@@ -298,8 +298,12 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
         payload: { name: '暗号员', role: '绘图', avatarColor: '#3D6B5B', password: 'secret-9' },
       })
     ).json() as Record<string, unknown>;
-    expect(created.passwordHash).toBeTruthy();
-    expect(created.passwordHash).not.toContain('secret-9');
+    // v0.6.1：实时接口只下发 hasPassword 布尔值，哈希本体绝不下发
+    // （scrypt 虽不可逆，但下发哈希 + 无鉴权 + 无限流 = 递出离线爆破的原料）
+    expect(created.hasPassword).toBe(true);
+    expect(created.passwordHash).toBeUndefined();
+    // 明文更不可能出现在响应里
+    expect(JSON.stringify(created)).not.toContain('secret-9');
 
     // 正确密码 → 200
     const ok = await ctx.app.inject({
@@ -325,7 +329,7 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
         payload: { name: '无密码员', role: '', avatarColor: '#3D6B5B' },
       })
     ).json() as Record<string, unknown>;
-    expect(noPwd.passwordHash).toBeNull();
+    expect(noPwd.hasPassword).toBe(false);
 
     // 清除密码后，旧密码不再通过
     await ctx.app.inject({

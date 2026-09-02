@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Plus, UserRound, UserX, Crown, XCircle, Pencil, Check, X, KeyRound } from 'lucide-react';
 
-import type { Member } from '../../core/types/entities';
+import { memberHasPassword, type Member } from '../../core/types/entities';
 import { ChangxiaError, MemberRoleKind } from '../../core/types/enums';
 import { useMembersStore } from '../../store/useMembersStore';
 import { createMemberActions } from '../../store/useMembersStore';
@@ -190,7 +190,8 @@ function PasswordDialog({
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const hasPassword = Boolean(member.passwordHash);
+  // 走 memberHasPassword：remote 模式服务端不下发哈希，passwordHash 恒为 null
+  const hasPassword = memberHasPassword(member);
 
   const save = async (): Promise<void> => {
     if (busy) return;
@@ -373,7 +374,7 @@ function MemberRow({
         <>
           <span className={`text-sm ${member.active ? 'text-ink' : 'text-mist'}`}>{member.name}</span>
           <span className="text-xs text-mist">{member.role}</span>
-          {member.passwordHash ? (
+          {memberHasPassword(member) ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-sand px-1.5 py-0.5 text-[10px] font-medium text-mist">
               <KeyRound size={10} /> 有密码
             </span>
@@ -417,7 +418,7 @@ function MemberRow({
           <button
             type="button"
             onClick={onPassword}
-            title={member.passwordHash ? '修改/清除密码' : '设置密码'}
+            title={memberHasPassword(member) ? '修改/清除密码' : '设置密码'}
             className="inline-flex items-center gap-1 rounded-md border border-sand px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
           >
             <KeyRound size={12} /> <span className="hidden sm:inline">密码</span>

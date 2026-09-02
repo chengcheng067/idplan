@@ -1,3 +1,5 @@
+import { BUILD_VERSION } from '../../constants/version';
+
 /**
  * 前端日志服务（统一日志记录 + 导出）。
  *
@@ -148,7 +150,7 @@ export function logExportFileName(now: Date = new Date()): string {
 export function buildLogExport(now: Date = new Date(), channel: 'local' | 'remote' = 'local'): LogExport {
   return {
     app: 'ID Plan',
-    version: '0.3.0',
+    version: BUILD_VERSION,
     exportedAt: now.toISOString(),
     channel,
     entries: dump(),

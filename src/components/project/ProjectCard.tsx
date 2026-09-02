@@ -61,9 +61,12 @@ export function ProjectCard({
   selected?: boolean;
   onOpen(): void;
 }): JSX.Element {
-  const { role } = useRoleGuard();
+  // useRoleGuard 只调用一次（原先调了两次，两个订阅点做同一件事）。
+  // memberView 与 isAdmin 严格互补（memberView === !isAdmin，见 isRestrictedView 定义），
+  // 仍保留两个名字：调用点读「受限视图该不该藏客户名」和「有没有管理权限」是两种意图，
+  // 统一成一个名字反而让 JSX 里的语义变模糊。
+  const { role, isAdmin } = useRoleGuard();
   const memberView = isRestrictedView(role);
-  const { isAdmin } = useRoleGuard();
   const repos = useRepos();
   const navigate = useNavigate();
 

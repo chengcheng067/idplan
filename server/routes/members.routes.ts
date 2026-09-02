@@ -1,9 +1,19 @@
 /**
  * Members 路由（对齐 api-contract.md）。
  * v0.6 密码系统：
- *   - 服务端用 node:crypto scrypt 派生密码哈希（格式 `saltHex:hashHex`），只落库，绝不下发客户端；
+ *   - 服务端用 node:crypto scrypt 派生密码哈希（格式 `saltHex:hashHex`），只落库；
+ *   - 实时接口（GET /api/members 等）只下发 hasPassword 布尔值，**绝不下发哈希本体**；
  *   - POST /api/members/verify → 服务端比对，200 通过 / 401 密码错误；
  *   - POST /api/members 与 PATCH /api/members/:id 接受可选 password（string 设密码 / null 清密码）。
+ *
+ * 为什么实时接口不下发哈希：scrypt 虽不可逆，但下发哈希 + 接口无鉴权 + 无限流，
+ * 等于把离线暴力破解（针对弱密码）的原料直接递出去。只下发 hasPassword（是否设过密码），
+ * 既满足前端「这个成员要不要弹密码框」的判断，又不泄露任何可用于爆破的内容。
+ *
+ * 例外：GET /api/backup 的备份通道**保留**哈希（它走 meta.routes.ts 的 rowToDto 全列 dump，
+ * 不经过本文件的 rowToMember）。备份是用户主动导出、自行保管的本地文件，暴露面与
+ * 「任何能连到 NAS 端口的人调一下 GET 就拿到全部哈希」完全不同；且移除会让备份还原后
+ * 成员密码全部失效，属于功能回归。两者风险等级不同，故区别对待。
  */
 
 import type { FastifyInstance } from 'fastify';
@@ -64,8 +74,9 @@ function rowToMember(r: MemberRow): Record<string, unknown> {
     active: Boolean(r.active),
     // 与前端 memberSchema 一致：非法/缺失一律归一 'member'，保证导入后运行时不为 undefined
     roleKind: r.role_kind === 'admin' ? 'admin' : 'member',
-    // 密码哈希绝不下发客户端（前端只存明文上送 + 服务端比对）
-    passwordHash: r.password_hash,
+    // 只下发「是否设过密码」，不下发哈希本体（理由见文件头注释）。
+    // 前端据此决定成员进入时是否弹密码框；真正的比对一律走 POST /api/members/verify。
+    hasPassword: Boolean(r.password_hash),
     revision: r.revision,
     updatedAt: r.updated_at,
   };

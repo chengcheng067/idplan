@@ -117,13 +117,33 @@ export interface Member {
   roleKind: MemberRoleKind;
   /**
    * 密码哈希（可空，null=无密码）。
-   * local 模式：Web Crypto PBKDF2-SHA256 派生的 hex（前缀 salt:hash）；
-   * remote 模式：服务端 crypto.scrypt 派生的 hex（前缀 salt:hash）。
-   * 仅存哈希，绝不落明文；身份进入时本地/远端各自比对。
+   * local 模式：Web Crypto PBKDF2-SHA256 派生的 hex（前缀 salt:hash），存在本地 Dexie，
+   *   身份进入时由前端自行比对（单机版数据本就在用户机器上，无从也不需要隔离）；
+   * remote 模式：**恒为 null** —— 服务端自 v0.6.1 起不再下发哈希，比对一律走
+   *   POST /api/members/verify。两个模式都由 hasPassword 表达「是否设过密码」。
+   * 仅存哈希，绝不落明文。
    */
   passwordHash: string | null;
+  /**
+   * 是否设置过登录密码（v0.6.1 新增）。
+   * 为什么需要它、而不是直接用 Boolean(passwordHash)：remote 模式下服务端不再下发哈希，
+   * passwordHash 恒为 null，前端就无法判断「这个成员进入时要不要弹密码框」——
+   * 缺了这个字段会导致所有成员免密直入。故由服务端下发布尔值。
+   * local 模式不填此字段，由 passwordHash 派生（见 memberHasPassword）。
+   */
+  hasPassword?: boolean;
   revision: number;
   updatedAt: string;
+}
+
+/**
+ * 成员是否设过登录密码（跨 local / remote 两种数据源的统一判据）。
+ * remote 模式服务端下发 hasPassword；local 模式无此字段，由本地哈希派生。
+ * UI 判断「要不要弹密码输入框」一律走这里，不要直接读 passwordHash——
+ * 否则 remote 模式下会永远判为「无密码」。
+ */
+export function memberHasPassword(m: Pick<Member, 'passwordHash' | 'hasPassword'>): boolean {
+  return m.hasPassword ?? Boolean(m.passwordHash);
 }
 
 /** 任务指派流水（append-only，本期只写不读，F17 同步底座） */

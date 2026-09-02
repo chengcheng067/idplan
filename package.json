@@ -73,6 +73,7 @@
       "build-dist/**/*",
       "electron/main.cjs",
       "electron/preload.cjs",
+      "version.json",
       "package.json"
     ],
     "win": {

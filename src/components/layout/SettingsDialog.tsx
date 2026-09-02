@@ -10,6 +10,8 @@ import { useProjectsStore } from '../../store/useProjectsStore';
 import { useTheme } from '../../hooks/useTheme';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { BUILD_VERSION, FRONTEND_STACK, REPO_URL } from '../../constants/version';
+import { isDesktop } from '../../lib/desktopBridge';
+import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 
 /**
@@ -38,6 +40,8 @@ export function SettingsDialog({
   // 角色闭环：休息制度仅在管理员设置界面出现（普通成员界面取消该区块）。
   // 顶栏独立入口 RestPolicySettingsButton 已是 admin-only，这里保持一致，权限规则不再散落。
   const { isAdmin } = useRoleGuard();
+  // 仅桌面端生效：浏览器/NAS 端 isDesktop() 为 false，下方更新区整块不渲染、从不发起请求。
+  const { status, payload, error, check } = useUpdateCheck();
 
   // 打开时实时读一次日志条数（抽屉每次打开都刷新，避免静态旧值）
   const count = useMemo(() => dump().length, [open]);
@@ -187,6 +191,45 @@ export function SettingsDialog({
                   <dd className="text-ink">{buildDate}</dd>
                 </div>
               </dl>
+
+              {/* 检查更新：仅 Windows 桌面端显示；浏览器/NAS 端 isDesktop() 为 false，整块不渲染 */}
+              {isDesktop() && (
+                <div className="mt-3 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => void check()}
+                    disabled={status === 'checking'}
+                    className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-sand bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {status === 'checking' ? '检查中…' : '检查更新'}
+                  </button>
+
+                  {status === 'up-to-date' && (
+                    <p className="rounded-xl border border-sand bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
+                      已是最新版本（{BUILD_VERSION}）。
+                    </p>
+                  )}
+                  {status === 'has-update' && payload && (
+                    <div className="rounded-xl border border-clay/40 bg-clay-soft px-3.5 py-2.5 text-xs">
+                      <p className="font-medium text-clay-deep">发现新版本 {payload.latest}</p>
+                      <a
+                        href={payload.exeAssetUrl || payload.releaseUrl || REPO_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-block text-pine underline-offset-2 hover:underline"
+                      >
+                        前往下载
+                      </a>
+                    </div>
+                  )}
+                  {status === 'error' && (
+                    <p className="rounded-xl border border-sand bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
+                      检查失败：{error}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <p className="mt-1.5 text-[11px] text-mist">
                 如有 bug 请提交 GitHub Issue：
                 <a

@@ -29,3 +29,8 @@ tmp/
 _e2e_*.ts
 vite.config.ts.timestamp-*.mjs
 release-*/
+
+# 本地校验的中间 stdout 不入库（历史上有 tsc-*.txt / result-*.txt 被 git add . 带进库，
+# 已在 2026-09-02 用 git rm --cached 移出跟踪；补规则防止再次误入）
+tsc-*.txt
+result-*.txt

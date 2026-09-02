@@ -6,6 +6,7 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useUiStore } from '../../store/useUiStore';
 import { SettingsDialog } from './SettingsDialog';
 import { useBackupIo } from './useBackupIo';
+import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { cn } from '../../lib/cn';
 
 /** 菜单项基础样式（玻璃面板内，hover 走 sand 半透明白，不引入新颜色；py-2 收紧提升密度） */
@@ -40,6 +41,9 @@ export function MobileMoreMenu(): JSX.Element {
   const setHomeViewMode = useUiStore((s) => s.setHomeViewMode);
   const openManualForm = useUiStore((s) => s.openManualForm);
   const { save, pick, fileInput, confirmDialog } = useBackupIo();
+  // 仅桌面端且主进程推送过「有新版本」时为 true；移动端菜单项照常用 ITEM/ITEM_ICON 写法
+  const { status } = useUpdateCheck();
+  const hasUpdate = status === 'has-update';
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -218,7 +222,12 @@ export function MobileMoreMenu(): JSX.Element {
             }}
           >
             <Settings size={15} className={ITEM_ICON} />
-            设置
+            <span className="flex items-center gap-1.5">
+              设置
+              {hasUpdate && (
+                <span className="h-2 w-2 rounded-full bg-clay" aria-label="有新版本可用" />
+              )}
+            </span>
           </button>
         </div>
       )}

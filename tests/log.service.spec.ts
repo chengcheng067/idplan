@@ -71,7 +71,7 @@ describe('log.service（前端日志系统）', () => {
     write({ type: 'info', source: 'a', message: '1' });
     const pkg = buildLogExport(new Date('2026-09-01T00:00:00.000Z'));
     expect(pkg.app).toBe('ID Plan');
-    expect(pkg.version).toBe('0.3.0');
+    expect(pkg.version).toBe('0.3.0.0018');
     expect(pkg.channel).toBe('local');
     expect(pkg.exportedAt).toBe('2026-09-01T00:00:00.000Z');
     expect(Array.isArray(pkg.entries)).toBe(true);

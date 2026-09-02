@@ -9,7 +9,7 @@ import { useRepos } from '../../hooks/useRepos';
 import { matchActiveMemberByName } from '../../hooks/useRoleGuard';
 import { createMemberActions } from '../../store/useMembersStore';
 import { ChangxiaError, MemberRoleKind } from '../../core/types/enums';
-import type { Member } from '../../core/types/entities';
+import { memberHasPassword, type Member } from '../../core/types/entities';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
 import { logError, logUser } from '../../core/services/log.service';
@@ -125,8 +125,9 @@ export function IdentityDialog(): JSX.Element | null {
 
       // 成员进入：命中 active 成员 → 若设置了密码则先验密码，否则直接进入
       if (matched) {
-        // 该成员被管理员设置了登录密码（v0.6）→ 进入 password_input 流程
-        if (matched.passwordHash) {
+        // 该成员被管理员设置了登录密码（v0.6）→ 进入 password_input 流程。
+        // 必须走 memberHasPassword：remote 模式服务端不下发哈希，passwordHash 恒为 null。
+        if (memberHasPassword(matched)) {
           setPendingMember(matched.id);
           setIdentityFlow('password_input');
           return;
