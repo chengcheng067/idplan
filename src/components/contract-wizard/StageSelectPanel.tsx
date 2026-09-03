@@ -326,6 +326,12 @@ const DOMAIN_LABELS: Record<StageTemplateDomain, string> = {
   landscape: '景观',
   architecture: '建筑',
   exhibition: '展陈',
+  // v2 跨行业
+  software: '软件',
+  marketing: '活动',
+  film: '影视',
+  wedding: '婚礼',
+  consulting: '咨询',
 };
 
 /** 项目类型 → 默认预选套餐 key（PRD §3.4：室内类 → indoor_full 九段；景观 → landscape_full；建筑 → architecture_full） */

@@ -11,13 +11,21 @@ import { useUiStore } from '../store/useUiStore';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { computeProjectStatus, currentStageOf } from '../lib/progress';
 import { StageStatus } from '../core/types/enums';
+import {
+  getDomainColumns,
+  getDomains,
+  getItemKanbanColumn,
+  getPreset,
+} from '../core/template/stage-library';
 import type { Project, Stage, Task } from '../core/types/entities';
 
 /**
  * 首页（严格对齐参考稿 §统计概览行 + §四列 Kanban）：
  *   概览行 = 4 张指标玻璃卡（进行中 / 本周到期 / 逾期风险 / 本月完工，数据全部派生、不伪造趋势）；
- *   主体 = 四列看板（待启动 / 设计中 / 深化中 / 施工中），列头 = 语义色圆点 + 列名 + 数量徽章。
- * 列归属按「当前阶段 orderIndex」分桶：未开始→待启动；①~③→设计中；④~⑥→深化中；⑦~⑨（含全完成）→施工中。
+ *   主体 = 看板（待启动 + 所属行业声明的阶段列），列头 = 语义色圆点 + 列名 + 数量徽章。
+ * 列定义自 v2 起由阶段模板的 domains 段给出（见 deriveColumns），不再写死「设计/深化/施工」——
+ * 室内/景观/建筑三行业沿用旧列名，跨行业项目（软件、影视、活动、婚礼、咨询）用自己的流程列。
+ * 列归属优先取当前阶段项声明的 kanbanColumn；老数据（templateKey 为 null）回退按 orderIndex 均分落段。
  * 视图开关已上移到 TopBar（参考稿应用栏形态），全局搜索按项目名 / 客户名过滤。
  */
 export function HomePage(): JSX.Element {
@@ -53,8 +61,8 @@ export function HomePage(): JSX.Element {
       )
     : active;
 
-  // 四列分桶
-  const buckets = groupByColumn(filtered, stagesOf, todayIso);
+  // 看板分桶（列随项目所属行业派生，见 deriveColumns）
+  const { columns, buckets } = groupByColumn(filtered, stagesOf, todayIso);
 
   // 指标卡（全部派生自 stages / projects，无历史趋势数据则不显示趋势）
   const weekStart = startOfWeekIso(today);
@@ -108,9 +116,15 @@ export function HomePage(): JSX.Element {
               </button>
             </div>
           ) : (
-            <section className="grid grid-cols-2 items-start gap-3 sm:gap-4 lg:grid-cols-4">
-              {KANBAN_COLUMNS.map((col) => {
-                const items = buckets[col.key];
+            <section
+              /* 列数由行业决定（设计 3 列、影视 4 列、软件 5 列…），不能再写死 grid-cols-4。
+                 用 auto-fit + minmax 让浏览器按可用宽度排：手机 1 列、平板 2 列、桌面尽量铺开。
+                 注意：注释必须放在 JSX 属性位置——三元括号内直接写花括号注释是表达式位，会编译错。 */
+              className="grid items-start gap-3 sm:gap-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}
+            >
+              {columns.map((col) => {
+                const items = buckets[col.key] ?? [];
                 return (
                     <div
                     key={col.key}
@@ -174,45 +188,120 @@ export function HomePage(): JSX.Element {
 
 /* ------------------------------ 列定义与分桶 ------------------------------ */
 
-export type ColumnKey = 'todo' | 'design' | 'deepen' | 'build';
+export type ColumnKey = string;
 
-export const KANBAN_COLUMNS: ReadonlyArray<{
+/** 起始列：未开始的项目固定落这里（非阶段声明，故不由模板定义） */
+const TODO_COLUMN = 'todo' as const;
+
+/** 看板列（渲染用的最终形态：模板数据 + 配色类名） */
+export interface KanbanColumn {
   key: ColumnKey;
   label: string;
   dot: string;
   chip: string;
-}> = [
-  { key: 'todo', label: '待启动', dot: 'bg-mist', chip: 'bg-sand text-mist' },
-  { key: 'design', label: '设计中', dot: 'bg-pine', chip: 'bg-pine-soft text-pine' },
-  { key: 'deepen', label: '深化中', dot: 'bg-amber', chip: 'bg-amber-soft text-amber' },
-  { key: 'build', label: '施工中', dot: 'bg-stage-s1', chip: 'bg-stage-s1/15 text-stage-s1' },
-];
+}
+
+/**
+ * 配色 token → Tailwind 类名。
+ * 模板 JSON 只存 token 名（pine / stage-s3 …），不携带 UI 框架的实现细节——
+ * 否则模板数据会和 Tailwind 版本绑死，第三方模板作者也没法写。
+ */
+const TONE_CLASSES: Record<string, { dot: string; chip: string }> = {
+  mist: { dot: 'bg-mist', chip: 'bg-sand text-mist' },
+  pine: { dot: 'bg-pine', chip: 'bg-pine-soft text-pine' },
+  amber: { dot: 'bg-amber', chip: 'bg-amber-soft text-amber' },
+};
+for (let i = 1; i <= 9; i += 1) {
+  TONE_CLASSES[`stage-s${i}`] = {
+    dot: `bg-stage-s${i}`,
+    chip: `bg-stage-s${i}/15 text-stage-s${i}`,
+  };
+}
+const FALLBACK_TONE = TONE_CLASSES.mist;
+
+function toneOf(tone: string): { dot: string; chip: string } {
+  return TONE_CLASSES[tone] ?? FALLBACK_TONE;
+}
+
+/**
+ * 按当前项目集合派生看板列：
+ *   todo 固定在最前，其后是这些项目所属行业在模板里声明的列（去重、按模板声明顺序）。
+ *
+ * 为什么是「派生」而不是固定四列：v2 起各行业自带列定义（软件是 规划→开发→测试→发布，
+ * 影视是 前期→拍摄→后期→交付），把室内那套 设计/深化/施工 硬套在别的行业上，列名就是错的。
+ * 单一行业的用户看到的列数与改造前完全一致；混用行业时列自然变多，项目不会无处可放。
+ */
+export function deriveColumns(projects: Project[]): KanbanColumn[] {
+  const used = new Set<string>();
+  for (const p of projects) {
+    const preset = p.stagePresetKey ? getPreset(p.stagePresetKey) : null;
+    if (preset) used.add(preset.domain);
+  }
+  // 老项目可能没有 stagePresetKey（或套餐已下架）→ 回退室内列，保证看板不空
+  if (used.size === 0) used.add('indoor');
+
+  const columns: KanbanColumn[] = [
+    { key: TODO_COLUMN, label: '待启动', ...toneOf('mist') },
+  ];
+  const seen = new Set<string>([TODO_COLUMN]);
+  for (const [domainKey] of getDomains()) {
+    if (!used.has(domainKey)) continue;
+    for (const c of getDomainColumns(domainKey)) {
+      if (seen.has(c.key)) continue; // 不同行业可能用同名列（如 design），只渲染一次
+      seen.add(c.key);
+      columns.push({ key: c.key, label: c.label, ...toneOf(c.tone) });
+    }
+  }
+  return columns;
+}
 
 /**
  * 项目 → 看板列：
- *   未开始 → 待启动；当前阶段 ①~③ → 设计中；④~⑥ → 深化中；⑦~⑨ 及全部完成 → 施工中。
+ *   未开始 → todo；
+ *   进行中 → 当前阶段项声明的 kanbanColumn（v2 起由模板声明，不再按 orderIndex 数字硬分桶）；
+ *   老数据（templateKey 为 null）→ 回退所属行业，按 orderIndex 均分落段，
+ *     对室内九段 + 三列的结果与改造前逐项一致（①②③→1 列，④⑤⑥→2 列，⑦⑧⑨→3 列）。
  */
-function columnOf(status: ReturnType<typeof computeProjectStatus>, orderIndex: number): ColumnKey {
-  if (status === 'not_started') return 'todo';
-  if (status === 'completed') return 'build';
-  if (orderIndex <= 3) return 'design';
-  if (orderIndex <= 6) return 'deepen';
-  return 'build';
+function columnOf(
+  status: ReturnType<typeof computeProjectStatus>,
+  currentStage: Stage | null,
+  domainKey: string | null,
+): ColumnKey {
+  if (status === 'not_started') return TODO_COLUMN;
+
+  const declared = currentStage ? getItemKanbanColumn(currentStage.templateKey) : null;
+  if (declared) return declared;
+
+  const cols = getDomainColumns(domainKey ?? 'indoor');
+  if (cols.length === 0) return 'build';
+  if (status === 'completed') return cols[cols.length - 1].key;
+
+  const idx = currentStage?.orderIndex ?? 9;
+  const per = Math.ceil(9 / cols.length);
+  const slot = Math.min(cols.length - 1, Math.floor(Math.max(idx - 1, 0) / per));
+  return cols[slot].key;
 }
 
 export function groupByColumn(
   projects: Project[],
   stagesOf: (p: Project) => Stage[],
   todayIso: string,
-): Record<ColumnKey, Project[]> {
-  const out: Record<ColumnKey, Project[]> = { todo: [], design: [], deepen: [], build: [] };
+): { columns: KanbanColumn[]; buckets: Record<ColumnKey, Project[]> } {
+  const columns = deriveColumns(projects);
+  const buckets: Record<ColumnKey, Project[]> = {};
+  for (const c of columns) buckets[c.key] = [];
+
   for (const p of projects) {
     const st = stagesOf(p);
     const status = computeProjectStatus(p, st, todayIso);
-    const idx = currentStageOf(st, todayIso)?.orderIndex ?? 9;
-    out[columnOf(status, idx)].push(p);
+    const cur = currentStageOf(st, todayIso) ?? null;
+    const domainKey = (p.stagePresetKey ? getPreset(p.stagePresetKey) : null)?.domain ?? null;
+    const key = columnOf(status, cur, domainKey);
+    // 兜底：列键不在当前集合中（如项目行业未参与派生）→ 并入最后一列，绝不静默丢项目
+    if (key in buckets) buckets[key].push(p);
+    else buckets[columns[columns.length - 1].key].push(p);
   }
-  return out;
+  return { columns, buckets };
 }
 
 /* ------------------------------ 日期工具（本地时区，避免 UTC 偏移） ------------------------------ */

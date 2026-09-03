@@ -240,14 +240,48 @@ export interface NineStagesTemplateFile {
 /**
  * 阶段项所属专业领域。
  * exhibition 为 P1 预留（展陈阶段项尚未随版本发布），当前 items 中暂无该领域数据。
+ * v2 起扩展出五个跨行业领域：软件 / 市场活动 / 影视 / 婚礼 / 咨询。
  */
-export type StageTemplateDomain = 'indoor' | 'landscape' | 'architecture' | 'exhibition';
+export type StageTemplateDomain =
+  | 'indoor'
+  | 'landscape'
+  | 'architecture'
+  | 'exhibition'
+  // v2 跨行业
+  | 'software'
+  | 'marketing'
+  | 'film'
+  | 'wedding'
+  | 'consulting';
 
 /**
- * 看板分桶列，取值与 HomePage 的 ColumnKey 前四键一致（todo 由项目状态派生，不由阶段项声明）。
- * 室内 9 项的取值与现状 columnOf() 的 orderIndex <=3 / <=6 分桶逐段等价。
+ * 看板分桶列。
+ *
+ * v2 起不再枚举取值：列由各行业在 domains 段自带声明（见 StageDomain），
+ * 新增行业或导入第三方模板时无需改动本类型。下面的字面量仅作阅读提示。
+ * 历史的三个值（design/deepen/build）是室内/景观/建筑三个设计行业通用的列名。
  */
-export type StageKanbanColumn = 'design' | 'deepen' | 'build';
+export type StageKanbanColumn = string;
+
+/** 看板列定义（某行业的一条列） */
+export interface StageColumn {
+  /** 列键，阶段项的 kanbanColumn 引用本行业的列键 */
+  key: string;
+  /** 列显示名（如「设计中」「开发中」） */
+  label: string;
+  /**
+   * 配色 token：pine / amber / mist / stage-s1..s9。
+   * 这里只存 token 名而非 Tailwind 类名——模板是数据，不该携带 UI 框架的实现细节，
+   * 由 UI 层（HomePage 的 TONE_CLASSES）映射为具体类名。
+   */
+  tone: string;
+}
+
+/** 行业定义：一个行业 = 一个中文名 + 一套看板列 */
+export interface StageDomain {
+  name: string;
+  columns: StageColumn[];
+}
 
 /** 阶段模板项：阶段模板库的最小可选项（templates/stage-library.json 的 items 段） */
 export interface StageTemplateItem {
@@ -282,8 +316,14 @@ export interface StagePreset {
 
 /** templates/stage-library.json 的类型化形状 */
 export interface StageTemplateLibraryFile {
-  version: 1;
+  /**
+   * v2：新增 domains 段，看板列由行业自带定义，UI 不再硬编码列名。
+   * 升级时无需迁移——老数据只需补一段 domains（三个设计行业共用 design/deepen/build）。
+   */
+  version: 2;
   source: string;
+  /** 行业键 → 行业定义（含看板列） */
+  domains: Record<string, StageDomain>;
   items: StageTemplateItem[];
   presets: StagePreset[];
 }

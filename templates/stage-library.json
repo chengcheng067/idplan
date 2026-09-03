@@ -1,6 +1,223 @@
 {
-  "version": 1,
-  "source": "阶段模板库：内置阶段项 + 套餐，随版本发布，用户不可编辑。室内 9 项与 templates/nine-stages.default.json 逐项等价，作为零回归锚点。",
+  "version": 2,
+  "source": "阶段模板库：内置阶段项 + 套餐 + 行业列定义，随版本发布，用户不可编辑。室内 9 项与 templates/nine-stages.default.json 逐项等价，作为零回归锚点。v2 新增 domains 段：看板列由行业自带，跨行业（软件/活动/影视/婚礼/咨询）不再受限于设计三列。",
+  "domains": {
+    "indoor": {
+      "name": "室内设计",
+      "columns": [
+        {
+          "key": "design",
+          "label": "设计中",
+          "tone": "pine"
+        },
+        {
+          "key": "deepen",
+          "label": "深化中",
+          "tone": "amber"
+        },
+        {
+          "key": "build",
+          "label": "施工中",
+          "tone": "stage-s1"
+        }
+      ]
+    },
+    "landscape": {
+      "name": "景观设计",
+      "columns": [
+        {
+          "key": "design",
+          "label": "设计中",
+          "tone": "pine"
+        },
+        {
+          "key": "deepen",
+          "label": "深化中",
+          "tone": "amber"
+        },
+        {
+          "key": "build",
+          "label": "施工中",
+          "tone": "stage-s1"
+        }
+      ]
+    },
+    "architecture": {
+      "name": "建筑设计",
+      "columns": [
+        {
+          "key": "design",
+          "label": "设计中",
+          "tone": "pine"
+        },
+        {
+          "key": "deepen",
+          "label": "深化中",
+          "tone": "amber"
+        },
+        {
+          "key": "build",
+          "label": "施工中",
+          "tone": "stage-s1"
+        }
+      ]
+    },
+    "software": {
+      "name": "软件开发",
+      "columns": [
+        {
+          "key": "planning",
+          "label": "规划中",
+          "tone": "stage-s1"
+        },
+        {
+          "key": "designing",
+          "label": "设计中",
+          "tone": "stage-s2"
+        },
+        {
+          "key": "developing",
+          "label": "开发中",
+          "tone": "stage-s3"
+        },
+        {
+          "key": "testing",
+          "label": "验证中",
+          "tone": "stage-s4"
+        },
+        {
+          "key": "released",
+          "label": "已发布",
+          "tone": "stage-s5"
+        }
+      ]
+    },
+    "marketing": {
+      "name": "市场活动",
+      "columns": [
+        {
+          "key": "planning",
+          "label": "立项",
+          "tone": "stage-s1"
+        },
+        {
+          "key": "creative",
+          "label": "创意",
+          "tone": "stage-s2"
+        },
+        {
+          "key": "prep",
+          "label": "筹备",
+          "tone": "stage-s3"
+        },
+        {
+          "key": "promo",
+          "label": "推广",
+          "tone": "stage-s4"
+        },
+        {
+          "key": "live",
+          "label": "执行中",
+          "tone": "stage-s5"
+        },
+        {
+          "key": "review",
+          "label": "复盘",
+          "tone": "stage-s6"
+        }
+      ]
+    },
+    "film": {
+      "name": "影视制作",
+      "columns": [
+        {
+          "key": "preprod",
+          "label": "前期",
+          "tone": "stage-s1"
+        },
+        {
+          "key": "shoot",
+          "label": "拍摄中",
+          "tone": "stage-s2"
+        },
+        {
+          "key": "post",
+          "label": "后期",
+          "tone": "stage-s3"
+        },
+        {
+          "key": "delivery",
+          "label": "交付",
+          "tone": "stage-s4"
+        }
+      ]
+    },
+    "wedding": {
+      "name": "婚礼策划",
+      "columns": [
+        {
+          "key": "planning",
+          "label": "筹备沟通",
+          "tone": "stage-s1"
+        },
+        {
+          "key": "design",
+          "label": "方案设计",
+          "tone": "stage-s2"
+        },
+        {
+          "key": "prep",
+          "label": "供应商与物料",
+          "tone": "stage-s3"
+        },
+        {
+          "key": "rehearsal",
+          "label": "彩排",
+          "tone": "stage-s4"
+        },
+        {
+          "key": "live",
+          "label": "现场执行",
+          "tone": "stage-s5"
+        },
+        {
+          "key": "delivery",
+          "label": "影像交付",
+          "tone": "stage-s6"
+        }
+      ]
+    },
+    "consulting": {
+      "name": "咨询交付",
+      "columns": [
+        {
+          "key": "kickoff",
+          "label": "启动",
+          "tone": "stage-s1"
+        },
+        {
+          "key": "research",
+          "label": "调研诊断",
+          "tone": "stage-s2"
+        },
+        {
+          "key": "design",
+          "label": "方案设计",
+          "tone": "stage-s3"
+        },
+        {
+          "key": "review",
+          "label": "评审修订",
+          "tone": "stage-s4"
+        },
+        {
+          "key": "delivery",
+          "label": "落地交付",
+          "tone": "stage-s5"
+        }
+      ]
+    }
+  },
   "items": [
     {
       "key": "indoor.proposal",
@@ -352,6 +569,516 @@
         "设计变更与技术核定",
         "竣工验收与整改销项"
       ]
+    },
+    {
+      "key": "software.discovery",
+      "name": "需求调研",
+      "domain": "software",
+      "ratioPercent": 10,
+      "colorIndex": 1,
+      "kanbanColumn": "planning",
+      "defaultResponsibility": "业务需求访谈；竞品与现状梳理；需求优先级排序；输出需求清单",
+      "defaultTasks": [
+        "业务需求访谈",
+        "竞品与现状梳理",
+        "需求优先级排序",
+        "输出需求清单"
+      ]
+    },
+    {
+      "key": "software.prd",
+      "name": "产品方案",
+      "domain": "software",
+      "ratioPercent": 12,
+      "colorIndex": 2,
+      "kanbanColumn": "planning",
+      "defaultResponsibility": "业务流程梳理；功能清单与优先级；输出 PRD；需求评审",
+      "defaultTasks": [
+        "业务流程梳理",
+        "功能清单与优先级",
+        "输出 PRD",
+        "需求评审"
+      ]
+    },
+    {
+      "key": "software.uidesign",
+      "name": "UI 设计",
+      "domain": "software",
+      "ratioPercent": 13,
+      "colorIndex": 3,
+      "kanbanColumn": "designing",
+      "defaultResponsibility": "信息架构与线框；视觉稿；交互标注；设计评审",
+      "defaultTasks": [
+        "信息架构与线框",
+        "视觉稿",
+        "交互标注",
+        "设计评审"
+      ]
+    },
+    {
+      "key": "software.dev",
+      "name": "开发实现",
+      "domain": "software",
+      "ratioPercent": 32,
+      "colorIndex": 4,
+      "kanbanColumn": "developing",
+      "defaultResponsibility": "技术方案与任务拆分；前端开发；后端开发；接口联调",
+      "defaultTasks": [
+        "技术方案与任务拆分",
+        "前端开发",
+        "后端开发",
+        "接口联调"
+      ]
+    },
+    {
+      "key": "software.qa",
+      "name": "测试修复",
+      "domain": "software",
+      "ratioPercent": 15,
+      "colorIndex": 5,
+      "kanbanColumn": "testing",
+      "defaultResponsibility": "用例编写与功能测试；缺陷修复；性能与兼容测试；回归验证",
+      "defaultTasks": [
+        "用例编写与功能测试",
+        "缺陷修复",
+        "性能与兼容测试",
+        "回归验证"
+      ]
+    },
+    {
+      "key": "software.launch",
+      "name": "验收上线",
+      "domain": "software",
+      "ratioPercent": 13,
+      "colorIndex": 6,
+      "kanbanColumn": "released",
+      "defaultResponsibility": "UAT 验收；部署上线；数据迁移；用户培训",
+      "defaultTasks": [
+        "UAT 验收",
+        "部署上线",
+        "数据迁移",
+        "用户培训"
+      ]
+    },
+    {
+      "key": "software.handover",
+      "name": "运维交接",
+      "domain": "software",
+      "ratioPercent": 5,
+      "colorIndex": 7,
+      "kanbanColumn": "released",
+      "defaultResponsibility": "文档交付；监控与告警配置；运维培训；结项",
+      "defaultTasks": [
+        "文档交付",
+        "监控与告警配置",
+        "运维培训",
+        "结项"
+      ]
+    },
+    {
+      "key": "marketing.brief",
+      "name": "需求立项",
+      "domain": "marketing",
+      "ratioPercent": 8,
+      "colorIndex": 1,
+      "kanbanColumn": "planning",
+      "defaultResponsibility": "客户目标与预算对齐；受众与渠道分析；立项与排期；成立项目组",
+      "defaultTasks": [
+        "客户目标与预算对齐",
+        "受众与渠道分析",
+        "立项与排期",
+        "成立项目组"
+      ]
+    },
+    {
+      "key": "marketing.strategy",
+      "name": "策略创意",
+      "domain": "marketing",
+      "ratioPercent": 15,
+      "colorIndex": 2,
+      "kanbanColumn": "creative",
+      "defaultResponsibility": "核心概念与主题；传播策略；创意提案；方案确认",
+      "defaultTasks": [
+        "核心概念与主题",
+        "传播策略",
+        "创意提案",
+        "方案确认"
+      ]
+    },
+    {
+      "key": "marketing.asset",
+      "name": "物料设计",
+      "domain": "marketing",
+      "ratioPercent": 20,
+      "colorIndex": 3,
+      "kanbanColumn": "prep",
+      "defaultResponsibility": "主视觉设计；延展物料设计；文案与脚本；物料打样确认",
+      "defaultTasks": [
+        "主视觉设计",
+        "延展物料设计",
+        "文案与脚本",
+        "物料打样确认"
+      ]
+    },
+    {
+      "key": "marketing.vendor",
+      "name": "供应商与场地",
+      "domain": "marketing",
+      "ratioPercent": 12,
+      "colorIndex": 4,
+      "kanbanColumn": "prep",
+      "defaultResponsibility": "场地勘察与预订；供应商比价与签约；搭建方案确认；报批与保险",
+      "defaultTasks": [
+        "场地勘察与预订",
+        "供应商比价与签约",
+        "搭建方案确认",
+        "报批与保险"
+      ]
+    },
+    {
+      "key": "marketing.promo",
+      "name": "预热推广",
+      "domain": "marketing",
+      "ratioPercent": 15,
+      "colorIndex": 5,
+      "kanbanColumn": "promo",
+      "defaultResponsibility": "推广排期与投放；KOL 对接；报名与邀约；媒体预热",
+      "defaultTasks": [
+        "推广排期与投放",
+        "KOL 对接",
+        "报名与邀约",
+        "媒体预热"
+      ]
+    },
+    {
+      "key": "marketing.onsite",
+      "name": "现场执行",
+      "domain": "marketing",
+      "ratioPercent": 20,
+      "colorIndex": 6,
+      "kanbanColumn": "live",
+      "defaultResponsibility": "搭建与彩排；现场流程管控；应急预案；撤场",
+      "defaultTasks": [
+        "搭建与彩排",
+        "现场流程管控",
+        "应急预案",
+        "撤场"
+      ]
+    },
+    {
+      "key": "marketing.review",
+      "name": "复盘结案",
+      "domain": "marketing",
+      "ratioPercent": 10,
+      "colorIndex": 7,
+      "kanbanColumn": "review",
+      "defaultResponsibility": "数据与效果回收；结案报告；客户汇报；资料归档",
+      "defaultTasks": [
+        "数据与效果回收",
+        "结案报告",
+        "客户汇报",
+        "资料归档"
+      ]
+    },
+    {
+      "key": "film.script",
+      "name": "剧本与分镜",
+      "domain": "film",
+      "ratioPercent": 15,
+      "colorIndex": 1,
+      "kanbanColumn": "preprod",
+      "defaultResponsibility": "剧本定稿；分镜脚本；拍摄脚本与勘景表；预算与排期",
+      "defaultTasks": [
+        "剧本定稿",
+        "分镜脚本",
+        "拍摄脚本与勘景表",
+        "预算与排期"
+      ]
+    },
+    {
+      "key": "film.casting",
+      "name": "勘景选角",
+      "domain": "film",
+      "ratioPercent": 10,
+      "colorIndex": 2,
+      "kanbanColumn": "preprod",
+      "defaultResponsibility": "场地堪景与确认；演员试镜与定角；造型与服化定调；拍摄许可",
+      "defaultTasks": [
+        "场地堪景与确认",
+        "演员试镜与定角",
+        "造型与服化定调",
+        "拍摄许可"
+      ]
+    },
+    {
+      "key": "film.prep",
+      "name": "前期筹备",
+      "domain": "film",
+      "ratioPercent": 12,
+      "colorIndex": 3,
+      "kanbanColumn": "preprod",
+      "defaultResponsibility": "组建 crew；器材与场地预订；拍摄计划细化；服化道准备",
+      "defaultTasks": [
+        "组建 crew",
+        "器材与场地预订",
+        "拍摄计划细化",
+        "服化道准备"
+      ]
+    },
+    {
+      "key": "film.shoot",
+      "name": "拍摄",
+      "domain": "film",
+      "ratioPercent": 28,
+      "colorIndex": 4,
+      "kanbanColumn": "shoot",
+      "defaultResponsibility": "现场拍摄执行；素材备份与场记；每日回放确认；补拍安排",
+      "defaultTasks": [
+        "现场拍摄执行",
+        "素材备份与场记",
+        "每日回放确认",
+        "补拍安排"
+      ]
+    },
+    {
+      "key": "film.edit1",
+      "name": "初剪",
+      "domain": "film",
+      "ratioPercent": 12,
+      "colorIndex": 5,
+      "kanbanColumn": "post",
+      "defaultResponsibility": "素材整理与选片；粗剪；结构剪辑；内部审片",
+      "defaultTasks": [
+        "素材整理与选片",
+        "粗剪",
+        "结构剪辑",
+        "内部审片"
+      ]
+    },
+    {
+      "key": "film.edit2",
+      "name": "精剪调色",
+      "domain": "film",
+      "ratioPercent": 13,
+      "colorIndex": 6,
+      "kanbanColumn": "post",
+      "defaultResponsibility": "精剪；调色；特效与字幕；音乐与音效设计",
+      "defaultTasks": [
+        "精剪",
+        "调色",
+        "特效与字幕",
+        "音乐与音效设计"
+      ]
+    },
+    {
+      "key": "film.deliver",
+      "name": "混音交付",
+      "domain": "film",
+      "ratioPercent": 10,
+      "colorIndex": 7,
+      "kanbanColumn": "delivery",
+      "defaultResponsibility": "混音；成片输出与格式转换；客户审片修订；成片交付归档",
+      "defaultTasks": [
+        "混音",
+        "成片输出与格式转换",
+        "客户审片修订",
+        "成片交付归档"
+      ]
+    },
+    {
+      "key": "wedding.brief",
+      "name": "需求与场地",
+      "domain": "wedding",
+      "ratioPercent": 12,
+      "colorIndex": 1,
+      "kanbanColumn": "planning",
+      "defaultResponsibility": "新人需求访谈；预算与风格确认；场地勘察与预订；婚期与流程框架",
+      "defaultTasks": [
+        "新人需求访谈",
+        "预算与风格确认",
+        "场地勘察与预订",
+        "婚期与流程框架"
+      ]
+    },
+    {
+      "key": "wedding.concept",
+      "name": "主题方案",
+      "domain": "wedding",
+      "ratioPercent": 18,
+      "colorIndex": 2,
+      "kanbanColumn": "design",
+      "defaultResponsibility": "主题与色彩方案；空间布置设计；花艺与灯光设计；方案确认",
+      "defaultTasks": [
+        "主题与色彩方案",
+        "空间布置设计",
+        "花艺与灯光设计",
+        "方案确认"
+      ]
+    },
+    {
+      "key": "wedding.vendor",
+      "name": "供应商确认",
+      "domain": "wedding",
+      "ratioPercent": 15,
+      "colorIndex": 3,
+      "kanbanColumn": "prep",
+      "defaultResponsibility": "四大金刚比选与签约；婚品与礼服；菜单与酒水；合同与付款节点",
+      "defaultTasks": [
+        "四大金刚比选与签约",
+        "婚品与礼服",
+        "菜单与酒水",
+        "合同与付款节点"
+      ]
+    },
+    {
+      "key": "wedding.asset",
+      "name": "物料制作",
+      "domain": "wedding",
+      "ratioPercent": 15,
+      "colorIndex": 4,
+      "kanbanColumn": "prep",
+      "defaultResponsibility": "请柬与桌卡设计制作；背景板与道具制作；伴手礼采购；物料清点",
+      "defaultTasks": [
+        "请柬与桌卡设计制作",
+        "背景板与道具制作",
+        "伴手礼采购",
+        "物料清点"
+      ]
+    },
+    {
+      "key": "wedding.rehearsal",
+      "name": "流程彩排",
+      "domain": "wedding",
+      "ratioPercent": 12,
+      "colorIndex": 5,
+      "kanbanColumn": "rehearsal",
+      "defaultResponsibility": "全天流程表确认；人员分工与联络表；现场彩排；应急预案",
+      "defaultTasks": [
+        "全天流程表确认",
+        "人员分工与联络表",
+        "现场彩排",
+        "应急预案"
+      ]
+    },
+    {
+      "key": "wedding.onsite",
+      "name": "现场执行",
+      "domain": "wedding",
+      "ratioPercent": 23,
+      "colorIndex": 6,
+      "kanbanColumn": "live",
+      "defaultResponsibility": "布置与搭建；全天流程把控；突发处理；撤场与结算",
+      "defaultTasks": [
+        "布置与搭建",
+        "全天流程把控",
+        "突发处理",
+        "撤场与结算"
+      ]
+    },
+    {
+      "key": "wedding.deliver",
+      "name": "影像交付",
+      "domain": "wedding",
+      "ratioPercent": 5,
+      "colorIndex": 7,
+      "kanbanColumn": "delivery",
+      "defaultResponsibility": "照片精修；视频剪辑；成片交付；结项回访",
+      "defaultTasks": [
+        "照片精修",
+        "视频剪辑",
+        "成片交付",
+        "结项回访"
+      ]
+    },
+    {
+      "key": "consulting.kickoff",
+      "name": "立项启动",
+      "domain": "consulting",
+      "ratioPercent": 10,
+      "colorIndex": 1,
+      "kanbanColumn": "kickoff",
+      "defaultResponsibility": "目标与范围界定；组建双方项目组；项目计划与里程碑；启动会",
+      "defaultTasks": [
+        "目标与范围界定",
+        "组建双方项目组",
+        "项目计划与里程碑",
+        "启动会"
+      ]
+    },
+    {
+      "key": "consulting.research",
+      "name": "现状诊断",
+      "domain": "consulting",
+      "ratioPercent": 22,
+      "colorIndex": 2,
+      "kanbanColumn": "research",
+      "defaultResponsibility": "资料收集与数据分析；访谈与问卷；标杆对标；诊断报告",
+      "defaultTasks": [
+        "资料收集与数据分析",
+        "访谈与问卷",
+        "标杆对标",
+        "诊断报告"
+      ]
+    },
+    {
+      "key": "consulting.design",
+      "name": "方案设计",
+      "domain": "consulting",
+      "ratioPercent": 28,
+      "colorIndex": 3,
+      "kanbanColumn": "design",
+      "defaultResponsibility": "框架设计；专题方案撰写；配套工具与模板；内部评审",
+      "defaultTasks": [
+        "框架设计",
+        "专题方案撰写",
+        "配套工具与模板",
+        "内部评审"
+      ]
+    },
+    {
+      "key": "consulting.review",
+      "name": "评审修订",
+      "domain": "consulting",
+      "ratioPercent": 15,
+      "colorIndex": 4,
+      "kanbanColumn": "review",
+      "defaultResponsibility": "客户汇报；意见收集；方案修订；终稿确认",
+      "defaultTasks": [
+        "客户汇报",
+        "意见收集",
+        "方案修订",
+        "终稿确认"
+      ]
+    },
+    {
+      "key": "consulting.landing",
+      "name": "落地辅导",
+      "domain": "consulting",
+      "ratioPercent": 17,
+      "colorIndex": 5,
+      "kanbanColumn": "delivery",
+      "defaultResponsibility": "试点辅导；培训与宣贯；落地问题支持；阶段复盘",
+      "defaultTasks": [
+        "试点辅导",
+        "培训与宣贯",
+        "落地问题支持",
+        "阶段复盘"
+      ]
+    },
+    {
+      "key": "consulting.close",
+      "name": "结项复盘",
+      "domain": "consulting",
+      "ratioPercent": 8,
+      "colorIndex": 6,
+      "kanbanColumn": "delivery",
+      "defaultResponsibility": "项目总结报告；客户满意度回访；知识沉淀归档；结项",
+      "defaultTasks": [
+        "项目总结报告",
+        "客户满意度回访",
+        "知识沉淀归档",
+        "结项"
+      ]
     }
   ],
   "presets": [
@@ -460,6 +1187,133 @@
         "architecture.permit_support",
         "architecture.site_service"
       ]
+    },
+    {
+      "key": "software_full",
+      "name": "软件·全流程",
+      "domain": "software",
+      "itemKeys": [
+        "software.discovery",
+        "software.prd",
+        "software.uidesign",
+        "software.dev",
+        "software.qa",
+        "software.launch",
+        "software.handover"
+      ],
+      "description": "从需求调研到上线运维的完整软件交付流程，含 PRD、UI、开发、测试、验收与交接"
+    },
+    {
+      "key": "software_design_only",
+      "name": "软件·方案与设计止",
+      "domain": "software",
+      "itemKeys": [
+        "software.discovery",
+        "software.prd",
+        "software.uidesign"
+      ],
+      "description": "只做需求、方案与 UI 设计的软件项目，交付物为 PRD 与设计稿"
+    },
+    {
+      "key": "marketing_full",
+      "name": "活动·全流程",
+      "domain": "marketing",
+      "itemKeys": [
+        "marketing.brief",
+        "marketing.strategy",
+        "marketing.asset",
+        "marketing.vendor",
+        "marketing.promo",
+        "marketing.onsite",
+        "marketing.review"
+      ],
+      "description": "从立项到复盘结案的完整市场活动执行流程，含创意、物料、供应商、推广与现场"
+    },
+    {
+      "key": "marketing_creative_only",
+      "name": "活动·创意与物料止",
+      "domain": "marketing",
+      "itemKeys": [
+        "marketing.brief",
+        "marketing.strategy",
+        "marketing.asset"
+      ],
+      "description": "只承接策略创意与物料设计的活动项目，交付物为方案与物料"
+    },
+    {
+      "key": "film_full",
+      "name": "影视·全流程",
+      "domain": "film",
+      "itemKeys": [
+        "film.script",
+        "film.casting",
+        "film.prep",
+        "film.shoot",
+        "film.edit1",
+        "film.edit2",
+        "film.deliver"
+      ],
+      "description": "从剧本分镜到成片交付的完整影视制作流程，含勘景、拍摄、初剪、精剪调色与混音"
+    },
+    {
+      "key": "film_post_only",
+      "name": "影视·仅后期",
+      "domain": "film",
+      "itemKeys": [
+        "film.edit1",
+        "film.edit2",
+        "film.deliver"
+      ],
+      "description": "只承接后期制作的影视项目，从初剪到成片交付"
+    },
+    {
+      "key": "wedding_full",
+      "name": "婚礼·全流程",
+      "domain": "wedding",
+      "itemKeys": [
+        "wedding.brief",
+        "wedding.concept",
+        "wedding.vendor",
+        "wedding.asset",
+        "wedding.rehearsal",
+        "wedding.onsite",
+        "wedding.deliver"
+      ],
+      "description": "从需求沟通到影像交付的完整婚礼策划流程，含方案、供应商、彩排与现场执行"
+    },
+    {
+      "key": "wedding_design_only",
+      "name": "婚礼·策划设计止",
+      "domain": "wedding",
+      "itemKeys": [
+        "wedding.brief",
+        "wedding.concept"
+      ],
+      "description": "只做需求沟通与主题方案设计的婚礼项目"
+    },
+    {
+      "key": "consulting_full",
+      "name": "咨询·全流程",
+      "domain": "consulting",
+      "itemKeys": [
+        "consulting.kickoff",
+        "consulting.research",
+        "consulting.design",
+        "consulting.review",
+        "consulting.landing",
+        "consulting.close"
+      ],
+      "description": "从立项启动到结项复盘的完整咨询交付流程，含诊断、方案、评审与落地辅导"
+    },
+    {
+      "key": "consulting_diagnosis_only",
+      "name": "咨询·仅诊断",
+      "domain": "consulting",
+      "itemKeys": [
+        "consulting.kickoff",
+        "consulting.research"
+      ],
+      "description": "只做现状调研与诊断的咨询项目，交付物为诊断报告"
     }
   ]
 }

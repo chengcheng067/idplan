@@ -1,4 +1,6 @@
 import type {
+  StageColumn,
+  StageDomain,
   StagePreset,
   StageTemplateItem,
   StageTemplateLibraryFile,
@@ -53,4 +55,39 @@ export function getPresetItems(presetKey: string): StageTemplateItem[] {
 /** 阶段模板库版本（Project.stageTemplateVersion 的取值来源） */
 export function getStageLibraryVersion(): number {
   return library.version;
+}
+
+/* ---------------------- v2：行业与看板列 ---------------------- */
+
+/**
+ * 全部行业定义，按 JSON 声明顺序（设计三行业在前，保证既有项目的列顺序不变）。
+ * 返回 [行业键, 行业定义] 数组而非对象——对象不保证遍历顺序，看板列必须有序。
+ */
+export function getDomains(): Array<[string, StageDomain]> {
+  return Object.entries(library.domains ?? {});
+}
+
+/** 单个行业定义（未知行业返回 null，不抛错：模板数据可能滞后于用户导入的项目） */
+export function getDomain(domainKey: string | null | undefined): StageDomain | null {
+  if (!domainKey) return null;
+  return library.domains?.[domainKey] ?? null;
+}
+
+/** 某行业的看板列（未知行业返回空数组，调用方自行回退） */
+export function getDomainColumns(domainKey: string | null | undefined): StageColumn[] {
+  return getDomain(domainKey)?.columns ?? [];
+}
+
+/**
+ * 阶段项所属看板列。
+ * 返回列键（如 'developing'），找不到阶段项时返回 null —— 老项目 templateKey 可能为 null。
+ */
+export function getItemKanbanColumn(itemKey: string | null | undefined): string | null {
+  if (!itemKey) return null;
+  return findStageLibraryItem(itemKey)?.kanbanColumn ?? null;
+}
+
+/** 阶段项的安全查找（不存在返回 null，不抛错） */
+export function findStageLibraryItem(key: string): StageTemplateItem | null {
+  return library.items.find((item) => item.key === key) ?? null;
 }

@@ -9,7 +9,7 @@ import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUiStore } from '../store/useUiStore';
 import { computeProjectStatus } from '../lib/progress';
-import { KANBAN_COLUMNS, groupByColumn } from './HomePage';
+import { groupByColumn } from './HomePage';
 import type { ColumnKey } from './HomePage';
 import type { Project, Stage, Task } from '../core/types/entities';
 import { StageStatus } from '../core/types/enums';
@@ -56,8 +56,8 @@ export function MemberBoardPage(): JSX.Element {
 
   const active = myRelatedProjects;
 
-  // 四列分桶
-  const buckets = groupByColumn(active, stagesOf, todayIso);
+  // 看板分桶（列随项目所属行业派生，与首页同一套逻辑）
+  const { columns, buckets } = groupByColumn(active, stagesOf, todayIso);
 
   // 指标卡（仅统计与我相关的 active 项目）
   const weekStart = startOfWeekIso(today);
@@ -107,8 +107,13 @@ export function MemberBoardPage(): JSX.Element {
           </p>
         </div>
       ) : (
-        <section className="grid grid-cols-2 items-start gap-3 sm:gap-4 lg:grid-cols-4">
-          {KANBAN_COLUMNS.map((col) => {
+        <section
+          /* 列数与 HomePage 同源（项目所属行业派生），不能写死 grid-cols-4。
+             注释放属性位：三元括号内直接写花括号注释是表达式位，会编译错。 */
+          className="grid items-start gap-3 sm:gap-4"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}
+        >
+          {columns.map((col) => {
             const items = buckets[col.key] ?? [];
             return (
               <div
@@ -174,5 +179,5 @@ function endOfWeekIso(d: Date): string {
   return localIso(e);
 }
 
-// 保持类型引用（ColumnKey 供 KANBAN_COLUMNS 键序约束）
+// 保持类型出口（v2 起列键由模板声明，不再有固定键序；此处仅为外部引用兼容）
 export type { ColumnKey };
