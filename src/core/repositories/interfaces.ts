@@ -8,6 +8,7 @@
  */
 
 import { ChangxiaErrorCode, StageStatus } from '../types/enums';
+import type { TaskSource, TaskStatus } from '../types/enums';
 import type {
   AssignmentLog,
   ContractRecord,
@@ -42,7 +43,20 @@ export interface TaskQuery {
    * （即 assigneeIds 含之 或 assigneeId 等于之）。接口签名不变，仅语义扩展。
    */
   assigneeId?: string;
+  /**
+   * @deprecated v0.6 起「是否完成」的唯一事实源是 `Task.status`（done 为派生）。
+   *   该维度保留仅为兼容既有调用方（如 TaskChecklist 的未完成过滤）；
+   *   新代码一律用 `status`（如 `status: [TaskStatus.Done]` 取反即可表达未完成）。
+   */
   done?: boolean;
+  /** 任务来源（v0.6）：human=人工 / agent=Agent 导入 */
+  source?: TaskSource;
+  /** 产出者 Agent 的 Member.id */
+  agentId?: string;
+  /** 状态过滤（v0.6）：支持单值或数组（数组 = 任一命中） */
+  status?: TaskStatus | readonly TaskStatus[];
+  /** 幂等键精确匹配（v0.6） */
+  externalId?: string;
 }
 
 /** 仓储层通用约束注释：写方法统一 bump revision(+1) 并刷新 updatedAt。 */
@@ -66,14 +80,47 @@ export interface IStagesRepository {
   reschedule(id: string, startAt: string, endAt: string, status?: StageStatus): Promise<Stage>;
 }
 
+/**
+ * 幂等批量写入行（v0.6 · §3.5）：Agent payload 导入的唯一写入形状。
+ * `id` 由仓储生成（命中既有行时忽略）、`revision`/`updatedAt` 由仓储统一 bump；
+ * `externalId` 必填（非空字符串）——它是幂等键。
+ * `orderIndex` 为**仅新建语义**：命中既有行时保持既有排序（防止重导入反复重排），
+ * 两套适配器（local/remote）与该语义逐字一致。
+ */
+export type TaskUpsertRow = Omit<
+  Task,
+  'id' | 'revision' | 'updatedAt' | 'externalId' | 'done'
+> & {
+  externalId: string;
+  /** 可省：省略时仓储按 `status === 'done'` 派生（唯一事实源纪律） */
+  done?: boolean;
+};
+
 export interface ITasksRepository {
   list(query?: TaskQuery): Promise<Task[]>;
   listByProject(projectId: string): Promise<Task[]>;
   listByAssignee(memberId: string): Promise<Task[]>;
+  /** 按 id 取单条（v0.6 新增：task.service 流转校验需要权威的当前 status）；不存在返回 null */
+  get(id: string): Promise<Task | null>;
   bulkInsert(rows: Task[]): Promise<void>;
   insert(cmd: CreateTaskCmd): Promise<Task>;
   update(id: string, cmd: UpdateTaskCmd): Promise<Task>;
   remove(id: string): Promise<void>;
+  /**
+   * 幂等批量写入（v0.6 · §3.5，payload 导入**唯一写入出口**）：
+   * 逐行按 `externalId` 查找——命中则合并 patch 并 bump revision（updated），
+   * 未命中则新建（created）。**整个调用是单事务**：任一行失败则全部回滚，
+   * 不允许出现「半套写入」。
+   * 返回 `{ created, updated }` 计数（rejected 行不在此列，由调用方先行过滤）。
+   */
+  upsertByExternalId(rows: readonly TaskUpsertRow[]): Promise<{ created: number; updated: number }>;
+  /**
+   * 原子认领（v0.6 · §3.5）：单事务内 校验 status==='ready' 且 claimedAt===null
+   * → 置 status='claimed'、assigneeId=actorMemberId、claimedAt=now。
+   * 并发争抢只有一个成功，其余抛 `ChangxiaError(Conflict)`；
+   * 非 ready 态认领同样抛 Conflict（文案：「该任务已被认领或不处于就绪状态。」）。
+   */
+  claim(taskId: string, actorMemberId: string): Promise<Task>;
 }
 
 export interface IMembersRepository {

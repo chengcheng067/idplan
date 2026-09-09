@@ -22,7 +22,9 @@ import {
   ChangxiaErrorCode,
   ProjectType,
   StageStatus,
+  TaskStatus,
 } from '../core/types/enums';
+import { taskIsDone, withStatus } from '../core/types/entities';
 import type { TaskQuery } from '../core/repositories/interfaces';
 import { previewSplit } from '../core/template/split';
 import { digestOf, ProjectService } from '../core/services/project.service';
@@ -308,11 +310,15 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
 
   return {
     async toggleDone(task: Task, operatorName: string): Promise<void> {
-      // 乐观更新：先 patch，失败回滚并 toast userMessage
-      const prev = task.done;
-      store.putTask({ ...task, done: !prev });
+      // v0.6 收敛（M23/useAgentStore 前置）：done 是派生字段——勾选/取消一律改 status
+      // （taskIsDone 求反 → withStatus 双写），不再直接写 done。
+      const nextDone = !taskIsDone(task);
+      const optimistic = withStatus(task, nextDone ? TaskStatus.Done : TaskStatus.Draft);
+      store.putTask(optimistic);
       try {
-        const updated = await repos.tasks.update(task.id, { done: !prev });
+        const updated = await repos.tasks.update(task.id, {
+          status: nextDone ? TaskStatus.Done : TaskStatus.Draft,
+        });
         await repos.logs.appendAssignment({
           taskId: task.id,
           projectId: task.projectId,
@@ -415,7 +421,16 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
       if (query.stageId) rows = rows.filter((t) => t.stageId === query.stageId);
       // v0.3：参与人包含语义（与 taskAssigneeIds 同口径）
       if (query.assigneeId) rows = rows.filter((t) => taskAssigneeIds(t).includes(query.assigneeId as string));
-      if (typeof query.done === 'boolean') rows = rows.filter((t) => t.done === query.done);
+      // @deprecated 兼容维度：读取统一 taskIsDone（status 是唯一事实源）
+      if (typeof query.done === 'boolean') rows = rows.filter((t) => taskIsDone(t) === query.done);
+      // v0.6 新维度（与仓储 list() 同语义：status 单值或数组）
+      if (query.source) rows = rows.filter((t) => t.source === query.source);
+      if (query.agentId) rows = rows.filter((t) => t.agentId === query.agentId);
+      if (query.status) {
+        const wanted = Array.isArray(query.status) ? query.status : [query.status];
+        rows = rows.filter((t) => wanted.includes(t.status));
+      }
+      if (query.externalId) rows = rows.filter((t) => t.externalId === query.externalId);
       return rows;
     },
   };

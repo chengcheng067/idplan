@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CalendarRange, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
 
 import type { Member, Project, Stage, Task } from '../../core/types/entities';
+import { taskIsDone } from '../../core/types/entities';
 import { PROJECT_TYPE_LABELS, ProjectType } from '../../core/types/enums';
 import { useRoleGuard, isRestrictedView, taskAssigneeIds } from '../../hooks/useRoleGuard';
 import { currentStageOf, computeProjectPercent, computeProjectStatus } from '../../lib/progress';
@@ -88,7 +89,7 @@ export function ProjectCard({
   const stageMembers = members.filter((m) => m.active && (!cur?.ownerId || m.id === cur.ownerId));
   const activeMemberIds = new Set(
     tasks
-      .filter((t) => cur && t.stageId === cur.id && !t.done)
+      .filter((t) => cur && t.stageId === cur.id && !taskIsDone(t))
       .flatMap((t) => taskAssigneeIds(t)),
   );
   const cardMembers = members.filter(

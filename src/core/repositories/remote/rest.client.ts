@@ -37,7 +37,7 @@ import type {
   Task,
 } from '../../types/entities';
 import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../../types/enums';
-import type { ProjectQuery, TaskQuery } from '../interfaces';
+import type { ProjectQuery, TaskQuery, TaskUpsertRow } from '../interfaces';
 
 /* --------------------------------- fetch 封装 --------------------------------- */
 
@@ -85,10 +85,15 @@ export class RestClient {
       } catch {
         /* 非 JSON 错误体保持默认文案 */
       }
-      throw new ChangxiaError(
-        res.status === 404 ? ChangxiaErrorCode.NotFound : ChangxiaErrorCode.Network,
-        userMessage,
-      );
+      // HTTP → 业务错误码映射（v0.6 扩展 409）：404=NotFound、409=Conflict（认领
+      // 争抢 / 幂等键冲突），其余归 Network。上层只 catch ChangxiaError 一种类型。
+      const code =
+        res.status === 404
+          ? ChangxiaErrorCode.NotFound
+          : res.status === 409
+            ? ChangxiaErrorCode.Conflict
+            : ChangxiaErrorCode.Network;
+      throw new ChangxiaError(code, userMessage);
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
@@ -111,8 +116,13 @@ export class RestClient {
   }
 }
 
-const qs = (params: Record<string, string | number | boolean | undefined>): string => {
-  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== '');
+const qs = (
+  params: Record<string, string | number | boolean | readonly string[] | undefined>,
+): string => {
+  const entries = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== '')
+    // 数组值（v0.6 status 多选）→ 逗号 join，服务端按逗号 split 后逐值匹配
+    .map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : v] as [string, string]);
   if (entries.length === 0) return '';
   return `?${entries.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')}`;
 };
@@ -173,6 +183,11 @@ export class RemoteTasksRepository implements ITasksRepository {
         stageId: query?.stageId,
         assigneeId: query?.assigneeId,
         done: query?.done,
+        // v0.6 新维度（status 数组由 qs 逗号 join，服务端 split 后逐值匹配）
+        source: query?.source,
+        agentId: query?.agentId,
+        status: query?.status === undefined ? undefined : Array.isArray(query.status) ? [...query.status] : [query.status],
+        externalId: query?.externalId,
       })}`,
     );
   }
@@ -181,6 +196,15 @@ export class RemoteTasksRepository implements ITasksRepository {
   }
   listByAssignee(memberId: string): Promise<Task[]> {
     return this.list({ assigneeId: memberId });
+  }
+  async get(id: string): Promise<Task | null> {
+    try {
+      return await this.api.get<Task>(`/tasks/${id}`);
+    } catch (err) {
+      // NotFound → null（与接口契约一致：不存在返回 null 而非抛错）
+      if (err instanceof ChangxiaError && err.code === ChangxiaErrorCode.NotFound) return null;
+      throw err;
+    }
   }
   bulkInsert(rows: Task[]): Promise<void> {
     return this.api.post('/tasks/bulk', { rows });
@@ -193,6 +217,17 @@ export class RemoteTasksRepository implements ITasksRepository {
   }
   remove(id: string): Promise<void> {
     return this.api.delete(`/tasks/${id}`);
+  }
+  /**
+   * 幂等批量写入：POST /tasks/upsert { rows } → { created, updated }。
+   * done 恒由 status 派生（服务端同样不接受请求体的 done）。
+   */
+  upsertByExternalId(rows: readonly TaskUpsertRow[]): Promise<{ created: number; updated: number }> {
+    return this.api.post('/tasks/upsert', { rows });
+  }
+  /** 原子认领：HTTP 409 已由 RestClient 翻译为 ChangxiaError(Conflict) */
+  claim(taskId: string, actorMemberId: string): Promise<Task> {
+    return this.api.post(`/tasks/${taskId}/claim`, { actorMemberId });
   }
 }
 
@@ -302,7 +337,10 @@ export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle 
       '启用 remote 数据源时必须配置 VITE_API_BASE_URL。',
     );
   }
-  const api = new RestClient(apiBaseUrl.replace(/\/+$/, ''));
+  // v0.6：VITE_API_TOKEN 预留位启用——Docker 化局域网部署时可配简单 Bearer token；
+  // 未配置时空串，与改造前行为完全一致（不发送 Authorization header）。
+  const env = import.meta.env as Record<string, string | undefined>;
+  const api = new RestClient(apiBaseUrl.replace(/\/+$/, ''), env.VITE_API_TOKEN ?? '');
   return {
     projects: new RemoteProjectsRepository(api),
     stages: new RemoteStagesRepository(api),

@@ -1,4 +1,5 @@
-import type { Project, Stage } from '../core/types/entities';
+import type { Project, Stage, Task } from '../core/types/entities';
+import { taskIsDone } from '../core/types/entities';
 import { StageStatus } from '../core/types/enums';
 
 /**
@@ -72,4 +73,19 @@ export function computeProjectStatus(
   if (todayIso < project.plannedStartAt) return 'not_started';
   if (project.plannedEndAt < todayIso) return 'overdue';
   return 'in_progress';
+}
+
+/**
+ * 阶段内任务完成度聚合（v0.6 · M21）：按 `taskIsDone` 统一口径，
+ * 供 Agent 进度回填与 T11 指标卡使用。不改动本文件既有 4 个导出函数的行为。
+ */
+export function computeStageTaskProgress(
+  tasks: Task[],
+  stageId: string,
+): { done: number; total: number } {
+  const stageTasks = tasks.filter((t) => t.stageId === stageId);
+  return {
+    done: stageTasks.filter((t) => taskIsDone(t)).length,
+    total: stageTasks.length,
+  };
 }

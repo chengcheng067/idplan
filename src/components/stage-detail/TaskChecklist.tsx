@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Check, Plus, Trash2, Users, X } from 'lucide-react';
 
 import type { Member, Stage, Task } from '../../core/types/entities';
+import { taskIsDone } from '../../core/types/entities';
 import { createTaskActions } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard, canMemberToggleTask, taskAssigneeIds } from '../../hooks/useRoleGuard';
@@ -131,11 +132,11 @@ export function TaskChecklist({
             >
               <button
                 type="button"
-                aria-label={t.done ? '标记未完成' : '标记完成'}
+                aria-label={taskIsDone(t) ? '标记未完成' : '标记完成'}
                 disabled={!canToggle}
                 onClick={() => void actions.toggleDone(t, operatorName)}
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                  t.done
+                  taskIsDone(t)
                     ? 'border-pine bg-pine text-white'
                     : 'border-mist/50 text-transparent hover:border-pine'
                 } ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
@@ -148,7 +149,7 @@ export function TaskChecklist({
                 readOnly={isMember}
                 onChange={(e) => void actions.updateTask(t.id, { title: e.target.value })}
                 className={`min-w-0 flex-1 bg-transparent text-sm outline-none ${
-                  t.done ? 'text-mist line-through' : 'text-ink'
+                  taskIsDone(t) ? 'text-mist line-through' : 'text-ink'
                 } ${isMember ? 'cursor-default' : ''}`}
               />
 

@@ -15,6 +15,7 @@ import { remainingDays } from '../lib/date';
 import { StatCard } from '../components/project/StatCard';
 import { STAGE_BAR_COLORS } from '../components/timeline/stageColors';
 import type { Project, Stage, Task } from '../core/types/entities';
+import { taskIsDone } from '../core/types/entities';
 import { resolveStageColorIndex } from '../core/template/stage-fallback';
 
 type FilterMode = 'by-project' | 'by-time';
@@ -51,7 +52,7 @@ export function MyTasksPage(): JSX.Element {
     [allTasks, currentMemberId],
   );
   const myTasks = useMemo(
-    () => allMyTasks.filter((t) => showDone || !t.done),
+    () => allMyTasks.filter((t) => showDone || !taskIsDone(t)),
     [allMyTasks, showDone],
   );
 
@@ -65,7 +66,7 @@ export function MyTasksPage(): JSX.Element {
     let week = 0;
     let undone = 0;
     for (const t of allMyTasks) {
-      if (t.done) continue;
+      if (taskIsDone(t)) continue;
       undone += 1;
       if (!t.dueDate) continue;
       const d = remainingDays(t.dueDate.slice(0, 10), todayIso);
@@ -185,7 +186,7 @@ export function MyTasksPage(): JSX.Element {
         ).map(([projectId, rows]) => {
           const p = projects.find((x) => x.id === projectId);
           const overdueCount = rows.filter(
-            (t) => !t.done && t.dueDate && remainingDays(t.dueDate.slice(0, 10), todayIso) < 0,
+            (t) => !taskIsDone(t) && t.dueDate && remainingDays(t.dueDate.slice(0, 10), todayIso) < 0,
           ).length;
           return (
             <section key={projectId} className="glass-light rounded-[16px] border border-sand p-3.5">
@@ -296,10 +297,10 @@ function TaskCard({
       <button
         type="button"
         onClick={onToggle}
-        aria-label={task.done ? '标记未完成' : '标记完成'}
+        aria-label={taskIsDone(task) ? '标记未完成' : '标记完成'}
         className={cn(
           'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors',
-          task.done
+          taskIsDone(task)
             ? 'border-pine bg-pine text-white'
             : 'border-mist/50 text-transparent hover:border-pine',
         )}
@@ -308,7 +309,7 @@ function TaskCard({
       </button>
 
       <div className="min-w-0 flex-1">
-        <span className={cn('block truncate text-sm', task.done ? 'text-mist line-through' : 'text-ink')}>
+        <span className={cn('block truncate text-sm', taskIsDone(task) ? 'text-mist line-through' : 'text-ink')}>
           {task.title}
         </span>
         <span className="mt-0.5 flex items-center gap-2 text-[11px] text-mist">

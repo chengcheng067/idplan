@@ -5,14 +5,15 @@
  */
 
 import type { Member, Project, Stage, Task } from '../core/types/entities';
+import { taskIsDone } from '../core/types/entities';
 import type { StageStatus } from '../core/types/enums';
 import { taskAssigneeIds } from '../hooks/useRoleGuard';
 
 /**
  * 导出 PNG / A4 预览的「打印友好」配色（v0.5 主题修复）：
- *   导出给甲方 / 客户的交付物相当于打印稿，固定「浅底深字」，
+ *   导出给客户 / 委托方的交付物相当于打印稿，固定「浅底深字」，
  *   不跟随应用当前的暗色主题。浅色主题下若文字写死浅色，会白底白字看不见；
- *   深色主题下深底浅字虽可读，但发给甲方不专业。故无论当前亮 / 暗主题，
+ *   深色主题下深底浅字虽可读，但发给客户不专业。故无论当前亮 / 暗主题，
  *   导出图一律 白 / 浅灰底 + 深色文字。阶段色条（stage colors）等品牌 / 语义色保持原样。
  */
 export const EXPORT_BG = '#ffffff'; // 导出背景：纯白纸面
@@ -99,7 +100,7 @@ export function buildScheduleSections(opts: {
         id: t.id,
         title: t.title,
         dueDate: t.dueDate?.slice(0, 10) ?? null,
-        done: t.done,
+        done: taskIsDone(t),
         assigneeNames: taskAssigneeIds(t).map(memberName),
       })),
     };

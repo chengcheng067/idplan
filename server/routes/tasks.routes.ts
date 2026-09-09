@@ -164,6 +164,18 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
     return rows.map(rowToTask);
   });
 
+  // GET /tasks/:id —— v0.6 新增：task.service 流转校验需要权威的当前 status；
+  // 404 走统一错误体（remote 适配器翻译为 ChangxiaError(NotFound) → null）。
+  app.get('/api/tasks/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
+    if (!row) {
+      void reply.status(404).send({ error: { userMessage: '未找到该任务。' } });
+      return;
+    }
+    return rowToTask(row);
+  });
+
   // POST /tasks/bulk —— 备份导入通道：接受 done（v1/v2 备份无 status），双写归一
   app.post('/api/tasks/bulk', async (req) => {
     const { rows } = req.body as { rows: Array<Record<string, unknown>> };
@@ -277,7 +289,8 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
             (t.agentId as string | null) ?? existing.agent_id,
             String(t.source ?? existing.source),
             (t.claimedAt as string | null) ?? existing.claimed_at,
-            Number(t.orderIndex ?? existing.order_index),
+            // order_index 仅新建语义：更新路径保持既有排序，防止重导入反复重排
+            existing.order_index,
             existing.revision + 1,
             nowIso(),
             existing.id,
