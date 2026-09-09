@@ -10,6 +10,7 @@ import { installFakeIndexedDB } from './setup';
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService, validateBackupJson } from '../src/core/services/backup.service';
+import type { BackupPackage } from '../src/core/types/dto';
 import { previewSplit } from '../src/core/template/split';
 import { ProjectService } from '../src/core/services/project.service';
 import type { Project } from '../src/core/types/entities';
@@ -24,7 +25,29 @@ beforeEach(async () => {
   // 每个用例独立内存库（fake-indexeddb 的 indexedDB 缓存同 module 实例——
   // 这里用一个固定库名 + 每次清空的方式保证隔离）
   bundle = await createRepositories({ dataSource: 'local' });
+  // vitest singleThread 下所有 spec 共享同一个 fake-indexeddb 实例：先跑的 spec
+  // （如 task-assignees）最后一个用例写入的行会残留到本文件。本 spec 的 roundtrip
+  // 断言要求「导出内容 == 自己 seed 的内容」，任何外来行都会让逐表 diff 失败
+  // （残留行缺 v0.6 新字段 → 导入归一后键数变化），故必须先空包清库。
+  await bundle.admin?.replaceAllImport(emptyPackage());
 });
+
+/** 与 backup.v3-roundtrip.spec 同款空包：仅清库，不带任何行 */
+function emptyPackage(): BackupPackage {
+  return {
+    meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
+    data: {
+      projects: [],
+      stages: [],
+      tasks: [],
+      members: [],
+      assignments: [],
+      logs: [],
+      contracts: [],
+      settings: [],
+    },
+  };
+}
 
 /** 造一份数据齐备的库：1 项目 × 9 阶段 × 若干任务 + 流水 + 设置 */
 async function seedData(): Promise<Project> {
@@ -62,6 +85,33 @@ async function seedData(): Promise<Project> {
   const tasks = await bundle.tasks.listByProject(project.id);
   if (tasks[0]) {
     await bundle.tasks.update(tasks[0].id, { done: true });
+  }
+  // v0.6（IN-06）：对一条任务写入 artifacts（≥2 个对象，path 与 url 各一）+
+  // dependsOn（引用同项目既有任务）+ status='review'，让 roundtrip 覆盖对象数组保真
+  // 与「done 由 status 反推」的归一口径（键序铁律的间接验证也依赖这里）。
+  if (tasks[0] && tasks[1]) {
+    await bundle.tasks.update(tasks[0].id, {
+      status: 'review',
+      dependsOn: [tasks[1].id],
+      artifacts: [
+        {
+          id: 'art_path_1',
+          kind: 'file',
+          title: 'payload.schema.ts',
+          path: 'src/core/agent/payload.schema.ts',
+          url: null,
+          note: null,
+        },
+        {
+          id: 'art_link_1',
+          kind: 'link',
+          title: '契约文档',
+          path: null,
+          url: 'https://example.com/payload-v1',
+          note: null,
+        },
+      ],
+    });
   }
   return project;
 }

@@ -6,6 +6,11 @@
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 
+// v0.6：JSON 数组列反序列化统一走通用实现（parseJsonArray<Task>）。
+// ★ 旧的本地实现内含 `filter(x => typeof x === 'string')`——对 artifacts（对象数组）
+//   会把对象元素全部滤掉、静默清空，必须换成 server/lib/json-columns.ts 的版本。
+import { parseJsonArray } from '../lib/json-columns';
+
 interface StageLogRow {
   id: string;
   stage_id: string;
@@ -314,23 +319,11 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
    * 以 JSON 数组串存储的列（SQLite 无数组类型）。
    * 导出时必须反序列化回真正的数组——否则前端 zod 期望 array 却收到 string，
    * 备份导入会被整体拒绝（曾导致 NAS 导出的备份无法导回前端）。
+   * v0.6：depends_on / artifacts 是对象/字符串数组列，走通用 parseJsonArray（无 filter）。
    */
   const JSON_ARRAY_COLUMNS: Record<string, string[]> = {
-    tasks: ['assignee_ids'],
+    tasks: ['assignee_ids', 'depends_on', 'artifacts'],
   };
-
-  /** 反序列化 JSON 数组列；坏数据回落 []，绝不因单条脏数据让整次导出 500 */
-  function parseJsonArray(raw: unknown): string[] {
-    if (typeof raw !== 'string' || raw.length === 0) return [];
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      return Array.isArray(parsed)
-        ? parsed.filter((x): x is string => typeof x === 'string')
-        : [];
-    } catch {
-      return [];
-    }
-  }
 
   /** snake_case 行 → camelCase DTO（key 下划线转驼峰；布尔列 0/1 转 boolean；JSON 数组列反序列化） */
   function rowToDto(table: string, o: Record<string, unknown>): Record<string, unknown> {
@@ -342,7 +335,8 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
       if (boolCols.includes(k)) {
         out[camelKey] = Boolean(v);
       } else if (jsonArrCols.includes(k)) {
-        out[camelKey] = parseJsonArray(v);
+        // 通用版（无 filter(string)）：保证 artifacts 对象数组往返保真
+        out[camelKey] = parseJsonArray<unknown>(v);
       } else {
         out[camelKey] = v;
       }

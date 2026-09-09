@@ -151,6 +151,98 @@ export enum StageLogType {
 }
 
 /**
+ * 任务来源（v0.6 Agent 任务排期）。
+ *   - human：人工在 App 内建立的任务（存量数据全部归此类）；
+ *   - agent：由 Agent payload 导入产出的任务。
+ * 用开放的字符串联合而非新增实体：Agent 本身就是一种 Member（PRD §0.4-1），
+ * 不新增顶层实体、不改 ProjectType（守全行业原则）。
+ */
+export type TaskSource = 'human' | 'agent';
+
+/** 全部任务来源集合（遍历渲染/校验用） */
+export const ALL_TASK_SOURCES: readonly TaskSource[] = ['human', 'agent'];
+
+/**
+ * 任务状态（v0.6 · PRD §4.4）。
+ * ★ `Task.status` 是「是否完成」的唯一事实源；`Task.done` 降级为派生字段
+ *   （读取一律走 `taskIsDone()`，写入一律走 `withStatus()`）。
+ */
+export enum TaskStatus {
+  Draft = 'draft',
+  Ready = 'ready',
+  Claimed = 'claimed',
+  InProgress = 'in_progress',
+  Blocked = 'blocked',
+  Review = 'review',
+  Done = 'done',
+}
+
+/** 全部任务状态集合（遍历渲染 7 列看板用） */
+export const ALL_TASK_STATUSES: readonly TaskStatus[] = [
+  TaskStatus.Draft,
+  TaskStatus.Ready,
+  TaskStatus.Claimed,
+  TaskStatus.InProgress,
+  TaskStatus.Blocked,
+  TaskStatus.Review,
+  TaskStatus.Done,
+];
+
+/** 任务状态展示名映射（唯一 UI 文案源，铁律 7） */
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  [TaskStatus.Draft]: '草稿',
+  [TaskStatus.Ready]: '就绪',
+  [TaskStatus.Claimed]: '已认领',
+  [TaskStatus.InProgress]: '进行中',
+  [TaskStatus.Blocked]: '受阻',
+  [TaskStatus.Review]: '待验收',
+  [TaskStatus.Done]: '已完成',
+};
+
+/**
+ * 合法流转白名单（PRD §4.4 状态图的代码化，共 9 条边）。
+ *
+ * 纪律：
+ *   - `task.service.assertTransition()` 是**严格通道**（UI 手动改状态必须走它）；
+ *   - payload 导入走**宽松通道**（直落 Agent 给定的 status，因为上游 Agent 是事实源）；
+ *   - 本期不新增错误码：非法流转复用 `Validation`，claim 冲突复用 `Conflict`。
+ */
+export const TASK_STATUS_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
+  [TaskStatus.Draft]: [TaskStatus.Ready],
+  // Ready → Claimed 是唯一出口：Ready 语义是「可被认领的下一步」
+  [TaskStatus.Ready]: [TaskStatus.Claimed],
+  // Claimed → Ready = 超时回收 / 主动释放
+  [TaskStatus.Claimed]: [TaskStatus.InProgress, TaskStatus.Ready],
+  [TaskStatus.InProgress]: [TaskStatus.Blocked, TaskStatus.Review],
+  [TaskStatus.Blocked]: [TaskStatus.Ready],
+  // Review → Claimed = 打回重做
+  [TaskStatus.Review]: [TaskStatus.Done, TaskStatus.Claimed],
+  [TaskStatus.Done]: [],
+};
+
+/**
+ * 成员行为体种类（v0.6）：Agent 是 Member 的一种，不新增顶层实体。
+ *   - human：人类成员（存量数据全部归此类）
+ *   - agent：Agent 身份（占 Agent 席位，见 PRD 附录 C）
+ */
+export enum MemberActorKind {
+  Human = 'human',
+  Agent = 'agent',
+}
+
+/** 全部行为体种类集合（遍历渲染/校验用） */
+export const ALL_MEMBER_ACTOR_KINDS: readonly MemberActorKind[] = [
+  MemberActorKind.Human,
+  MemberActorKind.Agent,
+];
+
+/** 行为体种类展示名映射（唯一 UI 文案源，铁律 7） */
+export const MEMBER_ACTOR_KIND_LABELS: Record<MemberActorKind, string> = {
+  [MemberActorKind.Human]: '人类',
+  [MemberActorKind.Agent]: 'Agent',
+};
+
+/**
  * 统一业务错误码。
  * 仓储层任何失败抛 ChangxiaError{code,userMessage}；REST client 将网络/HTTP
  * 错误翻译为同一类型（共享知识铁律 5），上层只 catch 一个类。

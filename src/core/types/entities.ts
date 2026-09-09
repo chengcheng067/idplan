@@ -5,6 +5,7 @@
 
 import {
   AssignmentAction,
+  MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
   ProjectType,
@@ -12,7 +13,111 @@ import {
   ScheduleBasis,
   StageLogType,
   StageStatus,
+  TaskStatus,
+  type TaskSource,
 } from './enums';
+
+/**
+ * 任务产出物（v0.6 · PRD §6.2 / AF-02）。
+ * `artifacts` 是**对象数组**——序列化时绝不可经过任何
+ * `filter(x => typeof x === 'string')` 的函数（会把对象元素静默清空），
+ * 必须走通用 `serializeJson` / `parseJson`（见 docs/backup-format.md v3 章节）。
+ */
+export interface TaskArtifact {
+  id: string; // art_xxx
+  /**
+   * 产出物种类。未知值归一为 'other'（前向兼容：将来新增种类时老数据不被拒绝）。
+   * 注意：这是**封闭枚举**（前端渲染需要穷举图标），与 `Member.agentKind` 的
+   * 开放字符串策略不同——后者是 Harness 名，迭代极快，禁止封闭。
+   */
+  kind: 'task_md' | 'doc' | 'file' | 'diff' | 'link' | 'other';
+  title: string;
+  /** 本地路径（浏览器沙箱内无法验证存在性，UI 降级为「复制路径」） */
+  path: string | null;
+  /** 外链 */
+  url: string | null;
+  /** 备注 */
+  note: string | null;
+}
+
+/** 阶段任务条目 */
+export interface Task {
+  id: string; // tsk_xxx
+  projectId: string;
+  stageId: string;
+  title: string;
+  /**
+   * ⚠️ **派生字段（v0.6 起降级）**：唯一事实源是 `status`，`done ≡ (status === 'done')`。
+   * @deprecated 禁止直接读 `t.done`（含本字段的任何读取点），一律用 `taskIsDone(t)`；
+   *   禁止单独写 `done`，一律用 `withStatus(row, next)` 或在仓储内 `done = status === 'done'` 双写。
+   *   字段保留仅为兼容既有备份格式与老数据迁移。
+   */
+  done: boolean;
+  /** 主负责人/兼容字段（保留）：UI 保存时自动同步为 assigneeIds[0] ?? null */
+  assigneeId: string | null;
+  /**
+   * 参与人全集（v0.3 新增，必填）：写入路径统一默认 []。
+   * 旧数据/旧备份无该字段 → zod .default([]) 归一 → 运行时 taskAssigneeIds() 回落 [assigneeId]，
+   * 行为与 v0.2 完全一致（键序铁律：本字段插在 assigneeId 之后、dueDate 之前，与 taskSchema/repo insert 同步）。
+   */
+  assigneeIds: string[];
+  /** 自然日截止日，YYYY-MM-DD 或 ISO datetime 均以 string 存库，可空 */
+  dueDate: string | null;
+  /* ------------------------- v0.6 Agent 新增块（序 9–17） ------------------------- */
+  /**
+   * 任务来源。键序铁律：下面 9 个字段在 entities / backup taskSchema /
+   * local.tasks.repo.insert / project.service.taskRows **四处必须逐字同序**
+   * （顺序即 §3.1 序 9–17：source → externalId → agentId → status → description →
+   *   dependsOn → artifacts → startAt → claimedAt，位于 dueDate 后、orderIndex 前）。
+   */
+  source: TaskSource;
+  /**
+   * 幂等键，建议格式 `${agentKind}:${runId}:${localKey}`。
+   * ⚠️ Dexie 侧人工任务**不写该键**（`null` 不是合法 IDB key，会干扰 `&externalId` 唯一索引）；
+   * 序列化（备份导出）侧由 zod `.nullable().default(null)` 归一回 `null`，保证备份形状稳定。
+   */
+  externalId: string | null;
+  /** 产出者 Agent 的 Member.id（人类任务为 null） */
+  agentId: string | null;
+  /** ★ 唯一事实源。7 值见 TaskStatus；老数据迁移：done=true→'done'，否则 'draft' */
+  status: TaskStatus;
+  /** Markdown 正文（承接 handoff bundle 的「上游留给你的话」） */
+  description: string | null;
+  /** 同项目内前驱 Task.id（跨项目引用在解引用阶段被剔除） */
+  dependsOn: string[];
+  /** 产出物清单（对象数组，序列化必须走 serializeJson） */
+  artifacts: TaskArtifact[];
+  /** 任务级排期起点（Timeline 画条用），UTC ISO string 或 'YYYY-MM-DD' */
+  startAt: string | null;
+  /** 认领时刻（V1 的 TTL 回收用）；null = 未被认领 */
+  claimedAt: string | null;
+  /* ------------------------------- v0.6 新增块结束 ------------------------------ */
+  orderIndex: number;
+  revision: number;
+  updatedAt: string;
+}
+
+/**
+ * ★ 全项目唯一「任务是否完成」入口（v0.6 起）。
+ *
+ * 禁用 `t.done` 直读的原因：迁移期与老备份导入后，`status` 与 `done` 可能短暂不一致，
+ * 直接读 `done` 会与看板状态角标自相矛盾。这里以 `status` 为准，并对
+ * 「status 缺失（Dexie 升级前的内存态 / 老备份 / 测试夹具）」保留 `done===true` 兜底。
+ */
+export function taskIsDone(t: Pick<Task, 'status' | 'done'>): boolean {
+  return t.status === TaskStatus.Done || t.done === true;
+}
+
+/**
+ * ★ 写入侧唯一「改状态」入口：任何写 status 的路径都必须经此构造，保证 done 不漂移。
+ * 用法：`repo.put(withStatus(row, TaskStatus.Done))`。
+ */
+export function withStatus<T extends { status: TaskStatus; done: boolean }>(
+  row: T,
+  next: TaskStatus,
+): T {
+  return { ...row, status: next, done: next === TaskStatus.Done };
+}
 
 /** 项目 */
 export interface Project {
@@ -82,28 +187,6 @@ export interface Stage {
   updatedAt: string;
 }
 
-/** 阶段任务条目 */
-export interface Task {
-  id: string; // tsk_xxx
-  projectId: string;
-  stageId: string;
-  title: string;
-  done: boolean;
-  /** 主负责人/兼容字段（保留）：UI 保存时自动同步为 assigneeIds[0] ?? null */
-  assigneeId: string | null;
-  /**
-   * 参与人全集（v0.3 新增，必填）：写入路径统一默认 []。
-   * 旧数据/旧备份无该字段 → zod .default([]) 归一 → 运行时 taskAssigneeIds() 回落 [assigneeId]，
-   * 行为与 v0.2 完全一致（键序铁律：本字段插在 assigneeId 之后、dueDate 之前，与 taskSchema/repo insert 同步）。
-   */
-  assigneeIds: string[];
-  /** 自然日截止日，YYYY-MM-DD 或 ISO datetime 均以 string 存库，可空 */
-  dueDate: string | null;
-  orderIndex: number;
-  revision: number;
-  updatedAt: string;
-}
-
 /** 成员（v0.6 支持密码登录，可选——管理员决定成员可有/可无密码） */
 export interface Member {
   id: string; // mem_xxx
@@ -132,6 +215,22 @@ export interface Member {
    * local 模式不填此字段，由 passwordHash 派生（见 memberHasPassword）。
    */
   hasPassword?: boolean;
+  /* ----------------------- v0.6 Agent 新增块（2 字段） ----------------------- */
+  /**
+   * 行为体种类：Agent 是 Member 的一种（PRD §0.4-1），不新增顶层实体。
+   * 键序铁律：与 `agentKind` 一起插在 `passwordHash` 之后、`revision` 之前，
+   * 与 backup.service.memberSchema / local.members.repo.insert 三处同步。
+   */
+  actorKind: MemberActorKind;
+  /**
+   * Agent 的 Harness 种类标识（workbuddy / deepseek / codex / claude / copilot /
+   * gemini / other …… 仅作 UI 下拉建议值，**不做任何校验**）。
+   * ⚠️ 硬约束：这是**开放字符串**——Harness 迭代极快，任何 `enum` / `z.enum` /
+   * `Record<AgentKind, …>` 的封闭结构都会导致每次接新 Agent 都要发版（PRD §0.5）。
+   * 人类成员恒为 null。
+   */
+  agentKind: string | null;
+  /* ----------------------------- v0.6 新增块结束 ---------------------------- */
   revision: number;
   updatedAt: string;
 }

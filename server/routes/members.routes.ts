@@ -31,6 +31,9 @@ interface MemberRow {
   role_kind: string;
   /** v0.6 密码哈希（服务端私有，不下发客户端） */
   password_hash: string | null;
+  /** v0.6 Agent 身份（键序与 entities.Member 一致：password_hash 后、revision 前） */
+  actor_kind: string;
+  agent_kind: string | null;
   revision: number;
   updated_at: string;
 }
@@ -77,6 +80,9 @@ function rowToMember(r: MemberRow): Record<string, unknown> {
     // 只下发「是否设过密码」，不下发哈希本体（理由见文件头注释）。
     // 前端据此决定成员进入时是否弹密码框；真正的比对一律走 POST /api/members/verify。
     hasPassword: Boolean(r.password_hash),
+    // v0.6 Agent 身份：agentKind 是开放字符串（禁 z.enum / enum 封闭），人类恒 null
+    actorKind: r.actor_kind === 'agent' ? 'agent' : 'human',
+    agentKind: r.agent_kind,
     revision: r.revision,
     updatedAt: r.updated_at,
   };
@@ -115,9 +121,11 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
     const id = crypto.randomUUID();
     const pw = b.password as string | undefined;
     const passwordHash = pw ? hashPassword(pw) : null;
+    const actorKind = b.actorKind === 'agent' ? 'agent' : 'human';
+    const agentKind = actorKind === 'agent' ? ((b.agentKind as string | null) ?? null) : null;
     db.prepare(
-      `INSERT INTO members (id, name, role, contact, avatar_color, active, role_kind, password_hash, revision, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?, 1, ?)`,
+      `INSERT INTO members (id, name, role, contact, avatar_color, active, role_kind, password_hash, actor_kind, agent_kind, revision, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 1, ?)`,
     ).run(
       id,
       name,
@@ -126,6 +134,8 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
       String(b.avatarColor ?? '#3D6B5B'),
       b.roleKind === 'admin' ? 'admin' : 'member',
       passwordHash,
+      actorKind,
+      agentKind,
       nowIso(),
     );
     const row = db.prepare('SELECT * FROM members WHERE id = ?').get(id) as MemberRow;
@@ -153,11 +163,20 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
       active: b.active !== undefined ? (b.active ? 1 : 0) : existing.active,
       role_kind: b.roleKind !== undefined ? String(b.roleKind) : existing.role_kind,
       password_hash: passwordHash,
+      // v0.6：actorKind/agentKind 可改（提权为 Agent 身份 / 降级回人类，agentKind null=清除）
+      actor_kind:
+        b.actorKind !== undefined
+          ? (b.actorKind === 'agent' ? 'agent' : 'human')
+          : existing.actor_kind,
+      agent_kind:
+        b.agentKind !== undefined
+          ? (b.agentKind as string | null)
+          : existing.agent_kind,
       revision: existing.revision + 1,
       updated_at: nowIso(),
     };
     db.prepare(
-      'UPDATE members SET name=?, role=?, contact=?, avatar_color=?, active=?, role_kind=?, password_hash=?, revision=?, updated_at=? WHERE id=?',
+      'UPDATE members SET name=?, role=?, contact=?, avatar_color=?, active=?, role_kind=?, password_hash=?, actor_kind=?, agent_kind=?, revision=?, updated_at=? WHERE id=?',
     ).run(
       merged.name,
       merged.role,
@@ -166,6 +185,8 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
       merged.active,
       merged.role_kind,
       merged.password_hash,
+      merged.actor_kind,
+      merged.agent_kind,
       merged.revision,
       merged.updated_at,
       id,

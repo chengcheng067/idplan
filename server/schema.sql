@@ -1,5 +1,16 @@
 -- 《长夏》SQLite DDL（与 src/core/types/entities.ts 同构）
 -- 约定：时间一律 TEXT 存储 UTC ISO 8601 字符串；金额为元整数 REAL/INTEGER。
+--
+-- ★ 文件分段（v0.6 · 设计文档 §6.2 / R1 顺序缺陷修复）：
+--   本文件被 `-- @SECTION:TABLES` 与 `-- @SECTION:INDEXES` 两个标记切成两段，
+--   server/db.ts 的 createDb() 按「① 表结构 → ② 幂等补列 → ③ 索引」三段式执行。
+--   为什么：对已存在的老库，CREATE TABLE IF NOT EXISTS 不会补列；若索引 DDL 与
+--   表 DDL 一起先执行，`CREATE INDEX ... ON tasks(external_id)` 会因列尚不存在而
+--   抛 `no such column` → 服务启动即崩。v2 迁移侥幸没踩中（那批新列恰好无索引），
+--   v3 的新列（external_id/status/agent_id）都要建索引，缺陷必然触发。
+--   索引 DDL 一律放 INDEXES 段；TABLES 段内禁止出现 CREATE INDEX。
+
+-- @SECTION:TABLES
 
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
@@ -41,7 +52,6 @@ CREATE TABLE IF NOT EXISTS stages (
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_stages_project ON stages(project_id, order_index);
 
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
@@ -54,12 +64,22 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- 读取时反序列化为 string[]；写入前序列化。缺失/空 → '[]'。
   assignee_ids TEXT NOT NULL DEFAULT '[]',
   due_date TEXT,
+  -- v0.6 Agent 字段（键序与 entities.Task 一致：due_date 之后、order_index 之前）。
+  -- depends_on / artifacts 为 JSON 文本列；artifacts 是对象数组，
+  -- 序列化必须走 server/lib/json-columns.ts 的 serializeJson（绝不可 filter(string)）。
+  source TEXT NOT NULL DEFAULT 'human',
+  external_id TEXT,
+  agent_id TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  description TEXT,
+  depends_on TEXT NOT NULL DEFAULT '[]',
+  artifacts TEXT NOT NULL DEFAULT '[]',
+  start_at TEXT,
+  claimed_at TEXT,
   order_index INTEGER NOT NULL DEFAULT 1,
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks(stage_id, done);
-CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
 
 CREATE TABLE IF NOT EXISTS members (
   id TEXT PRIMARY KEY,
@@ -72,6 +92,10 @@ CREATE TABLE IF NOT EXISTS members (
   role_kind TEXT NOT NULL DEFAULT 'member',
   -- v0.6 密码系统：密码哈希（格式 saltHex:hashHex），NULL=无密码（管理员决定成员可有/可无）。
   password_hash TEXT,
+  -- v0.6 Agent 身份（键序与 entities.Member 一致：password_hash 之后、revision 之前）。
+  -- agent_kind 为开放字符串（workbuddy/deepseek/codex/claude/…），人类成员为 NULL。
+  actor_kind TEXT NOT NULL DEFAULT 'human',
+  agent_kind TEXT,
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL
 );
@@ -86,7 +110,6 @@ CREATE TABLE IF NOT EXISTS assignments (
   operator_name TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_assignments_task ON assignments(task_id);
 
 -- append-only
 CREATE TABLE IF NOT EXISTS stage_logs (
@@ -104,8 +127,6 @@ CREATE TABLE IF NOT EXISTS stage_logs (
   operator_name TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_logs_stage ON stage_logs(stage_id);
-CREATE INDEX IF NOT EXISTS idx_logs_project ON stage_logs(project_id);
 
 CREATE TABLE IF NOT EXISTS contracts (
   id TEXT PRIMARY KEY,
@@ -123,3 +144,21 @@ CREATE TABLE IF NOT EXISTS settings (
   value_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- @SECTION:INDEXES
+
+CREATE INDEX IF NOT EXISTS idx_stages_project ON stages(project_id, order_index);
+CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks(stage_id, done);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
+-- v0.6 新增索引（三段式执行到本段时列已齐备）：
+-- external_id 用 UNIQUE + 部分索引（WHERE external_id IS NOT NULL）——幂等键的
+-- 最后一道防线是 DB 层唯一约束；部分索引允许无数条 NULL（人工任务无幂等键）。
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_external_id ON tasks(external_id)
+  WHERE external_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_agent ON tasks(agent_id);
+CREATE INDEX IF NOT EXISTS idx_members_actor ON members(actor_kind);
+-- append-only 流水索引
+CREATE INDEX IF NOT EXISTS idx_assignments_task ON assignments(task_id);
+CREATE INDEX IF NOT EXISTS idx_logs_stage ON stage_logs(stage_id);
+CREATE INDEX IF NOT EXISTS idx_logs_project ON stage_logs(project_id);

@@ -103,6 +103,18 @@ function samplePackage() {
           // 多人指派：这条数据曾因 SQLite 无数组类型被隐式 join 吞成字符串
           assigneeIds: ['m1', 'm2'],
           dueDate: '2026-08-10',
+          // v0.6 Agent 字段（M36：samplePackage 补 9 字段，status 与 done 一致）
+          source: 'human',
+          externalId: null,
+          agentId: null,
+          status: 'done',
+          description: null,
+          dependsOn: [],
+          artifacts: [
+            { id: 'art_1', kind: 'file', title: '平面图.pdf', path: '/docs/plan.pdf', url: null, note: null },
+          ],
+          startAt: null,
+          claimedAt: null,
           orderIndex: 1,
           revision: 1,
           updatedAt: now,
@@ -117,6 +129,9 @@ function samplePackage() {
           avatarColor: '#5B8C5A',
           active: true,
           roleKind: 'admin',
+          // v0.6 Member 2 字段
+          actorKind: 'human',
+          agentKind: null,
           revision: 1,
           updatedAt: now,
         },
@@ -160,11 +175,26 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
       (c) => c.name,
     );
     expect(tCols).toEqual(expect.arrayContaining(['assignee_ids']));
+    // v0.6（M36）：schema 断言补 11 列（tasks 9 + members 2），既有断言不改
+    expect(tCols).toEqual(
+      expect.arrayContaining([
+        'source',
+        'external_id',
+        'agent_id',
+        'status',
+        'description',
+        'depends_on',
+        'artifacts',
+        'start_at',
+        'claimed_at',
+      ]),
+    );
 
     const mCols = (ctx.db.prepare('PRAGMA table_info(members)').all() as Array<{ name: string }>).map(
       (c) => c.name,
     );
     expect(mCols).toEqual(expect.arrayContaining(['role_kind', 'password_hash']));
+    expect(mCols).toEqual(expect.arrayContaining(['actor_kind', 'agent_kind']));
   });
 
   it('stages.order_index 上限放宽到 99（前端备份 schema 已放宽，老库 CHECK 1-9 会拒写）', async () => {

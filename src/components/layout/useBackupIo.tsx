@@ -10,6 +10,9 @@ import {
 import { logError, logUser } from '../../core/services/log.service';
 import { ChangxiaError } from '../../core/types/enums';
 import type { BackupPackage } from '../../core/types/dto';
+import type { IRepositoryBundle } from '../../core/repositories/interfaces';
+import { DB_NAME } from '../../core/schema/current';
+import { dumpLegacyTables } from '../../core/repositories/local/dexie.database';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 /**
@@ -33,6 +36,42 @@ export interface BackupIo {
   confirmDialog: JSX.Element;
 }
 
+/**
+ * 可独立调用的导出函数（v0.6 抽取）：返回是否成功落盘。
+ * 除顶栏/移动菜单按钮外，也供非组件上下文（如迁移前闸门）复用同一套落盘口径。
+ * 成功/失败只记日志、不弹 toast——toast 由 UI 调用方按自身语境补。
+ */
+export async function exportBackupToFile(repos: IRepositoryBundle): Promise<boolean> {
+  try {
+    const pkg = await new BackupService(repos).exportAll();
+    downloadBackup(pkg);
+    logUser('备份', '保存备份成功');
+    return true;
+  } catch (err) {
+    logError('备份', '保存备份失败', err);
+    return false;
+  }
+}
+
+/**
+ * 迁移前备份闸门专用（v0.6）：把**升级前**的老库（v1）导出为回滚凭据并落盘。
+ *
+ * 为什么不走 BackupService：闸门必须发生在 `db.open()`（触发 Dexie 升级）之前，
+ * 正式仓储此刻尚不存在；`dumpLegacyTables` 用只声明 v1 的临时实例读快照（不会升级）。
+ * 导出失败返回 false —— 调用方**必须**中止升级（宁可不升，不可无凭据升）。
+ */
+export async function exportPreMigrationBackupToFile(dbName: string = DB_NAME): Promise<boolean> {
+  try {
+    const pkg = await dumpLegacyTables(dbName);
+    downloadBackup(pkg);
+    logUser('备份', '数据库升级前备份已导出');
+    return true;
+  } catch (err) {
+    logError('备份', '数据库升级前备份导出失败', err);
+    return false;
+  }
+}
+
 export function useBackupIo(): BackupIo {
   const repos = useRepos();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -43,15 +82,13 @@ export function useBackupIo(): BackupIo {
     useProjectsStore.getState().pushToast(kind, message);
   };
 
+  // 行为与抽取前完全一致（v0.6 仅改为复用 exportBackupToFile，文案口径不变）
   const save = async (): Promise<void> => {
-    try {
-      const pkg = await new BackupService(repos).exportAll();
-      downloadBackup(pkg);
+    const ok = await exportBackupToFile(repos);
+    if (ok) {
       toast('success', '备份包已保存');
-      logUser('备份', '保存备份成功');
-    } catch (err) {
-      toast('error', err instanceof ChangxiaError ? err.userMessage : '备份导出失败。');
-      logError('备份', '保存备份失败', err);
+    } else {
+      toast('error', '备份导出失败。');
     }
   };
 

@@ -6,14 +6,17 @@
 import {
   AssignmentAction,
   Confidence,
+  MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
   ProjectType,
   ScheduleBasis,
   StageLogType,
   StageStatus,
+  TaskStatus,
+  type TaskSource,
 } from './enums';
-import type { Member, Project, Stage, Task } from './entities';
+import type { Member, Project, Stage, Task, TaskArtifact } from './entities';
 
 /* ------------------------------------ 项目 ----------------------------------- */
 
@@ -130,6 +133,12 @@ export interface UpdateStageCmd {
 
 /* ------------------------------------ 任务 ------------------------------------ */
 
+/**
+ * 任务创建命令。
+ *
+ * v0.6 Agent 新增块（与 Task 实体的序 9–16 对应；`claimedAt` 只在认领路径产生，
+ * 不出现在 Create 命令里；`done` 不可写——它由 status 派生，见 entities.taskIsDone）。
+ */
 export interface CreateTaskCmd {
   projectId: string;
   stageId: string;
@@ -138,8 +147,31 @@ export interface CreateTaskCmd {
   /** 参与人全集（可选；未传时 repo.insert 回落 [assigneeId]） */
   assigneeIds?: string[];
   dueDate: string | null;
+  /** 任务来源；缺省由 repo 落 'human' */
+  source?: TaskSource;
+  /** 幂等键（Agent 导入路径必填，人工路径不传） */
+  externalId?: string;
+  /** 产出者 Agent 的 Member.id */
+  agentId?: string | null;
+  /** 初始状态；缺省 repo 落 TaskStatus.Draft */
+  status?: TaskStatus;
+  /** Markdown 正文 */
+  description?: string | null;
+  /** 同项目内前驱 Task.id */
+  dependsOn?: string[];
+  /** 产出物清单（对象数组） */
+  artifacts?: TaskArtifact[];
+  /** 任务级排期起点 */
+  startAt?: string | null;
 }
 
+/**
+ * 任务字段级更新命令。
+ *
+ * @deprecated 字段 `done`：v0.6 起 `done` 由 `status` 派生（唯一事实源 = `Task.status`），
+ *   传 `done` 会被仓储做双向双写（done=true ⇔ status='done'）以兼容存量调用；
+ *   新代码一律传 `status` 并经 `withStatus()` 构造。**绝不允许出现两者矛盾的写入。**
+ */
 export interface UpdateTaskCmd {
   title?: string;
   done?: boolean;
@@ -148,6 +180,18 @@ export interface UpdateTaskCmd {
   assigneeIds?: string[];
   dueDate?: string | null;
   orderIndex?: number;
+  /** 目标状态（v0.6 起 UI 手动流转必须走 task.service 的严格通道） */
+  status?: TaskStatus;
+  /** Markdown 正文 */
+  description?: string | null;
+  /** 同项目内前驱 Task.id */
+  dependsOn?: string[];
+  /** 产出物清单（对象数组） */
+  artifacts?: TaskArtifact[];
+  /** 任务级排期起点 */
+  startAt?: string | null;
+  /** 认领时刻（仅 claim 路径写入，一般调用方不要手工传） */
+  claimedAt?: string | null;
 }
 
 /* ------------------------------------ 成员 ------------------------------------ */
@@ -165,6 +209,13 @@ export interface CreateMemberCmd {
    * remote：随 body 上送，由后端 crypto.scrypt 哈希后存 SQLite。绝不落明文于客户端。
    */
   password?: string;
+  /** 行为体种类；缺省 repo 落 MemberActorKind.Human（存量调用方零改动） */
+  actorKind?: MemberActorKind;
+  /**
+   * Agent 的 Harness 种类标识。**开放字符串，不做校验**（禁 z.enum / enum 封闭）。
+   * 仅当 actorKind==='agent' 时有意义；人类成员落 null。
+   */
+  agentKind?: string | null;
 }
 
 export interface UpdateMemberCmd {
@@ -182,6 +233,13 @@ export interface UpdateMemberCmd {
    *   - undefined → 不变（缺省）。
    */
   password?: string | null;
+  /** 行为体种类（提权为 Agent 身份 / 降级回人类，可经此处修改） */
+  actorKind?: MemberActorKind;
+  /**
+   * Agent 的 Harness 种类标识。**开放字符串，不做校验**（禁 z.enum / enum 封闭）。
+   * null → 清除（回人类身份）。
+   */
+  agentKind?: string | null;
 }
 
 /* ------------------------------------ 备份 ------------------------------------ */
@@ -192,9 +250,11 @@ export interface BackupPackage {
     app: 'changxia';
     /**
      * 1 = 老备份（无 stagePresetKey / templateKey / colorIndex / scheduleBasis）；
-     * 2 = 现行版本。导入侧同时接受 1 与 2，导出恒为 2。
+     * 2 = 现行版本（v0.5 阶段自定义 + assigneeIds + roleKind + 密码字段）；
+     * 3 = v0.6 Agent 字段版本（Task 9 字段 + Member 2 字段 + status/done 归一）。
+     * 导入侧同时接受 1 / 2 / 3，导出恒为 3（BACKUP_SCHEMA_VERSION）。
      */
-    schemaVersion: 1 | 2;
+    schemaVersion: 1 | 2 | 3;
     exportedAt: string;
   };
   data: {

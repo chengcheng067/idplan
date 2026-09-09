@@ -81,3 +81,52 @@
 
 导入侧 projects / stages 与 members / tasks 一样**落库 zod 归一产物**（`normalizeProjectRow` /
 `normalizeStageRow`），归一函数按 entity 键序重建对象，故 roundtrip 的 `JSON.stringify` 逐表 diff 依然成立。
+
+## v3 增量（v0.6 · Agent 任务字段，PRD §0.4 / IN-06）
+
+现行导出版本 **3**（`BACKUP_SCHEMA_VERSION = 3`）；导入侧同时接受 **1 / 2 / 3**。
+
+### Task 新增 9 字段（键序：`dueDate` 后、`orderIndex` 前，即 §3.1 序 9–17）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `source` | `'human' \| 'agent'` | `'human'` | 任务来源；存量数据全部归 `human` |
+| `externalId` | `string \| null` | `null` | 幂等键，建议 `${agentKind}:${runId}:${localKey}`。Dexie 行内不写该键，序列化侧归一为 `null`（形状稳定） |
+| `agentId` | `string \| null` | `null` | 产出者 Agent 的 Member.id |
+| `status` | 7 值（draft/ready/claimed/in_progress/blocked/review/done） | 由 `done` 推导 | ★ **唯一事实源**。schema 用 `.optional()` 而非 `.default('draft')`——v2 老备份无 status，必须由 done 反推 |
+| `description` | `string \| null` | `null` | Markdown 正文 |
+| `dependsOn` | `string[]` | `[]` | 同项目内前驱 Task.id |
+| `artifacts` | `TaskArtifact[]`（对象数组） | `[]` | ★ 序列化绝不可经过 `serializeAssigneeIds`（内含 `filter(typeof x === 'string')`，会静默清空对象数组） |
+| `startAt` | `string \| null` | `null` | 任务级排期起点 |
+| `claimedAt` | `string \| null` | `null` | 认领时刻 |
+
+`TaskArtifact`：`{ id: 'art_xxx', kind: 'task_md'|'doc'|'file'|'diff'|'link'|'other', title, path, url, note }`；
+`kind` 缺省 `'other'`（前向兼容）；`id` 缺失 → 结构不符直接拒绝（不静默补）。
+
+### Member 新增 2 字段（键序：`passwordHash` 后、`revision` 前）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `actorKind` | `'human' \| 'agent'` | `'human'` | Agent 是 Member 的一种（不新增顶层实体） |
+| `agentKind` | `string \| null` | `null` | **开放字符串，严禁 z.enum**——Harness 迭代极快，封闭结构会让每次接新 Agent 都要发版 |
+
+### `done` 与 `status` 的归一口径（normalizeTaskRow）
+
+- 导入时 `status` 缺失 → `status = (done === true ? 'done' : 'draft')`；
+- 归一后恒有 `done === (status === 'done')`，两字段永不矛盾（即使老备份里矛盾）；
+- `done=false` 的老数据归一为 **`draft` 而非 `ready`**：ready 语义是「可被 Agent 认领的下一步」，
+  把存量人工任务全置 ready 会瞬间灌满 Ready 队列。
+
+### v1 / v2 / v3 兼容矩阵
+
+| 备份版本 | 导出 | 导入 | 缺失字段处理 |
+|---|---|---|---|
+| v1（远古） | ✗ | ✅ 接受 | 既有 `.transform(normalizeProjectRow/StageRow)` + 新 9/2 字段 `.default()` |
+| v2（v0.5） | ✗（升级后不再产出） | ✅ 接受 | `done` → `status` 归一；其余 8 字段 `.default()`；`externalId` 归一 `null` |
+| v3（现行） | ✅ 恒为 v3 | ✅ 接受 | 全字段显式存在 |
+
+### 键序铁律（v3 同样适用）
+
+Task 9 字段的键顺序必须在四处逐字一致：`entities.ts` / `backup.service.taskSchema`（含
+`normalizeTaskRow` 返回字面量）/ `local.tasks.repo.insert` / `project.service.taskRows`。
+违反后果：`tests/backup.roundtrip.spec.ts` 的 `JSON.stringify` 逐表 diff 失败。

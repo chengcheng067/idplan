@@ -1,9 +1,9 @@
 /**
  * ID 生成唯一出口（铁律 1）：crypto.randomUUID() + 类型前缀。
  */
-export type IdPrefix = 'proj' | 'stg' | 'tsk' | 'mem' | 'log' | 'ctt';
+export type IdPrefix = 'proj' | 'stg' | 'tsk' | 'mem' | 'log' | 'ctt' | 'art';
 
-const PREFIXES: readonly IdPrefix[] = ['proj', 'stg', 'tsk', 'mem', 'log', 'ctt'];
+const PREFIXES: readonly IdPrefix[] = ['proj', 'stg', 'tsk', 'mem', 'log', 'ctt', 'art'];
 
 export function createId(prefix: IdPrefix): string {
   return `${prefix}_${crypto.randomUUID()}`;

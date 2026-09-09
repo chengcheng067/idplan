@@ -9,16 +9,28 @@ import type { BackupPackage } from '../types/dto';
 import type {
   AssignmentLog,
   StageLog,
+  TaskArtifact,
 } from '../types/entities';
-import { ChangxiaError, ChangxiaErrorCode, ScheduleBasis } from '../types/enums';
+import {
+  ChangxiaError,
+  ChangxiaErrorCode,
+  MemberActorKind,
+  ScheduleBasis,
+  TaskStatus,
+  type TaskSource,
+} from '../types/enums';
 import type { IRepositoryBundle } from '../repositories/interfaces';
 import { normalizeProjectRow, normalizeStageRow } from '../template/stage-fallback';
 
-/** 现行备份 schema 版本（v2 = 含 stagePresetKey / templateKey / colorIndex / scheduleBasis） */
-export const BACKUP_SCHEMA_VERSION = 2;
+/**
+ * 现行备份 schema 版本。
+ * v1 = 老备份（缺阶段自定义字段）；v2 = 阶段自定义 + assigneeIds + roleKind + 密码；
+ * v3 = v0.6 Agent 字段（Task 9 字段 + Member 2 字段 + status/done 归一，见 docs/backup-format.md）。
+ */
+export const BACKUP_SCHEMA_VERSION = 3;
 
-/** 仍可导入的历史版本（v1 = 老备份，缺阶段自定义字段） */
-const LEGACY_BACKUP_SCHEMA_VERSION = 1;
+/** 仍可导入的历史版本（导出恒为现行版本，绝不降级产出） */
+const LEGACY_BACKUP_SCHEMA_VERSIONS = [1, 2] as const;
 
 /* ------------------------------ zod 实体 schema ------------------------------ */
 
@@ -80,22 +92,109 @@ const stageSchema = z
   })
   .transform(normalizeStageRow);
 
-const taskSchema = z.object({
+/** 产出物 schema：对象数组逐字段归一（v3 新增；id 缺失 → 结构不符直接拒绝，不静默补） */
+const artifactSchema = z.object({
   id: z.string(),
-  projectId: z.string(),
-  stageId: z.string(),
+  kind: z.enum(['task_md', 'doc', 'file', 'diff', 'link', 'other']).default('other'),
   title: z.string(),
-  done: z.boolean(),
-  assigneeId: z.string().nullable(),
-  // v0.3 新增：参与人全集。用 .default([]) 而非裸 optional——旧备份无该字段 → 归一 [] → 通过；
-  // 且保证导入后 DB 行必有显式 assigneeIds（否则运行时 assigneeIds.length 读 undefined 抛错）。
-  // 键序铁律：插在 assigneeId 之后、dueDate 之前（与 repo insert / project.service 默认字面量三处同步）。
-  assigneeIds: z.array(z.string()).default([]),
-  dueDate: z.string().nullable(),
-  orderIndex: z.number().int(),
-  revision: z.number().int().nonnegative(),
-  updatedAt: isoString,
+  path: z.string().nullable().default(null),
+  url: z.string().nullable().default(null),
+  note: z.string().nullable().default(null),
 });
+
+/** normalizeTaskRow 的入参形状（= zod 解析产物；status 可缺省，由 transform 决定） */
+export interface TaskRowInput {
+  id: string;
+  projectId: string;
+  stageId: string;
+  title: string;
+  done: boolean;
+  assigneeId: string | null;
+  assigneeIds: string[];
+  dueDate: string | null;
+  source: TaskSource;
+  externalId: string | null;
+  agentId: string | null;
+  status?: TaskStatus;
+  description: string | null;
+  dependsOn: string[];
+  artifacts: TaskArtifact[];
+  startAt: string | null;
+  claimedAt: string | null;
+  orderIndex: number;
+  revision: number;
+  updatedAt: string;
+}
+
+/**
+ * ★ status 用 `.optional()` + transform 而非 `.default('draft')`：
+ *   v2 老备份没有 status，但有 done。若用 `.default('draft')`，done=true 的行会被
+ *   归一成 draft → taskIsDone 仍返回 true（done===true 兜底），但看板会显示「草稿」，
+ *   与「已完成」不符。必须由 done 推导。
+ *
+ * 键序铁律：v0.6 的 9 个新字段按 §3.1 序 9–17 插在 dueDate 后、orderIndex 前；
+ * normalizeTaskRow 内**按 schema 键序重建对象**（与 normalizeProjectRow 同范式），
+ * 否则 roundtrip 的 JSON.stringify 逐表 diff 会失败。
+ */
+const taskSchema = z
+  .object({
+    id: z.string(),
+    projectId: z.string(),
+    stageId: z.string(),
+    title: z.string(),
+    done: z.boolean(),
+    assigneeId: z.string().nullable(),
+    // v0.3 新增：参与人全集。用 .default([]) 而非裸 optional——旧备份无该字段 → 归一 [] → 通过；
+    // 且保证导入后 DB 行必有显式 assigneeIds（否则运行时 assigneeIds.length 读 undefined 抛错）。
+    // 键序铁律：插在 assigneeId 之后、dueDate 之前（与 repo insert / project.service 默认字面量三处同步）。
+    assigneeIds: z.array(z.string()).default([]),
+    dueDate: z.string().nullable(),
+    // ↓↓↓ v0.6 Agent 新增（键序与 entities.Task 逐字对齐）↓↓↓
+    source: z.enum(['human', 'agent']).default('human'),
+    externalId: z.string().nullable().default(null),
+    agentId: z.string().nullable().default(null),
+    status: z.nativeEnum(TaskStatus).optional(), // ← 不给 .default()，由 transform 决定
+    description: z.string().nullable().default(null),
+    dependsOn: z.array(z.string()).default([]),
+    artifacts: z.array(artifactSchema).default([]),
+    startAt: z.string().nullable().default(null),
+    claimedAt: z.string().nullable().default(null),
+    // ↑↑↑ v0.6 Agent 新增 ↑↑↑
+    orderIndex: z.number().int(),
+    revision: z.number().int().nonnegative(),
+    updatedAt: isoString,
+  })
+  .transform(normalizeTaskRow);
+
+/**
+ * 任务行归一：done 由 status 反向对齐（消除历史不一致），并**按 schema 键序重建对象**。
+ * 导入后恒有 `done === (status === 'done')`——即使老备份里两者矛盾。
+ */
+export function normalizeTaskRow(t: TaskRowInput): import('../types/entities').Task {
+  const status = t.status ?? (t.done === true ? TaskStatus.Done : TaskStatus.Draft);
+  return {
+    id: t.id,
+    projectId: t.projectId,
+    stageId: t.stageId,
+    title: t.title,
+    done: status === TaskStatus.Done, // ★ done 由 status 反推
+    assigneeId: t.assigneeId,
+    assigneeIds: t.assigneeIds,
+    dueDate: t.dueDate,
+    source: t.source,
+    externalId: t.externalId,
+    agentId: t.agentId,
+    status,
+    description: t.description,
+    dependsOn: t.dependsOn,
+    artifacts: t.artifacts,
+    startAt: t.startAt,
+    claimedAt: t.claimedAt,
+    orderIndex: t.orderIndex,
+    revision: t.revision,
+    updatedAt: t.updatedAt,
+  };
+}
 
 /**
  * 成员 schema：roleKind 用 z.enum([...]).default('member')（不是裸 optional）。
@@ -115,6 +214,10 @@ const memberSchema = z.object({
   active: z.boolean(),
   roleKind: z.enum(['admin', 'member']).default('member'),
   passwordHash: z.string().nullable().default(null),
+  // v0.6 Agent 新增（键序：passwordHash 后、revision 前，与 entities.Member / repo insert 同步）。
+  // ★ agentKind 严禁 z.enum —— Harness 迭代极快，封闭结构会让每次接新 Agent 都要发版。
+  actorKind: z.nativeEnum(MemberActorKind).default(MemberActorKind.Human),
+  agentKind: z.string().nullable().default(null),
   revision: z.number().int().nonnegative(),
   updatedAt: isoString,
 });
@@ -165,9 +268,13 @@ const settingSchema = z.object({
 const backupSchema = z.object({
   meta: z.object({
     app: z.literal('changxia'),
-    // 导入侧同时接受 v1（老备份）与 v2（含阶段自定义字段）；缺失时按现行版本归一
+    // 导入侧同时接受 v1 / v2 / v3（缺失时按现行版本归一）；导出恒为 BACKUP_SCHEMA_VERSION
     schemaVersion: z
-      .union([z.literal(LEGACY_BACKUP_SCHEMA_VERSION), z.literal(BACKUP_SCHEMA_VERSION)])
+      .union([
+        z.literal(LEGACY_BACKUP_SCHEMA_VERSIONS[0]),
+        z.literal(LEGACY_BACKUP_SCHEMA_VERSIONS[1]),
+        z.literal(BACKUP_SCHEMA_VERSION),
+      ])
       .default(BACKUP_SCHEMA_VERSION),
     exportedAt: isoString,
   }),
@@ -238,8 +345,9 @@ export class BackupService {
       );
     }
     // 2) 落库前组装：一律用 zod 归一产物，保证「老备份缺字段 → 落库后必有显式值」。
-    //    - members：roleKind .default('member') 补齐（v0.2 范式）；
-    //    - tasks：assigneeIds .default([]) 补齐（v0.3 范式，键序 assigneeId 后、dueDate 前）；
+    //    - members：roleKind / actorKind / agentKind .default() 补齐（v0.2 / v0.6 范式）；
+    //    - tasks：assigneeIds .default([]) 补齐（v0.3 范式）+ v0.6 九字段归一
+    //      （status 缺省时由 done 推导，done 由 status 反向对齐——normalizeTaskRow）；
     //    - projects / stages（v2 范式）：stagePresetKey / scheduleBasis / templateKey /
     //      colorIndex 由 .transform() 补齐并**按 schema 键序重建对象**——
     //      该键序与 entities 定义、repo insert 字面量三处对齐，故 roundtrip 的

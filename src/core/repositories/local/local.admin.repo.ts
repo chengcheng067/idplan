@@ -85,7 +85,18 @@ export class LocalAdminRepository implements IAdminRepository {
           await tableOf(name).clear();
         }
         for (const name of ALL_TABLE_NAMES) {
-          const rows = rowsFor(name);
+          let rows = rowsFor(name);
+          if (name === 'tasks') {
+            // v0.6：externalId 空值在 Dexie 侧**不写该键**（null 不是合法 IDB key，
+            // 显式 null 键在 &externalId 唯一索引下的行为因实现而异）。
+            // 备份 zod 归一会把缺失补成 null —— 这里在落库前归一回「不写键」；
+            // 导出侧再经 zod 补回 null，roundtrip 的 JSON.stringify diff 不受影响。
+            rows = (rows as Array<Record<string, unknown>>).map((r) => {
+              if (r.externalId !== null && r.externalId !== undefined) return r;
+              const { externalId: _drop, ...rest } = r;
+              return rest;
+            }) as unknown[];
+          }
           if (rows.length > 0) await tableOf(name).bulkPut(rows);
         }
       });

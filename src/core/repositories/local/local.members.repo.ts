@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode, MemberRoleKind } from '../../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, MemberActorKind, MemberRoleKind } from '../../types/enums';
 import type { Member } from '../../types/entities';
 import type { CreateMemberCmd, UpdateMemberCmd } from '../../types/dto';
 import type { IMembersRepository } from '../interfaces';
@@ -44,6 +44,10 @@ export class LocalMembersRepository implements IMembersRepository {
       roleKind: cmd.roleKind ?? MemberRoleKind.Member,
       // v0.6 密码系统：明文 password → Web Crypto PBKDF2 哈希；缺省/未设 → null（无密码）
       passwordHash: cmd.password ? await hashPassword(cmd.password) : null,
+      // v0.6 Agent 身份（键序铁律：passwordHash 后、revision 前，与 entities.Member / memberSchema 同步）。
+      // actorKind 默认 human（存量调用方零改动）；agentKind 为开放字符串、人类恒 null。
+      actorKind: cmd.actorKind ?? MemberActorKind.Human,
+      agentKind: cmd.agentKind ?? null,
       revision: 1,
       updatedAt: now,
     };

@@ -16,7 +16,7 @@ import type {
   ConfirmedContractPayload,
   CreateProjectCmd,
 } from '../types/dto';
-import { ChangxiaError, ChangxiaErrorCode, ProjectType, StageLogType, StageStatus } from '../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, ProjectType, StageLogType, StageStatus, TaskStatus } from '../types/enums';
 import {
   DEFAULT_REST_POLICY,
   DEFAULT_SCHEDULE_BASIS,
@@ -148,10 +148,24 @@ export class ProjectService {
             // 漏补此字段 → 首次导出键序 ≠ 导入归一后键序 → backup.roundtrip 直接失败
             assigneeIds: [],
             dueDate: stageRow.endAt.slice(0, 10),
+            // v0.6 Agent 字段（键序铁律第 4 处）：按 §3.1 序 9–17 插在 dueDate 后、
+            // orderIndex 前，与 entities.Task / backup.taskSchema / repo insert 四处同序。
+            // 建档任务恒为人工来源；externalId 不写键（undefined）——人工任务无幂等键。
+            source: 'human',
+            externalId: undefined,
+            agentId: null,
+            status: TaskStatus.Draft,
+            description: null,
+            dependsOn: [],
+            artifacts: [],
+            startAt: null,
+            claimedAt: null,
             orderIndex: idx + 1,
             revision: 1,
             updatedAt: new Date().toISOString(),
-          });
+            // externalId 刻意不写键（undefined）：人工任务无幂等键，且 null 不是合法 IDB key。
+            // undefined 不在 Task.externalId 的声明类型内，需经 unknown 断言。
+          } as unknown as Task);
         });
       }
       if (taskRows.length > 0) {

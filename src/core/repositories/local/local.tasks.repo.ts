@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, TaskStatus } from '../../types/enums';
 import type { Task } from '../../types/entities';
 import type { CreateTaskCmd, UpdateTaskCmd } from '../../types/dto';
 import type { ITasksRepository, TaskQuery } from '../interfaces';
@@ -53,7 +53,11 @@ export class LocalTasksRepository implements ITasksRepository {
     }
     const now = new Date().toISOString();
     const siblings = await this.list({ stageId: cmd.stageId });
-    // 键序铁律：assigneeIds 必须插在 assigneeId 之后、dueDate 之前（与 taskSchema/project.service 默认字面量三处同步）
+    // 键序铁律：9 个 v0.6 字段按 §3.1 序 9–17 插在 dueDate 后、orderIndex 前，
+    // 与 entities.Task / backup.taskSchema / project.service.taskRows 四处逐字同序——
+    // 漏一处或乱序 → backup.roundtrip 的 JSON.stringify 逐表 diff 直接失败。
+    // ★ externalId 只在显式提供时写键（undefined/不写键）：null 不是合法 IDB key，
+    //   显式 null 会干扰 &externalId 唯一索引（见 migrateTaskV2Row 注释）。
     const row: Task = {
       id: crypto.randomUUID(),
       projectId: cmd.projectId,
@@ -63,10 +67,18 @@ export class LocalTasksRepository implements ITasksRepository {
       assigneeId: cmd.assigneeId ?? null,
       assigneeIds: cmd.assigneeIds ?? (cmd.assigneeId ? [cmd.assigneeId] : []),
       dueDate: cmd.dueDate ?? null,
+      source: cmd.source ?? 'human',
+      externalId: cmd.externalId,
+      agentId: cmd.agentId ?? null,
+      status: cmd.status ?? TaskStatus.Draft,
+      description: cmd.description ?? null,
+      dependsOn: cmd.dependsOn ?? [],
+      artifacts: cmd.artifacts ?? [],
+      startAt: cmd.startAt ?? null,
       orderIndex: siblings.reduce((max, t) => Math.max(max, t.orderIndex), 0) + 1,
       revision: 1,
       updatedAt: now,
-    };
+    } as Task;
     await this.db.tasks.add(row);
     return row;
   }
@@ -76,9 +88,21 @@ export class LocalTasksRepository implements ITasksRepository {
     if (!existing) {
       throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该任务。');
     }
+    const patch = pickDefined(cmd);
+    // v0.6 状态双写（status ⇄ done 恒一致，写入侧唯一口径）：
+    //   - 传 status → done = (status === 'done')（withStatus 语义）；
+    //   - 只传 done（存量调用路径，如 @deprecated toggleDone）→ 反推 status。
+    //   绝不允许两字段漂移——否则 taskIsDone 与看板状态角标会互相矛盾。
+    let nextStatus = patch.status;
+    if (nextStatus === undefined && patch.done !== undefined) {
+      nextStatus = patch.done ? TaskStatus.Done : TaskStatus.Draft;
+    }
     const next: Task = {
       ...existing,
-      ...pickDefined(cmd),
+      ...patch,
+      ...(nextStatus !== undefined
+        ? { status: nextStatus, done: nextStatus === TaskStatus.Done }
+        : {}),
       revision: existing.revision + 1,
       updatedAt: new Date().toISOString(),
     };
