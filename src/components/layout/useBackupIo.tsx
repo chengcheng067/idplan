@@ -155,6 +155,20 @@ export function useBackupIo(): BackupIo {
         <p className="mt-2 text-xs text-mist">
           文件：{pendingPkg ? `${(pendingPkg.meta as { exportedAt?: string }).exportedAt ?? ''}` : ''}
         </p>
+        {pendingPkg &&
+          (() => {
+            // T14 要点 10：网络通道下发的备份已脱敏（hasPassword=true 但
+            // passwordHash=null）——导入后密码丢失，成员需重设，必须先警示。
+            const members =
+              (pendingPkg.data as { members?: Array<{ hasPassword?: boolean; passwordHash?: string | null }> })
+                .members ?? [];
+            const sanitized = members.filter((m) => m.hasPassword === true && !m.passwordHash);
+            return sanitized.length > 0 ? (
+              <p className="mt-2 rounded-[8px] border border-amber/40 bg-amber-soft px-2.5 py-1.5 text-xs text-amber">
+                ⚠ 此备份不含密码哈希（{sanitized.length} 个成员设有密码）——导入后这些成员需重设密码。
+              </p>
+            ) : null;
+          })()}
       </ConfirmDialog>
     ),
   };

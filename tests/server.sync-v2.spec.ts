@@ -14,6 +14,10 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 
+// T14：备份通道已 fail-closed——本 spec 全部 backup 请求需带 token。
+// 模块级设置（vitest 每文件独立进程/环境，不外泄）。
+process.env.IDPLAN_AGENT_TOKEN = 'test-token';
+
 import { createDb } from '../server/db';
 import { registerProjectRoutes } from '../server/routes/projects.routes';
 import { registerStageRoutes } from '../server/routes/stages.routes';
@@ -278,6 +282,7 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/backup/import',
+      headers: { 'x-agent-token': 'test-token' },
       payload: samplePackage(),
     });
     expect(res.statusCode).toBe(200);
@@ -307,6 +312,7 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
     await ctx.app.inject({
       method: 'POST',
       url: '/api/backup/import',
+      headers: { 'x-agent-token': 'test-token' },
       payload: samplePackage(),
     });
 
@@ -379,10 +385,11 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
     await ctx.app.inject({
       method: 'POST',
       url: '/api/backup/import',
+      headers: { 'x-agent-token': 'test-token' },
       payload: samplePackage(),
     });
 
-    const exported = (await ctx.app.inject({ method: 'GET', url: '/api/backup' })).json() as Record<
+    const exported = (await ctx.app.inject({ method: 'GET', url: '/api/backup', headers: { 'x-agent-token': 'test-token' } })).json() as Record<
       string,
       unknown
     >;

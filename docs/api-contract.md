@@ -112,3 +112,24 @@
 唯一事实源，done 恒 = status==='done') / `description` / `dependsOn`(JSON 数组，
 与 assignee_ids 同走 JSON 列序列化) / `artifacts`(对象数组 JSON 列) / `startAt` /
 `claimedAt`。Agent 幂等写入唯一出口 = `POST /api/tasks/upsert`。
+
+## 备份通道鉴权（v0.6 · T14，Q9）
+
+| 端点 | 鉴权 | 脱敏 |
+| --- | --- | --- |
+| `GET /api/backup` | ✅ `X-Agent-Token` 或 `Authorization: Bearer`（值 = 服务端 env `IDPLAN_AGENT_TOKEN`，常量时间比较） | 默认 members 脱敏：`passwordHash=null` + `hasPassword` 布尔；`?includeSecrets=1` 持 token 才下发真实哈希（NAS→NAS 整机迁移专用） |
+| `POST /api/backup/import` | ✅ 同上 | —（导入不回传敏感值） |
+| `POST /api/bootstrap` | ❌ 本期不鉴权（前端启动全量装载依赖它；**V1 必须纳入鉴权**，§10-R7） | ✅ members 同规则脱敏（Q-D 拍板） |
+
+- **fail-closed**：服务端未配置 `IDPLAN_AGENT_TOKEN` 时，`/api/backup*` 全部 401。启动日志有醒目告警。
+- 前端 remote 模式配置 `VITE_API_TOKEN`（与上同值）即自动携带 `Authorization: Bearer`。
+- 导入侧检测「`hasPassword===true` 且 `passwordHash===null`」→ 恢复确认弹窗警示「此备份不含密码，导入后成员需重设密码」。
+- 服务端导入通道自动剔除 `hasPassword`（导出侧派生字段，非表列）。
+
+## ⚠ Agent HTTP API 边界（写死，勿越）
+
+**未来的 Agent 通道绝不复用 `/api/backup`**：独立端点（如 `/api/agent/*`）+ 独立
+Agent Token（与 `IDPLAN_AGENT_TOKEN` 分离，可独立吊销）+ 独立限流。备份通道的
+token 只授权「整库读写」，绝不能等价于「Agent 写任务」的授权面。实现时的落点：
+`server/lib/agent-auth.ts`（requireToken 目前仅 backup 使用；Agent 端点另建
+`requireAgentToken`，校验 `IDPLAN_AGENT_API_TOKEN`）。

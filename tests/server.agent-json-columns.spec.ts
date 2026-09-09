@@ -14,6 +14,10 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 
+// T14：备份通道已 fail-closed——本 spec 全部 backup 请求需带 token。
+// 模块级设置（vitest 每文件独立进程/环境，不外泄）。
+process.env.IDPLAN_AGENT_TOKEN = 'test-token';
+
 import { createDb, sectionOf, openDb } from '../server/db';
 import { registerTaskRoutes } from '../server/routes/tasks.routes';
 import { registerMetaRoutes } from '../server/routes/meta.routes';
@@ -174,6 +178,7 @@ describe('server 三件套③：JSON 列 + 幂等 upsert + claim', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/backup/import',
+      headers: { 'x-agent-token': 'test-token' },
       payload: {
         meta: { app: 'changxia', schemaVersion: 3, exportedAt: now },
         data: {

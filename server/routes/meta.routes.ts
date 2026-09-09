@@ -10,6 +10,7 @@ import type Database from 'better-sqlite3';
 // ★ 旧的本地实现内含 `filter(x => typeof x === 'string')`——对 artifacts（对象数组）
 //   会把对象元素全部滤掉、静默清空，必须换成 server/lib/json-columns.ts 的版本。
 import { parseJsonArray } from '../lib/json-columns';
+import { requireToken, unauthorizedBody } from '../lib/agent-auth';
 
 interface StageLogRow {
   id: string;
@@ -344,13 +345,38 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     return out;
   }
 
-  const dumpTable = (tableName: string): Array<Record<string, unknown>> =>
-    (db.prepare(`SELECT * FROM ${tableName}`).all() as Array<Record<string, unknown>>).map((r) =>
-      rowToDto(tableName, r),
-    );
+  /**
+   * 表导出（v0.6 · T14 要点 4）：`includeSecrets !== true` 时 members 表
+   * **保留 passwordHash 键、值置 null** 并补 `hasPassword`——形状稳定
+   * （前端 zod 期望 nullable），哈希本体绝不出无鉴权通道。
+   */
+  const dumpTable = (
+    tableName: string,
+    opts: { includeSecrets?: boolean } = {},
+  ): Array<Record<string, unknown>> =>
+    (db.prepare(`SELECT * FROM ${tableName}`).all() as Array<Record<string, unknown>>).map((r) => {
+      const dto = rowToDto(tableName, r);
+      if (tableName === 'members') {
+        // 两种模式都补 hasPassword（形状恒定）；区别只在哈希本体是否下发
+        return {
+          ...dto,
+          passwordHash: opts.includeSecrets === true ? (r.password_hash ?? null) : null,
+          hasPassword: Boolean(r.password_hash),
+        };
+      }
+      return dto;
+    });
 
-  // GET /backup —— 全量导出（与前端 BackupPackage 形状一致，可直接过 zod 校验）
-  app.get('/api/backup', async () => {
+  // GET /backup —— 全量导出（T14 要点 3/5：鉴权 + 默认脱敏；?includeSecrets=1 且持
+  // token 才下发真实哈希，用于 NAS→NAS 整机迁移）。
+  // ⚠️ 本端点是「NAS 迁移通道」，未来的 Agent HTTP API 是独立端点 + 独立 token，
+  //    绝不复用本端点（见 server/lib/agent-auth.ts 头注释与 docs/api-contract.md）。
+  app.get('/api/backup', async (req, reply) => {
+    if (!requireToken(req)) {
+      void reply.status(401);
+      return unauthorizedBody();
+    }
+    const includeSecrets = (req.query as { includeSecrets?: string }).includeSecrets === '1';
     return {
       // v2 = 含 stagePresetKey / templateKey / colorIndex / scheduleBasis / assigneeIds / roleKind，
       // 与前端 BACKUP_SCHEMA_VERSION 对齐；标 1 会让前端走老版本归一路径（v2 字段被视作缺失）。
@@ -359,7 +385,7 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
         projects: dumpTable('projects'),
         stages: dumpTable('stages'),
         tasks: dumpTable('tasks'),
-        members: dumpTable('members'),
+        members: dumpTable('members', { includeSecrets }),
         assignments: dumpTable('assignments'),
         logs: dumpTable('stage_logs'),
         contracts: dumpTable('contracts'),
@@ -368,7 +394,10 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     };
   });
 
-  // POST /bootstrap —— 启动全量装载
+  // POST /bootstrap —— 启动全量装载（T14 要点 7：**不加 token**——前端启动依赖它，
+  // 加了会破坏既有 remote 前端；但 members 一并脱敏（Q-D 拍板：backup 修完后的
+  // 漏网之鱼）。密码验证走 POST /api/members/verify，哈希不出库。
+  // TODO(V1, §10-R7)：bootstrap 也应纳入鉴权（如 mTLS / 局域网白名单）。
   app.post('/api/bootstrap', async () => {
     return {
       projects: dumpTable('projects'),
@@ -382,11 +411,20 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     };
   });
 
-  // POST /backup/import —— 服务端整库替换（事务）
-  app.post('/api/backup/import', async (req) => {
+  // POST /backup/import —— 服务端整库替换（事务；T14 要点 6：鉴权）
+  app.post('/api/backup/import', async (req, reply) => {
+    if (!requireToken(req)) {
+      void reply.status(401);
+      return unauthorizedBody();
+    }
     const pkg = req.body as {
       data: Record<string, Array<Record<string, unknown>>>;
     };
+    // T14：脱敏备份回导支持——hasPassword 是导出侧派生字段（非表列），
+    // 服务端导出 → 再导入的闭环必须剔除，否则 INSERT has_password 报 no such column。
+    for (const m of pkg.data?.members ?? []) {
+      delete m.hasPassword;
+    }
     const snake = (o: Record<string, unknown>): Record<string, unknown> => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(o)) {
