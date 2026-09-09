@@ -9,7 +9,7 @@ import {
   xOf,
   type TimelineRange,
 } from '../../lib/date';
-import type { Stage, Project, Member } from '../../core/types/entities';
+import type { Stage, Project, Member, Task } from '../../core/types/entities';
 import { ScheduleBasis } from '../../core/types/enums';
 import { pickActiveStageId } from '../../lib/progress';
 import { useUiStore, type TimelineZoom } from '../../store/useUiStore';
@@ -19,7 +19,7 @@ import { useDragReschedule } from '../../hooks/useDragReschedule';
 import { addWorkdaysSigned, countWorkdays, snapShiftDate } from '../../lib/workdays';
 import { MonthScaleHeader } from './MonthScaleHeader';
 import { StageRowsColumn } from './StageRowsColumn';
-import { StageBar } from './StageBar';
+import { StageBar, TaskBar } from './StageBar';
 import { TodayLine } from './TodayLine';
 import { RescheduleDialog } from './RescheduleDialog';
 import { ROW_BG_ACTIVE, ROW_BG_EVEN, ROW_BG_ODD } from './timelineColors';
@@ -77,11 +77,14 @@ export function TimelineView({
   stages,
   members = [],
   memberView = false,
+  tasks = [],
 }: {
   project: Project;
   stages: Stage[];
   members?: Member[];
   memberView?: boolean;
+  /** v0.6 双色分层：任务级时间条（Agent 斜纹 / Human 素色）；缺省不画 */
+  tasks?: Task[];
 }): JSX.Element {
   const zoom = useUiStore((s) => s.timelineZoom);
   const setZoom = useUiStore((s) => s.setTimelineZoom);
@@ -343,6 +346,25 @@ export function TimelineView({
                     />
                   );
                 })}
+
+                {/* v0.6 双色分层：任务级时间条层（Agent 斜纹 / Human 素色 + status 圆点）。
+                    仅渲染有 startAt/dueDate 的任务；行几何与 StageBar 无碰撞（贴行底部）。 */}
+                {stages.map((s, i) =>
+                  tasks
+                    .filter((t) => t.stageId === s.id && (t.startAt || t.dueDate))
+                    .map((t) => (
+                      <TaskBar
+                        key={`taskbar-${t.id}`}
+                        task={t}
+                        rowIndex={i}
+                        rowH={ROW_H}
+                        rowGap={ROW_GAP}
+                        range={range}
+                        pxPerDay={pxPerDay}
+                        onClick={() => openDrawer(s.id)}
+                      />
+                    )),
+                )}
               </svg>
             </div>
           </div>

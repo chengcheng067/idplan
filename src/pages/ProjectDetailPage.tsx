@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Link, useParams } from 'react-router-dom';
 
-import { ArrowLeft, Archive, CalendarRange } from 'lucide-react';
+import { ArrowLeft, Archive, Bot, CalendarRange } from 'lucide-react';
 
 import { useProjectsStore } from '../store/useProjectsStore';
+import { useAgentStore } from '../store/useAgentStore';
 import { createProjectActions } from '../store/useProjectsStore';
 import { useUiStore } from '../store/useUiStore';
 import { useMembersStore } from '../store/useMembersStore';
@@ -138,6 +139,18 @@ export function ProjectDetailPage(): JSX.Element {
               >
                 <CalendarRange size={14} /> 日程表
               </button>
+              {/* v0.6 · T13 要点 9：跳 Agent Board（先锚定当前项目再导航） */}
+              <button
+                type="button"
+                onClick={() => {
+                  useAgentStore.getState().setCurrentProject(project.id);
+                  window.location.assign('/agent');
+                }}
+                className="inline-flex items-center gap-1 rounded-md border border-sand bg-paper px-3 py-1.5 text-mist hover:bg-sand"
+                title="在 Agent Board 中查看本项目任务"
+              >
+                <Bot size={14} /> Agent Board
+              </button>
               <button
                 type="button"
                 disabled={project.status !== 'active'}
@@ -195,6 +208,7 @@ export function ProjectDetailPage(): JSX.Element {
           stages={visibleStages}
           members={members}
           memberView={memberView}
+          tasks={tasks}
         />
       )}
 

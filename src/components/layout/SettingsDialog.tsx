@@ -9,10 +9,19 @@ import { clearLogs, dump, logUser } from '../../core/services/log.service';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useTheme } from '../../hooks/useTheme';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
+import { useRepos } from '../../hooks/useRepos';
 import { BUILD_VERSION, FRONTEND_STACK, REPO_URL } from '../../constants/version';
 import { isDesktop } from '../../lib/desktopBridge';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
+import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
+import { useMembersStore } from '../../store/useMembersStore';
+import {
+  estimateLocalDbUsage,
+  formatBytes,
+  type LocalDbUsage,
+} from '../../lib/storage-estimate';
+import { useEffect } from 'react';
 
 /**
  * 「设置」面板（顶栏右侧 · 所有角色可见）。
@@ -45,6 +54,35 @@ export function SettingsDialog({
 
   // 打开时实时读一次日志条数（抽屉每次打开都刷新，避免静态旧值）
   const count = useMemo(() => dump().length, [open]);
+
+  // —— v0.6 · T13：Agent 席位明示（B5：只展示不拦截）+ 本地库占用量 ——
+  const members = useMembersStore((st) => st.members);
+  const agentSeatUsed = members.filter((m) => m.actorKind === 'agent').length;
+  const agentSeatOver = agentSeatUsed > AGENT_SEAT_LIMIT;
+  const repos = useRepos();
+  // 本地库占用：每次打开抽屉时估算一次（打开期间不轮询，展示用途足够）
+  const [dbUsage, setDbUsage] = useState<LocalDbUsage | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void estimateLocalDbUsage(async () => {
+      const projects = await repos.projects.list();
+      const stages = (
+        await Promise.all(projects.map((pj) => repos.stages.listByProject(pj.id)))
+      ).flat();
+      return {
+        projects,
+        stages,
+        tasks: await repos.tasks.list(),
+        members: await repos.members.list(),
+      };
+    }).then((u) => {
+      if (!cancelled) setDbUsage(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, repos]);
 
   // 打包日期（构建时静态快照，便于排查版本）
   const buildDate = new Date().toISOString().slice(0, 10);
@@ -117,6 +155,41 @@ export function SettingsDialog({
                   文件发给开发。日志仅含运行记录与错误堆栈，不含项目/客户业务数据。
                 </p>
               )}
+            </section>
+
+            {/* Agent 与本地库区（v0.6 · T13：席位明示 + 库占用，只展示不拦截） */}
+            <section>
+              <div className="mb-2 flex items-center gap-1.5">
+                <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                  <Database size={14} className="text-mist" aria-hidden />
+                  Agent 与本地库
+                </h3>
+              </div>
+              <div className="rounded-[10px] border border-sand bg-cream/50 px-3 py-2.5 text-xs leading-6">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-mist">Agent 席位</span>
+                  <span className="font-mono text-ink">
+                    已用 {agentSeatUsed}/{AGENT_SEAT_LIMIT}
+                  </span>
+                </div>
+                {agentSeatOver && (
+                  <p className="text-[11px] text-amber">
+                    已超出免费席位额度（{AGENT_SEAT_LIMIT} 个）——不影响使用，仅作提示。
+                  </p>
+                )}
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="text-mist">本地库占用</span>
+                  <span className="font-mono text-ink">
+                    {dbUsage ? formatBytes(dbUsage.bytes) : '—'}
+                    {dbUsage && dbUsage.source === 'serialization-fallback' && (
+                      <span className="ml-1 text-[10px] text-mist">（估算）</span>
+                    )}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-mist">
+                  未来单库超过约 50MB 时会在此提示清理 / 分库建议。
+                </p>
+              </div>
             </section>
 
             {/* 主题区 */}

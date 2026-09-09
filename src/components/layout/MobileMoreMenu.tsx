@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Bot } from 'lucide-react';
 import { CalendarRange, LayoutGrid, MoreVertical, PenLine, Save, Settings, Upload } from 'lucide-react';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
@@ -125,6 +126,16 @@ export function MobileMoreMenu(): JSX.Element {
             />
             <span className={cn(location.pathname === '/my-tasks' ? 'text-pine' : 'text-ink')}>
               我的任务
+            </span>
+          </Link>
+          {/* v0.6：Agent Board（所有角色可见，与桌面 TopBar 一致） */}
+          <Link to="/agent" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
+            <Bot
+              size={15}
+              className={cn(ITEM_ICON, location.pathname === '/agent' && 'text-pine')}
+            />
+            <span className={cn(location.pathname === '/agent' ? 'text-pine' : 'text-ink')}>
+              Agent
             </span>
           </Link>
 

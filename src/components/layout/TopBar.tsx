@@ -223,6 +223,10 @@ export function TopBar(): JSX.Element {
               <Link to="/my-tasks" className={navClass(location.pathname === '/my-tasks')}>
                 我的任务
               </Link>
+              {/* v0.6：Agent Board 独立 Tab（所有角色可见，沿用既有 nav 规则不自创） */}
+              <Link to="/agent" className={navClass(location.pathname === '/agent')}>
+                Agent
+              </Link>
 
               {isAdmin && (
                 <div className="flex items-center gap-1">

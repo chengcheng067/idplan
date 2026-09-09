@@ -1,11 +1,17 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { xOf, type TimelineRange } from '../../lib/date';
-import type { Stage } from '../../core/types/entities';
+import type { Stage, Task } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
 import { STAGE_BAR_COLORS } from './stageColors';
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
-import { STAGE_ACTIVE_STROKE, STAGE_GLOW_COLOR } from './timelineColors';
+import {
+  STAGE_ACTIVE_STROKE,
+  STAGE_GLOW_COLOR,
+  TASK_BAR_AGENT,
+  TASK_BAR_AGENT_HATCH,
+  TASK_BAR_HUMAN,
+} from './timelineColors';
 
 /**
  * 彩条本体：SVG rect + 左右手柄 + 激活发光 + 交付段子刻度。
@@ -226,13 +232,90 @@ function DateBubble({
   );
 }
 
-/** SVG filter defs（激活发光）——挂在 TimelineView 的 svg 内 */
-export function StageBarDefs(): JSX.Element {
+/**
+ * 任务条 status 圆点色（受控例外：hex 集中在 TS 常量，与 stageColors.ts 同款范式，
+ * 不散落在 JSX；语义 ready=绿 / review=琥珀 / blocked=红陶 / 其余=灰绿）。
+ */
+const TASK_STATUS_DOT: Record<string, string> = {
+  draft: '#88A293',
+  ready: '#5B8C5B',
+  claimed: '#D9A441',
+  in_progress: '#5B8C5B',
+  blocked: '#C4553B',
+  review: '#D9A441',
+  done: '#88A293',
+};
+
+/** SVG filter defs（激活发光）——挂在 TimelineView 的 svg 内 */export function StageBarDefs(): JSX.Element {
   return (
     <defs>
       <filter id="stage-glow" x="-15%" y="-40%" width="130%" height="180%">
         <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={STAGE_GLOW_COLOR} floodOpacity="0.45" />
       </filter>
+      {/* v0.6 双色分层：Agent 任务条斜纹 pattern（hex 只经 CSS 变量，铁律 8） */}
+      <pattern id="task-agent-hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+        <rect width="6" height="6" fill={TASK_BAR_AGENT} />
+        <line x1="0" y1="0" x2="0" y2="6" stroke={TASK_BAR_AGENT_HATCH} strokeWidth="2" />
+      </pattern>
     </defs>
+  );
+}
+
+/**
+ * 任务级时间条（v0.6 双色分层，设计文档 T13 要点 3/4）：
+ *   - Agent 任务 → 斜纹填充（url(#task-agent-hatch)）；Human 任务 → 素色；
+ *   - 左端 status 小圆点（英文状态 token 映射：ready=pine / review=amber /
+ *     blocked=clay / 其余=mist）；
+ *   - 条高比阶段彩条矮（贴行底部），与 StageBar 拖拽手柄无碰撞；
+ *   - 仅当任务有 startAt/dueDate 时渲染（调用方过滤）。
+ */
+export function TaskBar({
+  task,
+  rowIndex,
+  rowH,
+  rowGap,
+  range,
+  pxPerDay,
+  onClick,
+}: {
+  task: Task;
+  rowIndex: number;
+  rowH: number;
+  rowGap: number;
+  range: TimelineRange;
+  pxPerDay: number;
+  onClick(): void;
+}): JSX.Element {
+  const start = (task.startAt ?? task.dueDate ?? '').slice(0, 10);
+  const end = (task.dueDate ?? task.startAt ?? '').slice(0, 10);
+  if (!start || !end) return <g />;
+  const x1 = xOf(start, range, pxPerDay);
+  const x2 = xOf(end, range, pxPerDay) + pxPerDay; // 含头尾
+  const w = Math.max(pxPerDay, x2 - x1);
+
+  // 贴行底部：阶段彩条占 y+7..y+rowH-7，任务条放 y+rowH-9 起的细条
+  const y = rowIndex * (rowH + rowGap) + rowH - 10;
+  const barH = 5;
+
+  const isAgent = task.source === 'agent';
+  const dotFill = TASK_STATUS_DOT[task.status] ?? '#88A293';
+
+  return (
+    <g style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+      <rect
+        x={x1}
+        y={y}
+        width={w}
+        height={barH}
+        rx={2.5}
+        ry={2.5}
+        fill={isAgent ? 'url(#task-agent-hatch)' : TASK_BAR_HUMAN}
+        opacity={0.9}
+      >
+        <title>{`${task.title} · ${task.status}${isAgent ? ' · agent' : ' · human'}`}</title>
+      </rect>
+      {/* status 圆点（小、贴条左端） */}
+      <circle cx={x1 + 2.5} cy={y + barH / 2} r={2.5} fill={dotFill} />
+    </g>
   );
 }

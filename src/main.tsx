@@ -15,6 +15,7 @@ import { AppShell } from './components/layout/AppShell';
 import { HomeRouteGuard } from './components/layout/HomeRouteGuard';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { MemberBoardPage } from './pages/MemberBoardPage';
+import { AgentBoardPage } from './pages/AgentBoardPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { SchedulePrintPage } from './pages/SchedulePrintPage';
 import { CalendarPrintPage } from './pages/CalendarPrintPage';
@@ -26,6 +27,7 @@ import { CalendarPrintPage } from './pages/CalendarPrintPage';
  *   /project/:id/schedule-print 日程表打印视图（v0.3 变更 E；页内 isAdmin 守卫，复用 stores 零新查询）
  *   /project/:id/calendar-print 月历打印/导出视图（v0.5）
  *   /my-tasks                  我的任务（成员视角）
+ *   /agent                     Agent Board（v0.6 · Agent 任务看板，所有角色可见）
  *
  * 底座：绿联 Docker 应用是 IP:端口直连（根路径 /），不走系统网关、无 /<proxy_path>/ 前缀
  * （proxy_path 是原生应用专用字段）。故无需 basename，路由直接挂根路径。
@@ -42,6 +44,8 @@ export const router = createBrowserRouter(
         { path: 'project/:id/schedule-print', element: <SchedulePrintPage /> },
         { path: 'project/:id/calendar-print', element: <CalendarPrintPage /> },
         { path: 'my-tasks', element: <MyTasksPage /> },
+        // Agent Board：放在 my-tasks 之后、* 通配之前（设计文档 T10 要点 7）
+        { path: 'agent', element: <AgentBoardPage /> },
         { path: '*', element: <Navigate to="/" replace /> },
       ] satisfies RouteObject[],
     },

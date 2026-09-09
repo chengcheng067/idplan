@@ -43,3 +43,14 @@ export const TODAY_LINE_COLOR = 'var(--timeline-today-line)';
  * 不改变 xOf 的自然日线性映射）。
  */
 export const REST_DAY_BAND = 'var(--timeline-rest-band)';
+
+/* --------- v0.6 双色分层（Agent vs Human 任务条；hex 只落 global.css，铁律 8） --------- */
+
+/** Agent 任务条底色（斜纹 pattern 的底） */
+export const TASK_BAR_AGENT = 'var(--timeline-agent-bar)';
+
+/** Agent 任务条斜纹线色（<pattern> 内 line stroke） */
+export const TASK_BAR_AGENT_HATCH = 'var(--timeline-agent-hatch)';
+
+/** Human 任务条底色 */
+export const TASK_BAR_HUMAN = 'var(--timeline-human-bar)';

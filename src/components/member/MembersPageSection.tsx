@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Plus, UserRound, UserX, Crown, XCircle, Pencil, Check, X, KeyRound } from 'lucide-react';
 
 import { memberHasPassword, type Member } from '../../core/types/entities';
-import { ChangxiaError, MemberRoleKind } from '../../core/types/enums';
+import { ChangxiaError, MemberActorKind, MemberRoleKind } from '../../core/types/enums';
 import { useMembersStore } from '../../store/useMembersStore';
 import { createMemberActions } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
@@ -26,6 +26,11 @@ export function MembersPageSection(): JSX.Element | null {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [contact, setContact] = useState('');
+  // v0.6 · T13：新建成员「类型」（人 / Agent）与 agentKind（开放字符串）
+  const [actorKind, setActorKind] = useState<'human' | 'agent'>('human');
+  const [agentKind, setAgentKind] = useState('');
+  // PRD IN-03：成员列表默认隐藏 Agent，显式开关才展示（既有指派逻辑零回归）
+  const [showAgents, setShowAgents] = useState(false);
   const [demoteTarget, setDemoteTarget] = useState<Member | null>(null);
   /** v0.6 密码系统：正在设/清密码的成员（弹 PasswordDialog） */
   const [passwordMember, setPasswordMember] = useState<Member | null>(null);
@@ -41,15 +46,26 @@ export function MembersPageSection(): JSX.Element | null {
       role: role.trim() || '协作',
       contact: contact.trim() || null,
       avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
+      actorKind: actorKind === 'agent' ? MemberActorKind.Agent : undefined,
+      // 开放字符串直传，不校验取值（禁封闭枚举——Harness 迭代极快）
+      agentKind: actorKind === 'agent' ? agentKind.trim() || 'unknown' : null,
     });
     setName('');
     setRole('');
     setContact('');
+    setAgentKind('');
+    setActorKind('human');
     setAdding(false);
   };
 
   /** active 管理员计数（唯一管理员保护） */
   const activeAdminCount = countActiveAdmins(members);
+
+  /** Agent 席位已用数（B5：只展示不拦截） */
+  const agentSeatUsed = members.filter((m) => m.actorKind === 'agent').length;
+
+  /** 列表渲染集：默认隐藏 Agent（PRD IN-03） */
+  const visibleMembers = showAgents ? members : members.filter((m) => m.actorKind !== 'agent');
 
   /** 重命名：为空或不变时不调用；失败由 actions.update 内部 toast */
   const onRename = async (id: string, newName: string): Promise<void> => {
@@ -87,19 +103,57 @@ export function MembersPageSection(): JSX.Element | null {
     <section className="glass-light rounded-lg border border-sand bg-paper p-5 shadow-soft">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-display text-display-md">成员</h2>
-        {!adding && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1 rounded-md border border-sand px-3 py-1.5 text-xs text-mist hover:bg-sand hover:text-pine"
-          >
-            <Plus size={13} /> 添加成员
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {agentSeatUsed > 0 && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-mist">
+              <input
+                type="checkbox"
+                checked={showAgents}
+                onChange={(e) => setShowAgents(e.target.checked)}
+                className="h-3.5 w-3.5 accent-pine"
+              />
+              显示 Agent（{agentSeatUsed}/3）
+            </label>
+          )}
+          {!adding && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="inline-flex items-center gap-1 rounded-md border border-sand px-3 py-1.5 text-xs text-mist hover:bg-sand hover:text-pine"
+            >
+              <Plus size={13} /> 添加成员
+            </button>
+          )}
+        </div>
       </div>
 
       {adding && (
         <div className="mb-4 grid grid-cols-1 gap-2 rounded-lg border border-pine/40 bg-cream p-3 md:grid-cols-[1fr_120px_160px_auto]">
+          {/* 类型切换（v0.6 · T13 要点 6）：人 / Agent */}
+          <div className="flex items-center gap-1.5 md:col-span-4">
+            <span className="text-xs text-mist">类型</span>
+            {(['human', 'agent'] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setActorKind(k)}
+                aria-pressed={actorKind === k}
+                className={
+                  'rounded-md border px-2.5 py-1 text-xs transition-colors ' +
+                  (actorKind === k
+                    ? 'border-pine bg-pine text-white'
+                    : 'border-sand text-mist hover:bg-sand hover:text-ink')
+                }
+              >
+                {k === 'human' ? '👤 人' : '🤖 Agent'}
+              </button>
+            ))}
+            {actorKind === 'agent' && (
+              <span className="ml-2 text-[11px] text-amber">
+                Agent 席位 已用 {agentSeatUsed}/3（超额仅提示，不拦截）
+              </span>
+            )}
+          </div>
           <ImeInput
             autoFocus
             value={name}
@@ -119,6 +173,23 @@ export function MembersPageSection(): JSX.Element | null {
             placeholder="联系方式"
             className="rounded-md border border-sand bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
+          {actorKind === 'agent' && (
+            <>
+              <ImeInput
+                value={agentKind}
+                onChange={(e) => setAgentKind(e.target.value)}
+                list="agent-kind-suggestions"
+                placeholder="agentKind（如 workbuddy / codex）"
+                className="rounded-md border border-sand bg-paper px-2 py-1.5 font-mono text-sm outline-none focus:border-pine"
+              />
+              {/* 建议值仅供参考选择，输入框始终允许任意字符串（开放字符串铁律） */}
+              <datalist id="agent-kind-suggestions">
+                <option value="workbuddy" />
+                <option value="deepseek-harness" />
+                <option value="codex" />
+              </datalist>
+            </>
+          )}
           <button
             type="button"
             onClick={() => void submit()}
@@ -129,13 +200,13 @@ export function MembersPageSection(): JSX.Element | null {
         </div>
       )}
 
-      {members.length === 0 ? (
+      {visibleMembers.length === 0 ? (
         <p className="text-sm leading-6 text-mist">
           还没有成员。添加后可在阶段清单中指派任务，并在顶栏输入姓名进入「我的任务」。
         </p>
       ) : (
         <ul className="divide-y divide-sand/60">
-          {members.map((m) => (
+          {visibleMembers.map((m) => (
             <MemberRow
               key={m.id}
               member={m}
@@ -373,6 +444,12 @@ function MemberRow({
       ) : (
         <>
           <span className={`text-sm ${member.active ? 'text-ink' : 'text-mist'}`}>{member.name}</span>
+          {member.actorKind === 'agent' && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-pine-soft px-1.5 py-0.5 text-[10px] font-medium text-pine-deep">
+              <span aria-hidden>🤖</span>
+              <span className="font-mono">{member.agentKind ?? 'agent'}</span>
+            </span>
+          )}
           <span className="text-xs text-mist">{member.role}</span>
           {memberHasPassword(member) ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-sand px-1.5 py-0.5 text-[10px] font-medium text-mist">

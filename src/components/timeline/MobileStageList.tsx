@@ -40,7 +40,14 @@ export function MobileStageList({
           STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? '#88A293';
         const active = s.status === StageStatus.InProgress;
         const owner = members.find((m) => m.id === s.ownerId);
-        const taskCount = tasks.filter((t) => t.stageId === s.id).length;
+        const stageTasks = tasks.filter((t) => t.stageId === s.id);
+        const taskCount = stageTasks.length;
+        // v0.6 双色分层：来源标识（Agent 🤖 / Human 👤 计数）+ 未完成任务 status 角标
+        const agentCount = stageTasks.filter((t) => t.source === 'agent').length;
+        const humanCount = taskCount - agentCount;
+        const openStatuses = stageTasks
+          .filter((t) => !(t.status === 'done' || t.done === true))
+          .map((t) => t.status);
         const pct = progressOf(s);
         return (
           <button

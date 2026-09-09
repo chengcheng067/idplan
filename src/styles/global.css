@@ -121,6 +121,11 @@
   --timeline-today-line: #f06548;
   --timeline-rest-band: rgba(0, 0, 0, 0.03);
 
+  /* —— v0.6 Timeline 双色分层（Agent vs Human 任务条；亮色）—— */
+  --timeline-agent-bar: #5f8d80;      /* Agent 任务条底色（pine 系，比彩条沉稳） */
+  --timeline-agent-hatch: rgba(255, 255, 255, 0.55); /* Agent 斜纹线（亮色上白纹） */
+  --timeline-human-bar: #a99bb5;      /* Human 任务条底色（紫灰，与 stage 色板区分） */
+
   /* —— 兼容旧 token 名（历史组件/动效仍在引用）—— */
   --accent-default: #6366f1;
   --accent-hover: #818cf8;
@@ -230,6 +235,11 @@
   --timeline-ring-text: #f7f7fa;
   --timeline-today-line: #f06548;
   --timeline-rest-band: rgba(255, 255, 255, 0.02);
+
+  /* —— v0.6 Timeline 双色分层（暗色：提亮底色 + 深色斜纹，保证可辨识）—— */
+  --timeline-agent-bar: #6fa394;
+  --timeline-agent-hatch: rgba(0, 0, 0, 0.35);
+  --timeline-human-bar: #b7a8c7;
 
   --accent-default: #818cf8;
   --accent-hover: #a5b4fc;
