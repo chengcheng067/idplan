@@ -327,4 +327,35 @@ describe('批内重复 externalId（QA 返工 🟠-1）：逐条 conflict、绝�
       payload.tasks[0]!.externalId,
     ]);
   });
+
+  // QA 第二轮（严过关）补充：多层传播链——dup 键对下游的投毒不止一层，
+  // 首到者照常写入，而引用该键的整条下游链（B→C→D）全部 dep_unresolved，
+  // 逐条可归因；preview 与 apply 的 created/rejected 严格一致。
+  it('dup 键投毒：首到者照常写入，多层下游链全部 dep_unresolved、逐条可归因', async () => {
+    const projectId = await seedProject();
+    const payload = makePayload(projectId, [
+      { title: '甲·首到' },                                          // key t1（保留）
+      { title: '乙', dependsOnExternal: ['workbuddy:run-001:t1'] }, // 与甲同键 → conflict
+      { title: '丙', dependsOnExternal: ['workbuddy:run-001:t1'] }, // ← 指向 dup 键 → dep_unresolved
+      { title: '丁', dependsOnExternal: ['workbuddy:run-001:t3'] }, // ← 二层传播（丙被拒）
+    ]);
+    payload.tasks[1]!.externalId = payload.tasks[0]!.externalId; // 乙 与 甲 同键
+
+    const preview = await previewAgentPayload(bundle, payload, { projectId });
+    const result = await applyAgentPayload(bundle, payload, { projectId });
+
+    expect(preview.created).toBe(result.created);
+    expect(preview.rejected).toEqual(result.rejected);
+
+    const byCode = Object.fromEntries(
+      result.rejected.map((r) => [r.externalId, r.code] as const),
+    );
+    expect(byCode['workbuddy:run-001:t1']).toBe('conflict');
+    expect(byCode['workbuddy:run-001:t3']).toBe('dep_unresolved');
+    expect(byCode['workbuddy:run-001:t4']).toBe('dep_unresolved');
+    expect(result.created).toBe(1);
+
+    const tasks = await bundle.tasks.listByProject(projectId);
+    expect(tasks.map((t) => t.title)).toEqual(['甲·首到']);
+  });
 });
