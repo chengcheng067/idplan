@@ -35,6 +35,14 @@ export interface HandoffInput {
   agentKindLabel?: string | null;
   /** memberId / agentId → 展示名（只收纯字符串映射，见文件头安全边界说明） */
   assigneeLabels?: Readonly<Record<string, string>>;
+  /**
+   * 已完成任务「task.id → title」映射（可选；QA 返工 🟡-2）。
+   * Ready 任务的前置中已完成的条目据此在交接包中如实列出（PRD 附录 B）：
+   * 下游 Agent 需知道哪些活已干完、不必重做。缺省时前置完成信息整行省略，
+   * **绝不显示兜底假文案**（旧版「（见看板依赖区）」在 ready 里找 done 前置，
+   * 永远找不到，属于恒显死文案）。
+   */
+  doneTaskTitles?: ReadonlyMap<string, string>;
 }
 
 /** 摘录 description 的首段（截断到 maxLength，避免交接包被长文撑爆） */
@@ -95,13 +103,15 @@ export function buildHandoffBundle(input: HandoffInput): string {
       ? `截止 ${dayOf(t.dueDate)}（剩余 ${remainingDays(t.dueDate, dayOf(input.generatedAt))} 天）`
       : '未设截止';
     lines.push(`- status: ${t.status} ｜ ${due} ｜ assignee: ${assigneeLabelOf(t, labels)}`);
-    if (t.dependsOn && t.dependsOn.length > 0) {
+    // 前置完成信息（QA 返工 🟡-2）：ready 数组不含 done 任务，必须经
+    // doneTaskTitles 映射查全量任务；无数据或全部前置未完成 → 整行省略。
+    if (t.dependsOn && t.dependsOn.length > 0 && input.doneTaskTitles) {
       const doneTitles = t.dependsOn
-        .map((dep) => input.ready.find((r) => r.id === dep)?.title)
+        .map((dep) => input.doneTaskTitles?.get(dep))
         .filter((x): x is string => !!x);
-      lines.push(
-        `- 前置已完成：${doneTitles.length > 0 ? doneTitles.map((s) => `${s} ✓`).join('、') : '（见看板依赖区）'}`,
-      );
+      if (doneTitles.length > 0) {
+        lines.push(`- 前置已完成：${doneTitles.map((s) => `${s} ✓`).join('、')}`);
+      }
     }
     if (t.artifacts && t.artifacts.length > 0) {
       lines.push(`- artifacts 要求：${t.artifacts.map((a) => a.title).join('、')}`);

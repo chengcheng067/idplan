@@ -395,7 +395,7 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
     >;
 
     // 导出必须标 v2，否则前端走 v1 归一路径会把 v2 新字段视作缺失
-    expect((exported.meta as Record<string, unknown>).schemaVersion).toBe(2);
+    expect((exported.meta as Record<string, unknown>).schemaVersion).toBe(3);
 
     // 导出仍必须是数组（rowToDto 需反序列化 JSON 数组列）
     const data = exported.data as Record<string, Array<Record<string, unknown>>>;

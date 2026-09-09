@@ -254,3 +254,77 @@ describe('批次策略（§10-R3）：不自动新建 Stage', () => {
     );
   });
 });
+
+describe('批内重复 externalId（QA 返工 🟠-1）：逐条 conflict、绝不静默合并', () => {
+  it('同 externalId 两条不同 title → 后到者 rejected(conflict)，preview 与 apply 严格一致', async () => {
+    const projectId = await seedProject();
+    const payload = makePayload(projectId, [{ title: '首条·真身' }, { title: '后到·冒名' }]);
+    // 手工把第二条 externalId 改成与第一条相同（模拟 Agent 生成重复键）
+    payload.tasks[1]!.externalId = payload.tasks[0]!.externalId;
+
+    const preview = await previewAgentPayload(bundle, payload, { projectId });
+    const applied = await applyAgentPayload(bundle, payload, { projectId });
+
+    // ★ 所见即所写（PRD 附录 A 规则 4）：preview 与 apply 的计数与 rejected 完全一致
+    expect(preview.created).toBe(applied.created);
+    expect(preview.updated).toBe(applied.updated);
+    expect(preview.rejected).toEqual(applied.rejected);
+
+    expect(applied.created).toBe(1);
+    expect(applied.updated).toBe(0);
+    expect(applied.rejected).toHaveLength(1);
+    expect(applied.rejected[0]!.code).toBe('conflict');
+    expect(applied.rejected[0]!.externalId).toBe(payload.tasks[0]!.externalId);
+    expect(applied.rejected[0]!.reason).toContain('externalId');
+
+    // 库内事实：仅首到者写入，后到者绝不静默覆盖
+    const tasks = await bundle.tasks.listByProject(projectId);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]!.title).toBe('首条·真身');
+  });
+
+  it('下游引用 dup 条目 → 传播为 dep_unresolved（指向被拒条目的引用不可解析）', async () => {
+    const projectId = await seedProject();
+    const payload = makePayload(projectId, [
+      { title: '甲' },
+      { title: '乙·dup' },
+      { title: '下游丙', dependsOnExternal: ['workbuddy:run-001:t1'] },
+    ]);
+    // 乙 与 甲 同 externalId → 乙 conflict；丙引用该 id → 指向被拒条目，dep_unresolved
+    payload.tasks[1]!.externalId = payload.tasks[0]!.externalId;
+
+    const preview = await previewAgentPayload(bundle, payload, { projectId });
+    const result = await applyAgentPayload(bundle, payload, { projectId });
+
+    expect(preview.rejected).toEqual(result.rejected);
+    expect(result.created).toBe(1);
+    expect(result.rejected.map((r) => r.code).sort()).toEqual(['conflict', 'dep_unresolved']);
+    expect(result.rejected.find((r) => r.code === 'conflict')!.externalId).toBe(
+      payload.tasks[0]!.externalId,
+    );
+    expect(result.rejected.find((r) => r.code === 'dep_unresolved')!.externalId).toBe(
+      'workbuddy:run-001:t3',
+    );
+
+    const tasks = await bundle.tasks.listByProject(projectId);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]!.title).toBe('甲');
+  });
+
+  it('三条同 externalId → 仅首条写入，2 条 conflict（计数逐条可归因）', async () => {
+    const projectId = await seedProject();
+    const payload = makePayload(projectId, [{ title: '唯一存活的' }, { title: 'dup-2' }, { title: 'dup-3' }]);
+    payload.tasks[1]!.externalId = payload.tasks[0]!.externalId;
+    payload.tasks[2]!.externalId = payload.tasks[0]!.externalId;
+
+    const result = await applyAgentPayload(bundle, payload, { projectId });
+    expect(result.created).toBe(1);
+    expect(result.rejected).toHaveLength(2);
+    expect(result.rejected.every((r) => r.code === 'conflict')).toBe(true);
+    // 两条 conflict 的 externalId 相同但逐条报告（AUS-4 逐条 reason，不是聚合一条）
+    expect(result.rejected.map((r) => r.externalId)).toEqual([
+      payload.tasks[0]!.externalId,
+      payload.tasks[0]!.externalId,
+    ]);
+  });
+});

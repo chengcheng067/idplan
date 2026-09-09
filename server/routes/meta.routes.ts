@@ -378,9 +378,9 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     }
     const includeSecrets = (req.query as { includeSecrets?: string }).includeSecrets === '1';
     return {
-      // v2 = 含 stagePresetKey / templateKey / colorIndex / scheduleBasis / assigneeIds / roleKind，
-      // 与前端 BACKUP_SCHEMA_VERSION 对齐；标 1 会让前端走老版本归一路径（v2 字段被视作缺失）。
-      meta: { app: 'changxia', schemaVersion: 2, exportedAt: nowIso() },
+      // v3 = 含 Agent 任务 9 字段 / Member actorKind 2 字段（v0.6 · T14 顺带 🟡-3 修正：
+      // 此前标 2 与前端 BACKUP_SCHEMA_VERSION=3 脱节）。导入侧同时接受 1/2/3，导出恒为 3。
+      meta: { app: 'changxia', schemaVersion: 3, exportedAt: nowIso() },
       data: {
         projects: dumpTable('projects'),
         stages: dumpTable('stages'),

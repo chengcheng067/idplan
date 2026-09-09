@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 import { Copy, Download, X } from 'lucide-react';
 
 import type { Task } from '../../core/types/entities';
+import { taskIsDone } from '../../core/types/entities';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { buildHandoffBundle } from '../../core/agent/handoff';
@@ -61,6 +62,10 @@ export function HandoffPanel({
         : scope === 'stage'
           ? t.stageId === stageId
           : true;
+    // 已完成前置映射（QA 返工 🟡-2）：handoff 的「前置已完成」行如实列出
+    const doneTaskTitles = new Map(
+      [...tasks].filter((t) => taskIsDone(t)).map((t) => [t.id, t.title] as const),
+    );
     const bundle = buildHandoffBundle({
       projectName,
       generatedAt: new Date().toISOString(),
@@ -69,6 +74,7 @@ export function HandoffPanel({
       layerIndex,
       agentKindLabel: null,
       assigneeLabels,
+      doneTaskTitles,
     });
     return { text: bundle, generatedAt: new Date().toISOString() };
     // assigneeLabels 已按 members 记忆化；tasks 变化时重算

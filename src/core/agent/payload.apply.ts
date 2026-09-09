@@ -144,7 +144,6 @@ async function resolve(
   for (const t of existingTasks) {
     if (t.externalId) extMap.set(t.externalId, t);
   }
-  const batchExternalIds = new Set(payload.tasks.map((t) => t.externalId));
 
   /* ---- ② dependsOnExternal 解引用（含批内引用的传递闭包） ----
    * 批内引用指向的条目自身也可能 dep_unresolved → 用不动点迭代传播，
@@ -162,6 +161,28 @@ async function resolve(
     ok: true,
   }));
   const entryByExternalId = new Map(entries.map((e) => [e.task.externalId, e] as const));
+
+  /* ---- ①b 批内重复 externalId 预检（QA 返工 🟠-1）----
+   * 同 externalId 在本批出现 ≥2 次 → 仅保留首到者，后到者逐条 rejected('conflict')。
+   * 绝不允许静默合并：upsertByExternalId 的「后到覆盖前到」会让 preview 计数与
+   * 实际写入不一致（违反「所见即所写」PRD 附录 A 规则 4 与 AUS-4 逐条 reason）。
+   * 预检在解引用之前完成：dup 条目 ok=false，下游引用它的条目由不动点迭代
+   * 传播为 dep_unresolved，行为与其它被拒条目一致。 */
+  {
+    const seen = new Set<string>();
+    for (const e of entries) {
+      if (seen.has(e.task.externalId)) {
+        e.ok = false;
+        rejected.push({
+          externalId: e.task.externalId,
+          code: 'conflict',
+          reason: '批内存在相同 externalId 的条目，仅保留首次出现的条目，本条未写入。',
+        });
+      } else {
+        seen.add(e.task.externalId);
+      }
+    }
+  }
 
   const resolveOnce = (): boolean => {
     let changed = false;

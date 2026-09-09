@@ -137,6 +137,10 @@ export const useAgentStore = create<AgentState>((set) => ({
       for (const m of members) {
         assigneeLabels[m.id] = m.actorKind === 'agent' && m.agentKind ? m.agentKind : m.name;
       }
+      // 已完成前置映射（QA 返工 🟡-2）：handoff 的「前置已完成」行如实列出
+      const doneTaskTitles = new Map(
+        tasks.filter((t) => taskIsDone(t)).map((t) => [t.id, t.title] as const),
+      );
       const text = buildHandoffBundle({
         projectName: project?.name ?? '未命名项目',
         generatedAt: new Date().toISOString(),
@@ -145,6 +149,7 @@ export const useAgentStore = create<AgentState>((set) => ({
         layerIndex,
         agentKindLabel: null,
         assigneeLabels,
+        doneTaskTitles,
       });
       set({ handoffText: text });
       return text;

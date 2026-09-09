@@ -266,6 +266,38 @@ describe('handoff：五段式输出与安全边界（HF-04）', () => {
     expect(md).not.toContain('contact');
     expect(md).not.toContain('members');
   });
+
+  it('「前置已完成」按 doneTaskTitles 如实列出，无数据时整行省略（QA 返工 🟡-2）', () => {
+    // ready 任务带一个已完成前置（tsk_done1 不在 ready/blocked 中——done 任务
+    // 从不进入这两个区，旧版在 ready 里找它永远找不到，才有了恒显的兜底假文案）
+    const readyWithDoneDep = [
+      makeTask({
+        id: 'tsk_h3',
+        title: '联调验收',
+        dependsOn: ['tsk_done1'],
+      }),
+    ];
+    const input = {
+      projectName: 'P',
+      generatedAt: '2026-09-09T08:00:00.000Z',
+      ready: readyWithDoneDep,
+      blocked,
+      assigneeLabels: { mem_1: '许清楚' },
+    };
+
+    // 传入 done 映射 → 如实列出 ✓
+    const withDone = buildHandoffBundle({
+      ...input,
+      doneTaskTitles: new Map([['tsk_done1', '已完成的前置活']]),
+    });
+    expect(withDone).toContain('前置已完成：已完成的前置活 ✓');
+    expect(withDone).not.toContain('（见看板依赖区）');
+
+    // 缺省（不传 doneTaskTitles）→ 前置行整体省略，绝不回退兜底假文案
+    const withoutDone = buildHandoffBundle(input);
+    expect(withoutDone).not.toContain('前置已完成');
+    expect(withoutDone).not.toContain('（见看板依赖区）');
+  });
 });
 
 describe('markdown-ingest：兼容子集解析', () => {

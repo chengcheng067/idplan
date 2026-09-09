@@ -133,3 +133,14 @@ Agent Token（与 `IDPLAN_AGENT_TOKEN` 分离，可独立吊销）+ 独立限流
 token 只授权「整库读写」，绝不能等价于「Agent 写任务」的授权面。实现时的落点：
 `server/lib/agent-auth.ts`（requireToken 目前仅 backup 使用；Agent 端点另建
 `requireAgentToken`，校验 `IDPLAN_AGENT_API_TOKEN`）。
+
+## artifacts 校验口径：payload 通道 vs backup 通道（刻意不同，勿当 bug 修）
+
+| 通道 | artifacts 条目校验 | 理由 |
+| --- | --- | --- |
+| **payload 导入**（Agent 写入，前端 zod） | 缺 `kind` **静默补 `'other'`**；缺 `id` 结构不符**直接拒绝** | Agent 是宽松通道的上游事实源（§9.3）：kind 是展示语义、可前向兼容（新 kind 值不因旧前端拒绝）；而 id 是 artifacts 追踪的主键，缺了等于产出台账失真，宁可拒条目让上游修 |
+| **backup 导入**（人类备份恢复，前端 zod） | 同上口径（id 必填 / kind 缺省 'other'） | 备份的 artifacts 必然来自 payload 通道写入或 UI 编辑，形状已归一；同口径保证 roundtrip 无损 |
+
+**为什么不同 ≠ 疏忽**：payload 是「机器→机器」的增量事实流（宽松宽容、逐条拒绝），
+backup 是「人→机器」的全量恢复（形状已定、严格保真）。前向兼容只给 kind 这类
+纯展示字段，不给主键。
