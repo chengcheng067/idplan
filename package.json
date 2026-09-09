@@ -1,7 +1,7 @@
 {
   "name": "id-plan",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.6.0",
   "type": "module",
   "description": "《ID Plan》— 室内设计项目节点管理系统（离线优先 Web 应用）",
   "main": "electron/main.cjs",
