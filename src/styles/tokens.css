@@ -20,8 +20,8 @@
  * 已定义的 5 个 token（亮暗同值，无需 theme 覆盖）：
  *   --sidebar-w              240px  侧栏展开（图标 + 文字）
  *   --sidebar-w-collapsed     64px  侧栏折叠（纯图标条）
- *   --topbar-h                56px  顶栏内容高度基准
- *   --content-max           1600px  内容区最大宽度（全局唯一锚点）
+ *   --topbar-h                64px  顶栏内容高度基准（桌面 64 / 平板 56 / 移动两行 100）
+ *   --content-max           1440px  内容区最大宽度（全局唯一锚点 · v0.7 §6.2）
  *   --content-print-max      900px  打印页 A4 预览宽度（刻意保留，不并入 content-max）
  *
  * 铁律对照：
