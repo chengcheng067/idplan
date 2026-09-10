@@ -75,8 +75,16 @@ export default {
           deep: c('clay-deep'),
         },
         /**
-         * 时间轴九段莫兰迪低饱和彩条（阶段 1→9 顺色）。
-         * 仅集中定义于此，时间轴/图例统一引用 stage.sX；stageColors.ts 镜像同步（两处必须一致）。
+         * 时间轴九段阶段色 v3（松墨 → 栗褐 · 冷暖重排 · 2026-09-10 UNLOCKED）。
+         * 数值唯一来源是 global.css 的 --stage-sN-rgb（亮 = main / 暗 = lightBar），
+         * 本文件只做映射，因此这里**不出现任何 hex**。
+         *
+         * 三套变体对应三个角色，别混用（映射表见设计规格 §1.2）：
+         *   stage.sN      实心块 —— 侧栏彩条 / 细竖条 / 小方块 / 色点 / 图例点 / 阶段点
+         *   stage-band.sN 宽面   —— 时间轴跨度色带 / 月历色带 / 大横条 / 阶段条
+         *   stage-ink.sN  面内字 —— 压在 stage-band.sN 上的文字
+         * TS/SVG 里取不到 Tailwind 类的场景走
+         * src/components/timeline/stageColors.ts 的同名别名（那里镜像 var() 引用）。
          */
         stage: {
           s1: c('stage-s1'),
@@ -88,6 +96,30 @@ export default {
           s7: c('stage-s7'),
           s8: c('stage-s8'),
           s9: c('stage-s9'),
+        },
+        /** 宽面色带（亮 = lightBar / 暗 = darkBar）；用法 bg-stage-band-s3 */
+        'stage-band': {
+          s1: c('stage-band-s1'),
+          s2: c('stage-band-s2'),
+          s3: c('stage-band-s3'),
+          s4: c('stage-band-s4'),
+          s5: c('stage-band-s5'),
+          s6: c('stage-band-s6'),
+          s7: c('stage-band-s7'),
+          s8: c('stage-band-s8'),
+          s9: c('stage-band-s9'),
+        },
+        /** 色带内文字（亮 = lightText / 暗 = darkText）；用法 text-stage-ink-s3 */
+        'stage-ink': {
+          s1: c('stage-ink-s1'),
+          s2: c('stage-ink-s2'),
+          s3: c('stage-ink-s3'),
+          s4: c('stage-ink-s4'),
+          s5: c('stage-ink-s5'),
+          s6: c('stage-ink-s6'),
+          s7: c('stage-ink-s7'),
+          s8: c('stage-ink-s8'),
+          s9: c('stage-ink-s9'),
         },
       },
       fontFamily: {

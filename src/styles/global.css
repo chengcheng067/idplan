@@ -22,8 +22,16 @@
  *   --{name}-a    该色的默认 alpha（仅「本就半透明」的描边/底纹需要，其余省略=1）
  * ------------------------------------------------------------------------- */
 
-/* ===================== 亮色主题（默认，贴近 stylekit soft-ui） ===================== */
-:root {
+/* ===================== 亮色主题（默认，贴近 stylekit soft-ui） =====================
+ * `.print-root` 一并列在此处 = **打印页强制浅色**（SPEC §4 画板 09 / 20）：
+ * 打印 / A4 预览页（SchedulePrintPage、CalendarPrintPage）在暗色主题下也必须按亮色渲染，
+ * 否则纸面输出是暗底深色带，客户稿直接废掉。
+ * 原理：自定义属性取「最近一个声明了它的祖先」的值 —— `.print-root` 元素自身声明了整套亮色令牌，
+ * 其子树就只会继承到亮色值，`<html data-theme='dark'>` 上的暗色值被就近覆盖。
+ * 因此本段内的**所有**令牌（表面 / 文字 / 语义色 / 阶段色 / 阴影）都在打印页锁回亮色。
+ */
+:root,
+.print-root {
   color-scheme: light;
 
   /* —— 表面 —— */
@@ -64,16 +72,74 @@
   --rest-day-band-rgb: 15 23 42;
   --rest-day-band-a: 0.04;
 
-  /* —— 时间轴九段莫兰迪彩条（亮/暗通用；中间调，两侧底色上都可辨）—— */
-  --stage-s1-rgb: 169 198 183;
-  --stage-s2-rgb: 159 187 208;
-  --stage-s3-rgb: 211 185 155;
-  --stage-s4-rgb: 188 168 205;
-  --stage-s5-rgb: 196 210 188;
-  --stage-s6-rgb: 147 175 191;
-  --stage-s7-rgb: 213 190 170;
-  --stage-s8-rgb: 156 184 168;
-  --stage-s9-rgb: 187 181 157;
+  /* —— 时间轴九段阶段色 v3（松墨 → 栗褐 · 冷暖重排 · UNLOCKED 2026-09-10）——
+   * 唯一真相源：tmp/palette2.json。**三套变体 = 三个角色**，别用一个值通吃：
+   *   --stage-sN      实心块（main）     ：侧栏彩条 / 细竖条 / 小方块 / 色点 / 图例点 / 阶段点
+   *   --stage-band-sN 宽面（lightBar）   ：时间轴跨度色带 / 月历色带 / 大横条 / 阶段条
+   *   --stage-ink-sN  宽面内文字（lightText）：压在 --stage-band-sN 上的字
+   * 亮色页 ⟶ 上面的默认值；暗色页在 [data-theme='dark'] 整体换成
+   *   lightBar / darkBar / darkText 三套（见该段注释）。
+   * -rgb 三元组供 Tailwind 注入 alpha（bg-stage-s1/15 这类写法依赖它）；
+   * hex 变量供内联 SVG attr / style 使用（presentation attr 不解析 rgb(var())）。
+   * 改色只改本段 + [data-theme='dark'] 的对应段，tailwind.config.ts 与
+   * src/components/timeline/stageColors.ts 只是映射/别名，不需要改数值。
+   */
+  --stage-s1-rgb: 33 84 82;
+  --stage-s2-rgb: 46 134 240;
+  --stage-s3-rgb: 153 183 252;
+  --stage-s4-rgb: 140 198 62;
+  --stage-s5-rgb: 224 255 183;
+  --stage-s6-rgb: 255 209 107;
+  --stage-s7-rgb: 255 242 214;
+  --stage-s8-rgb: 255 109 71;
+  --stage-s9-rgb: 111 52 50;
+  --stage-s1: #215452; /* s1 松墨 */
+  --stage-s2: #2e86f0; /* s2 亮蓝 */
+  --stage-s3: #99b7fc; /* s3 雾蓝 */
+  --stage-s4: #8cc63e; /* s4 草绿 */
+  --stage-s5: #e0ffb7; /* s5 芽白 */
+  --stage-s6: #ffd16b; /* s6 蜜黄 */
+  --stage-s7: #fff2d6; /* s7 米白 */
+  --stage-s8: #ff6d47; /* s8 珊瑚 */
+  --stage-s9: #6f3432; /* s9 栗褐 */
+
+  --stage-band-s1-rgb: 100 135 134;
+  --stage-band-s2-rgb: 98 164 244;
+  --stage-band-s3-rgb: 178 201 253;
+  --stage-band-s4-rgb: 169 212 110;
+  --stage-band-s5-rgb: 224 255 183;
+  --stage-band-s6-rgb: 255 209 107;
+  --stage-band-s7-rgb: 255 242 214;
+  --stage-band-s8-rgb: 255 146 117;
+  --stage-band-s9-rgb: 147 103 101;
+  --stage-band-s1: #648786;
+  --stage-band-s2: #62a4f4;
+  --stage-band-s3: #b2c9fd;
+  --stage-band-s4: #a9d46e;
+  --stage-band-s5: #e0ffb7;
+  --stage-band-s6: #ffd16b;
+  --stage-band-s7: #fff2d6;
+  --stage-band-s8: #ff9275;
+  --stage-band-s9: #936765;
+
+  --stage-ink-s1-rgb: 7 18 18;
+  --stage-ink-s2-rgb: 10 29 53;
+  --stage-ink-s3-rgb: 34 40 55;
+  --stage-ink-s4-rgb: 31 44 14;
+  --stage-ink-s5-rgb: 49 56 40;
+  --stage-ink-s6-rgb: 56 46 24;
+  --stage-ink-s7-rgb: 56 53 47;
+  --stage-ink-s8-rgb: 56 24 16;
+  --stage-ink-s9-rgb: 255 255 255;
+  --stage-ink-s1: #071212;
+  --stage-ink-s2: #0a1d35;
+  --stage-ink-s3: #222837;
+  --stage-ink-s4: #1f2c0e;
+  --stage-ink-s5: #313828;
+  --stage-ink-s6: #382e18;
+  --stage-ink-s7: #38352f;
+  --stage-ink-s8: #381810;
+  --stage-ink-s9: #ffffff;
 
   /* —— 阴影：Soft UI 的灵魂（大范围 + 低透明度 + 绝不纯黑）—— */
   --shadow-soft: 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -217,6 +283,69 @@
   --rest-day-rgb: 35 38 45; /* #23262d */
   --rest-day-band-rgb: 255 255 255;
   --rest-day-band-a: 0.05;
+
+  /* —— 时间轴九段阶段色 v3 · 暗色页三套变体（与 :root 段一一对应，只是换变体）——
+   *   实心块：main → **lightBar**（暗底上 main 太深，会糊进背景）
+   *   宽   面：lightBar → **darkBar**
+   *   面内字：lightText → **darkText**
+   * 对比度已验（SPEC §1.2）：暗色面 8.96–16.x，实心块 ≥3.0。
+   */
+  --stage-s1-rgb: 100 135 134;
+  --stage-s2-rgb: 98 164 244;
+  --stage-s3-rgb: 178 201 253;
+  --stage-s4-rgb: 169 212 110;
+  --stage-s5-rgb: 224 255 183;
+  --stage-s6-rgb: 255 209 107;
+  --stage-s7-rgb: 255 242 214;
+  --stage-s8-rgb: 255 146 117;
+  --stage-s9-rgb: 147 103 101;
+  --stage-s1: #648786;
+  --stage-s2: #62a4f4;
+  --stage-s3: #b2c9fd;
+  --stage-s4: #a9d46e;
+  --stage-s5: #e0ffb7;
+  --stage-s6: #ffd16b;
+  --stage-s7: #fff2d6;
+  --stage-s8: #ff9275;
+  --stage-s9: #936765;
+
+  --stage-band-s1-rgb: 23 46 48;
+  --stage-band-s2-rgb: 28 67 114;
+  --stage-band-s3-rgb: 153 183 252;
+  --stage-band-s4-rgb: 140 198 62;
+  --stage-band-s5-rgb: 224 255 183;
+  --stage-band-s6-rgb: 255 209 107;
+  --stage-band-s7-rgb: 255 242 214;
+  --stage-band-s8-rgb: 116 56 43;
+  --stage-band-s9-rgb: 55 32 34;
+  --stage-band-s1: #172e30;
+  --stage-band-s2: #1c4372;
+  --stage-band-s3: #99b7fc;
+  --stage-band-s4: #8cc63e;
+  --stage-band-s5: #e0ffb7;
+  --stage-band-s6: #ffd16b;
+  --stage-band-s7: #fff2d6;
+  --stage-band-s8: #74382b;
+  --stage-band-s9: #372022;
+
+  --stage-ink-s1-rgb: 255 255 255;
+  --stage-ink-s2-rgb: 255 255 255;
+  --stage-ink-s3-rgb: 17 19 24;
+  --stage-ink-s4-rgb: 17 19 24;
+  --stage-ink-s5-rgb: 17 19 24;
+  --stage-ink-s6-rgb: 17 19 24;
+  --stage-ink-s7-rgb: 17 19 24;
+  --stage-ink-s8-rgb: 255 255 255;
+  --stage-ink-s9-rgb: 255 255 255;
+  --stage-ink-s1: #ffffff;
+  --stage-ink-s2: #ffffff;
+  --stage-ink-s3: #111318;
+  --stage-ink-s4: #111318;
+  --stage-ink-s5: #111318;
+  --stage-ink-s6: #111318;
+  --stage-ink-s7: #111318;
+  --stage-ink-s8: #ffffff;
+  --stage-ink-s9: #ffffff;
 
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.5);
   --shadow-raised: 0 10px 40px -10px rgba(0, 0, 0, 0.55), 0 2px 8px -2px rgba(0, 0, 0, 0.4);

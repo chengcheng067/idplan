@@ -26,7 +26,7 @@ import {
   type CalendarFilters,
   type CalendarEntry,
 } from '../src/components/calendar/calendarMath';
-import { STAGE_BAR_COLORS } from '../src/components/timeline/stageColors';
+import { STAGE_BAND_COLORS } from '../src/components/timeline/stageColors';
 import { TODAY_LINE_COLOR } from '../src/components/timeline/timelineColors';
 import {
   COMPLETED_COLOR,
@@ -168,7 +168,7 @@ describe('calendarMath.buildMonthMeta / shiftMonth / clampDate', () => {
 describe('calendarMath.computeCalendarEntry（PRD §4.1 / §4.2）', () => {
   const meta = buildMonthMeta('2026-09', '2026-09-15');
 
-  it('进行中：色带起点=阶段实际首日（早于计划基线则取阶段首）、终点=clamp(今日,阶段首,阶段末)、颜色=阶段莫兰迪', () => {
+  it('进行中：色带起点=阶段实际首日（早于计划基线则取阶段首）、终点=clamp(今日,阶段首,阶段末)、颜色=阶段九色（宽面变体）', () => {
     const p = makeProject({ plannedStartAt: '2026-09-05', plannedEndAt: '2026-09-30' });
     const e = computeCalendarEntry(p, nineStages('2026-09-15'), meta);
     expect(e.status).toBe('in_progress');
@@ -178,7 +178,7 @@ describe('calendarMath.computeCalendarEntry（PRD §4.1 / §4.2）', () => {
     // 图3修复：bandStart 现在=min(阶段实际首日 09-01, plannedStart 09-05)=09-01，不再固定用计划基线
     expect(e.bandStart).toBe('2026-09-01');
     expect(e.bandEnd).toBe('2026-09-15'); // clamp(今日 09-15, 阶段首 09-01, 阶段末 09-30)
-    expect(e.color).toBe(STAGE_BAR_COLORS[4]);
+    expect(e.color).toBe(STAGE_BAND_COLORS[4]);
     expect(e.isGhost).toBe(false);
   });
 
@@ -200,7 +200,7 @@ describe('calendarMath.computeCalendarEntry（PRD §4.1 / §4.2）', () => {
     expect(e.bandEnd).toBe('2026-09-30');
     expect(e.percent).toBe(100);
     expect(e.color).toBe(COMPLETED_COLOR);
-    expect(e.color).toBe(STAGE_BAR_COLORS[9]);
+    expect(e.color).toBe(STAGE_BAND_COLORS[9]);
   });
 
   it('逾期：clay 色、bandEnd 延伸到今天', () => {
@@ -258,8 +258,8 @@ describe('calendarMath.filterEntries（PRD §3.4 组间 AND / 组内 OR）', () 
 });
 
 describe('calendarColors 镜像一致性（PRD §6.2 禁止裸 hex 漂移）', () => {
-  it('完成色 = stage.s9，逾期色 = clay，未开始 = mist，进度点 = pine', () => {
-    expect(COMPLETED_COLOR).toBe(STAGE_BAR_COLORS[9]);
+  it('完成色 = stage.s9 宽面变体，逾期色 = clay，未开始 = mist，进度点 = pine', () => {
+    expect(COMPLETED_COLOR).toBe(STAGE_BAND_COLORS[9]);
     // 今日线 / 逾期色带 / 进度点改由 CSS 变量驱动（见 timelineColors.ts），
     // 未开始幽灵态改由 --calendar-not-started 驱动（见 calendarColors.ts），
     // 不再裸 hex：真实色值住在 global.css 对应变量，随主题换肤。
@@ -269,8 +269,8 @@ describe('calendarColors 镜像一致性（PRD §6.2 禁止裸 hex 漂移）', (
     expect(NOT_STARTED_COLOR).toBe('var(--calendar-not-started)');
     expect(PROGRESS_DOT_COLOR).toBe('var(--timeline-ring-progress)');
   });
-  it('stageColorOf 按 orderIndex 取九段色', () => {
-    expect(stageColorOf(3)).toBe(STAGE_BAR_COLORS[3]);
-    expect(stageColorOf(99)).toBe(STAGE_BAR_COLORS[9]);
+  it('stageColorOf 按 orderIndex 取九段色（宽面变体）', () => {
+    expect(stageColorOf(3)).toBe(STAGE_BAND_COLORS[3]);
+    expect(stageColorOf(99)).toBe(STAGE_BAND_COLORS[9]);
   });
 });

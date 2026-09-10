@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { xOf, type TimelineRange } from '../../lib/date';
 import type { Stage, Task } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
-import { STAGE_BAR_COLORS } from './stageColors';
+import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS } from './stageColors';
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
 import {
   STAGE_ACTIVE_STROKE,
@@ -65,7 +65,11 @@ export function StageBar({
   const w = Math.max(pxPerDay, xEnd - xStart);
   // 颜色与 orderIndex 解耦：优先用阶段自带的 colorIndex（多阶段项目 1..9 循环色板），
   // 缺失/越界时按 orderIndex 安全回落到 indoor_full 套餐对应色（读时回落范式，零迁移）。
-  const fill = STAGE_BAR_COLORS[resolveStageColorIndex(stage.orderIndex, stage.colorIndex)] ?? '#88A293';
+  const idx = resolveStageColorIndex(stage.orderIndex, stage.colorIndex);
+  // 阶段条是**宽面**（设计规格 §1.2）：亮色页用 lightBar、暗色页用 darkBar —— 即 --stage-band-sN。
+  // 条内文字 / 子刻度线必须配 --stage-ink-sN，否则「芽白 / 米白」段上的白字会彻底看不见。
+  const fill = STAGE_BAND_COLORS[idx] ?? STAGE_BAND_COLORS[9];
+  const ink = STAGE_BAND_INK_COLORS[idx] ?? STAGE_BAND_INK_COLORS[9];
 
   // 拖拽时显示的新日期（用于气泡提示）
   const previewDate =
@@ -130,7 +134,7 @@ export function StageBar({
               y={y + barH - 3}
               textAnchor="middle"
               fontSize={9}
-              fill="#FFFFFF"
+              fill={ink}
               opacity={0.85}
             >
               {['交底', '中期', '验收'][i]}
@@ -148,7 +152,8 @@ export function StageBar({
             width={handleW}
             height={barH - 10}
             rx={3}
-            fill="rgba(255,255,255,0.5)"
+            fill={ink}
+            opacity={0.5}
             style={{ cursor: 'ew-resize' }}
             onPointerDown={(e) => onHandleDown(e, stage, 'start')}
           />
@@ -172,7 +177,7 @@ export function StageBar({
           y={y + 18}
           textAnchor="middle"
           fontSize={9.5}
-          fill="#FFFFFF"
+          fill={ink}
           opacity={0.92}
           pointerEvents="none"
         >

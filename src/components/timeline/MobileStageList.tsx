@@ -37,7 +37,7 @@ export function MobileStageList({
     <div className="flex flex-col gap-2">
       {stages.map((s) => {
         const color =
-          STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? '#88A293';
+          STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? STAGE_BAR_COLORS[9];
         const active = s.status === StageStatus.InProgress;
         const owner = members.find((m) => m.id === s.ownerId);
         const stageTasks = tasks.filter((t) => t.stageId === s.id);

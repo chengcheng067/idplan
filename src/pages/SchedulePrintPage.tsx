@@ -9,7 +9,7 @@ import { useMembersStore } from '../store/useMembersStore';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { StageStatus, ScheduleBasis, SCHEDULE_BASIS_LABELS } from '../core/types/enums';
 import { resolveStageColorIndex } from '../core/template/stage-fallback';
-import { STAGE_BAR_COLORS } from '../components/timeline/stageColors';
+import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS, STAGE_BAR_COLORS } from '../components/timeline/stageColors';
 import {
   buildScheduleSections,
   paginateSections,
@@ -221,16 +221,20 @@ export function SchedulePrintPage(): JSX.Element {
                 <div className="flex h-9 w-full overflow-hidden rounded-lg border border-slate-200">
                   {sections.map((s) => {
                     const days = totalDaysInclusive(s.startAt, s.endAt) || 1;
+                    const segIdx = resolveStageColorIndex(s.orderIndex, s.colorIndex);
                     return (
                       <div
                         key={s.orderIndex}
                         title={`${s.orderIndex}. ${s.name}（${s.startAt} — ${s.endAt} · ${statusLabel(s.status)}）`}
-                        className="schedule-bar-segment flex min-w-0 items-center justify-center text-[11px] font-semibold text-white"
+                        className="schedule-bar-segment flex min-w-0 items-center justify-center text-[11px] font-semibold"
                         style={{
                           // 按天数比例分配宽度（旧实现 Math.max(12,…) 会导致 9 段合计溢出）
                           flexGrow: days,
                           flexBasis: 0,
-                          backgroundColor: STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? '#BBB59D',
+                          // 摘要条是宽面 → 亮色 lightBar（打印页恒浅色）；条内序号配 --stage-ink-sN，
+                          // 不能再用白字：芽白 s5 / 米白 s7 的白字对比度约 1.1，等于看不见。
+                          backgroundColor: STAGE_BAND_COLORS[segIdx] ?? STAGE_BAND_COLORS[9],
+                          color: STAGE_BAND_INK_COLORS[segIdx] ?? STAGE_BAND_INK_COLORS[9],
                         }}
                       >
                         {s.orderIndex}
@@ -248,7 +252,7 @@ export function SchedulePrintPage(): JSX.Element {
                         className="schedule-status-dot inline-block h-3 w-3 rounded-sm"
                         style={{
                           backgroundColor:
-                            STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? '#BBB59D',
+                            STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? STAGE_BAR_COLORS[9],
                         }}
                       />
                     ))}
@@ -307,7 +311,7 @@ function StageBlock({
   chipCls(status: StageStatus): string;
   label(status: StageStatus): string;
 }): JSX.Element {
-  const stageColor = STAGE_BAR_COLORS[resolveStageColorIndex(section.orderIndex, section.colorIndex)] ?? '#BBB59D';
+  const stageColor = STAGE_BAR_COLORS[resolveStageColorIndex(section.orderIndex, section.colorIndex)] ?? STAGE_BAR_COLORS[9];
   const hasTasks = section.tasks.length > 0;
   return (
     <section className="schedule-section mb-6 break-inside-avoid">
