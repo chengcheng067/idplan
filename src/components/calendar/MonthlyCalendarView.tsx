@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { Project, Stage, Task } from '../../core/types/entities';
 import { useUiStore } from '../../store/useUiStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
-import { useMembersStore } from '../../store/useMembersStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { useTheme } from '../../hooks/useTheme';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../../hooks/useRoleGuard';
 import { cn } from '../../lib/cn';
-import { totalDaysInclusive } from '../../lib/date';
 import { isRestDay } from '../../lib/workdays';
+import { SegmentedControl } from '../ui/SegmentedControl';
 import {
   buildMonthMeta,
   shiftMonth,
@@ -21,32 +22,65 @@ import {
   type CalendarMonthMeta,
   type CalendarFilters,
 } from './calendarMath';
+import {
+  WEEKDAYS,
+  buildCalendarGrid,
+  formatSelectedDate,
+  gridDaysOf,
+  lunarLabel,
+  weekOf,
+  type GridDay,
+} from './calendarGrid';
+import { weekendHeaderColor } from './calendarColors';
 import { CalendarLegend } from './CalendarLegend';
 import { CalendarFilters as CalendarFilterPanel } from './CalendarFilters';
+import { CalendarEmptyStates, type EmptyKind } from './CalendarEmptyStates';
+import { MonthDayCell, stageLabelOf } from './MonthDayCell';
 
-/** 星期表头（周一为起点，与系统日历一致） */
-const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
+/**
+ * 月历看板（v0.7 画板 14 亮色 / 15 暗色 / 16-17 空状态四态 / 18 拥挤方案 A / 19 移动端）。
+ *
+ * ── 结构（画板 14 原文）──
+ *   内容区 padding 20 36 24 36、纵向 gap 12、底 cream（规格 #F7F8FA 的 token 近似）
+ *   1) 日历工具行：高 60、横向 gap 16
+ *        左 = 「2026年8月」18/600 + 上/下月箭头 32×32
+ *        中 = 「今天」胶囊（pine-soft 底、圆角 9999、高 28、padding 0 14）
+ *        右 = 视图切换分段控件（月 / 周 / 日程）
+ *   2) 图例行（CalendarLegend）
+ *   3) 筛选行（CalendarFilters，§3.7）
+ *   4) 日历卡片：圆角 24、底 sunken、内部 gap 8
+ *        · 星期表头 一~日 11，**六/日 按主题取相反变体**（§1.2 角色表末行）
+ *        · 日期网格 7 列 × 6 行（MonthDayCell）
+ *
+ * ── 亮暗两套底（画板 14 末尾专门警告「别用同一个」）──
+ *   规格给的是两个裸 hex：内容区 `#F7F8FA`、日历卡 `#F1F3F7`。
+ *   按「零新色」纪律做 token 近似（差异均为 Δ≈2，肉眼不可分）：
+ *     内容区底 → `bg-cream`（亮 #F8FAFC / 暗 #141619，暗色与规格完全一致）
+ *     日历卡底 → `bg-sunken`（亮 #F1F5F9 / 暗 #0F1217 ≈ 规格 #101215）
+ *   详见交付报告的映射表。
+ *
+ * ── 休息日口径（有意偏离设计稿，见下方注释）──
+ *   画板 14 把「周末」写作「六 / 日」，本项目有休息制度配置（双休/单休/大小休），
+ *   业务真相源是 lib/workdays.isRestDay。格子底色一律走 isRestDay，
+ *   **不硬编码周六周日** —— 单休制下只有周日休息，硬编码会把功能做坏。
+ *
+ * ── 数据层与业务逻辑未动 ──
+ *   calendarMath 的纯计算、useUiStore 的 calendarMonth/calendarFilters 契约、
+ *   isRestDay 口径、四类空状态的判定条件全部保持原样；本次只做视觉与交互重构。
+ */
 
-const MONTH_NAMES = [
-  '1月', '2月', '3月', '4月', '5月', '6月',
-  '7月', '8月', '9月', '10月', '11月', '12月',
+/** 视图密度（画板 14 工具行右端的分段控件；§7.2 D2「方案 A 为主 + 允许切周」的配套） */
+type CalendarDensity = 'month' | 'week' | 'agenda';
+
+const DENSITY_OPTIONS = [
+  { value: 'month' as const, label: '月' },
+  { value: 'week' as const, label: '周' },
+  { value: 'agenda' as const, label: '日程' },
 ];
 
-/** 本地时区 ISO（YYYY-MM-DD） */
-function localIso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** 周一 = 0，周日 = 6 */
-function mondayFirst(d: Date): number {
-  return (d.getDay() + 6) % 7;
-}
-
-/** 手机（<768px）判定：月历手机适配用（纯 CSR SPA，window 可用；口径与 TimelineView 一致） */
+/** 手机（<768px）判定：月历手机适配用（纯 CSR SPA，window 可用） */
 function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(
-    () => window.matchMedia('(max-width: 767px)').matches,
-  );
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 767px)');
     const onChange = (): void => setIsMobile(mql.matches);
@@ -56,60 +90,31 @@ function useIsMobile(): boolean {
   return isMobile;
 }
 
-interface GridDay {
-  date: string; // 'YYYY-MM-DD'
-  day: number; // 公历日 1~31
-  inMonth: boolean; // 是否属于当月
-  isToday: boolean;
-  isSelected: boolean;
+/** 工具行里的上/下月箭头：桌面 32×32（画板 14），移动端放大到 44×44 满足触控 ≥44（画板 19） */
+function MonthArrow({
+  direction,
+  onClick,
+}: {
+  direction: 'prev' | 'next';
+  onClick(): void;
+}): JSX.Element {
+  const Icon = direction === 'prev' ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={direction === 'prev' ? '上个月' : '下个月'}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-line bg-paper text-ink transition-colors hover:bg-sunken md:h-[32px] md:w-[32px]"
+    >
+      <Icon size={16} aria-hidden />
+    </button>
+  );
 }
 
-/** 生成系统日历风格的 6×7 日期网格（含前后月填充） */
-function buildCalendarGrid(meta: CalendarMonthMeta, selectedDate: string): GridDay[] {
-  const first = new Date(meta.year, meta.month - 1, 1);
-  const startOffset = mondayFirst(first);
-  const start = new Date(meta.year, meta.month - 1, 1 - startOffset);
-
-  const days: GridDay[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const iso = localIso(d);
-    days.push({
-      date: iso,
-      day: d.getDate(),
-      inMonth: d.getMonth() + 1 === meta.month,
-      isToday: iso === meta.todayIso,
-      isSelected: iso === selectedDate,
-    });
-  }
-  return days;
-}
-
-/** 格式化顶部大日期："8月28日，星期五"（无农历时副标题留空） */
-function formatSelectedDate(iso: string): string {
-  const d = new Date(iso);
-  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-  return `${d.getMonth() + 1}月${d.getDate()}日，${weekdays[d.getDay()]}`;
-}
-
-/** 农历占位（未来可接入 lunar-javascript；避免手写农历导致错排） */
-function lunarLabel(): string {
-  return '农历';
-}
-
-type EmptyKind = 'E1' | 'E2' | 'E3' | 'E4' | null;
-
-/**
- * 月历视图（系统日历网格风格，对齐用户截图图一）：
- *   顶部大日期头 + 年月切换 + 今天；
- *   主体 7 列星期表头 + 日期格子；
- *   每个格子里显示当天覆盖的项目色条（项目进度以颜色块在日期格上延伸）。
- * 周/日密度切换当前未实现，已移除无效按钮。
- */
 export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.Element {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const { theme } = useTheme();
   const calendarMonth = useUiStore((s) => s.calendarMonth);
   const setCalendarMonth = useUiStore((s) => s.setCalendarMonth);
   const filters = useUiStore((s) => s.calendarFilters);
@@ -120,11 +125,12 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   const projects = useProjectsStore((s) => s.projects);
   const stages = useProjectsStore((s) => s.stages);
   const tasks = useProjectsStore((s) => s.tasks);
-  const members = useMembersStore((s) => s.members);
   const restPolicy = useSettingsStore((s) => s.restPolicy);
 
   const { role, currentMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
+
+  const [density, setDensity] = useState<CalendarDensity>('month');
 
   const meta: CalendarMonthMeta = useMemo(() => buildMonthMeta(calendarMonth), [calendarMonth]);
   const active = useMemo(() => projects.filter((p) => p.status === 'active'), [projects]);
@@ -168,6 +174,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
 
   const finalEntries = useMemo(() => filterEntries(baseEntries, filters), [baseEntries, filters]);
 
+  /** 四类空状态的判定条件与触发时机（业务语义，本次重构**未改**） */
   const emptyKind: EmptyKind = useMemo(() => {
     if (active.length === 0) return 'E1';
     if (baseEntries.length === 0) return memberView ? 'E4' : 'E2';
@@ -175,7 +182,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
     return null;
   }, [active.length, baseEntries.length, finalEntries.length, memberView]);
 
-  // 键盘 ←/→ 切换月份
+  // 键盘 ←/→ 切换月份（既有功能保留）
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const el = document.activeElement as HTMLElement | null;
@@ -192,13 +199,16 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
     return () => window.removeEventListener('keydown', onKey);
   }, [calendarMonth, setCalendarMonth]);
 
-  const thisMonth = useMemo(() => localIso(new Date()).slice(0, 7), []);
-  const todayIso = meta.todayIso;
-
-  const gridDays = useMemo(
-    () => buildCalendarGrid(meta, selectedDate),
-    [meta, selectedDate],
+  const thisMonth = useMemo(
+    () => `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+    [],
   );
+
+  const gridDays = useMemo(() => buildCalendarGrid(meta, selectedDate), [meta, selectedDate]);
+  const weekDays = useMemo(() => gridDaysOf(weekOf(selectedDate), selectedDate, meta.todayIso), [
+    selectedDate,
+    meta.todayIso,
+  ]);
 
   const entriesOnDate = (date: string): CalendarEntry[] =>
     finalEntries.filter((e) => e.bandStart <= date && e.bandEnd >= date);
@@ -207,55 +217,101 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
 
   const goToday = (): void => {
     setCalendarMonth(thisMonth);
-    setSelectedDate(todayIso);
+    setSelectedDate(meta.todayIso);
   };
 
-  return (
-    <div className="space-y-5">
-      {/* 顶部大日期头（系统日历风格）；手机端两行式（标题一行、年月导航一行），避免横向挤压 */}
-      <div className="glass-strong flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-line p-4 sm:gap-4 sm:p-5">
-        <div className="min-w-0">
-          <div className="font-display text-xl text-ink">{formatSelectedDate(selectedDate)}</div>
-          <div className="mt-0.5 text-xs text-mist">{lunarLabel()}</div>
-        </div>
+  /** 六 / 日表头色：亮色页 = lightText（深调），暗色页 = main（亮调）——§1.2 角色表末行 */
+  const weekendColor = weekendHeaderColor(theme);
 
-        <div className={`flex items-center gap-3 ${isMobile ? 'w-full justify-between' : ''}`}>
-          <button
-            type="button"
-            onClick={() => setCalendarMonth(shiftMonth(calendarMonth, -1))}
-            aria-label="上个月"
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-line bg-paper text-lg text-ink transition-colors hover:bg-sand"
-          >
-            ‹
-          </button>
-          <h2 className="min-w-0 flex-1 text-center font-display text-display-md text-ink">
+  /** 星期表头（画板 14：11；六/日 着色；移动端同尺寸 11） */
+  const weekdayHeader = (
+    <div className="grid grid-cols-7">
+      {WEEKDAYS.map((w, i) => (
+        <div
+          key={w}
+          className={cn('pb-[6px] text-center text-[11px]', i >= 5 ? 'font-medium' : 'text-mist')}
+          style={i >= 5 ? { color: weekendColor } : undefined}
+        >
+          {w}
+        </div>
+      ))}
+    </div>
+  );
+
+  /** 日历卡片（画板 14：圆角 24、底 sunken、内部 gap 8） */
+  const calendarCard = (children: JSX.Element): JSX.Element => (
+    <div className="rounded-[24px] bg-sunken p-[10px] md:p-[16px]">
+      <div className="flex min-w-0 flex-col gap-[8px]">{children}</div>
+    </div>
+  );
+
+  const grid = (days: GridDay[], cols = 'grid-cols-7'): JSX.Element => (
+    <div className={cn('grid', cols, 'gap-px overflow-hidden overflow-x-hidden rounded-[12px] bg-line')}>
+      {days.map((day) => (
+        <MonthDayCell
+          key={day.date}
+          day={day}
+          items={entriesOnDate(day.date)}
+          /* ★ 休息日一律走公司制度判定，不硬编码周六周日（画板 14 的「六/日」是双休语境） */
+          isRest={isRestDay(day.date, restPolicy)}
+          isMobile={isMobile}
+          onSelect={() => setSelectedDate(day.date)}
+          onOpen={open}
+        />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-[12px] bg-cream px-[16px] pb-[24px] pt-[20px] md:px-[36px]">
+      {/* ① 日历工具行（画板 14：高 60 / 横向 gap 16） */}
+      <div className="flex flex-col gap-[10px] md:h-[60px] md:flex-row md:items-center md:gap-[16px]">
+        {/* 左：年月 + 上/下月 */}
+        <div className="flex min-w-0 items-center gap-[8px] md:shrink-0">
+          <MonthArrow direction="prev" onClick={() => setCalendarMonth(shiftMonth(calendarMonth, -1))} />
+          <h2 className="min-w-0 flex-1 truncate text-center text-[18px] font-semibold text-ink md:flex-none md:text-left">
             {meta.label}
           </h2>
-          <button
-            type="button"
-            onClick={() => setCalendarMonth(shiftMonth(calendarMonth, 1))}
-            aria-label="下个月"
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-line bg-paper text-lg text-ink transition-colors hover:bg-sand"
-          >
-            ›
-          </button>
-          <button
-            type="button"
-            onClick={goToday}
-            className={cn(
-              'rounded-[12px] border px-4 py-2 text-sm transition-colors',
-              calendarMonth === thisMonth
-                ? 'border-pine bg-pine-soft text-pine-deep'
-                : 'border-line bg-paper text-mist hover:bg-sand hover:text-ink',
-            )}
-          >
-            今天
-          </button>
+          <MonthArrow direction="next" onClick={() => setCalendarMonth(shiftMonth(calendarMonth, 1))} />
+        </div>
+
+        {/* 中 + 右：桌面「今天」居中、「月/周/日程」靠右；移动端两者共处一行（画板 19） */}
+        <div className="flex items-center justify-between gap-[12px] md:flex-1 md:gap-[16px]">
+          <div className="md:flex md:flex-1 md:justify-center">
+            <button
+              type="button"
+              onClick={goToday}
+              className={cn(
+                // 画板 14：pine-soft 底、圆角 9999、高 28、padding 0 14。
+                // 画板 19：移动端宽 54 × 高 28（padding 略放宽到 16 凑出同量级宽度）。
+                'inline-flex h-[28px] items-center rounded-full bg-pine-soft text-[13px] font-medium text-pine transition-colors hover:brightness-95',
+                'px-[16px] md:px-[14px]',
+              )}
+            >
+              今天
+            </button>
+          </div>
+          <div className="md:flex md:shrink-0 md:justify-end">
+            <SegmentedControl
+              value={density}
+              onChange={setDensity}
+              options={DENSITY_OPTIONS}
+              ariaLabel="月历视图密度"
+            />
+          </div>
         </div>
       </div>
 
-      {/* 图例 + 筛选 */}
+      {/* 移动端日期详情行（画板 19 第 3 项：桌面画板 14 无此行，日期由选中格高亮表达） */}
+      <div className="flex flex-col gap-[2px] md:hidden">
+        <span className="text-[13px] font-medium text-ink">{formatSelectedDate(selectedDate)}</span>
+        <span className="text-[11px] text-mist">{lunarLabel()}</span>
+      </div>
+
+      {/* ② 图例行 */}
       <CalendarLegend />
+
+      {/* ③ 筛选行 */}
       <CalendarFilterPanel
         filters={filters as CalendarFilters}
         onToggleStatus={toggleStatus}
@@ -263,164 +319,74 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
         onClear={clearFilters}
       />
 
-      {/* 月历网格 / 空状态 */}
+      {/* ④ 日历卡片 / 空状态四态 */}
       {emptyKind ? (
-        <EmptyState kind={emptyKind} monthLabel={meta.label} onClear={clearFilters} onManual={onManual} />
+        <CalendarEmptyStates
+          kind={emptyKind}
+          monthLabel={meta.label}
+          gridDays={gridDays}
+          filters={filters as CalendarFilters}
+          memberProject={active[0] ?? null}
+          onClear={clearFilters}
+          onManual={onManual}
+          onToggleStatus={toggleStatus}
+          onToggleStage={toggleStage}
+        />
+      ) : density === 'month' ? (
+        calendarCard(
+          <>
+            {weekdayHeader}
+            {grid(gridDays)}
+          </>,
+        )
+      ) : density === 'week' ? (
+        calendarCard(
+          <>
+            {/* 周视图（画板 18-C / §7.2 D2「允许切周」）：同一套日期格，7 列一行 */}
+            <div className="pb-[2px] text-[11px] text-mist">
+              {meta.label} · 本周（周一 ~ 周日）
+            </div>
+            {weekdayHeader}
+            {grid(weekDays)}
+          </>,
+        )
       ) : (
-        <div className="glass-medium overflow-x-auto rounded-[20px] border border-line p-3 shadow-soft sm:p-4">
-          <div
-            className={cn(
-              'grid grid-cols-7 gap-px overflow-hidden rounded-[12px] border border-line bg-sand',
-              // 手机端去掉固定 560px 最小宽：7 列自适应屏宽，不再横向滚动导致右缘被裁/格子被压
-              !isMobile && 'min-w-[560px]',
-            )}
-          >
-            {/* 星期表头 */}
-            {WEEKDAYS.map((w) => (
-              <div
-                key={w}
-                className="bg-cream py-2.5 text-center text-[12px] font-medium text-mist"
-              >
-                {w}
-              </div>
-            ))}
-
-            {/* 日期格子 */}
-            {gridDays.map((day) => {
-              const items = entriesOnDate(day.date);
-              // 休息日底纹按公司制度走（单休只有周日、大小休周六隔周）。
-              // 顺带修存量 bug：原实现 new Date(iso).getDay() 是「UTC 解析 + 本地读取」，
-              // 在 GMT-X 时区会把周末画错一天；isRestDay 内部统一用 dayjs 本地口径。
-              const isRest = isRestDay(day.date, restPolicy);
-              const showCount = isMobile ? items.length > 0 : false;
-              return (
+        calendarCard(
+          // 日程视图（§7.2 D2 的补充档）：按月列出在途项目的阶段区间，纯清单、无网格
+          <div className="flex flex-col gap-[8px]">
+            {[...finalEntries]
+              .sort((a, b) => (a.bandStart < b.bandStart ? -1 : a.bandStart > b.bandStart ? 1 : 0))
+              .map((e) => (
                 <div
-                  key={day.date}
-                  onClick={() => setSelectedDate(day.date)}
-                  className={cn(
-                    // 结构层级 §mobile-density：手机 min-h 收紧、内部 gap/p 更紧凑；桌面维持原高度
-                    'group relative flex flex-col gap-0.5 bg-paper p-1.5 transition-colors hover:bg-sand/70 sm:min-h-[120px]',
-                    isMobile ? 'min-h-[92px]' : 'min-h-[110px]',
-                    isRest && 'bg-rest-day/70',
-                    day.isSelected && 'ring-1 ring-inset ring-pine',
-                    !day.inMonth && 'opacity-60',
-                  )}
+                  key={e.project.id}
+                  className="flex min-w-0 flex-wrap items-center gap-[10px] rounded-[12px] bg-paper px-[12px] py-[10px]"
                 >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={cn(
-                        'flex items-center justify-center rounded-full text-sm',
-                        isMobile ? 'h-6 w-6' : 'h-7 w-7',
-                        day.isToday
-                          ? 'bg-pine text-white'
-                          : day.inMonth
-                            ? 'text-ink'
-                            : 'text-mist',
-                      )}
-                    >
-                      {day.day}
-                    </span>
-                    {items.length > 0 && (
-                      <span
-                        className={cn(
-                          'text-[10px] text-mist',
-                          isMobile ? 'opacity-100' : 'opacity-0 transition-opacity group-hover:opacity-100',
-                        )}
-                      >
-                        {items.length}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
-                    {items.slice(0, isMobile ? 2 : 3).map((e) => (
-                      <button
-                        key={e.project.id}
-                        type="button"
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          open(e.project.id);
-                        }}
-                        className={cn(
-                          'w-full truncate rounded-[4px] px-1.5 py-0.5 text-left font-medium text-white transition-transform hover:scale-[1.02]',
-                          isMobile ? 'text-[10px] leading-4' : 'text-[11px]',
-                        )}
-                        style={{ backgroundColor: e.color }}
-                        title={`${e.project.name} · ${Math.round(e.percent)}%`}
-                      >
-                        {e.project.name}
-                      </button>
-                    ))}
-                    {items.length > (isMobile ? 2 : 3) && (
-                      <span className="text-[10px] text-mist">+{items.length - (isMobile ? 2 : 3)} 个项目</span>
-                    )}
-                  </div>
+                  <span
+                    aria-hidden
+                    className="h-[12px] w-[12px] shrink-0 rounded-[3px]"
+                    style={{ backgroundColor: e.color }}
+                  />
+                  <span className="min-w-0 truncate text-[13px] font-medium text-ink">
+                    {e.project.name}
+                  </span>
+                  <span className="text-[12px] text-mist">{stageLabelOf(e)}</span>
+                  <span className="tabular-nums text-[12px] text-mist">
+                    {e.bandStart} – {e.bandEnd}
+                  </span>
+                  <span className="tabular-nums text-[11px] text-mist">
+                    {Math.round(e.percent)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => open(e.project.id)}
+                    className="ml-auto shrink-0 text-[12px] text-pine hover:underline"
+                  >
+                    查看
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** 四类空状态（PRD §3.6） */
-function EmptyState({
-  kind,
-  monthLabel,
-  onClear,
-  onManual,
-}: {
-  kind: EmptyKind;
-  monthLabel: string;
-  onClear(): void;
-  onManual?(): void;
-}): JSX.Element {
-  const config: Record<Exclude<EmptyKind, null>, { title: string; desc: string; cta?: 'clear' | 'manual' }> = {
-    E1: {
-      title: '还没有进行中的项目',
-      desc: '用顶部「新建项目 → 导入合同建档」粘贴合同文本试试；任何情况下都可以先手动建档。',
-      cta: 'manual',
-    },
-    E2: {
-      title: `${monthLabel} 暂无在途项目`,
-      desc: '当前月份没有跨月推进的项目，换个时间段看看，或检查项目计划日期。',
-    },
-    E3: {
-      title: '没有符合筛选条件的项目',
-      desc: '试着放宽状态或阶段筛选条件。',
-      cta: 'clear',
-    },
-    E4: {
-      title: '该项目的阶段与你无关',
-      desc: '你当前身份下没有可查看的相关阶段，请先进入对应身份。',
-    },
-  };
-
-  const c = config[kind as Exclude<EmptyKind, null>];
-
-  return (
-    <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
-      <p className="font-display text-display-md text-mist">{c.title}</p>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">{c.desc}</p>
-      {c.cta === 'clear' && (
-        <button
-          type="button"
-          onClick={onClear}
-          className="mt-4 rounded-md border border-pine px-4 py-2 text-sm text-pine hover:bg-pine-soft"
-        >
-          清除筛选
-        </button>
-      )}
-      {c.cta === 'manual' && (
-        <button
-          type="button"
-          onClick={() => onManual?.()}
-          className="mt-4 rounded-md border border-pine px-4 py-2 text-sm text-pine hover:bg-pine-soft"
-        >
-          直接手动建档
-        </button>
+              ))}
+          </div>,
+        )
       )}
     </div>
   );
