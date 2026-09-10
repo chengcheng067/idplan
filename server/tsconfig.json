@@ -2,6 +2,22 @@
  * 服务端独立 TS 配置（与前端 tsconfig.json 隔离）：
  * ESM + NodeNext 解析，供 `npx tsc --noEmit -p server/tsconfig.json` 校验，
  * 运行时由 tsx 直接执行 TS 源码。
+ *
+ * v0.7 · T17（判断 2 共享内核落地，R18）：
+ *   `include` **显式**纳入 `src/` 的共享内核目录，使服务端能 typecheck 共享代码。
+ *
+ *   为什么用**相对路径 import** 而不是 `@core/*` alias（设计 §5.3.3 硬约束）：
+ *   运行时由 `tsx` 直接执行 TS 源码，`tsx` 不读 tsconfig 的 `paths`（除非额外装
+ *   tsconfig-paths 插件，违反「零新增依赖」铁律）→ alias 会在**运行时**解析失败。
+ *   相对路径是唯一「类型检查与运行期行为一致」的方案。
+ *
+ *   include 说明：`./**\/*.ts` 本身已能通过 import 图**传递地**跟随到
+ *   `../src/core/**`（已实测：在 server/index.ts 里 import `../src/core/agent/dag`
+ *   可正常解析）。此处**再显式列出**是为了把「服务端消费共享内核」从
+ *   「隐式副产物」升级为「显式契约」——共享内核文件即使暂无 server 侧引用，
+ *   也会被纳入类型检查，避免其悄悄带上浏览器 API 而无人发现。
+ *   注意：`../src/core/**` 的 import 图含 `zod`（共享内核已依赖）与
+ *   `../src/lib/date.ts`，二者均可被服务端正常解析（zod 在 dependencies 内）。
  */
 {
   "compilerOptions": {
@@ -18,5 +34,14 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true
   },
-  "include": ["./**/*.ts"]
+  "include": [
+    "./**/*.ts",
+    // 共享内核：前后端**单份实现**，服务端经相对路径 import 消费（J2）
+    "../src/core/agent/**/*.ts",
+    "../src/core/types/**/*.ts",
+    "../src/core/repositories/interfaces.ts",
+    "../src/core/services/task.service.ts",
+    // 共享内核的纯函数依赖（src/lib/date.ts 零 DOM 零 Node，两端可跑）
+    "../src/lib/date.ts"
+  ]
 }
