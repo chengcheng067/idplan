@@ -148,15 +148,71 @@ export async function openDatabase(): Promise<ChangxiaDatabase> {
 }
 
 /**
- * 迁移前版本探测（备份闸门的第一步，设计文档 §5.4）。
+ * Dexie 把 verno **×10** 写进 IndexedDB 的 version 字段——为了支持 `version(1.5)`
+ * 这类小数版本（1.5 → 15）。实测映射：verno 1/2/3 → IDB 10/20/30。
+ *
+ * ★ BUG-02 的根因就是漏了这一步：从 IDB 直接读到的版本号必须先 ÷10 才能与
+ *   `SCHEMA_VERSION` 比较。漏了归一 → 闸门判据 `10 < 2` / `20 < 3` 恒为 false
+ *   → 迁移前备份闸门（L1）**从不弹出**，老库升级没有回滚凭据。
+ */
+const IDB_VERSION_STRIDE = 10;
+
+/**
+ * 原始 IDB version → Dexie verno。
+ *
+ * ★ 本文件两条读取路径（`databases()` / 带外 open）的**唯一归一出口**。
+ *   两条路径都必须经过它，否则就会重现 BUG-02 的另一半症状：
+ *   一条返回 `10`（原始值未归一）、另一条返回 `1`（probe 声明值）——
+ *   同一个问题两个错答案，下一个人只会修一条。
+ *
+ * 取 `Math.round` 而非直接 `/10`：前者是 Dexie 内部 `Math.round(verno * 10)` 的
+ * 精确逆运算，对本项目只会声明的整数版本完全等值，且能把任何浮点噪声收成整数。
+ * （唯一差异在理论上的小数版本：verno 1.5 → raw 15 → 本函数得 2 而非 1.5。
+ * 本项目不声明小数版本，且闸门只做 `<` 比较，故不影响判据。）
+ */
+function toDexieVerno(rawIdbVersion: number): number {
+  return Math.round(rawIdbVersion / IDB_VERSION_STRIDE);
+}
+
+/**
+ * 带外读原始 IDB 版本：**不传 version** → 对已存在的库 = 按当前版本打开，不触发升级。
+ * 实测无副作用：读后库的版本与数据均不变（raw 仍 10；随后的正常升级照常成功）。
+ *
+ * ⚠️ 调用方**必须**先用 `Dexie.exists` 确认库存在：`indexedDB.open(name)` 对
+ *   **不存在**的库会把它**建出来**（版本 1）。实测确认该副作用真实存在——一旦发生，
+ *   「全新环境」下次启动就会看到 verno=1 而误弹备份闸门。
+ */
+function readRawIdbVersion(dbName: string): Promise<number | null> {
+  return new Promise<number | null>((resolve) => {
+    const req = globalThis.indexedDB.open(dbName);
+    req.onsuccess = () => {
+      const raw = req.result.version;
+      req.result.close();
+      resolve(typeof raw === 'number' ? raw : null);
+    };
+    req.onerror = () => resolve(null);
+    // 不传版本号不触发升级，正常不会 blocked；留个出口以免 Promise 永不落定
+    req.onblocked = () => resolve(null);
+  });
+}
+
+/**
+ * 探测本地 Dexie 库的**当前版本（Dexie verno 语义）**。
  *
  * 返回：
  *   - `null`   → 库不存在（全新环境，直接建当前版本库，**不弹闸门**）；
- *   - `1`      → 老库待升级（**必须先备份再 open**）；
- *   - `>= 2`   → 已是当前版本（不弹闸门）。
+ *   - `1..N`   → 库已存在的版本号（**Dexie verno 语义**，不是 IDB 原始值）。
+ *                与 `SCHEMA_VERSION` 比较请用 `needsPreMigrationBackup()`。
  *
- * 实现：优先 `indexedDB.databases()`（Chromium/Electron 均支持，且**不会创建库**）；
- * 不可用时回落「Dexie.exists 确认存在 + 只声明 v1 的临时实例读 verno 后 close」。
+ * 两条读取路径（性能/兼容性不同，**语义必须完全一致**）：
+ *   ① 首选 `indexedDB.databases()`：Chromium/Electron 均支持，不创建库、不触发升级；
+ *   ② 回落 `Dexie.exists` 守卫 + 不带版本号 `indexedDB.open()` 读 `result.version`。
+ *
+ * ★ 两条路径都经 `toDexieVerno()` 归一 —— 这是 BUG-02 的修复核心。
+ * ★ 回落路径**不能**沿用「只声明 v1 的临时 Dexie 实例 + `probe.verno`」：
+ *   实测 `verno` 返回的是**声明值**（恒 1），对 v2/v3 库同样报 1 —— 又一个错答案。
+ *   原先据此写的 `VersionError` 分支也是死的：实测在 v2 库上以「只声明 v1」的实例
+ *   open() **不会抛** VersionError，而是静默打开并报 verno=1。故该分支一并删除。
  */
 export async function detectLocalDbVersion(dbName: string = DB_NAME): Promise<number | null> {
   const anyIndexedDB = globalThis.indexedDB as
@@ -168,13 +224,14 @@ export async function detectLocalDbVersion(dbName: string = DB_NAME): Promise<nu
     try {
       const list = await anyIndexedDB.databases();
       const found = list.find((d) => d.name === dbName);
-      return found ? (found.version ?? null) : null;
+      // ★ 这里拿到的是**原始 IDB 版本（×10）**，必须归一（BUG-02）
+      return found?.version != null ? toDexieVerno(found.version) : null;
     } catch {
       // 个别实现的 databases() 可能抛错 → 走回落
     }
   }
 
-  // ② 回落：先确认库存在（Dexie.exists 不会创建库），再开只声明 v1 的临时实例
+  // ② 回落：先确认库存在（Dexie.exists 实测不会创建库），再带外读原始版本
   try {
     const exists = await Dexie.exists(dbName);
     if (!exists) return null;
@@ -182,20 +239,25 @@ export async function detectLocalDbVersion(dbName: string = DB_NAME): Promise<nu
     return null;
   }
 
-  const probe = new Dexie(dbName);
-  try {
-    probe.version(1).stores(DEXIE_V1_STORES);
-    await probe.open();
-    return probe.verno;
-  } catch (err) {
-    // 已是更高版本的库对「只声明 v1」会抛 VersionError → 说明 ≥ 当前版本
-    if ((err as { name?: string })?.name === 'VersionError') {
-      return SCHEMA_VERSION;
-    }
-    return null;
-  } finally {
-    probe.close();
-  }
+  const raw = await readRawIdbVersion(dbName);
+  return raw === null ? null : toDexieVerno(raw);
+}
+
+/**
+ * 迁移前备份闸门（L1）判据：**库已存在且版本比我方当前版本旧** → 必须先导出回滚凭据。
+ *
+ * ★ 唯一出处：UI（`di/repository.provider`）与测试都调用本函数，
+ *   **不允许**任何地方再复写一遍 `verno !== null && verno < SCHEMA_VERSION`。
+ *   判据抄成两份，就会出现「闸门改了、测试不会红」这种最坏组合。
+ *
+ * 比当前版本**更高**（降级安装）→ false：交由 Dexie 自己抛 VersionError 暴露，
+ * 不在这里假装「要升级」——那会引导用户做一次方向相反的导出。
+ *
+ * 签名写成类型谓词 `verno is number`：调用方进入闸门分支后，`verno` 由编译器
+ * 收窄为非空数字，于是「显示实际探测到的版本号」的文案**不可能**渲染出 `vnull`。
+ */
+export function needsPreMigrationBackup(verno: number | null): verno is number {
+  return verno !== null && verno < SCHEMA_VERSION;
 }
 
 /** 表名清单（备份整库替换时遍历用；单一出处见 schema/current.ts） */

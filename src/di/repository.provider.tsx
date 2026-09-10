@@ -4,7 +4,7 @@ import { appEnv } from '../config/env';
 import { createRepositories } from '../core/repositories';
 import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
-import { detectLocalDbVersion } from '../core/repositories/local/dexie.database';
+import { detectLocalDbVersion, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
 import { exportPreMigrationBackupToFile } from '../components/layout/useBackupIo';
 
@@ -27,6 +27,13 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
   const [bundle, setBundle] = useState<IRepositoryBundle | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [gate, setGate] = useState<GateState | null>(null);
+  /**
+   * 进入闸门时探测到的**实际库版本**（Dexie verno）。
+   * ★ BUG-02 顺带修的文案缺陷：这里原是硬编码「仍是旧版本（v1）」，
+   *   而对 v2 库会显示 v1 —— 在「不可逆升级」的确认框里说错版本号，
+   *   用户据此判断「要不要先备份」会判断错。改为显示实际探测值。
+   */
+  const [gateFromVersion, setGateFromVersion] = useState<number | null>(null);
   const cancelledRef = useRef(false);
 
   const startRepositories = useCallback(async (): Promise<void> => {
@@ -47,10 +54,15 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     cancelledRef.current = false;
     void (async () => {
       if (appEnv.dataSource === 'local') {
-        // 探测不到（全新环境）或已是当前版本 → 直接建库，不弹闸门
+        // 探测不到（全新环境）或已是当前版本 → 直接建库，不弹闸门。
+        // ★ 判据取自唯一出处 needsPreMigrationBackup（BUG-02）：
+        //   detectLocalDbVersion 返回的是**归一后的 Dexie verno**；此前它返回原始
+        //   IDB 版本（×10），使这里的 `verno < SCHEMA_VERSION` 恒为 false ——
+        //   闸门从不弹出、老库静默升级、没有任何回滚凭据。
         const verno = await detectLocalDbVersion();
         if (cancelledRef.current) return;
-        if (verno !== null && verno < SCHEMA_VERSION) {
+        if (needsPreMigrationBackup(verno)) {
+          setGateFromVersion(verno);
           setGate('pending');
           return;
         }
@@ -100,7 +112,8 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
           ) : (
             <>
               <p className="text-sm leading-6 text-mist">
-                检测到本地数据库仍是旧版本（v1），即将升级到 v{SCHEMA_VERSION}。升级会
+                检测到本地数据库是旧版本（v{gateFromVersion}），即将升级到 v
+                {SCHEMA_VERSION}。升级会
                 <strong>就地改写本地数据且不可逆</strong>，因此必须先导出一份备份——
                 这是升级后唯一的回滚凭据。
               </p>
