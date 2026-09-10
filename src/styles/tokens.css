@@ -1,0 +1,33 @@
+/* ---------------------------------------------------------------------------
+ * 《ID Plan》布局尺寸 token —— 说明文件（v0.7 · T16）
+ *
+ * ⚠️ 本文件**不被任何入口 @import**（因此不会参与构建）。它是
+ *    `src/styles/global.css` 中 `:root` 段「布局尺寸 token」子段的**镜像说明**，
+ *    存在的唯一目的是把「为什么这样切」写在与 token 同名的地方，便于检索。
+ *
+ * 唯一事实源：`src/styles/global.css` 的 `:root { --sidebar-w … }`。
+ *    改宽度 → 改 global.css（不是本文件）。
+ *
+ * 为什么不做成 @import 的独立 token 文件（实测结论，勿回退）：
+ *   PostCSS 会**上提** `@import` 到文件最顶部（早于 `@tailwind base/components/utilities`
+ *   三条指令）。实测 `@import './tokens.css'` 放在 @tailwind 之后时，Vite 构建
+ *   产物中 tokens.css 的全部变量被静默丢弃（构建成功、无 error，只有一条
+ *   `Expected identifier but found "-"` 的 CSS 压缩告警），而 `@media print` 段
+ *   引用 `var(--sidebar-w-*)` 会全部取到无效值 → 侧栏宽度失效。
+ *   因此选择「内联 + 本文件留档」。若将来要拆文件，必须把 @import 放到
+ *   global.css 的**第一行**（在 @tailwind 之前）并重新回归验证构建产物含变量。
+ *
+ * 已定义的 5 个 token（亮暗同值，无需 theme 覆盖）：
+ *   --sidebar-w              240px  侧栏展开（图标 + 文字）
+ *   --sidebar-w-collapsed     64px  侧栏折叠（纯图标条）
+ *   --topbar-h                56px  顶栏内容高度基准
+ *   --content-max           1600px  内容区最大宽度（全局唯一锚点）
+ *   --content-print-max      900px  打印页 A4 预览宽度（刻意保留，不并入 content-max）
+ *
+ * 铁律对照：
+ *   - 零新色：本组 token **不含任何颜色**，颜色唯一出处仍是 global.css 的
+ *     `--{name}-rgb` 通道三元组（cream/paper/sunken/sand/ink/mist/pine/rose/
+ *     amber/moss/clay/rest-day/stage.s1-s9）。
+ *   - 断点锁定 xl(1280)：本组 token 不引入断点；侧栏形态切换只用 `xl:` 前缀。
+ *   - 禁网络字体：本组 token 不涉及字体，字体栈在 tailwind.config.ts 的 fontFamily。
+ * ------------------------------------------------------------------------- */

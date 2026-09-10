@@ -156,6 +156,28 @@
   --glow-card-hover: var(--shadow-raised-lg);
   --shadow-glass: var(--shadow-raised);
   --soft-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1); /* stylekit --soft-shadow */
+
+  /* ================== 布局尺寸 token（v0.7 · T16） ==================
+   * 只定义**骨架几何**，不含任何颜色（铁律「零新色」）。
+   * 亮暗同值 → 因此只写在 :root 一处，不在 [data-theme='dark'] 重复。
+   * 断点纪律：本段不引入任何断点；xl(1280px) 是侧栏形态切换的唯一断点，
+   * 由 Tailwind 的 `hidden xl:flex` 承担（D3 + MEMORY「断点统一 xl」）。
+   *
+   * 为什么直接内联而不 @import './tokens.css'：
+   * PostCSS 会**上提** @import 到文件顶部（早于 @tailwind 指令），
+   * 实测导致 tokens.css 内容在 Vite 构建产物中被整段丢弃（构建不报错但变量全丢）。
+   * 故选择内联——src/styles/tokens.css 保留为同名镜像文档（含完整理由说明）。
+   * ------------------------------------------------------------------ */
+  /** 侧栏展开态：图标 + 文字（≥1280 持久左栏） */
+  --sidebar-w: 240px;
+  /** 侧栏折叠态：纯图标条 */
+  --sidebar-w-collapsed: 64px;
+  /** 顶栏内容高度基准（侧栏吸顶对齐 + 顶栏自身 min-h，不做固定定高以免裁切换行档） */
+  --topbar-h: 56px;
+  /** 内容区最大宽度：全局唯一锚点（AppShell 的 <main>），全站仅此一处约束 */
+  --content-max: 1600px;
+  /** 打印页 A4 预览宽度：刻意保留的独立档位，**不并入** --content-max */
+  --content-print-max: 900px;
 }
 
 /* ===================== 暗色主题 ===================== */
@@ -663,6 +685,23 @@
 
   header {
     display: none !important; /* TopBar（配合 TopBar print:hidden 双保险） */
+  }
+
+  /* 侧栏打印排除（v0.7 · R20 双保险的 CSS 层）：
+     侧栏根节点已带 print:hidden，这里再显式写一条作为第二道保险——
+     打印件绝不能出现导航（打印页是给委托方看的交付物）。
+     用 [data-app-sidebar] 属性选择器而非类名：Tailwind 的 print:hidden 生成
+     媒体查询内规则，本段同样在 @media print 内、且 !important 优先级更高，
+     两条同时命中不冲突；即使将来误删 print:hidden 本规则仍拦得住。 */
+  [data-app-sidebar] {
+    display: none !important;
+  }
+
+  /* 侧栏被移除后内容区不再需要为它让位；且打印时一律拉平到整幅纸宽，
+     保证 A4 导出与「屏幕预览的 .a4-page」逐像素一致（max-w-[900px] 由 .print-root 自持）。 */
+  .app-content-column {
+    display: block !important;
+    width: 100% !important;
   }
 
   .no-print {
