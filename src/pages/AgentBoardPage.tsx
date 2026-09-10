@@ -4,10 +4,15 @@
  * ── 两种模式（D2）──
  *
  * **人话模式（默认，PRD §4.1）**：
- *   ① 顶部一句话「**现在该做什么**」= `computeReadyTasks()` 置顶条（人话标题 + 剩余/逾期）
+ *   ① 顶部一句话「**现在该做什么**」= `computeReadyTasks()` 置顶条（人话标题 + 剩余/逾期）。
+ *      小字计数取**可开工组的桶长度**（不是 `ready.length`）——同一个词在同一屏必须
+ *      同一个含义，详见 `现在该做什么` 区块内的注释与验收用例。
  *   ② 四组分区：`待我确认 / 可开工 / 进行中 / 已完成`（顺序恒为 `HUMAN_BOARD_GROUP_ORDER`）
- *   ③ 埋在组外的 `hidden` 条（`draft ∧ 依赖未满足` = 上游 Agent 还在跑）**不进主列表**
- *   ④ 依赖环仍给 amber 告警条 —— 否则环成员被归入 hidden，等于在界面上无声消失
+ *   ③ 埋在组外的 `hidden` 条（`draft ∧ 依赖未满足` = 上游 Agent 还在跑）**不进主列表**，
+ *      但**必须给出汇总出口**：四组下方一行「另有 N 条在上游准备中，切到「技术」可查看全部」
+ *      —— 否则这类任务在人话模式下凭空消失、用户无从排查（team-lead 裁决必补）。
+ *   ④ 依赖环仍给 amber 告警条 —— 环成员同样被归入 hidden，无告警等于在界面上无声消失
+ *      （与 ③ 的出口提示互补：③ 解决「还没轮到」，④ 解决「数据坏了」）
  *
  * **技术模式（PRD §4.2「保留现有 7 列泳道，不降级」）**：
  *   `ReadyQueue` 置顶区 + `ALL_TASK_STATUSES` 遍历的 7 列 status 泳道，形态与 v0.6 一致。
@@ -92,11 +97,11 @@ const HUMAN_GROUP_TITLES: Record<HumanBoardGroup, string> = {
   hidden: '隐藏',
 };
 
-/** 模式切换 tab 的展示名（人话 / 技术，PRD §4.3 D2） */
-const MODE_TABS: ReadonlyArray<{ key: AgentTermMode; label: string }> = [
-  { key: 'human', label: '人话' },
-  { key: 'tech', label: '技术' },
-];
+/** 模式展示名的**唯一出处**：切换 tab 与隐藏提示行里的「切到「技术」」共用同一份 */
+const MODE_LABELS: Record<AgentTermMode, string> = { human: '人话', tech: '技术' };
+
+/** 模式切换 tab 的展示顺序（人话 / 技术，PRD §4.3 D2） */
+const MODE_TAB_ORDER: readonly AgentTermMode[] = ['human', 'tech'];
 
 /** 剩余 / 逾期文案（与卡片同口径；此处只用于「现在该做什么」条） */
 function topDueText(task: Task): { text: string; overdue: boolean } | null {
@@ -124,7 +129,7 @@ function BoardModeTabs({
       aria-label="看板模式切换"
       className="flex w-fit items-center gap-1 rounded-[12px] border border-sand bg-cream/60 p-1"
     >
-      {MODE_TABS.map(({ key, label }) => (
+      {MODE_TAB_ORDER.map((key) => (
         <button
           key={key}
           type="button"
@@ -136,7 +141,7 @@ function BoardModeTabs({
             mode === key ? 'bg-pine-soft text-pine' : 'text-mist hover:bg-sand hover:text-ink',
           )}
         >
-          {label}
+          {MODE_LABELS[key]}
         </button>
       ))}
     </div>
@@ -384,9 +389,30 @@ export function AgentBoardPage(): JSX.Element {
           >
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-semibold text-pine">现在该做什么</h2>
-              {readyComputation.ready.length > 0 && (
+              {/*
+                ⚠️ 小字计数取的是**可开工组的桶长度**，不是 `computeReadyTasks().ready.length`。
+
+                为什么（team-lead 裁决）：`可开工组 = ready ∪ (draft ∧ 依赖全 done)` 是
+                `computeReadyTasks().ready` 的**严格超集**，两者数字天然不同（种子场景 3 vs 2）。
+                两边单看都「对」，但**同一个词在同一屏指两个集合**是硬缺陷——用户只会
+                当成 bug。硬原则：同一屏同一个词必须同一个含义；故让置顶条随组计数。
+
+                数学上不会自相矛盾：`ready ⊆ 可开工组`（`ready` 真包含于 `ready ∪ …`），
+                所以置顶条那条任务**永远**是该组的成员（B-01 缺陷修复后 `claimedAt`
+                条件自动对齐：`status==='ready' ⟹ claimedAt===null`，PRD :327 那句
+                「且 未被认领」的额外约束已被不变式覆盖）。
+                该包含关系由验收用例锁死（「置顶条计数 == 组计数 ∧ 置顶条任务 ∈ 该组」），
+                防的是将来有人把两个源改成不同集合。
+
+                文案复用 `HUMAN_GROUP_TITLES.ready` 而非再写一遍字面量：让「同一个词」
+                在类型层就无法分叉（改标题即改小字）。
+                backlog：agentTerms.ts 的 `READY_NOW_LABEL` 目前**无任何组件消费**
+                （只有单测断言），与 HUMAN_GROUP_TITLES.ready 是同一个字符串的第二处
+                出处 —— 属同一类「两份真相」，待下次触碰该文件时收口。
+              */}
+              {humanView.groups.ready.length > 0 && (
                 <span className="rounded-md bg-paper/70 px-1.5 py-0.5 text-[10px] text-mist">
-                  可开工 {readyComputation.ready.length} 项
+                  {HUMAN_GROUP_TITLES.ready} {humanView.groups.ready.length} 项
                 </span>
               )}
             </div>
@@ -467,6 +493,43 @@ export function AgentBoardPage(): JSX.Element {
               );
             })}
           </div>
+
+          {/*
+            ③ 隐藏任务出口提示（team-lead 裁决必补）。
+
+            为什么必须补：`hidden` 组（`draft ∧ 依赖未满足`）**在四组里一条都不渲染**，
+            加上依赖环成员也归 hidden，这类任务在人话模式下**凭空消失且无从排查**。
+            设计文档 :344 本就承诺「仅在 tech 模式 7 列**或「查看全部」可见**」——
+            「查看全部」是承诺过的入口，此前未落地；`groupTasksForHuman().hiddenCount`
+            也一直算好却无人消费，等于欠着这个入口。
+
+            为什么不是「把 hidden 摊进四组」：隐藏是**有意的**（上游 Agent 还在跑，
+            human 不需要逐条看），摊开会把「我现在该动手什么」稀释掉。故只给
+            **一行汇总 + 去处**，把「有没有东西被我漏掉」这个疑问一次性答掉。
+
+            UI 纪律：
+              · `hiddenCount === 0` 时**不渲染**（不出现「另有 0 条」这种噪音）；
+              · 数字取真实值，不用「若干」；
+              · 去处必须给出（技术模式 7 列），且**直接可点**——复用 `changeMode('tech')`，
+                不引入任何新的状态分支（模式切换的真相源仍是 store + URL 镜像）；
+              · 文案零英文、零行业词（HF-05 守卫会扫本文件，注释也算）。
+              · `data-board-hidden-hint` 是验收用的稳定锚点（与既有 `data-app-sidebar`
+                同一惯例），避免测试靠中文文案或样式类定位。
+            依赖环的 amber 告警**保留**：它覆盖的是另一类问题（数据坏了，不是还没轮到）。
+          */}
+          {humanView.hiddenCount > 0 && (
+            <p data-board-hidden-hint="" className="mt-3 text-xs text-mist">
+              另有 {humanView.hiddenCount} 条在上游准备中，
+              <button
+                type="button"
+                onClick={() => changeMode('tech')}
+                className="text-pine underline-offset-2 transition-colors hover:underline"
+              >
+                切到「{MODE_LABELS.tech}」
+              </button>
+              可查看全部
+            </p>
+          )}
         </>
       ) : (
         <>

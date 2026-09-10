@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
@@ -56,7 +56,12 @@ import { resolve } from 'node:path';
  *
  * ── 截图 ──
  *   落在 `qa-scratch/v07-stageB/`（8 项验收各自的证据；B-08 折叠/展开各一张，
- *   故共 10 张）。
+ *   B-09~B-11 各一张，故共 13 张）。
+ *
+ * ── 后续两处（team-lead 裁决后补）──
+ *   ① 置顶条小字计数改取**可开工组桶长度**（原先取 `ready.length`，同屏同词两个数）；
+ *   ② 新增隐藏任务出口提示行（`hiddenCount` 原先算好却无人消费）。
+ *   两者各配独立用例：B-09（计数对齐 + 置顶条 ∈ 该组）、B-10/B-11（有/无隐藏两种场景）。
  */
 
 /** 构建产物入口 */
@@ -197,6 +202,33 @@ const LANE_COUNTS: Record<string, number> = {
 const READY_BARRIER_TITLE = '确认材料清单';
 const PROJECT_NAME = '验收样例项目';
 
+/**
+ * 从主种子**派生**一个变体备份包并落盘，返回其路径。
+ *
+ * 为什么不另存一份手写的变体 JSON：两份种子迟早漂移（改一处忘另一处），
+ * 而「两套数据只差被删掉的那几条」是变体用例的全部前提——前提悄悄失效时，
+ * 用例仍会绿，只是它证明的东西已经不同了。派生则让前提由构造保证。
+ */
+function writeSeedVariant(
+  fileName: string,
+  keep: (task: Record<string, unknown>) => boolean,
+): string {
+  const pkg = JSON.parse(readFileSync(SEED_FIXTURE, 'utf8')) as {
+    data: { tasks: Array<Record<string, unknown>> };
+  };
+  const before = pkg.data.tasks.length;
+  pkg.data.tasks = pkg.data.tasks.filter(keep);
+  if (pkg.data.tasks.length === before) {
+    throw new Error(
+      `[v07-board-acceptance] 变体种子未删掉任何任务（before=${before}）：filter 条件写错了，` +
+        '会退化成「与主种子完全相同」的假变体。',
+    );
+  }
+  const out = resolve(SHOT_DIR, fileName);
+  writeFileSync(out, JSON.stringify(pkg, null, 2), 'utf8');
+  return out;
+}
+
 /* ------------------------------ 页面读取工具（纯数据，不传 DOM 对象） ------------------------------ */
 
 interface GroupView {
@@ -246,6 +278,36 @@ async function readTitleSections(
     }
     return out;
   }, titles);
+}
+
+/**
+ * 卡片标题到底落在**四组中的哪一组**（DOM 事实，不是从桶反推）。
+ *
+ * 为什么必须限定查找范围：看板上有**两个地方**会出现同一个标题——
+ *   ① 「现在该做什么」置顶条里的按钮（其文本 = 标题 + 可选剩余天数）；
+ *   ② 四组里的卡片标题按钮。
+ * 若在 `main` 全范围找「文本恰为标题」的按钮，当该任务没有 dueDate 时置顶条那个
+ * 按钮的文本会**恰好等于标题**，于是选中置顶条自己，`closest('section')` 返回
+ * 「现在该做什么」→ 断言得出「任务不在可开工组」的**假红**。
+ * 故这里只在**四组的卡片容器**（`div.glass-light`，人话卡片形态）里找。
+ * @returns 组标题；找不到返回 null
+ */
+async function readGroupOfCard(page: Page, title: string): Promise<string | null> {
+  return page.evaluate(
+    ({ t, order }) => {
+      for (const label of order) {
+        const sec = document.querySelector(`main section[aria-label="${label}"]`);
+        if (!sec) continue;
+        const cards = Array.from(sec.querySelectorAll('div.glass-light'));
+        const hit = cards.some(
+          (card) => (card.querySelector('button')?.textContent ?? '').trim() === t,
+        );
+        if (hit) return label;
+      }
+      return null;
+    },
+    { t: title, order: GROUP_ORDER },
+  );
 }
 
 /** `main` 内带 font-mono 且文本恰好是一个 status 的 span —— 即 `StatusBadge` 的像素级特征 */
@@ -304,75 +366,103 @@ async function clickTab(page: Page, name: string): Promise<void> {
 }
 
 describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看板验收（真实构建产物）', () => {
+  /**
+   * 一个「验收环境」= 独立 BrowserContext（自带 localStorage + IndexedDB）+ 一个常驻同源操作页。
+   *
+   * 为什么每套种子数据独占一个 context：IndexedDB 是 **per-origin / per-context** 隔离的。
+   * B-11 要验证「无隐藏任务时不渲染提示行」，只能换一套种子数据；而在同一个 context 里
+   * 再导入一次会**整库替换**掉前一套，把主环境的用例全部弄脏。故两套数据 = 两个 context。
+   */
+  interface BoardEnv {
+    ctx: BrowserContext;
+    /**
+     * 「同源操作页」：只在需要**在下一个文档脚本执行前**改 localStorage 时用
+     * （清 `idplan.layout` 以验证默认模式）。
+     *
+     * 为什么不用 `page.addInitScript(... removeItem ...)`：
+     *   init script 对该 page 的**每一次导航**都生效。B-06「重载后仍是所选」需要在
+     *   切到技术模式后重新加载页面并断言持久化生效——若 init script 还在清，
+     *   断言会被自己清掉（首轮实测即栽在此处：`goto` 后仍回到人话）。
+     *   故「清偏好」必须是一次性动作，落在另一个常驻的同源页面上执行。
+     */
+    control: Page;
+  }
+
   let browser: Browser;
-  /** 整个 spec 共用一个 context：localStorage（模式偏好）与 IndexedDB（种子数据）都在其中 */
-  let ctx: BrowserContext;
   let server: { url: string; close(): Promise<void> };
   let base = '';
-  /**
-   * 「同源操作页」：只在需要**在下一个文档脚本执行前**改 localStorage 时用
-   * （清 `idplan.layout` 以验证默认模式）。
-   *
-   * 为什么不用 `page.addInitScript(... removeItem ...)`：
-   *   init script 对该 page 的**每一次导航**都生效。B-06「重载后仍是所选」需要在
-   *   切到技术模式后重新加载页面并断言持久化生效——若 init script 还在清，
-   *   断言会被自己清掉（首轮实测即栽在此处：`goto` 后仍回到人话）。
-   *   故「清偏好」必须是一次性动作，落在另一个常驻的同源页面上执行。
-   */
-  let control: Page;
+  /** 主环境：完整种子（11 条，含隐藏 3 条） */
+  let mainEnv: BoardEnv;
+  /** 变体环境：删掉隐藏那 3 条后的种子（`hiddenCount === 0`） */
+  let envNoHidden: BoardEnv;
 
   beforeAll(async () => {
     mkdirSync(SHOT_DIR, { recursive: true });
     server = await startStaticServer(resolve(__dirname, '..', 'build-dist'));
     base = server.url.replace(/index\.html$/, ''); // http://127.0.0.1:<port>/
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH ?? undefined });
-    ctx = await browser.newContext({ viewport: { width: 1600, height: 900 } });
 
-    /**
-     * 预置「已进入身份」。
-     * `useFirstRunGate` 的触发条件是 `currentMemberId === null ∧ 无管理员 ∧ …`：
-     * 全新空库首次打开会弹 admin_prompt 引导框（identityFlow 状态机）。
-     * 该框本身不阻断 `setInputFiles`（走 DOM 赋值而非点击），但会让「页面是不是
-     * 正常进入」的判定变浑浊。故在**任何页面脚本之前**写入 localStorage 的
-     * `changxia.currentMemberId`（键名唯一出处 `useSettingsStore.ts:24`）指向
-     * 种子里的管理员；导入完成后该成员真实存在，身份即成立。
-     * 这里用 `addInitScript` 是合适的：它是「每次加载都要成立的前置状态」，
-     * 与该页的导航次数无关（不会像清偏好那样自我抵消）。
+    mainEnv = await createSeededEnv(SEED_FIXTURE);
+
+    /*
+     * 变体种子**从同一份 fixture 派生**（删掉隐藏那 3 条），不另存一份 300 行 JSON：
+     * 手抄的第二份必然与主种子漂移，而一旦漂移，「两套数据只差隐藏条数」这个前提就
+     * 悄悄失效了——那正是最难发现的一类假绿。派生文件写进截图目录（与截图同为产物）。
      */
-    await ctx.addInitScript(() => {
+    const noHiddenFixture = writeSeedVariant(
+      'seed-no-hidden.json',
+      (t) => !HIDDEN_TITLES.includes(String(t['title'])),
+    );
+    envNoHidden = await createSeededEnv(noHiddenFixture);
+  });
+
+  afterAll(async () => {
+    await mainEnv?.ctx.close();
+    await envNoHidden?.ctx.close();
+    await browser?.close();
+    await server?.close();
+  });
+
+  /**
+   * 建一个已灌种子的验收环境：独立 context + 常驻同源操作页。
+   *
+   * 预置「已进入身份」的说明：
+   *   `useFirstRunGate` 的触发条件是 `currentMemberId === null ∧ 无管理员 ∧ …`：
+   *   全新空库首次打开会弹 admin_prompt 引导框（identityFlow 状态机）。
+   *   该框本身不阻断 `setInputFiles`（走 DOM 赋值而非点击），但会让「页面是不是正常
+   *   进入」的判定变浑浊。故在**任何页面脚本之前**写入 localStorage 的
+   *   `changxia.currentMemberId`（键名唯一出处 `useSettingsStore.ts:24`）指向种子里的
+   *   管理员；导入完成后该成员真实存在，身份即成立。用 `addInitScript` 在这里是合适的：
+   *   它是「每次加载都要成立的前置状态」，与导航次数无关（不会像清偏好那样自我抵消）。
+   */
+  async function createSeededEnv(fixture: string): Promise<BoardEnv> {
+    const c = await browser.newContext({ viewport: { width: 1600, height: 900 } });
+    await c.addInitScript(() => {
       try {
         localStorage.setItem('changxia.currentMemberId', 'm-admin');
       } catch {
         /* 隐私模式下 localStorage 不可写——种子导入随后会失败并给出清晰报错 */
       }
     });
-
-    const seedPage = await ctx.newPage();
-    await seedViaBackupImport(seedPage);
+    const seedPage = await c.newPage();
+    await seedViaBackupImport(seedPage, fixture);
     await seedPage.close();
-
-    // 常驻同源页：仅用于「一次性清 localStorage」（见 control 字段注释）
-    control = await ctx.newPage();
+    const control = await c.newPage();
     await control.goto(`${base}index.html`);
     await control.waitForSelector('header', { timeout: 20000 });
-  });
-
-  afterAll(async () => {
-    await ctx?.close();
-    await browser?.close();
-    await server?.close();
-  });
+    return { ctx: c, control };
+  }
 
   /** 清掉布局偏好（`idplan.layout`）——下一个打开的页面即走「无持久偏好 → 默认人话」 */
-  async function clearModePref(): Promise<void> {
-    await control.evaluate(() => localStorage.removeItem('idplan.layout'));
+  async function clearModePref(env: BoardEnv): Promise<void> {
+    await env.control.evaluate(() => localStorage.removeItem('idplan.layout'));
   }
 
   /**
    * 灌种子数据：走应用自己的备份导入链路（隐藏 file input → 预检 → 二次确认 → 整库替换 → reload）。
    * 任何一步失败都抛出**带页面原文**的错误，避免「卡在 waitFor 超时」这种无信息失败。
    */
-  async function seedViaBackupImport(page: Page): Promise<void> {
+  async function seedViaBackupImport(page: Page, fixture: string): Promise<void> {
     await page.goto(`${base}index.html`);
     await page.waitForSelector('header', { timeout: 20000 });
 
@@ -381,7 +471,7 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
     await page
       .locator('input[type="file"][accept*="json"]')
       .first()
-      .setInputFiles(SEED_FIXTURE, { force: true });
+      .setInputFiles(fixture, { force: true });
 
     const confirm = page.getByRole('button', { name: '确认恢复' });
     try {
@@ -411,14 +501,17 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
   }
 
   /**
-   * 开一个看板页并等到数据装载完成。
+   * 在指定环境里开一个看板页并等到数据装载完成。
    * @param route     相对路由（默认 `agent`，可带 query 做深链）
    * @param resetMode true = **开页前**清掉 `idplan.layout`，用于验证「无持久偏好 → 默认人话」
    */
-  async function openBoard(opts: { route?: string; resetMode?: boolean } = {}): Promise<Page> {
+  async function openBoardIn(
+    env: BoardEnv,
+    opts: { route?: string; resetMode?: boolean } = {},
+  ): Promise<Page> {
     // 必须在目标页创建之前清：persist 的同步 hydration 发生在模块求值期（早于首帧）
-    if (opts.resetMode) await clearModePref();
-    const page = await ctx.newPage();
+    if (opts.resetMode) await clearModePref(env);
+    const page = await env.ctx.newPage();
     await page.goto(base + (opts.route ?? 'agent'));
     await page.waitForSelector('main', { timeout: 20000 });
     // 数据装载屏障：这条任务在两种模式、两种主题下都渲染，出现即代表 loadProject 已回填
@@ -429,6 +522,11 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
     );
     await page.waitForTimeout(250);
     return page;
+  }
+
+  /** 主环境（完整种子）的薄封装——既有用例保持一参签名不变 */
+  async function openBoard(opts: { route?: string; resetMode?: boolean } = {}): Promise<Page> {
+    return openBoardIn(mainEnv, opts);
   }
 
   async function shot(page: Page, name: string): Promise<void> {
@@ -501,7 +599,7 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
   /* ===================================================================================
    * 验收 3 · 「现在该做什么」= computeReadyTasks 置顶条
    * =================================================================================== */
-  it('B-03 · 「现在该做什么」取 computeReadyTasks 置顶条（可开工 2 项 ⊂ 组内 3 条）', async () => {
+  it('B-03 · 「现在该做什么」取 computeReadyTasks 置顶条（置顶条取自 ready 集，非整组）', async () => {
     const page = await openBoard({ resetMode: true });
 
     const top = page.locator('main section[aria-label="现在该做什么"]');
@@ -510,9 +608,13 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
     expect(topText).toContain(READY_BARRIER_TITLE);
     expect(topText).not.toContain('复核尺寸');
 
-    // 小字计数取的是 computeReadyTasks().ready.length（= 2），
-    // 而人话「可开工」组是它的**超集**（多出 draft∧依赖已满足的「拟定采买计划」= 3）
-    expect(topText).toContain('可开工 2 项');
+    /*
+     * 小字计数 = **可开工组的桶长度**（3），不是 `computeReadyTasks().ready.length`（2）。
+     * 变更原因（team-lead 裁决）：两者都「对」，但同一个词在同一屏指两个集合是硬缺陷；
+     * 硬原则是「同一屏同一个词同一个含义」，故小字随组计数。
+     * 包含关系（ready ⊂ 可开工组）由 B-09 单独锁死，那里还断言置顶条任务属于该组。
+     */
+    expect(topText).toContain('可开工 3 项');
     const readyGroup = (await readGroups(page)).find((g) => g.label === '可开工');
     expect(readyGroup?.count).toBe(3);
     expect(readyGroup?.titles).toContain('拟定采买计划');
@@ -746,6 +848,112 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
     expect(await drawer.getByRole('button', { name: '认领', exact: true }).count()).toBe(1);
     expect(await drawer.getByRole('button', { name: 'claim', exact: true }).count()).toBe(0);
 
+    await page.close();
+  });
+
+  /* ===================================================================================
+   * 验收 9 · 置顶条计数与「可开工」组**永不可能是两个数**（同一屏同一个词同一个含义）
+   * =================================================================================== */
+  it('B-09 · 置顶条小字计数 == 「可开工」组计数，且置顶条任务属于该组', async () => {
+    const page = await openBoard({ resetMode: true });
+
+    const topText = await page.locator('main section[aria-label="现在该做什么"]').innerText();
+    const groups = await readGroups(page);
+    const readyGroup = groups.find((g) => g.label === '可开工');
+    expect(readyGroup).toBeDefined();
+    const readyCount = readyGroup?.count ?? -1;
+
+    // ① 同一个词在同一屏只有一个数：小字 = 组内计数
+    expect(topText).toContain(`可开工 ${readyCount} 项`);
+    expect(readyCount).toBe(3);
+    // 顺带把「不能退化成两个数」写死：旧的 `computeReadyTasks().ready.length`（= 2）不得出现
+    expect(topText).not.toContain('可开工 2 项');
+
+    // ② 比数相等更强的一条：置顶条任务**必须在可开工组内**。
+    //    数相等只说明两个集合大小一致（可能各自换了内容）；成员断言直接锁住
+    //    「置顶源 ⊆ 分组源」这个包含关系，防的是将来有人把两个源改成不同集合。
+    const topTitle = (
+      await page.locator('main section[aria-label="现在该做什么"] button span').first().innerText()
+    ).trim();
+    expect(topTitle).toBe(READY_BARRIER_TITLE);
+    expect(await readGroupOfCard(page, topTitle)).toBe('可开工');
+    expect(readyGroup?.titles).toContain(topTitle);
+
+    await shot(page, '11-ready-count-aligned.png');
+    await page.close();
+  });
+
+  /* ===================================================================================
+   * 验收 10 · 隐藏任务提示行（有隐藏时必须给出数字与去处）
+   * =================================================================================== */
+  it('B-10 · hiddenCount>0：提示行可见、数字取自真实值、告知去处（技术模式）且可直接跳转', async () => {
+    const page = await openBoard({ resetMode: true });
+
+    const hint = page.locator('[data-board-hidden-hint]');
+    expect(await hint.count()).toBe(1);
+    expect(await hint.isVisible()).toBe(true);
+
+    // 去空白后断言，避免 inline 元素之间可能插入的换行把子串切断
+    const hintText = (await hint.innerText()).replace(/\s+/g, '');
+    // 数字必须是**真实值**（= 种子里隐藏任务条数），不许出现「若干」这类含糊表述
+    expect(hintText).toContain(`另有${HIDDEN_TITLES.length}条`);
+    expect(hintText).not.toContain('若干');
+    // 必须告知**去处**，否则用户知道有东西却不知道去哪找
+    expect(hintText).toContain('技术');
+    expect(hintText).toContain('可查看全部');
+    // 文案零英文状态（与不变量 ① 同口径）
+    for (const w of STATUS_WORDS) {
+      expect(hintText, `提示行出现了英文状态「${w}」`).not.toMatch(new RegExp(`\\b${w}\\b`));
+    }
+    // 位置：在四组**下方**（承接四组之后，不是插在中间打断分区）
+    const position = await page.evaluate(() => {
+      const last = document.querySelector('main section[aria-label="已完成"]');
+      const el = document.querySelector('[data-board-hidden-hint]');
+      if (!last || !el) return 'missing';
+      return last.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING
+        ? 'after'
+        : 'before';
+    });
+    expect(position).toBe('after');
+
+    // 隐藏任务本身仍不进主列表（提示行只给出口，不把 hidden 摊进四组）
+    const hiddenWhere = await readTitleSections(page, HIDDEN_TITLES);
+    for (const t of HIDDEN_TITLES) expect(hiddenWhere[t]).toBeNull();
+
+    // 去处可点：复用既有 changeMode，不引入新状态分支 → 切到技术后隐藏任务可见、提示行消失
+    await hint.locator('button').click();
+    await page.waitForTimeout(300);
+    expect(await readSelectedTabs(page)).toEqual(['技术']);
+    expect(await page.locator('[data-board-hidden-hint]').count()).toBe(0);
+    const techText = await page.locator('main').innerText();
+    for (const t of HIDDEN_TITLES) expect(techText).toContain(t);
+
+    await shot(page, '12-hidden-hint-to-tech.png');
+    await page.close();
+  });
+
+  /* ===================================================================================
+   * 验收 11 · hiddenCount === 0 时不渲染提示行（变体种子：独立 context）
+   * =================================================================================== */
+  it('B-11 · hiddenCount===0：提示行与环告警都不渲染，四组计数不受影响（变体种子）', async () => {
+    const page = await openBoardIn(envNoHidden, { resetMode: true });
+
+    // 变体只删了 3 条隐藏任务：其余四组计数必须与主环境**完全一致**——
+    // 否则说明变体不只是「少了隐藏任务」，本用例证明的东西就不是它声称的那个了。
+    const groups = await readGroups(page);
+    expect(groups.map((g) => g.label)).toEqual(GROUP_ORDER);
+    expect(groups.map((g) => g.count)).toEqual(GROUP_ORDER.map((l) => GROUP_COUNTS[l]));
+
+    // 不渲染「另有 0 条」这类噪音
+    expect(await page.locator('[data-board-hidden-hint]').count()).toBe(0);
+    const mainText = await page.locator('main').innerText();
+    expect(mainText).not.toContain('另有');
+    // 变体里没有依赖环 → 环告警同样不该出现（它覆盖的是另一类问题，不能互相顶替）
+    expect(await page.locator('main [role="alert"]').count()).toBe(0);
+    // 隐藏任务确实不在库里（而不是「在但被别处显示出来」）
+    for (const t of HIDDEN_TITLES) expect(mainText).not.toContain(t);
+
+    await shot(page, '13-no-hidden-no-hint.png');
     await page.close();
   });
 });
