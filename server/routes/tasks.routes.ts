@@ -266,25 +266,69 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
   // POST /tasks/upsert —— v0.6 新增：幂等批量写入（externalId 幂等键）
   // 先查后写（非 ON CONFLICT）：① 需精确区分 created/updated 计数；② 整个循环已在
   // db.transaction 内，先查后写无竞态。done 恒由 status 派生，绝不接受请求体的 done。
-  app.post('/api/tasks/upsert', async (req) => {
+  //
+  // ★ BUG-03（v0.7 必修）：幂等查找的作用域是**项目内** `(project_id, external_id)`。
+  //   v0.7 §6.1（O1）已把唯一索引从「全局 external_id」换轨为复合唯一（见 server/db.ts
+  //   migrateAgentIndex / schema.sql 的 idx_tasks_external_id），查找口径必须与之逐字对齐。
+  //   若仍按全局 `WHERE external_id = ?` 查：A 项目已有键 k、B 项目再 upsert 同一个 k
+  //   （Agent 生成的键在项目间复用是常态，如都叫 `stage-1-task-1`）→ 会**命中 A 的行**，
+  //   随即走下面 `UPDATE ... WHERE id = <A 的行 id>` 把 A 的任务内容整体改写成 B 的，
+  //   而 B 该有的行根本没建。全程不报错、计数还显示 updated:1 —— 静默跨项目数据污染。
+  //   回归防线：tests/server.upsert-scope.spec.ts（跨项目同键 / 各自重发 / 批内同键）。
+  app.post('/api/tasks/upsert', async (req, reply) => {
     const { rows } = req.body as { rows: Array<Record<string, unknown>> };
+    const batch = rows ?? [];
+
+    // ── 前置校验：缺 projectId 的行必须**显式拒绝**（fail-closed），绝不能猜 ──
+    // 缺失时无法确定幂等查找的作用域，退回全局查找就会重演 BUG-03 的跨项目污染；
+    // 而 `String(undefined)` 会写出 project_id='undefined' 的幽灵行（外键报 500）。
+    // 选择 400 而不是「跳过并计入 skipped」的理由：
+    //   ① 与 local（Dexie）适配器同语义 —— 那边对 !r.projectId 直接抛
+    //      ChangxiaError(Validation, '任务字段不完整，无法写入。')。两端若一个抛错、
+    //      一个静默跳过，同一份 payload 在 NAS 与本地会得到不同结果，而「两套适配器
+    //      语义逐字一致」是本项目的硬约束（见 interfaces.ts 的 TaskUpsertRow 注释）。
+    //   ② 与本路由既有的 400 约定一致（POST /tasks 空标题 → 400 code:'validation'）。
+    //   ③ 静默跳过本身就是 BUG-03 的失效模式（数据静默分叉）；此处刻意选择响亮失败。
+    // 校验先于事务：拒绝时全库零写入，不留半套数据。
+    for (const t of batch) {
+      const projectId = t.projectId;
+      if (typeof projectId !== 'string' || projectId.length === 0) {
+        void reply.status(400);
+        return {
+          error: {
+            code: 'validation',
+            userMessage: '任务行缺少 projectId，无法确定幂等键的项目作用域。',
+          },
+        };
+      }
+    }
+
     let created = 0;
     let updated = 0;
     const tx = db.transaction((list: Array<Record<string, unknown>>) => {
+      // 语句提到循环外：本循环逐行执行，每行都重新 prepare 是纯开销（无行为差异）
+      const selectExisting = db.prepare(
+        'SELECT * FROM tasks WHERE external_id = ? AND project_id = ?',
+      );
+      const updateExisting = db.prepare(
+        `UPDATE tasks SET title=?, status=?, done=?, description=?, depends_on=?,
+           artifacts=?, start_at=?, due_date=?, assignee_id=?, assignee_ids=?,
+           agent_id=?, source=?, claimed_at=?, order_index=?, revision=?, updated_at=?
+         WHERE id=?`,
+      );
+      const insertNew = db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`);
+
       for (const t of list) {
         const externalId = (t.externalId as string | null) ?? null;
+        // ★ 项目作用域查找：与 idx_tasks_external_id 的复合列形 (project_id, external_id) 对齐
+        const projectId = String(t.projectId);
         const existing = externalId
-          ? (db.prepare('SELECT * FROM tasks WHERE external_id = ?').get(externalId) as TaskRow | undefined)
+          ? (selectExisting.get(externalId, projectId) as TaskRow | undefined)
           : undefined;
         if (existing) {
           // 命中 → UPDATE，bump revision（即使字段未变，保留「被 Agent 触碰过几次」的溯源）
           const nextStatus = String(t.status ?? existing.status);
-          db.prepare(
-            `UPDATE tasks SET title=?, status=?, done=?, description=?, depends_on=?,
-               artifacts=?, start_at=?, due_date=?, assignee_id=?, assignee_ids=?,
-               agent_id=?, source=?, claimed_at=?, order_index=?, revision=?, updated_at=?
-             WHERE id=?`,
-          ).run(
+          updateExisting.run(
             String(t.title ?? existing.title),
             nextStatus,
             nextStatus === 'done' ? 1 : 0, // ★ done 由 status 派生
@@ -309,10 +353,10 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
           updated += 1;
         } else {
           const status = deriveStatus(t);
-          db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`).run(
+          insertNew.run(
             ...insertValues({
               id: String(t.id ?? crypto.randomUUID()),
-              projectId: String(t.projectId),
+              projectId,
               stageId: String(t.stageId),
               title: String(t.title ?? ''),
               assigneeId: (t.assigneeId as string | null) ?? null,
@@ -336,7 +380,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
         }
       }
     });
-    tx(rows ?? []);
+    tx(batch);
     return { created, updated };
   });
 
