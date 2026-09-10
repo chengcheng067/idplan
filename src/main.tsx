@@ -9,6 +9,7 @@ import {
 
 import { RepoProvider } from './di/repository.provider';
 import { initTheme } from './hooks/useTheme';
+import { initSidebarCollapsed } from './store/useLayoutStore';
 import { installGlobalLogCatchers, logInfo } from './core/services/log.service';
 import './styles/global.css';
 import { AppShell } from './components/layout/AppShell';
@@ -63,6 +64,14 @@ export const router = createBrowserRouter(
 // index.html 里的同步内联脚本已经防过一次首屏闪白，这里再跑一次是为了接管系统偏好监听；
 // 两者读同一份 localStorage，结果一致，不会打架。
 initTheme();
+
+// 侧栏折叠态同样必须在首帧前落到 <html data-sidebar-collapsed>（v0.7 R13）：
+// index.html 的同步内联脚本已先写过一次（保证 CSS 生效前就位），这里再跑一次是为了
+//   1) 覆盖内联脚本被剥离/受限的降级场景；
+//   2) 让 DOM 属性与 zustand 内存状态严格一致——内联脚本只做 JSON 浅读，
+//      而 persist 有 schema 容错（内容损坏会回落 defaultExpanded()）。若两者结果
+//      不同，本调用负责把 DOM 纠正到内存状态的结果，避免「DOM 展开 / 内存折叠」打架。
+initSidebarCollapsed();
 
 // 全局前端日志：捕获运行时错误/未捕获 Promise 异常/console.error·warn，
 // 写入本地日志，设置界面可一键导出。必须在 React 渲染前挂载，才能网住首帧异常。

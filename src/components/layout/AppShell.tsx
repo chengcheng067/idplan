@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 
 import { TopBar } from './TopBar';
+import { Sidebar } from './Sidebar';
 import { IdentityDialog } from './IdentityDialog';
 import { ManualFallbackForm } from '../contract-wizard/ManualFallbackForm';
 import { useProjectsBootstrap } from '../../hooks/useProjectsBootstrap';
@@ -9,8 +10,29 @@ import { useProjectsStore } from '../../store/useProjectsStore';
 import { useUiStore } from '../../store/useUiStore';
 
 /**
- * 应用壳：米白底大面积留白 + 顶栏 + 路由出口；挂载全局 Toast 容器。
+ * 应用壳：米白底大面积留白 + 侧栏 + 顶栏 + 路由出口；挂载全局 Toast 容器。
  * 启动引导（全量装载）在此触发一次；首启身份闸门也在此挂载。
+ *
+ * ── v0.7 子系统 ①：三段式壳层（T18 骨架 → T20/T21 填肉）──
+ * 结构（§3.4）：
+ *   div.flex.min-h-screen           ← 横向 flex，侧栏与内容区并排
+ *   ├─ Sidebar                      ← ≥xl 持久左栏（240/64 可切）/ <xl Modal 抽屉
+ *   └─ div.flex-1.flex-col          ← 内容区（TopBar + main 独占剩余宽度）
+ *      ├─ TopBar                    ← 瘦身后常驻 ≤4 元素
+ *      └─ main.max-w-[1600px]       ← **全站唯一**内容宽度锚点
+ *
+ * 关键决策（§3.4，R12 对策）：
+ * 1. `<main>` 保留 `max-w-[1600px]`，作为**唯一出处**。
+ *    TopBar 与 AgentBoardPage 的重复约束已在 T21/T18 删除——否则会出现
+ *    「侧栏 + main 内又一层 1600 容器」的双重留白（L-08 验收点）。
+ * 2. 内容区加 `min-w-0`：flex 子项默认 `min-width:auto`，内含 overflow-hidden /
+ *    grid 时会被内容撑破、把侧栏挤出视口。`min-w-0` 是 flex 布局标配修复。
+ * 3. 内容区带 `.app-content-column` 钩子类：打印时由 @media print 拉平为整幅纸宽
+ *    （侧栏已被 print:hidden 隐藏，内容区无需再让位）。
+ * 4. 两条打印路由（schedule-print / calendar-print）不显示侧栏：Sidebar 内部
+ *    `useLocation` 命中即 `return null`（路由层），叠加 `print:hidden`（CSS 层）
+ *    与 global.css `[data-app-sidebar]{display:none}`（R20 双保险+1）。
+ *    这两个页面的 `max-w-[900px]` 是 A4 预览刻意保留的独立档位，**不并入** 1600。
  */
 export function AppShell(): JSX.Element {
   useProjectsBootstrap();
@@ -21,11 +43,18 @@ export function AppShell(): JSX.Element {
   const closeManualForm = useUiStore((s) => s.closeManualForm);
 
   return (
-    <div className="min-h-screen bg-cream font-body text-ink">
-      <TopBar />
-      <main className="mx-auto w-full max-w-[1600px] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-        <Outlet />
-      </main>
+    <div className="flex min-h-screen bg-cream font-body text-ink">
+      {/* ① 侧栏：≥xl 持久左栏 / <xl Modal 抽屉 / 打印路由 return null */}
+      <Sidebar />
+
+      {/* 内容区：flex-1 吃掉剩余宽度；min-w-0 防内容撑破导致侧栏被挤出 */}
+      <div className="app-content-column flex min-w-0 flex-1 flex-col">
+        <TopBar />
+        <main className="mx-auto w-full max-w-[1600px] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+          <Outlet />
+        </main>
+      </div>
+
       {/* 身份进入对话框（first-run 管理员确立 / 成员姓名进入 / 未命中提示） */}
       <IdentityDialog />
       {/* 手动建档兜底：全局挂载，「新建项目」直接打开（v0.3 移除导入合同建档入口后） */}

@@ -339,8 +339,7 @@
   }
 }
 
-/* ------------------------------ 三级表面（原玻璃分级，类名保持不变） ------------------------------ */
-/* Soft UI 不再用 backdrop-blur：三层靠「外凸 / 平铺 / 内凹」的阴影区分层次，描边只做 1px 提示。
+/* ------------------------------ 三级表面（原玻璃分级，类名保持不变） ------------------------------ *//* Soft UI 不再用 backdrop-blur：三层靠「外凸 / 平铺 / 内凹」的阴影区分层次，描边只做 1px 提示。
    48 处引用、23 个文件的 glass-* 类名全部沿用，无需逐个改文件。 */
 
 /* 每个表面类都额外写入 --tw-shadow：
@@ -367,6 +366,26 @@
   background: rgb(var(--sunken-rgb) / 1);
   border: 1px solid rgb(var(--sand-rgb) / var(--sand-a));
   box-shadow: var(--shadow-pressed);
+}
+
+/* ------------------------------ 侧栏宽度（v0.7 · R13 首帧不跳） ------------------------------ */
+/* 宽度由 <html data-sidebar-collapsed> 驱动，而非 React 的 className：
+   这样首帧（index.html 同步脚本已写好属性）与后续 React 渲染读的是同一个源头，
+   不会出现「先默认宽 → 水合后跳持久值」的抖动。
+   断点纪律：本段只用 `xl`(1280) 的媒体查询，与 Tailwind 的 xl 严格同值（D3）。 */
+.app-sidebar {
+  width: var(--sidebar-w-collapsed);
+  transition: width 180ms var(--liquid-ease);
+}
+html[data-sidebar-collapsed='false'] .app-sidebar {
+  width: var(--sidebar-w);
+}
+/* <1280 时侧栏走 Modal 抽屉，持久栏不渲染（由 Tailwind `hidden xl:flex` 承担显隐），
+   此处不再写断点，避免与 Tailwind 的 xl 出现两套口径。 */
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar {
+    transition: none;
+  }
 }
 
 /* ------------------------------ 虹彩描边 → 弱化为主色细环（1px，不占布局） ------------------------------ */

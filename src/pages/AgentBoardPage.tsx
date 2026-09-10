@@ -132,7 +132,13 @@ export function AgentBoardPage(): JSX.Element {
   const onOpenTask = useCallback((taskId: string) => openDrawer(taskId), [openDrawer]);
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+    /* v0.7 T18（R12 对策 · 容器收口）：**删除**了此处原有的
+       `mx-auto w-full max-w-[1600px]` —— 宽度约束已统一由 AppShell 的 <main>
+       提供（全局唯一出处）。保留重复约束会造成「侧栏 + main 内又一层 1600 容器」
+       的双重留白（工程核查 A.1 / L-08 验收点）。
+       本处只保留页面级的内边距与纵向节奏，不再碰宽度。
+       注意：本改动**仅容器收口**，页内编排（双模式等）归子系统 ② 后续批次。 */
+    <div className="w-full pb-10 pt-4">
       {/* 页头：返回 + 项目选择器 + 两个主 CTA */}
       <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
         <Link

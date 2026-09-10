@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)" />
     <!--
-      首屏防闪：在样式与脚本执行前同步写好 <html data-theme>。
+      首屏防闪（主题）：在样式与脚本执行前同步写好 <html data-theme>。
       优先级：用户显式选择（localStorage 'idplan-theme'）> 系统 prefers-color-scheme。
       必须与 src/hooks/useTheme.ts 的 STORAGE_KEY 保持一致。
     -->
@@ -28,6 +28,46 @@
         } catch (e) {
           document.documentElement.dataset.theme = 'light';
         }
+      })();
+    </script>
+    <!--
+      首屏防闪（侧栏折叠态 · v0.7 R13）：与主题脚本同款做法，在样式生效前同步写好
+      <html data-sidebar-collapsed>，使侧栏宽度**首帧即正确**——否则会出现
+      「先按默认宽度画一帧，React 水合后再跳到持久值」的宽度跳变（布局抖动）。
+
+      口径（必须与 src/store/useLayoutStore.ts 严格一致）：
+        · localStorage key = 'idplan.layout'（zustand persist 的 name）
+        · persist 包裹后 JSON 形如 {"state":{"sidebarExpanded":true},"version":0}
+        · 读到合法 sidebarExpanded → 取反写 data-sidebar-collapsed
+        · 读不到 / 解析失败 / 键缺失 → 回落 matchMedia('(min-width: 1280px)')
+          （与 defaultExpanded() 同一口径：≥1280 展开、以下收起）
+
+      容错：任何异常都静默回落到 CSS 默认（展开），绝不抛错阻塞首屏。
+      注意：此脚本只负责「DOM 属性先行」；内存状态的唯一真相源仍是
+      useLayoutStore，main.tsx 会调 initSidebarCollapsed() 做一次对齐纠正
+      （防 localStorage 内容损坏时 DOM 与内存打架）。
+    -->
+    <script>
+      (function () {
+        function fallback() {
+          try {
+            return !!(window.matchMedia && window.matchMedia('(min-width: 1280px)').matches);
+          } catch (e) {
+            return true;
+          }
+        }
+        var expanded = fallback();
+        try {
+          var raw = localStorage.getItem('idplan.layout');
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            var val = parsed && parsed.state && parsed.state.sidebarExpanded;
+            if (typeof val === 'boolean') expanded = val;
+          }
+        } catch (e) {
+          /* 内容损坏：保持 fallback 结果 */
+        }
+        document.documentElement.dataset.sidebarCollapsed = expanded ? 'false' : 'true';
       })();
     </script>
     <!-- 全平台新 logo：蓝 P 白色圆角方块。favicon 复用 public/logo.png（Vite 会把 /logo.png 拷到 dist 根） -->
