@@ -23,7 +23,6 @@ import {
   buildDepsDone,
   groupTasksForHuman,
   humanGroupOf,
-  isVisibleGroup,
   type HumanBoardGroup,
 } from '../src/core/agent/board';
 import { computeReadyTasks } from '../src/core/agent/dag';
@@ -313,14 +312,17 @@ describe('board：边界与防御', () => {
 });
 
 describe('board：组契约（可见顺序 / hidden 不属可见组）', () => {
+  /**
+   * ★ 这里原本还有一条 `isVisibleGroup()` 用例，v0.7 收口时随该谓词一起删除。
+   *
+   * 删得掉的原因是**它锁的事实已被上一行完全覆盖**：`isVisibleGroup('hidden') === false`
+   * 等价于「`hidden` 不在 `HUMAN_BOARD_GROUP_ORDER` 里」，而下面这条 `not.toContain('hidden')`
+   * 已经断言了同一件事——且断的是**唯一真相源本身**（数组内容），比经谓词间接推断更直接。
+   * 保留谓词 = 在同一个模块里放两份回答「哪些组可见」的真相，将来加组时极易一改一漏。
+   */
   it('显示顺序 = 待我确认 → 可开工 → 进行中 → 已完成，且不含 hidden', () => {
     expect(HUMAN_BOARD_GROUP_ORDER).toEqual(['confirm', 'ready', 'doing', 'done']);
     expect(HUMAN_BOARD_GROUP_ORDER).not.toContain('hidden');
-  });
-
-  it('isVisibleGroup：hidden 为 false，其余四组为 true', () => {
-    expect(isVisibleGroup('hidden')).toBe(false);
-    for (const g of HUMAN_BOARD_GROUP_ORDER) expect(isVisibleGroup(g)).toBe(true);
   });
 });
 

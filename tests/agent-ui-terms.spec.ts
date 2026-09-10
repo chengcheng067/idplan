@@ -24,7 +24,6 @@ import {
   AGENT_TERMS,
   AGENT_KIND_SUGGESTIONS,
   DEFAULT_AGENT_TERM_MODE,
-  READY_NOW_LABEL,
   termFor,
 } from '../src/constants/agentTerms';
 import { TaskStatus } from '../src/core/types/enums';
@@ -73,10 +72,14 @@ describe('agentTerms · PRD §2A.3 术语映射', () => {
     expect(DEFAULT_AGENT_TERM_MODE).toBe('human');
   });
 
-  it('「可开工」标签是独立常量，不复用 ready 词条', () => {
-    expect(READY_NOW_LABEL).toBe('可开工');
-    expect(READY_NOW_LABEL).not.toBe(termFor('ready', 'human'));
-  });
+  /**
+   * ★ 这里原本还有一条「『可开工』是独立常量、不复用 ready 词条」的用例，
+   * v0.7 收口时随 `READY_NOW_LABEL` 一起删除。它锁的两条事实仍被别处锁着：
+   *   · 「『可开工』≠ `termFor('ready','human')`（『待办』）」→ 上面 human 列断言
+   *     `termFor('ready','human') === '待办'` + 两模式取值必须不同，均已覆盖；
+   *   · 「组标题就叫『可开工』」→ 验收 spec B-02 断言屏幕上的组标题顺序
+   *     `['待我确认','可开工','进行中','已完成']`（锁 UI 事实，比锁常量更强）。
+   */
 
   it('状态值英文原样（TaskStatus 枚举值即展示值，UI 不翻译）', () => {
     expect(TaskStatus.Draft).toBe('draft');

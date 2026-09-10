@@ -406,9 +406,8 @@ export function AgentBoardPage(): JSX.Element {
 
                 文案复用 `HUMAN_GROUP_TITLES.ready` 而非再写一遍字面量：让「同一个词」
                 在类型层就无法分叉（改标题即改小字）。
-                backlog：agentTerms.ts 的 `READY_NOW_LABEL` 目前**无任何组件消费**
-                （只有单测断言），与 HUMAN_GROUP_TITLES.ready 是同一个字符串的第二处
-                出处 —— 属同一类「两份真相」，待下次触碰该文件时收口。
+                （原先 agentTerms.ts 另有一个同值的 `READY_NOW_LABEL` 常量，零组件消费，
+                属同类「两份真相」，已随本批收口删除——详见 agentTerms.ts 内的说明。）
               */}
               {humanView.groups.ready.length > 0 && (
                 <span className="rounded-md bg-paper/70 px-1.5 py-0.5 text-[10px] text-mist">

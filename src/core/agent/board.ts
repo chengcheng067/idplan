@@ -51,6 +51,12 @@ export type HumanBoardGroup = 'confirm' | 'ready' | 'doing' | 'done' | 'hidden';
  * 顺序是有语义的：待决事项排最前（人要先动），已完成的放最后（仅备查）。
  * `hidden` **刻意不在本数组内**——它不是「第五组」，而是「不属于任何可见组」。
  * 任何渲染层都应遍历本数组而非 `Object.keys(groups)`，否则隐藏组会漏出来。
+ *
+ * ★ **「哪些组可见」的唯一答案就是本数组的内容**（v0.7 收口）：
+ *   曾有一个 `isVisibleGroup(group)` 谓词回答同一个问题，已删除。理由：可见性既然
+ *   已由数组内容编码，再留一个谓词就是在同一个模块里放两份真相——将来有人加组时
+ *   改了一处没改另一处，就会静默出现「数组里有、谓词说不可见」的分叉。
+ *   故本数组**只增可见组**；`hidden` 永远不会进来（单测锁死）。
  */
 export const HUMAN_BOARD_GROUP_ORDER: readonly HumanBoardGroup[] = [
   'confirm',
@@ -58,11 +64,6 @@ export const HUMAN_BOARD_GROUP_ORDER: readonly HumanBoardGroup[] = [
   'doing',
   'done',
 ];
-
-/** 该组是否进入四组主列表（`hidden` 为 false） */
-export function isVisibleGroup(group: HumanBoardGroup): boolean {
-  return group !== 'hidden';
-}
 
 /**
  * 构造 `depsDone` 判定闭包——`byId` 与 `computeReadyTasks` **同源**（同一份
