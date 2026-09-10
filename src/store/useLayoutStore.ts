@@ -4,14 +4,34 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 /**
  * 布局瞬态状态（v0.7 · 子系统 ① · N03 / T18）。
  *
- * 为什么**新建独立 store** 而不塞进 `useUiStore`（架构决策，§3.3.3）：
- *   `useUiStore` 现为**非持久化**（其文件头注释明说「刷新即失，不落库」），
- *   且承载月历筛选（`calendarFilters.status/stage` 是 `Set` 类型——JSON 化会丢）。
- *   若直接给它加 `persist`，要么波及既有月历逻辑（Set 序列化破坏），
- *   要么得为每个字段写 partialize 特例，改动面大幅扩大且回归风险高。
- *   故本处新建独立 store：**只装布局态、零业务数据**，零回归风险。
- *   `useUiStore` 的持久化改造只在子系统 ② 需要（那时也只 partialize
- *   `agentBoardMode` 一个字段），与本 store 互不干扰。
+ * ── 为什么**新建独立 store** 而不塞进 `useUiStore`（架构决策）──
+ *
+ * ⚠️ 本节记录一次**经裁决确认的取舍**，与磁盘设计文档 §3.2（:392-394）的措辞不一致：
+ *    文档原文主张「把 `sidebarExpanded` + `agentBoardMode` 一并存入 `useUiStore`
+ *    并加 `persist`，**不新建独立 `useLayoutStore`**」。
+ *    本实现**不采纳**该主张，理由是文档那一版判断漏看了一个硬事实（详见下），
+ *    裁决结论为「以本文件代码为准，文档 §3.2 不改」：
+ *
+ *   1. **`useUiStore.calendarFilters` 是 `Set` 类型**（见 `useUiStore.ts` 的
+ *      `CalendarFilters.status: Set<CalendarFilterStatus>` / `stage: Set<number>`）。
+ *      `persist` 默认用 `JSON.stringify` 序列化整个 state —— `Set` 会被序列化成
+ *      `{}`（JSON 无 Set 表示），**hydration 回来就是空 Set**。这不只是「月历筛选
+ *      丢失」：`toggleCalendarStatusFilter` 里 `new Set(st.calendarFilters.status)`
+ *      在拿到 `{}` 后仍能构造（`new Set({})` 合法），于是**静默丢掉全部已存筛选**，
+ *      没有任何报错——属于最难排查的一类数据损坏。
+ *   2. 若要规避 ①，必须给 `useUiStore` 写 `partialize` 白名单，只持久化
+ *      `sidebarExpanded` / `agentBoardMode`。但 `useUiStore` 现有 10+ 个字段里
+ *      **绝大多数是纯瞬态**（`stageDrawerStageId` / `manualFormOpen` /
+ *      `timelineZoom` / `calendarMonth` / `searchQuery` / `selectedProjectId`…），
+ *      逐字段标注「持久化 / 不持久化」意味着**每新增一个字段都要重新判断一次**，
+ *      判断错了就是下次线上事故。白名单机制把「安全」变成了持续义务。
+ *   3. 独立 store 的边界**天然**正确：本文件只装布局态、**零业务数据、零 `Set`**，
+ *      `partialize` 之外没有任何东西可能被误持久化。新增字段时也不可能污染 UI 瞬态。
+ *      代价只是多一个文件，与「状态分散」的坏处相比，这个代价是值得的
+ *      （状态分散的实质危害是「同一事实两处存储」，而布局态本就与业务态无交集）。
+ *
+ *   结论：`useUiStore` **保持完全不持久化**（与其文件头注释「刷新即失，不落库」
+ *   一致，不破坏既有月历逻辑）；布局态与后续 `agentBoardMode` 一律落在独立 store。
  *
  * ── R13（首屏闪烁 FOUC）对策，两条同时生效 ──
  * 1. **首帧前同步读**：`persist` 默认 `skipHydration: false` → 在 store 创建时

@@ -5,6 +5,7 @@ import { StatCard } from '../components/project/StatCard';
 import { ArchiveListRow } from '../components/project/ArchiveListRow';
 import { MembersPageSection } from '../components/member/MembersPageSection';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
+import { HomeViewTabs } from '../components/layout/HomeViewTabs';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useUiStore } from '../store/useUiStore';
@@ -89,6 +90,9 @@ export function HomePage(): JSX.Element {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* 视图层 tab（看板 / 月历）：v0.7 T02 自 TopBar 位移到内容区顶部（PRD §3.1/§3.2）
+          ——「视图层」归内容区，顶栏只留 4 个全局常驻块。逻辑仍走 useUiStore.homeViewMode。 */}
+      <HomeViewTabs />
       {homeViewMode === 'calendar' ? (
         <MonthlyCalendarView onManual={openManual} />
       ) : (

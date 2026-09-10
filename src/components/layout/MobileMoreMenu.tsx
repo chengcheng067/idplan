@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Bot } from 'lucide-react';
-import { CalendarRange, LayoutGrid, MoreVertical, PenLine, Save, Settings, Upload } from 'lucide-react';
+import {
+  CalendarRange,
+  LayoutGrid,
+  MoreVertical,
+  PenLine,
+  Save,
+  Settings,
+  Upload,
+} from 'lucide-react';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useUiStore } from '../../store/useUiStore';
@@ -28,18 +36,27 @@ function Divider(): JSX.Element {
  * 在 iPad 横屏（1024）及以下会直接挤爆——搜索框被压成一条缝、按钮换行错位。
  * 因此在 xl（1280）以下把这些次要控件收进本菜单，顶栏只保留 logo + 搜索 + ⋮ + 身份头像。
  *
+ * ── v0.7 T02 定位（明确）──
+ *   PRD §5.2 表把**「⋮ 更多」列为顶栏允许的 4 个常驻视觉块之一**（logo+品牌 /
+ *   搜索+⌘K / 身份头像 / 设置+⋮更多），工程核查 A.2 注进一步说明
+ *   「本组件挂在 TopBar 内，跟随收缩，**无需单独改**」。
+ *   故 T02 对本文件**不做内容裁剪**：它仍是 <xl 档位的次要动作总收口。
+ *   注意它**不是**侧栏抽屉的替代品——侧栏抽屉（`Modal` placement）覆盖
+ *   <1280 且具备焦点圈禁/滚动锁定；本菜单是 <xl 的**快速动作面板**，
+ *   两者职责不同（前者导航、后者动作），在 <xl 档位并存是设计预期，不是重复入口。
+ *   本组件也**不**吞掉侧栏的导航职责：菜单里的导航四项属于
+ *   「小屏用户的就近入口」，与侧栏抽屉互为冗余但都保留（R15：入口不丢）。
+ *
  * 边界：xl 以上本组件整体不渲染（根节点 xl:hidden），桌面布局与行为完全不变。
  * 所有动作复用既有 store / 服务，不另起一份实现：
  *   - 视图切换 → useUiStore.homeViewMode
  *   - 新建项目 → useUiStore.openManualForm
  *   - 备份导入导出 → useBackupIo（与桌面按钮同一份逻辑）
- *   - 休息制度 → RestPolicyDialog（弹窗本身就是逻辑载体）
+ *   - 设置/导出日志 → SettingsDialog
  */
 export function MobileMoreMenu(): JSX.Element {
   const location = useLocation();
   const { isAdmin } = useRoleGuard();
-  const homeViewMode = useUiStore((s) => s.homeViewMode);
-  const setHomeViewMode = useUiStore((s) => s.setHomeViewMode);
   const openManualForm = useUiStore((s) => s.openManualForm);
   const { save, pick, fileInput, confirmDialog } = useBackupIo();
   // 仅桌面端且主进程推送过「有新版本」时为 true；移动端菜单项照常用 ITEM/ITEM_ICON 写法
@@ -50,8 +67,7 @@ export function MobileMoreMenu(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const onHome = location.pathname === '/';
-  const onProjectPage = onHome || location.pathname.startsWith('/project');
+  const onProjectPage = location.pathname === '/' || location.pathname.startsWith('/project');
 
   // 外点关闭 + Escape 关闭
   useEffect(() => {
@@ -97,7 +113,7 @@ export function MobileMoreMenu(): JSX.Element {
           aria-label="更多操作"
           className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-6rem)] w-56 overflow-y-auto rounded-xl border border-sand py-1 shadow-soft"
         >
-          {/* 导航 */}
+          {/* 导航（<xl 就近入口；与侧栏抽屉互为冗余但都保留——R15 入口不丢） */}
           {isAdmin ? (
             <Link to="/" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
               <LayoutGrid size={15} className={cn(ITEM_ICON, location.pathname === '/' && 'text-pine')} />
@@ -139,42 +155,9 @@ export function MobileMoreMenu(): JSX.Element {
             </span>
           </Link>
 
-          {/* 视图切换（仅首页） */}
-          {onHome && (
-            <>
-              <Divider />
-              <div className="px-3.5 py-1.5 text-[11px] text-mist">首页视图</div>
-              <div
-                role="tablist"
-                aria-label="首页视图切换"
-                className="mx-3 my-1 flex items-center gap-1 rounded-[10px] border border-sand bg-cream/60 p-1"
-              >
-                {(
-                  [
-                    { key: 'kanban' as const, label: '看板', Icon: LayoutGrid },
-                    { key: 'calendar' as const, label: '月历', Icon: CalendarRange },
-                  ]
-                ).map(({ key, label, Icon }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={homeViewMode === key}
-                    onClick={() => setHomeViewMode(key)}
-                    className={cn(
-                      'flex flex-1 items-center justify-center gap-1.5 rounded-[8px] py-2 text-sm font-medium transition-colors',
-                      homeViewMode === key
-                        ? 'bg-pine-soft text-pine'
-                        : 'text-mist hover:bg-sand hover:text-ink',
-                    )}
-                  >
-                    <Icon size={14} />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+          {/* 视图切换（仅首页）——v0.7 T02 已位移到首页内容区顶部（`HomeViewTabs`）。
+              此处**移除**，避免同一档位出现两个控件改同一个 `homeViewMode`
+              （PRD §3.2 迁移清单：视图切换「仅位移」，位移后原位置不留副本）。 */}
 
           {/* 管理员专属动作 */}
           {isAdmin && (
