@@ -13,6 +13,9 @@ import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 
 import type { TaskArtifact } from '../../src/core/types/entities';
+// B-01 不变式的共享纯函数（与前端的 local.tasks.repo 用的是**同一份**实现，
+// 故「status=ready ⟹ claimedAt=null」的规则文本只有一处）。
+import { normalizeClaimedAt } from '../../src/core/types/entities';
 import {
   parseJsonArray,
   serializeAssigneeIds,
@@ -106,7 +109,13 @@ interface TaskInsertValues {
   updatedAt: string;
 }
 
-/** 单条 INSERT 的 20 列值（done 恒由 status 派生，绝不取请求体的 done） */
+/**
+ * 单条 INSERT 的 20 列值（done 恒由 status 派生，绝不取请求体的 done）。
+ *
+ * ★ 本函数是**全部 4 条 INSERT 路径的唯一收口**（bulk / POST、upsert 的 insert
+ *   分支、未来新增的 INSERT），故 B-01 不变式（`status='ready'` ⟹ `claimed_at`
+ *   为 null）在此施加一次即覆盖全部——避免在四个调用点各写一遍而漏掉其一。
+ */
 function insertValues(v: TaskInsertValues): unknown[] {
   return [
     v.id,
@@ -125,7 +134,7 @@ function insertValues(v: TaskInsertValues): unknown[] {
     serializeJson(v.dependsOn),
     serializeJson(v.artifacts),
     v.startAt,
-    v.claimedAt,
+    normalizeClaimedAt(v.status, v.claimedAt),
     v.orderIndex,
     v.revision,
     v.updatedAt,
@@ -288,7 +297,9 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
             serializeAssigneeIds(t.assigneeIds ?? parseJsonArray<string>(existing.assignee_ids)),
             (t.agentId as string | null) ?? existing.agent_id,
             String(t.source ?? existing.source),
-            (t.claimedAt as string | null) ?? existing.claimed_at,
+            // ★ B-01 不变式：Agent 重发 payload 时若把状态带回 ready，必须同时清掉
+            // claimed_at，否则一次重导入就再制造一个认领僵尸。
+            normalizeClaimedAt(nextStatus, (t.claimedAt as string | null) ?? existing.claimed_at),
             // order_index 仅新建语义：更新路径保持既有排序，防止重导入反复重排
             existing.order_index,
             existing.revision + 1,
@@ -393,7 +404,13 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
       depends_on: b.dependsOn !== undefined ? serializeJson(b.dependsOn) : existing.depends_on,
       artifacts: b.artifacts !== undefined ? serializeJson(b.artifacts) : existing.artifacts,
       start_at: b.startAt !== undefined ? (b.startAt as string | null) : existing.start_at,
-      claimed_at: b.claimedAt !== undefined ? (b.claimedAt as string | null) : existing.claimed_at,
+      // ★ B-01 不变式：PATCH 把 status 改成 ready（释放/解除受阻）时清掉 claimed_at。
+      // 共享 normalizeClaimedAt 与前端 local.tasks.repo.update 同一份实现——
+      // 两端各写一遍 if (status === 'ready') 正是本 bug 的产生方式。
+      claimed_at: normalizeClaimedAt(
+        nextStatus,
+        b.claimedAt !== undefined ? (b.claimedAt as string | null) : existing.claimed_at,
+      ),
       order_index: b.orderIndex !== undefined ? Number(b.orderIndex) : existing.order_index,
       revision: existing.revision + 1,
       updated_at: nowIso(),

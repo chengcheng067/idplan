@@ -89,7 +89,29 @@ export interface Task {
   artifacts: TaskArtifact[];
   /** 任务级排期起点（Timeline 画条用），UTC ISO string 或 'YYYY-MM-DD' */
   startAt: string | null;
-  /** 认领时刻（V1 的 TTL 回收用）；null = 未被认领 */
+  /**
+   * 认领时刻（V1 的 TTL 回收用）。
+   *
+   * ⚠️ **语义 = 活标记「当前是否被持有」，不是历史事件痕迹**（B-01 订正）。
+   *
+   * 旧注释写的是「只在认领路径产生」，读起来像「曾认领过」的时间戳，于是写入侧
+   * 从不回退它。但那与**两个消费方的实际读法**矛盾——三处都在问「**现在**是否
+   * 被持有」：
+   *   · `local.tasks.repo.claim()`  `claimedAt !== null` → Conflict（并发互斥）
+   *   · `dag.computeReadyTasks()`   `claimedAt === null` 才是 Ready
+   *   · `TaskDrawer.canClaim`       `claimedAt === null` 才允许点认领
+   *
+   * 而「释放」是**合法流转**（`Claimed → Ready` = 超时回收/主动释放；
+   * `Blocked → Ready` = 解除受阻，见 `TASK_STATUS_TRANSITIONS`）。只写 status、
+   * 不回退 claimedAt → 释放后留下 `status=ready ∧ claimedAt=<旧值>` 的僵尸行：
+   * 谁也认领不了（Conflict）、也不在任何待办队列里（被 computeReadyTasks 排除）。
+   *
+   * 故本字段的**不变式**：
+   *   `status === 'ready'` ⟹ `claimedAt === null`
+   * 由 {@link normalizeClaimedAt} 在所有写入路径强制（前端仓储 + 服务端
+   * PATCH/upsert 共用同一实现），规则文本只有一处。
+   * 不改两个消费方语义的原因：改它们会破坏 claim 的并发互斥地基。
+   */
   claimedAt: string | null;
   /* ------------------------------- v0.6 新增块结束 ------------------------------ */
   orderIndex: number;
@@ -117,6 +139,40 @@ export function withStatus<T extends { status: TaskStatus; done: boolean }>(
   next: TaskStatus,
 ): T {
   return { ...row, status: next, done: next === TaskStatus.Done };
+}
+
+/**
+ * ★ B-01 不变式的**唯一出处**：`status === 'ready'` ⟹ `claimedAt === null`。
+ *
+ * ── 为什么需要它 ──
+ * `claimedAt` 是**活标记**（当前是否被持有，见 `Task.claimedAt` 注释）。而「回到
+ * ready」不止「初始 ready」一条路，`TASK_STATUS_TRANSITIONS` 里**有三条边**都
+ * 落在 ready：`Draft → Ready`、`Claimed → Ready`（释放/超时回收）、
+ * `Blocked → Ready`（解除受阻）。后两条的上游必然已认领过 → `claimedAt` 非空。
+ * 旧实现改 status 时从不回退它，于是产生僵尸行：
+ *   · `claim()` 因 `claimedAt !== null` 判 Conflict → **没有任何 Agent 能接手**
+ *   · `computeReadyTasks()` 因同一条件排除它 → 也不在任何待办队列里
+ *   · `TaskDrawer.canClaim` 为 false → 认领按钮直接消失
+ * 症状：界面看着「可开工」，实际无人能认领、也无处可查。v0.7 的核心卖点正是
+ * 「认领 → 遇阻 → 释放 → 由另一 Agent 接手」，此 bug 把交接链掐断在第一步。
+ *
+ * ── 为什么是「字段级」函数（status + claimedAt 两个标量）──
+ * 两侧行形状不同：前端是 camelCase `Task`（`claimedAt`），服务端是 snake_case
+ * `TaskRow`（`claimed_at`）。只有「status 与该字段」这一对是双方共有的，
+ * 行级函数无法同时服务两端。参数取 `string` 而非 `TaskStatus` 同理——
+ * `TaskStatus` 是字符串枚举可赋给 `string`，而服务端 PATCH 拿到的是裸 string。
+ *
+ * 幂等：已是 `null` 时原值返回（不制造无意义的写入差异）。
+ *
+ * @param status 变更**之后**的 status（语义是「这个 status 配得上什么 claimedAt」）
+ * @param claimedAt 候选 claimedAt（可能是 patch 带来的新值，也可能是存量值）
+ * @returns 应落库的 claimedAt：`status === 'ready'` 时为 `null`，否则原样保留
+ */
+export function normalizeClaimedAt(
+  status: string,
+  claimedAt: string | null,
+): string | null {
+  return status === TaskStatus.Ready ? null : claimedAt;
 }
 
 /** 项目 */

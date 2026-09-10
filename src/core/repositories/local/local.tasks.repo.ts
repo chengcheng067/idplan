@@ -1,6 +1,6 @@
 import { ChangxiaError, ChangxiaErrorCode, TaskStatus } from '../../types/enums';
 import type { Task } from '../../types/entities';
-import { taskIsDone, withStatus } from '../../types/entities';
+import { taskIsDone, withStatus, normalizeClaimedAt } from '../../types/entities';
 import type { CreateTaskCmd, UpdateTaskCmd } from '../../types/dto';
 import type { ITasksRepository, TaskQuery, TaskUpsertRow } from '../interfaces';
 import type { ChangxiaDatabase } from './dexie.database';
@@ -117,12 +117,24 @@ export class LocalTasksRepository implements ITasksRepository {
     if (nextStatus === undefined && patch.done !== undefined) {
       nextStatus = patch.done ? TaskStatus.Done : TaskStatus.Draft;
     }
+    // ★ B-01 不变式：status=ready ⟹ claimedAt=null（规则唯一出处：normalizeClaimedAt）。
+    // 判定用**生效后**的 status（patch.status ?? 存量 status）而非只判 patch.status：
+    //   ① 只传 status='ready' 的释放动作 → 必须清掉旧 claimedAt；
+    //   ② 只传 title 这类**非状态**字段时，存量 status 若已是 ready 且 claimedAt
+    //      残留（历史脏数据），也要顺手清掉——否则一次普通改名就会把僵尸行
+    //      「固化」为正常行，让问题永远查不出来。
+    const effectiveStatus = nextStatus ?? existing.status;
+    const nextClaimedAt = normalizeClaimedAt(
+      effectiveStatus,
+      patch.claimedAt !== undefined ? patch.claimedAt : existing.claimedAt,
+    );
     const next: Task = {
       ...existing,
       ...patch,
       ...(nextStatus !== undefined
         ? { status: nextStatus, done: nextStatus === TaskStatus.Done }
         : {}),
+      claimedAt: nextClaimedAt,
       revision: existing.revision + 1,
       updatedAt: new Date().toISOString(),
     };
@@ -168,6 +180,9 @@ export class LocalTasksRepository implements ITasksRepository {
               externalId,
               status: nextStatus,
               done: nextStatus === TaskStatus.Done,
+              // ★ B-01 不变式：Agent 重发同 payload 时若把状态带回 ready，
+              // 必须同时清掉 claimedAt，否则一次重导入就再制造一个认领僵尸。
+              claimedAt: normalizeClaimedAt(nextStatus, patch.claimedAt),
               revision: existing.revision + 1,
               updatedAt: now,
             };
@@ -180,6 +195,8 @@ export class LocalTasksRepository implements ITasksRepository {
               externalId,
               status: r.status ?? TaskStatus.Draft,
               done: (r.status ?? TaskStatus.Draft) === TaskStatus.Done,
+              // ★ B-01 不变式（新建路径同样适用）：status=ready 的行不得带 claimedAt
+              claimedAt: normalizeClaimedAt(r.status ?? TaskStatus.Draft, r.claimedAt),
               revision: 1,
               updatedAt: now,
             };

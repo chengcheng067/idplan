@@ -136,8 +136,10 @@ export interface UpdateStageCmd {
 /**
  * 任务创建命令。
  *
- * v0.6 Agent 新增块（与 Task 实体的序 9–16 对应；`claimedAt` 只在认领路径产生，
- * 不出现在 Create 命令里；`done` 不可写——它由 status 派生，见 entities.taskIsDone）。
+ * v0.6 Agent 新增块（与 Task 实体的序 9–16 对应）。注意：`claimedAt` 不在本命令里
+ * ——它是**活标记**（当前是否被持有）而非可指定的入参，只能由认领路径经
+ * `repo.claim()` 写入；新建行恒为 `null`（见 §B-01）。`done` 亦不可写——
+ * 它由 status 派生，见 entities.taskIsDone。
  */
 export interface CreateTaskCmd {
   projectId: string;
@@ -190,7 +192,14 @@ export interface UpdateTaskCmd {
   artifacts?: TaskArtifact[];
   /** 任务级排期起点 */
   startAt?: string | null;
-  /** 认领时刻（仅 claim 路径写入，一般调用方不要手工传） */
+  /**
+   * 认领时刻 —— **活标记**（当前是否被持有），不是历史痕迹。
+   *
+   * 一般调用方不要手工传：认领走 `repo.claim()`（单事务内校验 + 写入）。
+   * 无论谁传，写入路径都会强制不变式
+   * `status === 'ready'` ⟹ `claimedAt === null`（见 `entities.normalizeClaimedAt`），
+   * 故**传 `status: 'ready'` 时本字段一律被清空**，无需调用方记得手动清。
+   */
   claimedAt?: string | null;
 }
 
