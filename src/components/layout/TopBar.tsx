@@ -1,7 +1,7 @@
-import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Menu, Search, X } from 'lucide-react';
 import type { RefObject } from 'react';
-import { Menu, Search, X } from 'lucide-react';
 
 import { MemberIdentityPicker } from './MemberIdentityPicker';
 import { MobileMoreMenu } from './MobileMoreMenu';
@@ -9,33 +9,72 @@ import { SettingsButton } from './SettingsButton';
 import { ImeInput } from '../common/ImeInput';
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore } from '../../store/useLayoutStore';
+import { useProjectsStore } from '../../store/useProjectsStore';
 import { cn } from '../../lib/cn';
 
 /**
- * 窄屏搜索输入区（手机常驻整行 / 平板点击展开为内联）。
- * 抽成局部组件的原因：手机与平板各渲染一份（靠 CSS 断点二选一），
- * 若不复用会出现「两份输入框、ref 互相覆盖、⌘K 聚焦到看不见的那个」这类问题。
+ * 顶栏（v0.7 · 子系统 ① · N01 / §2.4）。
+ *
+ * ── 高度与底色（§2.4 / 画板 02·12）──
+ *   桌面（≥xl=1280）：单⾏ 64，纸面 `bg-paper`，底 1px `border-line`；
+ *   平板（768–1279）：单⾏ 56，横向 padding 0/16，gap 12；
+ *   手机（<768）：两⾏合计 100（56 + 44），第⼆⾏独占搜索框。
+ *   暗⾊下仍是同⼀ token（paper 在 `[data-theme="dark"]` 解析为 `#1F2126`），不写死 hex。
+ *
+ * ── 断点纪律（严格锁 xl=1280、md=768，绝不引⼊ lg=1024）──
+ *   `xl:`  → ≥1280（持久左栏，隐藏汉堡/品牌，搜索常驻 280）
+ *   `md:`  → ≥768（平板，汉堡+品牌+可展开搜索图标）
+ *   `max-md:` → <768（手机两⾏）
+ *
+ * ── 左组：面包屑（§2.4 新功能，原顶栏⽆）—— 按 `useLocation()` 的 pathname 推导：
+ *   `/`                           → 我的项目
+ *   `/member-board`              → 成员看板
+ *   `/my-tasks`                  → 我的任务
+ *   `/agent`                     → Agent 看板
+ *   `/project/:id`               → [返回] 项目 / 我的项目 / {项目名}
+ *   `/project/:id/schedule-print`→ 项目 / {项目名} / 日程表
+ *   `/project/:id/calendar-print`→ 项目 / {项目名} / 月历
+ *   项目名取自 `useProjectsStore`，取不到回落「项目详情」。
+ *
+ * ── 右组：搜索 + 身份头像（+ 既有的 设置 / ⋮更多，保留既有功能不丢）──
+ *   桌面：搜索常驻 280×36（`bg-sunken` 圆角 16，复用 `ImeInput`，绑 `useUiStore.searchQuery`）；
+ *   平板：40×40 图标按钮，点击展开为内联 280 搜索；
+ *   手机：第⼆⾏整宽搜索框（36 / 圆角 12 / pad 0 12 / gap 8）。
+ *   ⌘K / Ctrl+K / Alt+K 仍承担「聚焦 / 展开」搜索框。
  */
-function CompactSearchField({
+
+/** 单页面包屑文本映射（非项目路由） */
+const STATIC_CRUMB: Record<string, string> = {
+  '/': '我的项目',
+  '/member-board': '成员看板',
+  '/my-tasks': '我的任务',
+  '/agent': 'Agent 看板',
+};
+
+/** 搜索输入区（桌面常驻 / 平板展开 / 手机整行 三处复用，避免 ref 互相覆盖）。 */
+function SearchField({
   inputRef,
   onClose,
+  className,
 }: {
   inputRef: RefObject<HTMLInputElement>;
-  onClose?(): void;
+  /** 提供则渲染「清空并关闭」按钮（平板 / 手机展开态） */
+  onClose?: () => void;
+  className?: string;
 }): JSX.Element {
   const searchQuery = useUiStore((s) => s.searchQuery);
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
 
   return (
-    <div className="flex w-full max-w-[360px] items-center gap-2 rounded-[14px] border border-line bg-cream/60 px-3 py-2">
-      <Search size={15} className="shrink-0 text-mist" aria-hidden />
+    <div className={cn('flex h-9 items-center gap-2 rounded-2xl bg-sunken px-3', className)}>
+      <Search size={16} className="shrink-0 text-mist" aria-hidden />
       <ImeInput
         ref={inputRef}
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         placeholder="搜索项目、任务或客户…"
         aria-label="搜索项目、任务或客户"
-        className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-mist"
+        className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-mist"
       />
       {onClose && (
         <button
@@ -51,81 +90,107 @@ function CompactSearchField({
   );
 }
 
-/**
- * 顶栏（v0.7 · 子系统 ① · M2 / T02 瘦身至 ≤4 常驻元素）。
- *
- * ── 瘦身前后（PRD §3.2 / L-01）──
- *   瘦身前（v0.6）：浮起 glass-strong 卡片里塞了 9+ 个视觉块——logo / 品牌+副标题 /
- *     480 搜索框 / ⌘K / 4 项导航 / 保存备份 / 加载备份 / 设置 / 看板月历切换 /
- *     新建项目 / 身份头像 / ⋮ 更多。「上边栏观感重」的主因有二：
- *       ① 常驻导航占了顶栏最贵的一行横向空间（4 个文字链）；
- *       ② 整条顶栏做了玻璃浮起（玻璃层次误用于常驻导航，竞品调研结论 8）。
- *   瘦身后（v0.7）：常驻**恰 4 块**，其余全部下沉——
- *     ① 汉堡（<xl 打开抽屉）+ Logo + 品牌名；
- *     ② 搜索图标 + ⌘K（去 480px 常驻输入框，调研结论 3）；
- *     ③ 身份头像（`MemberIdentityPicker`）；
- *     ④ 设置（`SettingsButton`）+ ⋮更多（`MobileMoreMenu` 内部 xl:hidden）。
- *
- * ── 下沉去向（R15：功能入口一个都不能丢）──
- *   · 导航四项（项目/看板/我的任务/Agent）    → `SidebarNav`（T01 已迁，本文件删除）
- *   · 看板/月历视图切换                        → 首页内容区顶部 `HomeViewTabs`
- *   · 保存备份 / 加载备份                      → `Sidebar` 底部固定区（管理员专属）
- *   · 新建项目                                 → `Sidebar` 底部主 CTA
- *   · 导出日志                                 → 设置面板（`SettingsDialog` → `ExportLogButton`）
- *
- * ── 玻璃层次（§3.5）──
- *   整条顶栏**不再** `glass-strong` 浮起：改为纸白 `bg-cream` 常驻条 +
- *   底部极弱 `border-line` 分隔线。玻璃只留给浮层（命令栏/抽屉/弹窗/下拉）。
- *
- * ── 响应式三档（严格锁 xl=1280，不引入新断点；§3.3）──
- *   ≥1280（xl）：单行——汉堡隐藏、logo+品牌、搜索图标+⌘K、身份、设置+⋮；
- *   640～1279（sm～lg）：同单行，⋮更多承担全部次要控件；
- *   <640（手机）：两行——第一行 logo + ⋮ + 身份，第二行搜索框独占整行。
- *   断点统一取 xl：iPad 横屏（1024）与 iPad Pro 11"（1194）都进「更多」档，不卡临界。
- *
- * ── 宽度的唯一出处 ──
- *   **不再**有任何 `max-w-[1600px]`（原 :124 处的 `max-w-[1600px]` 已删）——
- *   全站宽度锚点唯一收敛在 `AppShell` 的 `<main>`（R12 / L-08），
- *   顶栏与其同处一个 flex 列，天然等宽。此处只保留横向内边距。
- */
+/** 面包屑（§2.4）：返回箭头 + 逐级「/」分隔，当前级不可点。 */
+function Breadcrumbs(): JSX.Element | null {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const projects = useProjectsStore((s) => s.projects);
+
+  // 项目详情 / 打印页：/project/:id 或 /project/:id/(schedule|calendar)-print
+  const projMatch = /^\/project\/([^/]+)(?:\/(schedule|calendar)-print)?$/.exec(pathname);
+
+  if (projMatch) {
+    const id = projMatch[1];
+    const printKind = projMatch[2]; // 'schedule' | 'calendar' | undefined
+    const project = projects.find((p) => p.id === id);
+    const projectName = project?.name ?? '项目详情';
+
+    return (
+      <div className="flex min-w-0 items-center gap-2.5 text-[13px] font-medium">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="返回上一页"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand hover:text-ink focus-visible:ring-2 focus-visible:ring-pine/40"
+        >
+          <ArrowLeft size={18} aria-hidden />
+        </button>
+        <span className="shrink-0 text-mist">项目</span>
+        <span className="shrink-0 text-mist" aria-hidden>
+          /
+        </span>
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="shrink-0 text-ink outline-none transition-colors hover:text-pine focus-visible:ring-2 focus-visible:ring-pine/40"
+        >
+          我的项目
+        </button>
+        <span className="shrink-0 text-mist" aria-hidden>
+          /
+        </span>
+        {printKind ? (
+          <>
+            <span className="shrink-0 truncate text-ink" title={projectName}>
+              {projectName}
+            </span>
+            <span className="shrink-0 text-mist" aria-hidden>
+              /
+            </span>
+            <span className="shrink-0 text-ink">
+              {printKind === 'schedule' ? '日程表' : '月历'}
+            </span>
+          </>
+        ) : (
+          <span className="min-w-0 truncate text-ink" title={projectName}>
+            {projectName}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  const label = STATIC_CRUMB[pathname];
+  if (!label) return null;
+  return (
+    <div className="flex min-w-0 items-center text-[13px] font-medium text-ink" title={label}>
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
 export function TopBar(): JSX.Element {
   const location = useLocation();
-  const searchQuery = useUiStore((s) => s.searchQuery);
-  const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const openSidebarDrawer = useLayoutStore((s) => s.openSidebarDrawer);
 
   const desktopSearchRef = useRef<HTMLInputElement>(null);
-  const phoneSearchRef = useRef<HTMLInputElement>(null);
   const tabletSearchRef = useRef<HTMLInputElement>(null);
-  /** 桌面档（≥xl）搜索框是否展开为常驻输入框；默认收起为图标（调研结论 3） */
-  const [desktopSearchOpen, setDesktopSearchOpen] = useState(false);
-  /** 平板档（640～1279）的搜索框是否展开；手机档常驻展开 */
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+  /** 平板档（768–1279）搜索框是否展开；手机档常驻展开，桌面档常驻展开 */
   const [tabletSearchOpen, setTabletSearchOpen] = useState(false);
 
   /**
-   * ⌘K / Ctrl+K / Alt+K 全局快捷键：按当前视口展开并聚焦对应的搜索框。
-   * 瘦身后三档的搜索**都**默认收起（顶栏不再常驻 480px 输入框），
-   * 故快捷键一并承担「展开」动作——否则聚焦到未挂载的 ref 上会静默失败。
+   * ⌘K / Ctrl+K / Alt+K 全局快捷键：按当前视口聚焦 / 展开对应的搜索框。
+   * 桌面档搜索常驻（直接聚焦）；平板档需先展开再聚焦；手机档直接聚焦整行框。
    */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if ((e.metaKey || e.ctrlKey || e.altKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         if (window.innerWidth >= 1280) {
-          setDesktopSearchOpen(true);
           window.setTimeout(() => {
             desktopSearchRef.current?.focus();
             desktopSearchRef.current?.select();
           }, 0);
-        } else if (window.innerWidth >= 640) {
+        } else if (window.innerWidth >= 768) {
           setTabletSearchOpen(true);
           window.setTimeout(() => {
             tabletSearchRef.current?.focus();
             tabletSearchRef.current?.select();
           }, 0);
         } else {
-          phoneSearchRef.current?.focus();
-          phoneSearchRef.current?.select();
+          mobileSearchRef.current?.focus();
+          mobileSearchRef.current?.select();
         }
       }
     };
@@ -133,159 +198,84 @@ export function TopBar(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  /** 切页时收起桌面/平板的展开态搜索框，避免挡住新页面的标题区 */
+  /** 切页时收起平板的展开态搜索框，避免挡住新页面的标题区 */
   useEffect(() => {
-    setDesktopSearchOpen(false);
     setTabletSearchOpen(false);
   }, [location.pathname]);
 
   return (
-    <header
-      className={cn(
-        'relative z-40 shrink-0 print:hidden',
-        // §3.5：常驻导航条不做玻璃浮起 —— 纸白底 + 极弱底部分隔线
-        'border-b border-line bg-cream',
-      )}
-    >
-      <div className="px-4 pt-4 sm:px-6 lg:px-8">
-        {/*
-          常驻 4 块容器的 flex 布局。
-          注意：这里**没有** footer 式的 flex-wrap 卡片结构了——瘦身后单行即可容纳，
-          卡片圆角/padding16/玻璃背景一并去掉（原 `glass-strong ... rounded-[20px] p-4`）。
-        */}
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          {/* ── ① 汉堡（<xl，打开侧栏抽屉）+ Logo + 品牌名 ── */}
-          <div className="order-1 flex shrink-0 items-center gap-2 sm:gap-3">
-            {/*
-              汉堡按钮：仅 <xl 渲染（`xl:hidden`）。≥xl 时侧栏是持久左栏，
-              再给一个「打开导航」按钮无处可指（抽屉在 xl 档不参与布局）。
-              用 `openSidebarDrawer` 显式打开而非 toggle：语义是「打开导航」，
-              不做「再次点击关闭」——关闭由 Modal 遮罩/Escape/选中项承担（D3）。
-            */}
+    <header className="relative z-40 shrink-0 border-b border-line bg-paper print:hidden">
+      {/*
+        顶栏主行（桌面+平板单⾏ / 手机第⼀⾏）。
+        高度：手机 md: 56 / 桌面 xl: 64；横向 padding 与 gap 随断点收紧（§2.4）。
+      */}
+      <div className="flex h-14 items-center gap-3 px-4 md:gap-3 md:px-4 xl:h-16 xl:gap-4 xl:px-6">
+        {/* 左组：汉堡 + 品牌（仅 <xl）+ 面包屑（手机隐藏，避免与品牌争位） */}
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {/* 汉堡（<xl，打开侧栏抽屉）+ 品牌名——≥xl 侧栏已是持久左栏，无需此按钮 */}
+          <div className="flex shrink-0 items-center gap-2 xl:hidden">
             <button
               type="button"
               onClick={openSidebarDrawer}
               aria-label="打开导航菜单"
               aria-controls="app-sidebar"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink xl:hidden"
+              className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink"
             >
               <Menu size={18} aria-hidden />
             </button>
-
-            <Link to="/" className="flex shrink-0 items-center gap-3">
-              {/* 品牌 P logo：白色圆角方块 + 蓝色 P，直接展示产品图 */}
-              <img
-                src="/logo.png"
-                alt="ID Plan logo"
-                aria-hidden
-                className="h-10 w-10 rounded-[12px] object-cover shadow-soft"
-              />
-              <span className="flex flex-col">
-                <span className="font-display text-lg font-bold leading-6 text-ink">ID Plan</span>
-                {/* L-06：副标题改行业中性表述（原「室内设计项目管理」把跨行业产品写窄了） */}
-                <span className="hidden text-xs leading-[14px] text-mist sm:block">
-                  项目排期与交付管理
-                </span>
-              </span>
-            </Link>
+            <span className="font-display text-[15px] font-semibold leading-5 text-ink">
+              ID Plan
+            </span>
           </div>
 
-          {/*
-            ── ② 搜索（图标 + ⌘K；展开时才渲染输入框）──
-            - 手机（<sm）：basis-full 强制换行，独占第二行整行，输入框常驻；
-            - sm 以上：basis-0 + grow 吸收剩余空间，图标/展开框二选一。
-          */}
-          <div className="order-3 flex min-w-0 grow basis-full justify-center sm:order-2 sm:basis-0">
-            {/* 桌面端（≥xl）：默认图标，点击/⌘K 展开为内联输入框（去 480px 常驻框） */}
-            <div className="hidden items-center justify-center xl:flex">
-              {desktopSearchOpen ? (
-                <div className="flex w-[480px] max-w-full items-center gap-2.5 rounded-[14px] border border-line bg-cream/60 p-2.5">
-                  <Search size={15} className="shrink-0 text-mist" aria-hidden />
-                  <ImeInput
-                    ref={desktopSearchRef}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="搜索项目、任务或客户…"
-                    aria-label="搜索项目、任务或客户"
-                    className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-mist"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setDesktopSearchOpen(false);
-                    }}
-                    aria-label="清空并关闭搜索"
-                    className="shrink-0 text-mist transition-colors hover:text-ink"
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDesktopSearchOpen(true);
-                    window.setTimeout(() => {
-                      desktopSearchRef.current?.focus();
-                      desktopSearchRef.current?.select();
-                    }, 0);
-                  }}
-                  aria-label="打开搜索（快捷键 ⌘K / Ctrl+K / Alt+K）"
-                  title="搜索（⌘K）"
-                  className="flex h-9 items-center gap-2 rounded-[10px] border border-line px-3 text-mist transition-colors hover:bg-sand hover:text-ink"
-                >
-                  <Search size={18} aria-hidden />
-                  <span className="text-xs" aria-hidden>
-                    ⌘K
-                  </span>
-                </button>
-              )}
-            </div>
-
-            {/* 手机端（<sm）：搜索框常驻，独占整行 */}
-            <div className="flex w-full justify-center sm:hidden">
-              <CompactSearchField inputRef={phoneSearchRef} onClose={() => setSearchQuery('')} />
-            </div>
-
-            {/* 平板端（sm～xl）：折叠为图标，点击展开内联输入框 */}
-            <div className="hidden w-full items-center justify-center sm:flex xl:hidden">
-              {tabletSearchOpen ? (
-                <CompactSearchField
-                  inputRef={tabletSearchRef}
-                  onClose={() => {
-                    setSearchQuery('');
-                    setTabletSearchOpen(false);
-                  }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTabletSearchOpen(true);
-                    window.setTimeout(() => {
-                      tabletSearchRef.current?.focus();
-                      tabletSearchRef.current?.select();
-                    }, 0);
-                  }}
-                  aria-label="打开搜索"
-                  className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink"
-                >
-                  <Search size={18} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* ── ③④ 身份头像 + 设置 + ⋮更多 ── */}
-          <div className="order-2 ml-auto flex shrink-0 items-center gap-2 sm:order-3 sm:gap-3">
-            {/* 设置：入口按钮，所有角色可用；导出日志收进设置面板 */}
-            <SettingsButton />
-            {/* 平板 / 手机：其余次要控件收进「⋮ 更多」（组件内部 xl:hidden） */}
-            <MobileMoreMenu />
-            <MemberIdentityPicker />
+          {/* 面包屑：平板与桌面显示，手机隐藏（手机第⼀⾏仅汉堡+品牌） */}
+          <div className="hidden min-w-0 md:flex md:flex-1">
+            <Breadcrumbs />
           </div>
         </div>
+
+        {/* 右组：搜索 + 设置 + ⋮更多 + 身份头像 */}
+        <div className="ml-auto flex shrink-0 items-center gap-3 xl:gap-4">
+          {/* 桌面（≥xl）：搜索常驻 280×36（bg-sunken 圆角 16） */}
+          <SearchField inputRef={desktopSearchRef} className="hidden w-[280px] xl:flex" />
+
+          {/* 平板（768–1279）：图标按钮，点击展开为内联 280 搜索 */}
+          <div className="hidden md:flex xl:hidden">
+            {tabletSearchOpen ? (
+              <SearchField
+                inputRef={tabletSearchRef}
+                onClose={() => setTabletSearchOpen(false)}
+                className="w-[280px]"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setTabletSearchOpen(true);
+                  window.setTimeout(() => {
+                    tabletSearchRef.current?.focus();
+                    tabletSearchRef.current?.select();
+                  }, 0);
+                }}
+                aria-label="打开搜索"
+                title="搜索（⌘K）"
+                className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink"
+              >
+                <Search size={18} aria-hidden />
+              </button>
+            )}
+          </div>
+
+          {/* 设置入口 + ⋮更多（<xl 才渲染，复用既有逻辑，保留功能不丢） */}
+          <SettingsButton />
+          <MobileMoreMenu />
+          <MemberIdentityPicker />
+        </div>
+      </div>
+
+      {/* 手机第⼆⾏（<768）：整宽搜索框，高 36 / 圆角 12 / pad 0 12 / gap 8 */}
+      <div className="flex h-11 items-center px-4 md:hidden">
+        <SearchField inputRef={mobileSearchRef} className="w-full rounded-xl" />
       </div>
     </header>
   );

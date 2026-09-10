@@ -116,6 +116,13 @@ export function SettingsDialog({
             <div className="flex items-center gap-2">
               <Settings size={16} className="text-pine" aria-hidden />
               <h2 className="font-display text-base font-semibold text-ink">设置</h2>
+              {/* Beta 标记（v0.7）：与侧栏品牌同款徽标，提示内测版本 */}
+              <span
+                title="内测版本"
+                className="inline-flex h-[18px] shrink-0 items-center rounded-sm bg-pine-soft px-1.5 text-[10px] font-medium text-pine"
+              >
+                Beta
+              </span>
             </div>
             <button
               type="button"
@@ -255,6 +262,10 @@ export function SettingsDialog({
                   <dt className="text-mist">版本号</dt>
                   <dd className="font-medium text-ink">{BUILD_VERSION}</dd>
                 </div>
+                {/* 内测提示（v0.7）：与标题 Beta 徽标呼应，克制地说明版本状态 */}
+                <p className="pt-0.5 text-[11px] leading-relaxed text-mist">
+                  内测版本，功能与数据格式仍可能调整。
+                </p>
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-mist">前端</dt>
                   <dd className="text-ink">{FRONTEND_STACK}</dd>

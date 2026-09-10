@@ -19,12 +19,12 @@ import { useUiStore } from '../../store/useUiStore';
  *   ├─ Sidebar                      ← ≥xl 持久左栏（240/64 可切）/ <xl Modal 抽屉
  *   └─ div.flex-1.flex-col          ← 内容区（TopBar + main 独占剩余宽度）
  *      ├─ TopBar                    ← 瘦身后常驻 ≤4 元素
- *      └─ main.max-w-[1600px]       ← **全站唯一**内容宽度锚点
+ *      └─ main.max-w-[1440px]       ← **全站唯一**内容宽度锚点（v0.7 §6.2）
  *
  * 关键决策（§3.4，R12 对策）：
- * 1. `<main>` 保留 `max-w-[1600px]`，作为**唯一出处**。
+ * 1. `<main>` 保留 `max-w-[1440px]`（原 1600，v0.7 §6.2 改为 1440），作为**唯一出处**。
  *    TopBar 与 AgentBoardPage 的重复约束已在 T21/T18 删除——否则会出现
- *    「侧栏 + main 内又一层 1600 容器」的双重留白（L-08 验收点）。
+ *    「侧栏 + main 内又一层容器」的双重留白（L-08 验收点）。
  * 2. 内容区加 `min-w-0`：flex 子项默认 `min-width:auto`，内含 overflow-hidden /
  *    grid 时会被内容撑破、把侧栏挤出视口。`min-w-0` 是 flex 布局标配修复。
  * 3. 内容区带 `.app-content-column` 钩子类：打印时由 @media print 拉平为整幅纸宽
@@ -50,7 +50,15 @@ export function AppShell(): JSX.Element {
       {/* 内容区：flex-1 吃掉剩余宽度；min-w-0 防内容撑破导致侧栏被挤出 */}
       <div className="app-content-column flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="mx-auto w-full max-w-[1600px] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+        {/*
+          内容区宽度锚点（§6.2）：≥1440 时 max-width: 1440px + margin-inline: auto。
+          1440 视口下侧栏 240 + 右侧区 1200，main 在 1200 容器里撑满，再减页面横向内边距
+          32×2 = 1136 内容宽，正好等于画板 02 内容区宽度——值是算出来的，非拍定。
+          内边距全部移除：各页面内边距不同（首页/项目详情 32、Agent 看板 24、月历
+          20/36/24/36，§1.8/§2.5），统一内边距无法表达，改由各页面根节点自持。
+          ⚠️ 过渡期页面会暂时贴边——这是预期，负责各页面的成员会补正确内边距，勿回加。
+        */}
+        <main className="mx-auto w-full max-w-[1440px]">
           <Outlet />
         </main>
       </div>

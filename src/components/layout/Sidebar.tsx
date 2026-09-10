@@ -14,6 +14,9 @@ import { useLayoutStore, isXlViewport } from '../../store/useLayoutStore';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
 import { STAGE_BAR_COLORS } from '../timeline/stageColors';
+import { MEMBER_ROLE_LABELS } from '../../core/types/enums';
+import { computeProjectStatus } from '../../lib/progress';
+import type { Project, Stage } from '../../core/types/entities';
 import { cn } from '../../lib/cn';
 
 /**
@@ -31,21 +34,26 @@ import { cn } from '../../lib/cn';
  *
  * ── 打印页互斥（R20 · 三重保险）──
  *   ① 路由层：命中 `/project/:id/(schedule|calendar)-print` → **`return null`**
- *      （与 HomeRouteGuard 同思路，此处是最强的保险：DOM 根本不生成）
  *   ② CSS 类层：根节点 / 抽屉面板带 `print:hidden`
  *   ③ 全局 CSS 层：global.css `@media print` 段的 `[data-app-sidebar]{display:none}`
- *   注意：两条打印路由的 `max-w-[900px]` 是 A4 预览**刻意保留**的，不并入 1600。
+ *   注意：两条打印路由的 `max-w-[900px]` 是 A4 预览**刻意保留**的，不并入 1440。
  *
  * ── 抽屉复用 `Modal`（§3.3.4）──
  * 采纳 Modal（`createPortal` + 遮罩点击关闭 + Escape + 焦点圈禁 + body 滚动锁定
  * + `role="dialog"`），与 `TaskDrawer` 同一底座，行为一致。
- * **不用** `MobileMoreMenu` 式绝对定位 Popover：它缺焦点圈禁与滚动锁定（R7 风险）。
  *
- * ── 玻璃层次（§3.6 规范）──
- * 侧栏是**常驻结构面板**，允许用 `glass-strong`（实心 paper + raised-lg 阴影）。
- * 注意「glass-strong 是实心面板」——项目已移除 backdrop-blur，"glass" 是历史误称，
- * 层次只靠阴影表达。**浮层（抽屉）** 用 glass 由 Modal 子面板承担。
- * 暗色下 glass-strong 自动变 #1e2127 实心（--paper-rgb 30 33 39），无适配成本。
+ * ── 暗色差异（§5 / 画板 22）──
+ *   侧栏底色走 `bg-paper` token，暗色自动解析为 `#1F2126`（--paper-rgb 由
+ *   `[data-theme="dark"]` 覆盖），不写死 hex。激活导航项底沿用 `bg-pine-soft`：
+ *   该 token 在暗色下解析为 `#24264A`（= 画板 22 的 Agent 激活底），与规格一致。
+ *   注：tailwind.config.ts 未配 `darkMode`（项目用 `<html data-theme>` 而非
+ *   Tailwind `class="dark"`），故 `dark:` 变体不可用；暗色下「内边距 12→16、
+ *   gap 10→8」的微调按纪律跳过（见报告 B3）。
+ *
+ * ── 新结构（v0.7 §2.2 / §2.3）──
+ *   展开态三段式：头部（Logo+品牌+Beta+折叠）/ 主导航+项目列表 / 底部（设置+备份+新建+身份）。
+ *   收起态：Logo("P") + 展开键 + 分隔 + 4 图标导航 + 3 项目彩条 + 弹性占位 +
+ *   设置/新建/身份。所有收起态元素带 `title` tooltip。
  */
 
 /** 打印路由正则：与 main.tsx 的两条 *-print 子路由严格对应 */
@@ -55,21 +63,8 @@ const PRINT_ROUTE_RE = /\/project\/[^/]+\/(schedule|calendar)-print$/;
 const SIDEBAR_ID = 'app-sidebar';
 
 /**
- * 打印路由守卫（R20 保险 ① · 路由层）。
- *
- * **结构性保证**：把「命中打印路由 → 不渲染侧栏」做成**外层组件的 early return**，
- * 而不是在 Sidebar 内部中间位置 return。这样：
- *   1) 命中打印路由时，`SidebarBody` 整个子树**根本不挂载**——不跑
- *      useBackupIo / useUpdateCheck / matchMedia 监听等任何 hook 与副作用，
- *      打印页零额外开销（打印页的数据装载逻辑本就独立）；
- *   2) 不存在「hook 顺序随路由变化」的任何可讨论空间——外层组件只有 1 个 hook
- *      （useLocation），且它在两条分支下都被调用。
- *
- * 为什么需要这一层而不是只靠 `print:hidden`：
- *   打印样式是在**打印时**生效的；但用户在屏幕上浏览打印页时，
- *   `print:hidden` 不生效，侧栏会照常出现在屏幕上挡住 A4 预览。PRD §3.7.1
- *   要求「打印页不显示侧栏」在屏幕态也成立——所以路由层判定是必需的，
- *   `print:hidden` 只是防「用户从普通页直接 Ctrl+P」的第二道保险。
+ * 打印路由守卫（R20 保险 ① · 路由层）。命中打印路由 → 不渲染侧栏（DOM 根本不生成），
+ * 避免用户在屏幕上浏览打印页时侧栏挡住 A4 预览（PRD §3.7.1 要求屏幕态也不显示）。
  */
 export function Sidebar(): JSX.Element | null {
   const { pathname } = useLocation();
@@ -78,12 +73,11 @@ export function Sidebar(): JSX.Element | null {
 }
 
 /**
- * 侧栏主体（仅在非打印路由挂载）。
- * `pathname` 由外层传入，本组件不再自行读 location——
- * 单一份路径来源，避免两处 useLocation 结果在某些过渡态下不一致。
+ * 侧栏主体（仅在非打印路由挂载）。`pathname` 由外层传入，本组件不再自行读 location——
+ * 单一份路径来源，避免两处 useLocation 在过渡态下不一致。
  */
 function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
-  const { isAdmin } = useRoleGuard();
+  const { isAdmin, currentMember } = useRoleGuard();
   const openManualForm = useUiStore((s) => s.openManualForm);
 
   const sidebarExpanded = useLayoutStore((s) => s.sidebarExpanded);
@@ -101,10 +95,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   /**
-   * 是否达到 xl（≥1280）。
-   * 用于决定「持久栏是否真正参与布局」——虽然显隐已由 Tailwind `hidden xl:flex`
-   * 承担，但折叠开关的语义（切换折叠 vs 切换抽屉）需要 JS 侧的同一口径。
-   * 用 state + resize 监听而非一次性求值：视口拖动跨断点时需重新判定。
+   * 是否达到 xl（≥1280）。用于决定「持久栏是否真正参与布局」——虽显隐由
+   * `hidden xl:flex` 承担，但折叠开关语义需 JS 侧同一口径。
    */
   const [xl, setXl] = useState<boolean>(() => isXlViewport());
 
@@ -117,29 +109,15 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  /**
-   * <xl 时强制收起（R13 明确要求：「xl 以下强制折叠，忽略持久值」）。
-   * 注意不是「把 store 改成 false」——那会污染用户在桌面端的偏好
-   * （在窄屏开一次页面，回到宽屏就变成收起了，属于状态串台）。
-   * 正确做法：**只影响本档位的渲染结果**，持久值原样保留。
-   */
+  /** <xl 时强制收起（R13：xl 以下强制折叠，忽略持久值，但不污染持久值本身） */
   const collapsed = xl ? !sidebarExpanded : true;
 
-  /**
-   * 补一步：<xl 时把 DOM 属性也强制为收起。
-   * 否则 data-sidebar-collapsed 会停在持久值（如展开），而实际渲染是抽屉，
-   * 两者口径不一致——虽不影响本档位观感，但会让「属性即真相」的约定失真，
-   * 也让 QA 的截图断言（读 data-sidebar-collapsed）产生误判。
-   */
   useEffect(() => {
     if (xl) return;
     document.documentElement.dataset.sidebarCollapsed = 'true';
   }, [xl]);
 
-  /**
-   * 换页时自动收起抽屉（<1280）。
-   * 否则点抽屉里的导航项跳转后，抽屉仍盖在新页面上，用户需要再点一次关闭。
-   */
+  /** 换页时自动收起抽屉（<1280），否则点导航跳转后抽屉仍盖在新页面上 */
   useEffect(() => {
     closeDrawer();
   }, [pathname, closeDrawer]);
@@ -151,39 +129,45 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   };
 
   const currentProjectId = matchProjectId(pathname);
+  /** 今日 ISO（YYYY-MM-DD，UTC）。仅供侧栏状态点的临期估算，误差一日内可接受 */
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   /** 侧栏主体内容（抽屉与持久栏共用同一棵子树，避免两份实现漂移） */
-  const body = (opts: { inDrawer: boolean }): JSX.Element => {
-    const isCollapsed = opts.inDrawer ? false : collapsed;
+  const body = ({ inDrawer }: { inDrawer: boolean }): JSX.Element => {
+    const isCollapsed = inDrawer ? false : collapsed;
     return (
       <div className="flex h-full min-h-0 flex-col">
-        {/* 头：Logo + 折叠开关（抽屉内改为标题 + 显式关闭由 Modal 遮罩/Escape 承担） */}
-        <div
-          className={cn(
-            'flex shrink-0 items-center gap-2 px-3 pb-2 pt-4',
-            isCollapsed && 'flex-col gap-1.5 px-0',
-          )}
-        >
+        {isCollapsed ? renderCollapsed() : renderExpanded(inDrawer)}
+      </div>
+    );
+  };
+
+  /** 展开 / 抽屉态：头部 + 主导航 + 项目列表 + 底部（§2.2） */
+  const renderExpanded = (inDrawer: boolean): JSX.Element => {
+    return (
+      <>
+        {/* 头部：Logo + 品牌 + Beta + 折叠键（行高 40，gap 10，横向 padding 12） */}
+        <div className="flex h-10 shrink-0 items-center gap-2.5 px-3">
           <Link
             to="/"
             aria-label="ID Plan 首页"
-            className={cn(
-              'flex items-center gap-2.5 rounded-[10px] outline-none',
-              'focus-visible:ring-2 focus-visible:ring-pine/40',
-              isCollapsed && 'justify-center',
-            )}
+            className="flex min-w-0 items-center gap-2.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <img
               src="/logo.png"
               alt="ID Plan logo"
               aria-hidden
-              className="h-9 w-9 shrink-0 rounded-[10px] object-cover shadow-soft"
+              className="h-8 w-8 shrink-0 rounded-sm object-cover shadow-soft"
             />
-            {!isCollapsed && (
-              <span className="font-display text-md font-bold leading-5 text-ink">ID Plan</span>
-            )}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-display text-[15px] font-semibold leading-5 text-ink">
+                ID Plan
+              </span>
+              <BetaBadge />
+            </span>
           </Link>
-          {!isCollapsed && (
+          {/* 抽屉内由 Modal 遮罩/Esc 关闭，不渲染折叠键；持久栏才需要 */}
+          {!inDrawer && (
             <div className="ml-auto">
               <SidebarCollapseToggle
                 collapsed={false}
@@ -193,24 +177,17 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             </div>
           )}
         </div>
-        {isCollapsed && (
-          <div className="flex shrink-0 justify-center pb-1.5">
-            <SidebarCollapseToggle
-              collapsed
-              onToggle={onToggleCollapse}
-              controlsId={SIDEBAR_ID}
-            />
-          </div>
-        )}
 
         {/* 可滚动区：主导航 + 项目列表（内容多时独立滚动，底部动作区固定不动） */}
-        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-          <SidebarNav collapsed={isCollapsed} />
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          {/* 主导航（§2.2：纵向 gap 4；每项高 40、横向 padding 12、gap 10、圆角 12） */}
+          <SidebarNav collapsed={false} drawer={inDrawer} />
 
-          {/* 项目列表（§3.3.2）：复用首页项目数据源，带 stage.sN 阶段彩条点缀 */}
-          {!isCollapsed && projects.length > 0 && (
-            <div className="mt-4 px-2">
-              <div className="px-3 pb-1.5 text-xs text-mist">项目</div>
+          {/* 项目列表（§2.2）：容器 gap 2、padding 4；标题行高 28「项目」11/500 mist；
+              条目高 36、padding 8、gap 8、圆角 12，含阶段色条 + 项目名 + 状态点 */}
+          {projects.length > 0 && (
+            <div className="mt-3 px-3">
+              <div className="pb-1 text-[11px] font-medium text-mist">项目</div>
               <ul className="flex flex-col gap-0.5">
                 {projects.slice(0, SIDEBAR_PROJECT_LIMIT).map((p) => {
                   const active = currentProjectId === p.id;
@@ -221,20 +198,30 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                         to={`/project/${p.id}`}
                         title={p.name}
                         aria-current={active ? 'page' : undefined}
-                        className={cn(navItemClass(active, false), 'gap-2')}
+                        className={cn(
+                          'flex h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 outline-none transition-colors',
+                          'focus-visible:ring-2 focus-visible:ring-pine/40',
+                          active ? 'bg-sunken' : 'hover:bg-sand',
+                        )}
                       >
+                        {/* 阶段色条 4×16，用该项目的阶段 main 色（实心块，走 STAGE_BAR_COLORS） */}
                         <span
                           aria-hidden
-                          className="h-3 w-1 shrink-0 rounded-full"
+                          className="h-4 w-1 shrink-0 rounded-[2px]"
                           style={{ backgroundColor: STAGE_BAR_COLORS[colorIdx] ?? 'transparent' }}
                         />
-                        <span className="truncate">{p.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{p.name}</span>
+                        {/* 状态点 6×6：正常 moss / 临期 amber / 逾期 clay */}
+                        <span
+                          aria-hidden
+                          className={cn('h-1.5 w-1.5 shrink-0 rounded-full', projectStatusDotClass(p, stages, todayIso))}
+                        />
                       </Link>
                     </li>
                   );
                 })}
                 {projects.length > SIDEBAR_PROJECT_LIMIT && (
-                  <li className="px-3 pt-1 text-xs text-mist">
+                  <li className="px-2 pt-1 text-[11px] text-mist">
                     还有 {projects.length - SIDEBAR_PROJECT_LIMIT} 个项目…
                   </li>
                 )}
@@ -243,22 +230,17 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           )}
         </div>
 
-        {/* 底部固定区：设置 + 备份 + 新建（§3.3.2「底部（固定）」） */}
-        <div
-          className={cn(
-            'shrink-0 border-t border-line px-2 py-2',
-            isCollapsed ? 'flex flex-col items-center gap-1' : 'flex flex-col gap-0.5',
-          )}
-        >
+        {/* 底部固定区（§2.2：设置/保存备份/加载备份 + 新建项目 + 身份行，纵向 gap 4） */}
+        <div className="shrink-0 space-y-1 border-t border-line px-3 py-3">
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
             aria-label="设置"
             title="设置（导出日志 / 清空日志）"
-            className={cn(navItemClass(false, isCollapsed), 'relative')}
+            className={cn(navItemClass(false, false, inDrawer), 'relative')}
           >
             <span className="relative inline-flex shrink-0">
-              <Settings size={18} aria-hidden />
+              <Settings size={18} className="text-mist" aria-hidden />
               {hasUpdate && (
                 <span
                   className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-clay ring-2 ring-paper"
@@ -266,7 +248,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                 />
               )}
             </span>
-            {!isCollapsed && <span className="truncate">设置</span>}
+            <span className="truncate text-[13px] text-ink">设置</span>
           </button>
 
           {/* 备份两按钮：**管理员专属**（与原 TopBar 一致，不放开权限口径） */}
@@ -277,20 +259,20 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                 onClick={() => void save()}
                 aria-label="保存备份"
                 title="保存备份"
-                className={cn(navItemClass(false, isCollapsed))}
+                className={cn(navItemClass(false, false, inDrawer))}
               >
-                <Save size={18} className="shrink-0" aria-hidden />
-                {!isCollapsed && <span className="truncate">保存备份</span>}
+                <Save size={18} className="shrink-0 text-mist" aria-hidden />
+                <span className="truncate text-[13px] text-ink">保存备份</span>
               </button>
               <button
                 type="button"
                 onClick={() => pick()}
                 aria-label="加载备份"
                 title="加载备份"
-                className={cn(navItemClass(false, isCollapsed))}
+                className={cn(navItemClass(false, false, inDrawer))}
               >
-                <Upload size={18} className="shrink-0" aria-hidden />
-                {!isCollapsed && <span className="truncate">加载备份</span>}
+                <Upload size={18} className="shrink-0 text-mist" aria-hidden />
+                <span className="truncate text-[13px] text-ink">加载备份</span>
               </button>
             </>
           )}
@@ -302,21 +284,151 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               onClick={openManualForm}
               aria-label="新建项目"
               title="新建项目"
-              className={cn(
-                'btn-aura flex items-center gap-2.5 text-sm text-white outline-none',
-                'focus-visible:ring-2 focus-visible:ring-pine/40',
-                isCollapsed ? 'h-10 w-10 justify-center self-center rounded-[10px]' : 'w-full rounded-[10px] px-3 py-2',
-              )}
+              className="btn-aura flex w-full items-center justify-center gap-2.5 rounded-2xl px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
             >
               <PenLine size={18} className="shrink-0" aria-hidden />
-              {!isCollapsed && <span className="truncate">新建项目</span>}
+              <span className="truncate">新建项目</span>
             </button>
           )}
+
+          {/* 身份行（§2.2：高 52、sunken 底、圆角 12、头像 28 + 姓名/角色 13） */}
+          {currentMember && (
+            <div
+              className="flex h-[52px] items-center gap-2 rounded-md bg-sunken px-2"
+              title={`${currentMember.name} · ${MEMBER_ROLE_LABELS[currentMember.roleKind]}`}
+            >
+              {/*
+                头像底色来自数据字段（Member.avatarColor），非设计 token——故此处允许裸 hex
+                仅作 fallback（与 MemberIdentityPicker 一致），避免使用未上传头像时的占位灰。
+              */}
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] text-white"
+                style={{ backgroundColor: currentMember.avatarColor ?? '#8A959E' }}
+                aria-hidden
+              >
+                {(currentMember.name ?? '?')[0]}
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-[13px] text-ink">{currentMember.name}</span>
+                <span className="truncate text-[11px] text-mist">
+                  {MEMBER_ROLE_LABELS[currentMember.roleKind]}
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  /** 收起态（§2.3 · 宽 64）：Logo("P") + 展开键 + 分隔 + 4 图标导航 + 3 项目彩条 + 占位 + 设置/新建/身份 */
+  const renderCollapsed = (): JSX.Element => {
+    const top3 = projects.slice(0, 3);
+    return (
+      <>
+        {/* Logo（字面 "P"，40×40 圆角 12，pine 底白字） + 展开键（40×40 sunken 圆角 12） */}
+        <div className="flex shrink-0 flex-col items-center gap-2 py-3">
+          <Link
+            to="/"
+            title="ID Plan v0.7 Beta"
+            aria-label="ID Plan 首页"
+            className="flex h-10 w-10 items-center justify-center rounded-md bg-pine text-[15px] font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
+          >
+            P
+          </Link>
+          <SidebarCollapseToggle collapsed onToggle={onToggleCollapse} controlsId={SIDEBAR_ID} />
         </div>
 
-        {/* 收起态给一个「项目」入口兜底：项目列表在收起时不可见，
-            但 `/`（项目首页）已由主导航项承担，故此处无需重复入口。 */}
-      </div>
+        {/* 分隔线 40×1 */}
+        <div className="mx-auto my-1 h-px w-10 bg-line" />
+
+        {/* 4 个导航图标键（40×40 圆角 12，激活态 bg-pine-soft） */}
+        <SidebarNav collapsed />
+
+        {/* 3 条项目彩条（40×36 圆角 12，内含竖条 4×20 用阶段 main 色） */}
+        {top3.length > 0 && (
+          <div className="flex flex-col items-center gap-1 py-2">
+            {top3.map((p) => {
+              const colorIdx = resolveStageColorIndex(projectStageOrder(p.id, stages));
+              return (
+                <Link
+                  key={p.id}
+                  to={`/project/${p.id}`}
+                  title={p.name}
+                  aria-label={p.name}
+                  className="flex h-9 w-10 items-center justify-center rounded-md bg-sunken outline-none transition-colors hover:bg-line focus-visible:ring-2 focus-visible:ring-pine/40"
+                >
+                  <span
+                    aria-hidden
+                    className="h-5 w-1 rounded-[2px]"
+                    style={{ backgroundColor: STAGE_BAR_COLORS[colorIdx] ?? 'transparent' }}
+                  />
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 弹性占位：把设置 + 新建压到底部 */}
+        <div className="flex-1" />
+
+        {/* 设置 + （管理员）备份 + 新建 + 身份头像 */}
+        <div className="flex shrink-0 flex-col items-center gap-1 py-2">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="设置"
+            title="设置"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
+          >
+            <Settings size={18} aria-hidden />
+          </button>
+          {isAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => void save()}
+                aria-label="保存备份"
+                title="保存备份"
+                className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
+              >
+                <Save size={18} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => pick()}
+                aria-label="加载备份"
+                title="加载备份"
+                className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
+              >
+                <Upload size={18} aria-hidden />
+              </button>
+            </>
+          )}
+          {isAdmin && onProjectPage(pathname) && (
+            <button
+              type="button"
+              onClick={openManualForm}
+              aria-label="新建项目"
+              title="新建项目"
+              className="btn-aura flex h-10 w-10 items-center justify-center rounded-md text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
+            >
+              <PenLine size={18} aria-hidden />
+            </button>
+          )}
+          {currentMember && (
+            <Link
+              to="/"
+              title={`${currentMember.name} · ${MEMBER_ROLE_LABELS[currentMember.roleKind]}`}
+              aria-label={currentMember.name}
+              className="mt-1 flex h-8 w-8 items-center justify-center rounded-full text-[13px] text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
+              style={{ backgroundColor: currentMember.avatarColor ?? '#8A959E' }}
+            >
+              {(currentMember.name ?? '?')[0]}
+            </Link>
+          )}
+        </div>
+      </>
     );
   };
 
@@ -337,7 +449,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         <div className="flex h-full w-full min-w-0 flex-col">{body({ inDrawer: false })}</div>
       </aside>
 
-      {/* ── 抽屉（<xl）：复用 Modal placement="right"（§3.3.4）── */}
+      {/* ── 抽屉（<xl）：复用 Modal placement="right"（§3.3.4）──
+          画板 10：宽 264、内 padding 16、导航项高 44；手机（<768）全屏（w-full） */}
       <Modal
         open={!xl && drawerOpen}
         onClose={closeDrawer}
@@ -346,7 +459,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
       >
         <div
           data-app-sidebar=""
-          className="glass-strong h-full w-[280px] max-w-[85vw] overflow-hidden rounded-l-[20px] border-0 print:hidden"
+          className="glass-strong h-full w-[264px] max-w-[100vw] overflow-hidden rounded-l-[20px] border-0 p-4 print:hidden max-md:w-full"
         >
           {body({ inDrawer: true })}
         </div>
@@ -360,6 +473,36 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
       {confirmDialog}
     </>
   );
+}
+
+/** Beta 徽标（规格统一：高 18、圆角 8、横向 padding 6、文字 10/500、pine-soft 底 + pine 字） */
+function BetaBadge(): JSX.Element {
+  return (
+    <span
+      title="内测版本"
+      className="inline-flex h-[18px] shrink-0 items-center rounded-sm bg-pine-soft px-1.5 text-[10px] font-medium text-pine"
+    >
+      Beta
+    </span>
+  );
+}
+
+/**
+ * 项目状态点配色（§2.2）：正常 `bg-moss` / 临期 `bg-amber` / 逾期 `bg-clay`。
+ * 数据模型仅有 4 态（in_progress / completed / overdue / not_started），无「临期」——
+ * 用「进行中且距计划结束 ≤ 7 天」近似临期，其余归为正常（绿）。
+ */
+function projectStatusDotClass(project: Project, stages: Stage[], todayIso: string): string {
+  const s = computeProjectStatus(project, stages, todayIso);
+  if (s === 'overdue') return 'bg-clay';
+  if (s === 'in_progress') {
+    const end = Date.parse(project.plannedEndAt);
+    const today = Date.parse(todayIso);
+    if (!Number.isNaN(end) && !Number.isNaN(today) && end - today <= 7 * 86_400_000) {
+      return 'bg-amber'; // 临期
+    }
+  }
+  return 'bg-moss'; // 正常：进行中未临期 / 未开始 / 已完成
 }
 
 /* ------------------------------ 纯函数辅助 ------------------------------ */

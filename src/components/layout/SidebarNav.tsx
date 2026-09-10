@@ -36,7 +36,25 @@ interface NavEntry {
   match(pathname: string): boolean;
 }
 
-export function SidebarNav({ collapsed }: { collapsed: boolean }): JSX.Element {
+/**
+ * ── 有意偏离规格画板的导航项数（v0.7 · 子系统 ① · N02 / T20）──
+ * 规格画板（画板 02/10）画了 4 项导航（项目 / 看板 / 我的任务 / Agent）。
+ * 但「看板」( `/member-board` ) 仅管理员可见、「项目」( `/` ) 仅管理员可见；
+ * 普通成员两项都不该出现。故本组**按角色动态生成**项数：
+ *   admin ：项目 / 我的任务 / Agent（3 项）
+ *   member：看板 / 我的任务 / Agent（3 项）
+ * **保留这个角色逻辑，不为了凑画板的 4 项而给成员显示无权限入口**——
+ * 否则成员点「项目」会被权限拦截或跳空白，违反「功能入口不能丢，但也别给无权限的」原则。
+ * 此项偏离已在代码注释中显式记录（team-lead 拍板：保留角色逻辑）。
+ */
+export function SidebarNav({
+  collapsed,
+  drawer = false,
+}: {
+  collapsed: boolean;
+  /** 抽屉态（<xl 的 Modal 抽屉）：导航项放大到 h44 / pad16 / 圆角 8（画板 10） */
+  drawer?: boolean;
+}): JSX.Element {
   const { isAdmin } = useRoleGuard();
   const { pathname } = useLocation();
 
@@ -79,6 +97,7 @@ export function SidebarNav({ collapsed }: { collapsed: boolean }): JSX.Element {
           Icon={Icon}
           active={match(pathname)}
           collapsed={collapsed}
+          drawer={drawer}
         />
       ))}
     </nav>
@@ -98,12 +117,15 @@ export function SidebarNavItem({
   Icon,
   active,
   collapsed,
+  drawer = false,
 }: {
   to: string;
   label: string;
   Icon: LucideIcon;
   active: boolean;
   collapsed: boolean;
+  /** 抽屉态：放大点击区到 h44 / pad16（画板 10），便于触屏点按 */
+  drawer?: boolean;
 }): JSX.Element {
   return (
     <Link
@@ -111,7 +133,7 @@ export function SidebarNavItem({
       aria-label={collapsed ? label : undefined}
       aria-current={active ? 'page' : undefined}
       title={collapsed ? label : undefined}
-      className={cn(navItemClass(active, collapsed))}
+      className={cn(navItemClass(active, collapsed, drawer))}
     >
       <Icon size={18} className="shrink-0" aria-hidden />
       {!collapsed && <span className="truncate">{label}</span>}
@@ -125,13 +147,20 @@ export function SidebarNavItem({
  * （text-pine 选中、text-mist 未选中、hover:bg-sand），
  * 只把形状从 `px-3 py-1.5` 的胶囊换成侧栏整行条目（`px-3 py-2` + `rounded-lg`）。
  * 收起态改为正方形容器（`h-10 w-10` 居中），保证 64px 栏内点击区不塌陷。
+ *
+ * 抽屉态（`drawer=true`，即 <xl 的 Modal 抽屉，画板 10）：点击区放大到
+ *   高 44（py-2.5）、横向 padding 16（px-4）、圆角 8（rounded-md），
+ * 便于触屏点按。仅影响展开态的尺寸，收起态恒为图标键、不受 drawer 影响。
  */
-export function navItemClass(active: boolean, collapsed: boolean): string {
+export function navItemClass(active: boolean, collapsed: boolean, drawer = false): string {
   return cn(
     'flex items-center gap-2.5 text-sm transition-colors outline-none',
     'focus-visible:ring-2 focus-visible:ring-pine/40',
-    collapsed ? 'h-10 w-10 justify-center self-center' : 'w-full px-3 py-2',
-    collapsed ? 'rounded-[10px]' : 'rounded-[10px]',
+    collapsed
+      ? 'h-10 w-10 justify-center self-center rounded-[10px]'
+      : drawer
+        ? 'w-full px-4 py-2.5 rounded-md'
+        : 'w-full px-3 py-2 rounded-[10px]',
     active ? 'bg-pine-soft text-pine' : 'text-mist hover:bg-sand hover:text-ink',
   );
 }
