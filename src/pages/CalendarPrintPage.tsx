@@ -153,7 +153,7 @@ export function CalendarPrintPage(): JSX.Element {
       <div className="no-print mb-6 flex flex-wrap items-center gap-2 text-sm">
         <Link
           to={`/project/${project.id}`}
-          className="inline-flex items-center gap-1 rounded-md border border-sand bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
         >
           <ArrowLeft size={14} /> 返回项目
         </Link>
@@ -162,14 +162,14 @@ export function CalendarPrintPage(): JSX.Element {
         <button
           type="button"
           onClick={onPrint}
-          className="inline-flex items-center gap-1.5 rounded-md border border-sand bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
         >
           <Printer size={14} /> 打印
         </button>
         <button
           type="button"
           onClick={onExportPdf}
-          className="inline-flex items-center gap-1.5 rounded-md border border-sand bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
         >
           <FileText size={14} /> 导出 PDF
         </button>

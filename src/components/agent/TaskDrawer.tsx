@@ -159,7 +159,7 @@ function ArtifactRow({ a }: { a: Task['artifacts'][number] }): JSX.Element {
   };
 
   return (
-    <li className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[10px] border border-sand bg-cream/50 px-2.5 py-2 text-xs">
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[10px] border border-line bg-cream/50 px-2.5 py-2 text-xs">
       <span className="text-mist">{ARTIFACT_KIND_ICONS[a.kind] ?? ARTIFACT_KIND_ICONS.other}</span>
       <span className="font-medium text-ink">{a.title}</span>
       <span className="rounded-[5px] bg-sand px-1.5 py-0.5 font-mono text-[10px] text-mist">{a.kind}</span>
@@ -169,7 +169,7 @@ function ArtifactRow({ a }: { a: Task['artifacts'][number] }): JSX.Element {
           <button
             type="button"
             onClick={() => void copyPath()}
-            className="inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-sand px-2 py-0.5 text-[10px] text-mist transition-colors hover:bg-sand hover:text-ink"
+            className="inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-line px-2 py-0.5 text-[10px] text-mist transition-colors hover:bg-sand hover:text-ink"
           >
             <Copy size={11} aria-hidden /> 复制路径
           </button>
@@ -268,7 +268,7 @@ export function TaskDrawer({
         </div>
 
         {/* ① 概要 —— 人话模式只留决策必要字段，技术字段折叠进「技术详情」 */}
-        <section className="rounded-[12px] border border-sand bg-cream/40 p-3">
+        <section className="rounded-[12px] border border-line bg-cream/40 p-3">
           <div className="mb-2 flex items-center gap-2">
             {/* 不变量 ①：人话模式不渲染 status 英文角标（PRD §4.6 :409 / 验收 S3） */}
             {!human && <StatusBadge status={task.status} />}
@@ -332,7 +332,7 @@ export function TaskDrawer({
                   key={to}
                   type="button"
                   onClick={() => transitionTask(repos, task.id, to)}
-                  className="rounded-[6px] border border-sand px-2 py-0.5 font-mono text-[10px] text-mist transition-colors hover:border-pine hover:text-pine"
+                  className="rounded-[6px] border border-line px-2 py-0.5 font-mono text-[10px] text-mist transition-colors hover:border-pine hover:text-pine"
                 >
                   {to}
                 </button>
@@ -344,7 +344,7 @@ export function TaskDrawer({
               「技术字段可折叠可见」。用原生 <details> 而非受控 state：
               零状态、可被浏览器/测试原生展开、语义自带 aria-expanded。 */}
           {human && (
-            <details className="mt-3 rounded-[8px] border border-sand bg-paper/60 px-2.5 py-2">
+            <details className="mt-3 rounded-[8px] border border-line bg-paper/60 px-2.5 py-2">
               <summary className="cursor-pointer text-[11px] text-mist">技术详情</summary>
               <dl className="mt-2 grid grid-cols-2 gap-2">
                 <Field label="id">
@@ -372,7 +372,7 @@ export function TaskDrawer({
                       key={to}
                       type="button"
                       onClick={() => transitionTask(repos, task.id, to)}
-                      className="rounded-[6px] border border-sand px-2 py-0.5 font-mono text-[10px] text-mist transition-colors hover:border-pine hover:text-pine"
+                      className="rounded-[6px] border border-line px-2 py-0.5 font-mono text-[10px] text-mist transition-colors hover:border-pine hover:text-pine"
                     >
                       {to}
                     </button>

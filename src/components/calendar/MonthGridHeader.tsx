@@ -9,7 +9,7 @@ const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 /**
  * 月历日期列头（列=当月日期，28~31）：
  * - 休息日列底色微沉（bg-rest-day；原来是「周末」，现在按公司休息制度走）
- * - 每 7 天弱竖向分隔（border-sand/40）
+ * - 每 7 天弱竖向分隔（border-line/40）
  * - 今日列高亮（bg-pine-soft + 顶部 pine 描边）
  * - 左列 sticky 锁定的表头占位（与行左列同宽）
  */
@@ -37,10 +37,10 @@ export function MonthGridHeader({
   });
 
   return (
-    <div className="flex border-b border-sand bg-paper">
+    <div className="flex border-b border-line bg-paper">
       {/* 左列表头占位（sticky） */}
       <div
-        className="sticky left-0 z-20 flex shrink-0 items-center border-r border-sand bg-paper px-3 text-xs font-medium text-mist"
+        className="sticky left-0 z-20 flex shrink-0 items-center border-r border-line bg-paper px-3 text-xs font-medium text-mist"
         style={{ width: leftWidth }}
       >
         项目
@@ -53,7 +53,7 @@ export function MonthGridHeader({
             key={c.day}
             className={cn(
               'flex flex-col items-center justify-center py-1.5 text-[11px] leading-tight',
-              c.isWeekStart && 'border-l border-sand/40',
+              c.isWeekStart && 'border-l border-line/40',
               c.isRest ? 'bg-rest-day text-mist' : 'text-mist',
               c.isToday && 'bg-pine-soft text-pine',
             )}

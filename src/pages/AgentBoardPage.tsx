@@ -127,7 +127,7 @@ function BoardModeTabs({
     <div
       role="tablist"
       aria-label="看板模式切换"
-      className="flex w-fit items-center gap-1 rounded-[12px] border border-sand bg-cream/60 p-1"
+      className="flex w-fit items-center gap-1 rounded-[12px] border border-line bg-cream/60 p-1"
     >
       {MODE_TAB_ORDER.map((key) => (
         <button
@@ -334,7 +334,7 @@ export function AgentBoardPage(): JSX.Element {
           value={currentProjectId ?? ''}
           onChange={(e) => setCurrentProject(e.target.value || null)}
           aria-label="选择项目"
-          className="min-w-0 max-w-[240px] rounded-[10px] border border-sand bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-pine"
+          className="min-w-0 max-w-[240px] rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-pine"
         >
           {projects.length === 0 && <option value="">（暂无项目）</option>}
           {projects.map((p) => (
@@ -460,7 +460,7 @@ export function AgentBoardPage(): JSX.Element {
                 <section
                   key={group}
                   aria-label={HUMAN_GROUP_TITLES[group]}
-                  className="glass-light rounded-[16px] border border-sand p-3"
+                  className="glass-light rounded-[16px] border border-line p-3"
                 >
                   <div className="mb-2 flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-ink">
@@ -483,7 +483,7 @@ export function AgentBoardPage(): JSX.Element {
                       />
                     ))}
                     {list.length === 0 && (
-                      <p className="rounded-[10px] border border-dashed border-sand px-2 py-3 text-center text-[10px] text-mist/70">
+                      <p className="rounded-[10px] border border-dashed border-line px-2 py-3 text-center text-[10px] text-mist/70">
                         —
                       </p>
                     )}
@@ -549,7 +549,7 @@ export function AgentBoardPage(): JSX.Element {
               return (
                 <section
                   key={status}
-                  className="glass-light w-[280px] shrink-0 rounded-[16px] border border-sand p-3 max-lg:w-full"
+                  className="glass-light w-[280px] shrink-0 rounded-[16px] border border-line p-3 max-lg:w-full"
                 >
                   <div className="sticky top-0 -mx-3 mb-2 bg-inherit px-3 pb-1 pt-1">
                     <div className="flex items-center gap-2">
@@ -570,7 +570,7 @@ export function AgentBoardPage(): JSX.Element {
                       />
                     ))}
                     {list.length === 0 && (
-                      <p className="rounded-[10px] border border-dashed border-sand px-2 py-3 text-center text-[10px] text-mist/70">
+                      <p className="rounded-[10px] border border-dashed border-line px-2 py-3 text-center text-[10px] text-mist/70">
                         —
                       </p>
                     )}

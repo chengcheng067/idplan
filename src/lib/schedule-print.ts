@@ -23,7 +23,7 @@ export const EXPORT_BORDER = '#e2e8f0'; // 导出弱描边：slate-200
 /**
  * 导出 PNG 的 html2canvas 固定配色选项（纯函数，可测）。
  * backgroundColor 写死 EXPORT_BG（浅色常量），不读取任何主题 CSS 变量 / store；
- * ignoreElements 跳过 .no-print 操作栏——该栏使用跟随主题的 bg-paper/text-mist/border-sand，
+ * ignoreElements 跳过 .no-print 操作栏——该栏使用跟随主题的 bg-paper/text-mist/border-line，
  * 不应进入交付物。若有人改回「跟随主题」，本函数返回的 backgroundColor 不再是固定常量，
  * 对应回归测试会失败。
  */

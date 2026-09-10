@@ -107,7 +107,7 @@ export function MyTasksPage(): JSX.Element {
         <div
           role="tablist"
           aria-label="任务分组方式"
-          className="flex items-center gap-1 rounded-[12px] border border-sand bg-cream/60 p-1"
+          className="flex items-center gap-1 rounded-[12px] border border-line bg-cream/60 p-1"
         >
           {(
             [
@@ -140,7 +140,7 @@ export function MyTasksPage(): JSX.Element {
             'rounded-full border px-3 py-1.5 text-xs transition-colors',
             showDone
               ? 'border-pine bg-pine-soft text-pine'
-              : 'border-sand text-mist hover:bg-sand hover:text-ink',
+              : 'border-line text-mist hover:bg-sand hover:text-ink',
           )}
         >
           {showDone ? '已含已完成' : '显示已完成'}
@@ -157,7 +157,7 @@ export function MyTasksPage(): JSX.Element {
 
       {/* 未选身份引导 */}
       {!currentMemberId && (
-        <div className="glass-light rounded-[16px] border border-dashed border-sand p-10 text-center">
+        <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
           <p className="text-sm leading-6 text-mist">
             请点击右上角「进入身份」输入你的姓名；
             <br />
@@ -168,7 +168,7 @@ export function MyTasksPage(): JSX.Element {
 
       {/* 空态 */}
       {currentMemberId && myTasks.length === 0 && (
-        <div className="glass-light rounded-[16px] border border-dashed border-sand p-10 text-center">
+        <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
           <p className="font-display text-display-md text-mist">
             {me ? `${me.name}，目前没有分配给你的待办 🎉` : '未找到该身份。'}
           </p>
@@ -189,7 +189,7 @@ export function MyTasksPage(): JSX.Element {
             (t) => !taskIsDone(t) && t.dueDate && remainingDays(t.dueDate.slice(0, 10), todayIso) < 0,
           ).length;
           return (
-            <section key={projectId} className="glass-light rounded-[16px] border border-sand p-3.5">
+            <section key={projectId} className="glass-light rounded-[16px] border border-line p-3.5">
               <h2 className="mb-2 flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-pine" aria-hidden />
                 {p ? (
@@ -233,7 +233,7 @@ export function MyTasksPage(): JSX.Element {
       {currentMemberId &&
         filter === 'by-time' &&
         groupedByTime.map(([groupLabel, rows]) => (
-          <section key={groupLabel} className="glass-light rounded-[16px] border border-sand p-3.5">
+          <section key={groupLabel} className="glass-light rounded-[16px] border border-line p-3.5">
             <h2 className="mb-2 flex items-center gap-2">
               <span
                 className={cn(
@@ -286,7 +286,7 @@ function TaskCard({
     : STAGE_BAR_COLORS[9];
 
   return (
-    <li className="glass-medium flex items-center gap-2.5 overflow-hidden rounded-[12px] border border-sand p-2.5">
+    <li className="glass-medium flex items-center gap-2.5 overflow-hidden rounded-[12px] border border-line p-2.5">
       {/* 行首阶段色条 */}
       <span
         className="h-7 w-1 shrink-0 rounded-full"

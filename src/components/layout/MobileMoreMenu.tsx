@@ -26,7 +26,7 @@ const ITEM_ICON = 'shrink-0 text-mist';
 
 /** 分组分隔线 */
 function Divider(): JSX.Element {
-  return <div className="my-1 border-t border-sand" />;
+  return <div className="my-1 border-t border-line" />;
 }
 
 /**
@@ -100,7 +100,7 @@ export function MobileMoreMenu(): JSX.Element {
         aria-expanded={menuOpen}
         aria-haspopup="menu"
         className={cn(
-          'flex h-9 w-9 items-center justify-center rounded-[10px] border border-sand text-mist transition-colors hover:bg-sand hover:text-ink',
+          'flex h-9 w-9 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink',
           menuOpen && 'bg-sand text-ink',
         )}
       >
@@ -111,7 +111,7 @@ export function MobileMoreMenu(): JSX.Element {
         <div
           role="menu"
           aria-label="更多操作"
-          className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-6rem)] w-56 overflow-y-auto rounded-xl border border-sand py-1 shadow-soft"
+          className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-6rem)] w-56 overflow-y-auto rounded-xl border border-line py-1 shadow-soft"
         >
           {/* 导航（<xl 就近入口；与侧栏抽屉互为冗余但都保留——R15 入口不丢） */}
           {isAdmin ? (

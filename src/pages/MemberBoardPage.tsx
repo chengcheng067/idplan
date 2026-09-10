@@ -100,7 +100,7 @@ export function MemberBoardPage(): JSX.Element {
 
       {/* 四列看板（成员视角：无用户/客户过滤，仅自己相关的项目） */}
       {active.length === 0 ? (
-        <div className="glass-light rounded-[16px] border border-dashed border-sand p-10 text-center">
+        <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
           <p className="font-display text-display-md text-mist">还没有与你相关的项目</p>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
             当管理员把阶段负责人或参与任务分派给你后，相关项目会出现在这里。

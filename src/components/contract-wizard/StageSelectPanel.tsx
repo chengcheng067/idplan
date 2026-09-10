@@ -150,7 +150,7 @@ export function StageSelectPanel({
                 className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
                   b === scheduleBasis
                     ? 'border-pine bg-pine text-white'
-                    : 'border-sand bg-paper text-mist hover:bg-sand'
+                    : 'border-line bg-paper text-mist hover:bg-sand'
                 }`}
               >
                 {SCHEDULE_BASIS_LABELS[b]}
@@ -162,7 +162,7 @@ export function StageSelectPanel({
 
       {/* 按阶段时长排期（受控：传了 durations 才渲染；为每阶段填天数后自动顺延算竣工） */}
       {durations !== undefined && onDurationChange !== undefined && (
-        <div className="rounded-md border border-sand bg-cream/40 p-2.5">
+        <div className="rounded-md border border-line bg-cream/40 p-2.5">
           <p className="mb-1.5 text-xs font-medium text-mist">
             按阶段时长排期（为每个阶段填天数，竣工日期自动算出）
           </p>
@@ -187,7 +187,7 @@ export function StageSelectPanel({
                 className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
                   active
                     ? 'border-pine bg-pine-soft/50 text-pine'
-                    : 'border-sand bg-paper text-mist hover:bg-sand'
+                    : 'border-line bg-paper text-mist hover:bg-sand'
                 }`}
               >
                 {p.name}（{p.itemKeys.length}）
@@ -200,7 +200,7 @@ export function StageSelectPanel({
       {/* 阶段池（按 domain 分组） */}
       <div>
         <p className="mb-1.5 text-xs font-medium text-mist">阶段池</p>
-        <div className="space-y-2.5 rounded-md border border-sand bg-paper p-3">
+        <div className="space-y-2.5 rounded-md border border-line bg-paper p-3">
           {grouped.map(([domain, list]) => (
             <div key={domain}>
               <p className="mb-1 text-xs font-medium text-mist">{DOMAIN_LABELS[domain]}</p>
@@ -220,7 +220,7 @@ export function StageSelectPanel({
                       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                         checked
                           ? 'border-pine bg-pine-soft/50 text-pine'
-                          : 'border-sand bg-cream text-ink hover:bg-sand'
+                          : 'border-line bg-cream text-ink hover:bg-sand'
                       } ${blocked ? 'cursor-not-allowed opacity-40' : ''}`}
                     >
                       <span
@@ -246,7 +246,7 @@ export function StageSelectPanel({
             至少选择 {MIN_STAGE_COUNT} 个阶段
           </p>
         ) : (
-          <ol className="divide-y divide-sand rounded-md border border-sand bg-paper">
+          <ol className="divide-y divide-sand rounded-md border border-line bg-paper">
             {selected.map((item, index) => (
               <li
                 key={item.key}
@@ -265,7 +265,7 @@ export function StageSelectPanel({
                 <span className="truncate text-ink">{item.name}</span>
                 {/* 时长（可选） */}
                 {durations !== undefined && onDurationChange !== undefined && (
-                  <span className="flex items-center gap-1 rounded-md border border-sand bg-cream px-1.5 py-0.5">
+                  <span className="flex items-center gap-1 rounded-md border border-line bg-cream px-1.5 py-0.5">
                     <input
                       type="number"
                       min={1}

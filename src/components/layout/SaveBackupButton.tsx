@@ -21,7 +21,7 @@ export function SaveBackupButton(): JSX.Element | null {
     <button
       type="button"
       onClick={() => void save()}
-      className="inline-flex items-center gap-1.5 rounded-md border border-sand bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
+      className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
       title="导出 JSON 备份包（含全部项目、成员与记录）"
     >
       <Save size={14} /> <span className="hidden 2xl:inline">保存备份</span>

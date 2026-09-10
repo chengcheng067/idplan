@@ -213,7 +213,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   return (
     <div className="space-y-5">
       {/* 顶部大日期头（系统日历风格）；手机端两行式（标题一行、年月导航一行），避免横向挤压 */}
-      <div className="glass-strong flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-sand p-4 sm:gap-4 sm:p-5">
+      <div className="glass-strong flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-line p-4 sm:gap-4 sm:p-5">
         <div className="min-w-0">
           <div className="font-display text-xl text-ink">{formatSelectedDate(selectedDate)}</div>
           <div className="mt-0.5 text-xs text-mist">{lunarLabel()}</div>
@@ -224,7 +224,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
             type="button"
             onClick={() => setCalendarMonth(shiftMonth(calendarMonth, -1))}
             aria-label="上个月"
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-sand bg-paper text-lg text-ink transition-colors hover:bg-sand"
+            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-line bg-paper text-lg text-ink transition-colors hover:bg-sand"
           >
             ‹
           </button>
@@ -235,7 +235,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
             type="button"
             onClick={() => setCalendarMonth(shiftMonth(calendarMonth, 1))}
             aria-label="下个月"
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-sand bg-paper text-lg text-ink transition-colors hover:bg-sand"
+            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-line bg-paper text-lg text-ink transition-colors hover:bg-sand"
           >
             ›
           </button>
@@ -246,7 +246,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
               'rounded-[12px] border px-4 py-2 text-sm transition-colors',
               calendarMonth === thisMonth
                 ? 'border-pine bg-pine-soft text-pine-deep'
-                : 'border-sand bg-paper text-mist hover:bg-sand hover:text-ink',
+                : 'border-line bg-paper text-mist hover:bg-sand hover:text-ink',
             )}
           >
             今天
@@ -267,10 +267,10 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
       {emptyKind ? (
         <EmptyState kind={emptyKind} monthLabel={meta.label} onClear={clearFilters} onManual={onManual} />
       ) : (
-        <div className="glass-medium overflow-x-auto rounded-[20px] border border-sand p-3 shadow-soft sm:p-4">
+        <div className="glass-medium overflow-x-auto rounded-[20px] border border-line p-3 shadow-soft sm:p-4">
           <div
             className={cn(
-              'grid grid-cols-7 gap-px overflow-hidden rounded-[12px] border border-sand bg-sand',
+              'grid grid-cols-7 gap-px overflow-hidden rounded-[12px] border border-line bg-sand',
               // 手机端去掉固定 560px 最小宽：7 列自适应屏宽，不再横向滚动导致右缘被裁/格子被压
               !isMobile && 'min-w-[560px]',
             )}
@@ -401,7 +401,7 @@ function EmptyState({
   const c = config[kind as Exclude<EmptyKind, null>];
 
   return (
-    <div className="glass-light rounded-[16px] border border-dashed border-sand p-10 text-center">
+    <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
       <p className="font-display text-display-md text-mist">{c.title}</p>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">{c.desc}</p>
       {c.cta === 'clear' && (

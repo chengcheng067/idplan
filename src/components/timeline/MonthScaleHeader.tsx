@@ -25,7 +25,7 @@ export function MonthScaleHeader({
         <div
           key={`${t.start}-${t.label}`}
           style={{ width: t.daysSpan * pxPerDay }}
-          className="flex items-center border-r border-sand/70 bg-cream px-2 text-xs text-mist last:border-r-0"
+          className="flex items-center border-r border-line/70 bg-cream px-2 text-xs text-mist last:border-r-0"
         >
           <span className="truncate">{t.label}</span>
         </div>

@@ -45,7 +45,7 @@ export function ExportLogButton({ compact = false }: { compact?: boolean }): JSX
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center gap-1.5 rounded-md border border-sand bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
         title="导出前端日志（仅本地运行记录与错误堆栈，不含项目业务数据）"
       >
         <FileDown size={14} />

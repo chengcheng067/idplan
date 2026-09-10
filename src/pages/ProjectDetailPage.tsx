@@ -134,7 +134,7 @@ export function ProjectDetailPage(): JSX.Element {
               <button
                 type="button"
                 onClick={() => window.open(`/project/${project.id}/schedule-print`, '_blank')}
-                className="inline-flex items-center gap-1 rounded-md border border-sand bg-paper px-3 py-1.5 text-mist hover:bg-sand"
+                className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
                 title="打开日程表打印视图（新窗口）"
               >
                 <CalendarRange size={14} /> 日程表
@@ -146,7 +146,7 @@ export function ProjectDetailPage(): JSX.Element {
                   useAgentStore.getState().setCurrentProject(project.id);
                   window.location.assign('/agent');
                 }}
-                className="inline-flex items-center gap-1 rounded-md border border-sand bg-paper px-3 py-1.5 text-mist hover:bg-sand"
+                className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
                 title="在 Agent Board 中查看本项目任务"
               >
                 <Bot size={14} /> Agent Board
@@ -155,7 +155,7 @@ export function ProjectDetailPage(): JSX.Element {
                 type="button"
                 disabled={project.status !== 'active'}
                 onClick={() => void actions.setArchived(project.id, true)}
-                className="inline-flex items-center gap-1 rounded-md border border-sand bg-paper px-3 py-1.5 text-mist hover:bg-sand disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand disabled:opacity-40"
                 title={project.status !== 'active' ? '已归档' : '归档后从首页列表隐藏'}
               >
                 <Archive size={14} /> 归档
@@ -166,7 +166,7 @@ export function ProjectDetailPage(): JSX.Element {
       </div>
 
       {/* 顶条信息环（v0.3 玻璃化；非管理员视角隐藏 clientName/address 等敏感字段） */}
-      <div className="glass-medium mb-5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-sand p-4 shadow-soft sm:gap-x-8 sm:p-5">
+      <div className="glass-medium mb-5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-line p-4 shadow-soft sm:gap-x-8 sm:p-5">
         <div>
           <h1 className="font-display text-display-lg">{project.name}</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-mist">

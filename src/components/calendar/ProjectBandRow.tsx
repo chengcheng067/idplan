@@ -67,7 +67,7 @@ export function ProjectBandRow({
 
   return (
     <div
-      className="group flex border-b border-sand/60"
+      className="group flex border-b border-line/60"
       style={{ height: rowHeight }}
       onMouseEnter={showTooltip}
       onMouseLeave={scheduleHide}
@@ -78,7 +78,7 @@ export function ProjectBandRow({
         onClick={open}
         onKeyDown={onKey}
         aria-label={`查看 ${project.name} 详情`}
-        className="sticky left-0 z-10 flex shrink-0 items-center gap-2 border-r border-sand bg-paper px-3 text-left transition-colors hover:bg-sand focus-visible:outline-pine"
+        className="sticky left-0 z-10 flex shrink-0 items-center gap-2 border-r border-line bg-paper px-3 text-left transition-colors hover:bg-sand focus-visible:outline-pine"
         style={{ width: leftWidth }}
       >
         <span
@@ -182,7 +182,7 @@ export function ProjectBandRow({
             </div>
 
             {isAdmin && ownerName && (
-              <div className="mt-2 flex items-center justify-between border-t border-sand pt-2">
+              <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
                 <span className="text-mist">负责人</span>
                 <span className="text-ink">{ownerName}</span>
               </div>

@@ -128,7 +128,7 @@ export function TaskChecklist({
           return (
             <li
               key={t.id}
-              className="glass-light group flex items-center gap-2 rounded-lg border border-sand bg-paper px-3 py-2 transition-colors hover:bg-sand/40"
+              className="glass-light group flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-2 transition-colors hover:bg-sand/40"
             >
               <button
                 type="button"
@@ -168,7 +168,7 @@ export function TaskChecklist({
                     className={`inline-flex max-w-[180px] items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-xs transition-colors ${
                       taskAssigneeIds(t).length > 0
                         ? 'border-pine/40 text-pine hover:border-pine hover:bg-pine-soft'
-                        : 'border-sand text-mist hover:border-pine hover:text-pine'
+                        : 'border-line text-mist hover:border-pine hover:text-pine'
                     }`}
                     title="指派参与人（多选）"
                   >
@@ -180,7 +180,7 @@ export function TaskChecklist({
                     createPortal(
                       <div
                         data-assign-popover
-                        className="bg-paper menuFadeIn fixed z-[65] w-64 rounded-lg border border-sand p-2 shadow-soft"
+                        className="bg-paper menuFadeIn fixed z-[65] w-64 rounded-lg border border-line p-2 shadow-soft"
                         style={{ top: assignAnchor?.top ?? 0, right: assignAnchor?.right ?? 0 }}
                       >
                         <p className="mb-1.5 px-1 text-xs font-medium text-ink">指派参与人（可多选）</p>
@@ -209,7 +209,7 @@ export function TaskChecklist({
                       </div>
 
                       {draftIds.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1 border-t border-sand/60 pt-2">
+                        <div className="mt-2 flex flex-wrap gap-1 border-t border-line/60 pt-2">
                           {draftIds.map((id) => {
                             const m = memberOf(id);
                             if (!m) return null;
@@ -233,11 +233,11 @@ export function TaskChecklist({
                         </div>
                       )}
 
-                      <div className="mt-2 flex justify-end gap-1.5 border-t border-sand/60 pt-2">
+                      <div className="mt-2 flex justify-end gap-1.5 border-t border-line/60 pt-2">
                         <button
                           type="button"
                           onClick={() => closeAssign()}
-                          className="rounded-md border border-sand px-2 py-1 text-xs text-mist transition-colors hover:bg-sand"
+                          className="rounded-md border border-line px-2 py-1 text-xs text-mist transition-colors hover:bg-sand"
                         >
                           取消
                         </button>
@@ -260,7 +260,7 @@ export function TaskChecklist({
                 value={t.dueDate?.slice(0, 10) ?? ''}
                 readOnly={isMember}
                 onChange={(e) => void actions.updateTask(t.id, { dueDate: e.target.value || null })}
-                className={`w-[120px] shrink-0 rounded-md border border-transparent px-1 py-0.5 text-xs tabular-nums text-mist hover:border-sand focus:border-pine focus:bg-paper focus:outline-none ${
+                className={`w-[120px] shrink-0 rounded-md border border-transparent px-1 py-0.5 text-xs tabular-nums text-mist hover:border-line focus:border-pine focus:bg-paper focus:outline-none ${
                   isMember ? 'cursor-default' : ''
                 }`}
               />

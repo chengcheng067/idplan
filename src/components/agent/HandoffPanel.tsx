@@ -142,7 +142,7 @@ export function HandoffPanel({
               'rounded-[8px] border px-2.5 py-1 transition-colors',
               scope === key
                 ? 'border-pine bg-pine text-white'
-                : 'border-sand text-mist hover:bg-sand hover:text-ink',
+                : 'border-line text-mist hover:bg-sand hover:text-ink',
             )}
           >
             {label}
@@ -152,7 +152,7 @@ export function HandoffPanel({
           <select
             value={stageId}
             onChange={(e) => setStageId(e.target.value)}
-            className="rounded-[8px] border border-sand bg-paper px-2 py-1 text-xs text-ink outline-none focus:border-pine"
+            className="rounded-[8px] border border-line bg-paper px-2 py-1 text-xs text-ink outline-none focus:border-pine"
           >
             {stages.map((s) => (
               <option key={s.id} value={s.id}>
@@ -164,7 +164,7 @@ export function HandoffPanel({
       </div>
 
       {/* 预览（等宽、全量展示供人工审阅敏感信息） */}
-      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-[12px] border border-sand bg-paper p-3 font-mono text-[11px] leading-5 text-ink">
+      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-[12px] border border-line bg-paper p-3 font-mono text-[11px] leading-5 text-ink">
         {text || '（当前范围为空，无可生成内容。）'}
       </pre>
 

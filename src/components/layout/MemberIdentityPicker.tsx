@@ -52,7 +52,7 @@ export function MemberIdentityPicker(): JSX.Element {
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-md border border-sand bg-paper px-2 py-1.5 text-sm shadow-soft transition-colors hover:bg-sand sm:px-3"
+        className="flex items-center gap-2 rounded-md border border-line bg-paper px-2 py-1.5 text-sm shadow-soft transition-colors hover:bg-sand sm:px-3"
         title="当前身份（点击切换/退出）"
       >
         <span
@@ -72,7 +72,7 @@ export function MemberIdentityPicker(): JSX.Element {
       </button>
 
       {menuOpen && (
-        <div className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-sand py-1 shadow-soft">
+        <div className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-line py-1 shadow-soft">
           <button
             type="button"
             onClick={() => {
@@ -92,7 +92,7 @@ export function MemberIdentityPicker(): JSX.Element {
               setMenuOpen(false);
               setCurrentMember(null);
             }}
-            className="w-full border-t border-sand px-3 py-1.5 text-left text-xs text-mist hover:bg-sand"
+            className="w-full border-t border-line px-3 py-1.5 text-left text-xs text-mist hover:bg-sand"
           >
             退出身份
           </button>

@@ -233,7 +233,7 @@ export function TimelineView({
       {/* 缩放档位切换 */}
       <div className="mb-2 hidden items-center justify-between text-xs text-mist sm:flex">
         <span>提示：拖动彩条边缘改期；←/→ 键平移时间轴（Shift 加速）</span>
-        <div className="flex overflow-hidden rounded-md border border-sand">
+        <div className="flex overflow-hidden rounded-md border border-line">
           {(
             [
               ['month', '月'],
@@ -256,7 +256,7 @@ export function TimelineView({
 
       <div
         ref={viewportRef}
-        className="glass-medium overflow-x-auto rounded-lg border border-sand bg-paper shadow-soft"
+        className="glass-medium overflow-x-auto rounded-lg border border-line bg-paper shadow-soft"
         onWheel={handleWheel}
       >
         {/* 宽度取「内容实际宽」与「可视视口宽」较大者：画布撑满可视区，避免图1月档下右侧留白 */}
@@ -264,7 +264,7 @@ export function TimelineView({
           {/* 表头行：左侧空置 + 刻度尺 */}
           <div className="flex" style={{ height: HEADER_H }}>
             <div
-              className="sticky left-0 z-20 shrink-0 border-r border-sand bg-cream"
+              className="sticky left-0 z-20 shrink-0 border-r border-line bg-cream"
               style={{ width: leftColW }}
             />
             <MonthScaleHeader

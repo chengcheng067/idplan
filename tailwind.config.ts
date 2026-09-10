@@ -7,14 +7,15 @@ import type { Config } from 'tailwindcss';
  *   - **色值本身不在本文件**，全部住在 src/styles/global.css 的 CSS 变量里
  *     （:root = 亮色默认，:root[data-theme='dark'] = 暗色）；
  *   - 本文件只负责「旧 token 名 → rgb(var(--x-rgb) / …)」的映射，
- *     因此 30+ 组件里的 bg-cream / bg-paper / border-sand / text-pine 一个 className 都不用改，
+ *     因此 30+ 组件里的 bg-cream / bg-paper / border-line / text-pine 一个 className 都不用改，
  *     随 <html data-theme> 整体换肤。
  *   - 组件内仍禁写裸色值 hex，一律引用这里的命名 token。
  *
- * 透明度修饰符（bg-pine/20、border-sand/60 等 50 处用法）如何生效：
+ * 透明度修饰符（bg-pine/20、border-line/60 等 50 处用法）如何生效：
  *   颜色值里预留 <alpha-value> 占位符，Tailwind 遇到 /20 就把它替换成 0.2，无修饰符时替换为 1。
- *   变量 --{name}-a 是该色的「默认 alpha」，让 sand 这类本就半透明的描边
- *   在不写修饰符时也是正确的淡描边，写 /60 时则变成 0.07×0.6 的相对淡度。
+ *   变量 --{name}-a 是该色的「默认 alpha」，让 sand 这类本就半透明的底纹
+ *   在不写修饰符时也是正确的淡度，写 /60 时则变成 0.07×0.6 的相对淡度。
+ *   v0.7 起 line 与 *-soft 都是实色（--{name}-a: 1），不带修饰符时即渲染规格实色。
  */
 const c = (name: string, fallbackAlpha = 1): string =>
   `rgb(var(--${name}-rgb) / calc(var(--${name}-a, ${fallbackAlpha}) * <alpha-value>))`;
@@ -30,8 +31,15 @@ export default {
         paper: c('paper'),
         /** surface-sunken 输入框 / 内凹井（亮 #f1f5f9 / 暗 #101216） */
         sunken: c('sunken'),
-        /** 1px 极弱描边 & hover 底纹（默认 alpha 0.07 / 暗 0.08） */
+        /** hover 底纹 / 极弱叠加（默认 alpha 0.07 / 暗 0.08）；v0.7 起**不再用于描边**，描边走 line */
         sand: c('sand', 0.07),
+        /**
+         * 描边实色（v0.7 规格 §1.1：亮 #E8EAED / 暗 #333840）。
+         * 卡片 / 控件 / 分隔线边框的**唯一**描边色，全站 border-* 一律用它；
+         * 实色不参与 alpha 混合，故不传 fallbackAlpha。
+         * 分工边界：**描边走 line，hover 底纹走 sand**，两者不可互串。
+         */
+        line: c('line'),
         /** text-primary 主文字 */
         ink: c('ink'),
         /** text-secondary 弱文字 */

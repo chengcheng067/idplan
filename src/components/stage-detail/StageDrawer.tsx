@@ -58,11 +58,11 @@ export function StageDrawer({
 
   return (
     <Modal open onClose={close} placement="right" ariaLabel={`阶段详情：${stage.name}`}>
-      <aside className="glass-strong dialog-pop flex h-full w-full flex-col border-l border-sand shadow-soft sm:max-w-xl">
+      <aside className="glass-strong dialog-pop flex h-full w-full flex-col border-l border-line shadow-soft sm:max-w-xl">
         {/* 手机端顶部抓手横条（提示可手势下滑关闭区域；平板以上隐藏） */}
         <div className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-sand sm:hidden" aria-hidden />
         {/* 头 */}
-        <div className="flex items-center justify-between border-b border-sand bg-paper/60 px-5 py-3">
+        <div className="flex items-center justify-between border-b border-line bg-paper/60 px-5 py-3">
           <h2 className="font-display text-display-md">
             <span className="mr-2 text-mist">{stage.orderIndex}.</span>
             {stage.name}
@@ -113,7 +113,7 @@ function DrawerFrame({
 }): JSX.Element {
   return (
     <Modal open onClose={onClose} placement="right" ariaLabel={title}>
-      <aside className="flex h-full w-full flex-col border-l border-sand bg-paper p-5 shadow-soft sm:max-w-xl">
+      <aside className="flex h-full w-full flex-col border-l border-line bg-paper p-5 shadow-soft sm:max-w-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-display-md">{title}</h2>
           <button type="button" onClick={onClose} aria-label="关闭" className="rounded-md p-1.5 text-mist hover:bg-sand">
@@ -195,7 +195,7 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
           type="date"
           value={stage.startAt.slice(0, 10)}
           onChange={(e) => void applyRange(e.target.value, stage.endAt.slice(0, 10))}
-          className="rounded-md border border-sand bg-paper px-2 py-1 tabular-nums outline-none focus:border-pine"
+          className="rounded-md border border-line bg-paper px-2 py-1 tabular-nums outline-none focus:border-pine"
         />
       </label>
       <label className="flex items-center gap-1.5">
@@ -204,7 +204,7 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
           type="date"
           value={stage.endAt.slice(0, 10)}
           onChange={(e) => void applyRange(stage.startAt.slice(0, 10), e.target.value)}
-          className="rounded-md border border-sand bg-paper px-2 py-1 tabular-nums outline-none focus:border-pine"
+          className="rounded-md border border-line bg-paper px-2 py-1 tabular-nums outline-none focus:border-pine"
         />
       </label>
     </div>

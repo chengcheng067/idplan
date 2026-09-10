@@ -40,7 +40,7 @@ export function HomeViewTabs(): JSX.Element {
     <div
       role="tablist"
       aria-label="首页视图切换"
-      className="flex w-fit items-center gap-1 rounded-[12px] border border-sand bg-cream/60 p-1"
+      className="flex w-fit items-center gap-1 rounded-[12px] border border-line bg-cream/60 p-1"
     >
       {options.map(({ key, label, Icon }) => (
         <button

@@ -43,7 +43,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element {
   };
 
   return (
-    <div className="rounded-md border border-sand bg-paper p-3">
+    <div className="rounded-md border border-line bg-paper p-3">
       {stage.resourcePath ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <FolderOpen size={14} className="text-pine" />
@@ -53,14 +53,14 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element {
           <button
             type="button"
             onClick={tryOpen}
-            className="inline-flex items-center gap-1 rounded-md border border-sand px-2.5 py-1.5 text-xs hover:bg-sand"
+            className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs hover:bg-sand"
           >
             <ExternalLink size={12} /> 打开
           </button>
           <button
             type="button"
             onClick={() => void navigator.clipboard?.writeText(stage.resourcePath!)}
-            className="inline-flex items-center gap-1 rounded-md border border-sand px-2.5 py-1.5 text-xs hover:bg-sand"
+            className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs hover:bg-sand"
           >
             <Copy size={12} /> 复制路径
           </button>

@@ -112,7 +112,7 @@ export function SettingsDialog({
       <Modal open={open} onClose={onClose} placement="right-float" ariaLabel="设置">
         <div className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-full sm:max-h-[calc(100dvh-3rem)] sm:w-[400px] sm:self-start sm:mr-2 sm:mt-2">
           {/* 头部 */}
-          <div className="flex items-center justify-between border-b border-sand px-5 py-4">
+          <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div className="flex items-center gap-2">
               <Settings size={16} className="text-pine" aria-hidden />
               <h2 className="font-display text-base font-semibold text-ink">设置</h2>
@@ -142,7 +142,7 @@ export function SettingsDialog({
               </div>
 
               {count === 0 ? (
-                <p className="rounded-xl border border-sand bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
+                <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
                   暂无日志。日志默认在{' '}
                   <strong className="text-ink">报错时</strong>或{' '}
                   <strong className="text-ink">执行关键操作</strong>（身份切换、备份导入导出）时
@@ -150,7 +150,7 @@ export function SettingsDialog({
                   请先复现一次再回来导出。
                 </p>
               ) : (
-                <p className="rounded-xl border border-sand bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
+                <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
                   已记录 <strong className="text-ink">{count}</strong> 条运行事件，可导出为 .log
                   文件发给开发。日志仅含运行记录与错误堆栈，不含项目/客户业务数据。
                 </p>
@@ -165,7 +165,7 @@ export function SettingsDialog({
                   Agent 与本地库
                 </h3>
               </div>
-              <div className="rounded-[10px] border border-sand bg-cream/50 px-3 py-2.5 text-xs leading-6">
+              <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5 text-xs leading-6">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-mist">Agent 席位</span>
                   <span className="font-mono text-ink">
@@ -213,7 +213,7 @@ export function SettingsDialog({
                         'flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border px-3 py-2 text-sm font-medium transition-colors ' +
                         (active
                           ? 'border-pine bg-pine text-cream shadow-accent'
-                          : 'border-sand text-mist hover:bg-sand hover:text-ink')
+                          : 'border-line text-mist hover:bg-sand hover:text-ink')
                       }
                     >
                       {o.icon}
@@ -236,7 +236,7 @@ export function SettingsDialog({
                     休息制度
                   </h3>
                 </div>
-                <div className="rounded-[12px] border border-sand bg-cream/40 p-3">
+                <div className="rounded-[12px] border border-line bg-cream/40 p-3">
                   <RestPolicyEditor embedded />
                 </div>
               </section>
@@ -250,7 +250,7 @@ export function SettingsDialog({
                   关于
                 </h3>
               </div>
-              <dl className="space-y-1.5 rounded-[12px] border border-sand bg-cream/40 px-3.5 py-3 text-xs">
+              <dl className="space-y-1.5 rounded-[12px] border border-line bg-cream/40 px-3.5 py-3 text-xs">
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-mist">版本号</dt>
                   <dd className="font-medium text-ink">{BUILD_VERSION}</dd>
@@ -272,13 +272,13 @@ export function SettingsDialog({
                     type="button"
                     onClick={() => void check()}
                     disabled={status === 'checking'}
-                    className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-sand bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {status === 'checking' ? '检查中…' : '检查更新'}
                   </button>
 
                   {status === 'up-to-date' && (
-                    <p className="rounded-xl border border-sand bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
+                    <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
                       已是最新版本（{BUILD_VERSION}）。
                     </p>
                   )}
@@ -296,7 +296,7 @@ export function SettingsDialog({
                     </div>
                   )}
                   {status === 'error' && (
-                    <p className="rounded-xl border border-sand bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
+                    <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
                       检查失败：{error}
                     </p>
                   )}
@@ -318,11 +318,11 @@ export function SettingsDialog({
           </div>
 
           {/* 底部操作 */}
-          <div className="space-y-2.5 border-t border-sand px-5 py-4">
+          <div className="space-y-2.5 border-t border-line px-5 py-4">
             <button
               type="button"
               onClick={onExport}
-              className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-sand bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
+              className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
             >
               <FileDown size={15} className="text-mist" aria-hidden />
               导出日志
@@ -330,7 +330,7 @@ export function SettingsDialog({
             <button
               type="button"
               onClick={() => setConfirmClearOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-sand px-4 py-2.5 text-sm text-mist transition-colors hover:bg-sand hover:text-clay"
+              className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm text-mist transition-colors hover:bg-sand hover:text-clay"
             >
               <Trash2 size={15} className="text-mist" aria-hidden />
               清空日志

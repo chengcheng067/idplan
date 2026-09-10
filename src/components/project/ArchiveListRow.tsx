@@ -12,7 +12,7 @@ export function ArchiveListRow({
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-3 border-b border-sand/60 px-2 py-2.5 text-left last:border-b-0 hover:bg-sand/40"
+      className="flex w-full items-center gap-3 border-b border-line/60 px-2 py-2.5 text-left last:border-b-0 hover:bg-sand/40"
     >
       <span className="text-sm text-mist line-through decoration-mist/30">{project.name}</span>
       <span className="ml-auto text-xs tabular-nums text-mist">

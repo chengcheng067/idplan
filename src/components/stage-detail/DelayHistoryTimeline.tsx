@@ -9,14 +9,14 @@ export function DelayHistoryTimeline({ logs }: { logs: StageLog[] }): JSX.Elemen
 
   if (reschedules.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-sand p-4 text-sm leading-6 text-mist">
+      <p className="rounded-md border border-dashed border-line p-4 text-sm leading-6 text-mist">
         暂无改期记录。拖拽彩条边缘或修改日期并确认后，将在此追加一条不可篡改的档案。
       </p>
     );
   }
 
   return (
-    <ol className="relative space-y-3 border-l border-sand pl-4">
+    <ol className="relative space-y-3 border-l border-line pl-4">
       {reschedules.map((l) => {
         const oldEnd = l.oldEndAt ? dayjs(l.oldEndAt).format('YYYY-MM-DD') : '—';
         const newEnd = l.newEndAt ? dayjs(l.newEndAt).format('YYYY-MM-DD') : '—';

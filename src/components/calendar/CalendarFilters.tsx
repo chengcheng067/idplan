@@ -26,7 +26,7 @@ function Chip({
         'rounded-full border px-3 py-1 text-xs transition-colors',
         active
           ? 'border-pine bg-pine-soft text-pine-deep'
-          : 'border-sand bg-paper text-mist hover:bg-sand hover:text-ink',
+          : 'border-line bg-paper text-mist hover:bg-sand hover:text-ink',
       )}
     >
       {children}
@@ -74,7 +74,7 @@ export function CalendarFilters({
         <button
           type="button"
           onClick={onClear}
-          className="rounded-full border border-sand px-3 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="rounded-full border border-line px-3 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
         >
           清除筛选
         </button>

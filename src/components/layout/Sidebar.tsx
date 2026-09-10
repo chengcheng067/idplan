@@ -246,7 +246,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         {/* 底部固定区：设置 + 备份 + 新建（§3.3.2「底部（固定）」） */}
         <div
           className={cn(
-            'shrink-0 border-t border-sand px-2 py-2',
+            'shrink-0 border-t border-line px-2 py-2',
             isCollapsed ? 'flex flex-col items-center gap-1' : 'flex flex-col gap-0.5',
           )}
         >

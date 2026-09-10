@@ -48,7 +48,7 @@ export function ReadyQueue({
   const termMode = useLayoutStore((s) => s.agentBoardMode);
 
   return (
-    <section className="glass-light rounded-[16px] border border-sand p-3.5">
+    <section className="glass-light rounded-[16px] border border-line p-3.5">
       <div className="mb-2 flex items-center gap-2">
         <Zap size={14} className="text-pine" aria-hidden />
         <h2 className="text-sm font-semibold text-ink">
@@ -71,7 +71,7 @@ export function ReadyQueue({
       )}
 
       {ready.length === 0 && blocked.length === 0 ? (
-        <p className="rounded-[10px] border border-dashed border-sand px-3 py-4 text-center text-xs text-mist">
+        <p className="rounded-[10px] border border-dashed border-line px-3 py-4 text-center text-xs text-mist">
           当前没有可执行的 Ready 任务。通过「{termFor('applyPayload', termMode)}」导入或把任务流转到
           ready 即可出现在这里。
         </p>

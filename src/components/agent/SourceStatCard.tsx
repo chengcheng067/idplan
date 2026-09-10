@@ -39,7 +39,7 @@ export function SourceStatCard({
   const humanTotal = tasks.filter((t) => t.source === 'human').length;
 
   return (
-    <div className="glass-light flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-[12px] border border-sand px-3.5 py-2.5 text-xs">
+    <div className="glass-light flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-[12px] border border-line px-3.5 py-2.5 text-xs">
       <span className="text-mist">
         human <strong className="font-mono text-ink">{humanTotal}</strong>
       </span>

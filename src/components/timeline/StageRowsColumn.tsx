@@ -37,7 +37,7 @@ export function StageRowsColumn({
 
   return (
     <div
-      className="sticky left-0 z-10 shrink-0 border-r border-sand bg-cream"
+      className="sticky left-0 z-10 shrink-0 border-r border-line bg-cream"
       style={{ width: leftColW }}
     >
       {stages.map((s) => (
@@ -45,7 +45,7 @@ export function StageRowsColumn({
           key={s.id}
           type="button"
           onClick={() => onRowClick(s.id)}
-          className={`flex w-full items-center gap-3 border-b border-sand/50 px-4 text-left transition-colors hover:bg-sand/60 ${
+          className={`flex w-full items-center gap-3 border-b border-line/50 px-4 text-left transition-colors hover:bg-sand/60 ${
             s.id === activeStageId ? 'bg-sand' : ''
           }`}
           style={{ height: 44, marginBottom: 8 }}

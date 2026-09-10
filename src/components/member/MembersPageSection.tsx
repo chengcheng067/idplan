@@ -100,7 +100,7 @@ export function MembersPageSection(): JSX.Element | null {
   if (!isAdmin) return null;
 
   return (
-    <section className="glass-light rounded-lg border border-sand bg-paper p-5 shadow-soft">
+    <section className="glass-light rounded-lg border border-line bg-paper p-5 shadow-soft">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-display text-display-md">成员</h2>
         <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export function MembersPageSection(): JSX.Element | null {
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="inline-flex items-center gap-1 rounded-md border border-sand px-3 py-1.5 text-xs text-mist hover:bg-sand hover:text-pine"
+              className="inline-flex items-center gap-1 rounded-md border border-line px-3 py-1.5 text-xs text-mist hover:bg-sand hover:text-pine"
             >
               <Plus size={13} /> 添加成员
             </button>
@@ -142,7 +142,7 @@ export function MembersPageSection(): JSX.Element | null {
                   'rounded-md border px-2.5 py-1 text-xs transition-colors ' +
                   (actorKind === k
                     ? 'border-pine bg-pine text-white'
-                    : 'border-sand text-mist hover:bg-sand hover:text-ink')
+                    : 'border-line text-mist hover:bg-sand hover:text-ink')
                 }
               >
                 {k === 'human' ? '👤 人' : '🤖 Agent'}
@@ -159,19 +159,19 @@ export function MembersPageSection(): JSX.Element | null {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="姓名 *"
-            className="rounded-md border border-sand bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
+            className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
           <ImeInput
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="角色（如绘图员）"
-            className="rounded-md border border-sand bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
+            className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
           <ImeInput
             value={contact}
             onChange={(e) => setContact(e.target.value)}
             placeholder="联系方式"
-            className="rounded-md border border-sand bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
+            className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
           {actorKind === 'agent' && (
             <>
@@ -180,7 +180,7 @@ export function MembersPageSection(): JSX.Element | null {
                 onChange={(e) => setAgentKind(e.target.value)}
                 list="agent-kind-suggestions"
                 placeholder="agentKind（如 workbuddy / codex）"
-                className="rounded-md border border-sand bg-paper px-2 py-1.5 font-mono text-sm outline-none focus:border-pine"
+                className="rounded-md border border-line bg-paper px-2 py-1.5 font-mono text-sm outline-none focus:border-pine"
               />
               {/* 建议值仅供参考选择，输入框始终允许任意字符串（开放字符串铁律） */}
               <datalist id="agent-kind-suggestions">
@@ -329,14 +329,14 @@ function PasswordDialog({
           placeholder="输入新密码（留空则不修改）"
           disabled={busy}
           autoComplete="new-password"
-          className="mt-4 w-full rounded-md border border-sand bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+          className="mt-4 w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
         />
         <div className="mt-5 flex justify-between gap-2">
           <button
             type="button"
             onClick={() => void clear()}
             disabled={busy || !hasPassword}
-            className="rounded-md border border-sand px-3 py-1.5 text-sm text-clay transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-line px-3 py-1.5 text-sm text-clay transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-40"
           >
             清除密码
           </button>
@@ -344,7 +344,7 @@ function PasswordDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-sand px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
               取消
             </button>
@@ -436,7 +436,7 @@ function MemberRow({
             type="button"
             onClick={cancel}
             title="取消"
-            className="inline-flex items-center gap-1 rounded-md border border-sand px-2 py-1 text-xs text-mist hover:bg-sand"
+            className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-mist hover:bg-sand"
           >
             <X size={12} /> 取消
           </button>
@@ -476,7 +476,7 @@ function MemberRow({
               type="button"
               onClick={onPromote}
               title="设为管理员"
-              className="inline-flex items-center gap-1 rounded-md border border-sand px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
+              className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
             >
               <Crown size={12} /> <span className="hidden sm:inline">设为管理员</span>
             </button>
@@ -487,7 +487,7 @@ function MemberRow({
               onClick={onDemote}
               disabled={isLastAdmin}
               title={isLastAdmin ? '系统至少需要一名管理员' : '取消管理员'}
-              className="inline-flex items-center gap-1 rounded-md border border-sand px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-clay disabled:cursor-not-allowed disabled:opacity-40 sm:px-2"
+              className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-clay disabled:cursor-not-allowed disabled:opacity-40 sm:px-2"
             >
               <XCircle size={12} /> <span className="hidden sm:inline">取消管理员</span>
             </button>
@@ -496,7 +496,7 @@ function MemberRow({
             type="button"
             onClick={onPassword}
             title={memberHasPassword(member) ? '修改/清除密码' : '设置密码'}
-            className="inline-flex items-center gap-1 rounded-md border border-sand px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
+            className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
           >
             <KeyRound size={12} /> <span className="hidden sm:inline">密码</span>
           </button>
@@ -504,7 +504,7 @@ function MemberRow({
             type="button"
             onClick={() => setEditing(true)}
             title="重命名"
-            className="inline-flex items-center gap-1 rounded-md border border-sand px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
+            className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
           >
             <Pencil size={12} /> <span className="hidden sm:inline">重命名</span>
           </button>
@@ -513,7 +513,7 @@ function MemberRow({
             onClick={onToggle}
             title={member.active ? '停用成员' : '重新启用'}
             className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs sm:px-2 ${
-              member.active ? 'border-sand text-mist hover:bg-sand' : 'border-sand text-pine hover:bg-sand'
+              member.active ? 'border-line text-mist hover:bg-sand' : 'border-line text-pine hover:bg-sand'
             }`}
           >
             {member.active ? (

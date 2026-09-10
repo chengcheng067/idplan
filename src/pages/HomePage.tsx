@@ -109,7 +109,7 @@ export function HomePage(): JSX.Element {
           {active.length === 0 ? (
             <EmptyState onManual={openManual} />
           ) : filtered.length === 0 ? (
-            <div className="glass-light rounded-[16px] border border-dashed border-sand p-6 text-center sm:p-10">
+            <div className="glass-light rounded-[16px] border border-dashed border-line p-6 text-center sm:p-10">
               <p className="font-display text-display-md text-mist">没有匹配「{searchQuery}」的项目</p>
               <button
                 type="button"
@@ -179,7 +179,7 @@ export function HomePage(): JSX.Element {
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="font-display text-display-md text-mist">已归档 · {archived.length}</h2>
-          <div className="glass-light rounded-[16px] border border-sand px-3 py-1 shadow-soft">
+          <div className="glass-light rounded-[16px] border border-line px-3 py-1 shadow-soft">
             {archived.map((p) => (
               <ArchiveListRow key={p.id} project={p} onOpen={() => openProject(p.id)} />
             ))}
@@ -334,7 +334,7 @@ function endOfWeekIso(d: Date): string {
 
 function EmptyState({ onManual }: { onManual(): void }): JSX.Element {
   return (
-    <div className="glass-light rounded-[16px] border border-dashed border-sand p-6 text-center sm:p-10">
+    <div className="glass-light rounded-[16px] border border-dashed border-line p-6 text-center sm:p-10">
       <p className="font-display text-display-md text-mist">还没有进行中的项目</p>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
         点击左上角「新建项目」创建你的第一个项目；项目名称与竣工日为必填，其余可在进入后随时补充。

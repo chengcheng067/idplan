@@ -188,7 +188,7 @@ export function AgentTaskCard({
       <div
         className={cn(
           'glass-light w-full rounded-[12px] border p-2.5 transition-colors hover:border-pine/50',
-          blocked ? 'border-clay/40' : 'border-sand',
+          blocked ? 'border-clay/40' : 'border-line',
         )}
       >
         {/* ① 人话标题（点开详情） */}
@@ -241,7 +241,7 @@ export function AgentTaskCard({
       onClick={() => onOpen(task.id)}
       className={cn(
         'glass-light w-full rounded-[12px] border p-2.5 text-left transition-colors hover:border-pine/50',
-        blockedByTitles.length > 0 ? 'border-clay/40' : 'border-sand',
+        blockedByTitles.length > 0 ? 'border-clay/40' : 'border-line',
       )}
     >
       {/* 第一行：标题 + status 角标 */}

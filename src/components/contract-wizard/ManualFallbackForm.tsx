@@ -165,7 +165,7 @@ export function ManualFallbackForm({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="如「XX餐饮·室内设计」"
-              className="w-full rounded-md border border-sand bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
+              className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             />
           </label>
           <label className="block text-sm">
@@ -173,7 +173,7 @@ export function ManualFallbackForm({
             <select
               value={type}
               onChange={(e) => setType(e.target.value as ProjectType)}
-              className="w-full rounded-md border border-sand bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
+              className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             >
               {Object.entries(PROJECT_TYPE_LABELS).map(([k, label]) => (
                 <option key={k} value={k} className="bg-cream text-ink">
@@ -187,7 +187,7 @@ export function ManualFallbackForm({
             <ImeInput
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className="w-full rounded-md border border-sand bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
+              className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             />
           </label>
           <label className="block text-sm">
@@ -195,7 +195,7 @@ export function ManualFallbackForm({
             <ImeInput
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              className="w-full rounded-md border border-sand bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
+              className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
@@ -205,7 +205,7 @@ export function ManualFallbackForm({
                 type="date"
                 value={startAt}
                 onChange={(e) => setStartAt(e.target.value)}
-                className="w-full rounded-md border border-sand bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
+                className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
               />
             </label>
             <label className="block text-sm">
@@ -217,7 +217,7 @@ export function ManualFallbackForm({
                 type="date"
                 value={endAt}
                 onChange={(e) => setEndAt(e.target.value)}
-                className="w-full rounded-md border border-sand bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
+                className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
               />
             </label>
           </div>
@@ -229,7 +229,7 @@ export function ManualFallbackForm({
             type="button"
             onClick={() => setStagePanelOpen((v) => !v)}
             aria-expanded={stagePanelOpen}
-            className="flex w-full items-center justify-between rounded-md border border-sand bg-cream px-3 py-2 text-sm text-ink hover:bg-sand"
+            className="flex w-full items-center justify-between rounded-md border border-line bg-cream px-3 py-2 text-sm text-ink hover:bg-sand"
           >
             <span>
               本次服务阶段 · 已选 {stageItems.length} 项
@@ -238,7 +238,7 @@ export function ManualFallbackForm({
             {stagePanelOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </button>
           {stagePanelOpen && (
-            <div className="mt-2 rounded-md border border-sand bg-paper p-3">
+            <div className="mt-2 rounded-md border border-line bg-paper p-3">
               <StageSelectPanel
                 selected={stageItems}
                 onChange={setStageItems}

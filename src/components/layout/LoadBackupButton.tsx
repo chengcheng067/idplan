@@ -23,7 +23,7 @@ export function LoadBackupButton(): JSX.Element | null {
       <button
         type="button"
         onClick={pick}
-        className="inline-flex items-center gap-1.5 rounded-md border border-sand bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
         title="从 JSON 备份包恢复（整体替换当前全部数据）"
       >
         <Upload size={14} /> <span className="hidden 2xl:inline">加载备份</span>

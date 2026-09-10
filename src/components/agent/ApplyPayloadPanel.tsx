@@ -186,7 +186,7 @@ export function ApplyPayloadPanel({
         onDrop={onDrop}
         className={cn(
           'rounded-[12px] border border-dashed p-3 transition-colors',
-          dragOver ? 'border-pine bg-pine-soft' : 'border-sand',
+          dragOver ? 'border-pine bg-pine-soft' : 'border-line',
         )}
       >
         <textarea
@@ -196,7 +196,7 @@ export function ApplyPayloadPanel({
           placeholder={`粘贴 payload JSON，或拖入 .json / .md 文件……\n（${AGENT_PAYLOAD_SCHEMA_ID}）`}
           rows={8}
           spellCheck={false}
-          className="w-full resize-y rounded-[10px] border border-sand bg-paper p-3 font-mono text-xs leading-5 text-ink outline-none focus:border-pine"
+          className="w-full resize-y rounded-[10px] border border-line bg-paper p-3 font-mono text-xs leading-5 text-ink outline-none focus:border-pine"
         />
         <div className="mt-2 flex items-center gap-2 text-[11px] text-mist">
           <Upload size={12} aria-hidden />
@@ -265,17 +265,17 @@ export function ApplyPayloadPanel({
             <table className="mt-2 w-full border-collapse text-left text-[11px]">
               <thead>
                 <tr className="text-mist">
-                  <th className="border-b border-sand py-1 pr-2 font-medium">externalId</th>
-                  <th className="border-b border-sand py-1 pr-2 font-medium">code</th>
-                  <th className="border-b border-sand py-1 font-medium">reason</th>
+                  <th className="border-b border-line py-1 pr-2 font-medium">externalId</th>
+                  <th className="border-b border-line py-1 pr-2 font-medium">code</th>
+                  <th className="border-b border-line py-1 font-medium">reason</th>
                 </tr>
               </thead>
               <tbody>
                 {state.result.rejected.map((r) => (
                   <tr key={`${r.externalId}-${r.code}`}>
-                    <td className="border-b border-sand/50 py-1 pr-2 font-mono text-ink">{r.externalId}</td>
-                    <td className="border-b border-sand/50 py-1 pr-2 font-mono text-clay">{r.code}</td>
-                    <td className="border-b border-sand/50 py-1 text-mist">{r.reason}</td>
+                    <td className="border-b border-line/50 py-1 pr-2 font-mono text-ink">{r.externalId}</td>
+                    <td className="border-b border-line/50 py-1 pr-2 font-mono text-clay">{r.code}</td>
+                    <td className="border-b border-line/50 py-1 text-mist">{r.reason}</td>
                   </tr>
                 ))}
               </tbody>
@@ -287,7 +287,7 @@ export function ApplyPayloadPanel({
             <button
               type="button"
               onClick={() => setState({ phase: 'input' })}
-              className="rounded-md border border-sand px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
               重新编辑
             </button>

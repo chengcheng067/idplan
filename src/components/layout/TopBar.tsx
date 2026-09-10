@@ -27,7 +27,7 @@ function CompactSearchField({
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
 
   return (
-    <div className="flex w-full max-w-[360px] items-center gap-2 rounded-[14px] border border-sand bg-cream/60 px-3 py-2">
+    <div className="flex w-full max-w-[360px] items-center gap-2 rounded-[14px] border border-line bg-cream/60 px-3 py-2">
       <Search size={15} className="shrink-0 text-mist" aria-hidden />
       <ImeInput
         ref={inputRef}
@@ -75,7 +75,7 @@ function CompactSearchField({
  *
  * ── 玻璃层次（§3.5）──
  *   整条顶栏**不再** `glass-strong` 浮起：改为纸白 `bg-cream` 常驻条 +
- *   底部极弱 `border-sand` 分隔线。玻璃只留给浮层（命令栏/抽屉/弹窗/下拉）。
+ *   底部极弱 `border-line` 分隔线。玻璃只留给浮层（命令栏/抽屉/弹窗/下拉）。
  *
  * ── 响应式三档（严格锁 xl=1280，不引入新断点；§3.3）──
  *   ≥1280（xl）：单行——汉堡隐藏、logo+品牌、搜索图标+⌘K、身份、设置+⋮；
@@ -144,7 +144,7 @@ export function TopBar(): JSX.Element {
       className={cn(
         'relative z-40 shrink-0 print:hidden',
         // §3.5：常驻导航条不做玻璃浮起 —— 纸白底 + 极弱底部分隔线
-        'border-b border-sand bg-cream',
+        'border-b border-line bg-cream',
       )}
     >
       <div className="px-4 pt-4 sm:px-6 lg:px-8">
@@ -167,7 +167,7 @@ export function TopBar(): JSX.Element {
               onClick={openSidebarDrawer}
               aria-label="打开导航菜单"
               aria-controls="app-sidebar"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-sand text-mist transition-colors hover:bg-sand hover:text-ink xl:hidden"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink xl:hidden"
             >
               <Menu size={18} aria-hidden />
             </button>
@@ -199,7 +199,7 @@ export function TopBar(): JSX.Element {
             {/* 桌面端（≥xl）：默认图标，点击/⌘K 展开为内联输入框（去 480px 常驻框） */}
             <div className="hidden items-center justify-center xl:flex">
               {desktopSearchOpen ? (
-                <div className="flex w-[480px] max-w-full items-center gap-2.5 rounded-[14px] border border-sand bg-cream/60 p-2.5">
+                <div className="flex w-[480px] max-w-full items-center gap-2.5 rounded-[14px] border border-line bg-cream/60 p-2.5">
                   <Search size={15} className="shrink-0 text-mist" aria-hidden />
                   <ImeInput
                     ref={desktopSearchRef}
@@ -233,7 +233,7 @@ export function TopBar(): JSX.Element {
                   }}
                   aria-label="打开搜索（快捷键 ⌘K / Ctrl+K / Alt+K）"
                   title="搜索（⌘K）"
-                  className="flex h-9 items-center gap-2 rounded-[10px] border border-sand px-3 text-mist transition-colors hover:bg-sand hover:text-ink"
+                  className="flex h-9 items-center gap-2 rounded-[10px] border border-line px-3 text-mist transition-colors hover:bg-sand hover:text-ink"
                 >
                   <Search size={18} aria-hidden />
                   <span className="text-xs" aria-hidden>
@@ -269,7 +269,7 @@ export function TopBar(): JSX.Element {
                     }, 0);
                   }}
                   aria-label="打开搜索"
-                  className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-sand text-mist transition-colors hover:bg-sand hover:text-ink"
+                  className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink"
                 >
                   <Search size={18} />
                 </button>

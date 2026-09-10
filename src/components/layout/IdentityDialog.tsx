@@ -199,7 +199,7 @@ export function IdentityDialog(): JSX.Element | null {
                 setNotice('系统当前还没有管理员。请联系管理员完成首次设置后再进入。');
                 setIdentityFlow('mismatch');
               }}
-              className="rounded-md border border-sand px-4 py-2 text-sm text-mist transition-colors hover:bg-sand"
+              className="rounded-md border border-line px-4 py-2 text-sm text-mist transition-colors hover:bg-sand"
             >
               我不是管理员
             </button>
@@ -231,13 +231,13 @@ export function IdentityDialog(): JSX.Element | null {
             disabled={busy}
             autoComplete="off"
             spellCheck={false}
-            className="w-full rounded-md border border-sand bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+            className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-md border border-sand px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
               取消
             </button>
@@ -279,14 +279,14 @@ export function IdentityDialog(): JSX.Element | null {
             placeholder="输入密码"
             disabled={busy}
             autoComplete="current-password"
-            className="w-full rounded-md border border-sand bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+            className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
           />
           {notice && <p className="text-xs text-clay">{notice}</p>}
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-md border border-sand px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
               取消
             </button>
@@ -311,7 +311,7 @@ export function IdentityDialog(): JSX.Element | null {
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-md border border-sand px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
+            className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
           >
             知道了
           </button>

@@ -174,7 +174,7 @@ export function ProjectCard({
             {menuOpen && (
               <div
                 role="menu"
-                className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-2xl border border-sand py-1.5 shadow-overlay"
+                className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-2xl border border-line py-1.5 shadow-overlay"
               >
                 <button
                   type="button"
@@ -208,7 +208,7 @@ export function ProjectCard({
                     setMenuOpen(false);
                     setArchiveOpen(true);
                   }}
-                  className="flex w-full items-center gap-2 border-t border-sand px-3 py-2 text-left text-sm text-ink hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm text-ink hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Archive size={14} className="text-mist" aria-hidden />
                   归档项目
@@ -220,7 +220,7 @@ export function ProjectCard({
                     setMenuOpen(false);
                     setDeleteOpen(true);
                   }}
-                  className="flex w-full items-center gap-2 border-t border-sand px-3 py-2 text-left text-sm text-clay hover:bg-clay-soft"
+                  className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm text-clay hover:bg-clay-soft"
                 >
                   <Trash2 size={14} aria-hidden />
                   删除项目

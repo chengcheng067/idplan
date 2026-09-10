@@ -56,7 +56,7 @@ export function MobileStageList({
             onClick={() => onOpen(s.id)}
             className={cn(
               'glass-medium flex w-full flex-col gap-1.5 rounded-[14px] border p-3 text-left shadow-soft transition-colors',
-              active ? 'border-pine bg-pine-soft/20' : 'border-sand',
+              active ? 'border-pine bg-pine-soft/20' : 'border-line',
             )}
           >
             {/* 第一行：序号 + 名称 + 状态 */}

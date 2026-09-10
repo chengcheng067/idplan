@@ -85,13 +85,13 @@ export function RescheduleDialog({
         </div>
 
         {/* 批量改期列表（最多显示 5 行，超出滚动） */}
-        <div className="mb-4 max-h-40 overflow-y-auto rounded-md border border-sand bg-cream/50 p-2 text-sm">
+        <div className="mb-4 max-h-40 overflow-y-auto rounded-md border border-line bg-cream/50 p-2 text-sm">
           {batch.items.map((it) => {
             const isPostponed = new Date(it.newEndAt).getTime() > new Date(it.oldEndAt).getTime();
             return (
               <div
                 key={it.stageId}
-                className="grid grid-cols-[1fr_auto] gap-x-3 border-b border-sand/40 py-1.5 last:border-b-0"
+                className="grid grid-cols-[1fr_auto] gap-x-3 border-b border-line/40 py-1.5 last:border-b-0"
               >
                 <span className="truncate text-ink">{it.stageName}</span>
                 <span className="tabular-nums text-mist">
@@ -113,7 +113,7 @@ export function RescheduleDialog({
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
                 placeholder="如：业主确认图纸延迟 / 消防验收排队…"
-                className="w-full resize-y rounded-md border border-sand p-2 text-sm leading-6 outline-none focus:border-pine"
+                className="w-full resize-y rounded-md border border-line p-2 text-sm leading-6 outline-none focus:border-pine"
                 autoFocus
               />
             </label>
@@ -127,7 +127,7 @@ export function RescheduleDialog({
             <ImeInput
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full rounded-md border border-sand px-2 py-1.5 text-sm outline-none focus:border-pine"
+              className="w-full rounded-md border border-line px-2 py-1.5 text-sm outline-none focus:border-pine"
             />
           </label>
         )}
@@ -138,7 +138,7 @@ export function RescheduleDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-sand px-3 py-1.5 text-sm text-mist hover:bg-sand"
+            className="rounded-md border border-line px-3 py-1.5 text-sm text-mist hover:bg-sand"
           >
             取消
           </button>

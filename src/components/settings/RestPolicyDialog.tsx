@@ -35,7 +35,7 @@ export function RestPolicySettingsButton(): JSX.Element | null {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-sand bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
         title="公司休息制度（双休 / 单休 / 大小休）"
       >
         <CalendarDays size={14} /> <span className="hidden 2xl:inline">休息制度</span>
@@ -134,7 +134,7 @@ export function RestPolicyEditor({
                 'flex cursor-pointer items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-sm transition-colors',
                 active
                   ? 'border-pine bg-pine-soft text-ink'
-                  : 'border-sand text-mist hover:bg-sand hover:text-ink',
+                  : 'border-line text-mist hover:bg-sand hover:text-ink',
               )}
             >
               <input
@@ -153,7 +153,7 @@ export function RestPolicyEditor({
 
       {/* 大小休：未来 4 周预览 + 对调 */}
       {draft.kind === RestPolicyKind.BigSmallWeek && (
-        <div className="mt-4 rounded-[12px] border border-sand bg-cream/60 p-3">
+        <div className="mt-4 rounded-[12px] border border-line bg-cream/60 p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs text-mist">
               未来 {PREVIEW_WEEKS} 周预览 · 锚点周{' '}
@@ -162,7 +162,7 @@ export function RestPolicyEditor({
             <button
               type="button"
               onClick={onSwap}
-              className="rounded-md border border-sand bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
+              className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
               title="把锚点周整体位移一周，大小休对调"
             >
               从下周起对调
@@ -195,7 +195,7 @@ export function RestPolicyEditor({
                     title={d.rest ? `${d.date} 休息` : `${d.date} 上班`}
                     className={cn(
                       'flex h-7 items-center justify-center rounded-[6px] text-[11px]',
-                      d.rest ? 'bg-rest-day text-mist' : 'border border-sand text-ink',
+                      d.rest ? 'bg-rest-day text-mist' : 'border border-line text-ink',
                     )}
                   >
                     {d.day}
@@ -218,7 +218,7 @@ export function RestPolicyEditor({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-sand px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
             >
               取消
             </button>
