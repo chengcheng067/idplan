@@ -11,6 +11,7 @@ import {
   buildLogExport,
   logExportFileName,
 } from '../src/core/services/log.service';
+import { BUILD_VERSION } from '../src/constants/version';
 
 /** 每条日志的稳定字段校验 */
 function assertEntryShape(e: unknown): void {
@@ -71,7 +72,10 @@ describe('log.service（前端日志系统）', () => {
     write({ type: 'info', source: 'a', message: '1' });
     const pkg = buildLogExport(new Date('2026-09-01T00:00:00.000Z'));
     expect(pkg.app).toBe('ID Plan');
-    expect(pkg.version).toBe('0.3.0.0018');
+    // 版本号单一真相源是仓库根 version.json（见 src/constants/version.ts）。
+    // 这里不再硬编码四段号——硬编码会在每次发版后烂掉（曾断言 0.3.0.0018 而实际 0.6.0.0001）。
+    expect(pkg.version).toBe(BUILD_VERSION);
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
     expect(pkg.channel).toBe('local');
     expect(pkg.exportedAt).toBe('2026-09-01T00:00:00.000Z');
     expect(Array.isArray(pkg.entries)).toBe(true);
