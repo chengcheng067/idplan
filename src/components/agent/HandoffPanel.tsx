@@ -18,6 +18,7 @@ import { useProjectsStore } from '../../store/useProjectsStore';
 import { buildHandoffBundle } from '../../core/agent/handoff';
 import { computeReadyTasks } from '../../core/agent/dag';
 import { termFor } from '../../constants/agentTerms';
+import { useLayoutStore } from '../../store/useLayoutStore';
 import { cn } from '../../lib/cn';
 
 type HandoffScope = 'ready' | 'all' | 'stage';
@@ -40,6 +41,8 @@ export function HandoffPanel({
 
   const [scope, setScope] = useState<HandoffScope>('ready');
   const [stageId, setStageId] = useState<string>(stages[0]?.id ?? '');
+  /** 术语模式（human 人话 / tech 技术）：T04 起必须显式传入，无缺省（§4.4） */
+  const termMode = useLayoutStore((s) => s.agentBoardMode);
 
   /** memberId → 展示名（agent 显示 agentKind；HF-04：绝不传 Member 实体） */
   const assigneeLabels = useMemo(() => {
@@ -85,7 +88,7 @@ export function HandoffPanel({
     if (!text.trim()) return;
     try {
       await navigator.clipboard.writeText(text);
-      pushToast('success', `${termFor('handoff')} 已复制到剪贴板`);
+      pushToast('success', `${termFor('handoff', termMode)} 已复制到剪贴板`);
     } catch {
       pushToast('error', '复制失败（剪贴板不可用），请手动全选预览区文本复制。');
     }
@@ -100,7 +103,7 @@ export function HandoffPanel({
     a.download = `handoff-${projectName}-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
-    pushToast('success', `${termFor('handoff')} 已下载为 .md`);
+    pushToast('success', `${termFor('handoff', termMode)} 已下载为 .md`);
   };
 
   return (
@@ -108,7 +111,8 @@ export function HandoffPanel({
       {/* 头部 */}
       <div className="mb-3 flex items-center justify-between gap-4">
         <h2 className="font-display text-display-md">
-          {termFor('handoff')} <span className="text-xs font-normal text-mist">（给下一个 Agent 的 prompt 包）</span>
+          {termFor('handoff', termMode)}{' '}
+          <span className="text-xs font-normal text-mist">（给下一个 Agent 的 prompt 包）</span>
         </h2>
         <button
           type="button"
@@ -124,9 +128,9 @@ export function HandoffPanel({
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         {(
           [
-            ['ready', `${termFor('ready')}（推荐）`],
+            ['ready', `${termFor('ready', termMode)}（推荐）`],
             ['all', '全部任务'],
-            ['stage', `指定${termFor('stageShort')}`],
+            ['stage', `指定${termFor('stageShort', termMode)}`],
           ] as Array<[HandoffScope, string]>
         ).map(([key, label]) => (
           <button

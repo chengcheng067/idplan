@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import {
+  DEFAULT_AGENT_TERM_MODE,
+  type AgentTermMode,
+} from '../constants/agentTerms';
+
 /**
  * 布局瞬态状态（v0.7 · 子系统 ① · N03 / T18）。
  *
@@ -63,6 +68,21 @@ export interface LayoutState {
   /** 抽屉开合（<xl；按会话，**不**持久化 —— D3：抽屉开合不强制持久化） */
   sidebarDrawerOpen: boolean;
 
+  /**
+   * Agent 看板模式（`human` 人话 / `tech` 技术；v0.7 子系统 ② · T04/§4.4）。
+   *
+   * 归属本 store 而非 `useUiStore` —— 与上面「为什么不塞进 useUiStore」
+   * 同一裁决（文档 §4.4 表格写 `useUiStore`，但那是漏看 `Set` 事实的那版；
+   * 裁决以本 store 为准）。它是**用户偏好**（切了下次进来还得是那个模式），
+   * 故必须持久化；而 `useUiStore` 整体不持久化，放它那儿等于每次刷新回默认。
+   *
+   * 类型收窄为字面量联合（非 string）：调用点 `termFor(key, mode)` 的
+   * mode 参数是同一联合，故本字段可直接透传，无需断言。
+   */
+  agentBoardMode: AgentTermMode;
+  /** 释放抽屉（reset，供测试与「恢复默认」用） */
+  setAgentBoardMode(mode: AgentTermMode): void;
+
   toggleSidebar(): void;
   setSidebarExpanded(v: boolean): void;
   openSidebarDrawer(): void;
@@ -104,6 +124,7 @@ export const useLayoutStore = create<LayoutState>()(
     (set) => ({
       sidebarExpanded: defaultExpanded(),
       sidebarDrawerOpen: false,
+      agentBoardMode: DEFAULT_AGENT_TERM_MODE,
 
       toggleSidebar: () =>
         set((s) => {
@@ -117,14 +138,18 @@ export const useLayoutStore = create<LayoutState>()(
       },
       openSidebarDrawer: () => set({ sidebarDrawerOpen: true }),
       closeSidebarDrawer: () => set({ sidebarDrawerOpen: false }),
+      setAgentBoardMode: (mode) => set({ agentBoardMode: mode }),
     }),
     {
       name: LAYOUT_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      // 只持久化展开态；抽屉态按会话（D3）。
+      // 只持久化**用户偏好**；抽屉态按会话（D3）。
       // 注意：**不能**持久化 sidebarDrawerOpen——否则刷新后抽屉自动弹开，
       // 在小屏上会盖住全屏内容，属于「上次会话的瞬时状态」而非偏好。
-      partialize: (s) => ({ sidebarExpanded: s.sidebarExpanded }),
+      partialize: (s) => ({
+        sidebarExpanded: s.sidebarExpanded,
+        agentBoardMode: s.agentBoardMode,
+      }),
       /**
        * 每次从 localStorage 恢复 / 每次写入后，都把折叠态同步到 DOM 属性。
        * `onRehydrateStorage` 在**同步 hydration 完成时立即**回调（persist 默认

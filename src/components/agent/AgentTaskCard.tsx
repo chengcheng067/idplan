@@ -10,6 +10,7 @@ import type { Task } from '../../core/types/entities';
 import { taskIsDone } from '../../core/types/entities';
 import { ChangxiaError, ChangxiaErrorCode } from '../../core/types/enums';
 import { termFor } from '../../constants/agentTerms';
+import { useLayoutStore } from '../../store/useLayoutStore';
 import { remainingDays } from '../../lib/date';
 import { cn } from '../../lib/cn';
 
@@ -78,6 +79,8 @@ export function AgentTaskCard({
   const overdue =
     !done && task.dueDate && remainingDays(task.dueDate.slice(0, 10)) < 0;
   const dueDays = task.dueDate ? remainingDays(task.dueDate.slice(0, 10)) : null;
+  /** 术语模式（human 人话 / tech 技术）：T04 起必须显式传入，无缺省（§4.4） */
+  const termMode = useLayoutStore((s) => s.agentBoardMode);
 
   return (
     <button
@@ -114,8 +117,8 @@ export function AgentTaskCard({
             )}
             title={
               blockedByTitles.length > 0
-                ? `${termFor('blockedBy')}：${blockedByTitles.join('、')}`
-                : termFor('deps')
+                ? `${termFor('blockedBy', termMode)}：${blockedByTitles.join('、')}`
+                : termFor('deps', termMode)
             }
           >
             ⛓ {task.dependsOn.length}

@@ -15,6 +15,7 @@ import { Zap } from 'lucide-react';
 import type { Task } from '../../core/types/entities';
 import { computeReadyTasks } from '../../core/agent/dag';
 import { termFor } from '../../constants/agentTerms';
+import { useLayoutStore } from '../../store/useLayoutStore';
 import { AgentTaskCard } from './AgentTaskCard';
 
 export function ReadyQueue({
@@ -34,12 +35,15 @@ export function ReadyQueue({
     [tasks],
   );
 
+  /** 术语模式（human 人话 / tech 技术）：T04 起必须显式传入，无缺省（§4.4） */
+  const termMode = useLayoutStore((s) => s.agentBoardMode);
+
   return (
     <section className="glass-light rounded-[16px] border border-sand p-3.5">
       <div className="mb-2 flex items-center gap-2">
         <Zap size={14} className="text-pine" aria-hidden />
         <h2 className="text-sm font-semibold text-ink">
-          ⚡ {termFor('ready')} —— 下一步该做什么
+          ⚡ {termFor('ready', termMode)} —— 下一步该做什么
         </h2>
         <span className="rounded-md bg-sand px-1.5 py-0.5 font-mono text-[10px] text-mist">
           {ready.length}
@@ -59,7 +63,7 @@ export function ReadyQueue({
 
       {ready.length === 0 && blocked.length === 0 ? (
         <p className="rounded-[10px] border border-dashed border-sand px-3 py-4 text-center text-xs text-mist">
-          当前没有可执行的 Ready 任务。通过「{termFor('applyPayload')}」导入或把任务流转到
+          当前没有可执行的 Ready 任务。通过「{termFor('applyPayload', termMode)}」导入或把任务流转到
           ready 即可出现在这里。
         </p>
       ) : (
@@ -107,7 +111,7 @@ export function ReadyQueue({
                   {task.title}
                 </button>
                 <span className="text-clay">
-                  ← {termFor('blockedBy')} {blockedBy.map((d) => `「${d.title}」`).join('、')}
+                  ← {termFor('blockedBy', termMode)} {blockedBy.map((d) => `「${d.title}」`).join('、')}
                 </span>
               </li>
             ))}

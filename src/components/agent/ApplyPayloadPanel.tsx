@@ -26,6 +26,7 @@ import {
 import type { AgentPayloadV1, ApplyResult } from '../../core/types/agent-payload';
 import { parseMarkdownTasks } from '../../core/agent/markdown-ingest';
 import { termFor } from '../../constants/agentTerms';
+import { useLayoutStore } from '../../store/useLayoutStore';
 import { cn } from '../../lib/cn';
 
 type PanelState =
@@ -64,6 +65,8 @@ export function ApplyPayloadPanel({
   const previewPayload = useAgentStore((s) => s.previewPayload);
   const commitPayload = useAgentStore((s) => s.commitPayload);
   const pushToast = useProjectsStore((s) => s.pushToast);
+  /** 术语模式（human 人话 / tech 技术）：T04 起必须显式传入，无缺省（§4.4） */
+  const termMode = useLayoutStore((s) => s.agentBoardMode);
 
   const [text, setText] = useState('');
   const [state, setState] = useState<PanelState>({ phase: 'input' });
@@ -160,7 +163,9 @@ export function ApplyPayloadPanel({
     <div className="glass-strong iridescent-border dialog-pop flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-y-auto rounded-2xl p-5 shadow-soft outline-none">
       {/* 头部 */}
       <div className="mb-3 flex items-center justify-between gap-4">
-        <h2 className="font-display text-display-md">{termFor('applyPayload')}</h2>
+        <h2 className="font-display text-display-md">
+          {termFor('applyPayload', termMode)}
+        </h2>
         <button
           type="button"
           onClick={onClose}

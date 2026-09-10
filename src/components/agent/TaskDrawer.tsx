@@ -27,6 +27,7 @@ import { useAgentStore } from '../../store/useAgentStore';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { termFor } from '../../constants/agentTerms';
+import { useLayoutStore } from '../../store/useLayoutStore';
 import { StatusBadge } from './AgentTaskCard';
 import { Modal } from '../common/Modal';
 import { remainingDays } from '../../lib/date';
@@ -197,6 +198,8 @@ export function TaskDrawer({
   const transitionTask = useAgentStore((s) => s.transitionTask);
   const openDrawer = useAgentStore((s) => s.openDrawer);
   const allTasks = useProjectsStore((s) => s.tasks);
+  /** 术语模式（human 人话 / tech 技术）：T04 起必须显式传入，无缺省（§4.4） */
+  const termMode = useLayoutStore((s) => s.agentBoardMode);
 
   /** 后继（被本任务依赖的任务）——deps 双向导航 */
   const successors = useMemo(
@@ -278,7 +281,7 @@ export function TaskDrawer({
               <span className="font-mono">{agent ? `${agent.name}` : (task.agentId ?? '—')}</span>
             </Field>
             <Field label="assignee">{assignee?.name ?? '—'}</Field>
-            <Field label={termFor('stageShort')}>{stageName}</Field>
+            <Field label={termFor('stageShort', termMode)}>{stageName}</Field>
             <Field label="startAt">
               <span className="font-mono">{task.startAt?.slice(0, 10) ?? '—'}</span>
             </Field>
@@ -318,7 +321,7 @@ export function TaskDrawer({
 
         {/* ③ deps（前置 + 后继，可点击跳转） */}
         <section className="mt-4">
-          <h3 className="mb-1.5 text-xs font-semibold text-mist">{termFor('deps')}</h3>
+          <h3 className="mb-1.5 text-xs font-semibold text-mist">{termFor('deps', termMode)}</h3>
           {(task.dependsOn?.length ?? 0) === 0 && successors.length === 0 ? (
             <p className="text-sm text-mist">—</p>
           ) : (
@@ -366,7 +369,9 @@ export function TaskDrawer({
 
         {/* ④ artifacts */}
         <section className="mt-4">
-          <h3 className="mb-1.5 text-xs font-semibold text-mist">{termFor('artifacts')}</h3>
+          <h3 className="mb-1.5 text-xs font-semibold text-mist">
+            {termFor('artifacts', termMode)}
+          </h3>
           {task.artifacts.length === 0 ? (
             <p className="text-sm text-mist">—</p>
           ) : (

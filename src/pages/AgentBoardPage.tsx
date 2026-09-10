@@ -10,7 +10,8 @@
  * 写操作全部经 useAgentStore actions（commitPayload 内已刷新镜像）。
  *
  * 移动端：单列纵向堆叠，列标题吸顶（sticky top-0）；抽屉/面板全屏化（T12）。
- * 术语：全部经 termFor('agent')；状态英文原样显示。
+ * 术语：全部经 `termFor(key, mode)` 显式传 mode（v0.7 T04：禁缺省）；
+ * mode 取自 useLayoutStore.agentBoardMode（人话/技术双模式，§4.4）。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,6 +27,7 @@ import { useAgentStore } from '../store/useAgentStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useLayoutStore } from '../store/useLayoutStore';
 import { AGENT_SEAT_LIMIT, termFor } from '../constants/agentTerms';
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
 import { HandoffPanel } from '../components/agent/HandoffPanel';
@@ -120,6 +122,8 @@ export function AgentBoardPage(): JSX.Element {
 
   const agentSeatUsed = members.filter((m) => m.actorKind === 'agent').length;
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
+  // v0.7 T04：看板模式（human/tech）显式取自 store，供全部 termFor 调用点传参
+  const agentBoardMode = useLayoutStore((s) => s.agentBoardMode);
 
   /** 列分桶：按 status 分组（列内 Ready 区之外的任务） */
   const columns = useMemo(() => {
@@ -147,7 +151,9 @@ export function AgentBoardPage(): JSX.Element {
         >
           ← 项目
         </Link>
-        <h1 className="font-display text-lg font-bold text-ink">{termFor('board')}</h1>
+        <h1 className="font-display text-lg font-bold text-ink">
+          {termFor('board', agentBoardMode)}
+        </h1>
         <select
           value={currentProjectId ?? ''}
           onChange={(e) => setCurrentProject(e.target.value || null)}
@@ -169,7 +175,7 @@ export function AgentBoardPage(): JSX.Element {
             className="inline-flex items-center gap-1.5 rounded-[10px] border border-pine px-3 py-1.5 text-sm text-pine transition-colors hover:bg-pine-soft disabled:opacity-40"
           >
             <ClipboardPaste size={14} aria-hidden />
-            {termFor('applyPayload')}
+            {termFor('applyPayload', agentBoardMode)}
           </button>
           <button
             type="button"
@@ -178,7 +184,7 @@ export function AgentBoardPage(): JSX.Element {
             className="inline-flex items-center gap-1.5 rounded-[10px] bg-pine px-3 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-40"
           >
             <FileOutput size={14} aria-hidden />
-            {termFor('handoff')}
+            {termFor('handoff', agentBoardMode)}
           </button>
         </div>
       </div>
@@ -242,7 +248,11 @@ export function AgentBoardPage(): JSX.Element {
 
       {/* Apply payload 面板（Modal 底座；失败保留输入由面板内部负责） */}
       {applyOpen && currentProjectId && (
-        <Modal open onClose={() => setApplyOpen(false)} ariaLabel={termFor('applyPayload')}>
+        <Modal
+          open
+          onClose={() => setApplyOpen(false)}
+          ariaLabel={termFor('applyPayload', agentBoardMode)}
+        >
           <ApplyPayloadPanel
             projectId={currentProjectId}
             onClose={() => setApplyOpen(false)}
@@ -256,7 +266,11 @@ export function AgentBoardPage(): JSX.Element {
 
       {/* handoff bundle 面板 */}
       {handoffOpen && currentProjectId && project && (
-        <Modal open onClose={() => setHandoffOpen(false)} ariaLabel={termFor('handoff')}>
+        <Modal
+          open
+          onClose={() => setHandoffOpen(false)}
+          ariaLabel={termFor('handoff', agentBoardMode)}
+        >
           <HandoffPanel
             projectId={currentProjectId}
             projectName={project.name}
