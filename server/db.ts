@@ -1,13 +1,19 @@
 /**
- * better-sqlite3 初始化：WAL 模式 + DDL 三段式执行。
+ * better-sqlite3 初始化：WAL 模式 + DDL 分段式执行。
  * schema 与 src/core/types/entities.ts 同构（见 schema.sql）。
  *
- * ★ createDb() 的执行顺序是硬约束（v0.6 · 设计文档 §6.2 / R1 缺陷修复）：
+ * ★ createDb() 的执行顺序是硬约束（v0.6 · 设计文档 §6.2 / R1 缺陷修复；
+ *   v0.7 §6.1 增补第 ④ 步）：
  *     ① 表结构段（-- @SECTION:TABLES）
  *     ② 幂等补列（V2 + V3 的 ALTER TABLE ADD COLUMN）
- *     ③ 索引段（-- @SECTION:INDEXES）
- *   顺序错了，老库（v1/v2 表结构）执行 `CREATE INDEX ... ON tasks(external_id)`
- *   时列尚不存在 → `no such column` → 服务启动即崩。
+ *     ③ 数据归一（done=1 → status='done'，user_version ⇒ 3）
+ *     ④ 索引换轨（idx_tasks_external_id ⇒ 复合唯一，user_version ⇒ 4）
+ *     ⑤ 索引段（-- @SECTION:INDEXES）
+ *   顺序错了有两种崩法：
+ *     · ② 之前执行 ⑤ → 老库 `CREATE INDEX ... ON tasks(external_id)` 时列尚不存在
+ *       → `no such column` → 服务启动即崩；
+ *     · ④ 早于 ③ → 二者共用的 user_version 被抢先置 4，③ 的 `>= 3` 守卫恒真
+ *       → 老库状态归一被静默跳过（界面不报错，只是历史完成任务退回 draft）。
  */
 
 import Database from 'better-sqlite3';
@@ -97,6 +103,15 @@ const V3_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
 /** 一次性数据迁移的版本标记（PRAGMA user_version）：>=3 表示已归一，跳过全表扫 */
 const V3_DATA_MIGRATION_VERSION = 3;
 
+/**
+ * 索引换轨的版本标记（PRAGMA user_version）：>=4 表示 idx_tasks_external_id 已是复合索引。
+ *
+ * ★ user_version 是**单一单调计数器**，被 migrateDoneToStatus(→3) 与
+ *   migrateAgentIndex(→4) 共用。两者守卫都是 `>= 自己那档`，因此**调用顺序构成语义**：
+ *   见 createDb 内 migrateAgentIndex 的调用点注释。
+ */
+const V4_INDEX_MIGRATION_VERSION = 4;
+
 /** 幂等补列：逐条检查 PRAGMA table_info，缺才 ALTER */
 function migrateColumns(db: ChangxiaServerDb, list: ReadonlyArray<{ table: string; column: string; ddl: string }>): void {
   for (const m of list) {
@@ -119,6 +134,41 @@ function migrateDoneToStatus(db: ChangxiaServerDb): void {
   db.pragma(`user_version = ${V3_DATA_MIGRATION_VERSION}`);
 }
 
+/**
+ * v0.7 §6.1 索引换轨（O1）：`idx_tasks_external_id` 的唯一性从**全局**收窄到
+ * **项目内**（`external_id` → `(project_id, external_id)`）。
+ *
+ * 为什么必须单独写一个迁移函数（而不是靠索引段的 IF NOT EXISTS）：
+ * 索引**定义**变了但**名字没变**，`CREATE UNIQUE INDEX IF NOT EXISTS` 见到同名索引
+ * 已存在会直接跳过 —— 于是老库里永远还是旧的全局唯一索引，而它正是 O1
+ * 「跨项目同幂等键互相误伤/误改」的根因。必须先 DROP 再 CREATE。
+ *
+ * 幂等：以 PRAGMA user_version 打标（>= 4 直接返回），避免每次启动都重建索引。
+ *
+ * ★★ 调用顺序是硬约束：必须在 `migrateDoneToStatus` **之后**执行。
+ *    两个迁移共用同一个 user_version 单调计数器，而 `migrateDoneToStatus` 的守卫是
+ *    `>= 3`。若本函数先跑并把 user_version 置为 4，`migrateDoneToStatus` 就会看到
+ *    `4 >= 3` 而**跳过**「done=1 → status='done'」的全表归一 —— 老库的状态迁移被
+ *    静默丢掉，且界面完全不报错（只是历史已完成任务全部退回 draft）。
+ *    这条顺序由 tests/server.external-id-index.spec.ts 的「老库升级」用例守着。
+ *
+ * 历史数据安全性（设计文档 §6.4）：旧的全局唯一已禁止跨项目重复 external_id，
+ * 故重建为复合唯一**不可能产生冲突行**，无需回滚式检测。
+ */
+function migrateAgentIndex(db: ChangxiaServerDb): void {
+  const version = (db.pragma('user_version', { simple: true }) as number) ?? 0;
+  if (version >= V4_INDEX_MIGRATION_VERSION) return;
+  // ① 先删旧索引：名字相同、列形不同，不删则下面的 IF NOT EXISTS 永不生效
+  db.exec('DROP INDEX IF EXISTS idx_tasks_external_id');
+  // ② 重建为复合唯一索引（与 schema.sql 索引段逐字同源，便于人工比对）
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_external_id
+       ON tasks(project_id, external_id) WHERE external_id IS NOT NULL`,
+  );
+  // ③ 打标（与 migrateDoneToStatus 共用同一个单调计数器）
+  db.pragma(`user_version = ${V4_INDEX_MIGRATION_VERSION}`);
+}
+
 /** 从分段 DDL 中取某一段（schema.sql 用行首 `-- @SECTION:NAME` 标记分隔） */
 export function sectionOf(ddl: string, name: string): string {
   // 行锚定匹配：文件头说明性注释里可能出现标记字样（如「用 -- @SECTION:TABLES 与
@@ -134,8 +184,9 @@ export function sectionOf(ddl: string, name: string): string {
 }
 
 /**
- * 执行 DDL（幂等）：★ 三段式 —— 表结构 → 补列 → 索引。
- * 顺序错了，老库升级会在索引 DDL 上抛 `no such column`（见文件头说明）。
+ * 执行 DDL（幂等）：★ 四段式 —— 表结构 → 补列 → 数据归一 → 索引换轨 → 建索引。
+ * 顺序错了，老库升级会在索引 DDL 上抛 `no such column`（见文件头说明），
+ * 或在 user_version 上互相截胡（见 migrateAgentIndex 注释）。
  */
 export function createDb(db: ChangxiaServerDb): void {
   const ddl = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
@@ -143,8 +194,12 @@ export function createDb(db: ChangxiaServerDb): void {
   db.exec(sectionOf(ddl, 'TABLES'));
   // ② 幂等补列（v2 既有 8 项 + v3 新增 11 项）
   migrateColumns(db, [...V2_COLUMN_MIGRATIONS, ...V3_COLUMN_MIGRATIONS]);
-  // ③ 一次性数据迁移（done=1 → status='done'，user_version 打标）
+  // ③ 一次性数据迁移（done=1 → status='done'，user_version 打标为 3）
   migrateDoneToStatus(db);
-  // ④ 列齐备后才建索引
+  // ④ v0.7：idx_tasks_external_id 换轨为复合唯一索引（user_version 打标为 4）
+  //    ★ 必须在 ③ 之后：两者共用 user_version，本步置 4 会让 ③ 的 `>= 3` 守卫永远为真
+  migrateAgentIndex(db);
+  // ⑤ 列齐备、索引换轨完成后建索引（新库由本段首次建出复合索引；
+  //    老库的第 ④ 步已建好同名复合索引，本段是 IF NOT EXISTS 空操作）
   db.exec(sectionOf(ddl, 'INDEXES'));
 }

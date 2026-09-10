@@ -17,6 +17,7 @@ import {
   DB_NAME,
   DEXIE_V1_STORES,
   DEXIE_V2_STORES,
+  DEXIE_V3_STORES,
   SCHEMA_VERSION,
 } from '../../schema/current';
 
@@ -26,12 +27,13 @@ import {
  *
  * ┌──────────────────────────────────────────────────────────────────────────┐
  * │ ★★★ 铁律：`version(n).stores({...})` 对列出的表是【整体替换】，不是增量合并。  │
- * │     version(2) 只列「索引有变化」的表；未列出的表自动继承 v1 定义——          │
+ * │     每个 version(n) 只列「相对上一版索引有变化」的表；未列出的表自动继承旧定义——  │
  * │     **绝对不要**把未变化的表也写进新版本。                                   │
  * │     凡是列出的表，其索引串必须包含该表在**所有历史版本**里的全部索引项         │
  * │     （v1 原串逐字重复 + 新增项）。漏写一个索引 = 静默丢索引：不报错，           │
  * │     但未来任何 `.where()` 都会悄悄退化为全表扫描。                            │
  * │     索引串的唯一出处：`src/core/schema/current.ts`（配守卫测试）。            │
+ * │     历史版本号一律写**字面量**，不得写成 SCHEMA_VERSION 变量（见 v2 处注释）。  │
  * └──────────────────────────────────────────────────────────────────────────┘
  */
 export class ChangxiaDatabase extends Dexie {
@@ -52,7 +54,13 @@ export class ChangxiaDatabase extends Dexie {
 
     // ── v2：只重声明「索引有变化」的两张表（tasks / members）──
     // 升级事务里跑单行迁移纯函数；抛异常 → Dexie 整体回滚，库保持 v1（三级回滚的 L0）。
-    this.version(SCHEMA_VERSION)
+    // ★ 版本号写**字面量 2** 而不是 SCHEMA_VERSION：本行是**历史声明**，而
+    //   SCHEMA_VERSION 会随版本推进而变。若此处用变量，下一次 bump 到 3 时这一行
+    //   会变成 `version(3).stores(DEXIE_V2_STORES)` —— 既把 v2 的升级事务（
+    //   migrateTaskV2Row / migrateMemberV2Row，老库数据归一的唯一入口）整段删掉，
+    //   又用 v2 的旧索引串顶替 v3 声明（静默丢「复合唯一」）。字面量 + 守卫测试里
+    //   断言 `new ChangxiaDatabase().verno === SCHEMA_VERSION`，两者合起来才防得住。
+    this.version(2)
       .stores(DEXIE_V2_STORES)
       .upgrade(async (tx) => {
         await tx
@@ -68,6 +76,18 @@ export class ChangxiaDatabase extends Dexie {
             migrateMemberV2Row(m);
           });
       });
+
+    // ── v3（v0.7 §6.1 / O1）：唯一性换轨 `&externalId` → `&[projectId+externalId]` ──
+    // 只重声明 tasks（members 在 v3 无变化 → 不列，自动继承 v2 定义）。
+    // 刻意**不写** `.upgrade()`：本版 schema 变更只动索引、不动任何行数据，
+    // 索引重建由 Dexie 按新 stores 自动完成（空 upgrade 回调只会招来「忘了写内容」的误读）。
+    // 两端都不用搬家：
+    //   · agent 任务：externalId 必有值 → 按 [projectId, externalId] 唯一；
+    //   · human 任务：externalId 是 undefined（不写键，见 migrateTaskV2Row 注释）→
+    //     IndexedDB 不索引 undefined 值 → 根本不进复合索引，不会因 [projectId, undefined]
+    //     重复而抛 ConstraintError。
+    // 升级事务抛异常 → Dexie 整体回滚，库保持 v2（三级回滚的 L0）。
+    this.version(3).stores(DEXIE_V3_STORES);
   }
 }
 

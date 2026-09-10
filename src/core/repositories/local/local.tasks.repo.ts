@@ -27,6 +27,11 @@ export class LocalTasksRepository implements ITasksRepository {
         const wanted = Array.isArray(query.status) ? query.status : [query.status];
         rows = rows.filter((t) => wanted.includes(t.status));
       }
+      // ★ v0.7（O1）：externalId 的唯一性作用域是「项目内」，故本过滤器只在**同时给定
+      //   projectId** 时才具备「等价于查唯一键」的语义（上一行的 projectId 过滤已先执行）。
+      //   只给 externalId 不给 projectId 时，跨项目同键的多行都会被返回——这是 v3 之后
+      //   的**正确**行为（旧版全局唯一下最多只有一行）。项目内查唯一键的唯一调用方
+      //   `upsertByExternalId` 走的是复合索引 `.where('[projectId+externalId]')`，不走这里。
       if (query?.externalId) rows = rows.filter((t) => t.externalId === query.externalId);
       return rows.sort((a, b) => a.orderIndex - b.orderIndex || a.id.localeCompare(b.id));
     } catch (err) {
@@ -76,7 +81,8 @@ export class LocalTasksRepository implements ITasksRepository {
     // 与 entities.Task / backup.taskSchema / project.service.taskRows 四处逐字同序——
     // 漏一处或乱序 → backup.roundtrip 的 JSON.stringify 逐表 diff 直接失败。
     // ★ externalId 只在显式提供时写键（undefined/不写键）：null 不是合法 IDB key，
-    //   显式 null 会干扰 &externalId 唯一索引（见 migrateTaskV2Row 注释）。
+    //   显式 null 会干扰复合唯一索引 &[projectId+externalId]；human 任务保持 undefined
+    //   即「不进唯一索引」，与 v0.7 §6.1.4 的口径一致（见 migrateTaskV2Row 注释）。
     const row: Task = {
       id: crypto.randomUUID(),
       projectId: cmd.projectId,
@@ -143,10 +149,14 @@ export class LocalTasksRepository implements ITasksRepository {
   }
 
   /**
-   * 幂等批量写入（§3.5）：单 rw 事务，逐行按 externalId 先查后写。
+   * 幂等批量写入（§3.5）：单 rw 事务，逐行按 **（projectId, externalId）复合幂等键**
+   * 先查后写（v0.7 §6.1 / O1）。
    * 命中 → put({...existing, ...patch, revision+1, updatedAt})；未命中 → add。
    * done 恒由 status 派生（withStatus 语义），绝不接受「两者矛盾」的行。
-   * Dexie 唯一索引冲突（同 externalId 并发抢建）→ ConstraintError → Conflict。
+   * Dexie 唯一索引冲突（同项目同 externalId 并发抢建）→ ConstraintError → Conflict。
+   *
+   * ★ 幂等键的作用域是**项目内**（与 Dexie `&[projectId+externalId]` 一致）：
+   *   同一 externalId 在 A/B 两个项目下是两条独立任务，各写各的、互不覆盖。
    */
   async upsertByExternalId(rows: readonly TaskUpsertRow[]): Promise<{ created: number; updated: number }> {
     if (rows.length === 0) return { created: 0, updated: 0 };
@@ -165,7 +175,16 @@ export class LocalTasksRepository implements ITasksRepository {
         const now = new Date().toISOString();
         for (const r of rows) {
           const externalId = r.externalId.trim();
-          const existing = await this.db.tasks.where('externalId').equals(externalId).first();
+          // ★ v0.7 §6.1（O1）：查重必须**按项目作用域**，与 Dexie 的复合唯一索引
+          //   `&[projectId+externalId]`（v3）逐字对齐。
+          //   旧写法 `.where('externalId').equals(externalId)` 是全局查重，在 v3 下
+          //   不仅语义错（会命中别的项目的同名键 → 误改他人任务），而且**直接抛
+          //   SchemaError**：索引已改名，`externalId` 不再是合法 keyPath。
+          //   跨项目同键各建一行、互不干扰，正是 O1 要买到的东西。
+          const existing = await this.db.tasks
+            .where('[projectId+externalId]')
+            .equals([r.projectId, externalId])
+            .first();
           if (existing) {
             // 命中 → 合并 patch（done 由 status 重派生，防双字段漂移）。
             // orderIndex 仅新建语义：更新路径保持既有排序，防止重导入反复重排。
@@ -208,7 +227,7 @@ export class LocalTasksRepository implements ITasksRepository {
       });
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      // 唯一索引（&externalId）竞态冲突 → ConstraintError → 语义化 Conflict
+      // 唯一索引（&[projectId+externalId]）竞态冲突 → ConstraintError → 语义化 Conflict
       if (err instanceof Error && err.name === 'ConstraintError') {
         throw new ChangxiaError(ChangxiaErrorCode.Conflict, '任务幂等键冲突，请重试导入。', err);
       }

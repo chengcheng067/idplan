@@ -153,8 +153,17 @@ CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
 -- v0.6 新增索引（三段式执行到本段时列已齐备）：
 -- external_id 用 UNIQUE + 部分索引（WHERE external_id IS NOT NULL）——幂等键的
 -- 最后一道防线是 DB 层唯一约束；部分索引允许无数条 NULL（人工任务无幂等键）。
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_external_id ON tasks(external_id)
-  WHERE external_id IS NOT NULL;
+--
+-- ★ v0.7 §6.1（O1）：唯一性从「全局」收窄为「项目内」——复合 (project_id, external_id)。
+--   理由：全局唯一会让 A 项目的 Agent 用同一个幂等键更新自己的任务时，撞上 B 项目的
+--   同名键而失败或误改（跨项目互相干扰）。幂等键的作用域天然就是「一次 Agent 运行的
+--   一个项目」。
+--   ⚠️ 老库升级**不能**指望本行的 IF NOT EXISTS：索引定义变了但名字没变，SQLite 见到
+--      同名索引已存在会直接跳过 → 新列形永不生效，老库仍是全局唯一索引。
+--      重建由 server/db.ts 的 `migrateAgentIndex()` 负责（DROP 旧的 + CREATE 新的 +
+--      PRAGMA user_version 打标）。本行负责新库的首次创建。
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_external_id
+  ON tasks(project_id, external_id) WHERE external_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_agent ON tasks(agent_id);
 CREATE INDEX IF NOT EXISTS idx_members_actor ON members(actor_kind);
