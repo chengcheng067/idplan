@@ -139,8 +139,6 @@ const VIEWPORTS = [
 
 /** 页面内测量：返回纯 JSON（不传 DOM 对象） */
 async function measure(page: Page): Promise<{
-  headerVisibleInteractive: number;
-  subtitle: string | null;
   sidebarPresent: boolean;
   sidebarWidth: number;
   sidebarClasses: string;
@@ -164,24 +162,7 @@ async function measure(page: Page): Promise<{
       return r.width > 0 && r.height > 0;
     };
 
-    // L-01：顶栏内「可见叶子级交互单元」计数（button/a/img/select）
-    const headerVisibleInteractive = header
-      ? Array.from(header.querySelectorAll('*')).filter(
-          (el) =>
-            isVisible(el) && ['BUTTON', 'A', 'IMG', 'SELECT'].includes(el.tagName),
-        ).length
-      : 0;
-
-    // L-06：副标题（行业中性文案）
-    const subtitleEl = header
-      ? Array.from(header.querySelectorAll('span')).find((s) =>
-          /室内设计项目管理|项目排期与交付管理/.test(s.textContent ?? ''),
-        )
-      : null;
-
     return {
-      headerVisibleInteractive,
-      subtitle: subtitleEl ? subtitleEl.textContent : null,
       sidebarPresent: !!sidebar && isVisible(sidebar),
       sidebarWidth: sidebar ? Math.round(sidebar.getBoundingClientRect().width) : 0,
       sidebarClasses: sidebar ? sidebar.className : '',

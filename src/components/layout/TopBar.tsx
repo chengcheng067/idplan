@@ -68,7 +68,7 @@ function CompactSearchField({
  *
  * ── 下沉去向（R15：功能入口一个都不能丢）──
  *   · 导航四项（项目/看板/我的任务/Agent）    → `SidebarNav`（T01 已迁，本文件删除）
- *   · 看板/月历视图切换                        → `SidebarNav` 的 `SidebarHomeViewToggle`
+ *   · 看板/月历视图切换                        → 首页内容区顶部 `HomeViewTabs`
  *   · 保存备份 / 加载备份                      → `Sidebar` 底部固定区（管理员专属）
  *   · 新建项目                                 → `Sidebar` 底部主 CTA
  *   · 导出日志                                 → 设置面板（`SettingsDialog` → `ExportLogButton`）
