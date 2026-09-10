@@ -1,13 +1,23 @@
 /**
- * 任务详情抽屉（v0.6 · 设计文档 T12 / PRD §6.2）。
+ * 任务详情抽屉（v0.6 · 设计文档 T12 / PRD §6.2；v0.7 · T08 双模式收口）。
  *
  * 四区块：① 概要 ② description（轻量 Markdown：标题/列表/代码块/粗体，自实现
  * 转义防注入，不引 markdown 库）③ deps（前置+后继，可点跳转）④ artifacts 列表。
+ *
+ * ── v0.7 T08：概要区按模式分派（PRD §4.2 / §4.1.3）──
+ *   技术模式：现状不变 —— status 英文角标 + `id/externalId/source/agentId/startAt`
+ *             全显（等宽）+ 状态流转按钮铺开。
+ *   人话模式：只留决策必要字段（负责人 / 阶段 / 截止）；
+ *             `id/externalId/source/agentId/startAt/status` + 流转按钮
+ *             **折叠进「技术详情」**（原生 `<details>`）—— **折叠，不是删除**，
+ *             审计时仍可展开看到原值（验收要求「技术字段可折叠可见」）。
+ *             并**不渲染** status 英文角标（不变量 ①：状态语义由 BOARD 的组归属表达）。
  *
  * 纪律：
  *   - 状态流转按钮只渲染 `TASK_STATUS_TRANSITIONS[current]` 允许的目标态
  *     （UI 层就不给非法选项；服务层 assertTransition 再兜一次）；
  *   - 「认领」走 useAgentStore.claimTask（原子；冲突 toast 文案并保持抽屉打开）；
+ *     人话模式按钮文案为「认领」（PRD §4.1.3 :339 要求隐藏英文 claim）；
  *   - 空值兜底 `—`（SC-02：全字段有渲染位、空值有兜底文案）；
  *   - artifacts 路径：浏览器无法探测本地路径存在性（AF-02）→ 降级为「复制路径 +
  *     提示无法在浏览器中直接打开」；url → 新窗打开 rel="noopener noreferrer"；
@@ -31,6 +41,7 @@ import { useLayoutStore } from '../../store/useLayoutStore';
 import { StatusBadge } from './AgentTaskCard';
 import { Modal } from '../common/Modal';
 import { remainingDays } from '../../lib/date';
+import { cn } from '../../lib/cn';
 
 /* ------------------------- 轻量 Markdown 渲染（转义防注入） ------------------------- */
 
@@ -200,6 +211,12 @@ export function TaskDrawer({
   const allTasks = useProjectsStore((s) => s.tasks);
   /** 术语模式（human 人话 / tech 技术）：T04 起必须显式传入，无缺省（§4.4） */
   const termMode = useLayoutStore((s) => s.agentBoardMode);
+  /**
+   * 人话模式（T08）：技术字段**折叠**进「技术详情」而非删除（PRD §4.2）。
+   * 不变量 ①：人话模式不渲染 status 英文角标 —— 状态语义由 BOARD 的**组归属**
+   * 表达，抽屉里再翻一遍英文角标既违 PRD §4.6「隐藏」也违验收 S3「零英文状态」。
+   */
+  const human = termMode === 'human';
 
   /** 后继（被本任务依赖的任务）——deps 双向导航 */
   const successors = useMemo(
@@ -250,11 +267,12 @@ export function TaskDrawer({
           </button>
         </div>
 
-        {/* ① 概要 */}
+        {/* ① 概要 —— 人话模式只留决策必要字段，技术字段折叠进「技术详情」 */}
         <section className="rounded-[12px] border border-sand bg-cream/40 p-3">
           <div className="mb-2 flex items-center gap-2">
-            <StatusBadge status={task.status} />
-            {task.source === 'agent' && agent?.agentKind && (
+            {/* 不变量 ①：人话模式不渲染 status 英文角标（PRD §4.6 :409 / 验收 S3） */}
+            {!human && <StatusBadge status={task.status} />}
+            {task.source === 'agent' && agent?.agentKind && !human && (
               <span className="rounded-[6px] bg-pine-soft px-1.5 py-0.5 font-mono text-[10px] text-pine">
                 {agent.agentKind}
               </span>
@@ -265,38 +283,48 @@ export function TaskDrawer({
                 onClick={() => claimTask(repos, task.id, currentMember?.id ?? task.assigneeId ?? '')}
                 className="ml-auto rounded-[8px] border border-pine px-2.5 py-1 text-xs text-pine transition-colors hover:bg-pine-soft"
               >
-                claim
+                {/* 人话模式去掉英文 claim（PRD §4.1.3 :339 明列要隐藏的英文按钮） */}
+                {human ? '认领' : 'claim'}
               </button>
             )}
           </div>
+
+          {/* 人话模式：只显人话字段（负责人 / 阶段 / 截止） */}
           <dl className="grid grid-cols-2 gap-2">
-            <Field label="id">
-              <span className="font-mono">{task.id}</span>
-            </Field>
-            <Field label="externalId">
-              <span className="font-mono">{task.externalId ?? '—'}</span>
-            </Field>
-            <Field label="source">{task.source}</Field>
-            <Field label="agentId">
-              <span className="font-mono">{agent ? `${agent.name}` : (task.agentId ?? '—')}</span>
-            </Field>
+            {!human && (
+              <>
+                <Field label="id">
+                  <span className="font-mono">{task.id}</span>
+                </Field>
+                <Field label="externalId">
+                  <span className="font-mono">{task.externalId ?? '—'}</span>
+                </Field>
+                <Field label="source">{task.source}</Field>
+                <Field label="agentId">
+                  <span className="font-mono">{agent ? `${agent.name}` : (task.agentId ?? '—')}</span>
+                </Field>
+              </>
+            )}
             <Field label="assignee">{assignee?.name ?? '—'}</Field>
             <Field label={termFor('stageShort', termMode)}>{stageName}</Field>
-            <Field label="startAt">
-              <span className="font-mono">{task.startAt?.slice(0, 10) ?? '—'}</span>
-            </Field>
             <Field label="dueDate">
-              <span className="font-mono">
+              <span className={cn(!human && 'font-mono')}>
                 {task.dueDate ? `${task.dueDate.slice(0, 10)}` : '—'}
                 {dueDays !== null && !taskIsDoneLocal(task) && (
                   <span className="ml-1 text-mist">（剩余 {dueDays} 天）</span>
                 )}
               </span>
             </Field>
+            {!human && (
+              <Field label="startAt">
+                <span className="font-mono">{task.startAt?.slice(0, 10) ?? '—'}</span>
+              </Field>
+            )}
           </dl>
 
-          {/* 状态流转：只渲染白名单允许的目标态（UI 层不给非法选项） */}
-          {allowedTargets.length > 0 && (
+          {/* 状态流转：只渲染白名单允许的目标态（UI 层不给非法选项）。
+              技术模式直接铺开；人话模式折进「技术详情」（等宽原值属技术字段）。 */}
+          {!human && allowedTargets.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] text-mist">流转 →</span>
               {allowedTargets.map((to) => (
@@ -310,6 +338,48 @@ export function TaskDrawer({
                 </button>
               ))}
             </div>
+          )}
+
+          {/* 技术详情（仅人话模式）：**折叠而非删除** —— PRD §4.2 + 验收要求
+              「技术字段可折叠可见」。用原生 <details> 而非受控 state：
+              零状态、可被浏览器/测试原生展开、语义自带 aria-expanded。 */}
+          {human && (
+            <details className="mt-3 rounded-[8px] border border-sand bg-paper/60 px-2.5 py-2">
+              <summary className="cursor-pointer text-[11px] text-mist">技术详情</summary>
+              <dl className="mt-2 grid grid-cols-2 gap-2">
+                <Field label="id">
+                  <span className="font-mono">{task.id}</span>
+                </Field>
+                <Field label="externalId">
+                  <span className="font-mono">{task.externalId ?? '—'}</span>
+                </Field>
+                <Field label="source">{task.source}</Field>
+                <Field label="agentId">
+                  <span className="font-mono">{agent ? `${agent.name}` : (task.agentId ?? '—')}</span>
+                </Field>
+                <Field label="startAt">
+                  <span className="font-mono">{task.startAt?.slice(0, 10) ?? '—'}</span>
+                </Field>
+                <Field label="status">
+                  <span className="font-mono">{task.status}</span>
+                </Field>
+              </dl>
+              {allowedTargets.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-mist">流转 →</span>
+                  {allowedTargets.map((to) => (
+                    <button
+                      key={to}
+                      type="button"
+                      onClick={() => transitionTask(repos, task.id, to)}
+                      className="rounded-[6px] border border-sand px-2 py-0.5 font-mono text-[10px] text-mist transition-colors hover:border-pine hover:text-pine"
+                    >
+                      {to}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </details>
           )}
         </section>
 

@@ -1,6 +1,15 @@
 /**
  * Ready 队列置顶区（v0.6 · 设计文档 T11 要点 4 / PRD V2）。
  *
+ * ── v0.7 T08：本组件的**渲染路径归属技术模式** ──
+ * 人话模式下它的内容已由 `board.ts` 的「可开工」组涵盖（`ready ∪ (draft ∧ depsDone)`，
+ * 是 `computeReadyTasks().ready` 的**超集**，见设计文档 §2.3.4 与
+ * `tests/agent-board.spec.ts` 的包含关系断言）。两者同时渲染会让同一批 ready 任务
+ * 在「Ready 队列」与人话「可开工」组**各出现一次**，故由 `AgentBoardPage` 只在
+ * 技术模式挂载本组件（team-lead 明确要求「别与可开工组重复展示」）。
+ * **计算未重写**——本文件仍是 `computeReadyTasks` 的唯一渲染出口，符合设计文档
+ * :345「计算复用，不重写」。
+ *
  * 纪律：
  *   - 计算全部委托 `dag.computeReadyTasks`（store/UI 只编排不重复实现）；
  *   - **computeReadyTasks 遇环不抛异常**——cyclicIds 非空时渲染黄色（amber）告警条，
