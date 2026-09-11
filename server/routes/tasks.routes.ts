@@ -16,6 +16,15 @@ import type { TaskArtifact } from '../../src/core/types/entities';
 // B-01 不变式的共享纯函数（与前端的 local.tasks.repo 用的是**同一份**实现，
 // 故「status=ready ⟹ claimedAt=null」的规则文本只有一处）。
 import { normalizeClaimedAt } from '../../src/core/types/entities';
+// ★ v0.7：号的分配规则与前端的 local.tasks.repo **共享同一份纯函数**。
+//   若两端各写一遍，「init 一次、逐条自增」这条纪律必有一端写成「每条重新 init」
+//   → 整批新建拿到同一个号（且全程不报错）。
+import {
+  TASK_NO_SEQ_KEY,
+  createTaskNoCounter,
+  parseTaskNoSeq,
+  type TaskNoCounter,
+} from '../../src/core/lib/task-no';
 import {
   parseJsonArray,
   serializeAssigneeIds,
@@ -24,6 +33,11 @@ import {
 
 interface TaskRow {
   id: string;
+  /**
+   * ★ v0.7：任务人读号。可空（老数据/未分配 → 前端由 `formatTaskNo` 展示 `'—'`）。
+   * 键序与 `entities.Task` 一致：紧接 `id` 之后。
+   */
+  task_no: number | null;
   project_id: string;
   stage_id: string;
   title: string;
@@ -49,6 +63,44 @@ interface TaskRow {
 
 const nowIso = (): string => new Date().toISOString();
 
+/* ------------------------- v0.7 号计数器（服务端侧） ------------------------- */
+
+/**
+ * 读计数器（**事务内**调用）。
+ *
+ * 取数方式与前端不同（SQLite 直接 `SELECT`，Dexie 要先整表读出来再归约 ——
+ * 因为 Dexie 侧 `taskNo` **刻意无索引**），但「怎么算下一个号」走同一份共享纯函数。
+ */
+function readTaskNoSeq(db: Database.Database): number | null {
+  const row = db
+    .prepare('SELECT value_json AS v FROM settings WHERE key = ?')
+    .get(TASK_NO_SEQ_KEY) as { v: string } | undefined;
+  return parseTaskNoSeq(row?.v);
+}
+
+/** 回写计数器（**事务内**调用）。`settings.key` 是 PRIMARY KEY，故用 UPSERT。 */
+function writeTaskNoSeq(db: Database.Database, next: number): void {
+  db.prepare(
+    `INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+  ).run(TASK_NO_SEQ_KEY, JSON.stringify(next), nowIso());
+}
+
+/**
+ * 打开计数器（**事务内**调用；事务须是 `.immediate()`，见各调用点注释）。
+ *
+ * `max_task_no` 直接用 SQL：SQLite 全表扫一次即可，无需前端那套内存归约。
+ * 老库刚补列时该列全为 NULL → `MAX` 返回 NULL → `parseTaskNoSeq` 之外无需特殊处理，
+ * `initTaskNoSeq` 会得到 999+1=1000（首个号 T-1000）。
+ */
+function openTaskNoCounter(db: Database.Database): TaskNoCounter {
+  const maxRow = db.prepare('SELECT MAX(task_no) AS m FROM tasks').get() as { m: number | null };
+  return createTaskNoCounter({
+    seqFromSettings: readTaskNoSeq(db),
+    maxTaskNoInDb: maxRow.m,
+  });
+}
+
 /** status 缺省时的保守推导：done=1 → 'done'，否则 'draft'（与前端 normalizeTaskRow 同口径） */
 function deriveStatus(raw: { status?: unknown; done?: unknown }): string {
   if (typeof raw.status === 'string' && raw.status.length > 0) return raw.status;
@@ -58,6 +110,9 @@ function deriveStatus(raw: { status?: unknown; done?: unknown }): string {
 function rowToTask(r: TaskRow): Record<string, unknown> {
   return {
     id: r.id,
+    // ★ v0.7：键序与 entities.Task 同序（紧接 id）。漏这一行 → 前端拿不到号，
+    //   且 remote 侧产出的 Task 形状与 local 不一致（两套适配器语义必须逐字一致）。
+    taskNo: r.task_no,
     projectId: r.project_id,
     stageId: r.stage_id,
     title: r.title,
@@ -81,14 +136,23 @@ function rowToTask(r: TaskRow): Record<string, unknown> {
   };
 }
 
+/**
+ * INSERT 列清单。
+ *
+ * ★ v0.7：`task_no` 追加在**第 2 位**（紧跟 `id`，与 `entities.Task` 键序同序），
+ *   占位符 20 → **21** 个 `?`。列数与占位符数不等会在**运行期**才报
+ *   「N values for M columns」—— 那时可能已经写坏了一半数据，故改动此处务必同改两处。
+ */
 const TASK_INSERT_COLUMNS = `(
-  id, project_id, stage_id, title, done, assignee_id, assignee_ids, due_date,
+  id, task_no, project_id, stage_id, title, done, assignee_id, assignee_ids, due_date,
   source, external_id, agent_id, status, description, depends_on, artifacts,
   start_at, claimed_at, order_index, revision, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 interface TaskInsertValues {
   id: string;
+  /** ★ v0.7：由调用方在**事务内**分配（仅新建路径；更新路径不经此处） */
+  taskNo: number | null;
   projectId: string;
   stageId: string;
   title: string;
@@ -110,15 +174,21 @@ interface TaskInsertValues {
 }
 
 /**
- * 单条 INSERT 的 20 列值（done 恒由 status 派生，绝不取请求体的 done）。
+ * 单条 INSERT 的 **21** 列值（done 恒由 status 派生，绝不取请求体的 done）。
  *
  * ★ 本函数是**全部 4 条 INSERT 路径的唯一收口**（bulk / POST、upsert 的 insert
  *   分支、未来新增的 INSERT），故 B-01 不变式（`status='ready'` ⟹ `claimed_at`
  *   为 null）在此施加一次即覆盖全部——避免在四个调用点各写一遍而漏掉其一。
+ *
+ * ★ v0.7：`v.taskNo` 必须落在**第 2 位**（与 `TASK_INSERT_COLUMNS` 的列序严格对齐）。
+ *   注意本函数**只负责摆位，不负责分配** —— 号的分配必须在各调用点的**事务内**
+ *   逐行完成（见 `openTaskNoCounter`）。把分配也塞进这里会让「一个事务里分配几次」
+ *   变成隐式行为，而 bulk 路径要的恰恰是「每行分配一次」。
  */
 function insertValues(v: TaskInsertValues): unknown[] {
   return [
     v.id,
+    v.taskNo,
     v.projectId,
     v.stageId,
     v.title,
@@ -186,17 +256,28 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
   });
 
   // POST /tasks/bulk —— 备份导入通道：接受 done（v1/v2 备份无 status），双写归一
+  // ★ v0.7：改 `.immediate()` 且**逐行**分配 taskNo（见下两处注释）。
   app.post('/api/tasks/bulk', async (req) => {
     const { rows } = req.body as { rows: Array<Record<string, unknown>> };
     const insert = db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`);
     const tx = db.transaction((list: Array<Record<string, unknown>>) => {
+      // ★ v0.7：计数器在**事务内只开一次**，之后逐行 `take()` 自增。
+      //   两种写法都会坏：① 循环外一次性求值再给每行 → 全表同号（§2.12 点名）；
+      //   ② 每行重新 open → 整批仍同号（都取到第一条的号）。
+      const counter = openTaskNoCounter(db);
+      let highestSeen = counter.peek() - 1;
       for (const t of list) {
         const ids = serializeAssigneeIds(t.assigneeIds);
         const idsArr = parseJsonArray<string>(ids);
         const status = deriveStatus(t);
+        // 行自带号（备份/跨库搬运）→ 沿用，不重编号；未带号 → 分配
+        const provided = typeof t.taskNo === 'number' && Number.isFinite(t.taskNo) ? t.taskNo : null;
+        const taskNo = provided ?? counter.take();
+        highestSeen = Math.max(highestSeen, taskNo);
         insert.run(
           ...insertValues({
             id: String(t.id),
+            taskNo,
             projectId: String(t.projectId),
             stageId: String(t.stageId),
             title: String(t.title),
@@ -218,8 +299,14 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
           }),
         );
       }
+      // 回写取「分配器下一个」与「本批最大号 + 1」的较大者。
+      // 后者专防「本批带的号比计数器还大」（跨库搬运的号段领先）：
+      // 只看 counter.peek() 会把计数器留在数据**之下**，下一次新建立刻撞号。
+      if (list.length > 0) writeTaskNoSeq(db, Math.max(counter.peek(), highestSeen + 1));
     });
-    tx(rows ?? []);
+    // ★ `.immediate()`：本事务**先读后写**（读计数器 → 写任务与计数器）。
+    //   默认的 DEFERRED 在并发下先拿读锁、升级写锁时失败（SQLITE_BUSY）。
+    tx.immediate(rows ?? []);
     return { ok: true, count: rows?.length ?? 0 };
   });
 
@@ -232,33 +319,45 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
       return { error: { code: 'validation', userMessage: '任务标题不能为空' } };
     }
     const id = crypto.randomUUID();
-    const maxRow = db
-      .prepare('SELECT MAX(order_index) AS m FROM tasks WHERE stage_id = ?')
-      .get(String(b.stageId)) as { m: number | null };
     const status = deriveStatus(b);
-    db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`).run(
-      ...insertValues({
-        id,
-        projectId: String(b.projectId),
-        stageId: String(b.stageId),
-        title,
-        assigneeId: (b.assigneeId as string | null) ?? parseJsonArray<string>(serializeAssigneeIds(b.assigneeIds))[0] ?? null,
-        assigneeIds: b.assigneeIds,
-        dueDate: (b.dueDate as string | null) ?? null,
-        source: String(b.source ?? 'human'),
-        externalId: (b.externalId as string | null) ?? null,
-        agentId: (b.agentId as string | null) ?? null,
-        status,
-        description: (b.description as string | null) ?? null,
-        dependsOn: b.dependsOn ?? [],
-        artifacts: b.artifacts ?? [],
-        startAt: (b.startAt as string | null) ?? null,
-        claimedAt: (b.claimedAt as string | null) ?? null,
-        orderIndex: (maxRow.m ?? 0) + 1,
-        revision: 1,
-        updatedAt: nowIso(),
-      }),
-    );
+    const insert = db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`);
+    // ★ v0.7：单条创建也要在**同一事务内**「开计数器 → 分配 → 写行 → 回写计数器」。
+    //   放到事务外，两个并发 POST 会读到同一个 next → 拿到同一个号（且不报错）。
+    // ★ 请求体里若带了 `taskNo` 一律**忽略**：它是仓储分配字段（见 interfaces.ts
+    //   的 TaskUpsertRow 注释），谁能提供号就等于谁能制造重号。
+    const tx = db.transaction(() => {
+      const maxRow = db
+        .prepare('SELECT MAX(order_index) AS m FROM tasks WHERE stage_id = ?')
+        .get(String(b.stageId)) as { m: number | null };
+      const counter = openTaskNoCounter(db);
+      insert.run(
+        ...insertValues({
+          id,
+          taskNo: counter.take(),
+          projectId: String(b.projectId),
+          stageId: String(b.stageId),
+          title,
+          assigneeId: (b.assigneeId as string | null) ?? parseJsonArray<string>(serializeAssigneeIds(b.assigneeIds))[0] ?? null,
+          assigneeIds: b.assigneeIds,
+          dueDate: (b.dueDate as string | null) ?? null,
+          source: String(b.source ?? 'human'),
+          externalId: (b.externalId as string | null) ?? null,
+          agentId: (b.agentId as string | null) ?? null,
+          status,
+          description: (b.description as string | null) ?? null,
+          dependsOn: b.dependsOn ?? [],
+          artifacts: b.artifacts ?? [],
+          startAt: (b.startAt as string | null) ?? null,
+          claimedAt: (b.claimedAt as string | null) ?? null,
+          orderIndex: (maxRow.m ?? 0) + 1,
+          revision: 1,
+          updatedAt: nowIso(),
+        }),
+      );
+      writeTaskNoSeq(db, counter.peek());
+    });
+    // `.immediate()`：先读（计数器）后写，DEFERRED 在并发下会锁升级失败（SQLITE_BUSY）
+    tx.immediate();
     const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow;
     return rowToTask(row);
   });
@@ -318,6 +417,16 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
       );
       const insertNew = db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`);
 
+      // ★ v0.7：号计数器**整批只开一次**（懒开 —— 纯 UPDATE 批次既不读也不写计数器）。
+      //   两种写法都会坏：① 循环外一次性求值再给每行 → 全批同号；② 每行重新
+      //   openTaskNoCounter → 仍全批同号（都取到第一条的号）。全程不报错。
+      let counter: TaskNoCounter | null = null;
+      let allocated = 0;
+      const ensureCounter = (): TaskNoCounter => {
+        if (counter === null) counter = openTaskNoCounter(db);
+        return counter;
+      };
+
       for (const t of list) {
         const externalId = (t.externalId as string | null) ?? null;
         // ★ 项目作用域查找：与 idx_tasks_external_id 的复合列形 (project_id, external_id) 对齐
@@ -353,9 +462,15 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
           updated += 1;
         } else {
           const status = deriveStatus(t);
+          // ★ v0.7：号是仓储分配字段 —— 请求体里带了也一律忽略（TaskUpsertRow 已用
+          //   Omit 放行，这里再兜一层：谁能提供号，谁就能制造重号）。
+          //   `.take()` 逐行自增，绝不能提到循环外求值一次（否则全批同号）。
+          const taskNo = ensureCounter().take();
+          allocated += 1;
           insertNew.run(
             ...insertValues({
               id: String(t.id ?? crypto.randomUUID()),
+              taskNo,
               projectId,
               stageId: String(t.stageId),
               title: String(t.title ?? ''),
@@ -379,8 +494,13 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
           created += 1;
         }
       }
+      // 仅当真的分配过号才回写计数器：纯 UPDATE 批次不该无谓改写 settings
+      // （保持「备份往返后 settings 逐字节不变」的往返判据）。
+      if (allocated > 0) writeTaskNoSeq(db, ensureCounter().peek());
     });
-    tx(batch);
+    // ★ `.immediate()`：本事务**先读后写**（读计数器 → 写任务与计数器）。
+    //   默认 DEFERRED 在并发下先拿读锁、升级写锁时失败（SQLITE_BUSY）。
+    tx.immediate(batch);
     return { created, updated };
   });
 

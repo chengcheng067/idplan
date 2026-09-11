@@ -322,8 +322,21 @@ class RemoteAdminRepository implements IAdminRepository {
   fullExport(): Promise<BackupPackage> {
     return this.api.get('/backup');
   }
-  replaceAllImport(pkg: BackupPackage): Promise<void> {
-    return this.api.post('/backup/import', pkg);
+  /**
+   * ⚠️ **已知缺口（已上报 team-lead，等待裁决，不在本轮擅自扩围）**：
+   * `renumbered` 恒为 `0`，**不是**真实的包内撞号计数。
+   *
+   * 原因：包内号段查重与 `taskNoSeq` 追平（§2.9.1 的「三者取最大」）本轮只落在
+   * **local（Dexie）路径**（§2.9 明确把改动点定在 `local.admin.repo.ts`）；
+   * 服务端 `POST /api/backup/import` 只回 `{ ok: true }`，不做查重。
+   *
+   * 这与本项目「两套适配器语义必须逐字一致」的硬约束**相抵触**（见 interfaces.ts）。
+   * 要让远端也正确，需在 `server/routes/meta.routes.ts` 的导入事务内复用
+   * `resolveTaskNoCollisions`（同一个纯函数，前后端共享），并让它回传真实计数。
+   * 已登记为待裁决项 —— 在本注释被删掉之前，**不要**把这里的 0 当作「服务端没撞号」的证据。
+   */
+  replaceAllImport(pkg: BackupPackage): Promise<{ renumbered: number }> {
+    return this.api.post<unknown>('/backup/import', pkg).then(() => ({ renumbered: 0 }));
   }
 }
 

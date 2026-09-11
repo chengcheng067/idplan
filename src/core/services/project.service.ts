@@ -139,6 +139,12 @@ export class ProjectService {
         draft.defaultTasks.forEach((title, idx) => {
           taskRows.push({
             id: createId('tsk'),
+            // ★ v0.7 键序铁律第 5 处：taskNo 紧接 id 之后。
+            // 这里**显式占位 null**（而不是省略键）：① 让「五处同序」在人工 review 时
+            // 可逐行对齐；② 避免 bulkInsert 的「已带号则保留」分支把它当成已编号行。
+            // 真正的号由 bulkInsert 在事务内分配（null ≠ 已编号）；
+            // null 也不属于 TaskUpsertRow 通道（该类型已 Omit taskNo）。
+            taskNo: null,
             projectId: project.id,
             stageId: stageRow.id,
             title,

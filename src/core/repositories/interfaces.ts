@@ -84,12 +84,18 @@ export interface IStagesRepository {
  * 幂等批量写入行（v0.6 · §3.5）：Agent payload 导入的唯一写入形状。
  * `id` 由仓储生成（命中既有行时忽略）、`revision`/`updatedAt` 由仓储统一 bump；
  * `externalId` 必填（非空字符串）——它是幂等键。
+ * ★ `taskNo` 由仓储分配，调用方不得提供（新建必分配、更新不覆写）——故一并 Omit。
  * `orderIndex` 为**仅新建语义**：命中既有行时保持既有排序（防止重导入反复重排），
  * 两套适配器（local/remote）与该语义逐字一致。
+ *
+ * 为什么 `taskNo` **必须**进 Omit 列表：它与 `id`/`revision`/`updatedAt` 同属
+ * 「仓储分配」字段。不 Omit 则 `payload.apply.ts` 的 `rows.push({...})`、
+ * `remote/rest.client.ts` 以及各 spec 夹具会全部编译报错，逼调用方传号 ——
+ * 而调用方（Agent 通道）根本无从知道该发什么号（号是本地/服务端的全局状态）。
  */
 export type TaskUpsertRow = Omit<
   Task,
-  'id' | 'revision' | 'updatedAt' | 'externalId' | 'done'
+  'id' | 'taskNo' | 'revision' | 'updatedAt' | 'externalId' | 'done'
 > & {
   externalId: string;
   /** 可省：省略时仓储按 `status === 'done'` 派生（唯一事实源纪律） */
@@ -167,8 +173,18 @@ export interface ISettingsRepository {
 export interface IAdminRepository {
   /** 全量导出（含 append-only 流水表整表） */
   fullExport(): Promise<import('../types/dto').BackupPackage>;
-  /** 校验后的清库重建导入 */
-  replaceAllImport(pkg: import('../types/dto').BackupPackage): Promise<void>;
+  /**
+   * 校验后的清库重建导入。
+   *
+   * 返回值 `renumbered` = 本次导入中因**包内号段自身冲突**被重编号的任务数
+   * （0 = 包内无撞号）。
+   *
+   * ★ 为什么返回它却**不接 UI toast**（§11-③ 已裁定）：跨库「合并导入」路径
+   * **不可达**（两端都是整库替换，见 §9-D5），故 `renumbered > 0` 只在
+   * **包自身已损坏**（同一号出现两次）时出现 —— 属异常数据而非正常业务流程。
+   * 给一条不存在的路径做界面是错的。返回值保留**仅供单测断言**「撞号确实被修掉了」。
+   */
+  replaceAllImport(pkg: import('../types/dto').BackupPackage): Promise<{ renumbered: number }>;
 }
 
 /** 七接口捆绑：DI 唯一下发的对象 */

@@ -160,6 +160,21 @@ describe('DEXIE_STORES 声明守卫（防 stores() 整体替换丢索引）', ()
     expect(DEXIE_V3_STORES).toBeDefined();
   });
 
+  it('★ v0.7 taskNo 铁律：既有 SCHEMA_VERSION=3 不 bump，且 taskNo 刻意不建索引', () => {
+    // 为什么不 bump：taskNo 是**非索引**字段，Dexie 不会因它开升级事务。
+    // 一旦为「看起来正式」而 bump 到 4，就会给用户数据强开一次升级事务——
+    // 升级失败即「用户数据不可达」这一最高风险事件，代价远大于收益。
+    expect(SCHEMA_VERSION).toBe(3);
+    expect(new ChangxiaDatabase('guard-taskno-probe').verno).toBe(3);
+
+    // taskNo 只服务「展示」与「全量归约求 max」，不参与任何 .where() 查询，
+    // 建索引只有写放大（且会引入「索引 DDL 早于补列」的顺序风险）。
+    // 若有人「顺手」把它加进索引串，本行拦下。
+    for (const table of Object.keys(DEXIE_STORES) as Array<keyof typeof DEXIE_STORES>) {
+      expect(indexNames(DEXIE_STORES[table])).not.toContain('taskNo');
+    }
+  });
+
   it('★ 版本接线守卫：类里实际声明的最高版本 === SCHEMA_VERSION', () => {
     // 上一行只保证「常量是 3」；本行保证「类真的声明到了 3」。
     // 二者缺一，就出现设计文档点名的静默陷阱：

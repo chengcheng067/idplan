@@ -59,6 +59,12 @@ CREATE TABLE IF NOT EXISTS stages (
 
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
+  -- v0.7 任务人读号。可空、**不加 NOT NULL、不加 DEFAULT**（老库补列同理）。
+  -- NULL = 老数据/未分配 → 展示回落 '—'，故本列**无需数据迁移**（只加列不填值）。
+  -- 键序与 entities.Task 一致：紧接 id 之后。
+  -- ★ 刻意**不建索引**（§2.10）：task_no 只服务「展示」与「全量归约求最大值」，
+  --   建索引要付写放大，还会引入「索引 DDL 早于补列 → no such column」的顺序风险。
+  task_no INTEGER,
   project_id TEXT NOT NULL REFERENCES projects(id),
   stage_id TEXT NOT NULL REFERENCES stages(id),
   title TEXT NOT NULL,

@@ -119,6 +119,27 @@ const V7_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
   },
 ];
 
+/**
+ * v0.7 数据层冻结列迁移（1 项）：`tasks.task_no`（任务人读号）。
+ *
+ * 与 V7 同款：**只加列、不填值**。NULL 即「老数据/未分配」，展示侧由
+ * `formatTaskNo` 回落 `—`，因此不需要一次性数据迁移。
+ *
+ * ★ **绝对不占 `user_version`**（§2.11）：user_version 是 `migrateDoneToStatus`(→3)
+ *   与 `migrateAgentIndex`(→4) 共用的**单一单调计数器**。列迁移若掺进去，会把两者
+ *   截胡 —— 具体说，若在此处 `db.pragma('user_version = 5')`，`migrateDoneToStatus`
+ *   的 `>= 3` 守卫会永远为真而被跳过，老库「done=1 → status='done'」的归一**静默丢失**
+ *   （界面不报错，只是历史已完成任务全部退回 draft）。
+ *   列迁移靠 `PRAGMA table_info` 判存在，**天然幂等，不需要版本标记**。
+ */
+const V8_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: string }> = [
+  {
+    table: 'tasks',
+    column: 'task_no',
+    ddl: 'ALTER TABLE tasks ADD COLUMN task_no INTEGER',
+  },
+];
+
 /** 一次性数据迁移的版本标记（PRAGMA user_version）：>=3 表示已归一，跳过全表扫 */
 const V3_DATA_MIGRATION_VERSION = 3;
 
@@ -211,10 +232,15 @@ export function createDb(db: ChangxiaServerDb): void {
   const ddl = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
   // ① 只执行「表结构」段
   db.exec(sectionOf(ddl, 'TABLES'));
-  // ② 幂等补列（v2 既有 8 项 + v3 新增 11 项 + v0.7 新增 1 项）
+  // ② 幂等补列（v2 既有 8 项 + v3 新增 11 项 + v0.7 新增 2 项：projects.short_label、tasks.task_no）
   //    ⚠️ 本步必须早于 ⑤（索引段）：新列若被索引段引用，顺序颠倒会在建索引时
   //       `no such column` → 服务启动即崩（见文件头「顺序错了有两种崩法」）。
-  migrateColumns(db, [...V2_COLUMN_MIGRATIONS, ...V3_COLUMN_MIGRATIONS, ...V7_COLUMN_MIGRATIONS]);
+  migrateColumns(db, [
+    ...V2_COLUMN_MIGRATIONS,
+    ...V3_COLUMN_MIGRATIONS,
+    ...V7_COLUMN_MIGRATIONS,
+    ...V8_COLUMN_MIGRATIONS,
+  ]);
   // ③ 一次性数据迁移（done=1 → status='done'，user_version 打标为 3）
   migrateDoneToStatus(db);
   // ④ v0.7：idx_tasks_external_id 换轨为复合唯一索引（user_version 打标为 4）

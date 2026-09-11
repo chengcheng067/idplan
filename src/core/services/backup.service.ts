@@ -110,6 +110,8 @@ const artifactSchema = z.object({
 /** normalizeTaskRow 的入参形状（= zod 解析产物；status 可缺省，由 transform 决定） */
 export interface TaskRowInput {
   id: string;
+  /** v0.7：老包经 `.default(null)` 归一后恒有该键（显式 null） */
+  taskNo: number | null;
   projectId: string;
   stageId: string;
   title: string;
@@ -144,6 +146,21 @@ export interface TaskRowInput {
 const taskSchema = z
   .object({
     id: z.string(),
+    /**
+     * ★ v0.7：任务人读号。
+     *
+     * **必须 `.nullable().default(null)`** —— 不能用 `.optional()` / `.nullish()`：
+     * 老备份（v3 及以前）根本没有该字段，而下面 `normalizeTaskRow` 需要拿到**显式
+     * `null`** 才能把键落进重建对象。用 `.optional()` 时键会缺失 → 导出/导入键序
+     * 不一致 → `backup.roundtrip` 的 `JSON.stringify` 逐表 diff 直接失败。
+     *
+     * ⚠️ `BACKUP_SCHEMA_VERSION` **保持 3，不 bump**：本轮只是追加一个可空字段
+     * （`default(null)` 让 v3 老包照常可读）。bump 会让老客户端拒收新包，收益为零。
+     *
+     * 键序铁律：紧接 `id` 之后（与 `entities.Task` / `normalizeTaskRow` /
+     * `local.tasks.repo.insert` / `project.service.taskRows` 五处逐字同序）。
+     */
+    taskNo: z.number().int().nullable().default(null),
     projectId: z.string(),
     stageId: z.string(),
     title: z.string(),
@@ -179,6 +196,9 @@ export function normalizeTaskRow(t: TaskRowInput): import('../types/entities').T
   const status = t.status ?? (t.done === true ? TaskStatus.Done : TaskStatus.Draft);
   return {
     id: t.id,
+    // ★ v0.7：键序铁律第 2 处落点。老包经 `.default(null)` 归一 → 此处恒有显式 null，
+    //   故导出/导入的键序逐字一致（roundtrip 的 JSON.stringify diff 才成立）。
+    taskNo: t.taskNo,
     projectId: t.projectId,
     stageId: t.stageId,
     title: t.title,

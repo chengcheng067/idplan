@@ -43,6 +43,27 @@ export interface TaskArtifact {
 /** 阶段任务条目 */
 export interface Task {
   id: string; // tsk_xxx
+  /**
+   * ★ v0.7 追加：任务人读号（全局单调递增、**永不复用**；删号后不得再发同一个号）。
+   *
+   * `null` = 老数据。本轮**不回填**（回填要全表改写，而「老任务没有号」本身合法），
+   * 展示由 `formatTaskNo` 归一为 `—`。
+   *
+   * 展示一律走 `formatTaskNo(taskNo)`（`src/core/lib/task-no.ts`），**禁止**组件里
+   * 散拼 `'T-' + n` —— 补零规则必须只有一处，否则「T-1000 / T-1000 / T- 1000」
+   * 会同时出现在三个界面上。
+   *
+   * 由**仓储分配**，不随调用方传入：`TaskUpsertRow` 已 Omit 该字段（新建必分配、
+   * 更新不覆写）。任何在组件/服务层手写 `taskNo` 的代码都是错的。
+   *
+   * ── 键序铁律（v0.7 追加，位置紧接 `id` 之后）──
+   * 与 `id` 同属「任务标识」族，且**不参与**下面 §3.1 序 9–17 的 v0.6 Agent 块
+   * （那块的相对顺序已冻结）。插在最前对既有四处**零扰动** → 五处只需在同一位置各加一行：
+   *   `entities.Task` / `backup.service.taskSchema` / `backup.service.normalizeTaskRow`
+   *   / `local.tasks.repo.insert` / `project.service.taskRows`
+   * 漏一处或乱序 → `backup.roundtrip` 的 `JSON.stringify` 逐表 diff 直接失败。
+   */
+  taskNo: number | null;
   projectId: string;
   stageId: string;
   title: string;
@@ -72,8 +93,14 @@ export interface Task {
    */
   source: TaskSource;
   /**
-   * 幂等键，建议格式 `${agentKind}:${runId}:${localKey}`。
-   * ⚠️ Dexie 侧人工任务**不写该键**（`null` 不是合法 IDB key，会干扰 `&externalId` 唯一索引）；
+   * 幂等键，建议格式 `${agentKind}:${taskKey}`。
+   *
+   * ⚠️ **绝不**把 `runId`（一次 Agent 运行的 id）编进键里 —— 这是主 PRD §4.2.2-①
+   * 定性的**最高优先级缺陷**：Agent 重跑会拿到新 `runId` → 新键 → 幂等彻底失效，
+   * 每跑一次就在库里多一条重复任务。键里只能放「稳定描述该任务」的东西。
+   *
+   * ⚠️ Dexie 侧人工任务**不写该键**（`null` 不是合法 IDB key，会干扰
+   * `&[projectId+externalId]` 唯一索引）；
    * 序列化（备份导出）侧由 zod `.nullable().default(null)` 归一回 `null`，保证备份形状稳定。
    */
   externalId: string | null;

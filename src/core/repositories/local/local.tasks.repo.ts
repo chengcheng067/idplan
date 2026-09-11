@@ -1,15 +1,48 @@
 import { ChangxiaError, ChangxiaErrorCode, TaskStatus } from '../../types/enums';
-import type { Task } from '../../types/entities';
+import type { Setting, Task } from '../../types/entities';
 import { taskIsDone, withStatus, normalizeClaimedAt } from '../../types/entities';
 import type { CreateTaskCmd, UpdateTaskCmd } from '../../types/dto';
 import type { ITasksRepository, TaskQuery, TaskUpsertRow } from '../interfaces';
 import type { ChangxiaDatabase } from './dexie.database';
 import { pickDefined } from './local.projects.repo';
 import { taskAssigneeIds } from '../../../hooks/useRoleGuard';
+// ★ v0.7：号的分配规则与后端**共享同一份纯函数**（禁止在本文件里另写一遍算式）。
+import {
+  TASK_NO_SEQ_KEY,
+  createTaskNoCounter,
+  maxTaskNoOf,
+  parseTaskNoSeq,
+  type TaskNoCounter,
+} from '../../lib/task-no';
 
 /** Dexie 实现的任务仓储 */
 export class LocalTasksRepository implements ITasksRepository {
   constructor(private readonly db: ChangxiaDatabase) {}
+
+  /**
+   * 打开号计数器。**必须在 rw 事务内调用**，且调用方已把 `this.db.settings`
+   * 列进事务表清单（Dexie 对未列出的表读写会抛 `NotFoundError`）。
+   *
+   * `allTasks` 由调用方传入而非在此读取：调用方通常已经为别的原因全表读过一次
+   * （insert 求 siblings、upsert 求 max），复用同一次归约避免重复 O(n) 扫描。
+   */
+  private async openTaskNoCounter(allTasks: readonly Task[]): Promise<TaskNoCounter> {
+    const setting = await this.db.settings.get(TASK_NO_SEQ_KEY);
+    return createTaskNoCounter({
+      seqFromSettings: parseTaskNoSeq(setting?.valueJson),
+      maxTaskNoInDb: maxTaskNoOf(allTasks),
+    });
+  }
+
+  /** 回写计数器（与 `LocalSettingsRepository.set` 同一存储形状；同事务调用） */
+  private async writeTaskNoSeq(next: number): Promise<void> {
+    const row: Setting = {
+      key: TASK_NO_SEQ_KEY,
+      valueJson: JSON.stringify(next),
+      updatedAt: new Date().toISOString(),
+    };
+    await this.db.settings.put(row);
+  }
 
   async list(query?: TaskQuery): Promise<Task[]> {
     try {
@@ -57,6 +90,15 @@ export class LocalTasksRepository implements ITasksRepository {
     }
   }
 
+  /**
+   * 批量写入（建档模板任务路径，`project.service` 调用）。
+   *
+   * ★ v0.7：`taskNo` 必须分两种情形处理，**不能一刀切**：
+   *   · 行**未带号**（`null`/`undefined`，= 建档模板任务）→ 由计数器分配；
+   *   · 行**已带号**（备份恢复 / 跨库搬运）→ **原样保留，绝不重编号**
+   *     （让「恢复备份」这件事悄悄改掉用户的号，是最不该发生的那类副作用）。
+   * 全部行都已带号时**连事务都不开**，也不碰计数器 —— 纯写入不该有额外副作用。
+   */
   async bulkInsert(rows: Task[]): Promise<void> {
     if (rows.length === 0) return;
     for (const r of rows) {
@@ -64,8 +106,21 @@ export class LocalTasksRepository implements ITasksRepository {
         throw new ChangxiaError(ChangxiaErrorCode.Validation, '任务草稿字段不完整，无法入库。');
       }
     }
+    const needsAllocation = rows.some((r) => r.taskNo === null || r.taskNo === undefined);
     try {
-      await this.db.tasks.bulkAdd(rows);
+      if (!needsAllocation) {
+        await this.db.tasks.bulkAdd(rows);
+        return;
+      }
+      await this.db.transaction('rw', this.db.tasks, this.db.settings, async () => {
+        // 全表读一次：既给计数器求 max，也不需要第二次扫描
+        const counter = await this.openTaskNoCounter(await this.db.tasks.toArray());
+        const prepared: Task[] = rows.map((r) =>
+          r.taskNo === null || r.taskNo === undefined ? { ...r, taskNo: counter.take() } : r,
+        );
+        await this.db.tasks.bulkAdd(prepared);
+        await this.writeTaskNoSeq(counter.peek());
+      });
     } catch (err) {
       throw new ChangxiaError(ChangxiaErrorCode.Storage, '任务批量写入失败。', err);
     }
@@ -76,37 +131,49 @@ export class LocalTasksRepository implements ITasksRepository {
       throw new ChangxiaError(ChangxiaErrorCode.Validation, '任务标题不能为空。');
     }
     const now = new Date().toISOString();
-    const siblings = await this.list({ stageId: cmd.stageId });
-    // 键序铁律：9 个 v0.6 字段按 §3.1 序 9–17 插在 dueDate 后、orderIndex 前，
-    // 与 entities.Task / backup.taskSchema / project.service.taskRows 四处逐字同序——
-    // 漏一处或乱序 → backup.roundtrip 的 JSON.stringify 逐表 diff 直接失败。
-    // ★ externalId 只在显式提供时写键（undefined/不写键）：null 不是合法 IDB key，
-    //   显式 null 会干扰复合唯一索引 &[projectId+externalId]；human 任务保持 undefined
-    //   即「不进唯一索引」，与 v0.7 §6.1.4 的口径一致（见 migrateTaskV2Row 注释）。
-    const row: Task = {
-      id: crypto.randomUUID(),
-      projectId: cmd.projectId,
-      stageId: cmd.stageId,
-      title: cmd.title.trim(),
-      done: false,
-      assigneeId: cmd.assigneeId ?? null,
-      assigneeIds: cmd.assigneeIds ?? (cmd.assigneeId ? [cmd.assigneeId] : []),
-      dueDate: cmd.dueDate ?? null,
-      source: cmd.source ?? 'human',
-      externalId: cmd.externalId,
-      agentId: cmd.agentId ?? null,
-      status: cmd.status ?? TaskStatus.Draft,
-      description: cmd.description ?? null,
-      dependsOn: cmd.dependsOn ?? [],
-      artifacts: cmd.artifacts ?? [],
-      startAt: cmd.startAt ?? null,
-      claimedAt: null, // §3.1 序 17：缺省 null（非 undefined）——claim 校验 `claimedAt === null` 依赖显式键
-      orderIndex: siblings.reduce((max, t) => Math.max(max, t.orderIndex), 0) + 1,
-      revision: 1,
-      updatedAt: now,
-    } as Task;
-    await this.db.tasks.add(row);
-    return row;
+    // ★ v0.7：整个「读计数器 → 分配 → 写行 → 回写计数器」必须在**同一个 rw 事务**内。
+    //   若把分配挪到事务外、或拆成两个事务，并发两次 insert 会读到同一个 next →
+    //   两条任务拿到**同一个号**，而且全程不报错（§2.15-④ 的并发用例专挡此错）。
+    //   ⚠️ `settings` 必须列进事务表清单，否则读写计数器会抛 NotFoundError。
+    return await this.db.transaction('rw', this.db.tasks, this.db.settings, async () => {
+      // 全表读一次：计数器求 max 与下面求 siblings 的 orderIndex 复用同一份归约
+      const all = await this.db.tasks.toArray();
+      const counter = await this.openTaskNoCounter(all);
+      const siblings = all.filter((t) => t.stageId === cmd.stageId);
+      // 键序铁律：`taskNo`（v0.7）紧接 `id` 之后；9 个 v0.6 字段按 §3.1 序 9–17 插在
+      // dueDate 后、orderIndex 前，与 entities.Task / backup.taskSchema /
+      // backup.normalizeTaskRow / project.service.taskRows **五处**逐字同序——
+      // 漏一处或乱序 → backup.roundtrip 的 JSON.stringify 逐表 diff 直接失败。
+      // ★ externalId 只在显式提供时写键（undefined/不写键）：null 不是合法 IDB key，
+      //   显式 null 会干扰复合唯一索引 &[projectId+externalId]；human 任务保持 undefined
+      //   即「不进唯一索引」，与 v0.7 §6.1.4 的口径一致（见 migrateTaskV2Row 注释）。
+      const row: Task = {
+        id: crypto.randomUUID(),
+        taskNo: counter.take(),
+        projectId: cmd.projectId,
+        stageId: cmd.stageId,
+        title: cmd.title.trim(),
+        done: false,
+        assigneeId: cmd.assigneeId ?? null,
+        assigneeIds: cmd.assigneeIds ?? (cmd.assigneeId ? [cmd.assigneeId] : []),
+        dueDate: cmd.dueDate ?? null,
+        source: cmd.source ?? 'human',
+        externalId: cmd.externalId,
+        agentId: cmd.agentId ?? null,
+        status: cmd.status ?? TaskStatus.Draft,
+        description: cmd.description ?? null,
+        dependsOn: cmd.dependsOn ?? [],
+        artifacts: cmd.artifacts ?? [],
+        startAt: cmd.startAt ?? null,
+        claimedAt: null, // §3.1 序 17：缺省 null（非 undefined）——claim 校验 `claimedAt === null` 依赖显式键
+        orderIndex: siblings.reduce((max, t) => Math.max(max, t.orderIndex), 0) + 1,
+        revision: 1,
+        updatedAt: now,
+      } as Task;
+      await this.db.tasks.add(row);
+      await this.writeTaskNoSeq(counter.peek());
+      return row;
+    });
   }
 
   async update(id: string, cmd: UpdateTaskCmd): Promise<Task> {
@@ -157,6 +224,9 @@ export class LocalTasksRepository implements ITasksRepository {
    *
    * ★ 幂等键的作用域是**项目内**（与 Dexie `&[projectId+externalId]` 一致）：
    *   同一 externalId 在 A/B 两个项目下是两条独立任务，各写各的、互不覆盖。
+   *
+   * ★ `taskNo` 是**仅新建语义**（v0.7）：只有「未命中 → 新建」分支才分配号；
+   *   命中既有行一律沿用 `existing.taskNo`，绝不重发新号（详见命中分支内注释）。
    */
   async upsertByExternalId(rows: readonly TaskUpsertRow[]): Promise<{ created: number; updated: number }> {
     if (rows.length === 0) return { created: 0, updated: 0 };
@@ -169,10 +239,27 @@ export class LocalTasksRepository implements ITasksRepository {
       }
     }
     try {
-      return await this.db.transaction('rw', this.db.tasks, async () => {
+      // ★ v0.7：`settings` 必须进表清单（分配号要读改写计数器）；
+      //   `taskNo` 的分配也必须在**本事务内**完成，否则并发 upsert 会撞号。
+      return await this.db.transaction('rw', this.db.tasks, this.db.settings, async () => {
         let created = 0;
         let updated = 0;
         const now = new Date().toISOString();
+        /**
+         * 计数器**懒开**：整批都是「更新」时不读全表、也不碰 settings。
+         * 关键纪律：事务内只 init **一次**，之后逐条 `take()` 自增 ——
+         * 若每条都重新 init，整批新建会全部拿到同一个号（20 条全 T-1000）。
+         */
+        let counterRef: TaskNoCounter | null = null;
+        let allocated = 0;
+        const ensureCounter = async (): Promise<TaskNoCounter> => {
+          if (counterRef === null) {
+            const opened = await this.openTaskNoCounter(await this.db.tasks.toArray());
+            counterRef = opened;
+            return opened;
+          }
+          return counterRef;
+        };
         for (const r of rows) {
           const externalId = r.externalId.trim();
           // ★ v0.7 §6.1（O1）：查重必须**按项目作用域**，与 Dexie 的复合唯一索引
@@ -195,6 +282,11 @@ export class LocalTasksRepository implements ITasksRepository {
               ...existing,
               ...patch,
               id: existing.id, // 幂等：以既有行为准，忽略 row 自带的任何 id 形状
+              // ★ v0.7：`taskNo` 是**仅新建语义**，命中既有行时**绝不覆写**。
+              //   与 `id` / `orderIndex` 同款纪律。Agent 重发同一个 payload 是常态，
+              //   若这里让号被覆盖（或重新分配），重发一次就把号洗掉/换掉 ——
+              //   而外部（Agent / Skill）仍拿旧号引用该任务，就会指向别的东西。
+              taskNo: existing.taskNo,
               orderIndex: existing.orderIndex,
               externalId,
               status: nextStatus,
@@ -208,9 +300,14 @@ export class LocalTasksRepository implements ITasksRepository {
             await this.db.tasks.put(next);
             updated += 1;
           } else {
+            // ★ v0.7：新行由计数器分配号。必须在**本事务内**逐条 take() 自增，
+            //   否则并发 upsert 与本批多条新建都会拿到同一个号（全程不报错）。
+            const allocatedNo = (await ensureCounter()).take();
+            allocated += 1;
             const row: Task = {
               ...r,
               id: crypto.randomUUID(),
+              taskNo: allocatedNo,
               externalId,
               status: r.status ?? TaskStatus.Draft,
               done: (r.status ?? TaskStatus.Draft) === TaskStatus.Done,
@@ -222,6 +319,10 @@ export class LocalTasksRepository implements ITasksRepository {
             await this.db.tasks.add(row);
             created += 1;
           }
+        }
+        // 只有真的分配过号才回写 —— 纯更新路径不在 settings 上制造无谓的写入差异
+        if (allocated > 0) {
+          await this.writeTaskNoSeq((await ensureCounter()).peek());
         }
         return { created, updated };
       });
