@@ -115,7 +115,7 @@ export function humanPrimaryOf(
 ): { label: string; intent: HumanPrimaryIntent } {
   switch (group) {
     case 'ready':
-      return { label: '认领开工', intent: 'claim' };
+      return { label: '开始处理', intent: 'claim' };
     case 'confirm':
       return task.status === 'review'
         ? { label: '验收', intent: 'approve' }
@@ -187,7 +187,7 @@ export function AgentTaskCard({
     return (
       <div
         className={cn(
-          'glass-light w-full rounded-[12px] border p-2.5 transition-colors hover:border-pine/50',
+          'glass-light w-full rounded-2xl border p-4 transition-colors hover:border-pine/50',
           blocked ? 'border-clay/40' : 'border-line',
         )}
       >
@@ -236,14 +236,14 @@ export function AgentTaskCard({
 
   /* ------------------------------ 技术模式（v0.6 原样） ------------------------------ */
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(task.id)}
-      className={cn(
-        'glass-light w-full rounded-[12px] border p-2.5 text-left transition-colors hover:border-pine/50',
-        blockedByTitles.length > 0 ? 'border-clay/40' : 'border-line',
-      )}
-    >
+      <button
+        type="button"
+        onClick={() => onOpen(task.id)}
+        className={cn(
+          'glass-light w-full rounded-2xl border p-4 text-left transition-colors hover:border-pine/50',
+          blockedByTitles.length > 0 ? 'border-clay/40' : 'border-line',
+        )}
+      >
       {/* 第一行：标题 + status 角标 */}
       <div className="flex items-start gap-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">

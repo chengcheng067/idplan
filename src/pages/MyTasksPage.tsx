@@ -95,7 +95,7 @@ export function MyTasksPage(): JSX.Element {
   }, [myTasks, todayIso]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
       {/* 标题 + 副标题 */}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-display text-display-lg">我的任务</h1>

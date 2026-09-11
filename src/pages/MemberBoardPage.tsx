@@ -83,7 +83,7 @@ export function MemberBoardPage(): JSX.Element {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
       {/* 标题 */}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-display text-display-lg">项目看板</h1>

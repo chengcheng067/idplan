@@ -43,7 +43,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { ClipboardPaste, FileOutput } from 'lucide-react';
+import { AlertTriangle, ClipboardPaste, FileOutput } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
@@ -317,9 +317,9 @@ export function AgentBoardPage(): JSX.Element {
   );
 
   return (
-    /* 容器：**不**加 max-w（宽度锚点唯一出处是 AppShell 的 <main>，见 L-08） */
-    <div className="w-full pb-10 pt-4">
-      {/* 页头：返回 + 项目选择器 + 两个主 CTA */}
+    /* 容器：**不**加 max-w（宽度锚点唯一出处是 AppShell 的 <main>，见 L-08）；横向内边距 24 自持（画板 06 内容区 padding 24） */
+    <div className="w-full px-6 pb-10 pt-4">
+      {/* 工具行（画板 06：左=模式切换分段控件，右=项目选择 + 操作按钮） */}
       <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
         <Link
           to="/"
@@ -330,20 +330,21 @@ export function AgentBoardPage(): JSX.Element {
         <h1 className="font-display text-lg font-bold text-ink">
           {termFor('board', agentBoardMode)}
         </h1>
-        <select
-          value={currentProjectId ?? ''}
-          onChange={(e) => setCurrentProject(e.target.value || null)}
-          aria-label="选择项目"
-          className="min-w-0 max-w-[240px] rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-pine"
-        >
-          {projects.length === 0 && <option value="">（暂无项目）</option>}
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <div className="ml-auto flex gap-2">
+        <BoardModeTabs mode={agentBoardMode} onChange={changeMode} />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <select
+            value={currentProjectId ?? ''}
+            onChange={(e) => setCurrentProject(e.target.value || null)}
+            aria-label="选择项目"
+            className="min-w-0 max-w-[240px] rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-pine"
+          >
+            {projects.length === 0 && <option value="">（暂无项目）</option>}
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => setApplyOpen(true)}
@@ -365,11 +366,6 @@ export function AgentBoardPage(): JSX.Element {
         </div>
       </div>
 
-      {/* 模式切换（人话 / 技术） */}
-      <div className="mb-4">
-        <BoardModeTabs mode={agentBoardMode} onChange={changeMode} />
-      </div>
-
       {/* 指标卡行（两种模式共用；PRD §4.1.2「保留在页脚/可复用」） */}
       <div className="mb-4">
         <SourceStatCard
@@ -383,32 +379,32 @@ export function AgentBoardPage(): JSX.Element {
       {agentBoardMode === 'human' ? (
         <>
           {/* ① 现在该做什么（PRD S5：取 computeReadyTasks 置顶条） */}
+          {/*
+            ⚠️ 小字计数取的是**可开工组的桶长度**，不是 `computeReadyTasks().ready.length`。
+
+            为什么（team-lead 裁决）：`可开工组 = ready ∪ (draft ∧ 依赖全 done)` 是
+            `computeReadyTasks().ready` 的**严格超集**，两者数字天然不同（种子场景 3 vs 2）。
+            两边单看都「对」，但**同一个词在同一屏指两个集合**是硬缺陷——用户只会
+            当成 bug。硬原则：同一屏同一个词必须同一个含义；故让置顶条随组计数。
+
+            数学上不会自相矛盾：`ready ⊆ 可开工组`（`ready` 真包含于 `ready ∪ …`），
+            所以置顶条那条任务**永远**是该组的成员（B-01 缺陷修复后 `claimedAt`
+            条件自动对齐：`status==='ready' ⟹ claimedAt===null`，PRD :327 那句
+            「且 未被认领」的额外约束已被不变式覆盖）。
+            该包含关系由验收用例锁死（「置顶条计数 == 组计数 ∧ 置顶条任务 ∈ 该组」），
+            防的是将来有人把两个源改成不同集合。
+
+            文案复用 `HUMAN_GROUP_TITLES.ready` 而非再写一遍字面量：让「同一个词」
+            在类型层就无法分叉（改标题即改小字）。
+            （原先 agentTerms.ts 另有一个同值的 `READY_NOW_LABEL` 常量，零组件消费，
+            属同类「两份真相」，已随本批收口删除——详见 agentTerms.ts 内的说明。）
+          */}
           <section
             aria-label="现在该做什么"
-            className="mb-4 rounded-[16px] border border-pine/30 bg-pine-soft/40 p-3.5"
+            className="mb-4 rounded-3xl border border-pine bg-pine-soft p-6"
           >
             <div className="flex items-center gap-2">
-              <h2 className="text-xs font-semibold text-pine">现在该做什么</h2>
-              {/*
-                ⚠️ 小字计数取的是**可开工组的桶长度**，不是 `computeReadyTasks().ready.length`。
-
-                为什么（team-lead 裁决）：`可开工组 = ready ∪ (draft ∧ 依赖全 done)` 是
-                `computeReadyTasks().ready` 的**严格超集**，两者数字天然不同（种子场景 3 vs 2）。
-                两边单看都「对」，但**同一个词在同一屏指两个集合**是硬缺陷——用户只会
-                当成 bug。硬原则：同一屏同一个词必须同一个含义；故让置顶条随组计数。
-
-                数学上不会自相矛盾：`ready ⊆ 可开工组`（`ready` 真包含于 `ready ∪ …`），
-                所以置顶条那条任务**永远**是该组的成员（B-01 缺陷修复后 `claimedAt`
-                条件自动对齐：`status==='ready' ⟹ claimedAt===null`，PRD :327 那句
-                「且 未被认领」的额外约束已被不变式覆盖）。
-                该包含关系由验收用例锁死（「置顶条计数 == 组计数 ∧ 置顶条任务 ∈ 该组」），
-                防的是将来有人把两个源改成不同集合。
-
-                文案复用 `HUMAN_GROUP_TITLES.ready` 而非再写一遍字面量：让「同一个词」
-                在类型层就无法分叉（改标题即改小字）。
-                （原先 agentTerms.ts 另有一个同值的 `READY_NOW_LABEL` 常量，零组件消费，
-                属同类「两份真相」，已随本批收口删除——详见 agentTerms.ts 内的说明。）
-              */}
+              <h2 className="text-[15px] font-semibold text-pine dark:text-ink">现在该做什么</h2>
               {humanView.groups.ready.length > 0 && (
                 <span className="rounded-md bg-paper/70 px-1.5 py-0.5 text-[10px] text-mist">
                   {HUMAN_GROUP_TITLES.ready} {humanView.groups.ready.length} 项
@@ -416,27 +412,39 @@ export function AgentBoardPage(): JSX.Element {
               )}
             </div>
             {topReady ? (
-              <button
-                type="button"
-                onClick={() => onOpenTask(topReady.id)}
-                className="mt-1.5 flex w-full items-center gap-2 text-left"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink hover:text-pine">
-                  {topReady.title}
-                </span>
-                {topDue && (
-                  <span
-                    className={cn(
-                      'shrink-0 text-[11px] tabular-nums',
-                      topDue.overdue ? 'text-clay' : 'text-mist',
-                    )}
-                  >
-                    {topDue.text}
+              <>
+                <button
+                  type="button"
+                  onClick={() => onOpenTask(topReady.id)}
+                  className="mt-3 flex w-full items-center gap-2 text-left"
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink hover:text-pine">
+                    {topReady.title}
                   </span>
-                )}
-              </button>
+                  {topDue && (
+                    <span
+                      className={cn(
+                        'shrink-0 text-[11px] tabular-nums',
+                        topDue.overdue ? 'text-clay' : 'text-mist',
+                      )}
+                    >
+                      {topDue.text}
+                    </span>
+                  )}
+                </button>
+                <p className="mt-1 text-[13px] text-mist">
+                  认领后即可开始处理，相关前置依赖都已就绪。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onPrimary(topReady, 'claim')}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-2xl bg-pine px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-deep"
+                >
+                  开始处理
+                </button>
+              </>
             ) : (
-              <p className="mt-1.5 text-sm text-mist">
+              <p className="mt-3 text-sm text-mist">
                 暂时没有可开工的任务。导入新任务或解除受阻后会出现在这里。
               </p>
             )}
@@ -446,9 +454,10 @@ export function AgentBoardPage(): JSX.Element {
           {readyComputation.cyclicIds.size > 0 && (
             <div
               role="alert"
-              className="mb-4 rounded-[10px] border border-amber/50 bg-amber-soft px-3 py-2 text-xs text-amber"
+              className="mb-4 flex items-center gap-2.5 rounded-2xl border border-amber/40 bg-amber-soft px-4 py-3 text-[13px] text-amber"
             >
-              检测到 {readyComputation.cyclicIds.size} 条任务存在依赖环，已移出主列表。请修正依赖后刷新。
+              <AlertTriangle size={16} className="shrink-0" aria-hidden />
+              <span>检测到 {readyComputation.cyclicIds.size} 条任务存在依赖环，已移出主列表。请修正依赖后刷新。</span>
             </div>
           )}
 
@@ -460,7 +469,7 @@ export function AgentBoardPage(): JSX.Element {
                 <section
                   key={group}
                   aria-label={HUMAN_GROUP_TITLES[group]}
-                  className="glass-light rounded-[16px] border border-line p-3"
+                  className="flex min-w-0 flex-col gap-2.5"
                 >
                   <div className="mb-2 flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-ink">
@@ -517,7 +526,10 @@ export function AgentBoardPage(): JSX.Element {
             依赖环的 amber 告警**保留**：它覆盖的是另一类问题（数据坏了，不是还没轮到）。
           */}
           {humanView.hiddenCount > 0 && (
-            <p data-board-hidden-hint="" className="mt-3 text-xs text-mist">
+            <p
+              data-board-hidden-hint=""
+              className="mt-3 flex items-center gap-1 rounded-[12px] bg-sunken px-3.5 py-2.5 text-[13px] text-mist"
+            >
               另有 {humanView.hiddenCount} 条在上游准备中，
               <button
                 type="button"
@@ -549,9 +561,9 @@ export function AgentBoardPage(): JSX.Element {
               return (
                 <section
                   key={status}
-                  className="glass-light w-[280px] shrink-0 rounded-[16px] border border-line p-3 max-lg:w-full"
+                  className="glass-light flex max-h-[70vh] w-[280px] shrink-0 flex-col overflow-y-auto rounded-2xl border border-line p-3 max-lg:w-full"
                 >
-                  <div className="sticky top-0 -mx-3 mb-2 bg-inherit px-3 pb-1 pt-1">
+                  <div className="sticky top-0 -mx-3 mb-2 bg-sunken px-3 pb-1 pt-1">
                     <div className="flex items-center gap-2">
                       <h2 className="font-mono text-xs font-semibold text-ink">{status}</h2>
                       <span className="rounded-md bg-sand px-1.5 py-0.5 font-mono text-[10px] text-mist">
