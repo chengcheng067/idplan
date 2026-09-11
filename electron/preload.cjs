@@ -29,4 +29,20 @@ contextBridge.exposeInMainWorld('idplan', {
     ipcRenderer.on('update:available', handler);
     return () => ipcRenderer.removeListener('update:available', handler);
   },
+  /**
+   * 通知主进程同步**自绘标题栏叠加层**（Windows titleBarOverlay）的配色与高度，
+   * 让原生三键区与顶栏内容区同色一体（画板 02 亮 / 板 12 暗）。
+   *
+   * 入参由渲染进程从 CSS 变量的**实际计算值**取出（见 src/lib/titleBarTheme.ts）：
+   *   color      顶栏底色（亮 #FFFFFF / 暗 #1F2126，即 --paper）
+   *   symbolColor 顶栏前景（即 --ink）
+   *   height      顶栏高度（<xl 56 / ≥xl 64，与 TopBar 的 h-14 xl:h-16 同口径）
+   * 单向 send 即可：主进程无需回执，且非 Windows 时主进程会静默忽略。
+   */
+  setTitleBarTheme: (theme) =>
+    ipcRenderer.send('theme:set', {
+      color: theme?.color,
+      symbolColor: theme?.symbolColor,
+      height: theme?.height,
+    }),
 });

@@ -56,7 +56,7 @@ import { resolve } from 'node:path';
  *
  * ── 截图 ──
  *   落在 `qa-scratch/v07-stageB/`（8 项验收各自的证据；B-08 折叠/展开各一张，
- *   B-09~B-11 各一张，故共 13 张）。
+ *   B-09~B-11 各一张，B-12 一张，故共 14 张）。
  *
  * ── 后续两处（team-lead 裁决后补）──
  *   ① 置顶条小字计数改取**可开工组桶长度**（原先取 `ready.length`，同屏同词两个数）；
@@ -244,9 +244,15 @@ async function readGroups(page: Page): Promise<GroupView[]> {
       const sec = document.querySelector(`main section[aria-label="${label}"]`);
       if (!sec) return { label, count: null, titles: [] as string[] };
       const countEl = sec.querySelector('h2 + span');
-      // 卡片根 = div.glass-light；其第一个 <button> 即「标题按钮」（人话卡片是
-      // div 容器 + 标题按钮 + 主按钮；技术卡片整卡单按钮，不走本分支）
-      const titles = Array.from(sec.querySelectorAll('div.glass-light')).map((card) => {
+      // 卡片根 = [data-agent-task-card]（人话全宽行卡的稳定 DOM 锚点）；其第一个
+      // <button> 即「标题按钮」（人话卡片是 div 容器 + 标题按钮 + 主按钮；
+      // 技术卡片整卡单按钮，不走本分支）
+      //
+      // 为什么不再用 `div.glass-light` 定位（v0.7 批次 B 起）：`.glass-light` 的语义是
+      // 「内凹井」（background = sunken），而画板 06 的行卡是 `fill=#FFFFFF` 的**浮起行卡**
+      // —— 语义与画板相反。卡面填充改走 `bg-paper` 后，样式类不再是可靠锚点，故改用
+      // 语义化 `data-*`（与 `data-board-hidden-hint` 同一惯例）。断言一字未改。
+      const titles = Array.from(sec.querySelectorAll('[data-agent-task-card]')).map((card) => {
         const b = card.querySelector('button');
         return (b?.textContent ?? '').trim();
       });
@@ -289,7 +295,7 @@ async function readTitleSections(
  * 若在 `main` 全范围找「文本恰为标题」的按钮，当该任务没有 dueDate 时置顶条那个
  * 按钮的文本会**恰好等于标题**，于是选中置顶条自己，`closest('section')` 返回
  * 「现在该做什么」→ 断言得出「任务不在可开工组」的**假红**。
- * 故这里只在**四组的卡片容器**（`div.glass-light`，人话卡片形态）里找。
+ * 故这里只在**四组的卡片容器**（`[data-agent-task-card]`，人话卡片形态）里找。
  * @returns 组标题；找不到返回 null
  */
 async function readGroupOfCard(page: Page, title: string): Promise<string | null> {
@@ -298,7 +304,7 @@ async function readGroupOfCard(page: Page, title: string): Promise<string | null
       for (const label of order) {
         const sec = document.querySelector(`main section[aria-label="${label}"]`);
         if (!sec) continue;
-        const cards = Array.from(sec.querySelectorAll('div.glass-light'));
+        const cards = Array.from(sec.querySelectorAll('[data-agent-task-card]'));
         const hit = cards.some(
           (card) => (card.querySelector('button')?.textContent ?? '').trim() === t,
         );
@@ -954,6 +960,128 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
     for (const t of HIDDEN_TITLES) expect(mainText).not.toContain(t);
 
     await shot(page, '13-no-hidden-no-hint.png');
+    await page.close();
+  });
+
+  /* ===================================================================================
+   * 验收 12 · 人话行卡的**卡面材质**：必须是 paper 浮起卡，不是 sunken 内凹井
+   * ===================================================================================
+   *
+   * 为什么要补这一条（自查「选择器从 `div.glass-light` 换成 `[data-agent-task-card]`
+   * 会不会削弱断言强度」的结论）：
+   *   原来那 2 处 `querySelectorAll('div.glass-light')` 是**定位器、不是断言**——
+   *   用例从没断言过 `glass-light` 存在（HEAD 上 `expect(…glass-light…)` 为 0 条，
+   *   该串只出现在 2 个调用点 + 2 处纯注释里），它只影响 `titles` 取到几条。
+   *   所以换锚点本身**没有丢掉任何一条既有断言**：类名或属性任一被改，
+   *   两边都是 `titles=[]`，`expect(g.titles.length).toBe(计数)` 照样红，
+   *   失败检出强度等价。但它确实丢掉了一层**隐式耦合**：旧锚点顺带保证了
+   *   「卡片根挂着那个样式类」。而这类耦合在改版后已经**语义倒错**
+   *   （`.glass-light` 的语义是内凹井 sunken，画板 06 的行卡恰恰是浮起的 paper 卡），
+   *   所以「保住耦合」是错的，正确的做法是**把被耦合掉的那件事显式断言出来**——
+   *   而且要用不可证伪的类名断言以外的办法：这一条读 **computed style**。
+   *
+   * 另有一个 `data-*` 锚点独有的新风险，本条一并用「真盒子尺寸」堵住：
+   *   `data-*` 不保证被标注的元素是个**看得见**的卡片 —— 有人把它挂到一个零尺寸
+   *   包裹层上，原来的 `titles` 断言照样全绿，而界面上卡片已经没了。
+   *
+   * ── 为什么是**全量遍历**而不是抽一张（QA 第 2 轮建议，已采纳）──
+   *   材质错误如果是「某个分支渲染出来的卡忘了给 paper 底」，抽样恰好抽到正常的
+   *   那一张就会**假绿**。「误挂锚点」更是逐元素的人为失误：一张卡挂对了、
+   *   另一张挂在包裹层上，抽样拦不住。故这里遍历**四组内的每一张**人话行卡，
+   *   逐张断言材质与可见性/尺寸；失败时把出问题那张的标题一起打出来，
+   *   免得只报「第 3 张不合格」却不知道是哪张。
+   */
+  it('B-12 · 人话行卡面全量核对：每张都是 paper 浮起底（≠ sunken 内凹井）且锚点落在真可见卡片上', async () => {
+    const page = await openBoard({ resetMode: true });
+
+    const m = await page.evaluate((order: string[]) => {
+      /**
+       * 用探针元素把 token **解析成运行时真值**，而不是把 `#FFFFFF` 写进断言：
+       * 写死 hex 会在换肤/调色板微调时变成假红，而它证明的东西（「卡面走的是
+       * paper 这个面」）与具体色值无关。
+       * 表达式与 tailwind.config.ts 的 `c('paper')` 逐字一致，避免两处漂移。
+       */
+      const probe = document.createElement('div');
+      probe.style.position = 'absolute';
+      probe.style.visibility = 'hidden';
+      document.body.appendChild(probe);
+      const readSurface = (name: string): string => {
+        probe.style.backgroundColor = `rgb(var(--${name}-rgb) / calc(var(--${name}-a, 1) * 1))`;
+        return getComputedStyle(probe).backgroundColor;
+      };
+      const paper = readSurface('paper');
+      const sunken = readSurface('sunken');
+      probe.remove();
+
+      /** 遍历四组，把每一张人话行卡的材质/几何事实带回来（含所属组与标题） */
+      const cards = order.flatMap((label) => {
+        const sec = document.querySelector(`main section[aria-label="${label}"]`);
+        if (!sec) return [];
+        return Array.from(sec.querySelectorAll('[data-agent-task-card]')).map((card) => {
+          const cs = getComputedStyle(card);
+          const r = card.getBoundingClientRect();
+          return {
+            group: label,
+            title: (card.querySelector('button')?.textContent ?? '').trim(),
+            bg: cs.backgroundColor,
+            cls: (card.className || '').toString(),
+            isGlass: card.classList.contains('glass-light'),
+            w: Math.round(r.width),
+            h: Math.round(r.height),
+            // 「看得见」= 既不是 display:none / visibility:hidden / opacity:0，也不是零尺寸盒子
+            visible:
+              cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0 && r.width > 0 && r.height > 0,
+            radius: cs.borderRadius,
+          };
+        });
+      });
+
+      return { paper, sunken, cards };
+    }, GROUP_ORDER);
+
+    // 两个面在 token 层就必须是两个值，否则本用例的「≠」分支毫无判别力
+    expect(m.paper).not.toBe('');
+    expect(m.sunken).not.toBe('');
+    expect(m.paper).not.toBe(m.sunken);
+
+    /**
+     * 前置：必须真的遍历到卡片。种子（见文件头「期望分布」）四组共 8 张——
+     * 若这个数为 0，下面的 `for` 循环一次都不执行，本用例会**空过**成假绿；
+     * 故先钉住数量（宁可写死也不要 `for` 空转）。
+     */
+    const expected = GROUP_ORDER.reduce((n, l) => n + GROUP_COUNTS[l]!, 0);
+    expect(expected).toBe(8);
+    expect(
+      m.cards.length,
+      `遍历到的人话行卡数不对：期望 ${expected}（= 四组计数之和），实得 ${m.cards.length}。` +
+        '为 0 时下面的循环会静默空过，等于没测。',
+    ).toBe(expected);
+
+    // 逐张核对材质 + 「锚点在真卡片上」。separate loop per 断言 → 失败信息能指名道姓
+    const describeCard = (c: (typeof m.cards)[number]): string =>
+      `「${c.group}」组 / 卡「${c.title}」/ 类名 ${c.cls}`;
+
+    const notPaper = m.cards.filter((c) => c.bg !== m.paper);
+    expect(
+      notPaper.map((c) => `${describeCard(c)} → 底色 ${c.bg}（期望 paper ${m.paper}）`),
+      '人话行卡必须走 paper 浮起面（画板 06：行卡 fill=#FFFFFF）',
+    ).toEqual([]);
+
+    // 且**不是** sunken —— 这正是 `.glass-light` 的材质，画板 06 要的不是它
+    const looksSunken = m.cards.filter((c) => c.bg === m.sunken);
+    expect(looksSunken.map(describeCard), '人话行卡不得呈内凹井材质（sunken）').toEqual([]);
+
+    const glassCards = m.cards.filter((c) => c.isGlass || c.cls.includes('glass-light'));
+    expect(glassCards.map(describeCard), '人话行卡不得再挂 .glass-light（语义与画板 06 相反）').toEqual([]);
+
+    // 锚点必须落在真可见、有实际尺寸的卡片上（`data-*` 本身不保证这一点）
+    const badBoxes = m.cards.filter((c) => !c.visible || c.w <= 80 || c.h <= 20);
+    expect(
+      badBoxes.map((c) => `${describeCard(c)} → ${c.w}×${c.h} visible=${c.visible}`),
+      '锚点必须落在有实际宽高且可见的卡片上（挂在零尺寸包裹层上会让旧断言假绿）',
+    ).toEqual([]);
+
+    await shot(page, '14-human-card-raised.png');
     await page.close();
   });
 });

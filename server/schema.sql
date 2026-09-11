@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS projects (
   planned_start_at TEXT NOT NULL,
   planned_end_at TEXT NOT NULL,
   cover_color TEXT,
+  -- v0.7 侧栏折叠态增强：折叠态项目方块简称。
+  -- NULL = 老数据/未设置 → 读时回落「项目名首字」，故本列**无需**数据迁移（只加列不填值）。
+  -- 键序与 entities.Project 一致：cover_color 之后、阶段字段之前。
+  short_label TEXT,
   -- v2 阶段自定义字段（与 backup schemaVersion=2 / entities.Project 同构）
   stage_preset_key TEXT,
   stage_template_version INTEGER NOT NULL DEFAULT 0,

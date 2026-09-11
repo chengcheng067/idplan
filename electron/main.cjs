@@ -145,6 +145,48 @@ function scheduleAutoUpdateCheck(win) {
 }
 
 
+// ---- 顶栏与主题融合（画板 02 亮色顶栏 / 画板 12 暗色顶栏） ----
+// 设计稿的顶栏是「内容区的一部分」（亮 #FFFFFF / 暗 #1F2126，仅面包屑+搜索+头像三块），
+// 而原生 Windows 标题栏是系统灰白，两者拼在一起就是用户说的「顶栏关闭栏与主题割裂」。
+// 解法：隐藏原生标题栏（titleBarStyle:'hidden'），改用**自绘叠加层** titleBarOverlay
+// 绘制最小化/最大化/关闭三键，其底色与符号色由渲染进程按当前主题实时下发（见下方
+// 'theme:set'），做到「原生栏与内容区同色一体的感觉」。
+
+/** 叠加层配色的**首帧兜底**（亮色）：与 src/styles/global.css 的 --paper / --ink 同源。
+ *  运行期由 'theme:set' 用 CSS 变量的实际计算值覆盖，这里只保证
+ *  「窗口创建 → 首帧 IPC 到达」之间不闪出错误颜色。 */
+const TITLEBAR_FALLBACK = { color: '#ffffff', symbolColor: '#1f2937' };
+
+/** 叠加层高度兜底（≥xl 口径，64）。渲染进程按视口宽度算实际值（<xl 为 56），
+ *  与 TopBar 的 `h-14 xl:h-16` 严格一致——若两者不等，按钮会与顶栏内容错位。 */
+const TITLEBAR_HEIGHT_FALLBACK = 64;
+
+/** 是否启用自绘标题栏叠加层。仅 Windows 支持 titleBarOverlay：
+ *  macOS 走系统红绿灯（自绘会破坏原生手势），Linux 不支持该 API。 */
+const USE_TITLEBAR_OVERLAY = process.platform === 'win32';
+
+/**
+ * 顶栏主题下发：渲染进程写完 `<html data-theme>` 后，取 --paper / --ink 的**实际
+ * 计算值**发来，主进程据此重设叠加层底色与符号色。
+ * 颜色不在主进程另起一套 hex——否则 CSS 变量一改这里就漂移。
+ */
+ipcMain.on('theme:set', (event, payload) => {
+  if (!USE_TITLEBAR_OVERLAY) return;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  const color = payload && typeof payload.color === 'string' ? payload.color : '';
+  const symbolColor = payload && typeof payload.symbolColor === 'string' ? payload.symbolColor : '';
+  if (!color || !symbolColor) return;
+  const height = Number.isFinite(payload.height)
+    ? Math.round(payload.height)
+    : TITLEBAR_HEIGHT_FALLBACK;
+  try {
+    win.setTitleBarOverlay({ color, symbolColor, height });
+  } catch {
+    /* 平台/版本不支持时静默：顶栏仍由 CSS 正常渲染，只是原生按钮区不跟随换肤 */
+  }
+});
+
 // 开发模式判定：默认加载 dist（electron:dev 需要先 npm run build）。
 // 若想用 vite dev server 热更新，传 --dev-server 参数。
 const useDevServer = process.argv.includes('--dev-server');
@@ -232,7 +274,22 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'ID Plan',
-    backgroundColor: '#f5f2ec',
+    // 窗口底色调成与 app 首屏底色同源（--cream 亮色 #F8FAFC）。
+    // 原值 '#f5f2ec' 是改造前的旧暖白，与 v0.7 令牌不同源，会在
+    // 「窗口创建 → 首帧渲染」之间闪出一块对不上的暖色。
+    backgroundColor: '#f8fafc',
+    // 自绘标题栏（仅 Windows）：隐藏原生栏，改用叠加层画三键，颜色随主题下发。
+    // 非 Windows 不传该组键，保持系统原生标题栏（红绿灯 / 各桌面环境自绘）。
+    ...(USE_TITLEBAR_OVERLAY
+      ? {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: {
+            color: TITLEBAR_FALLBACK.color,
+            symbolColor: TITLEBAR_FALLBACK.symbolColor,
+            height: TITLEBAR_HEIGHT_FALLBACK,
+          },
+        }
+      : {}),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

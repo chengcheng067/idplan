@@ -14,7 +14,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 
-import { Upload, X } from 'lucide-react';
+import { Info, Upload, X } from 'lucide-react';
 
 import { useRepos } from '../../hooks/useRepos';
 import { useAgentStore } from '../../store/useAgentStore';
@@ -174,6 +174,24 @@ export function ApplyPayloadPanel({
         >
           <X size={16} />
         </button>
+      </div>
+
+      {/*
+        自动导入通道的**占位说明**（画板 06/07 的「导入任务」按钮落点 · PRD §4.8 P0-9）。
+
+        本轮只做「按钮 + 交互占位」：与外部写入方（WorkBuddy）的 HTTP 自动导入通道
+        （端点 / token / dryRun 预览 / 最近同步记录）尚未接入，故此处**明确写清**
+        「现在能做什么、以后会多什么」，绝不给出已连通的假象——那会让用户以为
+        「我配好了」，然后在下一个版本发现任务根本没进来。
+        手动粘贴 / 拖入是 V1 的兜底通道，与自动通道共用同一份 payload schema（PRD §3.3）。
+      */}
+      <div className="mb-3 flex items-start gap-2 rounded-[12px] bg-sunken px-3.5 py-2.5 text-xs text-mist">
+        <Info size={13} className="mt-0.5 shrink-0 text-pine" aria-hidden />
+        <span>
+          现在可<strong className="text-ink">手动粘贴或拖入</strong>排期文件（下方输入区即用）。
+          与外部写入方（如 WorkBuddy）的<strong className="text-ink">自动导入</strong>
+          通道将在后续版本接入，届时此处会显示服务地址、连通状态与最近同步记录。
+        </span>
       </div>
 
       {/* 输入区：粘贴 textarea + 拖拽区一体（AF-01：粘贴即预览） */}

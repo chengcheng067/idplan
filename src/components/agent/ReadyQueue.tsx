@@ -1,5 +1,5 @@
 /**
- * Ready 队列置顶区（v0.6 · 设计文档 T11 要点 4 / PRD V2）。
+ * Ready 队列置顶区（v0.6 · 设计文档 T11 要点 4 / PRD V2；v0.7 按画板 07 重排）。
  *
  * ── v0.7 T08：本组件的**渲染路径归属技术模式** ──
  * 人话模式下它的内容已由 `board.ts` 的「可开工」组涵盖（`ready ∪ (draft ∧ depsDone)`，
@@ -9,6 +9,19 @@
  * 技术模式挂载本组件（team-lead 明确要求「别与可开工组重复展示」）。
  * **计算未重写**——本文件仍是 `computeReadyTasks` 的唯一渲染出口，符合设计文档
  * :345「计算复用，不重写」。
+ *
+ * ── 画板 07 取值（PRD §5.4.3）──
+ *   置顶区  `[col gap=12 pad=20] fill=paper stroke=pine r=24`
+ *   Ready 卡 `[row gap=10 pad=12] fill=sunken r=12`
+ *     ├ 技术 ID  11/Regular mist（等宽）
+ *     ├ 任务标题 14/SemiBold ink（占满剩余宽度）
+ *     └ 认领按钮 hug×30 [row pad=12] fill=pine r=10
+ *
+ * 为什么 Ready 卡不再复用 `AgentTaskCard`：画板的 Ready 卡是**一行三格**的编排条
+ * （id · 标题 · 认领），而 `AgentTaskCard` 的技术形态是三行高密度卡（标题/角标 ·
+ * id/来源 · 依赖/剩余）。把三行卡塞进 `bg-sunken` 的行里会得到「井中井」且信息
+ * 重复（id 与来源出现两次）。故此处只保留画板要求的三格，让置顶区回答
+ * 「**下一步该谁动手**」这一个问题；要看全字段请用看板泳道里的技术卡或详情抽屉。
  *
  * 纪律：
  *   - 计算全部委托 `dag.computeReadyTasks`（store/UI 只编排不重复实现）；
@@ -25,17 +38,13 @@ import type { Task } from '../../core/types/entities';
 import { computeReadyTasks } from '../../core/agent/dag';
 import { termFor } from '../../constants/agentTerms';
 import { useLayoutStore } from '../../store/useLayoutStore';
-import { AgentTaskCard } from './AgentTaskCard';
 
 export function ReadyQueue({
   tasks,
-  assigneeLabels,
   onOpenTask,
   onClaim,
 }: {
   tasks: readonly Task[];
-  /** memberId → 展示名（human 成员名 / agent 的 agentKind） */
-  assigneeLabels: Readonly<Record<string, string>>;
   onOpenTask(taskId: string): void;
   onClaim(taskId: string): void;
 }): JSX.Element {
@@ -48,13 +57,13 @@ export function ReadyQueue({
   const termMode = useLayoutStore((s) => s.agentBoardMode);
 
   return (
-    <section className="glass-light rounded-[16px] border border-line p-3.5">
-      <div className="mb-2 flex items-center gap-2">
+    <section className="flex flex-col gap-3 rounded-3xl border border-pine bg-paper p-5">
+      <div className="flex items-center gap-2">
         <Zap size={14} className="text-pine" aria-hidden />
         <h2 className="text-sm font-semibold text-ink">
           ⚡ {termFor('ready', termMode)} —— 下一步该做什么
         </h2>
-        <span className="rounded-md bg-sand px-1.5 py-0.5 font-mono text-[10px] text-mist">
+        <span className="text-sm font-semibold tabular-nums text-mist">
           {ready.length}
         </span>
       </div>
@@ -63,7 +72,7 @@ export function ReadyQueue({
       {cyclicIds.size > 0 && (
         <div
           role="alert"
-          className="mb-2 rounded-[10px] border border-amber/50 bg-amber-soft px-3 py-2 text-xs text-amber"
+          className="rounded-[10px] border border-amber/50 bg-amber-soft px-3 py-2 text-xs text-amber"
         >
           检测到 {cyclicIds.size} 条任务存在依赖环（deps 相互引用），已从 Ready
           队列排除。请在任务详情中修正 deps 后刷新。
@@ -76,24 +85,31 @@ export function ReadyQueue({
           ready 即可出现在这里。
         </p>
       ) : (
-        <ul className="flex flex-col gap-1.5">
+        <ul className="flex flex-col gap-2.5">
           {ready.map((t) => (
-            <li key={t.id} className="flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <AgentTaskCard
-                  task={t}
-                  assigneeLabel={
-                    t.assigneeId ? assigneeLabels[t.assigneeId] : undefined
-                  }
-                  onOpen={onOpenTask}
-                />
-              </div>
+            <li
+              key={t.id}
+              className="flex items-center gap-2.5 rounded-[12px] bg-sunken p-3"
+            >
+              {/* 技术 ID + 标题：整块可点开详情（认领是第二个动作，故不嵌套 button） */}
+              <button
+                type="button"
+                onClick={() => onOpenTask(t.id)}
+                className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
+              >
+                <span className="truncate font-mono text-xs text-mist">
+                  {t.externalId ?? t.id}
+                </span>
+                <span className="truncate text-base font-semibold text-ink transition-colors hover:text-pine">
+                  {t.title}
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => onClaim(t.id)}
-                className="shrink-0 rounded-[8px] border border-pine px-2.5 py-1.5 text-xs text-pine transition-colors hover:bg-pine-soft"
+                className="inline-flex h-[30px] shrink-0 items-center rounded-[10px] bg-pine px-3 text-xs font-medium text-white transition-colors hover:bg-pine-deep"
               >
-                claim
+                认领
               </button>
             </li>
           ))}
@@ -102,15 +118,15 @@ export function ReadyQueue({
 
       {/* 受阻区：blocked by ⟨title⟩ */}
       {blocked.length > 0 && (
-        <div className="mt-3">
-          <h3 className="mb-1.5 text-[11px] font-medium text-mist">
+        <div>
+          <h3 className="mb-1.5 text-xs font-medium text-mist">
             暂时不要碰（被阻塞 {blocked.length}）
           </h3>
           <ul className="flex flex-col gap-1">
             {blocked.map(({ task, blockedBy }) => (
               <li
                 key={task.id}
-                className="flex flex-wrap items-center gap-x-2 rounded-[8px] bg-sand/50 px-2.5 py-1.5 text-[11px] text-mist"
+                className="flex flex-wrap items-center gap-x-2 rounded-[8px] bg-sand/50 px-2.5 py-1.5 text-xs text-mist"
               >
                 <button
                   type="button"

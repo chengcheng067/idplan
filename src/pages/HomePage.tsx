@@ -111,16 +111,22 @@ export function HomePage(): JSX.Element {
         <StatCard tone="sage" value={doneThisMonth} label="本月完工" trend={null} />
       </section>
 
-      {/* 3. 视图切换行（替换 HomeViewTabs，契约不变：kanban / calendar） */}
-      <SegmentedControl<HomeViewMode>
-        ariaLabel="首页视图切换"
-        value={homeViewMode}
-        onChange={setHomeViewMode}
-        options={[
-          { value: 'kanban', label: '看板' },
-          { value: 'calendar', label: '月历' },
-        ]}
-      />
+      {/* 3. 视图切换行（画板 02 L143 · A4）
+          切换控件按画板规格做成 lg 档（容器 r16/pad4/gap4/高36，项 84×28/r12/13号字）；
+          homeViewMode 已持久化（见 useUiStore），刷新不再回落「看板」——
+          这是「找不到日历看板入口」的正面解法（画板确认月历是首页视图，非独立导航项）。 */}
+      <div className="flex items-center">
+        <SegmentedControl<HomeViewMode>
+          size="lg"
+          ariaLabel="首页视图切换"
+          value={homeViewMode}
+          onChange={setHomeViewMode}
+          options={[
+            { value: 'kanban', label: '看板' },
+            { value: 'calendar', label: '月历' },
+          ]}
+        />
+      </div>
 
       {/* 4/5 条件区：月历视图 vs 项目卡片网格 + 已归档折叠 */}
       {homeViewMode === 'calendar' ? (

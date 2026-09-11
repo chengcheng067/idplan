@@ -123,23 +123,32 @@ export function Modal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        // 移动端形态：right 抽屉在 <sm(640px) 时改为「从底部滑出、接近全屏」，符合单手操作习惯；
-        // 平板以上恢复右侧滑出。center 弹窗保持居中 + 收缩边距（p-4 → sm:p-6）。
+        /*
+          移动端形态：right 抽屉在 <sm(640px) 时改为「从底部滑出、接近全屏」，符合单手操作习惯；
+          平板以上恢复右侧滑出。center 弹窗保持居中 + 收缩边距（p-4 → sm:p-6）。
+
+          ⚠️ 关于「距底不对称 / 底部圆角被推出屏幕」（v0.7 批次 A 修复）：
+          这里原先是 className 给 `sm:p-6`、另用**内联 style** 给
+          `paddingTop: max(env(safe-area-inset-top), 3rem)`。内联样式优先级高于类，
+          于是 ≥sm 时实际是「上 48 / 其他 24」——上下不对称；
+          而子面板（如 SettingsDialog）的 `max-h` 是按**容器上下对称 48** 的口径写的，
+          容器顶部多吃 24px 就把面板整体下推、底部（含圆角）溢出视口被裁掉。
+          修法：去掉内联 style，改由**响应式类**表达，让「手机安全区」只作用于 <sm：
+            · center      → p-4 sm:p-6（对称，原样不变）
+            · right-float → <sm 顶部安全区，≥sm 对称 sm:p-6（画板无此稿，按对称原则修）
+            · right 抽屉  → <sm 顶部安全区，≥sm `sm:pt-12`（=48px，与改造前桌面端
+                            视觉完全一致，避免引入非预期变更）
+          手机档仍需避让状态栏：用 Tailwind 任意值类承载 env()，
+          任意值内含逗号/括号是合法写法（JIT 静态提取到的是字面量类名）。
+          ⚠️ 仅改此处 padding / className，切勿触碰下方焦点 effect 的 [open] 依赖（IME 吞字根治）。
+        */
         className={`outline-none flex h-full w-full ${
           placement === 'center'
             ? 'items-center justify-center p-4 sm:p-6'
             : placement === 'right-float'
-              ? 'items-end justify-center sm:items-start sm:justify-end sm:p-6'
-              : 'items-end justify-center sm:justify-end'
+              ? 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:items-start sm:justify-end sm:p-6'
+              : 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:justify-end sm:pt-12'
         }`}
-        // 手机状态栏安全区：right 抽屉从底部滑出、近全屏，面板头部（如设置抽屉标题）会顶到
-        // 状态栏下方。用 env(safe-area-inset-top) 顶部避让，回退到 3rem；桌面 center 不受影响。
-        // ⚠️ 仅改此处 padding / style，切勿触碰下方焦点 effect 的 [open] 依赖（IME 吞字根治）。
-        style={
-          placement === 'right' || placement === 'right-float'
-            ? { paddingTop: 'max(env(safe-area-inset-top), 3rem)' }
-            : undefined
-        }
         // 拦截合成 click，阻止其沿 React 组件树冒泡到背后触发器的 onClick（如项目卡片 → 跳转）。
         // 关键：Modal 用 createPortal 只改 DOM 挂载点，React 树仍是调用方的子树，
         // 故点弹窗内任意元素（输入框等）的 click 会冒泡到外层卡片的 onClick 触发跳转。

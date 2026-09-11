@@ -5,11 +5,11 @@ import type { RefObject } from 'react';
 
 import { MemberIdentityPicker } from './MemberIdentityPicker';
 import { MobileMoreMenu } from './MobileMoreMenu';
-import { SettingsButton } from './SettingsButton';
 import { ImeInput } from '../common/ImeInput';
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { isDesktop } from '../../lib/desktopBridge';
 import { cn } from '../../lib/cn';
 
 /**
@@ -36,12 +36,35 @@ import { cn } from '../../lib/cn';
  *   `/project/:id/calendar-print`→ 项目 / {项目名} / 月历
  *   项目名取自 `useProjectsStore`，取不到回落「项目详情」。
  *
- * ── 右组：搜索 + 身份头像（+ 既有的 设置 / ⋮更多，保留既有功能不丢）──
+ * ── 右组：搜索 + 身份头像（+ <xl 的 ⋮更多）──
  *   桌面：搜索常驻 280×36（`bg-sunken` 圆角 16，复用 `ImeInput`，绑 `useUiStore.searchQuery`）；
  *   平板：40×40 图标按钮，点击展开为内联 280 搜索；
  *   手机：第⼆⾏整宽搜索框（36 / 圆角 12 / pad 0 12 / gap 8）。
  *   ⌘K / Ctrl+K / Alt+K 仍承担「聚焦 / 展开」搜索框。
+ *   ⚠️ 顶栏齿轮「设置」按钮已移除（v0.7 批次 A · 画板背书）：画板 02/03/06/07/12/14
+ *      的顶栏均只有「面包屑 + 搜索 + 头像」三块，设置入口在**侧栏底部**
+ *      （Sidebar.tsx，展开态与收起态各一处），顶栏不再重复挂载。
+ *
+ * ── Electron 自绘标题栏（画板 02/12 的「顶栏与主题融合」）──
+ *   `titleBarStyle:'hidden'` + `titleBarOverlay`（见 electron/main.cjs）之后，
+ *   **窗口失去默认可拖拽区域**，必须由 CSS 提供，否则用户无法移动窗口。
+ *   故 `<header>` 声明 `.app-titlebar-drag`，其中交互元素由 global.css 的
+ *   后代选择器统一回退为 `no-drag`（漏一个就表现为「那个按钮点不动」）。
+ *   叠加层右侧的窗口三键浮在内容之上，故末尾留 `WINDOW_CONTROLS_WIDTH` 避让。
  */
+
+/**
+ * Electron 自绘标题栏叠加层里窗口三键（最小化/最大化/关闭）的避让宽度。
+ * 三键由系统绘制、浮在网页内容**之上**，不避让就会盖住顶栏右端的搜索框 / 头像。
+ * 取值：三键各约 46px（Windows 10/11 标准），合计 ≈138px。
+ * 仅 Windows 桌面端生效——浏览器 / NAS 端没有原生栏，不留白（否则白丢一块宽度）。
+ */
+const WINDOW_CONTROLS_WIDTH = 138;
+
+/** 是否处于「自绘标题栏」环境：桌面端且平台为 win32（与 main.cjs 的判定同源） */
+function usesTitleBarOverlay(): boolean {
+  return isDesktop() && window.idplan?.platform === 'win32';
+}
 
 /** 单页面包屑文本映射（非项目路由） */
 const STATIC_CRUMB: Record<string, string> = {
@@ -66,7 +89,14 @@ function SearchField({
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
 
   return (
-    <div className={cn('flex h-9 items-center gap-2 rounded-2xl bg-sunken px-3', className)}>
+    <div
+      className={cn(
+        // app-no-drag：搜索框外壳本身不是 button/input，若不显式豁免，
+        // 父级 header 的 drag 会让点它的留白区拖窗口而不是聚焦输入框。
+        'app-no-drag flex h-9 items-center gap-2 rounded-2xl bg-sunken px-3',
+        className,
+      )}
+    >
       <Search size={16} className="shrink-0 text-mist" aria-hidden />
       <ImeInput
         ref={inputRef}
@@ -204,18 +234,27 @@ export function TopBar(): JSX.Element {
   }, [location.pathname]);
 
   return (
-    <header className="relative z-40 flex h-14 shrink-0 border-b border-line bg-paper print:hidden xl:h-16">
+    <header className="app-titlebar-drag relative z-40 flex shrink-0 flex-col border-b border-line bg-paper print:hidden md:h-14 md:flex-row xl:h-16">
+      {/*
+        ⚠️ 为什么 header 是 `flex-col md:flex-row` + `md:h-14 xl:h-16`（而不是原来的 `flex h-14`）：
+        原来 header 是**横向** flex 且固定 56 高，而它有两个子块（主行 + 手机第二行搜索），
+        于是 <768 时第二行被排到主行**右侧**而非下方——390px 实测总宽 515px 溢出视口。
+        （实测证据：390px 下子块 x=0 w=260 与 x=260 w=255 并排。）
+        改为列向堆叠后 <768 为「56 + 44 = 100」两行，与 §2.4 规格一致；
+        ≥md 第二行 `md:hidden` 不渲染，header 回到单行 56 / ≥xl 64。
+      */}
       {/*
         顶栏主行（桌面 + 平板单⾏ / 手机第⼀⾏）。
-        高度：平板 56 / 桌面 64；横向 padding 与 gap 随断点收紧（§2.4）。
+        高度：手机 56 / 平板 56 / 桌面 64。
 
-        ⚠️ 高度写在 <header> 上、内容行用 h-full，而**不是**把 56/64 写在内容行上。
-        原因：header 还带 1px 下边框，Tailwind 默认 box-sizing: border-box，
-        写在 header 上时这 1px 计入总高 → 规格「顶栏高 64」精确成立；
-        若写在内容行上，header 实高会变成 65（内容 64 + 边框 1），
-        与规格差 1px，且会在 L-09 这类实测用例里暴露成真实偏差（曾经就是 65）。
+        ⚠️ 两处宽度/高度的必要修正（v0.7 批次 A 实测发现，非风格偏好）：
+        1) `w-full` —— 原来主行无宽度类，宽度=内容宽（1600 下仅 578px），
+           导致右组的 `ml-auto` **完全失效**：搜索框与头像贴在面包屑后面，
+           顶栏右侧留下约 800px 空白（画板 02 要求「搜索 + 头像」贴右）。
+        2) `h-14 md:h-full` —— 手机档 header 已是自动高（两行），`h-full` 在
+           自动高父级里退化为 auto；显式 `h-14` 保证第一行恒为 56。
       */}
-      <div className="flex h-full items-center gap-3 px-4 md:gap-3 md:px-4 xl:gap-4 xl:px-6">
+      <div className="flex h-14 w-full shrink-0 items-center gap-3 px-4 md:h-full md:gap-3 xl:gap-4 xl:px-6">
         {/* 左组：汉堡 + 品牌（仅 <xl）+ 面包屑（手机隐藏，避免与品牌争位） */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {/* 汉堡（<xl，打开侧栏抽屉）+ 品牌名——≥xl 侧栏已是持久左栏，无需此按钮 */}
@@ -240,8 +279,10 @@ export function TopBar(): JSX.Element {
           </div>
         </div>
 
-        {/* 右组：搜索 + 设置 + ⋮更多 + 身份头像 */}
-        <div className="ml-auto flex shrink-0 items-center gap-3 xl:gap-4">
+        {/* 右组：搜索 + ⋮更多（<xl）+ 身份头像。
+            app-no-drag：本容器自身不是 button/input，若不豁免则其内边距区域会
+            拖拽窗口而不是留给子按钮命中（画板 02 顶栏右组是搜索 + 头像两块）。 */}
+        <div className="app-no-drag ml-auto flex shrink-0 items-center gap-3 xl:gap-4">
           {/* 桌面（≥xl）：搜索常驻 280×36（bg-sunken 圆角 16） */}
           <SearchField inputRef={desktopSearchRef} className="hidden w-[280px] xl:flex" />
 
@@ -272,15 +313,27 @@ export function TopBar(): JSX.Element {
             )}
           </div>
 
-          {/* 设置入口 + ⋮更多（<xl 才渲染，复用既有逻辑，保留功能不丢） */}
-          <SettingsButton />
+          {/* ⋮更多（<xl 才渲染；≥xl 由 xl:hidden 隐去）。
+              顶栏齿轮「设置」按钮已移除——画板 02/03/06/07/12/14 顶栏均无该按钮，
+              设置入口在侧栏底部（Sidebar.tsx），此处不再重复。 */}
           <MobileMoreMenu />
           <MemberIdentityPicker />
         </div>
+
+        {/* Electron 自绘标题栏的窗口三键避让位（仅 Windows 桌面端渲染）。
+            叠加层三键由系统绘制、浮在内容之上，不避让会盖住头像/⋮更多。 */}
+        {usesTitleBarOverlay() && (
+          <div
+            className="shrink-0"
+            style={{ width: WINDOW_CONTROLS_WIDTH }}
+            aria-hidden
+          />
+        )}
       </div>
 
-      {/* 手机第⼆⾏（<768）：整宽搜索框，高 36 / 圆角 12 / pad 0 12 / gap 8 */}
-      <div className="flex h-11 items-center px-4 md:hidden">
+      {/* 手机第⼆⾏（<768）：整宽搜索框，高 36 / 圆角 12 / pad 0 12 / gap 8。
+          app-no-drag：整行仅一个搜索框，容器留白同样不该拖窗口。 */}
+      <div className="app-no-drag flex h-11 w-full shrink-0 items-center px-4 md:hidden">
         <SearchField inputRef={mobileSearchRef} className="w-full rounded-xl" />
       </div>
     </header>

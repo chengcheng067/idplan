@@ -13,6 +13,21 @@
  *   Project.stagePresetKey      → null（未知套餐）
  *   Project.stageTemplateVersion→ 0（未知版本）
  *   Project.scheduleBasis       → DEFAULT_SCHEDULE_BASIS（自然日）
+ *   Project.shortLabel          → null（v0.7 侧栏增强；「项目名首字」的文字级回落
+ *                                 在 src/lib/projectAccent.ts，属展示层，不进本文件）
+ *
+ * ── v0.7 B1 决策留痕：`Project.shortLabel` **刻意不升 Dexie 版本** ──
+ *   判据是「有没有索引变化」：
+ *     · projects 的索引串是 `id, status, name, updatedAt`（schema/current.ts 的
+ *       DEXIE_V1_STORES），shortLabel 是纯展示字段、**不进任何索引** →
+ *       `version(n).stores()` 无需改动 → 没有新版本可言；
+ *     · 老库的行只是**缺这个键**（读到 undefined），本文件不负责、由展示层
+ *       `resolveProjectShortLabel(name, shortLabel)` 的 `?? 首字` 兜住；
+ *     · 反过来，为了「补齐一个展示字段」去 bump SCHEMA_VERSION 的代价是：
+ *       每个存量用户下次启动都被 `needsPreMigrationBackup()` 拦下、被迫先导出一次
+ *       迁移前备份（L1 闸门）。零收益、有真实打扰，故明确不做。
+ *   将来若 shortLabel 需要被 `.where()` 查询而建索引，**那时才**按
+ *   schema/current.ts 的规则增量声明 DEXIE_V4_STORES（并保留历史串不动）。
  */
 
 import { DEFAULT_SCHEDULE_BASIS, type Project, type Stage } from '../types/entities';
@@ -68,10 +83,17 @@ export function resolveStageColorIndex(orderIndex: number, colorIndex?: number |
  */
 export type ProjectRowInput = Omit<
   Project,
-  'type' | 'status' | 'stagePresetKey' | 'stageTemplateVersion' | 'scheduleBasis'
+  'type' | 'status' | 'stagePresetKey' | 'stageTemplateVersion' | 'scheduleBasis' | 'shortLabel'
 > & {
   type: string;
   status: string;
+  /**
+   * v0.7 侧栏方块简称：必须与 Project 一样 Omit 后重声明为**可选**——
+   * 老备份（v1/v2/v3）根本没有这个键，zod 侧是 `.optional()` 产物。
+   * 若直接继承 Project 的必填 `string | null`，normalizeProjectRow 的入参会与
+   * zod 的解析产物类型不符（tsc 会报，但更危险的是有人顺手把它改成非空断言）。
+   */
+  shortLabel?: string | null;
   stagePresetKey?: string | null;
   stageTemplateVersion?: number;
   scheduleBasis?: ScheduleBasis;
@@ -108,7 +130,10 @@ export function normalizeStageRow(row: StageRowInput): Stage {
   };
 }
 
-/** 整行归一：补齐 stagePresetKey / stageTemplateVersion / scheduleBasis（键序同 entities.ts） */
+/**
+ * 整行归一：补齐 shortLabel / stagePresetKey / stageTemplateVersion / scheduleBasis
+ * （键序同 entities.ts：shortLabel 紧随 coverColor，三个阶段字段再紧随其后）。
+ */
 export function normalizeProjectRow(row: ProjectRowInput): Project {
   return {
     id: row.id,
@@ -121,6 +146,7 @@ export function normalizeProjectRow(row: ProjectRowInput): Project {
     plannedStartAt: row.plannedStartAt,
     plannedEndAt: row.plannedEndAt,
     coverColor: row.coverColor,
+    shortLabel: row.shortLabel ?? null,
     stagePresetKey: row.stagePresetKey ?? null,
     stageTemplateVersion: row.stageTemplateVersion ?? LEGACY_STAGE_TEMPLATE_VERSION,
     scheduleBasis: row.scheduleBasis ?? DEFAULT_SCHEDULE_BASIS,

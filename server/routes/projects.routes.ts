@@ -16,6 +16,8 @@ interface ProjectRow {
   planned_start_at: string;
   planned_end_at: string;
   cover_color: string | null;
+  /** v0.7 侧栏方块简称（NULL = 未设置 → 前端读时回落项目名首字） */
+  short_label: string | null;
   /** v2 阶段自定义字段（与 entities.Project 同构） */
   stage_preset_key: string | null;
   stage_template_version: number;
@@ -25,7 +27,12 @@ interface ProjectRow {
   updated_at: string;
 }
 
-/** snake_case 行 → 前端 camelCase 实体 */
+/**
+ * snake_case 行 → 前端 camelCase 实体。
+ * 键序与 entities.Project 一致（shortLabel 紧随 coverColor）——前端读取侧不做键序断言，
+ * 但保持同序能让「人工比对两侧字段」这件事不需要额外心智负担。
+ * `?? null` 兜底：老库（未跑 createDb 的极老实例 / 测试里手搓的表）读不到该列时为 undefined。
+ */
 export function rowToProject(r: ProjectRow): Record<string, unknown> {
   return {
     id: r.id,
@@ -38,6 +45,7 @@ export function rowToProject(r: ProjectRow): Record<string, unknown> {
     plannedStartAt: r.planned_start_at,
     plannedEndAt: r.planned_end_at,
     coverColor: r.cover_color,
+    shortLabel: r.short_label ?? null,
     stagePresetKey: r.stage_preset_key ?? null,
     stageTemplateVersion: r.stage_template_version ?? 0,
     scheduleBasis: r.schedule_basis ?? 'calendar',
@@ -87,13 +95,15 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       void reply.status(400);
       return { error: { code: 'validation', userMessage: '项目名称不能为空' } };
     }
+    // ⚠️ 列清单与占位符个数必须逐一对齐（15 个 ?）。加列时三处同改：
+    //    列清单 / VALUES / .run() 实参，漏一处就是运行期 'too few/many parameters'。
     db.prepare(
       `INSERT INTO projects
         (id, name, type, address, client_name, contract_amount, signed_at,
-         planned_start_at, planned_end_at, cover_color,
+         planned_start_at, planned_end_at, cover_color, short_label,
          stage_preset_key, stage_template_version, schedule_basis,
          status, revision, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
     ).run(
       id,
       name,
@@ -105,6 +115,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       String(body.plannedStartAt),
       String(body.plannedEndAt),
       (body.coverColor as string | null) ?? null,
+      (body.shortLabel as string | null) ?? null,
       (body.stagePresetKey as string | null) ?? null,
       Number(body.stageTemplateVersion ?? 0),
       String(body.scheduleBasis ?? 'calendar'),
@@ -123,6 +134,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       return { error: { code: 'not_found', userMessage: '项目不存在' } };
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
+    // undefined = 不变（字段级更新语义），null = 显式清除。两态必须分开处理，
+    // 否则「只改简称」的请求会把封面/阶段溯源字段一并擦掉。
     const merged: ProjectRow = {
       ...existing,
       name: b.name !== undefined ? String(b.name) : existing.name,
@@ -133,6 +146,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
         b.contractAmount !== undefined ? (b.contractAmount as number | null) : existing.contract_amount,
       signed_at: b.signedAt !== undefined ? (b.signedAt as string | null) : existing.signed_at,
       cover_color: b.coverColor !== undefined ? (b.coverColor as string | null) : existing.cover_color,
+      short_label:
+        b.shortLabel !== undefined ? (b.shortLabel as string | null) : existing.short_label,
       stage_preset_key:
         b.stagePresetKey !== undefined
           ? (b.stagePresetKey as string | null)
@@ -149,8 +164,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     };
     db.prepare(
       `UPDATE projects SET name=?, type=?, address=?, client_name=?, contract_amount=?,
-        signed_at=?, cover_color=?, stage_preset_key=?, stage_template_version=?, schedule_basis=?,
-        status=?, revision=?, updated_at=? WHERE id=?`,
+        signed_at=?, cover_color=?, short_label=?, stage_preset_key=?, stage_template_version=?,
+        schedule_basis=?, status=?, revision=?, updated_at=? WHERE id=?`,
     ).run(
       merged.name,
       merged.type,
@@ -159,6 +174,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       merged.contract_amount,
       merged.signed_at,
       merged.cover_color,
+      merged.short_label,
       merged.stage_preset_key,
       merged.stage_template_version,
       merged.schedule_basis,

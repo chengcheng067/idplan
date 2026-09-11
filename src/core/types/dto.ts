@@ -32,6 +32,11 @@ export interface CreateProjectCmd {
   plannedEndAt: string;
   coverColor: string | null;
   /**
+   * 侧栏方块简称（v0.7 新增，可选）。不传 → repo 落 null → 侧栏读时回落项目名首字。
+   * 仅影响折叠态侧栏那枚 40×36 项目方块的文字，不参与任何业务规则。
+   */
+  shortLabel?: string | null;
+  /**
    * 建档所选阶段套餐 key（溯源/统计）。不传 → 由 service 按 stageItems 有无推导
    * （无 stageItems 视为默认 indoor_full 九段）。
    */
@@ -57,6 +62,13 @@ export interface UpdateProjectCmd {
   contractAmount?: number | null;
   signedAt?: string | null;
   coverColor?: string | null;
+  /**
+   * 侧栏方块简称（v0.7 新增，可选）。
+   *   - string  → 设为该简称（编辑器会 trim，空串按 null 处理）；
+   *   - null    → 清除（回落项目名首字）；
+   *   - undefined → 不变（缺省）。
+   */
+  shortLabel?: string | null;
   status?: ProjectStatus;
 }
 

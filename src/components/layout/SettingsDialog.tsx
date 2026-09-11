@@ -110,7 +110,18 @@ export function SettingsDialog({
   return (
     <>
       <Modal open={open} onClose={onClose} placement="right-float" ariaLabel="设置">
-        <div className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-full sm:max-h-[calc(100dvh-3rem)] sm:w-[400px] sm:self-start sm:mr-2 sm:mt-2">
+        {/*
+          max-h 口径必须与 Modal 容器的 padding 口径**一致**，否则面板总高超出容器，
+          底部圆角会被推出视口裁掉（v0.7 批次 A 修的「设置弹窗底部圆角丢失」）。
+          容器现为：<sm `pt-[max(env(safe-area-inset-top),3rem)]`，≥sm `sm:p-6`（上下各 24）。
+            · <sm  ：容器上下各占 3rem（48px）→ max-h 取 100dvh-1.5rem 的偏紧档
+                     （手机上本就近全屏，留一点呼吸即可）
+            · ≥sm  ：容器上下各 24px，共 3rem → `sm:max-h-[calc(100dvh-3rem)]` 恰好
+                     顶到容器可用高度，圆角完整可见
+          原实现把 `sm:mr-2 sm:mt-2` 叠在容器 sm:p-6 之上，等于又多让 8px 且只让右侧/顶部，
+          破坏了「对称」这一修复目标，故一并去掉——间距统一由容器 sm:p-6 控制。
+        */}
+        <div className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-full sm:max-h-[calc(100dvh-3rem)] sm:w-[400px] sm:self-start">
           {/* 头部 */}
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div className="flex items-center gap-2">

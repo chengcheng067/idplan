@@ -967,3 +967,35 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
     page-break-after: auto;
   }
 }
+
+/* ============ Electron 自绘标题栏（titleBarOverlay）拖拽区 · 画板 02/12 ============
+ * titleBarStyle:'hidden' 去掉原生标题栏后，**窗口不再有默认可拖拽区域** ——
+ * 若不给 CSS 拖拽区，用户根本无法移动窗口（严重可用性问题）。
+ * 故：顶栏整体声明 drag，再把其中的交互元素改回 no-drag，否则按钮点不动。
+ *
+ * 只对 .app-titlebar-drag 子树生效：浏览器 / NAS 端没有原生栏，
+ * 这两个类名只是空挂（-webkit-app-region 在非 Electron 环境无效），零副作用。
+ * 注意：声明式属性（子元素上的 no-drag）优先于父级 drag，这是 Chromium 的规定，
+ * 因此「父 drag + 子 no-drag」是官方推荐的正确写法。
+ */
+.app-titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+/* 交互元素一律回退为可点击/可选中 —— 漏掉任何一个都会表现为「那个按钮点不动」 */
+.app-titlebar-drag button,
+.app-titlebar-drag a,
+.app-titlebar-drag input,
+.app-titlebar-drag select,
+.app-titlebar-drag textarea,
+.app-titlebar-drag label,
+.app-titlebar-drag [role='button'],
+.app-titlebar-drag [role='tab'],
+.app-titlebar-drag [role='menu'] {
+  -webkit-app-region: no-drag;
+}
+
+/* 显式豁免（用于非交互但需要正常点透/选中的容器，如搜索框外壳、右组容器） */
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}

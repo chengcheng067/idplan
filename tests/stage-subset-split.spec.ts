@@ -357,6 +357,7 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       'plannedStartAt',
       'plannedEndAt',
       'coverColor',
+      'shortLabel',
       'stagePresetKey',
       'stageTemplateVersion',
       'scheduleBasis',

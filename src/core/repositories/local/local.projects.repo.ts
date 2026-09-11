@@ -61,8 +61,11 @@ export class LocalProjectsRepository implements IProjectsRepository {
       plannedStartAt: cmd.plannedStartAt,
       plannedEndAt: cmd.plannedEndAt,
       coverColor: cmd.coverColor ?? null,
-      // 键序铁律：三个新增字段插在 coverColor 之后、status 之前
-      // （entities.Project / backup.service projectSchema / 本处 insert 字面量 三处同步）
+      // v0.7 侧栏折叠态增强：外观类字段紧随 coverColor（键序同 entities.Project）
+      shortLabel: cmd.shortLabel ?? null,
+      // 键序铁律（四处同步：entities.Project / backup.service projectSchema /
+      // 本处 insert 字面量 / stage-fallback.normalizeProjectRow）：
+      // 三个阶段字段紧随外观类字段之后、status 之前
       stagePresetKey: cmd.stagePresetKey ?? null,
       stageTemplateVersion: cmd.stageTemplateVersion ?? 0,
       scheduleBasis: cmd.scheduleBasis ?? DEFAULT_SCHEDULE_BASIS,

@@ -3,19 +3,38 @@
  *
  * ── 两种模式（D2）──
  *
- * **人话模式（默认，PRD §4.1）**：
- *   ① 顶部一句话「**现在该做什么**」= `computeReadyTasks()` 置顶条（人话标题 + 剩余/逾期）。
+ * **人话模式（默认，PRD §4.1 / §5.4.3 画板 06）**：
+ *   ① 顶部一句话「**现在该做什么**」= `computeReadyTasks()` 置顶条（人话标题 + 剩余/逾期
+ *      + 脚注「同类可开工 N 项 · 已逾期 M 项」）。
  *      小字计数取**可开工组的桶长度**（不是 `ready.length`）——同一个词在同一屏必须
  *      同一个含义，详见 `现在该做什么` 区块内的注释与验收用例。
  *   ② 四组分区：`待我确认 / 可开工 / 进行中 / 已完成`（顺序恒为 `HUMAN_BOARD_GROUP_ORDER`）
+ *      —— **纵向全宽四段**（不是横向多列）。
  *   ③ 埋在组外的 `hidden` 条（`draft ∧ 依赖未满足` = 上游 Agent 还在跑）**不进主列表**，
  *      但**必须给出汇总出口**：四组下方一行「另有 N 条在上游准备中，切到「技术」可查看全部」
  *      —— 否则这类任务在人话模式下凭空消失、用户无从排查（team-lead 裁决必补）。
  *   ④ 依赖环仍给 amber 告警条 —— 环成员同样被归入 hidden，无告警等于在界面上无声消失
  *      （与 ③ 的出口提示互补：③ 解决「还没轮到」，④ 解决「数据坏了」）
  *
- * **技术模式（PRD §4.2「保留现有 7 列泳道，不降级」）**：
- *   `ReadyQueue` 置顶区 + `ALL_TASK_STATUSES` 遍历的 7 列 status 泳道，形态与 v0.6 一致。
+ * **技术模式（PRD §4.2「保留现有 7 列泳道，不降级」；画板 07）**：
+ *   `ReadyQueue` 置顶区 + `ALL_TASK_STATUSES` 遍历的 7 列 status 泳道（**等宽**）。
+ *
+ * ── S1：为什么人话四组从「横向 4 列」改成「纵向全宽四段」（PRD §5.4）──
+ *   旧实现是 `grid gap-3 md:grid-cols-2 xl:grid-cols-4`。在 1600px 视口下每列只有
+ *   约 300px，而卡片里挤着标题 + 负责人 + 剩余天数 + 主按钮 —— 于是换行、截断、
+ *   层层堆叠，用户看到的正是「泡泡挤在一起」。根因不是间距不够，是**容器形态错了**：
+ *   任务清单是**列表**，不是**矩阵**。
+ *   画板 06 给的是纵向：内容区 `[col gap=16]` → 分组纵向排列（每组 `[col gap=10]`，
+ *   组间 `gap=16`）→ 卡片拿到**整行宽度**，压缩随之消失。
+ *
+ * ── S3：来源（human/agent）不进人话模式（PRD §5.3，三条纪律）──
+ *   ① 卡片主按钮**不因来源分叉**（claim/unblock/approve/open 按「组 + 状态」派生）；
+ *   ② 置顶条 `computeReadyTasks` **不按 source 过滤**（跨来源取全局最优，禁止加
+ *      `source === 'agent'` 之类过滤）；
+ *   ③ 人话模式不新增英文状态角标、不新增来源色。
+ *   配套：人话模式**不渲染** `SourceStatCard`（它按 agentKind 聚合、字样含
+ *   `human` / `agent`，与 V1-9「人话模式看不到 agent / human 字样」正面冲突）——
+ *   该指标条只在**技术模式**出现。来源的正式出处是技术卡与任务详情抽屉。
  *
  * ── 为什么人话模式**不**渲染 `ReadyQueue`（避免重复展示）──
  *   `ReadyQueue` 的内容 = `computeReadyTasks().ready` + blocked-by 区。而人话「可开工」
@@ -103,6 +122,38 @@ const MODE_LABELS: Record<AgentTermMode, string> = { human: '人话', tech: '技
 /** 模式切换 tab 的展示顺序（人话 / 技术，PRD §4.3 D2） */
 const MODE_TAB_ORDER: readonly AgentTermMode[] = ['human', 'tech'];
 
+/**
+ * 技术模式 7 条泳道的**表面**配色（画板 07 逐条取值）。
+ *
+ * 静态映射表 —— **严禁模板字符串拼类名**（BUG-05：Tailwind 只做静态文本扫描，
+ * `bg-${x}` 一条 CSS 都不会生成，阶段色带曾经整类不显色就是这个原因）。
+ * 画板 07 取值：
+ *   draft/claimed/in_progress/review → `paper` + `line`
+ *   ready                           → `pine-soft` + `pine`
+ *   blocked                         → `clay-soft` + `clay`
+ *   done                            → `moss-soft` + `moss`
+ */
+const LANE_SURFACE_CLASS: Record<TaskStatus, string> = {
+  [TaskStatus.Draft]: 'border border-line bg-paper',
+  [TaskStatus.Ready]: 'border border-pine bg-pine-soft',
+  [TaskStatus.Claimed]: 'border border-line bg-paper',
+  [TaskStatus.InProgress]: 'border border-line bg-paper',
+  [TaskStatus.Blocked]: 'border border-clay bg-clay-soft',
+  [TaskStatus.Review]: 'border border-line bg-paper',
+  [TaskStatus.Done]: 'border border-moss bg-moss-soft',
+};
+
+/** 泳道头状态名的前景色（画板 07：blocked → clay / done → moss，其余 ink） */
+const LANE_HEAD_CLASS: Record<TaskStatus, string> = {
+  [TaskStatus.Draft]: 'text-ink',
+  [TaskStatus.Ready]: 'text-ink',
+  [TaskStatus.Claimed]: 'text-ink',
+  [TaskStatus.InProgress]: 'text-ink',
+  [TaskStatus.Blocked]: 'text-clay',
+  [TaskStatus.Review]: 'text-ink',
+  [TaskStatus.Done]: 'text-moss',
+};
+
 /** 剩余 / 逾期文案（与卡片同口径；此处只用于「现在该做什么」条） */
 function topDueText(task: Task): { text: string; overdue: boolean } | null {
   if (!task.dueDate) return null;
@@ -115,6 +166,9 @@ function topDueText(task: Task): { text: string; overdue: boolean } | null {
 /**
  * 「人话 / 技术」模式切换（`role="tablist"` + `aria-selected`，对齐 `HomeViewTabs`
  * 的既有写法）。纯受控组件：不自己持有状态，也不碰 URL —— 均由页面统一处置。
+ *
+ * 画板 06/07 取值：分段控件 `200×44 [row gap=4 pad=4] sunken r=16`；
+ * 单个 tab `96×36 r=12`，激活态 `paper`。
  */
 function BoardModeTabs({
   mode,
@@ -127,7 +181,7 @@ function BoardModeTabs({
     <div
       role="tablist"
       aria-label="看板模式切换"
-      className="flex w-fit items-center gap-1 rounded-[12px] border border-line bg-cream/60 p-1"
+      className="flex w-fit items-center gap-1 rounded-2xl bg-sunken p-1"
     >
       {MODE_TAB_ORDER.map((key) => (
         <button
@@ -137,8 +191,8 @@ function BoardModeTabs({
           aria-selected={mode === key}
           onClick={() => onChange(key)}
           className={cn(
-            'rounded-[9px] px-3.5 py-1.5 text-sm font-medium transition-colors',
-            mode === key ? 'bg-pine-soft text-pine' : 'text-mist hover:bg-sand hover:text-ink',
+            'h-9 w-24 rounded-[12px] text-sm font-medium transition-colors',
+            mode === key ? 'bg-paper text-pine shadow-soft' : 'text-mist hover:text-ink',
           )}
         >
           {MODE_LABELS[key]}
@@ -284,6 +338,15 @@ export function AgentBoardPage(): JSX.Element {
   const topReady = readyComputation.ready[0] ?? null;
   const topDue = topReady ? topDueText(topReady) : null;
 
+  /** 置顶条脚注里的「已逾期 M 项」（口径与卡面一致：dueDate < 今天） */
+  const readyOverdueCount = useMemo(
+    () =>
+      humanView.groups.ready.filter(
+        (t) => !!t.dueDate && remainingDays(t.dueDate.slice(0, 10)) < 0,
+      ).length,
+    [humanView],
+  );
+
   const onOpenTask = useCallback((taskId: string) => openDrawer(taskId), [openDrawer]);
 
   /**
@@ -317,282 +380,337 @@ export function AgentBoardPage(): JSX.Element {
   );
 
   return (
-    /* 容器：**不**加 max-w（宽度锚点唯一出处是 AppShell 的 <main>，见 L-08）；横向内边距 24 自持（画板 06 内容区 padding 24） */
-    <div className="w-full px-6 pb-10 pt-4">
-      {/* 工具行（画板 06：左=模式切换分段控件，右=项目选择 + 操作按钮） */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
-        <Link
-          to="/"
-          className="rounded-[8px] px-2 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
-        >
-          ← 项目
-        </Link>
-        <h1 className="font-display text-lg font-bold text-ink">
-          {termFor('board', agentBoardMode)}
-        </h1>
-        <BoardModeTabs mode={agentBoardMode} onChange={changeMode} />
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <select
-            value={currentProjectId ?? ''}
-            onChange={(e) => setCurrentProject(e.target.value || null)}
-            aria-label="选择项目"
-            className="min-w-0 max-w-[240px] rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-pine"
+    /*
+     * 容器：**不**加 max-w（宽度锚点唯一出处是 AppShell 的 <main>，见 L-08）。
+     * 画板 06/07 内容区 = `[col gap=16 pad=24]` → 外层 `p-6` + 内层 `flex flex-col gap-4`。
+     * 模态框放在**纵向流之外**：它们虽然多为 fixed 定位，但保持在流内会让
+     * 「打开面板」这件事与纵向节奏耦合（将来换成非 portal 的实现就会多出一段空白）。
+     */
+    <div className="w-full p-6">
+      <div className="flex flex-col gap-4">
+        {/* 工具行（画板 06/07：左=模式切换分段控件，右=项目选择器 + 导入任务 + 生成交接包） */}
+        <div className="flex flex-wrap items-center gap-4">
+          <Link
+            to="/"
+            className="rounded-[10px] px-2 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
           >
-            {projects.length === 0 && <option value="">（暂无项目）</option>}
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => setApplyOpen(true)}
-            disabled={!currentProjectId}
-            className="inline-flex items-center gap-1.5 rounded-[10px] border border-pine px-3 py-1.5 text-sm text-pine transition-colors hover:bg-pine-soft disabled:opacity-40"
-          >
-            <ClipboardPaste size={14} aria-hidden />
-            {termFor('applyPayload', agentBoardMode)}
-          </button>
-          <button
-            type="button"
-            onClick={() => setHandoffOpen(true)}
-            disabled={!currentProjectId}
-            className="inline-flex items-center gap-1.5 rounded-[10px] bg-pine px-3 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-40"
-          >
-            <FileOutput size={14} aria-hidden />
-            {termFor('handoff', agentBoardMode)}
-          </button>
+            ← 项目
+          </Link>
+          <h1 className="font-display text-base font-bold text-ink">
+            {termFor('board', agentBoardMode)}
+          </h1>
+          <BoardModeTabs mode={agentBoardMode} onChange={changeMode} />
+          <div className="ml-auto flex flex-wrap items-center gap-2.5">
+            <select
+              value={currentProjectId ?? ''}
+              onChange={(e) => setCurrentProject(e.target.value || null)}
+              aria-label="选择项目"
+              className="h-[38px] min-w-0 max-w-[240px] rounded-2xl border border-line bg-paper px-3.5 text-sm text-ink outline-none focus:border-pine"
+            >
+              {projects.length === 0 && <option value="">（暂无项目）</option>}
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {/*
+              「导入任务」= WorkBuddy 排期入口（手动兜底 + 接入配置面板）。
+              画板 06/07 的第二位按钮，白底描边（次要操作）。
+              本轮只做**按钮与交互占位**：渠道本身（HTTP 端点 / token / 自动写入）
+              不在本批，面板内以说明行标注「后续接入」，不伪造任何已连通的假象。
+            */}
+            <button
+              type="button"
+              onClick={() => setApplyOpen(true)}
+              disabled={!currentProjectId}
+              className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl border border-line bg-paper px-4 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
+            >
+              <ClipboardPaste size={14} aria-hidden />
+              {termFor('applyPayload', agentBoardMode)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setHandoffOpen(true)}
+              disabled={!currentProjectId}
+              className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl bg-pine px-4 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-40"
+            >
+              <FileOutput size={14} aria-hidden />
+              {termFor('handoff', agentBoardMode)}
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* 指标卡行（两种模式共用；PRD §4.1.2「保留在页脚/可复用」） */}
-      <div className="mb-4">
-        <SourceStatCard
-          tasks={projectTasks}
-          assigneeLabels={assigneeLabels}
-          agentSeatUsed={agentSeatUsed}
-          agentSeatLimit={AGENT_SEAT_LIMIT}
-        />
-      </div>
+        {/*
+          指标卡行 —— **仅技术模式**。
+          它按 agentKind 聚合、字样含 `human` / `agent`，与人话模式的铁律
+          「不显示来源」（画板 06/22 卡片无来源标签；PRD §5.3 表 + V1-9）正面冲突。
+          技术模式需要席位占用与 agentKind 聚合来排查，故保留在这里。
+        */}
+        {agentBoardMode === 'tech' && (
+          <SourceStatCard
+            tasks={projectTasks}
+            assigneeLabels={assigneeLabels}
+            agentSeatUsed={agentSeatUsed}
+            agentSeatLimit={AGENT_SEAT_LIMIT}
+          />
+        )}
 
-      {agentBoardMode === 'human' ? (
-        <>
-          {/* ① 现在该做什么（PRD S5：取 computeReadyTasks 置顶条） */}
-          {/*
-            ⚠️ 小字计数取的是**可开工组的桶长度**，不是 `computeReadyTasks().ready.length`。
+        {agentBoardMode === 'human' ? (
+          <>
+            {/* ① 现在该做什么（PRD S5：取 computeReadyTasks 置顶条） */}
+            {/*
+              ⚠️ 小字计数取的是**可开工组的桶长度**，不是 `computeReadyTasks().ready.length`。
 
-            为什么（team-lead 裁决）：`可开工组 = ready ∪ (draft ∧ 依赖全 done)` 是
-            `computeReadyTasks().ready` 的**严格超集**，两者数字天然不同（种子场景 3 vs 2）。
-            两边单看都「对」，但**同一个词在同一屏指两个集合**是硬缺陷——用户只会
-            当成 bug。硬原则：同一屏同一个词必须同一个含义；故让置顶条随组计数。
+              为什么（team-lead 裁决）：`可开工组 = ready ∪ (draft ∧ 依赖全 done)` 是
+              `computeReadyTasks().ready` 的**严格超集**，两者数字天然不同（种子场景 3 vs 2）。
+              两边单看都「对」，但**同一个词在同一屏指两个集合**是硬缺陷——用户只会
+              当成 bug。硬原则：同一屏同一个词必须同一个含义；故让置顶条随组计数。
 
-            数学上不会自相矛盾：`ready ⊆ 可开工组`（`ready` 真包含于 `ready ∪ …`），
-            所以置顶条那条任务**永远**是该组的成员（B-01 缺陷修复后 `claimedAt`
-            条件自动对齐：`status==='ready' ⟹ claimedAt===null`，PRD :327 那句
-            「且 未被认领」的额外约束已被不变式覆盖）。
-            该包含关系由验收用例锁死（「置顶条计数 == 组计数 ∧ 置顶条任务 ∈ 该组」），
-            防的是将来有人把两个源改成不同集合。
+              数学上不会自相矛盾：`ready ⊆ 可开工组`（`ready` 真包含于 `ready ∪ …`），
+              所以置顶条那条任务**永远**是该组的成员（B-01 缺陷修复后 `claimedAt`
+              条件自动对齐：`status==='ready' ⟹ claimedAt===null`，PRD :327 那句
+              「且 未被认领」的额外约束已被不变式覆盖）。
+              该包含关系由验收用例锁死（「置顶条计数 == 组计数 ∧ 置顶条任务 ∈ 该组」），
+              防的是将来有人把两个源改成不同集合。
 
-            文案复用 `HUMAN_GROUP_TITLES.ready` 而非再写一遍字面量：让「同一个词」
-            在类型层就无法分叉（改标题即改小字）。
-            （原先 agentTerms.ts 另有一个同值的 `READY_NOW_LABEL` 常量，零组件消费，
-            属同类「两份真相」，已随本批收口删除——详见 agentTerms.ts 内的说明。）
-          */}
-          <section
-            aria-label="现在该做什么"
-            className="mb-4 rounded-3xl border border-pine bg-pine-soft p-6"
-          >
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-semibold text-pine dark:text-ink">现在该做什么</h2>
-              {humanView.groups.ready.length > 0 && (
-                <span className="rounded-md bg-paper/70 px-1.5 py-0.5 text-[10px] text-mist">
-                  {HUMAN_GROUP_TITLES.ready} {humanView.groups.ready.length} 项
-                </span>
-              )}
-            </div>
-            {topReady ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onOpenTask(topReady.id)}
-                  className="mt-3 flex w-full items-center gap-2 text-left"
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink hover:text-pine">
-                    {topReady.title}
-                  </span>
-                  {topDue && (
-                    <span
-                      className={cn(
-                        'shrink-0 text-[11px] tabular-nums',
-                        topDue.overdue ? 'text-clay' : 'text-mist',
-                      )}
+              文案复用 `HUMAN_GROUP_TITLES.ready` 而非再写一遍字面量：让「同一个词」
+              在类型层就无法分叉（改标题即改脚注）。
+              （原先 agentTerms.ts 另有一个同值的 `READY_NOW_LABEL` 常量，零组件消费，
+              属同类「两份真相」，已随本批收口删除——详见 agentTerms.ts 内的说明。）
+            */}
+            <section
+              aria-label="现在该做什么"
+              className="flex flex-col gap-3 rounded-3xl border border-pine bg-pine-soft p-6"
+            >
+              {/* 标签 11/SemiBold（画板 06）：这里的主角是**任务标题**，不是这个标签 */}
+              <h2 className="text-xs font-semibold text-pine dark:text-ink">现在该做什么</h2>
+
+              {topReady ? (
+                <>
+                  {/* 内容行：文字列（标题 + 剩余/逾期）+ 操作 */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onOpenTask(topReady.id)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
-                      {topDue.text}
-                    </span>
-                  )}
-                </button>
-                <p className="mt-1 text-[13px] text-mist">
-                  认领后即可开始处理，相关前置依赖都已就绪。
+                      <span className="min-w-0 flex-1 truncate text-base font-semibold text-ink transition-colors hover:text-pine">
+                        {topReady.title}
+                      </span>
+                      {topDue && (
+                        <span
+                          className={cn(
+                            'shrink-0 text-sm tabular-nums',
+                            topDue.overdue ? 'text-clay' : 'text-mist',
+                          )}
+                        >
+                          {topDue.text}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onPrimary(topReady, 'claim')}
+                      className="inline-flex h-[34px] shrink-0 items-center rounded-[12px] bg-pine px-3.5 text-sm font-medium text-white transition-colors hover:bg-pine-deep"
+                    >
+                      开始处理
+                    </button>
+                  </div>
+                  <p className="text-sm text-mist">
+                    认领后即可开始处理，相关前置依赖都已就绪。
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-mist">
+                  暂时没有可开工的任务。导入新任务或解除受阻后会出现在这里。
                 </p>
-                <button
-                  type="button"
-                  onClick={() => onPrimary(topReady, 'claim')}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-2xl bg-pine px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-deep"
-                >
-                  开始处理
-                </button>
-              </>
-            ) : (
-              <p className="mt-3 text-sm text-mist">
-                暂时没有可开工的任务。导入新任务或解除受阻后会出现在这里。
-              </p>
-            )}
-          </section>
+              )}
 
-          {/* 环告警：环成员被归入 hidden 组（不可见），若无提示等于无声消失 */}
-          {readyComputation.cyclicIds.size > 0 && (
-            <div
-              role="alert"
-              className="mb-4 flex items-center gap-2.5 rounded-2xl border border-amber/40 bg-amber-soft px-4 py-3 text-[13px] text-amber"
-            >
-              <AlertTriangle size={16} className="shrink-0" aria-hidden />
-              <span>检测到 {readyComputation.cyclicIds.size} 条任务存在依赖环，已移出主列表。请修正依赖后刷新。</span>
-            </div>
-          )}
+              {/* 脚注 13/Regular（画板 06）：同类 与 逾期 两个数都取自同一屏的同一批任务 */}
+              {humanView.groups.ready.length > 0 && (
+                <p className="text-sm text-mist">
+                  同类{HUMAN_GROUP_TITLES.ready}{' '}
+                  <span className="font-semibold tabular-nums">
+                    {humanView.groups.ready.length}
+                  </span>{' '}
+                  项
+                  {readyOverdueCount > 0 && (
+                    <>
+                      {' · 已逾期 '}
+                      <span className="font-semibold tabular-nums text-clay">
+                        {readyOverdueCount}
+                      </span>{' '}
+                      项
+                    </>
+                  )}
+                </p>
+              )}
+            </section>
 
-          {/* ② 四组分区（标题写死在本组件；顺序取 HUMAN_BOARD_GROUP_ORDER，hidden 不在内） */}
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {HUMAN_BOARD_GROUP_ORDER.map((group) => {
-              const list = humanView.groups[group];
-              return (
-                <section
-                  key={group}
-                  aria-label={HUMAN_GROUP_TITLES[group]}
-                  className="flex min-w-0 flex-col gap-2.5"
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <h2 className="text-sm font-semibold text-ink">
-                      {HUMAN_GROUP_TITLES[group]}
-                    </h2>
-                    <span className="rounded-md bg-sand px-1.5 py-0.5 text-[10px] text-mist">
-                      {list.length}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    {list.map((t) => (
-                      <AgentTaskCard
-                        key={t.id}
-                        task={t}
-                        group={group}
-                        assigneeLabel={t.assigneeId ? assigneeLabels[t.assigneeId] : undefined}
-                        blockedByTitles={unmetDepTitles(t, taskById)}
-                        onOpen={onOpenTask}
-                        onPrimary={onPrimary}
-                      />
-                    ))}
-                    {list.length === 0 && (
-                      <p className="rounded-[10px] border border-dashed border-line px-2 py-3 text-center text-[10px] text-mist/70">
-                        —
-                      </p>
-                    )}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-
-          {/*
-            ③ 隐藏任务出口提示（team-lead 裁决必补）。
-
-            为什么必须补：`hidden` 组（`draft ∧ 依赖未满足`）**在四组里一条都不渲染**，
-            加上依赖环成员也归 hidden，这类任务在人话模式下**凭空消失且无从排查**。
-            设计文档 :344 本就承诺「仅在 tech 模式 7 列**或「查看全部」可见**」——
-            「查看全部」是承诺过的入口，此前未落地；`groupTasksForHuman().hiddenCount`
-            也一直算好却无人消费，等于欠着这个入口。
-
-            为什么不是「把 hidden 摊进四组」：隐藏是**有意的**（上游 Agent 还在跑，
-            human 不需要逐条看），摊开会把「我现在该动手什么」稀释掉。故只给
-            **一行汇总 + 去处**，把「有没有东西被我漏掉」这个疑问一次性答掉。
-
-            UI 纪律：
-              · `hiddenCount === 0` 时**不渲染**（不出现「另有 0 条」这种噪音）；
-              · 数字取真实值，不用「若干」；
-              · 去处必须给出（技术模式 7 列），且**直接可点**——复用 `changeMode('tech')`，
-                不引入任何新的状态分支（模式切换的真相源仍是 store + URL 镜像）；
-              · 文案零英文、零行业词（HF-05 守卫会扫本文件，注释也算）。
-              · `data-board-hidden-hint` 是验收用的稳定锚点（与既有 `data-app-sidebar`
-                同一惯例），避免测试靠中文文案或样式类定位。
-            依赖环的 amber 告警**保留**：它覆盖的是另一类问题（数据坏了，不是还没轮到）。
-          */}
-          {humanView.hiddenCount > 0 && (
-            <p
-              data-board-hidden-hint=""
-              className="mt-3 flex items-center gap-1 rounded-[12px] bg-sunken px-3.5 py-2.5 text-[13px] text-mist"
-            >
-              另有 {humanView.hiddenCount} 条在上游准备中，
-              <button
-                type="button"
-                onClick={() => changeMode('tech')}
-                className="text-pine underline-offset-2 transition-colors hover:underline"
+            {/* 环告警：环成员被归入 hidden 组（不可见），若无提示等于无声消失 */}
+            {readyComputation.cyclicIds.size > 0 && (
+              <div
+                role="alert"
+                className="flex items-center gap-2.5 rounded-2xl border border-amber/40 bg-amber-soft px-4 py-3 text-sm text-amber"
               >
-                切到「{MODE_LABELS.tech}」
-              </button>
-              可查看全部
-            </p>
-          )}
-        </>
-      ) : (
-        <>
-          {/* Ready 队列置顶区（**仅技术模式**：人话模式由「可开工」组涵盖，不重复展示） */}
-          <div className="mb-4">
-            <ReadyQueue
-              tasks={projectTasks}
-              assigneeLabels={assigneeLabels}
-              onOpenTask={onOpenTask}
-              onClaim={(taskId) => claimTask(repos, taskId, currentMemberId ?? '')}
-            />
-          </div>
+                <AlertTriangle size={16} className="shrink-0" aria-hidden />
+                <span>检测到 {readyComputation.cyclicIds.size} 条任务存在依赖环，已移出主列表。请修正依赖后刷新。</span>
+              </div>
+            )}
 
-          {/* status 分列看板（7 列；移动端纵向堆叠、列标题吸顶）——不降级 */}
-          <div className="flex gap-3 overflow-x-auto pb-2 max-lg:flex-col lg:overflow-visible">
-            {ALL_TASK_STATUSES.map((status) => {
-              const list = columns.get(status) ?? [];
-              return (
-                <section
-                  key={status}
-                  className="glass-light flex max-h-[70vh] w-[280px] shrink-0 flex-col overflow-y-auto rounded-2xl border border-line p-3 max-lg:w-full"
-                >
-                  <div className="sticky top-0 -mx-3 mb-2 bg-sunken px-3 pb-1 pt-1">
+            {/*
+              ② 四组分区 —— **纵向全宽四段**（S1）。
+              标题写死在本组件；顺序取 HUMAN_BOARD_GROUP_ORDER（hidden 不在内）。
+              组容器 `[col gap=10]`（`gap-2.5`）、组间 `gap=16`（外层 `gap-4`），
+              卡内两栏由 AgentTaskCard 负责。
+            */}
+            <div className="flex flex-col gap-4">
+              {HUMAN_BOARD_GROUP_ORDER.map((group) => {
+                const list = humanView.groups[group];
+                return (
+                  <section
+                    key={group}
+                    aria-label={HUMAN_GROUP_TITLES[group]}
+                    className="flex min-w-0 flex-col gap-2.5"
+                  >
                     <div className="flex items-center gap-2">
-                      <h2 className="font-mono text-xs font-semibold text-ink">{status}</h2>
-                      <span className="rounded-md bg-sand px-1.5 py-0.5 font-mono text-[10px] text-mist">
+                      <h2 className="text-md font-semibold text-ink">
+                        {HUMAN_GROUP_TITLES[group]}
+                      </h2>
+                      <span className="text-sm font-semibold tabular-nums text-mist">
                         {list.length}
                       </span>
                     </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    {list.map((t) => (
-                      <AgentTaskCard
-                        key={t.id}
-                        task={t}
-                        assigneeLabel={t.assigneeId ? assigneeLabels[t.assigneeId] : undefined}
-                        blockedByTitles={unmetDepTitles(t, taskById)}
-                        onOpen={onOpenTask}
-                      />
-                    ))}
-                    {list.length === 0 && (
-                      <p className="rounded-[10px] border border-dashed border-line px-2 py-3 text-center text-[10px] text-mist/70">
-                        —
-                      </p>
+                    <div className="flex flex-col gap-2.5">
+                      {list.map((t) => (
+                        <AgentTaskCard
+                          key={t.id}
+                          task={t}
+                          group={group}
+                          assigneeLabel={t.assigneeId ? assigneeLabels[t.assigneeId] : undefined}
+                          blockedByTitles={unmetDepTitles(t, taskById)}
+                          onOpen={onOpenTask}
+                          onPrimary={onPrimary}
+                        />
+                      ))}
+                      {list.length === 0 && (
+                        <p className="rounded-[10px] border border-dashed border-line px-2 py-3 text-center text-xs text-mist/70">
+                          —
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+
+            {/*
+              ③ 隐藏任务出口提示（team-lead 裁决必补）。
+
+              为什么必须补：`hidden` 组（`draft ∧ 依赖未满足`）**在四组里一条都不渲染**，
+              加上依赖环成员也归 hidden，这类任务在人话模式下**凭空消失且无从排查**。
+              设计文档 :344 本就承诺「仅在 tech 模式 7 列**或「查看全部」可见**」——
+              「查看全部」是承诺过的入口，此前未落地；`groupTasksForHuman().hiddenCount`
+              也一直算好却无人消费，等于欠着这个入口。
+
+              为什么不是「把 hidden 摊进四组」：隐藏是**有意的**（上游 Agent 还在跑，
+              human 不需要逐条看），摊开会把「我现在该动手什么」稀释掉。故只给
+              **一行汇总 + 去处**，把「有没有东西被我漏掉」这个疑问一次性答掉。
+
+              UI 纪律：
+                · `hiddenCount === 0` 时**不渲染**（不出现「另有 0 条」这种噪音）；
+                · 数字取真实值，不用「若干」；
+                · 去处必须给出（技术模式 7 列），且**直接可点**——复用 `changeMode('tech')`，
+                  不引入任何新的状态分支（模式切换的真相源仍是 store + URL 镜像）；
+                · 文案零英文、零行业词（HF-05 守卫会扫本文件，注释也算）。
+                · `data-board-hidden-hint` 是验收用的稳定锚点（与既有 `data-app-sidebar`
+                  同一惯例），避免测试靠中文文案或样式类定位。
+              依赖环的 amber 告警**保留**：它覆盖的是另一类问题（数据坏了，不是还没轮到）。
+            */}
+            {humanView.hiddenCount > 0 && (
+              <p
+                data-board-hidden-hint=""
+                className="flex items-center gap-2 rounded-[12px] bg-sunken px-3.5 py-2.5 text-sm text-mist"
+              >
+                另有 {humanView.hiddenCount} 条在上游准备中，
+                <button
+                  type="button"
+                  onClick={() => changeMode('tech')}
+                  className="text-pine underline-offset-2 transition-colors hover:underline"
+                >
+                  切到「{MODE_LABELS.tech}」
+                </button>
+                可查看全部
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Ready 队列置顶区（**仅技术模式**：人话模式由「可开工」组涵盖，不重复展示） */}
+            <ReadyQueue
+              tasks={projectTasks}
+              onOpenTask={onOpenTask}
+              onClaim={(taskId) => claimTask(repos, taskId, currentMemberId ?? '')}
+            />
+
+            {/*
+              status 分列看板（7 列，画板 07）——**等宽**（`flex-1`，不再是写死的 280px，
+              否则宽屏上留白、窄屏上挤压）；移动端纵向堆叠、列标题吸顶。不降级。
+            */}
+            <div className="flex gap-3 overflow-x-auto pb-2 max-lg:flex-col lg:overflow-visible">
+              {ALL_TASK_STATUSES.map((status) => {
+                const list = columns.get(status) ?? [];
+                return (
+                  <section
+                    key={status}
+                    className={cn(
+                      'flex max-h-[70vh] min-w-0 flex-1 flex-col overflow-y-auto rounded-[20px] p-3 max-lg:w-full',
+                      LANE_SURFACE_CLASS[status],
                     )}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        </>
-      )}
+                  >
+                    {/*
+                      吸顶头用 `bg-inherit` 取所在泳道的底色：泳道底色按状态分叉，
+                      若写死一个颜色，滚动时会出现「纸条压在异色底上」的透底叠字。
+                    */}
+                    <div className="sticky top-0 z-10 -mx-3 mb-2 bg-inherit px-3 pb-1 pt-1">
+                      <div className="flex items-center gap-2">
+                        <h2
+                          className={cn(
+                            'font-mono text-[12px] font-semibold',
+                            LANE_HEAD_CLASS[status],
+                          )}
+                        >
+                          {status}
+                        </h2>
+                        <span className="rounded-md bg-sand px-1.5 py-0.5 font-mono text-[11px] text-mist">
+                          {list.length}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {list.map((t) => (
+                        <AgentTaskCard
+                          key={t.id}
+                          task={t}
+                          assigneeLabel={t.assigneeId ? assigneeLabels[t.assigneeId] : undefined}
+                          blockedByTitles={unmetDepTitles(t, taskById)}
+                          onOpen={onOpenTask}
+                        />
+                      ))}
+                      {list.length === 0 && (
+                        <p className="rounded-[10px] border border-dashed border-line px-2 py-3 text-center text-xs text-mist/70">
+                          —
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Apply payload 面板（Modal 底座；失败保留输入由面板内部负责） */}
       {applyOpen && currentProjectId && (

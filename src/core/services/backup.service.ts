@@ -56,6 +56,11 @@ const projectSchema = z
     plannedStartAt: dateLike,
     plannedEndAt: dateLike,
     coverColor: z.string().nullable(),
+    /**
+     * v0.7 侧栏方块简称。老备份（v1/v2/v3）无此字段 → `.optional()` + transform 补 null，
+     * 与 coverColor / stagePresetKey 同一手法（读时回落，不做导入期数据改写）。
+     */
+    shortLabel: z.string().nullable().optional(),
     stagePresetKey: z.string().nullable().optional(),
     stageTemplateVersion: z.number().int().nonnegative().optional(),
     scheduleBasis: z.nativeEnum(ScheduleBasis).optional(),

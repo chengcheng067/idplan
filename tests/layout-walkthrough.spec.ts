@@ -73,6 +73,64 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /**
+ * 参与「产物是否过期」判定的构建输入：源码目录 + 根级构建配置。
+ * 排除 `build-dist` 自身与 `tests`（改测试不该让产物判定过期）。
+ */
+const BUILD_INPUT_DIRS = ['src', 'electron'];
+const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
+
+/** 递归收集目录下所有文件的绝对路径（目录不存在返回空数组） */
+function collectFiles(dir: string): string[] {
+  const fs = require('node:fs') as typeof import('node:fs');
+  const { join } = require('node:path') as typeof import('node:path');
+  if (!fs.existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...collectFiles(full));
+    } else if (entry.isFile()) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+/**
+ * 产物是否**已过期**（任一构建输入比 `build-dist/index.html` 新）。
+ * 返回过期样例文件名（最多 3 个），不过期返回空数组。
+ */
+function staleInputs(): string[] {
+  const fs = require('node:fs') as typeof import('node:fs');
+  const { resolve: res } = require('node:path') as typeof import('node:path');
+  if (!existsSync(DIST_INDEX)) return [];
+  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
+
+  const candidates = [
+    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(res(__dirname, '..', d))),
+    ...BUILD_INPUT_FILES.map((f) => res(__dirname, '..', f)).filter((f) => existsSync(f)),
+  ];
+
+  return candidates
+    .filter((f) => fs.statSync(f).mtimeMs > distMs)
+    .map((f) => f.replace(res(__dirname, '..') + '\\', '').replace(res(__dirname, '..') + '/', ''))
+    .slice(0, 3);
+}
+
+const STALE_INPUTS = CAN_RUN ? staleInputs() : [];
+
+/**
+ * 本 spec 断言的是**产物里的 DOM / 类名**，故产物必须是当前源码构建出来的。
+ *
+ * 为什么必须挡（本次批次 A 的真实教训）：
+ *   改完源码没重跑 `npm run build` 时，测的是**上一版界面**。
+ *   轻则误报红（A3 删掉顶栏设置按钮后即如此：旧产物里按钮还在，
+ *   真源码其实已删），重则更危险——**误报绿**：验收「通过」的其实是过期界面，
+ *   比不跑更误导。故产物早于任一构建输入时直接 skip 并提示重建。
+ */
+const CAN_RUN_FRESH = CAN_RUN && STALE_INPUTS.length === 0;
+
+/**
  * 产物须经 **HTTP** 提供，不能走 `file://`。
  *
  * `vite.config.ts` 的 `base: '/'`（UGOS nginx 根路径直连模型）使产物内资源引用为
@@ -176,7 +234,7 @@ async function measure(page: Page): Promise<{
   });
 }
 
-describe.skipIf(!CAN_RUN)('v0.7 阶段 A · L-01~L-08 布局验收（真实构建产物）', () => {
+describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 A · L-01~L-08 布局验收（真实构建产物）', () => {
   let browser: Browser;
   let server: { url: string; close(): Promise<void> };
   let DIST_URL = '';
@@ -238,8 +296,14 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 A · L-01~L-08 布局验收（真实构�
     );
     expect(subtitleVisible).toBe(false);
 
-    // 设置入口仍在（所有角色可用）
-    expect(await page.locator('header [aria-label="设置"]').count()).toBe(1);
+    // ★ v0.7 批次 A · A3：顶栏「设置」按钮已按画板删除。
+    // 画板 02/03/06/07/12/14 的顶栏**只有**面包屑 + 搜索 + 头像三块，无设置按钮；
+    // 设置入口在设计稿里位于**侧栏底部**（板 02 L73），故这里必须两头都断言：
+    // 顶栏没有、侧栏仍在 —— 只断言"没有了"会把「入口丢失」误判成通过。
+    expect(await page.locator('header [aria-label="设置"]').count()).toBe(0);
+    expect(
+      await page.locator('[data-app-sidebar] [aria-label="设置"]').count(),
+    ).toBeGreaterThanOrEqual(1);
 
     // 桌面端常驻搜索框（ImeInput）**可见**——这是 v0.7 新结构（不再是折叠图标）。
     // 注意按「可见」判定：DOM 里还有两个隐藏 input（手机档 sm:hidden、备份 file input），
@@ -520,7 +584,7 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 A · L-01~L-08 布局验收（真实构�
   });
 });
 
-// 产物/浏览器缺失时给出可操作的提示（避免「skip 静默通过」被误读为已验收）
+// 产物/浏览器缺失或产物过期时给出可操作的提示（避免「skip 静默通过」被误读为已验收）
 describe('v0.7 阶段 A · 验收前置检查', () => {
   it('构建产物与 Chromium 可用（缺失则上面的验收被跳过）', () => {
     if (!CAN_RUN) {
@@ -528,6 +592,17 @@ describe('v0.7 阶段 A · 验收前置检查', () => {
       console.warn(
         `[layout-walkthrough] 跳过验收：build-dist 存在=${existsSync(DIST_INDEX)} chromium 存在=${CHROMIUM_PATH !== null}。` +
           ' 请先 npm run build（Chromium 由 playwright-core 依赖安装）。',
+      );
+    }
+    expect(true).toBe(true);
+  });
+
+  it('构建产物未过期（源改完必须重跑 build，否则验收的是上一版界面）', () => {
+    if (STALE_INPUTS.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[layout-walkthrough] 跳过验收：产物比源码旧，样例=${STALE_INPUTS.join(', ')}。` +
+          ' 请重跑 npm run build && npm test —— 否则可能「误报绿」（通过的是过期界面）。',
       );
     }
     expect(true).toBe(true);

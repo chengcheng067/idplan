@@ -100,6 +100,25 @@ const V3_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
   { table: 'members', column: 'agent_kind', ddl: 'ALTER TABLE members ADD COLUMN agent_kind TEXT' },
 ];
 
+/**
+ * v0.7 侧栏折叠态增强列迁移（1 项）：`projects.short_label`。
+ *
+ * 只加列、**不填值**——NULL 即「未设置」，读取侧由 `resolveProjectShortLabel`
+ * 回落项目名首字。因此**不需要**一次性数据迁移，也**不占** user_version：
+ * user_version 是 `migrateDoneToStatus`(→3) 与 `migrateAgentIndex`(→4) 共用的
+ * 单调计数器（见 V4_INDEX_MIGRATION_VERSION 注释），列迁移掺进去会把两者截胡。
+ *
+ * 与 V2/V3 两个列表一样，本表由 `createDb` 的 ② 步统一走幂等 ALTER，
+ * 顺序无耦合（每条各自 PRAGMA table_info 判存在）。
+ */
+const V7_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: string }> = [
+  {
+    table: 'projects',
+    column: 'short_label',
+    ddl: 'ALTER TABLE projects ADD COLUMN short_label TEXT',
+  },
+];
+
 /** 一次性数据迁移的版本标记（PRAGMA user_version）：>=3 表示已归一，跳过全表扫 */
 const V3_DATA_MIGRATION_VERSION = 3;
 
@@ -192,8 +211,10 @@ export function createDb(db: ChangxiaServerDb): void {
   const ddl = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
   // ① 只执行「表结构」段
   db.exec(sectionOf(ddl, 'TABLES'));
-  // ② 幂等补列（v2 既有 8 项 + v3 新增 11 项）
-  migrateColumns(db, [...V2_COLUMN_MIGRATIONS, ...V3_COLUMN_MIGRATIONS]);
+  // ② 幂等补列（v2 既有 8 项 + v3 新增 11 项 + v0.7 新增 1 项）
+  //    ⚠️ 本步必须早于 ⑤（索引段）：新列若被索引段引用，顺序颠倒会在建索引时
+  //       `no such column` → 服务启动即崩（见文件头「顺序错了有两种崩法」）。
+  migrateColumns(db, [...V2_COLUMN_MIGRATIONS, ...V3_COLUMN_MIGRATIONS, ...V7_COLUMN_MIGRATIONS]);
   // ③ 一次性数据迁移（done=1 → status='done'，user_version 打标为 3）
   migrateDoneToStatus(db);
   // ④ v0.7：idx_tasks_external_id 换轨为复合唯一索引（user_version 打标为 4）

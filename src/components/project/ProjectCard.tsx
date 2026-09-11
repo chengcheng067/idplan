@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CalendarRange, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
+import { CalendarRange, MoreHorizontal, Archive, Palette, Trash2 } from 'lucide-react';
 
 import type { Member, Project, Stage, Task } from '../../core/types/entities';
 import { taskIsDone } from '../../core/types/entities';
@@ -15,6 +15,7 @@ import { ImeInput } from '../common/ImeInput';
 import { Modal } from '../common/Modal';
 import { Tag } from '../ui/Tag';
 import { STAGE_BAR_COLORS } from '../timeline/stageColors';
+import { ProjectAppearanceDialog } from './ProjectAppearanceDialog';
 import { cn } from '../../lib/cn';
 
 /**
@@ -70,6 +71,8 @@ export function ProjectCard({
   const [renameValue, setRenameValue] = useState(project.name);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  /** v0.7 B1：侧栏方块外观（简称 + 自定义色）编辑弹窗 */
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const actions = createProjectActions(repos);
@@ -111,6 +114,14 @@ export function ProjectCard({
     return { dur, color: STAGE_BAR_COLORS[s.orderIndex] ?? STAGE_BAR_COLORS[9] };
   });
   const total = segs.reduce((a, s) => a + s.dur, 0) || 1;
+
+  /**
+   * 本项目当前阶段色 —— 侧栏方块「跟随阶段色」时的取值（v0.7 B1）。
+   * 与 Sidebar 折叠态方块的回落口径一致：取最早可见阶段的实心块色。
+   * 本文件既有 segs 也用 `STAGE_BAR_COLORS[s.orderIndex]`，故此处沿用同一口径，
+   * 不额外引入 resolveStageColorIndex（避免同一文件出现两套取色约定）。
+   */
+  const stageAccentColor = STAGE_BAR_COLORS[ordered[0]?.orderIndex ?? 1] ?? STAGE_BAR_COLORS[9];
 
   // 外点关闭菜单
   useEffect(() => {
@@ -207,6 +218,19 @@ export function ProjectCard({
                   className="w-full px-3 py-2 text-left text-sm text-ink hover:bg-sunken"
                 >
                   项目重命名
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-project-appearance-trigger=""
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setAppearanceOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink hover:bg-sunken"
+                >
+                  <Palette size={14} className="text-mist" aria-hidden />
+                  侧栏方块外观
                 </button>
                 <button
                   type="button"
@@ -320,6 +344,15 @@ export function ProjectCard({
           </div>
         </div>
       </Modal>
+
+      {/* 侧栏方块外观编辑（v0.7 B1）：简称 + 自定义方块色，独立弹窗（刻意与重命名分开） */}
+      <ProjectAppearanceDialog
+        open={appearanceOpen}
+        project={project}
+        stageAccentColor={stageAccentColor}
+        onClose={() => setAppearanceOpen(false)}
+        onSave={(patch) => void actions.updateProject(project.id, patch)}
+      />
 
       {/* 归档确认（danger 变体） */}
       <ConfirmDialog

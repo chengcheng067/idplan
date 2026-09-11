@@ -191,6 +191,23 @@ export interface Project {
   /** 卡片封面色 token 名（cream/pine/amber/clay 系），可空 */
   coverColor: string | null;
   /**
+   * 侧栏方块简称（v0.7 · 侧栏折叠态增强新增），可空。
+   *
+   * 用途单一：折叠态侧栏（64px）里那枚 40×36「项目方块」上的文字。
+   * 展开态侧栏与其它所有视图一律显示 `name`，本字段不参与——避免同一侧栏里
+   * 同一个项目出现「两个名字」，用户无从判断哪个是正式项目名。
+   *
+   * null / 空串 → **读时回落**「项目名首字」（`src/lib/projectAccent.ts` 的
+   * `resolveProjectShortLabel`），故老数据无需任何迁移脚本即可正确显示；
+   * 这也是与 `assigneeIds` / `roleKind` / `stagePresetKey` 一致的历史手法。
+   *
+   * 键序铁律：插在 `coverColor` 之后 —— 两者同为**外观类**字段，紧邻可读性最好。
+   * 与下面四处必须逐字同序（漏一处 backup roundtrip 的逐表 JSON diff 就挂）：
+   *   entities.Project / backup.service projectSchema /
+   *   local.projects.repo insert 字面量 / stage-fallback.normalizeProjectRow
+   */
+  shortLabel: string | null;
+  /**
    * 建档时所选阶段套餐 key（templates/stage-library.json 的 presets[].key）。
    * 仅作溯源与统计使用——**不冗余存阶段 key 列表**：Stage 表已是「本阶段集合」的
    * 唯一事实源，Project 侧再存一份必然产生双写不一致。老数据回落 null。

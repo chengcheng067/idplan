@@ -14,6 +14,7 @@ import { useLayoutStore, isXlViewport } from '../../store/useLayoutStore';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
 import { STAGE_BAR_COLORS } from '../timeline/stageColors';
+import { resolveProjectAccentColor, resolveProjectShortLabel } from '../../lib/projectAccent';
 import { MEMBER_ROLE_LABELS } from '../../core/types/enums';
 import { computeProjectStatus } from '../../lib/progress';
 import type { Project, Stage } from '../../core/types/entities';
@@ -55,8 +56,17 @@ import { cn } from '../../lib/cn';
  *
  * ── 新结构（v0.7 §2.2 / §2.3）──
  *   展开态三段式：头部（Logo+品牌+Beta+折叠）/ 主导航+项目列表 / 底部（设置+备份+新建+身份）。
- *   收起态：Logo("P") + 展开键 + 分隔 + 4 图标导航 + 3 项目彩条 + 弹性占位 +
- *   设置/新建/身份。所有收起态元素带 `title` tooltip。
+ *   收起态：Logo(/logo.png) + 展开键 + 分隔 + 4 图标导航 + 3 枚项目方块（竖条 + 简称）+
+ *   弹性占位 + 设置/新建/身份。所有收起态元素带 `title` tooltip。
+ *
+ * ── v0.7 B1 · 折叠态增强：两处**有意偏离画板**，在此显式备案（便于日后对稿时不被当成 bug）──
+ *   ① 折叠态项目方块**加文字简称**（`shortLabel` ?? 项目名首字）：画板 03 只画了色条，
+ *      但 64px 栏里 3 条同阶段色的条彼此不可辨，加简称是可用性刚需。
+ *      只有折叠态加；展开态仍只显示正式项目名（避免同一项目出现两个名字）。
+ *   ② 色条/方块的**颜色可被项目级自定义色覆盖**（`Project.coverColor`）：
+ *      画板只规定「用阶段色」，但同阶段项目必然撞色，故支持覆盖式取色。
+ *      两处的取色与文字回落**唯一出处**都是 `src/lib/projectAccent.ts`：
+ *      白名单 token、零裸 hex、随 <html data-theme> 自动换肤。
  */
 
 /** 打印路由正则：与 main.tsx 的两条 *-print 子路由严格对应 */
@@ -207,11 +217,25 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                           active ? 'bg-sunken' : 'hover:bg-sand',
                         )}
                       >
-                        {/* 阶段色条 4×16，用该项目的阶段 main 色（实心块，走 STAGE_BAR_COLORS） */}
+                        {/*
+                          色条 4×16：**覆盖式**取色 —— 项目设了自定义色（coverColor，
+                          白名单 token）就用它，否则回退该项目当前阶段的 main 色（实心块）。
+
+                          ★ 有意偏离画板（B1 已备案）：画板 03 只规定「用阶段色」，
+                            但两个同阶段的项目必然撞色、无法区分，故引入项目级自定义色。
+                            值域白名单与取色分支的唯一出处是 src/lib/projectAccent.ts；
+                            本处只做取值，绝不在此再写一遍 `coverColor || stage` 回落
+                            （否则折叠态/展开态/项目卡三处会各有一套口径）。
+                        */}
                         <span
                           aria-hidden
                           className="h-4 w-1 shrink-0 rounded-[2px]"
-                          style={{ backgroundColor: STAGE_BAR_COLORS[colorIdx] ?? 'transparent' }}
+                          style={{
+                            backgroundColor: resolveProjectAccentColor(
+                              p.coverColor,
+                              STAGE_BAR_COLORS[colorIdx] ?? 'transparent',
+                            ),
+                          }}
                         />
                         <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{p.name}</span>
                         {/* 状态点 6×6：正常 moss / 临期 amber / 逾期 clay */}
@@ -324,20 +348,36 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
     );
   };
 
-  /** 收起态（§2.3 · 宽 64）：Logo("P") + 展开键 + 分隔 + 4 图标导航 + 3 项目彩条 + 占位 + 设置/新建/身份 */
+/**
+ * 收起态（§2.3 · 宽 64）：Logo(/logo.png) + 展开键 + 分隔 + 4 图标导航 +
+ * 3 枚项目方块（竖条 + 简称）+ 占位 + 设置/新建/身份
+ */
   const renderCollapsed = (): JSX.Element => {
     const top3 = projects.slice(0, 3);
     return (
       <>
-        {/* Logo（字面 "P"，40×40 圆角 12，pine 底白字） + 展开键（40×40 sunken 圆角 12） */}
+        {/* Logo（真图 /logo.png，40×40 圆角 12） + 展开键（40×40 sunken 圆角 12） */}
         <div className="flex shrink-0 flex-col items-center gap-2 py-3">
           <Link
             to="/"
             title="ID Plan v0.7 Beta"
             aria-label="ID Plan 首页"
-            className="flex h-10 w-10 items-center justify-center rounded-md bg-pine text-[15px] font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
+            className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
           >
-            P
+            {/*
+              ★ v0.7 B1：折叠态 logo 由写死的文本「P」换成真图 /logo.png，
+                与展开态头部**同一素材**（此前两态各用一套：展开态图文、折叠态一个字母）。
+                h-10 w-10 = 40×40、rounded-md = 12px —— 注意本仓库圆角刻度被重映射
+                （tailwind.config.ts：md=12、xl=16，与 Tailwind 默认值不同），
+                故「圆角 12」要写 rounded-md 而非 rounded-xl。
+                object-cover + overflow-hidden 兜住任意比例素材，不让它撑破圆角。
+            */}
+            <img
+              src="/logo.png"
+              alt="ID Plan logo"
+              aria-hidden
+              className="h-10 w-10 shrink-0 rounded-md object-cover"
+            />
           </Link>
           <SidebarCollapseToggle collapsed onToggle={onToggleCollapse} controlsId={SIDEBAR_ID} />
         </div>
@@ -348,24 +388,45 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         {/* 4 个导航图标键（40×40 圆角 12，激活态 bg-pine-soft） */}
         <SidebarNav collapsed />
 
-        {/* 3 条项目彩条（40×36 圆角 12，内含竖条 4×20 用阶段 main 色） */}
+        {/* 3 枚项目方块（40×36 圆角 12）：竖条 4×20 + 简称文字（两处偏离见文件头备案） */}
         {top3.length > 0 && (
           <div className="flex flex-col items-center gap-1 py-2">
             {top3.map((p) => {
               const colorIdx = resolveStageColorIndex(projectStageOrder(p.id, stages));
+              const shortLabel = resolveProjectShortLabel(p.name, p.shortLabel);
               return (
                 <Link
                   key={p.id}
                   to={`/project/${p.id}`}
                   title={p.name}
                   aria-label={p.name}
-                  className="flex h-9 w-10 items-center justify-center rounded-md bg-sunken outline-none transition-colors hover:bg-line focus-visible:ring-2 focus-visible:ring-pine/40"
+                  className="flex h-9 w-10 items-center justify-center gap-1 rounded-md bg-sunken outline-none transition-colors hover:bg-line focus-visible:ring-2 focus-visible:ring-pine/40"
                 >
+                  {/* 竖条颜色：覆盖式（自定义方块色优先，否则阶段 main 色；零裸 hex） */}
                   <span
                     aria-hidden
-                    className="h-5 w-1 rounded-[2px]"
-                    style={{ backgroundColor: STAGE_BAR_COLORS[colorIdx] ?? 'transparent' }}
+                    className="h-5 w-1 shrink-0 rounded-[2px]"
+                    style={{
+                      backgroundColor: resolveProjectAccentColor(
+                        p.coverColor,
+                        STAGE_BAR_COLORS[colorIdx] ?? 'transparent',
+                      ),
+                    }}
                   />
+                  {/*
+                    ★ 有意偏离画板 ①：画板 03 的折叠态方块里**只有色条、没有文字**。
+                      但 64px 栏里 3 条同阶段色的条彼此不可辨，故补简称（可用性刚需）。
+                      仅折叠态加：展开态仍只显示正式项目名，避免同一项目出现两个名字。
+                      文字口径统一走 resolveProjectShortLabel（shortLabel ?? 项目名首字）。
+                      data-project-short-label 供验收用例读取「实际渲染出的简称」，
+                      免得测试去猜 max-w 下的截断结果。
+                  */}
+                  <span
+                    data-project-short-label={shortLabel}
+                    className="max-w-[24px] truncate text-[12px] font-medium leading-4 text-ink"
+                  >
+                    {shortLabel}
+                  </span>
                 </Link>
               );
             })}

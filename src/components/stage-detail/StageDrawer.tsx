@@ -38,6 +38,10 @@ export function StageDrawer({
     s.tasks.filter((t) => t.stageId === stageId).sort((a, b) => a.orderIndex - b.orderIndex),
   );
   const logs = useProjectsStore((s) => (stageId ? s.stageLogs[stageId] : undefined));
+  // 注意：该 hook 必须与其余 hook 同段、无条件执行。
+  // 若放到下方 `if (!stageId) return null` 之后，点击甘特图彩条（stageId 由 null 变非空）
+  // 会多执行 1 个 hook，触发 React error #310（Rendered more hooks than during the previous render）白屏。
+  const project = useProjectsStore((s) => s.projects.find((p) => p.id === projectId));
   const repos = useRepos();
   const { isAdmin } = useRoleGuard();
 
@@ -55,8 +59,6 @@ export function StageDrawer({
       </DrawerFrame>
     );
   }
-
-  const project = useProjectsStore((s) => s.projects.find((p) => p.id === projectId));
 
   return (
     <Modal open onClose={close} placement="right" ariaLabel={`阶段详情：${stage.name}`}>

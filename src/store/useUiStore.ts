@@ -12,6 +12,38 @@ export type TimelineZoom = 'month' | 'half-month';
 /** 首页视图模式：看板（项目卡片网格）/ 月历（跨项目甘特） */
 export type HomeViewMode = 'kanban' | 'calendar';
 
+/**
+ * homeViewMode 的 localStorage 键（v0.7 批次 A · A4）。
+ *
+ * 为什么持久化：用户反馈「找不到日历看板入口」。设计稿（画板 02 L143 / 板 14）确认
+ * 月历是**首页的一种视图**而非独立导航目的地，故入口就是首页内容区的视图切换；
+ * 但此前刷新会回落 kanban，用户切到月历后一刷新就「又不见了」，
+ * 观感上等同于入口不存在。持久化后切换选择即可长期保留。
+ *
+ * 命名沿用本项目既有规范（`idplan-theme` / `idplan.layout`），
+ * 存储不可用时静默降级为「仅当前会话生效」（与主题一致的做法）。
+ */
+const HOME_VIEW_STORAGE_KEY = 'idplan.homeView';
+
+/** 读回持久化的首页视图模式；非法值 / 存储不可用一律回落 'kanban' */
+function readStoredHomeView(): HomeViewMode {
+  try {
+    const v = localStorage.getItem(HOME_VIEW_STORAGE_KEY);
+    return v === 'calendar' || v === 'kanban' ? v : 'kanban';
+  } catch {
+    return 'kanban';
+  }
+}
+
+/** 写入持久化的首页视图模式；失败静默（隐私模式 / 禁用存储） */
+function persistHomeView(mode: HomeViewMode): void {
+  try {
+    localStorage.setItem(HOME_VIEW_STORAGE_KEY, mode);
+  } catch {
+    /* 存储不可用：仅当前会话生效 */
+  }
+}
+
 /** 月历筛选条件（瞬态，不落库）：状态组 + 阶段组，组间 AND、组内 OR */
 export interface CalendarFilters {
   status: Set<CalendarFilterStatus>;
@@ -63,7 +95,8 @@ export const useUiStore = create<UiState>((set) => ({
   timelineZoom: 'month',
 
   calendarMonth: currentMonthIso(),
-  homeViewMode: 'kanban',
+  // 首屏即读回上次选择（A4 持久化）：刷新不再回落「看板」，月历入口因此长期可见
+  homeViewMode: readStoredHomeView(),
   calendarFilters: { status: new Set(), stage: new Set() },
 
   searchQuery: '',
@@ -78,7 +111,10 @@ export const useUiStore = create<UiState>((set) => ({
   setTimelineZoom: (zoom) => set({ timelineZoom: zoom }),
 
   setCalendarMonth: (month) => set({ calendarMonth: month }),
-  setHomeViewMode: (mode) => set({ homeViewMode: mode }),
+  setHomeViewMode: (mode) => {
+    persistHomeView(mode);
+    set({ homeViewMode: mode });
+  },
   toggleCalendarStatusFilter: (status) =>
     set((st) => {
       const next = new Set(st.calendarFilters.status);

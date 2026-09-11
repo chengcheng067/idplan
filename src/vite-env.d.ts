@@ -48,6 +48,19 @@ interface IdPlanBridge {
       exeAssetUrl: string | null;
     }) => void,
   ) => () => void;
+  /**
+   * 同步自绘标题栏叠加层配色（Windows titleBarOverlay）。
+   * 可选：老版本 preload 未暴露该方法，故调用方必须做存在性判断
+   * （见 src/lib/titleBarTheme.ts）。浏览器 / NAS 端 window.idplan 本身就不存在。
+   */
+  setTitleBarTheme?: (theme: {
+    /** 顶栏底色（--paper 实际值） */
+    color: string;
+    /** 顶栏前景（--ink 实际值） */
+    symbolColor: string;
+    /** 顶栏高度（<xl 56 / ≥xl 64） */
+    height: number;
+  }) => void;
 }
 
 interface Window {
