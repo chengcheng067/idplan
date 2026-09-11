@@ -160,7 +160,14 @@ export function ProjectCard({
         'group flex w-full min-w-0 cursor-pointer flex-col bg-paper shadow-raised',
         'rounded-md p-4 gap-[10px] h-[124px]',
         'md:w-[calc(50%-10px)]',
-        'xl:w-auto xl:flex-1 xl:h-[185px] xl:rounded-3xl xl:p-6 xl:gap-3',
+        // 桌面列宽：规格 §2.5 明确写「卡片宽 365、高 185」，并注明
+        // 「365 是 1440 下的固定稿宽，实现时用 flex: 1 1 340px 让列数随容器自适应」。
+        // 这个 340 的基准是**精确校准过的**：内容区 = 1440 − 侧栏 240 − 内边距 64 = 1136，
+        //   3 张：340×3 + gap 20×2 = 1060 ≤ 1136 → 放下，且各自伸展到 (1136−40)/3 = 365.3 ✓
+        //   4 张：340×4 + gap 20×3 = 1420 > 1136 → 放不下，自动换行
+        // 所以 1440 下恰好是 3 列 × 365。若写成 flex-1（= flex: 1 1 0%），
+        // 基准宽度变 0、四张卡全挤进一行各 279px，与规格差一整列 —— 这是曾经的实现。
+        'xl:w-auto xl:flex-[1_1_340px] xl:h-[185px] xl:rounded-3xl xl:p-6 xl:gap-3',
         'transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/50',
         selected && 'ring-2 ring-pine/50',
