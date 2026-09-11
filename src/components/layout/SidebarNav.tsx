@@ -154,13 +154,25 @@ export function SidebarNavItem({
  */
 export function navItemClass(active: boolean, collapsed: boolean, drawer = false): string {
   return cn(
-    'flex items-center gap-2.5 text-sm transition-colors outline-none',
+    'flex items-center text-sm transition-colors outline-none',
     'focus-visible:ring-2 focus-visible:ring-pine/40',
+    // 暗色差异（规格 §2.2）：内边距 12→16、gap 10→8（暗色板更松一档）。
+    // 这两项是**非颜色**属性，无法靠 CSS 变量自动换肤，必须显式写 dark:。
+    // 此前 Tailwind 的 dark 变体被绑在 prefers-color-scheme 上（跟随系统而非应用开关），
+    // 且调用点用的是自创的祖先属性变体、其中几处还写坏了 —— 所以这两档一直没生效。
+    // 现已在 tailwind.config.ts 用 darkMode:['variant','html[data-theme="dark"] &'] 修好。
+    'gap-2.5 dark:gap-2',
     collapsed
       ? 'h-10 w-10 justify-center self-center rounded-[10px]'
       : drawer
         ? 'w-full px-4 py-2.5 rounded-md'
-        : 'w-full px-3 py-2 rounded-[10px]',
-    active ? 'bg-pine-soft text-pine' : 'text-mist hover:bg-sand hover:text-ink',
+        : 'w-full px-3 py-2 rounded-[10px] dark:px-4',
+    // 激活态（§5 亮暗对照表第 697 行）：亮色用浅靛 pine-soft #EFF0FE，
+    // **暗色改用凹陷 sunken #0F1217 而非浅靛** —— 这是规格里明确点出「用凹陷而非浅靛」
+    // 的一处刻意设计（暗底上再叠一层浅靛会发灰、且与卡片底 #1F2126 拉不开层次）。
+    // 文字仍是 pine：暗色下解析为 #828CF7，压在 #0F1217 上对比度 6.36，达标。
+    active
+      ? 'bg-pine-soft text-pine dark:bg-sunken'
+      : 'text-mist hover:bg-sand hover:text-ink',
   );
 }

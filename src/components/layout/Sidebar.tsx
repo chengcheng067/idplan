@@ -42,13 +42,16 @@ import { cn } from '../../lib/cn';
  * 采纳 Modal（`createPortal` + 遮罩点击关闭 + Escape + 焦点圈禁 + body 滚动锁定
  * + `role="dialog"`），与 `TaskDrawer` 同一底座，行为一致。
  *
- * ── 暗色差异（§5 / 画板 22）──
+ * ── 暗色差异（§2.2 暗色差异段 / §5 亮暗对照表）──
  *   侧栏底色走 `bg-paper` token，暗色自动解析为 `#1F2126`（--paper-rgb 由
- *   `[data-theme="dark"]` 覆盖），不写死 hex。激活导航项底沿用 `bg-pine-soft`：
- *   该 token 在暗色下解析为 `#24264A`（= 画板 22 的 Agent 激活底），与规格一致。
- *   注：tailwind.config.ts 未配 `darkMode`（项目用 `<html data-theme>` 而非
- *   Tailwind `class="dark"`），故 `dark:` 变体不可用；暗色下「内边距 12→16、
- *   gap 10→8」的微调按纪律跳过（见报告 B3）。
+ *   `<html data-theme="dark">` 覆盖），不写死 hex。
+ *   激活导航项**不能沿用 `bg-pine-soft`**：规格三处独立指明暗色下该底要改成
+ *   **凹陷 `sunken` `#0F1217`**（§1.1 用途表「激活态导航项」、§2.2「用凹陷而非浅靛」、
+ *   §5 亮暗对照表「导航激活项 #EFF0FE → #0F1217」）。原因见 SidebarNav.tsx 的注释。
+ *   项目列表选中项与身份行同样是 sunken 底（画板 12 标注 `#0F1217`），
+ *   这两处走 token 自动换肤，无需 dark:。
+ *   暗色下「内边距 12→16、gap 10→8」是**非颜色**属性，已在 SidebarNav.tsx 的
+ *   navItemClass 里用 `dark:` 显式接线（此前因 dark 变体失效而未生效）。
  *
  * ── 新结构（v0.7 §2.2 / §2.3）──
  *   展开态三段式：头部（Logo+品牌+Beta+折叠）/ 主导航+项目列表 / 底部（设置+备份+新建+身份）。

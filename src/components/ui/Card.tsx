@@ -8,9 +8,10 @@
 //   small    —— 列表卡/移动端：圆角 12，paper 底，shadow-soft
 //
 // 暗色收紧：最终设计稿（画板 13）要求时间轴卡暗色下圆角 16。
-// 项目主题走 <html data-theme="dark">，故 tailwind.config.ts 已注册 dark 变体
-// （addVariant('dark', 'html[data-theme="dark"] &')），这里直接写标准 dark: 前缀。
-// 此前写成自创的祖先属性任意变体且**写坏了**（字符串里的真实空格把它拆成两个非法 class），
+// 项目主题走 <html data-theme="dark">，故 tailwind.config.ts 用
+// `darkMode: ['variant', 'html[data-theme="dark"] &']` 把 dark 变体重绑到该属性上，
+// 这里直接写标准 dark: 前缀即可。
+// 此前写成自创的祖先属性任意变体且**写坏了**（字符串里夹了真实空格，被拆成两个非法 class），
 // 导致暗色圆角 16 从未生效过 —— 那是个静默失败：Tailwind 不报错，只是不生成 CSS。
 
 import { forwardRef, type HTMLAttributes } from 'react';
