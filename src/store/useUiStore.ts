@@ -3,14 +3,26 @@ import { create } from 'zustand';
 import type { CalendarFilterStatus } from '../components/calendar/calendarMath';
 
 /**
- * UI 瞬态状态：抽屉开关、当前选中 stage、向导可见性、时间轴缩放档位、首页视图模式。
+ * UI 瞬态状态：抽屉开关、当前选中 stage、向导可见性、时间轴缩放档位、首页/成员看板视图模式。
  * 与业务数据严格分离——刷新即失，不落库。
+ *
+ * 例外：两个**视图模式偏好**刻意落 localStorage（首页 `idplan.homeView` /
+ * 成员看板 `idplan.memberBoardView`），因为它们承载「入口是否找得到」——
+ * 刷新即失会让用户切过去的视图「又不见了」，观感上等同于入口不存在。
+ * 两者**按角色分键**，不复用（理由见下方各自键位注释）。
  */
 
 export type TimelineZoom = 'month' | 'half-month';
 
 /** 首页视图模式：看板（项目卡片网格）/ 月历（跨项目甘特） */
 export type HomeViewMode = 'kanban' | 'calendar';
+
+/**
+ * 成员看板视图模式（v0.7 · P0-18）：
+ *   kanban   = 我的相关项目四列看板（既有形态，默认）
+ *   calendar = 跨项目排期的月历（只读，复用 `MonthlyCalendarView`）
+ */
+export type MemberBoardView = 'kanban' | 'calendar';
 
 /**
  * homeViewMode 的 localStorage 键（v0.7 批次 A · A4）。
@@ -44,6 +56,41 @@ function persistHomeView(mode: HomeViewMode): void {
   }
 }
 
+/**
+ * memberBoardView 的 localStorage 键（v0.7 · P0-18）。
+ *
+ * ★ 为什么单独一个键、**绝不复用 `idplan.homeView`**：
+ *   `homeViewMode` 是**管理员首页**（`/`）的视图偏好；成员没有首页
+ *   （`HomeRouteGuard` 把成员重定向到 `/member-board`，见 `useRoleGuard.homeRouteTarget`）。
+ *   若两处共用同一个键：
+ *     ① 管理员在首页切到月历后，成员进看板页会「凭空」落在月历；
+ *     ② 成员在看板页切回看板，又会把管理员的首页视图改掉。
+ *   两个角色的视图状态互相污染，且同一台机器换角色登录读到的还是对方的上次选择。
+ *   故按角色分键：管理员 `idplan.homeView` / 成员 `idplan.memberBoardView`。
+ *
+ * 写入策略与 `HOME_VIEW_STORAGE_KEY` 完全同款（读回静默降级、写的失败静默）。
+ */
+const MEMBER_BOARD_VIEW_STORAGE_KEY = 'idplan.memberBoardView';
+
+/** 读回持久化的成员看板视图；非法值 / 存储不可用一律回落 'kanban' */
+function readStoredMemberBoardView(): MemberBoardView {
+  try {
+    const v = localStorage.getItem(MEMBER_BOARD_VIEW_STORAGE_KEY);
+    return v === 'calendar' || v === 'kanban' ? v : 'kanban';
+  } catch {
+    return 'kanban';
+  }
+}
+
+/** 写入持久化的成员看板视图；失败静默（隐私模式 / 禁用存储） */
+function persistMemberBoardView(mode: MemberBoardView): void {
+  try {
+    localStorage.setItem(MEMBER_BOARD_VIEW_STORAGE_KEY, mode);
+  } catch {
+    /* 存储不可用：仅当前会话生效 */
+  }
+}
+
 /** 月历筛选条件（瞬态，不落库）：状态组 + 阶段组，组间 AND、组内 OR */
 export interface CalendarFilters {
   status: Set<CalendarFilterStatus>;
@@ -60,6 +107,8 @@ export interface UiState {
   calendarMonth: string;
   /** 首页视图模式：看板 / 月历 */
   homeViewMode: HomeViewMode;
+  /** 成员看板视图模式：看板 / 月历（与 homeViewMode 各自的持久化键**互不相干**） */
+  memberBoardView: MemberBoardView;
   /** 月历筛选条件（状态 + 阶段多选 chip） */
   calendarFilters: CalendarFilters;
 
@@ -79,6 +128,7 @@ export interface UiState {
   // ---- 月历 setter ----
   setCalendarMonth(month: string): void;
   setHomeViewMode(mode: HomeViewMode): void;
+  setMemberBoardView(mode: MemberBoardView): void;
   toggleCalendarStatusFilter(status: CalendarFilterStatus): void;
   toggleCalendarStageFilter(orderIndex: number): void;
   clearCalendarFilters(): void;
@@ -97,6 +147,8 @@ export const useUiStore = create<UiState>((set) => ({
   calendarMonth: currentMonthIso(),
   // 首屏即读回上次选择（A4 持久化）：刷新不再回落「看板」，月历入口因此长期可见
   homeViewMode: readStoredHomeView(),
+  // 成员看板独立键（P0-18）：默认「看板」，与管理员首页视图互不干扰
+  memberBoardView: readStoredMemberBoardView(),
   calendarFilters: { status: new Set(), stage: new Set() },
 
   searchQuery: '',
@@ -114,6 +166,10 @@ export const useUiStore = create<UiState>((set) => ({
   setHomeViewMode: (mode) => {
     persistHomeView(mode);
     set({ homeViewMode: mode });
+  },
+  setMemberBoardView: (mode) => {
+    persistMemberBoardView(mode);
+    set({ memberBoardView: mode });
   },
   toggleCalendarStatusFilter: (status) =>
     set((st) => {

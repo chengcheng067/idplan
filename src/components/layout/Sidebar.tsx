@@ -268,8 +268,20 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           >
             <span className="relative inline-flex shrink-0">
               <Settings size={18} className="text-mist" aria-hidden />
+              {/*
+                「有新版本可用」红点 8×8 / 圆角 9999 / fill=clay(clay 即画板裸 hex
+                #EF4444) —— 画板 02 侧栏设置项结构里**本来就有**这一枚，属**回归画板**
+                而非新增设计。ring-paper 让红点从设置图标上"浮"起来（暗色自动换肤）。
+
+                ★ 为什么红点落在这里（P0-17 配套的迁移）：`status === 'has-update'` 仅由
+                  **桌面端主进程**推送，而此前唯一的渲染点是 `MobileMoreMenu`（本就只在
+                  窄屏渲染）。本轮把 ⋮ 收窄到手机档后，桌面端推送将**再无可见落点**——
+                  等于静默吃掉一个既有提示。故桌面/平板可见的落点定在侧栏「设置」项。
+                  窄屏那份保留在 `MobileMoreMenu`（手机档仍渲染 ⋮）。
+              */}
               {hasUpdate && (
                 <span
+                  data-update-dot="expanded"
                   className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-clay ring-2 ring-paper"
                   aria-label="有新版本可用"
                 />
@@ -443,9 +455,19 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             onClick={() => setSettingsOpen(true)}
             aria-label="设置"
             title="设置"
-            className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
+            className="relative flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <Settings size={18} aria-hidden />
+            {/* 更新红点（收起态）：与展开态同一枚 8×8 clay 圆点，落点改为图标右上角。
+                展开态靠文字右侧、收起态靠图标角标——两态都要有，否则用户折叠侧栏后
+                红点凭空消失（V1-24 明确要求展开态 + 收起态各一次）。 */}
+            {hasUpdate && (
+              <span
+                data-update-dot="collapsed"
+                className="absolute right-1 top-1 h-2 w-2 rounded-full bg-clay ring-2 ring-paper"
+                aria-label="有新版本可用"
+              />
+            )}
           </button>
           {isAdmin && (
             <>

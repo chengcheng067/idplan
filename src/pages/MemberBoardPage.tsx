@@ -4,10 +4,13 @@ import { useNavigate } from 'react-router-dom';
 
 import { ProjectCard } from '../components/project/ProjectCard';
 import { StatCard } from '../components/project/StatCard';
+import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUiStore } from '../store/useUiStore';
+import type { MemberBoardView } from '../store/useUiStore';
 import { computeProjectStatus } from '../lib/progress';
 import { groupByColumn } from './HomePage';
 import type { ColumnKey } from './HomePage';
@@ -23,6 +26,33 @@ import { StageStatus } from '../core/types/enums';
  *   - 看板隐藏成员管理区、隐藏项目卡片的指派参与人控件（成员选项框）；
  *   - 不按客户名搜索（脱敏），沿用首页「only active 项目」口径；
  *   - 项目卡片点开仍走 /project/:id，但详情内成员视角本就只读（TaskChecklist isAdmin 门控）。
+ *
+ * ── v0.7 T04 · P0-18 成员只读月历（M1 方案）──
+ *   用户决策：「成员能看**月历**，但不给编辑权限」。已核实月历页
+ *   （`MonthlyCalendarView` / `MonthDayCell` / `CalendarFilters` / `CalendarEmptyStates`）
+ *   **本身零数据写操作**（切月/筛选/选中日期只是 localStorage 偏好，点格子只做
+ *   `navigate('/project/:id')` 只读跳转），故成员看不到月历的**唯一原因是路由重定向**
+ *   （`HomeRouteGuard` 把成员送到本页）。所以这里只需在**本页（成员的落地页）**
+ *   加一个「看板 / 月历」视图切换，权限上不需要新增任何判断分支。
+ *
+ *   ⚠️ 三条实现纪律（违反任一条即为缺陷，见设计文档 §5.3.3 / §5.6 次高风险）：
+ *     ① **`onManual` 必须传 `undefined`**：`CalendarEmptyStates` 的 E1 空状态里有
+ *        「直接手动建档」CTA，其渲染条件是 `onManual` **有值**（`{onManual && …}`）。
+ *        传 `undefined` 后按钮与其包裹层**整体不渲染** —— 成员在空状态里既看不到、
+ *        也点不到「新建项目」的同类入口（首页 `HomePage` 传的是 `openManual`，本页**不能**跟）。
+ *        ⚠️ 口径更正（勿按旧注释误读）：初版误以为「`onManual=undefined` 只让按钮失效、
+ *        按钮仍会画出来」，并据此把这个**死按钮**当成可接受项 —— **那是错的**（E1 的触发
+ *        条件正是「与我相关的 active 项目 = 0」，刚被拉进项目的新成员最常看到它，一个
+ *        `variant="primary"` 的主按钮点了毫无反应属必现观感缺陷）。已由 team-lead 复审
+ *        定性并修正 `CalendarEmptyStates` 的 E1 分支为条件渲染。
+ *        现口径：**E1 的 CTA 不渲染**，验收直接断言「该文本不存在」（而非「点了无效」）。
+ *     ② **绝不向 `MonthlyCalendarView` 传任何项目/阶段/任务数据**：
+ *        它内部（见其 `baseEntries` 的 memo）自己用 `isRestrictedView(role)` +
+ *        `computeRelatedStageIds` 过滤，读的是**全局 store**。在调用方再传一份
+ *        会形成「两份过滤」；若传成全部项目就是**权限泄漏**（成员看到不属于自己的项目）。
+ *        故本页只传 `onManual`，其余一概不传。
+ *     ③ **跳过看板区渲染**：`calendar` 档只渲染一份数据视图，避免两棵重树同时挂载。
+ *        统计卡行（下方 section）两档共用、保留 —— 它统计的已经是「我的相关项目」。
  */
 export function MemberBoardPage(): JSX.Element {
   const navigate = useNavigate();
@@ -33,6 +63,9 @@ export function MemberBoardPage(): JSX.Element {
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const selectedProjectId = useUiStore((s) => s.selectedProjectId);
   const setSelectedProjectId = useUiStore((s) => s.setSelectedProjectId);
+  // 视图模式偏好（独立持久化键 idplan.memberBoardView，**不复用**管理员首页的 idplan.homeView）
+  const memberBoardView = useUiStore((s) => s.memberBoardView);
+  const setMemberBoardView = useUiStore((s) => s.setMemberBoardView);
 
   const today = new Date();
   const todayIso = localIso(today);
@@ -82,15 +115,31 @@ export function MemberBoardPage(): JSX.Element {
     navigate(`/project/${id}`);
   };
 
+  const isCalendar = memberBoardView === 'calendar';
+
   return (
     <div className="flex flex-col gap-4 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
-      {/* 标题 */}
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      {/* 标题行 + 视图切换（P0-18）
+          切换控件用既有 SegmentedControl 的 lg 档，与首页 `HomePage.tsx` 的
+          「首页视图切换」同款（同一控件、同一档位、只是 ariaLabel 与绑定的 key 不同）。 */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-display text-display-lg">项目看板</h1>
-        <span className="text-xs text-mist">仅显示与我相关的项目</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-mist">仅显示与我相关的项目</span>
+          <SegmentedControl<MemberBoardView>
+            size="lg"
+            ariaLabel="成员看板视图切换"
+            value={memberBoardView}
+            onChange={setMemberBoardView}
+            options={[
+              { value: 'kanban', label: '看板' },
+              { value: 'calendar', label: '月历' },
+            ]}
+          />
+        </div>
       </div>
 
-      {/* 统计概览行 */}
+      {/* 统计概览行（两档共用；口径已是「与我相关的 active 项目」） */}
       <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard icon="▣" tone="pine" value={active.length} label="进行中项目" trend={null} />
         <StatCard icon="▢" tone="amber" value={dueThisWeek} label="本周到期任务" trend={null} />
@@ -98,8 +147,14 @@ export function MemberBoardPage(): JSX.Element {
         <StatCard icon="✓" tone="sage" value={doneThisMonth} label="本月完工" trend={null} />
       </section>
 
-      {/* 四列看板（成员视角：无用户/客户过滤，仅自己相关的项目） */}
-      {active.length === 0 ? (
+      {/* ④ 数据视图：看板 / 月历 **二选一**（只挂载一份，避免两棵重树同时在树上）
+          ⚠️ 月历只传 onManual，且必须传 undefined —— E1 的「直接手动建档」CTA 是
+             `{onManual && …}` 条件渲染的：undefined ⇒ 按钮**整体不画**（成员既看不到、
+             也点不到，不是「画出来但失效」）；
+             **不传任何项目/阶段/任务数据**，过滤在 MonthlyCalendarView 内部完成。 */}
+      {isCalendar ? (
+        <MonthlyCalendarView onManual={undefined} />
+      ) : active.length === 0 ? (
         <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
           <p className="font-display text-display-md text-mist">还没有与你相关的项目</p>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">

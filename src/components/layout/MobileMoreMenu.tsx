@@ -30,36 +30,51 @@ function Divider(): JSX.Element {
 }
 
 /**
- * 移动端「⋮ 更多」菜单（v0.4 手机端重构 · 阶段 A）。
+ * 手机端「⋮ 更多」菜单（v0.4 手机端重构 · 阶段 A）。
  *
  * 背景：顶栏右侧原本平铺「项目 / 我的任务 / 保存备份 / 加载备份 / 休息制度 / 视图切换 / 新建项目 / 身份」，
  * 在 iPad 横屏（1024）及以下会直接挤爆——搜索框被压成一条缝、按钮换行错位。
- * 因此在 xl（1280）以下把这些次要控件收进本菜单，顶栏只保留 logo + 搜索 + ⋮ + 身份头像。
+ * 因此在窄屏把这些次要控件收进本菜单，顶栏只保留 logo + 搜索 + ⋮ + 身份头像。
  *
- * ── v0.7 T02 定位（明确）──
- *   PRD §5.2 表把**「⋮ 更多」列为顶栏允许的 4 个常驻视觉块之一**（logo+品牌 /
- *   搜索+⌘K / 身份头像 / 设置+⋮更多），工程核查 A.2 注进一步说明
- *   「本组件挂在 TopBar 内，跟随收缩，**无需单独改**」。
- *   故 T02 对本文件**不做内容裁剪**：它仍是 <xl 档位的次要动作总收口。
- *   注意它**不是**侧栏抽屉的替代品——侧栏抽屉（`Modal` placement）覆盖
- *   <1280 且具备焦点圈禁/滚动锁定；本菜单是 <xl 的**快速动作面板**，
- *   两者职责不同（前者导航、后者动作），在 <xl 档位并存是设计预期，不是重复入口。
- *   本组件也**不**吞掉侧栏的导航职责：菜单里的导航四项属于
- *   「小屏用户的就近入口」，与侧栏抽屉互为冗余但都保留（R15：入口不丢）。
+ * ── v0.7 T04 · P0-17 按端分流（**本文件的边界已收窄到手机档**）──
+ *   根节点 = `relative md:hidden`，即**仅在 <768（手机）渲染**：
+ *     手机（< 768）  ✅ 渲染 —— 工作区动作入口 = ⋮ 菜单 + 汉堡全屏抽屉
+ *     平板（768–1279）❌ 不渲染 —— 依据**画板 10**（iPad 横屏顶栏逐块为
+ *                     「汉堡 + 品牌 + 搜索入口 40×40 + 头像 32×32」，**没有 ⋮**），
+ *                     平板改用汉堡 → 侧栏 Modal 抽屉
+ *     桌面（≥ 1280） ❌ 不渲染 —— 原为 `xl:hidden` 的**既有行为**，本轮零改动
+ *   ⚠️ 这是本决策**唯一的断点类名改动**。旧断点是 `xl:hidden`（≥1280 桌面早就不渲染），
+ *      本轮只把上界从 1280 下移到 768，删掉的是**平板档**那一段。
  *
- * 边界：xl 以上本组件整体不渲染（根节点 xl:hidden），桌面布局与行为完全不变。
+ *   ⚠️ 平板档删渲染后的**功能等价性**（逐项核实，不允许「删了就没入口」）：
+ *      菜单里的每一项在侧栏（<xl 时为 Modal 抽屉，由顶栏汉堡展开）都有等价入口 ——
+ *      项目/看板（`SidebarNav` 首项，角色分流同 ⋮）、我的任务（`SidebarNav`）、
+ *      Agent（`SidebarNav`）、新建项目（`Sidebar` 底部，`isAdmin && onProjectPage`）、
+ *      保存备份 / 加载备份（`Sidebar` 底部，`isAdmin`）、设置（`Sidebar` 底部，所有角色）。
+ *      视图切换早在 v0.7 批次 A 就已移出本菜单（见下方渲染处的注释）。
+ *
+ *   ⚠️ **底部的 `fileInput` / `confirmDialog` / `SettingsDialog` 三个弹层不得挪动**：
+ *      它们仍处在一个 `display:none` 的容器内，按钮不可见故当前不可触发（无害）。
+ *      把 `hidden` 挪到弹层自身、或为 ≥768 新开触发路径，都会让弹层被父级
+ *      `display:none` 吃掉（备份导入/设置入口直接失效）。
+ *
+ * 边界：md（768）及以上本组件整体不渲染，桌面与平板布局、行为按各自档位不变。
  * 所有动作复用既有 store / 服务，不另起一份实现：
- *   - 视图切换 → useUiStore.homeViewMode
  *   - 新建项目 → useUiStore.openManualForm
- *   - 备份导入导出 → useBackupIo（与桌面按钮同一份逻辑）
+ *   - 备份导入导出 → useBackupIo（与桌面/侧栏按钮同一份逻辑）
  *   - 设置/导出日志 → SettingsDialog
+ *   - 更新红点 → useUpdateCheck（**窄屏这一份保留**；桌面/平板那份在 `Sidebar` 设置项上）
  */
 export function MobileMoreMenu(): JSX.Element {
   const location = useLocation();
   const { isAdmin } = useRoleGuard();
   const openManualForm = useUiStore((s) => s.openManualForm);
   const { save, pick, fileInput, confirmDialog } = useBackupIo();
-  // 仅桌面端且主进程推送过「有新版本」时为 true；移动端菜单项照常用 ITEM/ITEM_ICON 写法
+  // 仅桌面端且主进程推送过「有新版本」时为 true。
+  // 注：本菜单只在手机档渲染（根节点 md:hidden），而推送只发生在桌面端 ——
+  // 故这一份红点在新版 Windows 桌面端**永远不会亮**；桌面/平板可见的落点是
+  // Sidebar.tsx 的「设置」项（P0-17 配套的红点迁移）。此处保留，是为了
+  // 「手机档仍渲染 ⋮」这一档位不出现功能回退（日后若补移动端更新提示即在此处亮）。
   const { status } = useUpdateCheck();
   const hasUpdate = status === 'has-update';
 
@@ -92,7 +107,7 @@ export function MobileMoreMenu(): JSX.Element {
   }, [location.pathname]);
 
   return (
-    <div ref={rootRef} className="relative xl:hidden">
+    <div ref={rootRef} className="relative md:hidden">
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
@@ -113,7 +128,7 @@ export function MobileMoreMenu(): JSX.Element {
           aria-label="更多操作"
           className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-6rem)] w-56 overflow-y-auto rounded-xl border border-line py-1 shadow-soft"
         >
-          {/* 导航（<xl 就近入口；与侧栏抽屉互为冗余但都保留——R15 入口不丢） */}
+          {/* 导航（手机档 <768 的就近入口；与侧栏全屏抽屉互为冗余但都保留——R15 入口不丢） */}
           {isAdmin ? (
             <Link to="/" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
               <LayoutGrid size={15} className={cn(ITEM_ICON, location.pathname === '/' && 'text-pine')} />

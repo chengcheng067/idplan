@@ -6,6 +6,7 @@ import type { Stage } from '../../core/types/entities';
 import { createProjectActions } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { ImeInput } from '../common/ImeInput';
 
 /**
@@ -14,11 +15,36 @@ import { ImeInput } from '../common/ImeInput';
  *   ① 尝试 window.open(file://)（部分环境可用）
  *   ② 复制路径到剪贴板（兜底）
  *   ③ 展示路径文字方便手动取用
+ *
+ * ── v0.7 T04 · P0-19-① 权限门控（收紧一处既有缺口）──
+ *   现状：本文件此前**全文无** `useRoleGuard`，三种角色都能点「修改」并写库
+ *   （对比 `StageDrawer.tsx` 的 `StatusRow` / `DateRow` 都带 `isAdmin` 门控）。
+ *   成员视角是**只读视图**（权限矩阵默认档 = H 隐藏），故：
+ *     · `stage.resourcePath` **有值** → 只读展示（FolderOpen + `<code>` 路径 +
+ *       「打开」「复制路径」保留），**隐藏「修改」按钮**（唯一的写入口）。
+ *       为什么保留「打开 / 复制路径」：两者都**不写库**（`window.open` / 剪贴板），
+ *       且资料路径本就对成员可见——只读展示不扩大可见面，只是掐掉写入口。
+ *     · `stage.resourcePath` **无值** → `if (!isAdmin) return null`（整块不渲染），
+ *       成员看不到「登记资料文件夹路径…」这个登记入口。
+ *
+ *   ⚠️ Hooks 顺序（本项目已出过一次 React #310 白屏事故，见 `StageDrawer.tsx` 的警戒注释）：
+ *      `useRoleGuard()` 必须放在**所有条件 return 之前**。本组件的 `return` 都写在
+ *      JSX 三元里（无早退），但仍按纪律把 hook 放在最顶部，避免日后加早退时踩坑。
  */
-export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element {
+/**
+ * @returns 卡片节点；成员且**未登记路径**时返回 `null`（不渲染登记入口）。
+ *          返回类型含 `null` 是本组件唯一的类型签名变更（原为 `JSX.Element`），
+ *          与 `Sidebar` / `Modal` 等既有的 `JSX.Element | null` 同款。
+ */
+export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | null {
+  // ⚠️ 唯一判定出口（禁止在本组件内自写 !isMember 之类的派生，见 useRoleGuard.ts 收口说明）
+  const { isAdmin } = useRoleGuard();
   const repos = useRepos();
   const [editing, setEditing] = useState(false);
   const [pathText, setPathText] = useState(stage.resourcePath ?? '');
+
+  // 未登记路径时，「登记入口」是管理类写操作 → 成员整块隐藏（默认档 H）
+  if (!stage.resourcePath && !isAdmin) return null;
 
   const save = async (): Promise<void> => {
     await createProjectActions(repos).updateStageFields(stage.id, {
@@ -64,13 +90,16 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element {
           >
             <Copy size={12} /> 复制路径
           </button>
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="rounded-md px-2 py-1.5 text-xs text-mist hover:bg-sand"
-          >
-            修改
-          </button>
+          {/* 「修改」= 唯一的写入口 → 管理员专属（成员只读展示，见文件头 P0-19-①） */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-md px-2 py-1.5 text-xs text-mist hover:bg-sand"
+            >
+              修改
+            </button>
+          )}
         </div>
       ) : editing ? (
         <div className="flex items-center gap-2">

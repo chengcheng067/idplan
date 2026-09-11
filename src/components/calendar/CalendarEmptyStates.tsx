@@ -157,11 +157,25 @@ export function CalendarEmptyStates({
         </IconTile>
         <p className="text-[16px] font-semibold text-ink">还没有进行中的项目</p>
         <p className="text-[13px] text-mist">新建一个项目，把阶段排期跑起来</p>
-        <div className="mt-[4px]">
-          <Button variant="primary" onClick={() => onManual?.()}>
-            直接手动建档
-          </Button>
-        </div>
+        {/*
+          ★ v0.7 T04 · P0-18 修正（team-lead 复审发现的**死按钮**缺陷）：
+            原写法 `<Button onClick={() => onManual?.()}>` 是**无条件渲染**的，
+            `?.()` 只让点击无效、按钮照样画出来 —— 于是成员视角（`MemberBoardPage`
+            传 `onManual={undefined}`）会出现一个「点得到但点了毫无反应」的
+            `variant="primary"` 主按钮。而 E1 的触发条件正是「与我相关的 active 项目 = 0」，
+            身为刚被拉进项目的新成员**最常**看到它，属必现的观感级缺陷。
+            故改为**有回执才渲染**：无 `onManual` 时连包裹层一起不画（结构上消失，
+            而非仅失效）。管理员侧（`HomePage.tsx:133` 传 `openManual`）行为逐字节不变。
+          ⚠️ 只改 E1 这一处：E2/E3/E4 与 `onClear` / `onToggleStatus` / `onToggleStage`
+            等其余回调一律不动（它们都有无条件的合法语义，不存在同类死控件）。
+        */}
+        {onManual && (
+          <div className="mt-[4px]">
+            <Button variant="primary" onClick={onManual}>
+              直接手动建档
+            </Button>
+          </div>
+        )}
       </EmptyShell>
     );
   }
