@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import type { Member, Stage } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
 import { remainingDays } from '../../lib/date';
+import { stageSolidClass } from './stageColors';
 
 /**
  * 左侧锁定列（sticky）：序号圆标 / 阶段名 / 负责人 / 距截止天数。
@@ -66,18 +67,15 @@ export function StageRowsColumn({
 }
 
 function IndexBadge({ stage }: { stage: Stage }): JSX.Element {
-  const base =
-    'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium';
-  if (stage.status === StageStatus.Completed) {
-    return <span className={`${base} bg-pine text-white`}>✓</span>;
-  }
-  if (stage.status === StageStatus.Delayed) {
-    return <span className={`${base} bg-clay text-white`}>{stage.orderIndex}</span>;
-  }
-  if (stage.status === StageStatus.InProgress) {
-    return <span className={`${base} bg-pine-soft text-pine-deep border border-pine`}>{stage.orderIndex}</span>;
-  }
-  return <span className={`${base} border border-mist/40 text-mist`}>{stage.orderIndex}</span>;
+  // 画板 04：阶段点 = 实心块（main 色，圆角 9999），仅作色相指示；
+  // 序号由行序 + 阶段抽屉承载，避免「深色 main 上压白/黑字」的对比度问题。
+  // 取色走 stageColors.stageSolidClass 静态映射（禁止动态拼类名）。
+  return (
+    <span
+      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${stageSolidClass(stage.orderIndex)}`}
+      aria-hidden
+    />
+  );
 }
 
 function DueChip({ stage, todayIso }: { stage: Stage; todayIso: string }): JSX.Element | null {

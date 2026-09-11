@@ -44,7 +44,9 @@ export function StageBar({
   onClick(): void;
 }): JSX.Element {
   const y = rowIndex * (rowH + rowGap);
-  const barH = rowH - 14;
+  // 画板 04：跨度色带高 36（行高 44 - 上下各 4px 留白）；band 在行内垂直居中
+  const barH = rowH - 8;
+  const bandY = y + 4;
 
   const dStart = stage.startAt.slice(0, 10);
   const dEnd = stage.endAt.slice(0, 10);
@@ -95,19 +97,18 @@ export function StageBar({
         onClick();
       }}
     >
-      {/* 彩条主体 */}
+      {/* 彩条主体（画板 04：宽面 lightBar / 暗色 darkBar，圆角 8；进行中阶段额外 1px pine 描边） */}
       <rect
         x={xStart}
-        y={y + 7}
+        y={bandY}
         width={w}
         height={barH}
-        rx={4}
-        ry={4}
+        rx={8}
+        ry={8}
         fill={fill}
         opacity={opacity}
-        filter={active ? 'url(#stage-glow)' : undefined}
         stroke={active ? STAGE_ACTIVE_STROKE : 'none'}
-        strokeWidth={active ? 1.5 : 0}
+        strokeWidth={active ? 1 : 0}
         onClick={(e) => {
           e.stopPropagation();
           onClick();
@@ -115,14 +116,15 @@ export function StageBar({
       />
 
       {/* 发丝描边（BUG-04）：单独一层 rect，因为同一个 <rect> 只有一个 stroke 通道，
-          而激活态已经占用它画 STAGE_ACTIVE_STROKE。fill=none 只描边，不影响带面与透明度。 */}
+          而激活态已经占用它画 STAGE_ACTIVE_STROKE。fill=none 只描边，不影响带面与透明度。
+          圆角与主体保持一致（8）。 */}
       <rect
         x={xStart}
-        y={y + 7}
+        y={bandY}
         width={w}
         height={barH}
-        rx={4}
-        ry={4}
+        rx={8}
+        ry={8}
         fill="none"
         stroke={outline.stroke}
         strokeOpacity={outline.strokeOpacity * opacity}
@@ -138,9 +140,9 @@ export function StageBar({
               key={`seg-${stage.id}-${i}`}
               x1={xStart + (w * i) / 3}
               x2={xStart + (w * i) / 3}
-              y1={y + 10}
-              y2={y + barH + 4}
-              stroke="#FFFFFF"
+              y1={bandY + 3}
+              y2={bandY + barH - 1}
+              stroke={ink}
               strokeWidth={1.5}
               strokeDasharray="3 3"
               opacity={0.55}
@@ -151,7 +153,7 @@ export function StageBar({
             <text
               key={`lab-${stage.id}-${i}`}
               x={xStart + (w * i) / 3 + w / 9}
-              y={y + barH - 3}
+              y={bandY + barH - 3}
               textAnchor="middle"
               fontSize={9}
               fill={ink}
@@ -168,9 +170,9 @@ export function StageBar({
         <>
           <rect
             x={xStart + 1}
-            y={y + 12}
+            y={bandY + 8}
             width={handleW}
-            height={barH - 10}
+            height={barH - 16}
             rx={3}
             fill={ink}
             opacity={0.5}
@@ -179,11 +181,12 @@ export function StageBar({
           />
           <rect
             x={xEnd - handleW - 1}
-            y={y + 12}
+            y={bandY + 8}
             width={handleW}
-            height={barH - 10}
+            height={barH - 16}
             rx={3}
-            fill="rgba(255,255,255,0.5)"
+            fill={ink}
+            opacity={0.5}
             style={{ cursor: 'ew-resize' }}
             onPointerDown={(e) => onHandleDown(e, stage, 'end')}
           />
@@ -194,7 +197,7 @@ export function StageBar({
       {w > pxPerDay * 20 && (
         <text
           x={xStart + w / 2}
-          y={y + 18}
+          y={bandY + 22}
           textAnchor="middle"
           fontSize={9.5}
           fill={ink}
@@ -243,13 +246,13 @@ function DateBubble({
   const rx = 4;
   return (
     <g transform={`translate(${x - width / 2}, ${y - height})`} pointerEvents="none">
-      <rect x={0} y={0} width={width} height={height} rx={rx} fill="rgba(15,23,42,0.92)" />
+      <rect x={0} y={0} width={width} height={height} rx={rx} fill="var(--ink)" />
       <text
         x={width / 2}
         y={12}
         textAnchor="middle"
         fontSize={9}
-        fill="#ffffff"
+        fill="var(--paper)"
       >
         {label}
       </text>

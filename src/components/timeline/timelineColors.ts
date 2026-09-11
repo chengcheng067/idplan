@@ -20,8 +20,12 @@ export const ROW_BG_EVEN = 'var(--timeline-row-even)';
 /** 时间轴行底纹：奇数行 */
 export const ROW_BG_ODD = 'var(--timeline-row-odd)';
 
-/** 激活彩条描边（accent #6ea8fe，亮暗通用） */
-export const STAGE_ACTIVE_STROKE = 'var(--timeline-active-stroke)';
+/**
+ * 激活彩条描边（品牌靛蓝 pine，随主题切换亮/暗变体）。
+ * 画板 04：进行中阶段色带额外加 1px pine 描边；替换旧硬编码的浅蓝 #6ea8fe，
+ * 以对齐 v0.7 令牌（§1.1 pine / 暗色 #828CF7）。
+ */
+export const STAGE_ACTIVE_STROKE = 'var(--pine)';
 
 /** 激活彩条发光（feDropShadow floodColor，accent #6ea8fe） */
 export const STAGE_GLOW_COLOR = 'var(--timeline-glow)';

@@ -19,7 +19,7 @@ import { useDragReschedule } from '../../hooks/useDragReschedule';
 import { addWorkdaysSigned, countWorkdays, snapShiftDate } from '../../lib/workdays';
 import { MonthScaleHeader } from './MonthScaleHeader';
 import { StageRowsColumn } from './StageRowsColumn';
-import { StageBar, TaskBar } from './StageBar';
+import { StageBar, TaskBar, StageBarDefs } from './StageBar';
 import { TodayLine } from './TodayLine';
 import { RescheduleDialog } from './RescheduleDialog';
 import { ROW_BG_ACTIVE, ROW_BG_EVEN, ROW_BG_ODD } from './timelineColors';
@@ -256,7 +256,7 @@ export function TimelineView({
 
       <div
         ref={viewportRef}
-        className="glass-medium overflow-x-auto rounded-lg border border-line bg-paper shadow-soft"
+        className="overflow-x-auto rounded-3xl dark:rounded-2xl border border-line bg-paper p-4 shadow-soft sm:p-6"
         onWheel={handleWheel}
       >
         {/* 宽度取「内容实际宽」与「可视视口宽」较大者：画布撑满可视区，避免图1月档下右侧留白 */}
@@ -278,7 +278,7 @@ export function TimelineView({
             />
           </div>
 
-          <div className="flex relative">
+          <div className="flex relative mt-4">
             {/* 左锁定列 */}
             <StageRowsColumn
               stages={stages}
@@ -296,9 +296,13 @@ export function TimelineView({
                 width={contentW}
                 height={stages.length * (ROW_H + ROW_GAP)}
                 className="block select-none"
-                role="img"
-                aria-label="九阶段时间轴"
-              >
+              role="img"
+              aria-label="九阶段时间轴"
+            >
+              {/* 共享 defs：激活发光 + Agent 任务条斜纹 pattern
+                  （此前未被渲染，导致 Agent 任务条 url(#task-agent-hatch) 解析失败、斜纹不显；
+                  现挂入 SVG 根，保留「人工 / Agent 双形态」功能） */}
+              <StageBarDefs />
                 {/* 行底纹：激活阶段整行高亮（hex 收敛 timelineColors 常量，v0.3 暗色） */}
                 {stages.map((s, i) => (
                   <g key={`rowbg-${s.id}`}>

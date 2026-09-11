@@ -56,28 +56,35 @@ export function StageDrawer({
     );
   }
 
+  const project = useProjectsStore((s) => s.projects.find((p) => p.id === projectId));
+
   return (
     <Modal open onClose={close} placement="right" ariaLabel={`阶段详情：${stage.name}`}>
-      <aside className="glass-strong dialog-pop flex h-full w-full flex-col border-l border-line shadow-soft sm:max-w-xl">
+      <aside className="flex h-full w-full flex-col border-l border-line bg-paper shadow-raised-lg rounded-l-3xl dark:rounded-l-2xl sm:max-w-[520px]">
         {/* 手机端顶部抓手横条（提示可手势下滑关闭区域；平板以上隐藏） */}
         <div className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-sand sm:hidden" aria-hidden />
-        {/* 头 */}
-        <div className="flex items-center justify-between border-b border-line bg-paper/60 px-5 py-3">
-          <h2 className="font-display text-display-md">
-            <span className="mr-2 text-mist">{stage.orderIndex}.</span>
-            {stage.name}
-          </h2>
+        {/* 头（画板 05：标题列 阶段名 18/600 + 副标题 13 mist + 关闭 36×36 sunken 圆角12） */}
+        <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-5">
+          <div className="min-w-0">
+            <h2 className="font-display text-display-md">
+              <span className="mr-2 text-mist">{stage.orderIndex}.</span>
+              {stage.name}
+            </h2>
+            <p className="mt-1 text-[13px] text-mist">
+              {project?.name ?? '项目'} · 第 {stage.orderIndex} 阶段
+            </p>
+          </div>
           <button
             type="button"
             onClick={close}
             aria-label="关闭抽屉"
-            className="rounded-md p-1.5 text-mist hover:bg-sand"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sunken text-mist transition-colors hover:bg-sand"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
           {/* 阶段流转/改期是管理员操作（权限矩阵 #11）；成员保留查看任务清单/资料路径/延期档案 */}
           {isAdmin && <StatusRow stage={stage} projectId={projectId} />}
           {isAdmin && <DateRow stage={stage} />}
@@ -113,10 +120,10 @@ function DrawerFrame({
 }): JSX.Element {
   return (
     <Modal open onClose={onClose} placement="right" ariaLabel={title}>
-      <aside className="flex h-full w-full flex-col border-l border-line bg-paper p-5 shadow-soft sm:max-w-xl">
+      <aside className="flex h-full w-full flex-col border-l border-line bg-paper p-6 shadow-raised-lg rounded-l-3xl dark:rounded-l-2xl sm:max-w-[520px]">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-display-md">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="关闭" className="rounded-md p-1.5 text-mist hover:bg-sand">
+          <button type="button" onClick={onClose} aria-label="关闭" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sunken text-mist transition-colors hover:bg-sand">
             <X size={18} />
           </button>
         </div>
