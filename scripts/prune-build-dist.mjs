@@ -104,6 +104,10 @@ if (DRY_RUN) {
   process.exit(0);
 }
 
+// 大小必须在删除**之前**结算：删完再 statSync 会全部 ENOENT，
+// 被 sizeOf 的 catch 吞成 0，于是永远报「回收约 0.00 MB」（实际回收了几十 MB）。
+const reclaimedBytes = sizeOf(doomed);
+
 let removed = 0;
 for (const n of doomed) {
   try {
@@ -115,5 +119,5 @@ for (const n of doomed) {
     console.warn(`[prune] 跳过 ${n}（${err.code || err.message}）`);
   }
 }
-console.log(`[prune] 已删除 ${removed}/${doomed.length} 个，回收约 ${mb(sizeOf(doomed))}`);
+console.log(`[prune] 已删除 ${removed}/${doomed.length} 个，回收约 ${mb(reclaimedBytes)}`);
 console.log(`[prune] 剩余 assets：${basename(ASSETS)} 下 ${readdirSync(ASSETS).length} 个文件`);
