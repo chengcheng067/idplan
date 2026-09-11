@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronDown, Plus } from 'lucide-react';
 
+import { Button } from '../components/ui/Button';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { ProjectCard } from '../components/project/ProjectCard';
 import { StatCard } from '../components/project/StatCard';
 import { ArchiveListRow } from '../components/project/ArchiveListRow';
 import { MembersPageSection } from '../components/member/MembersPageSection';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
-import { HomeViewTabs } from '../components/layout/HomeViewTabs';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
-import { useUiStore } from '../store/useUiStore';
+import { useUiStore, type HomeViewMode } from '../store/useUiStore';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { computeProjectStatus, currentStageOf } from '../lib/progress';
 import { StageStatus } from '../core/types/enums';
@@ -19,15 +22,17 @@ import {
   getPreset,
 } from '../core/template/stage-library';
 import type { Project, Stage, Task } from '../core/types/entities';
+import { cn } from '../lib/cn';
 
 /**
- * 首页（严格对齐参考稿 §统计概览行 + §四列 Kanban）：
- *   概览行 = 4 张指标玻璃卡（进行中 / 本周到期 / 逾期风险 / 本月完工，数据全部派生、不伪造趋势）；
- *   主体 = 看板（待启动 + 所属行业声明的阶段列），列头 = 语义色圆点 + 列名 + 数量徽章。
- * 列定义自 v2 起由阶段模板的 domains 段给出（见 deriveColumns），不再写死「设计/深化/施工」——
- * 室内/景观/建筑三行业沿用旧列名，跨行业项目（软件、影视、活动、婚礼、咨询）用自己的流程列。
- * 列归属优先取当前阶段项声明的 kanbanColumn；老数据（templateKey 为 null）回退按 orderIndex 均分落段。
- * 视图开关已上移到 TopBar（参考稿应用栏形态），全局搜索按项目名 / 客户名过滤。
+ * 首页（严格对齐规格 §2.5 首页各块 + 画板 02「亮色首页」/ 画板 12「暗色首页」）：
+ *   页面标题行 → 统计卡行 → 视图切换行 → 项目卡片网格 → 已归档折叠区。
+ *   视图模式仍走 useUiStore.homeViewMode / setHomeViewMode（契约不变），
+ *   但视图切换控件改用本项目的 SegmentedControl（不再渲染 layout/HomeViewTabs）。
+ *   内边距由本页根节点自持（AppShell 已移除全部内边距）。
+ *
+ * 看板分桶逻辑（deriveColumns / groupByColumn）保留导出：
+ *   成员看板页（MemberBoardPage）仍依赖它按行业派生列，契约不变，此处仅不再渲染四列看板。
  */
 export function HomePage(): JSX.Element {
   const navigate = useNavigate();
@@ -37,6 +42,7 @@ export function HomePage(): JSX.Element {
   const members = useMembersStore((s) => s.members);
   const { isAdmin } = useRoleGuard();
   const homeViewMode = useUiStore((s) => s.homeViewMode);
+  const setHomeViewMode = useUiStore((s) => s.setHomeViewMode);
   const searchQuery = useUiStore((s) => s.searchQuery);
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const selectedProjectId = useUiStore((s) => s.selectedProjectId);
@@ -62,9 +68,6 @@ export function HomePage(): JSX.Element {
       )
     : active;
 
-  // 看板分桶（列随项目所属行业派生，见 deriveColumns）
-  const { columns, buckets } = groupByColumn(filtered, stagesOf, todayIso);
-
   // 指标卡（全部派生自 stages / projects，无历史趋势数据则不显示趋势）
   const weekStart = startOfWeekIso(today);
   const weekEnd = endOfWeekIso(today);
@@ -89,108 +92,138 @@ export function HomePage(): JSX.Element {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* 视图层 tab（看板 / 月历）：v0.7 T02 自 TopBar 位移到内容区顶部（PRD §3.1/§3.2）
-          ——「视图层」归内容区，顶栏只留 4 个全局常驻块。逻辑仍走 useUiStore.homeViewMode。 */}
-      <HomeViewTabs />
+    <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
+      {/* 1. 页面标题行 */}
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-[24px] font-bold text-ink">我的项目</h1>
+        <div className="flex items-center gap-3">
+          <Button variant="primary" icon={<Plus size={14} aria-hidden />} onClick={openManual}>
+            新建项目
+          </Button>
+        </div>
+      </div>
+
+      {/* 2. 统计卡行（响应式：桌面 4 列 / 平板 2×2 / 手机单列） */}
+      <section className="flex flex-wrap gap-5">
+        <StatCard tone="pine" value={active.length} label="进行中项目" trend={null} />
+        <StatCard tone="amber" value={dueThisWeek} label="本周到期任务" trend={null} />
+        <StatCard tone="clay" value={overdueCount} label="逾期风险" trend={null} />
+        <StatCard tone="sage" value={doneThisMonth} label="本月完工" trend={null} />
+      </section>
+
+      {/* 3. 视图切换行（替换 HomeViewTabs，契约不变：kanban / calendar） */}
+      <SegmentedControl<HomeViewMode>
+        ariaLabel="首页视图切换"
+        value={homeViewMode}
+        onChange={setHomeViewMode}
+        options={[
+          { value: 'kanban', label: '看板' },
+          { value: 'calendar', label: '月历' },
+        ]}
+      />
+
+      {/* 4/5 条件区：月历视图 vs 项目卡片网格 + 已归档折叠 */}
       {homeViewMode === 'calendar' ? (
         <MonthlyCalendarView onManual={openManual} />
       ) : (
         <>
-          {/* 统计概览行（参考稿 §统计概览行）：手机单列、平板双列、桌面四列） */}
-          <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <StatCard icon="▣" tone="pine" value={active.length} label="进行中项目" trend={null} />
-            <StatCard icon="▢" tone="amber" value={dueThisWeek} label="本周到期任务" trend={null} />
-            <StatCard icon="▲" tone="clay" value={overdueCount} label="逾期风险" trend={null} />
-            <StatCard icon="✓" tone="sage" value={doneThisMonth} label="本月完工" trend={null} />
-          </section>
-
-          {/* 四列看板 */}
           {active.length === 0 ? (
             <EmptyState onManual={openManual} />
           ) : filtered.length === 0 ? (
-            <div className="glass-light rounded-[16px] border border-dashed border-line p-6 text-center sm:p-10">
-              <p className="font-display text-display-md text-mist">没有匹配「{searchQuery}」的项目</p>
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="mt-3 rounded-md border border-pine px-4 py-2 text-sm text-pine hover:bg-pine-soft"
-              >
+            <div className="rounded-2xl border border-dashed border-line bg-paper p-8 text-center">
+              <p className="text-[15px] text-mist">没有匹配「{searchQuery}」的项目</p>
+              <Button variant="secondary" className="mt-3" onClick={() => setSearchQuery('')}>
                 清除搜索
-              </button>
+              </Button>
             </div>
           ) : (
-            <section
-              /* 列数由行业决定（设计 3 列、影视 4 列、软件 5 列…），不能再写死 grid-cols-4。
-                 用 auto-fit + minmax 让浏览器按可用宽度排：手机 1 列、平板 2 列、桌面尽量铺开。
-                 注意：注释必须放在 JSX 属性位置——三元括号内直接写花括号注释是表达式位，会编译错。 */
-              className="grid items-start gap-3 sm:gap-4"
-              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}
-            >
-              {columns.map((col) => {
-                const items = buckets[col.key] ?? [];
-                return (
-                    <div
-                    key={col.key}
-                    className="glass-light flex flex-col gap-3 rounded-3xl p-3.5"
-                  >
-                    {/* 列头：语义色圆点 + 列名 + 数量徽章 */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full ${col.dot}`} aria-hidden />
-                        <span className="text-sm font-semibold text-ink">{col.label}</span>
-                      </div>
-                      <span
-                        className={`rounded-[10px] px-2.5 py-0.5 text-[12px] font-medium ${col.chip}`}
-                      >
-                        {items.length}
-                      </span>
-                    </div>
-
-                    {/* 卡片列表 */}
-                    <div className="flex flex-col gap-2.5">
-                      {items.map((p) => (
-                        <ProjectCard
-                          key={p.id}
-                          project={p}
-                          stages={stagesOf(p)}
-                          tasks={tasksOf(p)}
-                          members={members}
-                          todayIso={todayIso}
-                          selected={selectedProjectId === p.id}
-                          onOpen={() => openProject(p.id)}
-                        />
-                      ))}
-                      {items.length === 0 && (
-                        <p className="px-1 py-2 text-xs text-mist">暂无项目</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <section className="flex flex-wrap gap-5">
+              {filtered.map((p) => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  stages={stagesOf(p)}
+                  tasks={tasksOf(p)}
+                  members={members}
+                  todayIso={todayIso}
+                  selected={selectedProjectId === p.id}
+                  onOpen={() => openProject(p.id)}
+                />
+              ))}
             </section>
+          )}
+
+          {archived.length > 0 && (
+            <ArchivedSection archived={archived} onOpen={(id) => openProject(id)} />
           )}
         </>
       )}
 
       {/* 成员管理（权限矩阵 #5：仅 admin；路由守卫已把成员重定向出首页，这里双保险） */}
       {isAdmin && <MembersPageSection />}
-
-      {archived.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="font-display text-display-md text-mist">已归档 · {archived.length}</h2>
-          <div className="glass-light rounded-[16px] border border-line px-3 py-1 shadow-soft">
-            {archived.map((p) => (
-              <ArchiveListRow key={p.id} project={p} onOpen={() => openProject(p.id)} />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
 
-/* ------------------------------ 列定义与分桶 ------------------------------ */
+/* ------------------------------ 已归档折叠区 ------------------------------ */
+
+function ArchivedSection({
+  archived,
+  onOpen,
+}: {
+  archived: Project[];
+  onOpen(id: string): void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={cn(
+          'flex h-12 w-full items-center gap-2.5 rounded-2xl border border-line bg-paper px-4 text-left text-[13px] text-ink',
+          'transition-colors hover:bg-sunken dark:rounded-md',
+        )}
+      >
+        <ChevronDown
+          size={16}
+          aria-hidden
+          className={cn('text-mist transition-transform', open && 'rotate-180')}
+        />
+        <span>已归档（{archived.length}）</span>
+      </button>
+      {open && (
+        <div className="overflow-hidden rounded-2xl border border-line bg-paper shadow-soft dark:rounded-md">
+          {archived.map((p) => (
+            <ArchiveListRow key={p.id} project={p} onOpen={() => onOpen(p.id)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------ 空状态（无进行中项目） ------------------------------ */
+
+function EmptyState({ onManual }: { onManual(): void }): JSX.Element {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line bg-paper p-10 text-center">
+      <p className="text-[15px] font-semibold text-ink">还没有进行中的项目</p>
+      <p className="max-w-md text-[13px] leading-6 text-mist">
+        新建一个项目，把阶段排期跑起来；项目名称与竣工日为必填，其余可进入后随时补充。
+      </p>
+      <p className="max-w-md rounded-2xl bg-cream px-4 py-3 text-[11px] leading-5 text-mist">
+        你的数据自动保存在本机浏览器中，关闭浏览器不会丢失；如需换电脑或留档，点击顶栏「保存备份」导出文件，随时可再恢复。
+      </p>
+      <Button onClick={onManual} className="mt-1">
+        直接手动建档
+      </Button>
+    </div>
+  );
+}
+
+/* ------------------------------ 列定义与分桶（保留导出，供 MemberBoardPage 使用） ------------------------------ */
 
 export type ColumnKey = string;
 
@@ -207,20 +240,28 @@ export interface KanbanColumn {
 
 /**
  * 配色 token → Tailwind 类名。
- * 模板 JSON 只存 token 名（pine / stage-s3 …），不携带 UI 框架的实现细节——
- * 否则模板数据会和 Tailwind 版本绑死，第三方模板作者也没法写。
+ * 模板 JSON 只存 token 名（pine / stage-s3 …），不携带 UI 框架的实现细节。
+ *
+ * ⚠️ **必须逐条写死字面量，不得用循环 + 模板字符串生成**（BUG-05）。
+ * Tailwind 的 CSS 生成是静态文本扫描，`bg-stage-s${i}` 这种拼接类名在扫描期无法求值，
+ * 结果是一条 CSS 都不生成 —— 阶段色点与阶段 chip 会在亮/暗两套主题下**完全不显色**，
+ * 而 tsc 与单测都发现不了（只有真浏览器看构建产物才看得见）。
+ * 这一段曾被写成 `for (let i = 1; i <= 9; i += 1) { TONE_CLASSES[`stage-s${i}`] = … }`。
  */
 const TONE_CLASSES: Record<string, { dot: string; chip: string }> = {
   mist: { dot: 'bg-mist', chip: 'bg-sand text-mist' },
   pine: { dot: 'bg-pine', chip: 'bg-pine-soft text-pine' },
   amber: { dot: 'bg-amber', chip: 'bg-amber-soft text-amber' },
+  'stage-s1': { dot: 'bg-stage-s1', chip: 'bg-stage-s1/15 text-stage-s1' },
+  'stage-s2': { dot: 'bg-stage-s2', chip: 'bg-stage-s2/15 text-stage-s2' },
+  'stage-s3': { dot: 'bg-stage-s3', chip: 'bg-stage-s3/15 text-stage-s3' },
+  'stage-s4': { dot: 'bg-stage-s4', chip: 'bg-stage-s4/15 text-stage-s4' },
+  'stage-s5': { dot: 'bg-stage-s5', chip: 'bg-stage-s5/15 text-stage-s5' },
+  'stage-s6': { dot: 'bg-stage-s6', chip: 'bg-stage-s6/15 text-stage-s6' },
+  'stage-s7': { dot: 'bg-stage-s7', chip: 'bg-stage-s7/15 text-stage-s7' },
+  'stage-s8': { dot: 'bg-stage-s8', chip: 'bg-stage-s8/15 text-stage-s8' },
+  'stage-s9': { dot: 'bg-stage-s9', chip: 'bg-stage-s9/15 text-stage-s9' },
 };
-for (let i = 1; i <= 9; i += 1) {
-  TONE_CLASSES[`stage-s${i}`] = {
-    dot: `bg-stage-s${i}`,
-    chip: `bg-stage-s${i}/15 text-stage-s${i}`,
-  };
-}
 const FALLBACK_TONE = TONE_CLASSES.mist;
 
 function toneOf(tone: string): { dot: string; chip: string } {
@@ -230,10 +271,6 @@ function toneOf(tone: string): { dot: string; chip: string } {
 /**
  * 按当前项目集合派生看板列：
  *   todo 固定在最前，其后是这些项目所属行业在模板里声明的列（去重、按模板声明顺序）。
- *
- * 为什么是「派生」而不是固定四列：v2 起各行业自带列定义（软件是 规划→开发→测试→发布，
- * 影视是 前期→拍摄→后期→交付），把室内那套 设计/深化/施工 硬套在别的行业上，列名就是错的。
- * 单一行业的用户看到的列数与改造前完全一致；混用行业时列自然变多，项目不会无处可放。
  */
 export function deriveColumns(projects: Project[]): KanbanColumn[] {
   const used = new Set<string>();
@@ -241,17 +278,14 @@ export function deriveColumns(projects: Project[]): KanbanColumn[] {
     const preset = p.stagePresetKey ? getPreset(p.stagePresetKey) : null;
     if (preset) used.add(preset.domain);
   }
-  // 老项目可能没有 stagePresetKey（或套餐已下架）→ 回退室内列，保证看板不空
   if (used.size === 0) used.add('indoor');
 
-  const columns: KanbanColumn[] = [
-    { key: TODO_COLUMN, label: '待启动', ...toneOf('mist') },
-  ];
+  const columns: KanbanColumn[] = [{ key: TODO_COLUMN, label: '待启动', ...toneOf('mist') }];
   const seen = new Set<string>([TODO_COLUMN]);
   for (const [domainKey] of getDomains()) {
     if (!used.has(domainKey)) continue;
     for (const c of getDomainColumns(domainKey)) {
-      if (seen.has(c.key)) continue; // 不同行业可能用同名列（如 design），只渲染一次
+      if (seen.has(c.key)) continue;
       seen.add(c.key);
       columns.push({ key: c.key, label: c.label, ...toneOf(c.tone) });
     }
@@ -262,9 +296,8 @@ export function deriveColumns(projects: Project[]): KanbanColumn[] {
 /**
  * 项目 → 看板列：
  *   未开始 → todo；
- *   进行中 → 当前阶段项声明的 kanbanColumn（v2 起由模板声明，不再按 orderIndex 数字硬分桶）；
- *   老数据（templateKey 为 null）→ 回退所属行业，按 orderIndex 均分落段，
- *     对室内九段 + 三列的结果与改造前逐项一致（①②③→1 列，④⑤⑥→2 列，⑦⑧⑨→3 列）。
+ *   进行中 → 当前阶段项声明的 kanbanColumn（v2 起由模板声明）；
+ *   老数据 → 回退所属行业，按 orderIndex 均分落段。
  */
 function columnOf(
   status: ReturnType<typeof computeProjectStatus>,
@@ -301,7 +334,6 @@ export function groupByColumn(
     const cur = currentStageOf(st, todayIso) ?? null;
     const domainKey = (p.stagePresetKey ? getPreset(p.stagePresetKey) : null)?.domain ?? null;
     const key = columnOf(status, cur, domainKey);
-    // 兜底：列键不在当前集合中（如项目行业未参与派生）→ 并入最后一列，绝不静默丢项目
     if (key in buckets) buckets[key].push(p);
     else buckets[columns[columns.length - 1].key].push(p);
   }
@@ -328,27 +360,4 @@ function endOfWeekIso(d: Date): string {
   const e = new Date(d);
   e.setDate(d.getDate() + (6 - day));
   return localIso(e);
-}
-
-/* ------------------------------ 空状态 ------------------------------ */
-
-function EmptyState({ onManual }: { onManual(): void }): JSX.Element {
-  return (
-    <div className="glass-light rounded-[16px] border border-dashed border-line p-6 text-center sm:p-10">
-      <p className="font-display text-display-md text-mist">还没有进行中的项目</p>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
-        点击左上角「新建项目」创建你的第一个项目；项目名称与竣工日为必填，其余可在进入后随时补充。
-      </p>
-      <p className="mx-auto mt-3 max-w-md rounded-[16px] bg-cream px-4 py-3 text-xs leading-5 text-mist">
-        你的数据自动保存在本机浏览器中，关闭浏览器不会丢失；如需换电脑或留档，点击顶栏「保存备份」导出文件，随时可再恢复。
-      </p>
-      <button
-        type="button"
-        onClick={onManual}
-        className="mt-4 rounded-md border border-pine px-4 py-2 text-sm text-pine hover:bg-pine-soft"
-      >
-        直接手动建档
-      </button>
-    </div>
-  );
 }

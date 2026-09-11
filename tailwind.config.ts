@@ -22,6 +22,67 @@ const c = (name: string, fallbackAlpha = 1): string =>
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}', './tests/**/*.{ts,tsx}'],
+
+  /**
+   * safelist —— 阶段色的「保命名单」（BUG-05 的第二道防线）。
+   *
+   * 背景：Tailwind 只做**静态文本扫描**，模板字符串拼出来的类名（`bg-stage-band-s${n}`）
+   * 一条 CSS 都不会生成。项目里确实踩过这个坑：构建产物 CSS 中
+   * `bg-stage-band-s1..s9` / `text-stage-ink-s1..s9` / `bg-stage-s1..s9` 生成条数**全为 0**，
+   * 导致阶段色带 / chip / 色点在亮暗两套主题下都不显色。
+   *
+   * 根因已在调用点修掉（统一改为 src/components/timeline/stageColors.ts 里的静态映射表索引），
+   * 这里再把三类 × 九段的**实际组合**显式列进 safelist 兜底：
+   * 万一以后有人又写回动态拼接，至少 CSS 里这些类还在，不会立刻变成隐形色块。
+   *
+   * 注意列的是「会真实出现的组合」而非穷举全集 —— safelist 是逃生舱，不是主力。
+   *   实心块   bg-stage-sN            （色点 / 细竖条 / 小方块 / 图例点）
+   *   宽面     bg-stage-band-sN       （跨度色带 / 月历色带 / 大横条 / 阶段条 / chip 底）
+   *   面内字   text-stage-ink-sN      （压在宽面上的文字）
+   *   色点淡底 bg-stage-sN/15 + text-stage-sN（首页看板列头 chip）
+   */
+  /**
+   * blocklist —— 排除扫描器误报。
+   *
+   * Tailwind 的 content 扫描是**纯文本正则**，不区分代码语境，于是会把
+   * 「长得像 CSS 类名的字符串」当成真的类名：
+   *   · src/core/services/backup.service.ts:386 等三处的 `now.toISOString()…replace(/[-:T]/g, '')`
+   *     → 被读成类名 `[-:T]`，生成 `.\[\-\:T\]{-: T}`（一条语法非法的规则）
+   *   · tests/agent-dag.spec.ts:199 注释里的 `[changxia:validation]`
+   *     → 生成 `.[changxia\:validation]{changxia:validation}`
+   * 二者都进不了实际渲染（浏览器直接丢弃非法声明），但会在每次构建时刷一条 CSS 语法警告，
+   * 长期会训练出「警告无视」的习惯，掩盖真正的 CSS 问题。故在此显式排除。
+   */
+  blocklist: ['[-:T]', '[changxia:validation]'],
+
+  safelist: [
+    ...Array.from({ length: 9 }, (_, i) => `bg-stage-s${i + 1}`),
+    ...Array.from({ length: 9 }, (_, i) => `bg-stage-s${i + 1}/15`),
+    ...Array.from({ length: 9 }, (_, i) => `text-stage-s${i + 1}`),
+    ...Array.from({ length: 9 }, (_, i) => `bg-stage-band-s${i + 1}`),
+    ...Array.from({ length: 9 }, (_, i) => `text-stage-ink-s${i + 1}`),
+  ],
+
+  /**
+   * 暗色变体的**判定依据**：本项目的主题开关是 `<html data-theme="dark">`
+   * （由主题 store 写在 documentElement 上），**不是** Tailwind 默认的
+   * `prefers-color-scheme` 媒体查询，也不是 `.dark` class。
+   *
+   * ⚠️ 这里必须显式声明。Tailwind 默认的 dark 变体是**跟随操作系统的**——
+   * 若不声明，`dark:xxx` 会生成在 `@media (prefers-color-scheme: dark)` 里，
+   * 于是出现「系统是深色但用户在应用里选了浅色 → 样式错乱」这种极难排查的问题。
+   * 用 `['variant', …]` 形式把判定改成属性选择器，与应用内开关严格一致。
+   *
+   * 背景：此前代码里散着 4 处自创的「祖先属性任意变体」写法，且两处写坏（一处缺最外层
+   * `[`、一处字符串里夹了真实空格），导致「暗色下时间轴卡圆角 16」「暗色首页内边距收紧」
+   * 从未生效过。Tailwind 对这类坏类名不报错，只是静默不生成 CSS。
+   * 现在统一成标准 `dark:` 前缀，可读、可搜、不可能写错。
+   *
+   * 注意：绝大多数换肤仍由 CSS 变量自动完成（见 global.css 的 token 层）；
+   * 只有「同一元素在暗色下要换**非颜色**属性」（圆角、间距）时才需要 dark:。
+   */
+  darkMode: ['variant', 'html[data-theme="dark"] &'],
+
   theme: {
     extend: {
       colors: {

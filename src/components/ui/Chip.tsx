@@ -8,6 +8,7 @@
 
 import { forwardRef, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
+import { stageBandClass } from '../timeline/stageColors';
 
 export interface ChipProps {
   active?: boolean;
@@ -23,8 +24,10 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
   ref,
 ) {
   const isStage = stageIndex != null && active;
-  const stageN = isStage ? (stageIndex % 9) + 1 : 0;
-  const stageCls = isStage ? `bg-stage-band-s${stageN} text-stage-ink-s${stageN}` : '';
+  // ⚠️ 必须走 stageBandClass 的静态映射表。
+  // 这里曾写成 `bg-stage-band-s${n} text-stage-ink-s${n}` 模板字符串——Tailwind 是静态扫描，
+  // 拼接类名一条 CSS 都不会生成，导致阶段 chip 在亮/暗两套主题下**完全不显色**（BUG-05）。
+  const stageCls = isStage ? stageBandClass(stageIndex) : '';
 
   return (
     <button

@@ -204,12 +204,18 @@ export function TopBar(): JSX.Element {
   }, [location.pathname]);
 
   return (
-    <header className="relative z-40 shrink-0 border-b border-line bg-paper print:hidden">
+    <header className="relative z-40 flex h-14 shrink-0 border-b border-line bg-paper print:hidden xl:h-16">
       {/*
-        顶栏主行（桌面+平板单⾏ / 手机第⼀⾏）。
-        高度：手机 md: 56 / 桌面 xl: 64；横向 padding 与 gap 随断点收紧（§2.4）。
+        顶栏主行（桌面 + 平板单⾏ / 手机第⼀⾏）。
+        高度：平板 56 / 桌面 64；横向 padding 与 gap 随断点收紧（§2.4）。
+
+        ⚠️ 高度写在 <header> 上、内容行用 h-full，而**不是**把 56/64 写在内容行上。
+        原因：header 还带 1px 下边框，Tailwind 默认 box-sizing: border-box，
+        写在 header 上时这 1px 计入总高 → 规格「顶栏高 64」精确成立；
+        若写在内容行上，header 实高会变成 65（内容 64 + 边框 1），
+        与规格差 1px，且会在 L-09 这类实测用例里暴露成真实偏差（曾经就是 65）。
       */}
-      <div className="flex h-14 items-center gap-3 px-4 md:gap-3 md:px-4 xl:h-16 xl:gap-4 xl:px-6">
+      <div className="flex h-full items-center gap-3 px-4 md:gap-3 md:px-4 xl:gap-4 xl:px-6">
         {/* 左组：汉堡 + 品牌（仅 <xl）+ 面包屑（手机隐藏，避免与品牌争位） */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {/* 汉堡（<xl，打开侧栏抽屉）+ 品牌名——≥xl 侧栏已是持久左栏，无需此按钮 */}

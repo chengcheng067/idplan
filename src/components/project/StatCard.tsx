@@ -1,31 +1,33 @@
 /**
- * 首页统计概览指标卡（严格对齐参考稿 §统计概览行）：
- *   glass-medium / 圆角 18 / padding 20 / gap 14；
- *   顶部行 = 40×40 圆角12 语义色图标底（色值 0.14 透明）+ 趋势胶囊（圆角8，色值 0.12）；
- *   数字 32/700 + 标签 13 次级文字。
- * 语义色全部走 Tailwind token（pine / amber / clay / stage.s1），禁止裸 hex。
+ * 首页统计概览指标卡（规格 §2.5 统计卡行）：
+ *   等宽 4 卡，高 156（桌面）/ 92（平板），圆角 24（桌面）/ 12（平板），bg-paper + shadow-raised；
+ *   内含：标签 13 / 大数字 18·700 / 环比小字 11。
+ *   响应式：flex-wrap + flex:1 1 基准宽，不写死列数；平板 2×2、手机单列（断点 xl/md，不用 lg）。
+ * 配色走 token（pine / amber / clay / sage=stage-s1），禁止裸 hex。
  */
+
+import { cn } from '../../lib/cn';
 
 export type StatTone = 'pine' | 'amber' | 'clay' | 'sage';
 
-const TONE_CLASS: Record<StatTone, { text: string; soft: string }> = {
-  pine: { text: 'text-pine', soft: 'bg-pine-soft' },
-  amber: { text: 'text-amber', soft: 'bg-amber-soft' },
-  clay: { text: 'text-clay', soft: 'bg-clay-soft' },
-  // 灰绿（参考稿「本月完工」）复用九段莫兰迪 stage.s1，避免新增配色体系
-  sage: { text: 'text-stage-s1', soft: 'bg-stage-s1/15' },
+const TONE_TEXT: Record<StatTone, string> = {
+  pine: 'text-pine',
+  amber: 'text-amber',
+  clay: 'text-clay',
+  // 灰绿（「本月完工」）复用九段 stage.s1，避免新增配色体系
+  sage: 'text-stage-s1',
 };
 
 export function StatCard({
-  icon,
   tone,
   value,
   label,
   trend,
   trendDown = false,
+  icon,
 }: {
-  /** 卡片图标（与参考稿一致的极简字形，避免引入新图标库） */
-  icon: string;
+  /** 保留字段（历史参考稿遗留的极简字形）；规格 §2.5 不再渲染独立图标底 */
+  icon?: string;
   tone: StatTone;
   value: number | string;
   label: string;
@@ -33,31 +35,25 @@ export function StatCard({
   trend?: string | null;
   trendDown?: boolean;
 }): JSX.Element {
-  const t = TONE_CLASS[tone];
-
+  const tClass = TONE_TEXT[tone];
   return (
-    // 统计卡是纯展示、不可点击：只做阴影呼吸，不加位移（位移会误导成可点）
-    <div className="soft-card flex min-w-0 flex-1 flex-col gap-3 rounded-3xl p-4 transition-shadow duration-300 ease-in-out hover:shadow-raised-lg md:p-5">
-      <div className="flex items-center justify-between">
-        <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${t.soft}`}
-          aria-hidden
-        >
-          <span className={`text-[15px] ${t.text}`}>{icon}</span>
-        </span>
-
-        {trend ? (
-          <span
-            className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${t.soft} ${t.text}`}
-          >
-            <span aria-hidden>{trendDown ? '↘' : '↗'}</span>
-            {trend}
-          </span>
-        ) : null}
-      </div>
-
-      <span className="text-[28px] font-bold leading-[34px] text-ink">{value}</span>
+    <div
+      className={cn(
+        'flex min-w-0 flex-col gap-1 rounded-md bg-paper p-4 shadow-raised',
+        'h-[92px] w-full md:w-[calc(50%-10px)] xl:w-auto xl:flex-1',
+        'xl:h-[156px] xl:rounded-3xl xl:p-6 xl:gap-4',
+      )}
+    >
       <span className="truncate text-[13px] text-mist">{label}</span>
+      <span className="text-[18px] font-bold leading-tight text-ink">{value}</span>
+      {trend ? (
+        <span className={cn('flex items-center gap-1 text-[11px] font-medium', tClass)}>
+          <span aria-hidden>{trendDown ? '↘' : '↗'}</span>
+          {trend}
+        </span>
+      ) : (
+        <span className="text-[11px] text-mist/70">—</span>
+      )}
     </div>
   );
 }

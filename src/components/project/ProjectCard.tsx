@@ -13,31 +13,29 @@ import { AvatarStack } from '../common/AvatarStack';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ImeInput } from '../common/ImeInput';
 import { Modal } from '../common/Modal';
+import { Tag } from '../ui/Tag';
+import { STAGE_BAR_COLORS } from '../timeline/stageColors';
 import { cn } from '../../lib/cn';
 
 /**
- * 项目卡片（严格对齐参考稿 §卡片）：
- *   glass / 圆角16 / padding16 / gap12；
- *   信息架构 = 项目名(15/600) → 客户(12 次级) → 阶段 tag(圆角8) → 进度(6px 细条 + 百分比) →
- *   footer(截止日 12/500 + 成员头像组 26px)。
- * 状态语义色（进行中 pine / 逾期 clay / 完成 stage.s1 / 未开始 mist）全部走 token，禁止裸 hex。
- * 选中态 = 参考稿蓝紫描边 + 双层光晕 + 亮底（最近打开的项目）。
+ * 项目卡片（规格 §2.5 项目卡片网格 + 画板 02）：
+ *   bg-paper + shadow-raised；桌面 圆角24 / 高185，平板 圆角12 / 高124（flex-wrap，不写死列数）；
+ *   信息架构 = 项目名(15/600) → 委托方(13 次级) → 阶段进度轨道(高8，多段按比例拼接，槽 sunken) →
+ *   底部元信息行(周期 11 + 阶段标签 + 成员头像组)。
+ * 阶段色走 STAGE_BAR_COLORS（实心块 main 色），阶段标签走 Tag（stageIndex 取 lightBar + lightText）。
+ * 状态语义色全部走 token，禁止裸 hex。选中态 = 主色环。
  *
- * v0.x · ⋯ 更多菜单（产品调研结论后实现）：
- *   - 修复交互结构：卡片原为 <button>，HTML 禁止嵌套交互元素 → 改为 div[role=button] + keydown 可达，
- *     ⋯ 触发器是独立 <button> 并 stopPropagation（否则点菜单误触打开项目）。
- *   - 菜单项（仅 admin 可见卡片场景渲染）：重命名 / 导出日程表 / 归档（复用已有后端与路由）。
- *   - 重命名：复用 store updateProject(id,{name})；归档：复用 setArchived；均走统一 Modal / ConfirmDialog。
+ * ⋯ 更多菜单（仅 admin）：重命名 / 导出日程表 / 归档 / 删除，复用既有 Modal / ConfirmDialog。
+ * 卡片原 <button> 改 div[role=button] + keydown 可达，⋯ 触发器独立 <button> 并 stopPropagation。
  */
-
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨';
 
-/** 状态 → 语义色 token（tag 文字 / tag 底 / 进度条填充 / 日期文字） */
+/** 状态 → 文字语义色（用于进度百分比与逾期日期文字） */
 const STATUS_TONE = {
-  in_progress: { text: 'text-pine', soft: 'bg-pine-soft', fill: 'bg-pine' },
-  completed: { text: 'text-stage-s1', soft: 'bg-stage-s1/15', fill: 'bg-stage-s1' },
-  overdue: { text: 'text-clay', soft: 'bg-clay-soft', fill: 'bg-clay' },
-  not_started: { text: 'text-mist', soft: 'bg-sand', fill: 'bg-mist' },
+  in_progress: { text: 'text-pine' },
+  completed: { text: 'text-stage-s1' },
+  overdue: { text: 'text-clay' },
+  not_started: { text: 'text-mist' },
 } as const;
 
 function daysBetween(fromIso: string, toIso: string): number {
@@ -62,10 +60,6 @@ export function ProjectCard({
   selected?: boolean;
   onOpen(): void;
 }): JSX.Element {
-  // useRoleGuard 只调用一次（原先调了两次，两个订阅点做同一件事）。
-  // memberView 与 isAdmin 严格互补（memberView === !isAdmin，见 isRestrictedView 定义），
-  // 仍保留两个名字：调用点读「受限视图该不该藏客户名」和「有没有管理权限」是两种意图，
-  // 统一成一个名字反而让 JSX 里的语义变模糊。
   const { role, isAdmin } = useRoleGuard();
   const memberView = isRestrictedView(role);
   const repos = useRepos();
@@ -85,7 +79,7 @@ export function ProjectCard({
   const status = computeProjectStatus(project, stages, todayIso);
   const tone = STATUS_TONE[status];
 
-  // 参与人：当前阶段未完成任务的执行人 + 阶段负责人（沿用 v0.3 口径，成员受限时mask姓名）
+  // 参与人：当前阶段未完成任务的执行人 + 阶段负责人（沿用 v0.3 口径，成员受限时 mask 姓名）
   const stageMembers = members.filter((m) => m.active && (!cur?.ownerId || m.id === cur.ownerId));
   const activeMemberIds = new Set(
     tasks
@@ -96,11 +90,27 @@ export function ProjectCard({
     (m) => activeMemberIds.has(m.id) || (cur?.ownerId && m.id === cur.ownerId),
   );
 
+  const typeLabel = PROJECT_TYPE_LABELS[project.type as ProjectType] ?? '未分类';
+  const clientText = !memberView && project.clientName
+    ? `${typeLabel} · ${project.clientName}`
+    : typeLabel;
+
   const stageLabel = cur ? `${CIRCLED[cur.orderIndex - 1] ?? cur.orderIndex} ${cur.name}` : '全部完成';
   const dueIso = cur?.endAt.slice(0, 10) ?? project.plannedEndAt;
   const dueMd = dueIso.slice(5).replace('-', '-');
   const overdueDays = daysBetween(dueIso, todayIso);
   const dueText = overdueDays > 0 ? `逾期 ${overdueDays} 天` : `${dueMd} 到期`;
+
+  // 阶段进度轨道：可见阶段按工期占比拼接多段（实心块 main 色）
+  const visibleStages = stages.filter((s) => s.visible !== false);
+  const ordered = [...visibleStages].sort((a, b) => a.orderIndex - b.orderIndex);
+  const segs = ordered.map((s) => {
+    const s0 = Date.parse(s.startAt ?? '');
+    const e0 = Date.parse(s.endAt ?? '');
+    const dur = Number.isFinite(s0) && Number.isFinite(e0) ? Math.max(e0 - s0, 1) : 1;
+    return { dur, color: STAGE_BAR_COLORS[s.orderIndex] ?? STAGE_BAR_COLORS[9] };
+  });
+  const total = segs.reduce((a, s) => a + s.dur, 0) || 1;
 
   // 外点关闭菜单
   useEffect(() => {
@@ -146,16 +156,19 @@ export function ProjectCard({
       onContextMenu={openContextMenu}
       aria-current={selected ? 'true' : undefined}
       className={cn(
-        // Soft UI 参考形态：.soft-card = bg-paper + 1px 极弱描边 + raised 外凸阴影
-        // Cloud Float 悬浮上浮（-4px / 300ms）+ Halo Focus 光晕聚焦
-        // 选中态改用主色环，取代旧版蓝紫渐变硬描边与 rgba 硬编码底色（那会盖掉暗色主题）
-        'group soft-card flex w-full cursor-pointer flex-col gap-3 rounded-3xl p-4 text-left transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg soft-focus-halo md:p-5',
+        // Soft UI 卡片：bg-paper + shadow-raised；Cloud Float 悬浮上浮 + 选中态主色环
+        'group flex w-full min-w-0 cursor-pointer flex-col bg-paper shadow-raised',
+        'rounded-md p-4 gap-[10px] h-[124px]',
+        'md:w-[calc(50%-10px)]',
+        'xl:w-auto xl:flex-1 xl:h-[185px] xl:rounded-3xl xl:p-6 xl:gap-3',
+        'transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/50',
         selected && 'ring-2 ring-pine/50',
       )}
     >
       {/* 标题行：项目名 + ⋯ 更多菜单（独立 button + stopPropagation） */}
       <div className="flex w-full items-start justify-between gap-2">
-        <span className="min-w-0 flex-1 truncate font-display text-md font-semibold text-ink group-hover:text-pine">
+        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink group-hover:text-pine">
           {project.name}
         </span>
         {isAdmin && (
@@ -166,7 +179,7 @@ export function ProjectCard({
               aria-label="项目更多操作"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="rounded-full p-1.5 text-mist transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine soft-press soft-focus-halo"
+              className="rounded-full p-1.5 text-mist transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
             >
               <MoreHorizontal size={16} aria-hidden />
             </button>
@@ -231,43 +244,34 @@ export function ProjectCard({
         )}
       </div>
 
-      {/* 客户（成员受限视图隐藏，沿用既有语义） */}
-      <span className="w-full truncate text-[12px] text-mist">
-        {PROJECT_TYPE_LABELS[project.type as ProjectType] ?? '未分类'}
-        {!memberView && project.clientName ? ` · ${project.clientName}` : ''}
-      </span>
+      {/* 委托方（成员受限视图隐藏客户名，沿用既有语义） */}
+      <span className="w-full truncate text-[13px] text-mist">{clientText}</span>
 
-      {/* 阶段 tag */}
-      <span
-        className={cn(
-          'inline-flex max-w-full items-center truncate rounded-2xl px-3 py-1 text-[12px] font-medium',
-          tone.soft,
-          tone.text,
-        )}
-      >
-        {stageLabel}
-      </span>
-
-      {/* 进度（6px 细条 + 百分比，口径 = 已完成可见阶段 / 可见阶段总数） */}
-      <div className="flex w-full flex-col gap-1.5">
+      {/* 阶段进度轨道：高 8，槽 sunken，多段按工期占比拼接（实心块 main 色） */}
+      <div className="flex w-full flex-col gap-1">
         <div className="flex w-full items-center justify-between text-[12px]">
           <span className="text-mist">进度</span>
           <span className={cn('font-medium', tone.text)}>{Math.round(percent)}%</span>
         </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-sunken">
-          <div
-            className={cn('h-full rounded-full transition-all', tone.fill)}
-            style={{ width: `${Math.max(percent, 2)}%` }}
-          />
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-sunken">
+          {segs.map((s, i) => (
+            <div
+              key={i}
+              className="h-full"
+              style={{ width: `${(s.dur / total) * 100}%`, backgroundColor: s.color }}
+            />
+          ))}
         </div>
       </div>
 
-      {/* footer：截止日 + 成员头像组 */}
+      {/* 底部元信息行：周期 + 阶段标签 + 成员头像组 */}
       <div className="flex w-full items-center justify-between gap-2">
-        <span className={cn('flex items-center gap-1.5 text-[12px] font-medium', status === 'overdue' ? 'text-clay' : 'text-mist')}>
-          <span aria-hidden>▦</span>
-          {dueText}
-        </span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[11px] text-mist">{dueText}</span>
+          {cur && (
+            <Tag stageIndex={cur.orderIndex - 1}>{stageLabel}</Tag>
+          )}
+        </div>
         <AvatarStack
           members={cardMembers.length > 0 ? cardMembers : stageMembers}
           maskMemberNames={memberView}
@@ -294,7 +298,7 @@ export function ProjectCard({
             <button
               type="button"
               onClick={() => setRenameOpen(false)}
-              className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-200 ease-in-out hover:-translate-y-0.5 soft-press soft-focus-halo"
+              className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-200 ease-in-out hover:-translate-y-0.5"
             >
               取消
             </button>

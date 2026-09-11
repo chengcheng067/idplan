@@ -31,7 +31,7 @@ import {
   DESKTOP_CELL_MIN_H,
   type GridDay,
 } from './calendarGrid';
-import { stageSolidOf } from './calendarColors';
+import { stageSolidOf, bandOutlineOf } from './calendarColors';
 import type { CalendarEntry } from './calendarMath';
 
 /**
@@ -134,7 +134,13 @@ export function MonthDayCell({
                 // 未开始幽灵态（图例有「未开始」说明，此处保持语义一致）
                 e.isGhost && 'opacity-40',
               )}
-              style={{ backgroundColor: e.color }}
+              // 发丝描边（BUG-04）：浅色带（s5 芽白/s7 米白）在亮色格底上对比度仅 1.10，
+              // 深色带在暗色格底上同为 ~1.1，两侧主题都会「隐形」。描边取该阶段 stage-ink
+              // （天生与带面明度对立），与时间轴色带共用同一份实现。
+              style={{
+                backgroundColor: e.color,
+                boxShadow: bandOutlineOf(e.filterStageIndex, e.activeStage?.colorIndex).boxShadow,
+              }}
               aria-label={`打开项目 ${e.project.name}`}
             />
           ))}

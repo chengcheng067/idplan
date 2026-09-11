@@ -8,9 +8,10 @@
 //   small    —— 列表卡/移动端：圆角 12，paper 底，shadow-soft
 //
 // 暗色收紧：最终设计稿（画板 13）要求时间轴卡暗色下圆角 16。
-// 项目主题走 <html data-theme="dark">（非 Tailwind class），无法用普通 dark: 变体。
-// 这里用「祖先属性任意变体」[data-theme='dark']_& 在暗色主题下把 timeline 圆角降到 16。
-// 若该任意变体在当前 Tailwind 构建未生成，则 timeline 暗色下保持 24（已在报告说明）。
+// 项目主题走 <html data-theme="dark">，故 tailwind.config.ts 已注册 dark 变体
+// （addVariant('dark', 'html[data-theme="dark"] &')），这里直接写标准 dark: 前缀。
+// 此前写成自创的祖先属性任意变体且**写坏了**（字符串里的真实空格把它拆成两个非法 class），
+// 导致暗色圆角 16 从未生效过 —— 那是个静默失败：Tailwind 不报错，只是不生成 CSS。
 
 import { forwardRef, type HTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
@@ -26,7 +27,7 @@ const variantMap: Record<CardVariant, string> = {
   sunken: 'rounded-3xl bg-cream',
   timeline: cn(
     'rounded-3xl bg-paper border border-line p-[24px] flex flex-col gap-[16px]',
-    "[data-theme='dark'] &]:rounded-2xl",
+    'dark:rounded-2xl',
   ),
   pinned: 'rounded-3xl bg-pine-soft border border-pine p-[24px] flex flex-col gap-[12px]',
   small: 'rounded-md bg-paper shadow-soft',

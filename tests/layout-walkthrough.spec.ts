@@ -204,24 +204,54 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 A · L-01~L-08 布局验收（真实构�
     return { ctx, page };
   }
 
-  it('L-01 · 顶栏常驻视觉块 ≤4（xl 档）', async () => {
+  it('L-01 · 顶栏常驻视觉块 ≤4（xl 档，无 logo/品牌/副标题）', async () => {
     const { ctx, page } = await openAt(1600, 900);
 
-    // 结构性断言（比纯计数更稳）：4 类代表元素都在
-    expect(await page.locator('header img[alt="ID Plan logo"]').count()).toBe(1);
+    // 新设计（画板 02）：桌面 ≥xl 顶栏只有「面包屑 + 搜索 + 头像」三块，
+    // 不再渲染 logo 图、品牌名、副标题。logo 图已下沉到侧栏（<aside>），
+    // 品牌名在 xl 档用 `xl:hidden` 隐藏，副标题已彻底移除。
+    expect(await page.locator('header img[alt="ID Plan logo"]').count()).toBe(0);
+
+    // 顶栏内不得出现可见的「ID Plan」品牌名（xl 档 xl:hidden 隐藏）
+    const brandVisible = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('header *')).some((el) => {
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return false;
+        return (el.textContent ?? '').trim() === 'ID Plan';
+      }),
+    );
+    expect(brandVisible).toBe(false);
+
+    // 顶栏内不得出现可见的副标题（旧「项目排期与交付管理」已移除）
+    const subtitleVisible = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('header span')).some((s) => {
+        const cs = getComputedStyle(s);
+        if (cs.display === 'none' || Number(cs.opacity) === 0) return false;
+        const r = s.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return false;
+        return Array.from(s.childNodes).some(
+          (n) => n.nodeType === Node.TEXT_NODE && /室内设计项目管理|项目排期与交付管理/.test(n.textContent ?? ''),
+        );
+      }),
+    );
+    expect(subtitleVisible).toBe(false);
+
+    // 设置入口仍在（所有角色可用）
     expect(await page.locator('header [aria-label="设置"]').count()).toBe(1);
-    // 顶栏默认不渲染**可见**的常驻搜索输入框（已改图标，去 480px 框）。
-    // 注意必须按「可见」判定：DOM 里恒有两个隐藏 input——
-    //   ① 手机档搜索框（`sm:hidden`，xl 下 display:none）；
-    //   ② 备份用的 `input[type=file].hidden`。
-    // 只数 `count()` 会把它们算进来，得到「顶栏还有输入框」的假阳性。
+
+    // 桌面端常驻搜索框（ImeInput）**可见**——这是 v0.7 新结构（不再是折叠图标）。
+    // 注意按「可见」判定：DOM 里还有两个隐藏 input（手机档 sm:hidden、备份 file input），
+    // 只数 count() 会误算。xl 档下仅桌面搜索框可见，故应为 1。
     const visibleHeaderInputs = await page.evaluate(() =>
       Array.from(document.querySelectorAll('header input')).filter((el) => {
         const r = el.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
       }).length,
     );
-    expect(visibleHeaderInputs).toBe(0);
+    expect(visibleHeaderInputs).toBe(1);
+
     // 顶栏内不得再出现导航链接文字（已迁侧栏）
     const headerText = (await page.locator('header').innerText()).replace(/\s+/g, '');
     expect(headerText).not.toContain('我的任务');
@@ -319,37 +349,53 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 A · L-01~L-08 布局验收（真实构�
     await ctx.close();
   });
 
-  it('L-06 · 副标题改为行业中性表述', async () => {
-    const { ctx, page } = await openAt(1600, 900);
-
+  it('L-06 · 副标题已从顶栏移除；<xl 才渲染汉堡 + 品牌名', async () => {
     /**
-     * 精确断言「副标题那个 span 的**直接文本**」。
-     * 不用 `header.textContent.includes(...)`：品牌块外层 span 会拼成
-     * 「ID Plan项目排期与交付管理」，既易误判也测不到「副标题单独是什么」。
-     * 用 `:scope` 取「自身直接文本」——在 span 集合里找满足正则的**最内层**元素。
+     * v0.7 设计：桌面 ≥xl 顶栏只有「面包屑 + 搜索 + 头像」三块，
+     * 不渲染 logo 图 / 品牌名 / 副标题（画板 02）。副标题那行已被彻底删除，
+     * 故断言「无可见副标题」；旧行业窄文案也必须全页消失。
+     * 而 `<xl` 顶栏须保留「汉堡 + 品牌名 'ID Plan'」，供小屏用户识别产品。
      */
-    const subtitle = await page.evaluate(() => {
-      const spans = Array.from(document.querySelectorAll('header span')).filter(
-        (s) =>
-          Array.from(s.childNodes).some(
-            (n) => n.nodeType === Node.TEXT_NODE && /室内设计项目管理|项目排期与交付管理/.test(n.textContent ?? ''),
-          ),
-      );
-      const target = spans[spans.length - 1];
-      return target
-        ? Array.from(target.childNodes)
-            .filter((n) => n.nodeType === Node.TEXT_NODE)
-            .map((n) => n.textContent ?? '')
-            .join('')
-            .trim()
-        : null;
-    });
+    // 桌面 ≥xl（1600）：无可见副标题
+    {
+      const { ctx, page } = await openAt(1600, 900);
 
-    expect(subtitle).toBe('项目排期与交付管理');
-    // 旧文案必须彻底消失（全页范围，防止别处残留）
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText).not.toContain('室内设计项目管理');
-    await ctx.close();
+      const subtitleVisible = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('header span')).some((s) => {
+          const cs = getComputedStyle(s);
+          if (cs.display === 'none' || Number(cs.opacity) === 0) return false;
+          const r = s.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return false;
+          return Array.from(s.childNodes).some(
+            (n) => n.nodeType === Node.TEXT_NODE && /室内设计项目管理|项目排期与交付管理/.test(n.textContent ?? ''),
+          );
+        }),
+      );
+      expect(subtitleVisible).toBe(false);
+
+      // 旧文案全页范围不得残留（防止别处残留）
+      const bodyText = await page.locator('body').innerText();
+      expect(bodyText).not.toContain('室内设计项目管理');
+      await ctx.close();
+    }
+
+    // <xl（1024）：顶栏渲染汉堡 + 品牌名「ID Plan」
+    {
+      const { ctx, page } = await openAt(1024, 900);
+      expect(await page.locator('header [aria-label="打开导航菜单"]').count()).toBe(1);
+
+      const brandVisible = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('header *')).some((el) => {
+          const cs = getComputedStyle(el);
+          if (cs.display === 'none' || Number(cs.opacity) === 0) return false;
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return false;
+          return (el.textContent ?? '').trim() === 'ID Plan';
+        }),
+      );
+      expect(brandVisible).toBe(true);
+      await ctx.close();
+    }
   });
 
   it('L-07 · 暗色主题顶栏/侧栏 token 自动换肤（无额外适配）', async () => {
@@ -412,6 +458,65 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 A · L-01~L-08 布局验收（真实构�
     expect(m.headerHasGlass).toBe(false);
     expect(parseFloat(m.headerBorderBottom)).toBeGreaterThan(0);
     await ctx.close();
+  });
+
+  it('L-09 · 新顶栏结构：面包屑 / 搜索块常驻 / 高 64', async () => {
+    // 取站根：DIST_URL 形如 http://127.0.0.1:PORT/index.html，去掉文件名后**必须补回斜杠**，
+    // 否则拼出来的是 http://127.0.0.1:PORTproject/... —— 浏览器直接报 invalid URL。
+    const base = DIST_URL.replace(/\/index\.html$/, '/');
+
+    // 1) 顶栏高 64（桌面 ≥xl，画板 02 / §2.4 统一 64）
+    {
+      const { ctx, page } = await openAt(1600, 900);
+      const h = await page.evaluate(() => {
+        const el = document.querySelector('header');
+        return el ? Math.round(el.getBoundingClientRect().height) : 0;
+      });
+      expect(h).toBe(64);
+      await ctx.close();
+    }
+
+    // 2) 桌面端搜索块常驻：可见 input，外层容器宽 ~280 / 高 ~36
+    {
+      const { ctx, page } = await openAt(1600, 900);
+      const rect = await page.evaluate(() => {
+        const inp = Array.from(document.querySelectorAll('header input')).find((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        });
+        if (!inp) return null;
+        // 取 input 的父容器（SearchField 根 div，带 w-[280px] h-9）更接近规格量级
+        const box = (inp.parentElement as HTMLElement) ?? inp;
+        const b = box.getBoundingClientRect();
+        return { w: Math.round(b.width), h: Math.round(b.height) };
+      });
+      expect(rect).not.toBeNull();
+      // 宽 280 量级（容器 280 + 盒模型/字体微调容差）
+      expect(rect!.w).toBeGreaterThanOrEqual(264);
+      expect(rect!.w).toBeLessThanOrEqual(296);
+      // 高 36 量级
+      expect(rect!.h).toBeGreaterThanOrEqual(32);
+      expect(rect!.h).toBeLessThanOrEqual(40);
+      await ctx.close();
+    }
+
+    // 3) 面包屑：/project/:id 下呈「项目 / 我的项目 / {项目名}」三段
+    //    （项目名取不到时回落「项目详情」，用不存在的 id 即可确定性触发回落，
+    //      同时验证面包屑逻辑本身——这正是顶栏新增功能）
+    {
+      const { ctx, page } = await openAt(1600, 900);
+      await page.goto(`${base}project/__walkthrough_breadcrumb__`);
+      await page.waitForSelector('header', { timeout: 15000 });
+      await page.waitForTimeout(300);
+
+      // 返回箭头存在（详情页面包屑特征）
+      expect(await page.locator('header [aria-label="返回上一页"]').count()).toBe(1);
+      const htext = (await page.locator('header').innerText()).replace(/\s+/g, '');
+      // 三段：项目 / 我的项目 / {项目名(回落 项目详情)}
+      expect(htext).toContain('我的项目');
+      expect(htext).toContain('项目详情');
+      await ctx.close();
+    }
   });
 });
 

@@ -10,6 +10,7 @@
 
 import { type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
+import { stageBandClass } from '../timeline/stageColors';
 
 export type TagTone = 'doing' | 'due' | 'overdue' | 'done' | 'neutral' | 'pine';
 
@@ -33,11 +34,10 @@ const toneMap: Record<TagTone, string> = {
 
 export function Tag({ tone = 'neutral', stageIndex, children, className }: TagProps) {
   const isStage = stageIndex != null;
-  // N = (stageIndex % 9) + 1，范围 1–9 循环取模
-  const stageN = isStage ? (stageIndex % 9) + 1 : 0;
-  const stageCls = isStage
-    ? `bg-stage-band-s${stageN} text-stage-ink-s${stageN}`
-    : '';
+  // ⚠️ 必须走 stageBandClass 的静态映射表（BUG-05）。
+  // 这里曾写成 `bg-stage-band-s${n} text-stage-ink-s${n}` 模板字符串——Tailwind 只做静态
+  // 文本扫描，拼接类名一条 CSS 都不会生成，阶段色签会在亮/暗主题下**完全不显色**。
+  const stageCls = isStage ? stageBandClass(stageIndex) : '';
 
   return (
     <span

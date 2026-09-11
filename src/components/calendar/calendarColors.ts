@@ -22,6 +22,8 @@ import {
   STAGE_BAND_COLORS,
   STAGE_BAND_INK_COLORS,
   STAGE_BAR_COLORS,
+  stageBandOutline,
+  type BandOutline,
 } from '../timeline/stageColors';
 import { TODAY_LINE_COLOR, RING_PROGRESS } from '../timeline/timelineColors';
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
@@ -55,6 +57,24 @@ export function stageColorOf(orderIndex: number, colorIndex?: number | null): st
  * 入参口径与 computeCalendarEntry 的 filterStageIndex 一致（激活阶段 orderIndex /
  * 已完成→9 / 未开始→1），故色点与同一天色带恒为同一色相（只是角色变体不同）。
  */
+/**
+ * 月历格内色带的发丝描边（BUG-04）。
+ *
+ * 规格 §1.2 只规定了三个角色变体的 hex，**从未规定「色带 vs 所在格底」的对比度**，
+ * 于是浅色带（s5 芽白 #E0FFB7 / s7 米白 #FFF2D6）压在白色格底上只有 1.10 / 1.11，
+ * 暗色格底上深色带（s1 松墨 / s9 栗褐）同样 ~1.1 —— 两侧主题都存在「看不见的色带」。
+ *
+ * 实现与时间轴色带**共用同一份**（timeline/stageColors 的 stageBandOutline），
+ * 这里只做一层转发，让月历侧不必反向依赖 timeline 目录的内部函数名。
+ * 调用方（MonthDayCell）消费其中的 `.boxShadow` 做 1px 内描边。
+ */
+export function bandOutlineOf(
+  filterStageIndex: number,
+  colorIndex?: number | null,
+): BandOutline {
+  return stageBandOutline(filterStageIndex, colorIndex);
+}
+
 export function stageSolidOf(filterStageIndex: number, colorIndex?: number | null): string {
   return (
     STAGE_BAR_COLORS[resolveStageColorIndex(filterStageIndex, colorIndex)] ?? STAGE_BAR_COLORS[9]

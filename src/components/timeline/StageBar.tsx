@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { xOf, type TimelineRange } from '../../lib/date';
 import type { Stage, Task } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
-import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS } from './stageColors';
+import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS, stageBandOutline } from './stageColors';
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
 import {
   STAGE_ACTIVE_STROKE,
@@ -70,6 +70,10 @@ export function StageBar({
   // 条内文字 / 子刻度线必须配 --stage-ink-sN，否则「芽白 / 米白」段上的白字会彻底看不见。
   const fill = STAGE_BAND_COLORS[idx] ?? STAGE_BAND_COLORS[9];
   const ink = STAGE_BAND_INK_COLORS[idx] ?? STAGE_BAND_INK_COLORS[9];
+  // 色带发丝描边（BUG-04）：规格 §1.2 未定义「色带 vs 行底」对比度，导致浅带（s5 芽白 /
+  // s7 米白）在亮色行底、深带（s1 松墨 / s9 栗褐）在暗色行底双双隐形（对比度 ~1.1）。
+  // 描边色取本阶段的 --stage-ink-sN（天生与带面明度对立），一个公式通吃九色与两套主题。
+  const outline = stageBandOutline(stage.orderIndex, stage.colorIndex);
 
   // 拖拽时显示的新日期（用于气泡提示）
   const previewDate =
@@ -108,6 +112,22 @@ export function StageBar({
           e.stopPropagation();
           onClick();
         }}
+      />
+
+      {/* 发丝描边（BUG-04）：单独一层 rect，因为同一个 <rect> 只有一个 stroke 通道，
+          而激活态已经占用它画 STAGE_ACTIVE_STROKE。fill=none 只描边，不影响带面与透明度。 */}
+      <rect
+        x={xStart}
+        y={y + 7}
+        width={w}
+        height={barH}
+        rx={4}
+        ry={4}
+        fill="none"
+        stroke={outline.stroke}
+        strokeOpacity={outline.strokeOpacity * opacity}
+        strokeWidth={outline.strokeWidth}
+        pointerEvents="none"
       />
 
       {/* 交付阶段子刻度（交底 / 中期 / 验收 三等分浅色竖线） */}
