@@ -8,8 +8,12 @@ import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { StageStatus, ScheduleBasis, SCHEDULE_BASIS_LABELS } from '../core/types/enums';
-import { resolveStageColorIndex } from '../core/template/stage-fallback';
-import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS, STAGE_BAR_COLORS } from '../components/timeline/stageColors';
+import {
+  STAGE_COLOR_NAMES,
+  stageSolidClass,
+  stageBandClass,
+  stageBandOutline,
+} from '../components/timeline/stageColors';
 import {
   buildScheduleSections,
   paginateSections,
@@ -19,15 +23,19 @@ import {
   A4_HEIGHT_PX,
   type ScheduleSection,
 } from '../lib/schedule-print';
-import { totalDaysInclusive } from '../lib/date';
+import { dayjs, totalDaysInclusive } from '../lib/date';
 
 /**
- * 日程表打印视图（v0.4.1 重做）：
- *   旧版把整份日程表一次性 html2canvas 截成单张 PNG → 内容越多图越细长，
- *   且 @media print 的 A4 / break-inside 规则对屏幕渲染无效（表格被拉断、颜色割裂）。
- * 现改为：按 A4 页高估算分页 → 每页独立渲染为白纸（屏幕态即所见即所得）→ 逐页导出 PNG。
- * 第一页承载项目信息 + 时间轴摘要；每页含页眉（项目名 / 工期或页码）、页脚（打印人 / 页码 x/y）。
- * 导出：打印（window.print）/ PDF（打印对话框另存为）/ PNG（逐页，多页时文件名带 -p1ofN）。
+ * 打印页 · 排期客户稿（A4 · 强制浅色 · 画板 09）：
+ *   旧版把整份排期一次性 html2canvas 截成单张 PNG，内容越多图越细长；
+ *   现改为按 A4 页高估算分页 → 每页独立渲染为白纸（屏幕态即所见即所得）→ 逐页导出 PNG。
+ *
+ * 阶段色分工（规格 §1.2 / §1.3，铁律）：
+ *   · 时间轴摘要色带（宽面）→ stage-band（bg-stage-band-sN）+ 面内字 stage-ink；
+ *   · 序号圆点 / 图例小方块（实心块）→ stage（bg-stage-sN）。
+ *   取色一律走「静态类映射」stageBandClass / stageSolidClass（禁止模板字符串拼类名——见 stageColors.ts 注释），
+ *   不写裸 hex、不写 text-white（s5 芽白 / s7 米白 压白字对比度 1.10/1.11，硬 bug）。
+ *   打印子树根节点带 .print-root，global.css 已把它整棵锁回亮色，暗色主题下仍是浅稿。
  */
 export function SchedulePrintPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
@@ -41,14 +49,40 @@ export function SchedulePrintPage(): JSX.Element {
   const [pdfHint, setPdfHint] = useState(false);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
 
-  // ⚠️ 所有 Hook 必须在任何条件提前 return 之前调用完成，
-  //    否则不同 render 路径下 React 记录的 Hook 数量不一致会触发 error #310。
+  // ⚠️ 所有 Hook 必须在任何条件提前 return 之前调用完成，否则不同 render 路径下
+  //    React 记录的 Hook 数量不一致会触发 error #310。
   const sections = useMemo(
     () => (project ? buildScheduleSections({ project, stages, tasks, members }) : []),
     [project, stages, tasks, members],
   );
   const pages = useMemo(() => paginateSections(sections), [sections]);
   const nowIso = new Date().toISOString();
+
+  // 时间轴甘特视图范围 = 项目计划基线（首帧即建，稳定）
+  const viewStart = project ? project.plannedStartAt.slice(0, 10) : '';
+  const viewEnd = project ? project.plannedEndAt.slice(0, 10) : '';
+  const viewDays = Math.max(totalDaysInclusive(viewStart, viewEnd), 1);
+  const offsetDays = (iso: string): number => totalDaysInclusive(viewStart, iso) - 1;
+  const bandGeom = (startAt: string, endAt: string): { left: number; width: number } => {
+    const lo = offsetDays(startAt);
+    const hi = offsetDays(endAt);
+    const left = (lo / viewDays) * 100;
+    const width = Math.max(((hi - lo + 1) / viewDays) * 100, 2.5);
+    return { left, width };
+  };
+  const monthsList = useMemo<string[]>(() => {
+    if (!project) return [];
+    const labels: string[] = [];
+    let cur = dayjs(viewStart);
+    const endYm = viewEnd.slice(0, 7);
+    let guard = 0;
+    while (cur.format('YYYY-MM') <= endYm && guard < 48) {
+      labels.push(cur.format('YYYY年M月'));
+      cur = cur.add(1, 'month');
+      guard += 1;
+    }
+    return labels;
+  }, [project, viewStart, viewEnd]);
 
   // bootstrap 完成前先展示加载态（首帧 members 未装载时 isAdmin 恒 false，避免误判重定向）
   if (!hydrated) {
@@ -95,30 +129,17 @@ export function SchedulePrintPage(): JSX.Element {
     }
   };
 
-  const statusColor = (status: StageStatus): string => {
-    switch (status) {
-      case StageStatus.InProgress:
-        return 'bg-pine';
-      case StageStatus.Completed:
-        return 'bg-ink';
-      case StageStatus.Delayed:
-        return 'bg-clay';
-      default:
-        return 'bg-sand';
-    }
-  };
-
-  /** 状态胶囊（浅色底 + 深色字：纸面与打印均清晰可读） */
+  /** 状态胶囊（浅色底 + 深色字：纸面与打印均清晰可读，全部走命名 token） */
   const statusChipCls = (status: StageStatus): string => {
     switch (status) {
       case StageStatus.InProgress:
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-pine-soft text-pine';
       case StageStatus.Completed:
-        return 'bg-slate-300 text-slate-700';
+        return 'bg-moss-soft text-moss';
       case StageStatus.Delayed:
-        return 'bg-red-100 text-red-700';
+        return 'bg-clay-soft text-clay';
       default:
-        return 'bg-slate-200 text-slate-700';
+        return 'bg-sunken text-mist';
     }
   };
 
@@ -141,7 +162,7 @@ export function SchedulePrintPage(): JSX.Element {
       <div className="no-print mb-6 flex flex-wrap items-center gap-2 text-sm">
         <Link
           to={`/project/${project.id}`}
-          className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
           <ArrowLeft size={14} /> 返回项目
         </Link>
@@ -150,20 +171,20 @@ export function SchedulePrintPage(): JSX.Element {
         <button
           type="button"
           onClick={onPrint}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
           <Printer size={14} /> 打印
         </button>
         <button
           type="button"
           onClick={onExportPdf}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
           <FileText size={14} /> 导出 PDF
         </button>
         <Link
           to={`/project/${project.id}/calendar-print`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
           <CalendarDays size={14} /> 月历视图
         </Link>
@@ -182,7 +203,7 @@ export function SchedulePrintPage(): JSX.Element {
         )}
       </div>
 
-      {/* A4 分页纸面 */}
+      {/* A4 分页纸面（画板 09：宽 900 · paper 底 · line 描边 · padding 56） */}
       {pages.map((pageSections, idx) => (
         <div
           key={idx}
@@ -190,74 +211,71 @@ export function SchedulePrintPage(): JSX.Element {
             pageRefs.current[idx] = el;
           }}
           className="a4-page mx-auto mb-6 flex flex-col"
-          style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX, padding: 44 }}
+          style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX, padding: 56 }}
         >
-          {/* 页眉（running header 弱化：不重复大标题，仅作引导） */}
-          <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-            <span className="text-[12px] font-medium text-slate-500">{project.name}</span>
-            <span className="text-[11px] tabular-nums text-slate-400">
-              {idx === 0 ? `工期 ${startAt} — ${endAt}（共 ${totalDays} 天）` : `第 ${idx + 1} 页`}
-            </span>
-          </div>
+          {/* 打印头部（画板 09：项目名 18/700 + 委托方·周期 13 · 右 打印日期 11） */}
+          <header className="flex items-start justify-between border-b border-line pb-3">
+            <div>
+              <h1 className="text-[18px] font-bold leading-tight text-ink">{project.name}</h1>
+              <p className="mt-0.5 text-[13px] text-mist">
+                {project.clientName && <span>委托方：{project.clientName}　</span>}
+                周期：{startAt} – {endAt}（共 {totalDays} 天）
+              </p>
+            </div>
+            <span className="shrink-0 text-[11px] tabular-nums text-mist">打印日期 {nowText}</span>
+          </header>
 
-          {/* 第一页：项目信息（封面感）+ 时间轴摘要 */}
+          {/* 第一页：打印时间轴（甘特）+ 阶段清单 */}
           {idx === 0 && (
             <>
-              <h1 className="mb-5 text-[28px] font-bold leading-tight tracking-tight text-slate-900">
-                {project.name}
-              </h1>
-              <div className="text-xs leading-relaxed text-slate-500">
-                <p>
-                  {project.clientName && <span>客户：{project.clientName}　</span>}
-                  {project.address && <span>地址：{project.address}</span>}
-                </p>
-                <p className="mt-0.5">
-                  排期基准：{SCHEDULE_BASIS_LABELS[project.scheduleBasis] ?? SCHEDULE_BASIS_LABELS[ScheduleBasis.Calendar]}　·　打印时间：{nowText}
-                </p>
-              </div>
-
+              {/* 打印时间轴（画板 09：刻度行 + 每条阶段 阶段点 + 名称 + 日期区间 + 跨度色带） */}
               <section className="mt-6">
-                <h2 className="mb-2 text-sm font-semibold text-slate-800">时间轴摘要</h2>
-                <div className="flex h-9 w-full overflow-hidden rounded-lg border border-slate-200">
+                <h2 className="mb-2 text-[15px] font-semibold text-ink">打印时间轴</h2>
+                <div className="mb-1.5 flex justify-between text-[11px] text-mist">
+                  {monthsList.map((m) => (
+                    <span key={m}>{m}</span>
+                  ))}
+                </div>
+                <div className="space-y-1.5">
                   {sections.map((s) => {
-                    const days = totalDaysInclusive(s.startAt, s.endAt) || 1;
-                    const segIdx = resolveStageColorIndex(s.orderIndex, s.colorIndex);
+                    const g = bandGeom(s.startAt, s.endAt);
+                    const outline = stageBandOutline(s.orderIndex, s.colorIndex);
                     return (
-                      <div
-                        key={s.orderIndex}
-                        title={`${s.orderIndex}. ${s.name}（${s.startAt} — ${s.endAt} · ${statusLabel(s.status)}）`}
-                        className="schedule-bar-segment flex min-w-0 items-center justify-center text-[11px] font-semibold"
-                        style={{
-                          // 按天数比例分配宽度（旧实现 Math.max(12,…) 会导致 9 段合计溢出）
-                          flexGrow: days,
-                          flexBasis: 0,
-                          // 摘要条是宽面 → 亮色 lightBar（打印页恒浅色）；条内序号配 --stage-ink-sN，
-                          // 不能再用白字：芽白 s5 / 米白 s7 的白字对比度约 1.1，等于看不见。
-                          backgroundColor: STAGE_BAND_COLORS[segIdx] ?? STAGE_BAND_COLORS[9],
-                          color: STAGE_BAND_INK_COLORS[segIdx] ?? STAGE_BAND_INK_COLORS[9],
-                        }}
-                      >
-                        {s.orderIndex}
+                      <div key={s.orderIndex} className="flex items-center gap-3">
+                        <div className="flex w-40 shrink-0 items-center gap-1.5">
+                          <span
+                            className={`schedule-status-dot inline-block h-2.5 w-2.5 shrink-0 rounded-full ${stageSolidClass(s.orderIndex)}`}
+                          />
+                          <span className="truncate text-[13px] text-ink">{s.name}</span>
+                        </div>
+                        <div className="relative h-9 flex-1 rounded-lg bg-sunken">
+                          <div
+                            className={`schedule-bar-segment absolute inset-y-1.5 rounded-md ${stageBandClass(s.orderIndex)}`}
+                            style={{
+                              left: `${g.left}%`,
+                              width: `${g.width}%`,
+                              boxShadow: outline.boxShadow,
+                            }}
+                            title={`${s.orderIndex}. ${s.name}（${s.startAt} — ${s.endAt} · ${statusLabel(s.status)}）`}
+                          />
+                        </div>
+                        <span className="shrink-0 tabular-nums text-[11px] text-mist">
+                          {s.startAt} — {s.endAt}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
-                {/* 图例三块分行：阶段色块 / 状态 / 完成标记；取色统一走 STAGE_BAR_COLORS */}
-                <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-[11px] text-slate-500">
-                  <span className="inline-flex items-center gap-1.5">色块 = 阶段：</span>
-                  <span className="inline-flex items-center gap-1.5">
-                    {sections.slice(0, 9).map((s) => (
-                      <span
-                        key={s.orderIndex}
-                        className="schedule-status-dot inline-block h-3 w-3 rounded-sm"
-                        style={{
-                          backgroundColor:
-                            STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? STAGE_BAR_COLORS[9],
-                        }}
-                      />
-                    ))}
-                    <span className="text-slate-400">1→9</span>
-                  </span>
+                {/* 图例：阶段色点（实心块）+ 状态（全部命名 token，无裸 hex） */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-mist">
+                  <span className="inline-flex items-center gap-1.5">阶段色：</span>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                    <span
+                      key={n}
+                      className={`schedule-status-dot inline-block h-3 w-3 rounded-sm ${stageSolidClass(n)}`}
+                      title={`${n} ${STAGE_COLOR_NAMES[n] ?? ''}`}
+                    />
+                  ))}
                   <span className="inline-flex items-center gap-1.5">
                     状态：
                     {(
@@ -270,30 +288,64 @@ export function SchedulePrintPage(): JSX.Element {
                     ).map((st) => (
                       <span key={st} className="ml-1 inline-flex items-center gap-1">
                         <span
-                          className={`schedule-status-dot inline-block h-2.5 w-2.5 rounded-sm ${statusColor(st)}`}
+                          className={`schedule-status-dot inline-block h-2.5 w-2.5 rounded-full ${statusDotCls(st)}`}
                         />
                         {statusLabel(st)}
                       </span>
                     ))}
                   </span>
-                  <span className="inline-flex items-center gap-2 text-slate-400">✓ 已标记完成　·　□ 未完成</span>
                 </div>
               </section>
+
+              {/* 项目信息（画板 09 打印头部下方：排期基准 / 打印时间） */}
+              <p className="mt-4 text-xs leading-relaxed text-mist">
+                排期基准：{SCHEDULE_BASIS_LABELS[project.scheduleBasis] ?? SCHEDULE_BASIS_LABELS[ScheduleBasis.Calendar]}
+                {'　·　'}打印时间：{nowText}
+              </p>
             </>
           )}
 
-          {/* 本页阶段分组任务表 */}
-          <div className="mt-3 flex-1">
-            {pageSections.map((s) => (
-              <StageBlock key={`${s.orderIndex}-${s.name}`} section={s} chipCls={statusChipCls} label={statusLabel} />
-            ))}
-          </div>
+          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 34 · 数据行 42 · 斑马纹） */}
+          <section className="mt-6 break-inside-avoid">
+            <h2 className="mb-2 text-[15px] font-semibold text-ink">阶段清单</h2>
+            <table className="schedule-table w-full overflow-hidden rounded-lg border border-line text-[13px]">
+              <thead>
+                <tr className="bg-sunken text-left text-[11px] font-semibold text-mist">
+                  <th className="h-[34px] px-3 font-semibold">序号</th>
+                  <th className="px-3 font-semibold">阶段</th>
+                  <th className="px-3 font-semibold">起止日期</th>
+                  <th className="px-3 font-semibold">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageSections.map((s, i) => (
+                  <tr key={s.orderIndex} className={i % 2 === 1 ? 'bg-sunken/60' : ''}>
+                    <td className="h-[42px] px-3">
+                      <span
+                        className={`mr-1.5 inline-block h-3 w-3 rounded-sm align-middle ${stageSolidClass(s.orderIndex)}`}
+                      />
+                      <span className="text-ink">{s.orderIndex}</span>
+                    </td>
+                    <td className="px-3 text-ink">{s.name}</td>
+                    <td className="px-3 tabular-nums text-mist">{s.startAt} — {s.endAt}</td>
+                    <td className="px-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusChipCls(s.status)}`}
+                      >
+                        {statusLabel(s.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
 
-          {/* 页脚（更浅分隔 + tabular 页码） */}
-          <footer className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] tabular-nums text-slate-400">
-            <span>打印人：{currentMember?.name ?? '—'} · {nowText}</span>
+          {/* 打印页脚（画板 09：左 署名 · 右 页码） */}
+          <footer className="mt-auto flex items-center justify-between border-t border-line pt-3 text-[11px] tabular-nums text-mist">
+            <span>ID Plan · 项目排期与交付管理</span>
             <span>
-              第 {idx + 1} / {pages.length} 页 · ID Plan 日程表
+              第 {idx + 1} / {pages.length} 页
             </span>
           </footer>
         </div>
@@ -302,97 +354,18 @@ export function SchedulePrintPage(): JSX.Element {
   );
 }
 
-function StageBlock({
-  section,
-  chipCls,
-  label,
-}: {
-  section: ScheduleSection;
-  chipCls(status: StageStatus): string;
-  label(status: StageStatus): string;
-}): JSX.Element {
-  const stageColor = STAGE_BAR_COLORS[resolveStageColorIndex(section.orderIndex, section.colorIndex)] ?? STAGE_BAR_COLORS[9];
-  const hasTasks = section.tasks.length > 0;
-  return (
-    <section className="schedule-section mb-6 break-inside-avoid">
-      {/* 阶段标题行：序号色块 + 阶段名 + 日期（主次分开）+ 状态胶囊 */}
-      <h3 className="mb-2 flex items-center gap-2.5 text-[15px] font-semibold text-slate-800">
-        <span
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white"
-          style={{ backgroundColor: stageColor }}
-        >
-          {section.orderIndex}
-        </span>
-        <span className="truncate">{section.name}</span>
-        <span className="shrink-0 tabular-nums text-[11px] font-normal text-slate-400">
-          {section.startAt} — {section.endAt}
-        </span>
-        <span className={`ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-medium ${chipCls(section.status)}`}>
-          {label(section.status)}
-        </span>
-      </h3>
-      {!hasTasks ? (
-        <p className="rounded-md bg-slate-50 px-4 py-3 text-center text-xs text-slate-400">无任务</p>
-      ) : (
-        <table className="schedule-table w-full border-collapse text-[12px] leading-relaxed">
-          <thead>
-            <tr className="text-left">
-              <th className="w-[46%] border-b-2 border-slate-300 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                任务标题
-              </th>
-              <th className="w-[24%] border-b-2 border-slate-300 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                参与人
-              </th>
-              <th className="w-[16%] border-b-2 border-slate-300 px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                截止日
-              </th>
-              <th className="w-[14%] border-b-2 border-slate-300 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                状态
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {section.tasks.map((t, tIdx) => (
-              <tr
-                key={t.id}
-                className={`border-b border-slate-100 ${tIdx % 2 === 1 ? 'bg-slate-50/60' : ''} ${tIdx === section.tasks.length - 1 ? 'rounded-b-md' : ''}`}
-              >
-                <td className="px-3 py-2.5 text-slate-700">{t.title}</td>
-                <td className="px-3 py-2.5 text-slate-600">
-                  {t.assigneeNames.length > 0 ? (
-                    <span className="flex flex-wrap gap-1">
-                      {t.assigneeNames.map((n) => (
-                        <span
-                          key={n}
-                          className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600"
-                        >
-                          {n}
-                        </span>
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="text-slate-300">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{t.dueDate ?? '—'}</td>
-                <td className="whitespace-nowrap px-3 py-2.5">
-                  {t.done ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                      ✓ 完成
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                      □ 未完成
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
+/** 状态图例色点（命名 token，无裸 hex） */
+function statusDotCls(status: StageStatus): string {
+  switch (status) {
+    case StageStatus.InProgress:
+      return 'bg-pine';
+    case StageStatus.Completed:
+      return 'bg-moss';
+    case StageStatus.Delayed:
+      return 'bg-clay';
+    default:
+      return 'bg-mist';
+  }
 }
 
 export type { StageStatus };
