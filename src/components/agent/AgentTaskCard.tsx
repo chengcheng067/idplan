@@ -49,6 +49,7 @@ import type { Task } from '../../core/types/entities';
 import { taskIsDone } from '../../core/types/entities';
 import { ChangxiaError, ChangxiaErrorCode } from '../../core/types/enums';
 import type { HumanBoardGroup } from '../../core/agent/board';
+import { taskMetaText } from './taskMetaText';
 import { termFor } from '../../constants/agentTerms';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { remainingDays } from '../../lib/date';
@@ -297,9 +298,22 @@ export function AgentTaskCard({
         <StatusBadge status={task.status} />
       </div>
 
-      {/* 第二行：id + 来源徽标（等宽，开发者向高密度；人话模式**没有**这一行） */}
+      {/*
+        第二行：短号 · 来源 + 来源徽标（等宽，开发者向高密度；人话模式**没有**这一行）。
+
+        v0.7 T03 · P0-15 / V1-10：此格此前渲染 `task.externalId ?? task.id`
+        （幂等键，如 `workbuddy:run1:local3`）—— 那是**给机器看的**，人读不出
+        「这是第几条」。改为人读短号 `T-1042 · agent`（V1-14 ① 的正则口径）。
+
+        补零/进位/老数据归一**全部**由 `taskMetaText` → `formatTaskNo` 负责，
+        本处**不**拼 `'T-' + n`（该串的唯一出处纪律见 `core/lib/task-no.ts`）。
+        品牌级来源（`agentKind`：workbuddy / deepseek / …）仍由右侧 `SourceBadge`
+        承载，故本次改动**不丢信息**。
+      */}
       <div className="mt-1.5 flex items-center gap-2 text-[10px] text-mist">
-        <span className="truncate font-mono">{task.externalId ?? task.id}</span>
+        <span className="truncate font-mono" data-task-no="">
+          {taskMetaText(task)}
+        </span>
         <span className="ml-auto shrink-0">
           <SourceBadge task={task} label={assigneeLabel} />
         </span>

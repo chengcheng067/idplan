@@ -36,6 +36,7 @@ import { Zap } from 'lucide-react';
 
 import type { Task } from '../../core/types/entities';
 import { computeReadyTasks } from '../../core/agent/dag';
+import { taskMetaText } from './taskMetaText';
 import { termFor } from '../../constants/agentTerms';
 import { useLayoutStore } from '../../store/useLayoutStore';
 
@@ -97,8 +98,14 @@ export function ReadyQueue({
                 onClick={() => onOpenTask(t.id)}
                 className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
               >
-                <span className="truncate font-mono text-xs text-mist">
-                  {t.externalId ?? t.id}
+                {/*
+                  v0.7 T03 · P0-15：11/Regular mist 等宽带 —— 内容由
+                  `externalId`（机器幂等键）改为人读短号 `T-1042 · agent`
+                  （V1-14 ① 口径，与技术卡同一函数，保证两处逐字符一致）。
+                  字号按画板 07 由 `text-xs` 收紧到 `text-[11px]`。
+                */}
+                <span className="truncate font-mono text-[11px] text-mist" data-task-no="">
+                  {taskMetaText(t)}
                 </span>
                 <span className="truncate text-base font-semibold text-ink transition-colors hover:text-pine">
                   {t.title}
