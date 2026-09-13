@@ -419,8 +419,18 @@ export function downloadBackup(pkg: BackupPackage): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = backupFileName();
+  // ★ 挂载式 anchor：必须先把 <a> 挂进 document 再 click，点击后立刻移除。
+  //   为什么：detached 的 <a>（不挂 DOM）点击，Chromium 不发起「可被捕获的下载」——
+  //   Playwright 的 download 事件拿不到（实机走查 B3「下载事件已捕获」判 FAIL），
+  //   部分内核版本下甚至完全不产生下载。挂载式是标准做法，与用户真实点击行为一致。
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  // ★ revoke 挪到下一轮事件循环：旧实现「紧跟 click 同步 revoke」与下载启动存在竞态——
+  //   下载尚未读完 blob URL 就被撤销，可能导致下载中断或内容为空。让出一拍（setTimeout 0）
+  //   足以让下载引用住 blob，同时不长期占用内存。
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export type { AssignmentLog, StageLog };
