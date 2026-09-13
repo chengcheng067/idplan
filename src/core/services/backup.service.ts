@@ -419,17 +419,29 @@ export function downloadBackup(pkg: BackupPackage): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = backupFileName();
-  // ★ 挂载式 anchor：必须先把 <a> 挂进 document 再 click，点击后立刻移除。
-  //   为什么：detached 的 <a>（不挂 DOM）点击，Chromium 不发起「可被捕获的下载」——
-  //   Playwright 的 download 事件拿不到（实机走查 B3「下载事件已捕获」判 FAIL），
-  //   部分内核版本下甚至完全不产生下载。挂载式是标准做法，与用户真实点击行为一致。
+  // ★ 挂载式 anchor + revoke 让出一拍。两点理由，请勿「顺手整理」回去：
+  //
+  //  (1) 挂载式 anchor 是标准做法（appendChild → click → removeChild），
+  //      与用户真实点击行为一致。
+  //
+  //  (2) revoke 让出一拍属**防御性硬化，不是已证实的缺陷修复**：
+  //      「紧跟 click 同步 revoke」理论上与下载启动存在竞态，但按规范，revoke 只是
+  //      从 URL 映射表里摘除条目，**已持有 blob 引用的下载不受影响** —— 也就是说
+  //      我们**从未观测到它真的坏过**。改成 setTimeout 0 成本为零、且是业界通行写法，
+  //      故保留；但请勿把它当成「修好了一个 bug」引用。
+  //      同一写法已同步到 log.service.ts / schedule-print.ts(×2) / HandoffPanel.tsx，
+  //      它们同样是硬化，不是缺陷修复。
+  //
+  //  ⚠️ 切勿沿用「detached <a> 导致 Chromium 不发起可捕获下载」这个解释 —— 已被证伪：
+  //     挂载式改法（commit ce74d9f）确已进包（可在 build-dist 里抠到
+  //     appendChild→click→removeChild 字节），而实机走查 B3 依然恒红。
+  //     B3 恒红的真因在**观测侧**：Electron 由主进程处理下载（打包形态实测会弹 OS 原生
+  //     「另存为」对话框），Playwright 的 page 级 download 事件在 _electron 下收不到。
+  //     现 B3 已改为从主进程观察 session 的 will-download（见 scripts/electron-funcwalk.mjs）。
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  // ★ revoke 挪到下一轮事件循环：旧实现「紧跟 click 同步 revoke」与下载启动存在竞态——
-  //   下载尚未读完 blob URL 就被撤销，可能导致下载中断或内容为空。让出一拍（setTimeout 0）
-  //   足以让下载引用住 blob，同时不长期占用内存。
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 

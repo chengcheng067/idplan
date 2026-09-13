@@ -129,8 +129,12 @@ export async function exportSchedulePng(
   const a = document.createElement('a');
   a.href = url;
   a.download = fileName;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  // ★ 与 downloadBackup 同款：revoke 必须让出一拍（同步 revoke 与下载启动存在竞态，详见那里注释）
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /** 打印文件名（用户可见物）：id-plan-schedule-<项目名>-<时间戳>.png */
@@ -228,8 +232,12 @@ export async function exportSchedulePngPages(
     const a = document.createElement('a');
     a.href = url;
     a.download = withPageSuffix(baseFileName, i + 1, elements.length);
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    // ★ 与 downloadBackup 同款：revoke 必须让出一拍（同步 revoke 与下载启动存在竞态，详见那里注释）
+    setTimeout(() => URL.revokeObjectURL(url), 0);
     if (i < elements.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }

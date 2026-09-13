@@ -101,8 +101,12 @@ export function HandoffPanel({
     const a = document.createElement('a');
     a.href = url;
     a.download = `handoff-${projectName}-${new Date().toISOString().slice(0, 10)}.md`;
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    // ★ 与 downloadBackup 同款：revoke 必须让出一拍（同步 revoke 与下载启动存在竞态，详见那里注释）
+    setTimeout(() => URL.revokeObjectURL(url), 0);
     pushToast('success', `${termFor('handoff', termMode)} 已下载为 .md`);
   };
 
