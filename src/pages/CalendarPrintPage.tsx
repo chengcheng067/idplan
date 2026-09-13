@@ -7,7 +7,7 @@ import { ArrowLeft, Download, FileText, Printer } from 'lucide-react';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { useRoleGuard } from '../hooks/useRoleGuard';
+import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
 import {
   buildMonthMeta,
   computeCalendarEntry,
@@ -104,43 +104,74 @@ export function CalendarPrintPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
   const project = useProjectsStore((s) => s.projects.find((p) => p.id === id));
   const stages = useProjectsStore((s) => s.stages.filter((st) => st.projectId === id));
+  // ⚠️ v0.7-D 补漏新增：本页原先**没有**订阅 tasks，而收窄阶段要用
+  //    `computeRelatedStageIds`（其判定之一是「该阶段下有我参与的任务」）。
+  //    缺这一行 → 成员会漏掉「任务分派给我、但阶段负责人不是我」的那些阶段。
+  const tasks = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
   const members = useMembersStore((s) => s.members);
-  // v0.7-D：本页守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**）——
-  // 故不取 isAdmin，也不在页内自写 `!isMember` 之类的派生。
+  // v0.7-D：页首守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**）；
+  // `memberView` 口径与 ProjectDetailPage / MonthlyCalendarView **逐字一致**，不自造第三种判定。
   const { role, currentMember, hydrated } = useRoleGuard();
+  const memberView = isRestrictedView(role);
 
   const [pngBusy, setPngBusy] = useState(false);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   // 所有 Hook 必须在任何条件提前 return 之前调用完成
-  // 可见阶段（图例 / 逐日色带取色用）
+  //
+  // 相关阶段（v0.7-D 补漏）：**与 `ProjectDetailPage.tsx:64-77` 同一母本**——
+  //   管理员（memberView=false）→ `relatedStageIds=null` → 全量；
+  //   成员 → `computeRelatedStageIds` 收窄为「我负责（ownerId）或我名下有任务」的阶段；
+  //   未进入 → 空集（本页页首守卫已先重定向，接触不到）。
+  // 补漏背景：放开成员打印时**未同时收窄范围**，打印页成了「成员看到项目全量阶段」的侧门。
+  const relatedStageIds = useMemo(
+    () =>
+      computeRelatedStageIds({
+        memberView,
+        currentMemberId: currentMember?.id ?? null,
+        stages,
+        tasks,
+      }),
+    [memberView, currentMember, stages, tasks],
+  );
+
+  /** 收窄后的阶段集合：后续**一切**取数（月份范围 / 当前阶段 / 逐日色带 / 色泽说明）都用它 */
+  const scopedStages = useMemo(
+    () => (relatedStageIds ? stages.filter((s) => relatedStageIds.has(s.id)) : stages),
+    [relatedStageIds, stages],
+  );
+
+  // 可见阶段（图例 / 逐日色带取色用）——取收窄后的集合再滤 visible
   const visibleStages = useMemo(
-    () => stages.filter((s) => s.visible !== false).map((s) => ({
+    () => scopedStages.filter((s) => s.visible !== false).map((s) => ({
       orderIndex: s.orderIndex,
       colorIndex: s.colorIndex,
       startAt: s.startAt,
       endAt: s.endAt,
     })),
-    [stages],
+    [scopedStages],
   );
   // 月份覆盖范围（图3修复）：取「阶段实际起止 ∪ 项目计划基线」，避免阶段拖出计划范围后被裁剪
+  // ⚠️ 这里的 `stageSpan` 必须吃 `scopedStages`（不是 `stages`）：否则成员虽看不到无关阶段，
+  //    月份数却仍按全量阶段推算 → 泄漏「项目跨度到此为止」这一事实，且多出空白页。
   const months = useMemo(() => {
     if (!project) return [];
-    const span = stageSpan(stages);
+    const span = stageSpan(scopedStages);
     const s = span && span.minStart < project.plannedStartAt.slice(0, 10) ? span.minStart : project.plannedStartAt.slice(0, 10);
     const e = span && span.maxEnd > project.plannedEndAt.slice(0, 10) ? span.maxEnd : project.plannedEndAt.slice(0, 10);
     return monthsBetween(s, e);
-  }, [project, stages]);
+  }, [project, scopedStages]);
   const todayIso = localIso(new Date());
   const entries = useMemo(() => {
     if (!project) return [];
     return months.map((m) => {
       const meta = buildMonthMeta(m, todayIso);
-      const entry = computeCalendarEntry(project, stages, meta);
+      // 「当前阶段 / 进度 / 剩余天数」同样按收窄后的集合算（否则概览行会报出成员看不到的阶段）
+      const entry = computeCalendarEntry(project, scopedStages, meta);
       const grid = buildCalendarGrid(meta, todayIso, visibleStages);
       return { meta, entry, grid };
     });
-  }, [project, stages, visibleStages, months, todayIso]);
+  }, [project, scopedStages, visibleStages, months, todayIso]);
   const nowIso = new Date().toISOString();
   const nowText = `${nowIso.slice(0, 10)} ${nowIso.slice(11, 16)}`;
 
@@ -154,6 +185,11 @@ export function CalendarPrintPage(): JSX.Element {
    *   · **成员（受限）** → **允许留在页内只读导出**（本页零数据写操作：打印 / 读 DOM 导出 PNG /
    *     失败时一条 toast，`restPolicy` 仅只读）；
    *   · **管理员** → 行为不变。
+   *
+   * ⚠️ 「放开打印权限」**只是权限，不是可见范围**：阶段范围按 `computeRelatedStageIds`
+   * 收窄（与 ProjectDetailPage 同一口径，见上方 `scopedStages`），客户名（委托方）仅管理员可见。
+   * 放开前本页只对 admin 开放，故当时的无条件全量渲染是对的；放开成员后不收窄即侧门。
+   *
    * 旧注释口径「非管理员一律重定向」已作废。`role === null` 与「成员」是两档，切勿混同。
    */
   if (role === null) {
@@ -166,6 +202,27 @@ export function CalendarPrintPage(): JSX.Element {
         <p className="mb-3">未找到该项目。</p>
         <Link to="/" className="text-pine underline underline-offset-2">
           ← 返回项目列表
+        </Link>
+      </div>
+    );
+  }
+
+  /**
+   * 受限空态（口径与 `ProjectDetailPage.tsx:91-104` 同款）：成员且收窄后**无任何可打印阶段**
+   * → 明确告知「与你无关」，**不输出空白月历稿**。
+   *
+   * 判据取 `visibleStages.length`（= 真正会画进格子与图例的阶段，已含 `visible !== false` 过滤）
+   * 而非「相关阶段数」：否则「相关阶段都存在但全被隐藏」时会输出一份没有色带的空白月历。
+   *
+   * 注：`role === null` 走不到这里（页首守卫已重定向），故 `memberView` 在此等价于「是成员」，
+   * `currentMember` 必非空（`role` 由 `currentMember.roleKind` 派生）。
+   */
+  if (memberView && visibleStages.length === 0) {
+    return (
+      <div className="py-16 text-center text-mist">
+        <p className="mb-3">该项目的阶段与你无关。</p>
+        <Link to="/my-tasks" className="text-pine underline underline-offset-2">
+          ← 返回我的任务
         </Link>
       </div>
     );
@@ -237,9 +294,14 @@ export function CalendarPrintPage(): JSX.Element {
           <header className="flex items-start justify-between border-b border-line pb-2">
             <div>
               <h1 className="text-[26px] font-bold leading-tight text-ink">{project.name}</h1>
-              <p className="mt-0.5 text-[13px] text-mist">
-                委托方：{project.clientName || '—'}
-              </p>
+              {/* 委托方：仅管理员（与 ProjectDetailPage.tsx:181 同一门控口径）。
+                  本页放开成员打印前只对 admin 开放，无条件渲染当时是对的；
+                  放开后若不门控，客户名就成了「同一条数据一处屏蔽一处敞开」的洞。 */}
+              {role === 'admin' && (
+                <p className="mt-0.5 text-[13px] text-mist">
+                  委托方：{project.clientName || '—'}
+                </p>
+              )}
               <p className="text-[13px] text-mist">
                 周期：{project.plannedStartAt.slice(0, 10)} – {project.plannedEndAt.slice(0, 10)}
               </p>
@@ -308,7 +370,7 @@ export function CalendarPrintPage(): JSX.Element {
               {visibleStages.map((s, i) => {
                 const nameIdx = resolveStageColorIndex(s.orderIndex, s.colorIndex);
                 const label = STAGE_COLOR_NAMES[nameIdx] ?? '';
-                const stage = stages.find((st) => st.orderIndex === s.orderIndex && st.visible !== false);
+                const stage = scopedStages.find((st) => st.orderIndex === s.orderIndex && st.visible !== false);
                 return (
                   <span key={s.orderIndex}>
                     {i > 0 ? '　' : ''}

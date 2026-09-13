@@ -100,9 +100,15 @@ import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 
 const PROJECT_ID = 'proj_dl2';
 const STAGE_ID = 'stg_dl2';
+const OTHER_STAGE_ID = 'stg_dl2_other';
 const ADMIN_ID = 'm-admin-dl2';
 const MEMBER_ID = 'm-member-dl2';
 const TODAY = '2026-02-01';
+
+/** 成员相关的阶段名（成员应看到） */
+const MY_STAGE_NAME = '现场勘测';
+/** 与成员**无关**的阶段名（阶段负责人是管理员，其下也无成员的任务）——成员绝不应看到 */
+const OTHER_STAGE_NAME = '幕墙专项深化';
 
 const PROJECT: Project = {
   id: PROJECT_ID,
@@ -131,12 +137,37 @@ const STAGE: Stage = {
   orderIndex: 1,
   templateKey: null,
   colorIndex: 1,
-  name: '现场勘测',
+  name: MY_STAGE_NAME,
   ratioPercent: 100,
   startAt: '2026-01-05T00:00:00Z',
   endAt: '2026-01-20T23:59:59Z',
   status: StageStatus.InProgress,
   ownerId: MEMBER_ID,
+  visible: true,
+  resourcePath: null,
+  revision: 1,
+  updatedAt: '2026-01-01T00:00:00Z',
+};
+
+/**
+ * 「与我无关」的阶段（v0.7-D 补漏组的**核心自变量**）：
+ *   · `ownerId = ADMIN_ID`（不是成员）且其下无成员参与的任务 → `computeRelatedStageIds` 不收它；
+ *   · **`endAt` 刻意伸到项目计划基线之后（2026-06-20 vs 基线 2026-03-01）**——
+ *     这是为了能钉死「月份范围也必须按收窄后的集合推算」：
+ *     若只看 `visibleStages` 而漏改 `stageSpan(stages)`，成员月历仍会多出 4–6 月（空白页 + 跨度泄漏）。
+ */
+const OTHER_STAGE: Stage = {
+  id: OTHER_STAGE_ID,
+  projectId: PROJECT_ID,
+  orderIndex: 2,
+  templateKey: null,
+  colorIndex: 2,
+  name: OTHER_STAGE_NAME,
+  ratioPercent: 100,
+  startAt: '2026-05-01T00:00:00Z',
+  endAt: '2026-06-20T23:59:59Z',
+  status: StageStatus.NotStarted,
+  ownerId: ADMIN_ID,
   visible: true,
   resourcePath: null,
   revision: 1,
@@ -196,12 +227,16 @@ type Actor = 'admin' | 'member' | 'none';
  * 裸写会触发「update … not wrapped in act」告警 —— 那是真实信号（`tests/setup.ts`
  * 明确要求不得靠关开关压回去），故在**源头**包住，而不是在每个调用点补。
  */
-function setActor(actor: Actor, opts: { hydrated?: boolean } = {}): void {
+function setActor(
+  actor: Actor,
+  opts: { hydrated?: boolean; stages?: Stage[]; tasks?: Task[] } = {},
+): void {
   act(() => {
     useProjectsStore.getState().replaceAll({
       projects: [PROJECT],
-      stages: [STAGE],
-      tasks: [TASK],
+      // 默认两段：成员相关（STAGE）+ 与成员无关（OTHER_STAGE）→ 可判定「收窄是否生效」
+      stages: opts.stages ?? [STAGE, OTHER_STAGE],
+      tasks: opts.tasks ?? [TASK],
     });
     useMembersStore.getState().setAll([ADMIN, MEMBER]);
     const currentMemberId =
@@ -210,6 +245,9 @@ function setActor(actor: Actor, opts: { hydrated?: boolean } = {}): void {
     useUiStore.setState({ stageDrawerStageId: null });
   });
 }
+
+/** 「成员零相关阶段」场景：项目里只有与成员无关的阶段（负责人是管理员，其下无成员任务） */
+const ZERO_RELATED: { stages: Stage[]; tasks: Task[] } = { stages: [OTHER_STAGE], tasks: [] };
 
 /* ====================================================================================
  * 渲染 / 清理
@@ -584,20 +622,184 @@ function readCode(file: string): string {
 
 describe('v0.7-D · 打印页守卫判据源码锁（变异方向永久红）', () => {
   for (const file of ['SchedulePrintPage.tsx', 'CalendarPrintPage.tsx']) {
-    it(`★ ${file}：守卫为 role === null（不得 !isAdmin / 不得 isRestrictedView）`, () => {
+    it(`★ ${file}：守卫为 role === null（不得 !isAdmin / 不得用受限判定作重定向条件）`, () => {
       const code = readCode(file);
 
       // 正向：两档判据必须落在 role 上
       expect(code, '必须按 role === null 判定「未进入身份」').toContain('if (role === null)');
       expect(code).toContain('return <Navigate to="/" replace />;');
 
-      // 反向（本轮两个高危变异方向）：
-      //   ① 改回「受限即重定向」（isRestrictedView）→ 成员又被挡
-      //   ② 用 !isAdmin 当判据 → 与 isRestrictedView 等价，同样的错
-      expect(code, '不得用 isRestrictedView 作重定向判据').not.toContain('isRestrictedView');
-      expect(code, '不得用 !isAdmin 作重定向判据').not.toContain('!isAdmin');
+      // 反向（本轮两个高危变异方向）——注意锁的是「当重定向条件用」，而不是「文件里出现过」：
+      //   v0.7-D 补漏后两页**合法地**导入了 isRestrictedView（用来算 memberView 收窄范围），
+      //   故这里只禁 `if (isRestrictedView(` / `if (!isAdmin)` 这种**当守卫用**的写法。
+      expect(code, '不得用 isRestrictedView 当重定向判据').not.toContain('if (isRestrictedView(');
+      expect(code, '不得用 !isAdmin 当重定向判据').not.toContain('if (!isAdmin)');
       // 铁律：页面内不得自写 !isMember 之类的派生
       expect(code, '不得自写 isMember 派生').not.toContain('isMember');
     });
   }
+});
+
+/* ====================================================================================
+ * ⑤ 阶段范围 + 委托方（v0.7-D 补漏 · team-lead 复审认定「真漏」）
+ *
+ * 事实依据（team-lead 核出，本轮按此修）：
+ *   ① `ProjectDetailPage.tsx:60,64-77` 与 `MonthlyCalendarView.tsx:131,162-172` **都**按
+ *      `computeRelatedStageIds` 收窄；两个打印页原先是**唯一例外**（全量 `visible !== false`）
+ *      → 成员只要打开打印页就能看到项目全量阶段 = 绕过成员可见性规则的侧门。
+ *   ② `ProjectDetailPage.tsx:181` 明确 `{!memberView && project.clientName && …}`，
+ *      而打印页原先**无条件**渲染 `委托方：`（放开前只对 admin 开放，故当时是对的；
+ *      放开后就成了「同一条数据一处屏蔽一处敞开」的洞）。
+ *
+ * ⚠️ 为什么不能只断言「成员看不到无关阶段」：
+ *   把打印页整页删掉、或者让成员又撞回重定向，都能让这条变绿（假绿）。
+ *   故每组都配 **admin 对照组**（必须照旧看到全量 + 委托方），并另断言「成员仍看得到自己的阶段」。
+ * ==================================================================================== */
+
+/** 某段阶段名是否出现在页面上（日历页以 `（阶段名）` 形态落在「阶段色泽」行） */
+const showsStage = (h: ParentNode, name: string): boolean => (h.textContent ?? '').includes(name);
+
+describe('v0.7-D 补漏 · 打印页阶段范围按成员收窄（与详情页 / 月历同一口径）', () => {
+  it('★ 成员 · 日程表打印页：看得到自己的阶段，看不到与自己无关的阶段', () => {
+    setActor('member');
+    const h = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+
+    expect(printed(h), '前提：成员仍在页内（不是又撞回重定向）').toBe(true);
+    expect(showsStage(h, MY_STAGE_NAME), '成员必须看得到自己的阶段').toBe(true);
+    expect(showsStage(h, OTHER_STAGE_NAME), '成员不得看到与自己无关的阶段').toBe(false);
+
+    // 阶段清单表的行数必须恰为「我的相关阶段」数（1），而不是全量（2）
+    expect(h.querySelectorAll('tbody tr').length).toBe(1);
+  });
+
+  it('★ 成员 · 月历打印页：图例只列自己的阶段，不含无关阶段名', () => {
+    setActor('member');
+    const h = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+
+    expect(printed(h)).toBe(true);
+    expect(showsStage(h, MY_STAGE_NAME), '成员必须看得到自己的阶段').toBe(true);
+    expect(showsStage(h, OTHER_STAGE_NAME), '成员不得看到与自己无关的阶段').toBe(false);
+  });
+
+  it('★ 成员 · 月历打印页：月份范围也只按收窄后的阶段推算（无关阶段不得撑开月份）', () => {
+    setActor('member');
+    const h = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+
+    // OTHER_STAGE 伸到 2026-06，项目基线只到 2026-03。
+    // 若只改 `visibleStages` 而漏改 `stageSpan(stages)` / `computeCalendarEntry(project, stages, …)`，
+    // 成员月历会多出 4–6 月（既泄漏「项目跨度到此」的事实，又多出空白页）。
+    expect(showsStage(h, '2026年6月'), '成员月历不得出现无关阶段撑开的月份').toBe(false);
+    expect(showsStage(h, '2026年3月'), '项目基线内的月份照旧要有').toBe(true);
+  });
+
+  it('对照组 · 管理员 · 两页均照旧看到全量阶段（含无关阶段）——收紧不得收过头', () => {
+    setActor('admin');
+
+    const sch = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+    expect(showsStage(sch, MY_STAGE_NAME)).toBe(true);
+    expect(showsStage(sch, OTHER_STAGE_NAME), '管理员必须仍看到全量阶段').toBe(true);
+    expect(sch.querySelectorAll('tbody tr').length).toBe(2);
+
+    const cal = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+    expect(showsStage(cal, OTHER_STAGE_NAME), '管理员必须仍看到全量阶段').toBe(true);
+    expect(showsStage(cal, '2026年6月'), '管理员月历照旧覆盖到无关阶段所在月份').toBe(true);
+  });
+
+  it('★ 成员 · 零相关阶段：两页均走受限空态（不输出白纸稿、不输出全量）', () => {
+    setActor('member', ZERO_RELATED);
+
+    for (const path of ['schedule-print', 'calendar-print']) {
+      const h = renderAt(`/project/${PROJECT_ID}/${path}`);
+      expect(printed(h), `${path}：零相关阶段时不得输出打印稿`).toBe(false);
+      expect(h.textContent, `${path}：应明确告知与成员无关`).toContain('该项目的阶段与你无关');
+      expect(showsStage(h, OTHER_STAGE_NAME), `${path}：空态里也不得泄漏无关阶段`).toBe(false);
+      // 反向：不是「把页面搞崩了」——要能看到返回入口
+      expect(h.textContent).toContain('返回我的任务');
+    }
+  });
+});
+
+describe('v0.7-D 补漏 · 打印页「委托方」仅管理员可见（与详情页同一门控）', () => {
+  it('★ 成员 · 两页均不出现「委托方」字样（客户名不因打印而敞开）', () => {
+    setActor('member');
+
+    const sch = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+    expect(sch.textContent, '日程表打印页不得出现委托方').not.toContain('委托方');
+    expect(sch.textContent, '客户名本身也不得出现').not.toContain(PROJECT.clientName);
+
+    const cal = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+    expect(cal.textContent, '月历打印页不得出现委托方').not.toContain('委托方');
+    expect(cal.textContent, '客户名本身也不得出现').not.toContain(PROJECT.clientName);
+  });
+
+  it('对照组 · 管理员 · 两页均照旧出现「委托方：客户甲」', () => {
+    setActor('admin');
+
+    const sch = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+    expect(sch.textContent).toContain('委托方');
+    expect(sch.textContent).toContain(PROJECT.clientName);
+
+    const cal = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+    expect(cal.textContent).toContain('委托方');
+    expect(cal.textContent).toContain(PROJECT.clientName);
+  });
+});
+
+/* ====================================================================================
+ * ⑥ 源码锁（补漏组）：范围收窄与委托方门控的静态钉死
+ * ==================================================================================== */
+
+/**
+ * 找出**未被 `role === 'admin'` 门控**的「委托方」出现点。
+ * 做法：全文扫 `委托方`，回溯 400 字符窗口，要求窗口里出现 `role === 'admin'`。
+ * （注释已由 `readCode` 剥掉，故注释里引用「委托方」不会误伤。）
+ */
+function ungatedClientNameSpots(code: string): string[] {
+  const spots: string[] = [];
+  let idx = code.indexOf('委托方');
+  while (idx !== -1) {
+    const window = code.slice(Math.max(0, idx - 400), idx);
+    if (!window.includes("role === 'admin'")) spots.push(code.slice(idx, idx + 40));
+    idx = code.indexOf('委托方', idx + 1);
+  }
+  return spots;
+}
+
+describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () => {
+  it('★ SchedulePrintPage：走 computeRelatedStageIds，且阶段入参是收窄后的集合', () => {
+    const code = readCode('SchedulePrintPage.tsx');
+
+    expect(code, '必须走既有唯一口径 computeRelatedStageIds').toContain('computeRelatedStageIds');
+    expect(code, 'memberView 口径必须与详情页一致').toContain('isRestrictedView(role)');
+    // 反向：不得把**全量** stages 直接喂给打印数据组装（退回全量 → 红）
+    expect(code, '不得把全量 stages 喂给 buildScheduleSections').not.toContain(
+      'buildScheduleSections({ project, stages,',
+    );
+    // 空态必须存在（零相关阶段时不得输出白纸稿）
+    expect(code).toContain('该项目的阶段与你无关');
+  });
+
+  it('★ CalendarPrintPage：订阅 tasks（收窄判定需要）且月份范围吃收窄后的集合', () => {
+    const code = readCode('CalendarPrintPage.tsx');
+
+    expect(code, '必须走既有唯一口径 computeRelatedStageIds').toContain('computeRelatedStageIds');
+    expect(code, 'memberView 口径必须与详情页一致').toContain('isRestrictedView(role)');
+    // 反向：不得用**全量** stages 推算月份跨度（只改 visibleStages 漏改这处 → 红）
+    expect(code, 'stageSpan 必须吃收窄后的集合').not.toContain('stageSpan(stages)');
+    expect(code, 'computeCalendarEntry 必须吃收窄后的集合').not.toContain(
+      'computeCalendarEntry(project, stages,',
+    );
+    // 正向：收窄后的集合变量必须真的被用于可见阶段过滤
+    expect(code).toContain('scopedStages.filter((s) => s.visible !== false)');
+    expect(code).toContain('该项目的阶段与你无关');
+  });
+
+  it('★ 两页：「委托方」必须被 role === "admin" 门控（不得无条件渲染）', () => {
+    for (const file of ['SchedulePrintPage.tsx', 'CalendarPrintPage.tsx']) {
+      const code = readCode(file);
+      // 前提：该文件确实渲染了委托方（否则下面的「全部有门控」是空过）
+      expect(code, `${file} 应包含「委托方」`).toContain('委托方');
+      expect(ungatedClientNameSpots(code), `${file} 存在无门控的「委托方：」`).toEqual([]);
+    }
+  });
 });

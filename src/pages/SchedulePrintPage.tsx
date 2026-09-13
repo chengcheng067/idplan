@@ -6,7 +6,7 @@ import { ArrowLeft, CalendarDays, Download, FileText, Printer } from 'lucide-rea
 
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
-import { useRoleGuard } from '../hooks/useRoleGuard';
+import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
 import { StageStatus, ScheduleBasis, SCHEDULE_BASIS_LABELS } from '../core/types/enums';
 import {
   STAGE_COLOR_NAMES,
@@ -43,9 +43,11 @@ export function SchedulePrintPage(): JSX.Element {
   const stages = useProjectsStore((s) => s.stages.filter((st) => st.projectId === id));
   const tasks = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
   const members = useMembersStore((s) => s.members);
-  // v0.7-D：本页守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**，
-  // 不可混同）——故这里不取 isAdmin，也不在页内自写 `!isMember` 之类的派生。
-  const { role, hydrated } = useRoleGuard();
+  // v0.7-D：页首守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**，
+  // 不可混同）；`memberView` 的口径与 ProjectDetailPage / MonthlyCalendarView **逐字一致**，
+  // 不自造第三种判定。
+  const { role, currentMember, hydrated } = useRoleGuard();
+  const memberView = isRestrictedView(role);
 
   const [pngBusy, setPngBusy] = useState(false);
   const [pdfHint, setPdfHint] = useState(false);
@@ -53,9 +55,33 @@ export function SchedulePrintPage(): JSX.Element {
 
   // ⚠️ 所有 Hook 必须在任何条件提前 return 之前调用完成，否则不同 render 路径下
   //    React 记录的 Hook 数量不一致会触发 error #310。
+  //
+  // 相关阶段（v0.7-D 补漏）：**与 `ProjectDetailPage.tsx:64-77` 同一母本**——
+  //   管理员（memberView=false）→ `relatedStageIds=null` → 全量；
+  //   成员 → `computeRelatedStageIds` 收窄为「我负责（ownerId）或我名下有任务」的阶段；
+  //   未进入 → 空集（但本页页首守卫已先把它重定向掉，接触不到这里）。
+  // 补漏背景：放开成员打印时**未同时收窄范围**，导致打印页成了「成员看到项目全量阶段」
+  // 的侧门（详情页与月历都收窄，打印页是唯一例外）。本轮按母本补齐。
+  const relatedStageIds = useMemo(
+    () =>
+      computeRelatedStageIds({
+        memberView,
+        currentMemberId: currentMember?.id ?? null,
+        stages,
+        tasks,
+      }),
+    [memberView, currentMember, stages, tasks],
+  );
+
+  /** 收窄后的阶段集合：全量（admin）或仅与当前成员相关——后续一切取数都用它，不再直接用 `stages` */
+  const visibleStages = useMemo(
+    () => (relatedStageIds ? stages.filter((s) => relatedStageIds.has(s.id)) : stages),
+    [relatedStageIds, stages],
+  );
+
   const sections = useMemo(
-    () => (project ? buildScheduleSections({ project, stages, tasks, members }) : []),
-    [project, stages, tasks, members],
+    () => (project ? buildScheduleSections({ project, stages: visibleStages, tasks, members }) : []),
+    [project, visibleStages, tasks, members],
   );
   const pages = useMemo(() => paginateSections(sections), [sections]);
   const nowIso = new Date().toISOString();
@@ -96,12 +122,15 @@ export function SchedulePrintPage(): JSX.Element {
    *   · **未进入身份（role === null）** → 仍重定向回首页。没有身份就没有可见范围，
    *     与 `ProjectDetailPage` 的「受限空态」同档，保持现状不放行。
    *   · **成员（受限）** → **允许留在页内只读导出**：本页零数据写操作
-   *     （只有 `window.print()` / 读 DOM 导出 PNG / 失败时一条 toast），
-   *     故「看得到 → 打得出来」不扩大写权限面。
+   *     （只有 `window.print()` / 读 DOM 导出 PNG / 失败时一条 toast）。
    *   · **管理员** → 行为不变。
    *
-   * 旧注释写的是「非管理员重定向（打印内容含全员任务，敏感信息）」，那与本次决策相悖，已作废：
-   * 打印稿本就是给委托方看的对外交付物，成员打印的意义正在于此。
+   * ⚠️ 但「放开打印权限」**只是权限，不是可见范围**：范围仍按 `computeRelatedStageIds`
+   * 收窄（与 ProjectDetailPage / MonthlyCalendarView 同一口径，见上方 `visibleStages`），
+   * 客户名（委托方）亦仅管理员可见。放开前打印页只对 admin 开放，故当时的无条件渲染是对的；
+   * 放开成员后若不收窄，打印页就成了绕过成员可见性规则的侧门。
+   *
+   * 旧注释「非管理员重定向（打印内容含全员任务，敏感信息）」已作废。
    *
    * 判据口径：`role === null` ≠「成员」，**不要**把 `role === null` 并进允许档
    * （那等于让未进入身份者也拿到全员排期）。本判定是页内唯一守卫，与 `useRoleGuard()` 同源。
@@ -116,6 +145,30 @@ export function SchedulePrintPage(): JSX.Element {
         <p className="mb-3">未找到该项目。</p>
         <Link to="/" className="text-pine underline underline-offset-2">
           ← 返回项目列表
+        </Link>
+      </div>
+    );
+  }
+
+  /**
+   * 受限空态（口径与 `ProjectDetailPage.tsx:91-104` 同款）：成员且收窄后**无任何可打印阶段**
+   * → 明确告知「与你无关」，**不输出白纸稿**（一张只有表头的空 A4 会被误当成
+   * 「这个项目没有阶段」，比看不到更糟）。
+   *
+   * 判据取 `sections.length`（= 真正会上屏的阶段数，已含 `buildScheduleSections` 内部的
+   * `visible !== false` 过滤）而非母本的「相关阶段数」：母本没有 `visible` 这一层，
+   * 这里若只数相关阶段，会出现「相关阶段都存在但全被隐藏 → 仍输出空白 A4」的漏网。
+   *
+   * 注：`role === null` 走不到这里（页首守卫已重定向），故 `memberView` 在此等价于「是成员」，
+   * `currentMember` 必非空（`role` 由 `currentMember.roleKind` 派生）——不存在母本里的
+   * 「请先点击右上角『进入身份』」那一支。
+   */
+  if (memberView && sections.length === 0) {
+    return (
+      <div className="py-16 text-center text-mist">
+        <p className="mb-3">该项目的阶段与你无关。</p>
+        <Link to="/my-tasks" className="text-pine underline underline-offset-2">
+          ← 返回我的任务
         </Link>
       </div>
     );
@@ -234,7 +287,12 @@ export function SchedulePrintPage(): JSX.Element {
             <div>
               <h1 className="text-[18px] font-bold leading-tight text-ink">{project.name}</h1>
               <p className="mt-0.5 text-[13px] text-mist">
-                {project.clientName && <span>委托方：{project.clientName}　</span>}
+                {/* 委托方：仅管理员（与 ProjectDetailPage.tsx:181 同一门控口径）。
+                    放开成员打印前此页只对 admin 开放，无条件渲染当时是对的；
+                    放开后若不门控，客户名就成了「同一条数据一处屏蔽一处敞开」的洞。 */}
+                {role === 'admin' && project.clientName && (
+                  <span>委托方：{project.clientName}　</span>
+                )}
                 周期：{startAt} – {endAt}（共 {totalDays} 天）
               </p>
             </div>
