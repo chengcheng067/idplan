@@ -22,6 +22,9 @@
  *   ③ **只读性**：打印页对成员只读的正确实现不是「把写入口禁用」，而是**页内没有写入口**。
  *      故断言页内无任何表单控件、交互控件只剩只读集合，且点「打印 / 导出 PDF」前后
  *      store 的引用完全不变（真消费一次，而不是只看有没有按钮）。
+ *   ④ **范围收窄 + 任务支**（v0.7-D 补漏 / 补锁）：成员在打印页只能看到「与自己相关」的阶段，
+ *      相关性的**两支撑**（`ownerId` = 我 / 该阶段下有我参与的任务）各配**唯一自变量**，
+ *      使任一支失效都会**变红**（详见「任务支」组的补锁背景）。
  *
  * ── 为什么必须带 admin / none 对照组 ──
  *   旧实现是「非管理员一律重定向」。若只断言「成员不重定向」，那么**把守卫整个删掉**
@@ -101,6 +104,7 @@ import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 const PROJECT_ID = 'proj_dl2';
 const STAGE_ID = 'stg_dl2';
 const OTHER_STAGE_ID = 'stg_dl2_other';
+const TASK_ONLY_STAGE_ID = 'stg_dl2_taskonly';
 const ADMIN_ID = 'm-admin-dl2';
 const MEMBER_ID = 'm-member-dl2';
 const TODAY = '2026-02-01';
@@ -109,6 +113,8 @@ const TODAY = '2026-02-01';
 const MY_STAGE_NAME = '现场勘测';
 /** 与成员**无关**的阶段名（阶段负责人是管理员，其下也无成员的任务）——成员绝不应看到 */
 const OTHER_STAGE_NAME = '幕墙专项深化';
+/** 「任务支专供」阶段名：负责人是管理员，但成员在该阶段下有一条任务 → 成员**必须**看到 */
+const TASK_ONLY_STAGE_NAME = '灯光专项深化';
 
 const PROJECT: Project = {
   id: PROJECT_ID,
@@ -198,6 +204,64 @@ const TASK: Task = {
   updatedAt: '2026-01-01T00:00:00Z',
 };
 
+/**
+ * ★「任务支专供」阶段（v0.7-D **补锁**组的新自变量，spec-only）：
+ *   · `ownerId = ADMIN_ID` → `computeRelatedStageIds` 的「我负责」支**不成立**；
+ *   · 其下有一条任务（`TASK_ONLY_TASK`）`assigneeIds` 含成员 → 「该阶段下有我参与的任务」支**成立**。
+ *
+ * 为什么必须单独造它（**结构性证明**，team-lead 复核给出）：
+ *   `STAGE.ownerId = MEMBER_ID` 且其下也有成员任务 → **两支同时成立**，故它**无法区分**
+ *   到底是哪一支在起作用；`OTHER_STAGE.ownerId = ADMIN_ID` 且其下无任务 → 两队支都不成立。
+ *   于是「任务支」在旧夹具里**从不作为任何阶段被纳入的唯一理由** → 把 `tasks` 恒置空，
+ *   相关性判定结果**一点不变** → 检查恒绿（**无效测试**）。本夹具是补上这个唯一理由。
+ *
+ * ⚠️ `endAt`（2026-02-28）刻意**留在项目计划基线内**（基线 2026-01-01 – 2026-03-01）：
+ *   「月份范围收窄」那条断言（成员月历不得出现 `2026年6月`）必须由 `OTHER_STAGE` 独占自变量；
+ *   若此处也伸出基线，两条断言会互相污染（改一处会同时动另一条）。
+ */
+const TASK_ONLY_STAGE: Stage = {
+  id: TASK_ONLY_STAGE_ID,
+  projectId: PROJECT_ID,
+  orderIndex: 3,
+  templateKey: null,
+  colorIndex: 3,
+  name: TASK_ONLY_STAGE_NAME,
+  ratioPercent: 100,
+  startAt: '2026-02-01T00:00:00Z',
+  endAt: '2026-02-28T23:59:59Z',
+  status: StageStatus.NotStarted,
+  ownerId: ADMIN_ID,
+  visible: true,
+  resourcePath: null,
+  revision: 1,
+  updatedAt: '2026-01-01T00:00:00Z',
+};
+
+/** 任务支的唯一凭据：分派给成员、但落在「负责人不是我」的阶段下 */
+const TASK_ONLY_TASK: Task = {
+  id: 'tsk_dl2_taskonly',
+  taskNo: 2,
+  projectId: PROJECT_ID,
+  stageId: TASK_ONLY_STAGE_ID,
+  title: '灯具选型',
+  done: false,
+  assigneeId: MEMBER_ID,
+  assigneeIds: [MEMBER_ID],
+  dueDate: '2026-02-10',
+  source: 'human',
+  externalId: null,
+  agentId: null,
+  status: TaskStatus.Todo,
+  description: null,
+  dependsOn: [],
+  artifacts: [],
+  startAt: null,
+  claimedAt: null,
+  orderIndex: 2,
+  revision: 1,
+  updatedAt: '2026-01-01T00:00:00Z',
+};
+
 function makeMember(id: string, name: string, roleKind: MemberRoleKind): Member {
   return {
     id,
@@ -234,9 +298,13 @@ function setActor(
   act(() => {
     useProjectsStore.getState().replaceAll({
       projects: [PROJECT],
-      // 默认两段：成员相关（STAGE）+ 与成员无关（OTHER_STAGE）→ 可判定「收窄是否生效」
-      stages: opts.stages ?? [STAGE, OTHER_STAGE],
-      tasks: opts.tasks ?? [TASK],
+      // 默认三段，**刻意覆盖两支撑的全部三种组合**（这是「范围收窄」组的自变量完整性）：
+      //   · STAGE           → ownerId 支 ✅ + 任务支 ✅（两支都成立，无法单独归因）
+      //   · TASK_ONLY_STAGE → ownerId 支 🚫 + 任务支 ✅（**仅任务支成立** → 任务的唯一自变量）
+      //   · OTHER_STAGE     → ownerId 支 🚫 + 任务支 🚫（两支都不成立 → 必须被收掉）
+      // 少了中间这段，`tasks` 订阅就是**无行为差异的必要输入**（删掉检查不会红）= 无效测试。
+      stages: opts.stages ?? [STAGE, TASK_ONLY_STAGE, OTHER_STAGE],
+      tasks: opts.tasks ?? [TASK, TASK_ONLY_TASK],
     });
     useMembersStore.getState().setAll([ADMIN, MEMBER]);
     const currentMemberId =
@@ -409,13 +477,38 @@ describe('v0.7-D · 打印页三档守卫（成员放开为只读导出）', () 
    *   `!hydrated` → 加载态（不重定向）；`role === null` → 重定向。
    * 若有人把 `role === null` 并进 `!hydrated` 分支（或反过来），本用例会红。
    */
-  it('闸门分档 · hydrated=false 时不重定向也不出内容，只出加载态（不得与身份闸门合并）', () => {
+  it('闸门分档 · hydrated=false 时**两页**都不重定向也不出内容，只出加载态（不得与身份闸门合并）', () => {
+    // ⚠️ 补锁（消融普查发现）：原用例只跑了 `schedule-print` → CalendarPrintPage 的
+    //    装载闸门消融后**全绿**（未锁住）。两页都有这道闸门，故两页都断言。
     setActor('member', { hydrated: false });
-    const h = renderAt(`/project/${PROJECT_ID}/schedule-print`);
 
-    expect(redirectedHome(h), '装载未完成时不得重定向').toBe(false);
-    expect(printed(h), '装载未完成时不得渲染打印内容').toBe(false);
-    expect(h.textContent).toContain('正在装载日程表');
+    for (const [path, loadingText] of [
+      ['schedule-print', '正在装载日程表'],
+      ['calendar-print', '正在装载月历'],
+    ] as const) {
+      const h = renderAt(`/project/${PROJECT_ID}/${path}`);
+
+      expect(redirectedHome(h), `${path}：装载未完成时不得重定向`).toBe(false);
+      expect(printed(h), `${path}：装载未完成时不得渲染打印内容`).toBe(false);
+      expect(h.textContent, `${path}：应出加载态`).toContain(loadingText);
+    }
+  });
+
+  it('★ 未知项目 id：两页均出「未找到该项目」（不是崩溃、不是白页、也不是重定向）', () => {
+    // ⚠️ 补锁（消融普查发现）：去掉 `if (!project)` 空态后**全绿**（未锁住）。
+    //    这条分支是「成员点了一个已被删除 / 别人发来的失效链接」的真实路径。
+    setActor('member');
+
+    for (const path of ['schedule-print', 'calendar-print']) {
+      const h = renderAt(`/project/__not_exist__/${path}`);
+
+      expect(h.textContent, `${path}：未知项目应给出明确空态`).toContain('未找到该项目');
+      expect(printed(h), `${path}：未知项目不得渲染打印稿`).toBe(false);
+      expect(
+        redirectedHome(h),
+        `${path}：未知项目**不是**「未进入身份」，不得被重定向（两档不可混同）`,
+      ).toBe(false);
+    }
   });
 });
 
@@ -620,6 +713,16 @@ function readCode(file: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }
 
+/**
+ * 取 `marker` 之后的 `len` 个字符（= 该调用点的**实参窗口**）。
+ * 用于「某项必须出现在**这个调用**里」，避免全文 `contain` 被同名的无关位置假绿。
+ * `marker` 不存在时返回空串 → 断言必然失败（漏了 marker 也算红）。
+ */
+function windowAfter(code: string, marker: string, len: number): string {
+  const i = code.indexOf(marker);
+  return i === -1 ? '' : code.slice(i, i + len);
+}
+
 describe('v0.7-D · 打印页守卫判据源码锁（变异方向永久红）', () => {
   for (const file of ['SchedulePrintPage.tsx', 'CalendarPrintPage.tsx']) {
     it(`★ ${file}：守卫为 role === null（不得 !isAdmin / 不得用受限判定作重定向条件）`, () => {
@@ -665,11 +768,12 @@ describe('v0.7-D 补漏 · 打印页阶段范围按成员收窄（与详情页 /
     const h = renderAt(`/project/${PROJECT_ID}/schedule-print`);
 
     expect(printed(h), '前提：成员仍在页内（不是又撞回重定向）').toBe(true);
-    expect(showsStage(h, MY_STAGE_NAME), '成员必须看得到自己的阶段').toBe(true);
+    expect(showsStage(h, MY_STAGE_NAME), '成员必须看得到自己的阶段（ownerId 支）').toBe(true);
+    expect(showsStage(h, TASK_ONLY_STAGE_NAME), '成员必须看得到自己的阶段（任务支）').toBe(true);
     expect(showsStage(h, OTHER_STAGE_NAME), '成员不得看到与自己无关的阶段').toBe(false);
 
-    // 阶段清单表的行数必须恰为「我的相关阶段」数（1），而不是全量（2）
-    expect(h.querySelectorAll('tbody tr').length).toBe(1);
+    // 阶段清单表的行数必须恰为「我的相关阶段」数（2 = STAGE + TASK_ONLY_STAGE），而非全量（3）
+    expect(h.querySelectorAll('tbody tr').length).toBe(2);
   });
 
   it('★ 成员 · 月历打印页：图例只列自己的阶段，不含无关阶段名', () => {
@@ -677,7 +781,8 @@ describe('v0.7-D 补漏 · 打印页阶段范围按成员收窄（与详情页 /
     const h = renderAt(`/project/${PROJECT_ID}/calendar-print`);
 
     expect(printed(h)).toBe(true);
-    expect(showsStage(h, MY_STAGE_NAME), '成员必须看得到自己的阶段').toBe(true);
+    expect(showsStage(h, MY_STAGE_NAME), '成员必须看得到自己的阶段（ownerId 支）').toBe(true);
+    expect(showsStage(h, TASK_ONLY_STAGE_NAME), '成员必须看得到自己的阶段（任务支）').toBe(true);
     expect(showsStage(h, OTHER_STAGE_NAME), '成员不得看到与自己无关的阶段').toBe(false);
   });
 
@@ -697,10 +802,12 @@ describe('v0.7-D 补漏 · 打印页阶段范围按成员收窄（与详情页 /
 
     const sch = renderAt(`/project/${PROJECT_ID}/schedule-print`);
     expect(showsStage(sch, MY_STAGE_NAME)).toBe(true);
+    expect(showsStage(sch, TASK_ONLY_STAGE_NAME), '管理员必须仍看到全量阶段').toBe(true);
     expect(showsStage(sch, OTHER_STAGE_NAME), '管理员必须仍看到全量阶段').toBe(true);
-    expect(sch.querySelectorAll('tbody tr').length).toBe(2);
+    expect(sch.querySelectorAll('tbody tr').length).toBe(3);
 
     const cal = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+    expect(showsStage(cal, TASK_ONLY_STAGE_NAME), '管理员必须仍看到全量阶段').toBe(true);
     expect(showsStage(cal, OTHER_STAGE_NAME), '管理员必须仍看到全量阶段').toBe(true);
     expect(showsStage(cal, '2026年6月'), '管理员月历照旧覆盖到无关阶段所在月份').toBe(true);
   });
@@ -716,6 +823,82 @@ describe('v0.7-D 补漏 · 打印页阶段范围按成员收窄（与详情页 /
       // 反向：不是「把页面搞崩了」——要能看到返回入口
       expect(h.textContent).toContain('返回我的任务');
     }
+  });
+});
+
+/* ------------------------------------------------------------------------------------
+ * ★ 补锁组：打印页「任务支」（阶段负责人**不是我**，但任务分派给我）
+ *
+ * 补锁背景（本轮自查发现的**无效测试**，team-lead 定夺必须补）：
+ *   旧夹具里成员相关性只由 `STAGE.ownerId = MEMBER_ID` 满足，任务支从不作为
+ *   **任何阶段被纳入的唯一理由** → 把两页的 `tasks` 订阅恒置空，检查**全绿**。
+ *   即：一行**必要**的订阅（删掉 → 成员被误判「零相关阶段」→ 看到用户可见的错误空态）
+ *   完全没有用例锁住，将来任何一次重构都能顺手删掉而无人察觉。
+ *   这两个用例把「任务支」变成唯一自变量，并配 `OTHER_STAGE` 反向断言
+ *   （防止把「收窄」写成「不过滤」——若写成不过滤，OTHER_STAGE 会一起冒出来变红）。
+ * ------------------------------------------------------------------------------------ */
+describe('v0.7-D 补锁 · 打印页「任务支」（负责人不是我、任务分派给我）', () => {
+  it('★ 成员 · 日程表打印页：仅任务支成立的阶段必须被纳入（恒空 tasks → 本用例红）', () => {
+    setActor('member');
+    const h = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+
+    expect(printed(h), '前提：成员仍在页内').toBe(true);
+    expect(
+      showsStage(h, TASK_ONLY_STAGE_NAME),
+      '「任务分派给我、但阶段负责人不是我」的阶段必须出现在日程表打印稿上',
+    ).toBe(true);
+    // 反向：收窄仍在生效（不是被写成「不过滤」）
+    expect(showsStage(h, OTHER_STAGE_NAME), '两支都不成立的阶段仍不得出现').toBe(false);
+    // 行数 = 相关阶段数 2（STAGE + TASK_ONLY_STAGE），不是全量 3、也不是只有 STAGE 的 1
+    expect(h.querySelectorAll('tbody tr').length).toBe(2);
+  });
+
+  it('★ 成员 · 月历打印页：仅任务支成立的阶段必须被纳入（恒空 tasks → 本用例红）', () => {
+    setActor('member');
+    const h = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+
+    expect(printed(h), '前提：成员仍在页内').toBe(true);
+    expect(
+      showsStage(h, TASK_ONLY_STAGE_NAME),
+      '「任务分派给我、但阶段负责人不是我」的阶段必须出现在月历打印稿的色泽说明里',
+    ).toBe(true);
+    expect(showsStage(h, OTHER_STAGE_NAME), '两支都不成立的阶段仍不得出现').toBe(false);
+  });
+
+  it('反向对照 · 若该阶段改为「负责人是我」（ownerId 支也成立）：原本两条用例仍应绿', () => {
+    // 本用例是把「任务支是唯一理由」变成可复核的事实：
+    // `TASK_ONLY_STAGE.ownerId` 换成成员后，阶段**依然可见**（改由 ownerId 支成立），
+    // 故上面两条仍绿 → 证明它们**不是**被 ownerId 支顺带满足的（M5 方向）。
+    setActor('member', {
+      stages: [
+        STAGE,
+        { ...TASK_ONLY_STAGE, ownerId: MEMBER_ID },
+        OTHER_STAGE,
+      ],
+      tasks: [TASK, TASK_ONLY_TASK],
+    });
+    const h = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+
+    expect(showsStage(h, TASK_ONLY_STAGE_NAME), 'ownerId 支成立时同样可见（反向对照）').toBe(true);
+    expect(showsStage(h, OTHER_STAGE_NAME)).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------------------------------
+ * ★ 补锁组：月历打印页页脚「打印人」
+ *   消融普查发现：把页脚的 `{currentMember?.name ?? '—'}` 恒置空 → 全绿（未锁住）。
+ *   team-lead 判定该署名**本就正常**（署打印者自己的名；对外交付物上属正常行为），
+ *   故它不是「要改名」而是「要锁住」：锁「印的是**本人**」且「不露他人姓名」。
+ * ------------------------------------------------------------------------------------ */
+describe('v0.7-D 补锁 · 月历打印页页脚「打印人」只印本人（不露他人姓名）', () => {
+  it('★ 成员 · 页脚出现「打印人：本人姓名」，且不含他人姓名', () => {
+    setActor('member');
+    const h = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+
+    expect(printed(h), '前提：成员仍在页内').toBe(true);
+    expect(h.textContent, '页脚应有「打印人」署名').toContain('打印人：');
+    expect(h.textContent, '应印本人姓名').toContain(MEMBER.name);
+    expect(h.textContent, '不得印出他人姓名').not.toContain(ADMIN.name);
   });
 });
 
@@ -779,7 +962,7 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
     expect(code).toContain('该项目的阶段与你无关');
   });
 
-  it('★ CalendarPrintPage：订阅 tasks（收窄判定需要）且月份范围吃收窄后的集合', () => {
+  it('★ CalendarPrintPage：三处取数同源吃 `scopedStages`（漏改一处即半成品修法）', () => {
     const code = readCode('CalendarPrintPage.tsx');
 
     expect(code, '必须走既有唯一口径 computeRelatedStageIds').toContain('computeRelatedStageIds');
@@ -792,6 +975,34 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
     // 正向：收窄后的集合变量必须真的被用于可见阶段过滤
     expect(code).toContain('scopedStages.filter((s) => s.visible !== false)');
     expect(code).toContain('该项目的阶段与你无关');
+  });
+
+  /**
+   * ★ 补锁：订阅本身。
+   *
+   * 这条用例是修一个**「名字强于断言」**的问题：原用例名写作「订阅 `tasks`（收窄判定需要）」，
+   * 但断言里**从未检查 `tasks`** —— 名字承诺的东西没被验证，属于「我以为锁住了」。
+   * 现把「订阅存在」变成真断言，且两页各锁一遍（两页都依赖它）。
+   *
+   * ⚠️ 这是**静态**锁，只证明源码里放着这行订阅；**行为**由上面「任务支」组的两个用例保证。
+   *    两者缺一不可：静态锁防「顺手删掉」，行为用例防「订阅写了但没用上」（如接错 projectId）。
+   */
+  it('★ 两页：必须按 projectId 订阅 tasks（收窄的「任务支」唯一输入）', () => {
+    for (const file of ['SchedulePrintPage.tsx', 'CalendarPrintPage.tsx']) {
+      const code = readCode(file);
+      expect(code, `${file}：必须订阅 tasks（恒空 → 成员被误判零相关阶段）`).toContain(
+        's.tasks.filter',
+      );
+      expect(code, `${file}：tasks 必须按本项目过滤`).toContain('t.projectId === id');
+      // 反向：订阅了却把它排除在收窄判定之外 = 白订阅。
+      // 注意**必须**只看 `computeRelatedStageIds(` 的实参窗口——`tasks,` 在整份文件里
+      // 还出现在 `buildScheduleSections({ … tasks … })` 等无关位置，全文 contain 会假绿。
+      const callWindow = windowAfter(code, 'computeRelatedStageIds({', 300);
+      expect(callWindow, `${file}：computeRelatedStageIds 的实参窗口应被截到`).toContain(
+        'currentMemberId',
+      );
+      expect(callWindow, `${file}：tasks 必须真的喂给 computeRelatedStageIds`).toContain('tasks');
+    }
   });
 
   it('★ 两页：「委托方」必须被 role === "admin" 门控（不得无条件渲染）', () => {
