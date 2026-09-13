@@ -7,17 +7,31 @@
  *
  * ── 本文件的边界 ──
  *   1. 只承载**跨批共享的传输层契约**（类型 + 注册表 + R5/R6 判据）；
- *   2. 唯一实现是默认注册的 `local-dexie` 通道（转调既有 preview/apply，= 现状行为）；
- *      `desktop-loopback` / `nas-http` 由 **T05** 覆盖注册；
+ *   2. 提供 `local-dexie` 通道的**构造器**（转调既有 preview/apply，= 现状行为）；
+ *      但**不含**「默认接线」—— 仓储由宿主注入，默认接线在
+ *      `src/di/agent-channel.ts`（组合根）。`desktop-loopback` / `nas-http`
+ *      由 **T05** 覆盖注册；
  *   3. **不含** `stageName` 判重 / 按名解析 / 新建分支 —— 那是 **T02** 的
  *      `payload.apply.ts` + `stage-resolve.ts`。本文件的 `local-dexie` 实现把
  *      `opts.stageName` **原样转发**给它，**永不自行判定**（详见该实现内的注释）。
  *
  * ── 依赖方向（单向，不得成环）──
- *   本文件 → `payload.apply.ts` / `types/agent-payload.ts`。
+ *   本文件 → `payload.apply.ts` / `types/agent-payload.ts` / `repositories/interfaces`（**仅类型**）。
  *   `payload.apply.ts` **不得**反向 import 本文件。
  *
- * 纪律：零 IO、零 browser API，可被 `server/tsconfig.json` 的 `../src/core/**` 覆盖。
+ * ── ⚠️ 为什么本文件不再自带默认接线（2026-09-14 修的真实缺陷，后人勿改回去）──
+ *   本文件被 `server/tsconfig.json` 的 `include` 通配
+ *   `../src/core/agent/` 全目录（`**` + `*.ts`）纳入服务端编译单元
+ *   （`lib` 仅 ES2020、无 DOM），即**服务端也要能编译它**。因此本文件**不得触到实现层**：
+ *     ✗ 不得 import（含 `await import()`）`../repositories/index` 及其下游
+ *       —— 那会拖进 Dexie、`remote/rest.client`、`services/backup.service`、
+ *       `config/env`，并经 `local.tasks.repo → hooks/useRoleGuard → store/use*Store`
+ *       反向缠上 Zustand store 层（实测连带 **27 个文件**、9 条 `typecheck:server` 报错）；
+ *     ✓ 只允许依赖 `repositories/interfaces` 的**接口类型**（纯类型、零运行期代码）。
+ *   **「取仓储」是宿主的事**，不是共享内核的事 —— 默认接线已搬到
+ *   `src/di/agent-channel.ts`。搬回去 = 原样复现上面那 27 个文件与 9 条报错。
+ *
+ * 纪律：零 IO、零 browser API，可被 `server/tsconfig.json` 的 `../src/core/` 覆盖。
  *
  * ⚠️ 注：`ChangxiaError` / `ChangxiaErrorCode` 曾用于 `local-dexie` 通道里那段
  *    「`stageName` 未接入」的抛错（T01 占位，T02 已解除）。占位去掉后本文件不再需要
@@ -128,20 +142,24 @@ export function getAgentImportChannel(): AgentImportChannel | null {
  * 四、默认实现：`local-dexie`
  *
  * 直接跑 `previewAgentPayload` / `applyAgentPayload`，行为与 v0.6 现状逐字节一致。
+ *
+ * ⚠️ 本段**刻意不含「从哪里取仓储」**：仓储由宿主注入（`getBundle` 参数）。
+ *    理由见文件头「为什么本文件不再自带默认接线」——`IRepositoryBundle` 是**接口**，
+ *    而取它的**实现**（`repositories/index` → Dexie → hooks/store）不是共享内核该知道的事。
+ *    默认接线搬到了 `src/di/agent-channel.ts`（组合根），本文件对它零引用。
  * ============================================================================================ */
-
-/** 懒开本地数据源：避免本文件被 import 时就触发 Dexie 建库。 */
-async function defaultLocalBundle(): Promise<IRepositoryBundle> {
-  const { createRepositories } = await import('../repositories/index');
-  return createRepositories({ dataSource: 'local' });
-}
 
 /**
  * 构造 `local-dexie` 通道。
- * @param getBundle 仓储来源，默认懒开本地数据源（测试/自定义宿主可注入）。
+ *
+ * @param getBundle 仓储来源，**必填** —— 由宿主注入（组合根 / 测试夹具）。
+ *                  此处**刻意不提供默认值**：任何默认值都要求本文件知道
+ *                  `repositories/index` 的存在，而那正是被切断的那条边
+ *                  （历史缺陷与后果见文件头）。类型仍是 `IRepositoryBundle`
+ *                  **接口**——不引入任何实现层依赖。
  */
 export function createLocalDexieChannel(
-  getBundle: () => Promise<IRepositoryBundle> = defaultLocalBundle,
+  getBundle: () => Promise<IRepositoryBundle>,
 ): AgentImportChannel {
   const status = (): AgentChannelStatus => ({
     kind: 'local-dexie',
@@ -175,4 +193,21 @@ export function createLocalDexieChannel(
   };
 }
 
-registerAgentImportChannel(createLocalDexieChannel());
+/**
+ * ⚠️ 这里**曾经**有一句 `registerAgentImportChannel(createLocalDexieChannel());`
+ *    —— 即「只要 import 本文件就自动注册默认通道」。
+ *
+ * 它已被**搬到组合根** `src/di/agent-channel.ts`。为什么必须搬走：
+ * 那句的默认实现要取仓储，于是本文件必须 `await import('../repositories/index')`；
+ * 而 `server/tsconfig.json` 把 `../src/core/agent/**` 整个纳入服务端编译单元
+ * （其 `lib` 只有 ES2020、无 DOM），这条 import 会把 `repositories/index` 的**整个
+ * 实现图**拖进来——实测连带 **27 个文件**（Dexie 适配器、`remote/rest.client`、
+ * `services/backup.service`、`config/env`、以及经
+ * `local.tasks.repo → hooks/useRoleGuard → store/use*Store`
+ * 反向缠上的**整个 Zustand store 层**）→ `npm run typecheck:server` 9 条红。
+ *
+ * 注册时机**没有变**：仍是「组合根被加载时注册一次」。生产侧本来就没有读取者
+ * （`AgentBoardPage` 的通道信息走 `transport.http` 的 props，不读本注册表），
+ * 故搬走对运行期行为**零影响**；唯一消费方是
+ * `tests/v07-t01-contract.spec.ts`，它改为显式 import 组合根。
+ */

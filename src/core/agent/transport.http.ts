@@ -36,10 +36,11 @@
  *     `Response` / `AbortSignal` 只出现在**类型位置**，源码 grep 扫不到（上面的守卫
  *     也扫不到），只有真按服务端 lib 编一遍才会红 —— 这就是本文件必须靠它兜底的原因。
  * ⚠️ 前端那条 `npm run typecheck` 对本文件**测不出**这类问题——它那套 lib 带 DOM，
- * 换成 DOM 类型名它照样绿。另注：`typecheck:server` 目前另**有 8 条报错**，但全在
- * `src/config/env.ts` / `dexie.database.ts` / `rest.client.ts` / `backup.service.ts`
- * （它们经 `include` 的 import 图被连带纳入，与本文件无关）；**本文件零报错**——
- * 看结果时请只认「有没有 `transport.http.ts`」，别被那 8 条历史报错带偏。
+ * 换成 DOM 类型名它照样绿。另注：`typecheck:server` 现已**回 0 条报错**（2026-09-14
+ * 修掉了一批边界击穿：`transport.contract.ts` 曾 `await import('../repositories/index')`，
+ * 把实现层 27 个文件拖进服务端编译单元；接线已搬到 `src/di/agent-channel.ts`）。
+ * 因此这条守卫**第一次变得锐利**：它的红不再是「9 条常驻噪声里的第 10 条」，
+ * 而是真问题——**看到 `transport.http.ts` 报错就是本文件写错了**，可直接当发版门禁用。
  *   ✗ 别把 `RequestInitLike` 换成 DOM 的 `RequestInit`；
  *   ✗ 别把 `HttpResponseLike` 换成 DOM 的 `Response`；
  *   ✗ 别引入 `AbortSignal` / `AbortController` 的**类型名**（构造器按结构取，可以）；

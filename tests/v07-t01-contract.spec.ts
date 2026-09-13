@@ -22,6 +22,19 @@ import {
   shouldShowImpact,
   getAgentImportChannel,
 } from '../src/core/agent/transport.contract';
+/**
+ * ★ 组合根副作用导入（v0.7）。
+ *
+ * `transport.contract.ts` **不再**在模块顶层自动注册默认通道 —— 那句会强制它
+ * `await import('../repositories/index')`，从而把实现层（Dexie / store 层）拖进
+ * 服务端编译单元，使 `npm run typecheck:server` 9 条红（详见该文件头）。
+ * 注册已搬到组合根 `src/di/agent-channel.ts`。
+ *
+ * 本文件下面那条 `expect(getAgentImportChannel()).not.toBeNull()` 依赖这个副作用，
+ * 故此处显式导入组合根。语义比原来更准确：不是「import 契约文件就自动注册」，
+ * 而是「**组合根被加载时会注册默认通道**」。
+ */
+import '../src/di/agent-channel';
 import {
   AGENT_PAYLOAD_SCHEMA_ID,
   type AgentPayloadTask,
