@@ -28,6 +28,14 @@ import { cn } from '../../lib/cn';
  *
  * ⋯ 更多菜单（仅 admin）：重命名 / 导出日程表 / 归档 / 删除，复用既有 Modal / ConfirmDialog。
  * 卡片原 <button> 改 div[role=button] + keydown 可达，⋯ 触发器独立 <button> 并 stopPropagation。
+ *
+ * ── v0.7-D：成员导出日程表入口 ──
+ *   用户已拍板「放开成员打印（只读导出）」，故成员侧需有自己的入口。管理员的 ⋯ 菜单
+ *   **整体保持 admin-only**（内含重命名 / 侧栏方块外观 / 归档 / 删除四个**写操作**，
+ *   放开容器等于把四个写口一起暴露给成员），因此这里为成员单独渲染一个图标按钮，
+ *   只做「新窗口打开 /project/:id/schedule-print」（与详情页「日程表」按钮同目标）。
+ *   判据用 `isMember`（= role === 'member'，useRoleGuard 的既有导出）：
+ *   未进入身份（role=null）**不**渲染，与打印页守卫的「未进入不放行」同档。
  */
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨';
 
@@ -61,7 +69,7 @@ export function ProjectCard({
   selected?: boolean;
   onOpen(): void;
 }): JSX.Element {
-  const { role, isAdmin } = useRoleGuard();
+  const { role, isAdmin, isMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
   const repos = useRepos();
   const navigate = useNavigate();
@@ -189,6 +197,22 @@ export function ProjectCard({
         <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink group-hover:text-pine">
           {project.name}
         </span>
+        {/* v0.7-D：成员（role==='member'）的「导出日程表」入口——只读导出，与详情页同目标。
+            stopPropagation 必需：外层 role=button 的 onClick 会跳详情页，不拦就变成"点导出跳详情"。 */}
+        {isMember && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(`/project/${project.id}/schedule-print`, '_blank');
+            }}
+            aria-label="导出日程表"
+            title="导出日程表（新窗口，只读导出）"
+            className="shrink-0 rounded-full p-1.5 text-mist transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
+          >
+            <CalendarRange size={16} aria-hidden />
+          </button>
+        )}
         {isAdmin && (
           <div ref={menuRef} className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
             <button

@@ -105,7 +105,9 @@ export function CalendarPrintPage(): JSX.Element {
   const project = useProjectsStore((s) => s.projects.find((p) => p.id === id));
   const stages = useProjectsStore((s) => s.stages.filter((st) => st.projectId === id));
   const members = useMembersStore((s) => s.members);
-  const { isAdmin, currentMember, hydrated } = useRoleGuard();
+  // v0.7-D：本页守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**）——
+  // 故不取 isAdmin，也不在页内自写 `!isMember` 之类的派生。
+  const { role, currentMember, hydrated } = useRoleGuard();
 
   const [pngBusy, setPngBusy] = useState(false);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -146,7 +148,15 @@ export function CalendarPrintPage(): JSX.Element {
     return <div className="py-16 text-center text-mist">正在装载月历…</div>;
   }
 
-  if (!isAdmin) {
+  /**
+   * 页内守卫（v0.7-D · 用户已拍板「放开成员打印」）：
+   *   · **未进入身份（role === null）** → 仍重定向回首页（无身份即无可见范围，保持现状）；
+   *   · **成员（受限）** → **允许留在页内只读导出**（本页零数据写操作：打印 / 读 DOM 导出 PNG /
+   *     失败时一条 toast，`restPolicy` 仅只读）；
+   *   · **管理员** → 行为不变。
+   * 旧注释口径「非管理员一律重定向」已作废。`role === null` 与「成员」是两档，切勿混同。
+   */
+  if (role === null) {
     return <Navigate to="/" replace />;
   }
 

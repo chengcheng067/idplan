@@ -43,7 +43,9 @@ export function SchedulePrintPage(): JSX.Element {
   const stages = useProjectsStore((s) => s.stages.filter((st) => st.projectId === id));
   const tasks = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
   const members = useMembersStore((s) => s.members);
-  const { isAdmin, currentMember, hydrated } = useRoleGuard();
+  // v0.7-D：本页守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**，
+  // 不可混同）——故这里不取 isAdmin，也不在页内自写 `!isMember` 之类的派生。
+  const { role, hydrated } = useRoleGuard();
 
   const [pngBusy, setPngBusy] = useState(false);
   const [pdfHint, setPdfHint] = useState(false);
@@ -84,13 +86,27 @@ export function SchedulePrintPage(): JSX.Element {
     return labels;
   }, [project, viewStart, viewEnd]);
 
-  // bootstrap 完成前先展示加载态（首帧 members 未装载时 isAdmin 恒 false，避免误判重定向）
+  // bootstrap 完成前先展示加载态（首帧 members 未装载时 role 恒 null，避免误判重定向）
   if (!hydrated) {
     return <div className="py-16 text-center text-mist">正在装载日程表…</div>;
   }
 
-  // 页内守卫：非管理员重定向（打印内容含全员任务，敏感信息）
-  if (!isAdmin) {
+  /**
+   * 页内守卫（v0.7-D · 用户已拍板「放开成员打印」）：
+   *   · **未进入身份（role === null）** → 仍重定向回首页。没有身份就没有可见范围，
+   *     与 `ProjectDetailPage` 的「受限空态」同档，保持现状不放行。
+   *   · **成员（受限）** → **允许留在页内只读导出**：本页零数据写操作
+   *     （只有 `window.print()` / 读 DOM 导出 PNG / 失败时一条 toast），
+   *     故「看得到 → 打得出来」不扩大写权限面。
+   *   · **管理员** → 行为不变。
+   *
+   * 旧注释写的是「非管理员重定向（打印内容含全员任务，敏感信息）」，那与本次决策相悖，已作废：
+   * 打印稿本就是给委托方看的对外交付物，成员打印的意义正在于此。
+   *
+   * 判据口径：`role === null` ≠「成员」，**不要**把 `role === null` 并进允许档
+   * （那等于让未进入身份者也拿到全员排期）。本判定是页内唯一守卫，与 `useRoleGuard()` 同源。
+   */
+  if (role === null) {
     return <Navigate to="/" replace />;
   }
 

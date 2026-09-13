@@ -128,17 +128,23 @@ export function ProjectDetailPage(): JSX.Element {
           <ArrowLeft size={14} /> {memberView ? (currentMember ? '我的任务' : '首页') : '全部项目'}
         </Link>
         <div className="flex items-center gap-2 text-sm">
+          {/* v0.7-D · 打印/导出入口对「已进入身份」开放（管理员 + 成员）：
+              用户已拍板「放开成员打印」——成员可查看并打印/导出（只读导出），不放开编辑。
+              条件是 `role !== null`（不是 `!isAdmin`、更不是 `!memberView`）：
+              未进入身份（role=null）**不**渲染此入口——该档在页首已走受限空态（无可见范围），
+              此处是双保险，避免「未进入」被误并进允许档。 */}
+          {role !== null && (
+            <button
+              type="button"
+              onClick={() => window.open(`/project/${project.id}/schedule-print`, '_blank')}
+              className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
+              title="打开日程表打印视图（新窗口）"
+            >
+              <CalendarRange size={14} /> 日程表
+            </button>
+          )}
           {!memberView && (
             <>
-              {/* v0.3 变更 E：日程表打印视图（仅 admin；新窗口打开，打印完可关） */}
-              <button
-                type="button"
-                onClick={() => window.open(`/project/${project.id}/schedule-print`, '_blank')}
-                className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
-                title="打开日程表打印视图（新窗口）"
-              >
-                <CalendarRange size={14} /> 日程表
-              </button>
               {/* v0.6 · T13 要点 9：跳 Agent Board（先锚定当前项目再导航） */}
               <button
                 type="button"
@@ -151,6 +157,7 @@ export function ProjectDetailPage(): JSX.Element {
               >
                 <Bot size={14} /> Agent Board
               </button>
+              {/* 归档是**写操作**，仍限管理员（v0.7-D 只放开打印，未放开任何写） */}
               <button
                 type="button"
                 disabled={project.status !== 'active'}

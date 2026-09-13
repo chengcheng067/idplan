@@ -25,7 +25,8 @@ import { CalendarPrintPage } from './pages/CalendarPrintPage';
  * 应用路由表：
  *   /                          首页·项目列表（HomeRouteGuard：isMember 重定向 /my-tasks）
  *   /project/:id               项目详情·九阶段时间轴主视图
- *   /project/:id/schedule-print 日程表打印视图（v0.3 变更 E；页内 isAdmin 守卫，复用 stores 零新查询）
+ *   /project/:id/schedule-print 日程表打印视图（v0.3 变更 E；v0.7-D 起页内守卫仅挡「未进入身份」，
+ *                               管理员与成员均可打开，成员为只读导出）
  *   /project/:id/calendar-print 月历打印/导出视图（v0.5）
  *   /my-tasks                  我的任务（成员视角）
  *   /agent                     Agent Board（v0.6 · Agent 任务看板，所有角色可见）
