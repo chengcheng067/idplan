@@ -301,7 +301,7 @@ describe('handoff：五段式输出与安全边界（HF-04）', () => {
 });
 
 describe('markdown-ingest：兼容子集解析', () => {
-  it('解析 # 标题 / deps: / - [ ] / - [x]，externalId 按 kind:runId:md-N 合成', () => {
+  it('解析 # 标题 / deps: / - [ ] / - [x]，externalId 按「任务身份」合成（不含 runId）', () => {
     const md = `# 实现序列化层
 deps: workbuddy:run-007:t09
 - [ ] 待办说明一
@@ -318,13 +318,138 @@ deps: workbuddy:run-007:t09
     });
     expect(payload.schema).toBe('idplan-agent-payload/v1');
     expect(payload.tasks).toHaveLength(2);
-    expect(payload.tasks[0]!.externalId).toBe('deepseek:run-042:md-1');
+    // ★ v0.7 P0-2：键形如 `${agentKind}:md-${标题哈希}`，**不含 runId、不含行序**
+    expect(payload.tasks[0]!.externalId).toMatch(/^deepseek:md-[0-9a-f]{8}$/);
+    expect(payload.tasks[0]!.externalId).not.toContain('run-042');
+    expect(payload.tasks[0]!.externalId).not.toContain('md-1');
     expect(payload.tasks[0]!.title).toBe('实现序列化层');
     expect(payload.tasks[0]!.dependsOnExternal).toEqual(['workbuddy:run-007:t09']);
     expect(payload.tasks[0]!.status).toBe(TaskStatus.Done); // 末尾 - [x] 覆盖
     expect(payload.tasks[0]!.description).toContain('待办说明一');
-    expect(payload.tasks[1]!.externalId).toBe('deepseek:run-042:md-2');
+    expect(payload.tasks[1]!.externalId).toMatch(/^deepseek:md-[0-9a-f]{8}$/);
     expect(payload.tasks[1]!.status).toBe(TaskStatus.Done);
+    // 两条不同标题 → 两个不同键
+    expect(payload.tasks[1]!.externalId).not.toBe(payload.tasks[0]!.externalId);
+    // runId 的归属是 producedBy（溯源用），不是幂等键
+    expect(payload.producedBy.runId).toBe('run-042');
+  });
+
+  /**
+   * ★ v0.7 P0-1 / P0-2 的不变量 —— 这几条才是本功能的「意义所在」。
+   *
+   * 为什么必须单独锁：旧实现（`${agentKind}:${runId}:md-${index}`）能通过上面那条
+   * 格式测试（它只验了形状），却在真实使用里**必然翻车**：
+   *   - 换一天运行 → runId 变 → 整批重建；
+   *   - 文档开头插一条 → index 后移 → 整批重建。
+   * 后果不是「没帮忙」而是**帮倒忙**：用户每次同步都拿到一份重复任务。
+   * 所以这里直接断言「**跨 runId**」「**跨行序**」两个维度上键稳定。
+   */
+  describe('★ 幂等键只由任务身份决定（P0-1 / P0-2）', () => {
+    const base = {
+      actorKind: 'agent' as const,
+      agentKind: 'workbuddy',
+      agentName: 'WorkBuddy',
+    };
+
+    it('同一份文档换 runId（= 换一天同步）→ externalId 逐条不变', () => {
+      const md = `# 现场勘测
+- [ ] 拍照
+
+# 出平面方案
+- [ ] 初稿`;
+      const day1 = parseMarkdownTasks(md, { ...base, runId: 'run-2026-09-13' });
+      const day2 = parseMarkdownTasks(md, { ...base, runId: 'run-2026-09-14' });
+
+      expect(day2.tasks.map((t) => t.externalId)).toEqual(day1.tasks.map((t) => t.externalId));
+    });
+
+    it('在文档开头插入一条新任务 → 既有任务的 externalId 不变（行序不是身份）', () => {
+      const before = `# 现场勘测
+- [ ] 拍照
+
+# 出平面方案
+- [ ] 初稿`;
+      const after = `# 补签合同
+- [ ] 盖章
+
+${before}`;
+      const a = parseMarkdownTasks(before, { ...base, runId: 'r1' });
+      const b = parseMarkdownTasks(after, { ...base, runId: 'r2' });
+
+      // 只多了一条；原有的两条键**逐条相同**（顺序也保持）
+      expect(b.tasks).toHaveLength(a.tasks.length + 1);
+      expect(b.tasks.map((t) => t.externalId)).toEqual([
+        expect.stringMatching(/^workbuddy:md-[0-9a-f]{8}$/),
+        ...a.tasks.map((t) => t.externalId),
+      ]);
+    });
+
+    it('重排文档顺序 → 每条任务仍拿到自己那把键（键跟着标题走，不跟位置）', () => {
+      const ab = `# 甲
+- [ ]
+
+# 乙
+- [ ]`;
+      const ba = `# 乙
+- [ ]
+
+# 甲
+- [ ]`;
+      const p1 = parseMarkdownTasks(ab, { ...base, runId: 'r1' });
+      const p2 = parseMarkdownTasks(ba, { ...base, runId: 'r2' });
+
+      const keyOf = (p: typeof p1, title: string): string =>
+        p.tasks.find((t) => t.title === title)!.externalId;
+
+      expect(keyOf(p2, '甲')).toBe(keyOf(p1, '甲'));
+      expect(keyOf(p2, '乙')).toBe(keyOf(p1, '乙'));
+    });
+
+    it('标题规范化：前后空白 / 连续多空格归一，全角空格 ≡ 半角空格', () => {
+      const clean = parseMarkdownTasks('# 现场 勘测\n- [ ]', { ...base, runId: 'r1' });
+
+      // 前后空白 + 连续多个空格 → 压成单空格，与基准同键
+      const messy = parseMarkdownTasks('#    现场   勘测   \n- [ ]', { ...base, runId: 'r2' });
+      expect(messy.tasks[0]!.externalId).toBe(clean.tasks[0]!.externalId);
+
+      // 全角空格经 NFKC 归一为半角空格 → 与「半角单空格」同键
+      const wide = parseMarkdownTasks('# 现场　勘测\n- [ ]', { ...base, runId: 'r3' });
+      expect(wide.tasks[0]!.externalId).toBe(clean.tasks[0]!.externalId);
+
+      // ★ 反例对照组：真的多了一个词，必须**不同键**
+      //   （少了这条，把 normalizeTitle 写成「删掉所有空格」也能让上面两条全绿）
+      const different = parseMarkdownTasks('# 现场勘测\n- [ ]', { ...base, runId: 'r4' });
+      expect(different.tasks[0]!.externalId).not.toBe(clean.tasks[0]!.externalId);
+    });
+
+    it('同名标题 → 首条用 base，其后追加 -2 / -3（**仅此情形**才引入序依赖）', () => {
+      const md = `# 复核
+- [ ]
+
+# 复核
+- [ ]
+
+# 复核
+- [ ]`;
+      const p = parseMarkdownTasks(md, { ...base, runId: 'r1' });
+      const ids = p.tasks.map((t) => t.externalId);
+
+      expect(ids[0]).toMatch(/^workbuddy:md-[0-9a-f]{8}$/);
+      expect(ids[1]).toBe(`${ids[0]}-2`);
+      expect(ids[2]).toBe(`${ids[0]}-3`);
+      // 三把键互不相同（若撞成同一把，三条任务会被幂等合并成一条）
+      expect(new Set(ids).size).toBe(3);
+    });
+
+    it('不同 agentKind 写同名标题 → 不互相抢占（键以 agentKind 为前缀隔离）', () => {
+      const md = '# 复核\n- [ ]';
+      const wb = parseMarkdownTasks(md, { ...base, agentKind: 'workbuddy', runId: 'r1' });
+      const cx = parseMarkdownTasks(md, { ...base, agentKind: 'codex', runId: 'r2' });
+
+      expect(wb.tasks[0]!.externalId).not.toBe(cx.tasks[0]!.externalId);
+      expect(wb.tasks[0]!.externalId.startsWith('workbuddy:')).toBe(true);
+      expect(cx.tasks[0]!.externalId.startsWith('codex:')).toBe(true);
+    });
   });
 
   it('无任务标题 → tasks 为空数组（由 validateAgentPayload 的 min(1) 拒绝）', () => {

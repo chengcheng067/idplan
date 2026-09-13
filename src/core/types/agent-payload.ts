@@ -37,7 +37,17 @@ export interface AgentPayloadArtifact {
 }
 
 export interface AgentPayloadTask {
-  /** 必填幂等键，建议格式 `${agentKind}:${runId}:${localKey}` */
+  /**
+   * 必填幂等键（项目内唯一）。**只由「任务身份」决定，不含运行时实例**。
+   *
+   * 建议格式：`${agentKind}:${taskKey}`，`taskKey` = 外部写入方侧任务的**稳定标识**
+   * （推荐：规范化标题哈希，或源文档里的稳定 slug）。
+   *
+   * ⚠️ **绝不要把 `runId` 写进这个键**（v0.7 P0-1）。`runId` 每次运行都变，
+   * 混入即等于「每次运行都是新任务」→ 幂等形同虚设 → 用户每次同步都得到一份
+   * 重复任务。语义上：本键回答的是「**这条任务是谁**」，不是「**这次运行是谁**」。
+   * `runId` 的归属是 `producedBy.runId`（溯源 / 批次统计）。
+   */
   externalId: string;
   title: string;
   description: string | null;
