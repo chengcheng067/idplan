@@ -60,21 +60,23 @@
  * `useLayoutStore.agentBoardMode`。
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AlertTriangle, ClipboardPaste, FileOutput } from 'lucide-react';
+import { AlertTriangle, ClipboardPaste, FileOutput, Plug } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import type { Project, Stage, Task } from '../core/types/entities';
 import { ALL_TASK_STATUSES, TASK_STATUS_TRANSITIONS, TaskStatus } from '../core/types/enums';
 import { computeReadyTasks } from '../core/agent/dag';
+import { probe } from '../core/agent/transport.http';
 import {
   HUMAN_BOARD_GROUP_ORDER,
   groupTasksForHuman,
   type HumanBoardGroup,
 } from '../core/agent/board';
 import { useRepos } from '../hooks/useRepos';
+import { useRoleGuard } from '../hooks/useRoleGuard';
 import { useAgentStore } from '../store/useAgentStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useProjectsStore } from '../store/useProjectsStore';
@@ -86,6 +88,13 @@ import {
   type AgentTermMode,
 } from '../constants/agentTerms';
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
+import {
+  AgentIngressPanel,
+  LOOPBACK_ORIGIN,
+  type IngressChannelMode,
+  type IngressProbeView,
+  type IngressSyncView,
+} from '../components/agent/AgentIngressPanel';
 import { HandoffPanel } from '../components/agent/HandoffPanel';
 import { ReadyQueue } from '../components/agent/ReadyQueue';
 import {
@@ -121,6 +130,64 @@ const MODE_LABELS: Record<AgentTermMode, string> = { human: '人话', tech: '技
 
 /** 模式切换 tab 的展示顺序（人话 / 技术，PRD §4.3 D2） */
 const MODE_TAB_ORDER: readonly AgentTermMode[] = ['human', 'tech'];
+
+/* ---------------------------------------------------------------------------------------------
+ * 接入面板的本地存储（v0.7 · T03-B）
+ *
+ * ── 为什么 token 不进 React state，而在这几个函数里直接读写 localStorage ──
+ *   1. state 里的值会出现在 React DevTools、组件快照与任何 `JSON.stringify(state)` 里；
+ *      token 是**共享密钥**（能往库里写任务），不该有这么多副本。
+ *   2. 页面只需要知道**配没配**（布尔）就能渲染「已配置 / 未配置」——面板的 props
+ *      契约本身就是这么设计的（`tokenConfigured: boolean`，**绝不收原文**）。
+ *   3. 「复制」走 `onIngressCopyToken` 现取现用，不经 DOM 读值。
+ *   故：原文的**唯一**落点是 `localStorage`，**唯一**出口是这几函数。
+ *
+ * ── 读写全部 try/catch ──
+ * Safari 隐私模式 / 企业策略下 `localStorage` 的**访问本身**就可能抛
+ * （不是返回 null）。裸调用会让整个看板页白屏——为了一个「记住令牌」的便利
+ * 功能搭上主功能，代价完全不对称。
+ * ------------------------------------------------------------------------------------------ */
+
+/** token 存储键（单一出处） */
+export const AGENT_TOKEN_STORAGE_KEY = 'idplan.agentToken';
+/** NAS 地址存储键（单一出处） */
+export const AGENT_BASE_URL_STORAGE_KEY = 'idplan.agentBaseUrl';
+
+function readStoredAgentToken(): string {
+  try {
+    return localStorage.getItem(AGENT_TOKEN_STORAGE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function hasStoredAgentToken(): boolean {
+  return readStoredAgentToken().trim().length > 0;
+}
+
+function writeStoredAgentToken(token: string): void {
+  try {
+    localStorage.setItem(AGENT_TOKEN_STORAGE_KEY, token);
+  } catch {
+    /* 存不下（隐私模式 / 配额满）：本次会话内仍可用，不打断用户 */
+  }
+}
+
+function readStoredAgentBaseUrl(): string {
+  try {
+    return localStorage.getItem(AGENT_BASE_URL_STORAGE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredAgentBaseUrl(next: string): void {
+  try {
+    localStorage.setItem(AGENT_BASE_URL_STORAGE_KEY, next);
+  } catch {
+    /* 同 writeStoredAgentToken */
+  }
+}
 
 /**
  * 技术模式 7 条泳道的**表面**配色（画板 07 逐条取值）。
@@ -207,6 +274,8 @@ export function AgentBoardPage(): JSX.Element {
   const projects = useProjectsStore((s) => s.projects);
   const stages = useProjectsStore((s) => s.stages);
   const tasks = useProjectsStore((s) => s.tasks);
+  /** 接入面板的动作反馈（保存/复制令牌）走全站既有 toast 通道，不另造提示条 */
+  const pushToast = useProjectsStore((s) => s.pushToast);
   const members = useMembersStore((s) => s.members);
 
   const currentProjectId = useAgentStore((s) => s.currentProjectId);
@@ -224,6 +293,88 @@ export function AgentBoardPage(): JSX.Element {
   const [loaded, setLoaded] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const [handoffOpen, setHandoffOpen] = useState(false);
+
+  /* ------------------------------ 接入配置面板（v0.7 · T03-B 接线） ------------------------------ */
+
+  /**
+   * 权限唯一出口（与面板内同一 hook）。**页面侧必须再条件渲染一次**，理由：
+   * 面板内部的 `useRoleGuard` 门控只能保证"成员看不到面板内容"，而
+   * `{isAdmin && …}` 保证的是**这块 UI 压根不进渲染树**。两者都要有——
+   * 单靠组件内部返回 null，一旦将来有人把门控挪进条件分支/hook 顺序被破坏，
+   * 页面侧不会给出任何信号（本项目已因 hook 顺序栽过一次白屏）。
+   */
+  const { isAdmin } = useRoleGuard();
+
+  const [ingressOpen, setIngressOpen] = useState(false);
+  const [ingressMode, setIngressMode] = useState<IngressChannelMode>('local');
+  /** NAS 地址（受控）。本机档位下面板不使用该值，改显示只读 LOOPBACK_ORIGIN */
+  const [ingressAddress, setIngressAddress] = useState<string>(() => readStoredAgentBaseUrl());
+  /**
+   * ★ 只持有**布尔**。token 原文从进 `localStorage` 到出，全程**不进 React state**：
+   *   state 里的值会出现在 React DevTools、组件快照和任何 `JSON.stringify(state)` 里。
+   */
+  const [tokenConfigured, setTokenConfigured] = useState<boolean>(() => hasStoredAgentToken());
+  const [probeResult, setProbeResult] = useState<IngressProbeView | null>(null);
+
+  /**
+   * 真正要探测的地址：本机档位是主进程写死的事实（**不看** `ingressAddress`），
+   * NAS 档位才是用户填的。这一处映射若写错，本机档位会去探测一个空地址
+   * → 永远"不可连通"，而用户以为自己没配错。
+   */
+  const ingressBaseUrl = ingressMode === 'local' ? LOOPBACK_ORIGIN : ingressAddress;
+
+  const onIngressModeChange = useCallback((next: IngressChannelMode): void => {
+    setIngressMode(next);
+    // 档位变了 = 目标地址变了，旧的探测结果对应的是**另一个**地址，留着就是误导
+    setProbeResult(null);
+  }, []);
+
+  const onIngressAddressChange = useCallback((next: string): void => {
+    setIngressAddress(next);
+    setProbeResult(null); // 同因：地址一变，旧结果失效
+    writeStoredAgentBaseUrl(next); // 持久化，下次打开不必重输
+  }, []);
+
+  const onIngressProbe = useCallback((): void => {
+    // probe() 契约是**永不抛**（见 transport.http.ts 文件头），故无需 try/catch
+    void probe(ingressBaseUrl, readStoredAgentToken()).then(setProbeResult);
+  }, [ingressBaseUrl]);
+
+  const onIngressSaveToken = useCallback(
+    (token: string): void => {
+      writeStoredAgentToken(token); // 原文只落 localStorage，**不进 state**
+      setTokenConfigured(true);
+      pushToast('success', '访问令牌已保存到本机。');
+    },
+    [pushToast],
+  );
+
+  /**
+   * 复制令牌：**从存储取件**，不从 DOM 读（DOM 里根本没有原文）。
+   * 若这里改成读 DOM，必须先让原文出现在页面上 —— 那正是要禁的做法。
+   */
+  const onIngressCopyToken = useCallback((): void => {
+    const token = readStoredAgentToken();
+    if (!token) {
+      pushToast('error', '尚未配置访问令牌。');
+      return;
+    }
+    const clip = navigator.clipboard;
+    if (!clip || typeof clip.writeText !== 'function') {
+      pushToast('error', '当前环境不支持剪贴板，请手动复制。');
+      return;
+    }
+    void clip.writeText(token).then(
+      () => pushToast('success', '访问令牌已复制。'),
+      () => pushToast('error', '复制失败，请重试。'),
+    );
+  }, [pushToast]);
+
+  /** 「手动粘贴」是**另一个入口**（离线兜底），不得与通道配置合并（主 PRD §4.1） */
+  const onIngressOpenManual = useCallback((): void => {
+    setIngressOpen(false);
+    setApplyOpen(true);
+  }, []);
 
   /* ------------------------------ 深链（URL 是镜像，不是真相源） ------------------------------ */
   useEffect(() => {
@@ -415,16 +566,24 @@ export function AgentBoardPage(): JSX.Element {
               ))}
             </select>
             {/*
-              「导入任务」= WorkBuddy 排期入口（手动兜底 + 接入配置面板）。
-              画板 06/07 的第二位按钮，白底描边（次要操作）。
-              本轮只做**按钮与交互占位**：渠道本身（HTTP 端点 / token / 自动写入）
-              不在本批，面板内以说明行标注「后续接入」，不伪造任何已连通的假象。
+              「导入任务」= WorkBuddy 排期入口（画板 06/07 的第二位按钮，白底描边=次要操作）。
+
+              ★ 本按钮打开的是**接入配置面板**（通道配置），不是手动粘贴面板。
+                两个入口的分工（主 PRD §4.1 明定，不得合并）：
+                  · 接入配置面板 = 外部写入方（WorkBuddy）的**服务地址与令牌** → 自动写入；
+                  · 手动粘贴面板 = **离线兜底**，由接入面板底部的「改为手动粘贴」跳转进入。
+                此前本按钮**直通手动粘贴**，接入面板虽然建好了却无人引用 ——
+                于是「怎么把 WorkBuddy 接上」这件事用户根本看不到（P0-9 的剩余部分）。
+
+              ⚠️ 刻意**不加** `disabled={!currentProjectId}`（此前有）：
+                通道配置（地址/令牌/探活）是**项目无关**的全局设置。新装 NAS 上
+                往往一个项目都还没有，若按项目禁用，用户会在最需要配通道的时刻
+                看到按钮是灰的 —— 而那正是首次接入的必经一步。
             */}
             <button
               type="button"
-              onClick={() => setApplyOpen(true)}
-              disabled={!currentProjectId}
-              className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl border border-line bg-paper px-4 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
+              onClick={() => setIngressOpen(true)}
+              className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl border border-line bg-paper px-4 text-sm text-ink transition-colors hover:bg-sunken"
             >
               <ClipboardPaste size={14} aria-hidden />
               {termFor('applyPayload', agentBoardMode)}
@@ -711,6 +870,44 @@ export function AgentBoardPage(): JSX.Element {
           </>
         )}
       </div>
+
+      {/*
+        接入配置面板（v0.7 · T03-B 接线）。
+        ★ 双重门控：本行 `isAdmin &&` 决定**进不进渲染树**；面板内部的
+          `useRoleGuard()` 再判一次。成员/未进入身份时此处**整块不渲染** ——
+          注意不是「渲染了但按钮 disabled」：不可见的功能不该在 DOM 里留痕
+          （`?.()` 只保证回调不执行，不保证不渲染，本项目踩过「回调可选 → 死按钮」）。
+      */}
+      {isAdmin && ingressOpen && (
+        <Modal open onClose={() => setIngressOpen(false)} ariaLabel="接入外部写入方">
+          <AgentIngressPanel
+            mode={ingressMode}
+            onModeChange={onIngressModeChange}
+            address={ingressAddress}
+            onAddressChange={onIngressAddressChange}
+            /* ★ 只传布尔。原文不出 localStorage，不进 state，更不传给面板 */
+            tokenConfigured={tokenConfigured}
+            onSaveToken={onIngressSaveToken}
+            onCopyToken={onIngressCopyToken}
+            /*
+             * 结构兼容由**本行类型标注**兜底：`probe()` 返回 `AgentProbeView`，
+             * 若它和面板的 `IngressProbeView` 字段漂移，这里当场编译失败
+             * （transport.http.ts 不能 import 组件类型，原因见该文件头）。
+             */
+            probeResult={probeResult}
+            onProbe={onIngressProbe}
+            /*
+             * 最近同步记录：v0.7 本轮**没有**它的数据来源（服务端三个端点里没有
+             * 「最近一次同步」——`AgentChannelStatus.lastSyncAt` 目前恒为 null，
+             * 见 transport.contract.ts 的 local-dexie 通道）。故如实传 null，
+             * 面板会显示「还没有同步记录」。**绝不编造一条同步记录**来把面板填满。
+             */
+            status={null}
+            onOpenManual={onIngressOpenManual}
+            onClose={() => setIngressOpen(false)}
+          />
+        </Modal>
+      )}
 
       {/* Apply payload 面板（Modal 底座；失败保留输入由面板内部负责） */}
       {applyOpen && currentProjectId && (
