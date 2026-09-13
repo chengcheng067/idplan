@@ -125,6 +125,17 @@
 - 前端 remote 模式配置 `VITE_API_TOKEN`（与上同值）即自动携带 `Authorization: Bearer`。
 - 导入侧检测「`hasPassword===true` 且 `passwordHash===null`」→ 恢复确认弹窗警示「此备份不含密码，导入后成员需重设密码」。
 - 服务端导入通道自动剔除 `hasPassword`（导出侧派生字段，非表列）。
+- **导入响应体**：`{ ok: true, renumbered: <number> }`
+  - `renumbered` = 本次导入因**包内**号段自身冲突（同一个 `taskNo` 出现多次）被
+    重编号的任务条数；口径是「保留先到者、后到者重编号」，正常包恒为 `0`。
+    与 local（Dexie）路径**同一个答案** —— 两侧共用 `src/core/lib/task-no.ts`
+    的 `resolveTaskNoCollisions`（§2.9.1），不存在第二份实现。
+  - `ok` 是兼容老客户端的保留字段（老 NAS 前端只读它），**不得移除**；
+    `renumbered` 为 v0.7 新增字段，老服务端不返回它 —— 前端按「缺字段回落 0」兼容。
+  - 导入事务内**同时**按「三者取最大」追平 `settings.taskNoSeq`
+    （包内 `max(task_no)+1` / 包内 `taskNoSeq` / 导入前**本地** `taskNoSeq`），
+    保证导入后新建任务不复用已被（导入前本机或包内）占用的号。
+    漏任一项都存在真实可达的撞号路径，见 `resolveTaskNoCollisions` 函数头注释。
 
 ## ⚠ Agent HTTP API 边界（写死，勿越）
 

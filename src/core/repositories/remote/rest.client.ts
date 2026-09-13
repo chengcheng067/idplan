@@ -323,20 +323,23 @@ class RemoteAdminRepository implements IAdminRepository {
     return this.api.get('/backup');
   }
   /**
-   * ⚠️ **已知缺口（已上报 team-lead，等待裁决，不在本轮擅自扩围）**：
-   * `renumbered` 恒为 `0`，**不是**真实的包内撞号计数。
+   * 备份整库导入（remote 侧）。
    *
-   * 原因：包内号段查重与 `taskNoSeq` 追平（§2.9.1 的「三者取最大」）本轮只落在
-   * **local（Dexie）路径**（§2.9 明确把改动点定在 `local.admin.repo.ts`）；
-   * 服务端 `POST /api/backup/import` 只回 `{ ok: true }`，不做查重。
+   * ★ v0.7（T01-b）：本注释此前把「服务端不做号段归一」记为**待裁决的已知缺口**，
+   *   现裁决为「做」并已落地 —— 服务端 `POST /api/backup/import` 现在与 local 路径
+   *   **同义**地在导入事务内调用**同一个**共享纯函数 `resolveTaskNoCollisions`
+   *   （见 `server/routes/meta.routes.ts`），并把真实重编号条数放在响应体的
+   *   `renumbered` 字段里回传。
+   *   至此两套适配器在「导入后计数器值」与「`renumbered` 含义」上给出同一个答案
+   *   （硬约束见 interfaces.ts）—— 判定逻辑只有共享纯函数一处，不存在第二份实现。
    *
-   * 这与本项目「两套适配器语义必须逐字一致」的硬约束**相抵触**（见 interfaces.ts）。
-   * 要让远端也正确，需在 `server/routes/meta.routes.ts` 的导入事务内复用
-   * `resolveTaskNoCollisions`（同一个纯函数，前后端共享），并让它回传真实计数。
-   * 已登记为待裁决项 —— 在本注释被删掉之前，**不要**把这里的 0 当作「服务端没撞号」的证据。
+   * 故此处**如实回传**服务端计数；仅在字段缺失时回落 `0` —— 那只可能是**老服务端**
+   * （升级前的 NAS）的响应，属版本兼容分支，**不是**「服务端没做查重」的证据。
    */
   replaceAllImport(pkg: BackupPackage): Promise<{ renumbered: number }> {
-    return this.api.post<unknown>('/backup/import', pkg).then(() => ({ renumbered: 0 }));
+    return this.api
+      .post<{ renumbered?: number }>('/backup/import', pkg)
+      .then((res) => ({ renumbered: typeof res?.renumbered === 'number' ? res.renumbered : 0 }));
   }
 }
 

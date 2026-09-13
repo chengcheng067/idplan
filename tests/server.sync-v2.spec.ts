@@ -286,7 +286,9 @@ describe('后端 v2 同步链路（NAS remote 数据源）', () => {
       payload: samplePackage(),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true });
+    // ★ v0.7（T01-b）：响应体新增 `renumbered` = 真实重编号条数（`ok` 保留，老客户端仍能读）。
+    //   本包内无撞号 → 期望 0；顺带把「正常包不误报重编号」这条锁在这里。
+    expect(res.json()).toEqual({ ok: true, renumbered: 0 });
 
     const projects = (await ctx.app.inject({ method: 'GET', url: '/api/projects' })).json() as Array<
       Record<string, unknown>

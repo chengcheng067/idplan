@@ -12,6 +12,19 @@ import type Database from 'better-sqlite3';
 import { parseJsonArray } from '../lib/json-columns';
 import { requireToken, unauthorizedBody } from '../lib/agent-auth';
 
+// ★ v0.7（T01-b）：备份导入的号段归一走**前后端共享的同一份纯函数** —— 与 local
+//   适配器的 `local.admin.repo.replaceAllImport` **逐字同义**（硬约束见 interfaces.ts）。
+//   判定逻辑只此一处：本地与远端必须给出同一个「导入后计数器值」与同一个 `renumbered`
+//   含义，各写一份必漂移（典型症状：本地说没撞号、远端说没撞号，但两边号段不同步）。
+//   该库零 IO、无 browser/node API，可安全被 server typecheck 引用（见其文件头「纪律」）。
+import {
+  TASK_NO_SEQ_KEY,
+  maxTaskNoOf,
+  parseTaskNoSeq,
+  resolveTaskNoCollisions,
+} from '../../src/core/lib/task-no';
+import type { Task } from '../../src/core/types/entities';
+
 interface StageLogRow {
   id: string;
   stage_id: string;
@@ -462,14 +475,83 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
       settings: 'settings',
     };
 
+    // ★ v0.7（T01-b）：包内任务行交给共享纯函数做号段归一。
+    //
+    // 这里做一次**受控 cast**（**不是** `any`）：包内行此处是备份 DTO 形状（camelCase
+    // 的 `Record<string, unknown>`），而共享纯函数签名收 `readonly Task[]`。
+    // 它之所以安全，是因为 `resolveTaskNoCollisions` 只**读** `row.taskNo`，
+    // 并用 `{ ...row, taskNo }` 原样重建行、其余字段一律透传；随后 `snake()` 再把
+    // 这些行逐列转成 SQLite 的 snake_case。改成 `any` 会把「归一只依赖 taskNo 这一个
+    // 字段」这个前提掩盖掉，将来有人在纯函数里多读一个字段也不会报错 —— 故显式窄化。
+    const pkgTasks = (pkg.data?.tasks ?? []) as unknown as readonly Task[];
+
+    // ★ v0.7（T01-b）：本次导入被重编号的条数（`renumbered` 的真实值）。
+    //   用闭包变量带出事务，与 local 侧 `local.admin.repo` 的写法对齐，便于人工比对。
+    let renumbered = 0;
+
     const tx = db.transaction(() => {
-      for (const t of Object.values(map)) db.prepare(`DELETE FROM ${t}`).run();
+      // ① **本地**计数器：必须在 `DELETE FROM settings` **之前**读 —— 顺序错了就永远
+      //    拿不到本地值（DELETE 之后它已经没了，随后 INSERT 进来的是**包内**的值）。
+      //    这是「本机已发到 1043、导入一个老包后被拉回 1000、之后新建全部重号」
+      //    这条真实可达路径的唯一防线。
+      const localRow = db
+        .prepare('SELECT value_json AS v FROM settings WHERE key = ?')
+        .get(TASK_NO_SEQ_KEY) as { v: string } | undefined;
+      const localSeq = parseTaskNoSeq(localRow?.v);
+
+      // ② 号段归一（§2.9.1 的三者取最大）：保留先到者、后到者重编号，
+      //    并算出「导入后应落的计数器值」= max(包内 max+1, 包内 seq, 本地 seq)。
+      //    `existingNos` **刻意不传**：本端点是整库替换（先 DELETE 再 INSERT），
+      //    导入瞬间库内无既有行，「与库内撞号」不可达，只剩**包内**查重。
+      const pkgSeqRow = (pkg.data?.settings ?? []).find((s) => s.key === TASK_NO_SEQ_KEY);
+      const pkgSeqRaw = pkgSeqRow?.valueJson;
+      const pkgSeq = typeof pkgSeqRaw === 'string' ? parseTaskNoSeq(pkgSeqRaw) : null;
+      const resolved = resolveTaskNoCollisions(pkgTasks, {
+        seqFromSettings: pkgSeq,
+        maxTaskNoInDb: maxTaskNoOf(pkgTasks),
+        localSeq,
+      });
+      renumbered = resolved.renumbered;
+
+      // ③ 计数器回写两准则（与 local.admin.repo 逐字同义，都是为了不破坏
+      //    §2.15-① 的「导出→导入→再导出 逐表全等」）：
+      //      · 包里**没有**该行 → **不发明一行**（否则 settings 凭空多一条，diff 必挂；
+      //        且这是安全的：新建路径的 initTaskNoSeq 会用「库内 max+1」现算，不撞号）；
+      //      · 包里**有**该行但归一后值未变 → **连 updatedAt 都不动**（否则同机常规往返
+      //        会因一次无意义的 updatedAt 刷新而在 JSON.stringify 上不等）。
+      //    走既有 `snake()` 转换，故这里仍写 camelCase 的 `valueJson`（SQLite 列是
+      //    snake_case 的 `value_json`）—— 手写列名会绕过这个转换。
+      const settingsRows: Array<Record<string, unknown>> =
+        pkgSeqRow && resolved.next !== pkgSeq
+          ? (pkg.data?.settings ?? []).map((s) =>
+              s.key === TASK_NO_SEQ_KEY
+                ? {
+                    key: TASK_NO_SEQ_KEY,
+                    valueJson: JSON.stringify(resolved.next),
+                    updatedAt: nowIso(),
+                  }
+                : s,
+            )
+          : (pkg.data?.settings ?? []);
+
+      // ★ 清库顺序 = **子表 → 父表**（即 `map` 声明序的逆序）。
+      //   `foreign_keys = ON`（生产 `openDb` 与本机一致）时，先删父表 `projects`
+      //   会因仍有 stages/tasks 引用它而**立刻**抛 `SQLITE_CONSTRAINT_FOREIGNKEY`
+      //   （无 ON DELETE CASCADE、且约束非 deferrable）—— 任何**非空库**的导入都会撞上，
+      //   整库替换在团队形态下根本走不通。
+      //   刻意用「map 声明序取反」而不是另写一份表名清单：后者一旦有人给 map 加表
+      //   而忘了同步，就会变成**静默漏删**（比报错危险得多）。
+      for (const t of [...Object.values(map)].reverse()) db.prepare(`DELETE FROM ${t}`).run();
       for (const [key, tableName] of Object.entries(map)) {
-        const rows = pkg.data?.[key] ?? [];
+        let rows = pkg.data?.[key] ?? [];
+        // 用归一后的行集（撞号的后到者已被重编号）
+        if (key === 'tasks') rows = resolved.rows as unknown as Array<Record<string, unknown>>;
+        if (key === 'settings') rows = settingsRows;
         for (const r of rows) insertRow(tableName, snake(r));
       }
     });
     tx();
-    return { ok: true };
+    // ★ `renumbered` 是新增字段，`ok` 必须保留（老客户端只读它），HTTP 状态码不变。
+    return { ok: true, renumbered };
   });
 }
