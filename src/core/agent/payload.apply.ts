@@ -25,7 +25,10 @@
  *   - `ensureAgentMember` **必须幂等**：按 (actorKind='agent', agentKind, name) 查找，
  *     命中复用——否则重复导入每次吃掉一个免费 3 席位（PRD 附录 C）。
  *   - `stageId` 缺省 → 落该项目 orderIndex 最大的**可见** Stage；项目无 Stage →
- *     `rejected('stage_limit')`，**绝不自动新建 Stage**（用户 2026-09-09 拍板 / §10-R3）。
+ *     `rejected('stage_limit')`。
+ *     ★ 绝不静默自动建 Stage；仅当导入请求显式声明落点阶段名、且该项目无同名阶段时才创建。
+ *     （用户 2026-09-09 拍板 / §10-R3；MAX_STAGE_COUNT 只在建档时校验、DB 层无约束，
+ *     自动建会让反复导入静默造出 20+ 批次拉垮 Timeline）
  */
 
 import {
@@ -35,11 +38,12 @@ import {
   MemberRoleKind,
   TaskStatus,
 } from '../types/enums';
-import type { Task, TaskArtifact } from '../types/entities';
+import type { Stage, Task, TaskArtifact } from '../types/entities';
 import type {
   AgentPayloadV1,
   ApplyResult,
   ApplyRejection,
+  ApplyStageResolution,
 } from '../types/agent-payload';
 import type { IRepositoryBundle, TaskUpsertRow } from '../repositories/interfaces';
 import { buildDependencyGraph, topoLayers } from './dag';
@@ -59,6 +63,13 @@ export interface ApplyOptions {
 interface ResolvedPlan {
   projectId: string;
   stageId: string | null;
+  /**
+   * v0.7 **恒定字段**：本批的落点阶段。
+   * 命中已有批次 → `mode:'existing'`；无落点（项目无可见批次 / 指定批次不存在）
+   * → `mode:'none'` + `id:null` + `name:''` + `orderIndex:-1`。
+   * ★ 本批不产出 `planned` / `created`（依赖按名新建，属 T02）。
+   */
+  stage: ApplyStageResolution;
   /** 待写入行（已被拒绝的条目不在其中） */
   rows: TaskUpsertRow[];
   /** 每行的 payload externalId（与 rows 同序，供两段式 upsert 回查） */
@@ -98,6 +109,8 @@ async function resolve(
     .filter((s) => s.visible)
     .sort((a, b) => a.orderIndex - b.orderIndex);
   let stageId: string | null = null;
+  /** 命中的批次**对象**（不只留 id —— `stage` 需要 name / orderIndex 回填） */
+  let stageHit: Stage | null = null;
   if (payload.stageId) {
     const hit = stages.find((s) => s.id === payload.stageId);
     if (!hit) {
@@ -108,9 +121,11 @@ async function resolve(
       });
     } else {
       stageId = hit.id;
+      stageHit = hit;
     }
   } else if (stages.length > 0) {
-    stageId = stages[stages.length - 1]!.id; // orderIndex 最大的可见批次
+    stageHit = stages[stages.length - 1]!; // orderIndex 最大的可见批次
+    stageId = stageHit.id;
   } else {
     // 不自动新建 Stage：MAX_STAGE_COUNT 只在建档时校验、DB 层无约束，
     // 自动建会让反复导入静默造出 20+ 批次拉垮 Timeline（§10-R3）
@@ -120,11 +135,25 @@ async function resolve(
       reason: '该项目暂无批次，请先建立批次后再导入。',
     });
   }
+  /**
+   * 落点解析结果（R1 四键恒定 / R4 四态表）：
+   *   命中已有批次 → `existing`（id 非空）；
+   *   无落点      → `none`（`id:null` + `name:''` + `orderIndex:-1` 哨兵）。
+   */
+  const stage: ApplyStageResolution = stageHit
+    ? {
+        mode: 'existing',
+        id: stageHit.id,
+        name: stageHit.name,
+        orderIndex: stageHit.orderIndex,
+      }
+    : { mode: 'none', id: null, name: '', orderIndex: -1 };
   if (!stageId) {
     // 批次不可用 → 全部条目按批次级拒绝返回（保持 ApplyResult 形状恒定）
     return {
       projectId,
       stageId: null,
+      stage,
       rows: [],
       rowExternalIds: [],
       rowBatchDeps: [],
@@ -275,6 +304,7 @@ async function resolve(
     return {
       projectId,
       stageId,
+      stage,
       rows: [],
       rowExternalIds: [],
       rowBatchDeps: [],
@@ -349,7 +379,7 @@ async function resolve(
     rowBatchDeps.push([...e.batchRefs]);
   }
 
-  return { projectId, stageId, rows, rowExternalIds, rowBatchDeps, rejected, created, updated };
+  return { projectId, stageId, stage, rows, rowExternalIds, rowBatchDeps, rejected, created, updated };
 }
 
 /**
@@ -387,7 +417,12 @@ export async function previewAgentPayload(
   opts?: ApplyOptions,
 ): Promise<ApplyResult> {
   const plan = await resolve(repos, payload, opts);
-  return { created: plan.created, updated: plan.updated, rejected: plan.rejected };
+  return {
+    created: plan.created,
+    updated: plan.updated,
+    rejected: plan.rejected,
+    stage: plan.stage,
+  };
 }
 
 /** 真正落库（两段式 upsert，见文件头「批内依赖」说明） */
@@ -398,7 +433,7 @@ export async function applyAgentPayload(
 ): Promise<ApplyResult> {
   const plan = await resolve(repos, payload, opts);
   if (plan.rows.length === 0) {
-    return { created: 0, updated: 0, rejected: plan.rejected };
+    return { created: 0, updated: 0, rejected: plan.rejected, stage: plan.stage };
   }
 
   // Agent 身份 Member（幂等）→ 补 agentId / source
@@ -439,5 +474,6 @@ export async function applyAgentPayload(
     created: first.created,
     updated: first.updated + second.updated,
     rejected: plan.rejected,
+    stage: plan.stage,
   };
 }

@@ -159,7 +159,13 @@ describe('payload.apply：preview / apply 编排', () => {
     const payload = payloadOf(project.id, [payloadTask('codex:run-1:t1')]);
 
     const preview = await previewAgentPayload(bundle, payload);
-    expect(preview).toEqual({ created: 1, updated: 0, rejected: [] });
+    // v0.7：`stage` 是 ApplyResult 的第四个恒定键（stg_v2 = 最后一个【可见】批次）
+    expect(preview).toEqual({
+      created: 1,
+      updated: 0,
+      rejected: [],
+      stage: { mode: 'existing', id: 'stg_v2', name: '批次2', orderIndex: 2 },
+    });
     expect(await bundle.tasks.list()).toHaveLength(0); // preview 零写入
 
     const result = await applyAgentPayload(bundle, payload);

@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 
-import { ChangxiaError, ChangxiaErrorCode, TaskStatus } from './enums';
+import { ChangxiaError, ChangxiaErrorCode, ProjectStatus, TaskStatus } from './enums';
 
 export const AGENT_PAYLOAD_SCHEMA_ID = 'idplan-agent-payload/v1' as const;
 
@@ -62,9 +62,11 @@ export interface AgentPayloadV1 {
   projectId: string | null;
   /**
    * 可选：落到哪个批次；null → 落该项目 orderIndex 最大的可见批次。
-   * ★ 不自动新建 Stage（用户 2026-09-09 拍板 / 设计文档 §10-R3）：
-   *   MAX_STAGE_COUNT 只在建档时校验、DB 层无约束，自动建会让反复导入静默造出
-   *   20+ Stage 拉垮 Timeline，且破坏 orderIndex 1..N 连续无空缺的既有假设。
+   * ★ 绝不静默自动建 Stage；仅当导入请求显式声明落点阶段名（query `?stageName=`）
+   *   且该项目无同名阶段时才创建。未声明 → 行为与 v0.6 逐字节一致。
+   *   （用户 2026-09-09 拍板 / 设计文档 §10-R3：MAX_STAGE_COUNT 只在建档时校验、
+   *   DB 层无约束，自动建会让反复导入静默造出 20+ Stage 拉垮 Timeline，且破坏
+   *   orderIndex 1..N 连续无空缺的既有假设。）
    */
   stageId: string | null;
   producedBy: AgentPayloadProducer;
@@ -82,14 +84,92 @@ export interface ApplyRejection {
   reason: string;
 }
 
+/* ---------------------- 阶段落点（v0.7 · 契约冻结） ---------------------- */
+
 /**
- * 写入响应（PRD 附录 A 规则 4）：**形状恒定**，无论成功/部分拒绝/整批拒绝，
- * 三个键永远存在且顺序不变。
+ * 本批最终落在哪个阶段 —— 四种互斥结果。
+ *
+ * | mode | 触发条件 | `id` |
+ * | --- | --- | --- |
+ * | `existing` | 落到**已存在**的阶段（`stageId` 指定命中，或缺省 → 最后一个可见批次） | 非空 |
+ * | `planned` | **预览**中「将会新建」的阶段（dryRun 专用，尚未落库） | `null` |
+ * | `created` | **已新建并落库**（仅 T02 在显式声明 `?stageName=` 且无同名阶段时产出） | 非空 |
+ * | `none` | **无落点**：项目无可见批次且未声明落点阶段名 → 整批拒绝、零写入 | `null` |
+ *
+ * ★ 本批（T01 契约冻结）**只产出 `existing` 与 `none`**；
+ *   `planned` / `created` 依赖「按名判重 + 新建分支」，属 **T02**，本批不产出
+ *   （§10.2 裁定 A 引入第 4 值 `'none'`）。
+ */
+export type ApplyStageMode = 'existing' | 'planned' | 'created' | 'none';
+
+/**
+ * 新建阶段带来的连带效应（**仅供预览**渲染「完成度 62% → 56%」，§4.8）。
+ *
+ * ★ `statusBefore` / `statusAfter` 取 **ProjectStatus**（项目整体状态），
+ *   不是 `StageStatus` —— 「项目整体完成 → 新建阶段后回进行中」是项目级语义
+ *   （§2.4 L217 口径；§3.1.1 样本里的 StageStatus 是文档笔误）。
+ */
+export interface ApplyStageImpact {
+  percentBefore: number;
+  percentAfter: number;
+  statusBefore: ProjectStatus;
+  statusAfter: ProjectStatus;
+}
+
+/**
+ * 落点阶段的解析结果。
+ *
+ * **R1**：`mode` / `id` / `name` / `orderIndex` **四键恒定** —— 无论成功、部分失败、
+ * 全拒、无落点，键集合与顺序都不漂移。
+ *
+ * **R4（`id` 与 `mode` 自洽的四态表）**：`existing`/`created` → 非空；
+ * `planned`/`none` → `null`。
+ */
+export interface ApplyStageResolution {
+  mode: ApplyStageMode;
+  /** `planned` / `none` → `null`（R4，不透支推断） */
+  id: string | null;
+  /** `none` → `''`（空串，不给例外） */
+  name: string;
+  /** `none` → `-1`（哨兵：仅 `'none'` 下出现，表示「无位置」，不是笔误） */
+  orderIndex: number;
+  /**
+   * **可选属性，不是 `| null`**（R3：「无 impact」只能用「键不存在」表达，
+   * 禁止 `null` / `{}`）。
+   *
+   * 出现 ⟺ `mode === 'planned' || mode === 'created'`（**R5 正向白名单**）。
+   * ★ 不得写成 `mode !== 'existing'` —— 枚举一扩张就会把新取值误卷进来
+   *   （新增 `'none'` 时已踩过一次）。
+   */
+  impact?: ApplyStageImpact;
+}
+
+/**
+ * 导入请求的 query 契约（**typing only**；解析与校验属 T02）。
+ *
+ * - `stageName` 为主名，`createStageIfMissing` 为其**同义别名**；
+ * - 空值 → `400 invalid_field`（**不静默降级**）；
+ * - 与 `stageId` **互斥**。
+ */
+export interface AgentImportQuery {
+  dryRun?: '1';
+  projectId?: string;
+  projectName?: string;
+  stageId?: string;
+  stageName?: string;
+  createStageIfMissing?: string;
+}
+
+/**
+ * 写入响应（PRD 附录 A 规则 4）：**形状恒定**，无论成功 / 部分拒绝 / 整批拒绝 /
+ * 无落点，四个键永远存在且顺序不变。
  */
 export interface ApplyResult {
   created: number;
   updated: number;
   rejected: ApplyRejection[];
+  /** v0.7 恒定字段：本批最终落在哪个阶段（含「无落点」这一态） */
+  stage: ApplyStageResolution;
 }
 
 /* ------------------------------ zod schema ------------------------------ */
