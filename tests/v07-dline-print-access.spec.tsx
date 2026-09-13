@@ -25,6 +25,10 @@
  *   ④ **范围收窄 + 任务支**（v0.7-D 补漏 / 补锁）：成员在打印页只能看到「与自己相关」的阶段，
  *      相关性的**两支撑**（`ownerId` = 我 / 该阶段下有我参与的任务）各配**唯一自变量**，
  *      使任一支失效都会**变红**（详见「任务支」组的补锁背景）。
+ *   ⑤ **不直读成员列表**（v0.7-D 收尾）：月历打印页历史上多一行
+ *      `const members = useMembersStore((s) => s.members);` 而**整页从未读过** → 死订阅。
+ *      角色派生已经由 `useRoleGuard()` 收口（`useRoleGuard.ts` 明文禁止组件直读 members），
+ *      故锁「打印页除收口外**不得再读**成员列表」。判别式见 ⑦ 组（运行期计数，非源码 contain）。
  *
  * ── 为什么必须带 admin / none 对照组 ──
  *   旧实现是「非管理员一律重定向」。若只断言「成员不重定向」，那么**把守卫整个删掉**
@@ -78,6 +82,32 @@ vi.mock('../src/hooks/useRepos', () => {
   return { useRepos: (): unknown => bundle };
 });
 
+/**
+ * 成员列表 selector **调用计数**（⑦ 组「不直读成员列表」判别式的量具）。
+ *
+ * 为什么必须用 `vi.mock` 包一层、而不能 spy `useMembersStore.subscribe`：
+ *   zustand 的 `create()` 返回的是 `useBoundStore`（`Object.assign(useBoundStore, api)`），
+ *   而 `useStore(api, selector)` 订阅的是**闭包里捕获的 `api.subscribe`**。
+ *   改写 `useMembersStore.subscribe` 只换掉了 bound hook 上的那份**拷贝**，
+ *   `api.subscribe` 纹丝不动 → 计数恒 0，**任何变异都量不出来**（实测：删掉与保留该行
+ *   都得 `subs: 0`）。故此处改为在模块边界上计数 selector 调用，实测能区分 2 ≠ 1。
+ *
+ * 包装是**透明**的：`Object.assign` 保留 `getState/setState/subscribe/setAll` 等全部成员，
+ * 既有 32 条用例对 store 的读写与断言语义不变。
+ */
+const membersHookCalls = vi.hoisted(() => ({ count: 0 }));
+
+vi.mock('../src/store/useMembersStore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/store/useMembersStore')>();
+  const real = actual.useMembersStore;
+  const counted = ((selector?: unknown) => {
+    membersHookCalls.count += 1;
+    return (real as unknown as (s?: unknown) => unknown)(selector);
+  }) as unknown as typeof real;
+  Object.assign(counted, real);
+  return { ...actual, useMembersStore: counted };
+});
+
 import { SchedulePrintPage } from '../src/pages/SchedulePrintPage';
 import { CalendarPrintPage } from '../src/pages/CalendarPrintPage';
 import { ProjectDetailPage } from '../src/pages/ProjectDetailPage';
@@ -86,6 +116,7 @@ import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useMembersStore } from '../src/store/useMembersStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import { useUiStore } from '../src/store/useUiStore';
+import { useRoleGuard } from '../src/hooks/useRoleGuard';
 import {
   MemberActorKind,
   MemberRoleKind,
@@ -925,6 +956,86 @@ describe('v0.7-D 补漏 · 打印页「委托方」仅管理员可见（与详�
     const cal = renderAt(`/project/${PROJECT_ID}/calendar-print`);
     expect(cal.textContent).toContain('委托方');
     expect(cal.textContent).toContain(PROJECT.clientName);
+  });
+});
+
+/* ====================================================================================
+ * ⑦ 死订阅锁（v0.7-D 收尾）：打印页除**收口**外不得再直读成员列表
+ *
+ * 事实：`CalendarPrintPage.tsx` 历史上有一行 `const members = useMembersStore((s) => s.members);`，
+ * 而该变量在整页**零引用**（grep 只有 import 与这一行）→ 死订阅。
+ * 角色派生已由 `useRoleGuard()` 收口（`useRoleGuard.ts:8-9` 明文「禁止组件直接读 members
+ * 比对 roleKind」），故删掉它同时满足「去死代码」与「收口纪律」。
+ *
+ * ⚠️ 两处**必须更正**的常见说法（都有实测依据，不要照抄）：
+ *   ① 它不是「无谓的重渲染触发源」：实测「改成员列表 → 该页多渲染 1 次」在**删前删后都一样**
+ *      （`React.Profiler` 计数：删前 `1→2`，删后仍 `1→2`）——因为 `useRoleGuard()` 订阅的是
+ *      **同一个 `members` slice**，重渲染照旧发生。删它是「收口 + 去死代码」，**不是性能优化**。
+ *   ② 判别式**不能**用「源码 contain/not-contain」（本项目明令禁止的恒真写法），
+ *      也**不能**用「订阅数」（改 `useMembersStore.subscribe` 量不到，恒 0，见上方 mock 注释）；
+ *      能用的是「运行期 selector 调用次数」。而调用次数**不能**断言为 0：`useRoleGuard()`
+ *      本身就要读一次（正是允许的那次）。故采用**差分**：与「只走收口的对照组件」逐次比对，
+ *      多出任何一次 = 有人又加了一条直读。
+ * ------------------------------------------------------------------------------------ */
+
+/** 只走收口的对照组件：它读成员列表的次数 = 「合法基线」 */
+function RoleGuardOnlyProbe(): React.ReactElement {
+  useRoleGuard();
+  return <div data-role-guard-probe="" />;
+}
+
+/**
+ * 量一次「渲染 `node` 期间，成员列表 selector 被调用了几次」。
+ * 用 `mount`（会对齐前一棵树做 unmount）保证计数不被上一棵树的残留影响。
+ */
+function countMembersHookCalls(node: React.ReactElement): number {
+  membersHookCalls.count = 0;
+  mount(node);
+  return membersHookCalls.count;
+}
+
+describe('v0.7-D 收尾 · 打印页不得直读成员列表（角色派生只经 useRoleGuard 收口）', () => {
+  it('★ 月历打印页：成员列表 selector 调用次数 == 仅走收口的次数（多一次 = 死订阅回来了）', () => {
+    setActor('member');
+
+    const baseline = countMembersHookCalls(<RoleGuardOnlyProbe />);
+    // 前提：基线必须真的 >0，否则「相等」是 0==0 的假绿（判别式自身有效性）
+    expect(
+      baseline,
+      '前提：useRoleGuard 必须真的读一次成员列表（基线为 0 说明量具失效）',
+    ).toBeGreaterThan(0);
+
+    membersHookCalls.count = 0;
+    const h = renderAt(`/project/${PROJECT_ID}/calendar-print`);
+    expect(printed(h), '前提：页面真的渲染了（否则计数无意义）').toBe(true);
+    const pageCalls = membersHookCalls.count;
+
+    expect(
+      pageCalls,
+      `月历打印页除 useRoleGuard 外不得再直读成员列表：实测 ${pageCalls} 次，收口基线 ${baseline} 次` +
+        `（多出的 ${pageCalls - baseline} 次即那行死订阅）`,
+    ).toBe(baseline);
+  });
+
+  it('★ 日程表打印页：同样不得多读一次（该页的 members 是喂给组装函数的**在用**输入，另见下注）', () => {
+    // 说明：`SchedulePrintPage` 的 `members` **不是**死代码——它被传给
+    // `buildScheduleSections({ …, members })` 组装 `assigneeNames`（grep 可证）。
+    // 但打印渲染层从不读 `assigneeNames`（§5.3 登记在案的「不可观测输入」），
+    // 故本轮**不动源码**、也不锁成 2 次（那会把「可以优化」误锁成「必须如此」）。
+    // 本用例只钉住它的**下界**：不得出现「又多一条纯死直读」。
+    setActor('member');
+
+    const baseline = countMembersHookCalls(<RoleGuardOnlyProbe />);
+    expect(baseline).toBeGreaterThan(0);
+
+    membersHookCalls.count = 0;
+    const h = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+    expect(printed(h), '前提：页面真的渲染了').toBe(true);
+
+    expect(
+      membersHookCalls.count,
+      '日程表打印页最多只应有「收口 1 次 + 组装用 1 次」，多出即新增死直读',
+    ).toBeLessThanOrEqual(baseline + 1);
   });
 });
 

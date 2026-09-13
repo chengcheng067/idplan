@@ -5,7 +5,6 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download, FileText, Printer } from 'lucide-react';
 
 import { useProjectsStore } from '../store/useProjectsStore';
-import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
 import {
@@ -108,7 +107,13 @@ export function CalendarPrintPage(): JSX.Element {
   //    `computeRelatedStageIds`（其判定之一是「该阶段下有我参与的任务」）。
   //    缺这一行 → 成员会漏掉「任务分派给我、但阶段负责人不是我」的那些阶段。
   const tasks = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
-  const members = useMembersStore((s) => s.members);
+  // ⚠️ 本页**不直接**订阅成员列表：角色派生一律经 `useRoleGuard()` 收口
+  //    （`useRoleGuard.ts`「禁止组件直接读 members」）。历史上这里曾多一行
+  //    `const members = useMembersStore((s) => s.members);`——**整页从未读过它**，
+  //    是死变量；且它并不减少重渲染（本页已由 `useRoleGuard()` 订阅同一 slice，
+  //    成员列表变更**照样**会重渲染一次），删掉它是「收口 + 去掉死代码」，
+  //    **不是**性能优化。若日后确需成员列表，请走 useRoleGuard / 专用 hook，
+  //    不要在此恢复直读。
   // v0.7-D：页首守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**）；
   // `memberView` 口径与 ProjectDetailPage / MonthlyCalendarView **逐字一致**，不自造第三种判定。
   const { role, currentMember, hydrated } = useRoleGuard();
