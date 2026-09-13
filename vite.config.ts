@@ -5,9 +5,6 @@ import { defineConfig } from 'vite';
 /**
  * Vite 配置。
  *
- * - pdfjs worker：在 src/core/file-extractors/pdf.extractor.ts 内以
- *   `import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'` 方式注入，
- *   无需额外的 worker 插件；如遇兼容问题可退化为 legacy build。
  * - vitest：测试运行在 node 环境（fake-indexeddb 补齐 IndexedDB），
  *   设置文件 tests/setup.ts 只负责挂载 fake-indexeddb。
  */
@@ -24,7 +21,8 @@ export default defineConfig({
     // 因此禁用自动清空,并把产物输出到全新目录 build-dist,规避被锁残留文件。
     emptyOutDir: false,
     outDir: 'build-dist',
-    // mammoth / pdfjs 体量大且为按需动态加载，放宽分包警告阈值
+    // 报表/图表类依赖体量较大，且多为按需动态加载；放宽分包警告阈值，
+    // 避免构建日志被无行动价值的体积告警淹没。
     chunkSizeWarningLimit: 1600,
   },
   test: {

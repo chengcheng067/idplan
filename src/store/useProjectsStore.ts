@@ -28,7 +28,6 @@ import { taskIsDone, withStatus } from '../core/types/entities';
 import type { TaskQuery } from '../core/repositories/interfaces';
 import { previewSplit } from '../core/template/split';
 import { digestOf, ProjectService } from '../core/services/project.service';
-import { parseContract } from '../core/contract-parser';
 import { StageService } from '../core/services/stage.service';
 import type { UnlockHintSignal } from '../core/services/stage.service';
 import { sameAssigneeSet, taskAssigneeIds } from '../hooks/useRoleGuard';
@@ -455,7 +454,7 @@ export function splitPreview(startAt: string, endAt: string): StageDraft[] {
   return previewSplit({ startAt, endAt });
 }
 
-/** 快速解析（向导 Step1→Step2 直接调用；纯函数无 IO） */
-export { parseContract, digestOf };
+/** 导出副作用零依赖的纯函数（测试友好；纯函数无 IO） */
+export { digestOf };
 
 export type { AssignmentLog, StageLog, ProjectType };

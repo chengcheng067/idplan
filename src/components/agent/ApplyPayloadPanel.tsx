@@ -7,8 +7,8 @@
  * AF-01「50 条 ≤ 2 次点击」：粘贴 / 拖入后**自动触发** previewPayload（无「校验」按钮），
  * 用户只点「确认写入」= 1 次点击。
  * 失败纪律：任何失败保留面板与用户输入（**不清空输入框**）；写入成功才关闭面板。
- * 输入通道：textarea 粘贴 + 拖拽 .json/.md（FileReader.readAsText 纯文本，
- * 不复用 file-extractors——那是 pdf/docx 二进制提取）。
+ * 输入通道：textarea 粘贴 + 拖拽 .json/.md（FileReader.readAsText 纯文本读取，
+ * 不做二进制文档解析——本面板只接受用户手工粘贴/导出的纯文本载荷）。
  * .md / 非 JSON 起始 → markdown-ingest.parseMarkdownTasks；否则 JSON.parse + validate。
  */
 
