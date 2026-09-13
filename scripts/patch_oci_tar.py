@@ -7,6 +7,8 @@ ID Plan · OCI/Docker-save 前端镜像 tar 就地修补（完整版）
 dist 层（usr/share/nginx/html/），并同步更新：
   - 经典 docker-save manifest.json（ugcli 实际读取的）
   - OCI index.json + OCI manifest blob（给不读 classic 的导入方看）
+  - 清掉 manifest 图不可达的历史层（层尸体）—— 内含旧一代 bundle 文件名，
+    留着会让后续 grep 排查把「历史残留」误判成「patch 没生效」
 
 输出为同格式的「经典 docker save」tar（manifest.json 指向 blobs/sha256/<hash>）。
 
@@ -166,6 +168,52 @@ def main():
     index["manifests"][0]["size"] = len(oci_manifest_bytes)
     index_bytes = json.dumps(index, separators=(",", ":")).encode()
 
+    # ---- 清掉「manifest 图不可达」的历史 blob（层尸体）----
+    # 为什么要清：输入镜像里存在**层尸体** —— 含 usr/share/nginx/html/assets/ 却不被
+    # 任何 manifest 引用的层。它们有两类来源：(1) 本轮被我们替换掉的旧 dist 层；
+    # (2) **从输入 tar 继承来的**更早一代残留（例如 9786f5f3…，10 个成员）。
+    # 它们永远不会被装载（功能无害），但里面装着**旧一代 bundle 文件名**
+    # （如 index-BgvOjm_I.js / index-1t3p9oM5.js）。留着的话，将来任何人 grep 这个
+    # 交付包排查「有没有旧资产管理残留」都会命中它们，从而误判「patch 没生效」。
+    # —— 这类「历史残留带偏判断」本晚已反复踩过（verify-package 假绿、qa-scratch 死文件、
+    #    build-dist 老哈希），故不把会制造此类误判的包交出去。
+    #
+    # 判据必须用**从 manifest 图的可达性**，不能只看「不在 manifest.Layers 里」：
+    # index.json 引用的 OCI manifest blob 与 config blob 同样不在 Layers 里，却是
+    # manifest 图的必需节点，若按「不在 Layers」去删会把它们一起误删、直接损坏包
+    # （上一轮的统计口径就犯过这个假阳性）。此处按可达性算保留集，天然避开。
+    keep = set()
+    for _entry in classic:                       # 经典 docker-save 图
+        keep.add(_entry["Config"].split("/")[-1])
+        for _ref in _entry["Layers"]:
+            keep.add(_ref.split("/")[-1])
+    for _m in index["manifests"]:                # OCI index 图（多镜像也能全保住）
+        _m_sha = _m["digest"].split(":")[-1]
+        keep.add(_m_sha)
+        _raw_m = blobs.get(_m_sha)
+        if _raw_m is None:
+            continue
+        try:
+            _m_man = json.loads(_raw_m)
+        except Exception:
+            continue
+        _cfg_ref = (_m_man.get("config") or {}).get("digest")
+        if _cfg_ref:
+            keep.add(_cfg_ref.split(":")[-1])
+        for _lay in _m_man.get("layers", []) or []:
+            keep.add(_lay["digest"].split(":")[-1])
+
+    dropped_bytes = 0
+    for _sha in [s for s in blobs if s not in keep]:
+        _gone = blobs.pop(_sha)
+        dropped_bytes += len(_gone)
+        print(">> 丢弃不可达 blob（层尸体）:", _sha[:16], "size", len(_gone))
+    print(">> 层尸体清理合计", dropped_bytes, "bytes；剩余 blob", len(blobs), "个")
+    if old_digest_sha != new_sha and old_digest_sha in keep:
+        print("!! 异常：被替换的旧 dist 层仍在保留集里（应已不可达）")
+    if not keep <= set(blobs):
+        print("!! 异常：保留集里有 blob 不在输出 dict 中")
+
     # ---- 写回 ----
     def w(name, data):
         info = tarfile.TarInfo(name)
@@ -177,7 +225,8 @@ def main():
         w("manifest.json", json.dumps(classic, separators=(",", ":")).encode())
         w("index.json", index_bytes)
         w("oci-layout", b'{"imageLayoutVersion":"1.0.0"}')
-        # 所有 blob，跳过旧的 dist blob（new_sha 已写入 blobs dict；旧 digest 若与 new_sha 相同则保留）
+        # blobs 里此时只剩：新 dist 层 / 新 config / 新 OCI manifest，以及其它仍可从
+        # manifest 图到达的既有层（base OS / nginx / 字体等）。不可达的层尸体已在上方清掉。
         for sha, data in blobs.items():
             w(f"blobs/sha256/{sha}", data)
 
