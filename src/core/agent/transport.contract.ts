@@ -9,16 +9,22 @@
  *   1. 只承载**跨批共享的传输层契约**（类型 + 注册表 + R5/R6 判据）；
  *   2. 唯一实现是默认注册的 `local-dexie` 通道（转调既有 preview/apply，= 现状行为）；
  *      `desktop-loopback` / `nas-http` 由 **T05** 覆盖注册；
- *   3. **不含** `stageName` 判重 / 按名解析 / 新建分支 —— 那是 **T02**。
+ *   3. **不含** `stageName` 判重 / 按名解析 / 新建分支 —— 那是 **T02** 的
+ *      `payload.apply.ts` + `stage-resolve.ts`。本文件的 `local-dexie` 实现把
+ *      `opts.stageName` **原样转发**给它，**永不自行判定**（详见该实现内的注释）。
  *
  * ── 依赖方向（单向，不得成环）──
  *   本文件 → `payload.apply.ts` / `types/agent-payload.ts`。
  *   `payload.apply.ts` **不得**反向 import 本文件。
  *
  * 纪律：零 IO、零 browser API，可被 `server/tsconfig.json` 的 `../src/core/**` 覆盖。
+ *
+ * ⚠️ 注：`ChangxiaError` / `ChangxiaErrorCode` 曾用于 `local-dexie` 通道里那段
+ *    「`stageName` 未接入」的抛错（T01 占位，T02 已解除）。占位去掉后本文件不再需要
+ *    它们，但**刻意保留 import 会变成未使用导入（`noUnusedLocals` 未开，故不报错）**——
+ *    故此处如实删除，避免留下误导下一位读者的死导入。
  */
 
-import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
 import type {
   AgentImportQuery,
   ApplyResult,
@@ -150,17 +156,19 @@ export function createLocalDexieChannel(
     status: async () => status(),
     probe: async () => status(),
     async import(payload, opts) {
-      // ★ 不静默降级：落点名解析属 T02，本通道尚未接入。
-      //   静默忽略会让调用方以为任务落到了指定阶段，实则落到了默认批次。
-      if (opts.stageName) {
-        throw new ChangxiaError(
-          ChangxiaErrorCode.Validation,
-          'local-dexie 通道尚未接入 ?stageName= 落点解析（T02），请先改用 stageId 或指定既有批次。',
-        );
-      }
       const repos = await getBundle();
       const validated = validateAgentPayload(payload);
-      const applyOpts = { projectId: opts.projectId };
+      // ★ v0.7（T02）：`opts.stageName` **原样转发**进落点解析 —— 与
+      //   `POST /api/agent/import` 的 `?stageName=` 是同一条链路（同一份
+      //   `payload.apply.resolve()`），因此本地手动通道也能跑通 V1-19 的
+      //   「预览将新建阶段『X』」与 V1-17 的「自动落进 Agent 排期」。
+      //
+      //   ⚠️ 此处**绝不**自己判一次 `stageName`（例如「本地没有就静默忽略」）：
+      //      形式判定（空值 → 报错 / 有同名则复用 / 无同名才建）全部由
+      //      `payload.apply` 内的 `resolve()` 定死。在这里再判一次就会出现
+      //      「同一份 payload 在本机与 NAS 得到不同答案」—— 那正是 §6.2 写锁
+      //      矩阵要防的「两份真相」。契约层只负责**转发**，不负责**判定**。
+      const applyOpts = { projectId: opts.projectId, stageName: opts.stageName ?? null };
       if (opts.dryRun) return previewAgentPayload(repos, validated, applyOpts);
       return applyAgentPayload(repos, validated, applyOpts);
     },

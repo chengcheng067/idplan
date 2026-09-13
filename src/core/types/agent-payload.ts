@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 
-import { ChangxiaError, ChangxiaErrorCode, ProjectStatus, TaskStatus } from './enums';
+import { ChangxiaError, ChangxiaErrorCode, ProjectCalendarStatus, TaskStatus } from './enums';
 
 export const AGENT_PAYLOAD_SCHEMA_ID = 'idplan-agent-payload/v1' as const;
 
@@ -103,27 +103,38 @@ export interface ApplyRejection {
  * | --- | --- | --- |
  * | `existing` | 落到**已存在**的阶段（`stageId` 指定命中，或缺省 → 最后一个可见批次） | 非空 |
  * | `planned` | **预览**中「将会新建」的阶段（dryRun 专用，尚未落库） | `null` |
- * | `created` | **已新建并落库**（仅 T02 在显式声明 `?stageName=` 且无同名阶段时产出） | 非空 |
+ * | `created` | **已新建并落库**（T02 在显式声明 `?stageName=` 且无同名阶段时产出） | 非空 |
  * | `none` | **无落点**：项目无可见批次且未声明落点阶段名 → 整批拒绝、零写入 | `null` |
  *
- * ★ 本批（T01 契约冻结）**只产出 `existing` 与 `none`**；
- *   `planned` / `created` 依赖「按名判重 + 新建分支」，属 **T02**，本批不产出
- *   （§10.2 裁定 A 引入第 4 值 `'none'`）。
+ * ★ T01 冻结契约时**只产出 `existing` 与 `none`**；`planned` / `created` 依赖
+ *   「按名判重 + 新建分支」，由 **T02** 落地（`payload.apply.ts` + `stage-resolve.ts`）。
+ *   （§10.2 裁定 A 引入第 4 值 `'none'`）
  */
 export type ApplyStageMode = 'existing' | 'planned' | 'created' | 'none';
 
 /**
  * 新建阶段带来的连带效应（**仅供预览**渲染「完成度 62% → 56%」，§4.8）。
  *
- * ★ `statusBefore` / `statusAfter` 取 **ProjectStatus**（项目整体状态），
- *   不是 `StageStatus` —— 「项目整体完成 → 新建阶段后回进行中」是项目级语义
- *   （§2.4 L217 口径；§3.1.1 样本里的 StageStatus 是文档笔误）。
+ * ★ v0.7 契约修订 R1：`statusBefore` / `statusAfter` 由 `ProjectStatus` **更正为
+ *   `ProjectCalendarStatus`**（`'in_progress' | 'completed' | 'overdue' | 'not_started'`）。
+ *
+ *   ── 为什么必须更正 ──
+ *   `ProjectStatus` 只有 `active | archived`（回答「在不在归档区」），而 §3.1.1 的
+ *   样例 B/B′ **逐字节**要求 `"statusBefore": "completed"` / `"statusAfter": "in_progress"`，
+ *   §8-V1-21 的断言亦为 `statusBefore === 'completed'`。一个 `active | archived` 的类型
+ *   与这两处的验收**不可能同时成立** —— 契约自相矛盾时以**验收口径**为准。
+ *
+ *   ── 为什么不是 `StageStatus` ──
+ *   §3.1.1 早期草稿里出现过 `StageStatus` 字形，但那是**笔误**：本字段描述的是
+ *   「**项目整体**已经全部完成 → 新增一个未开始的可见阶段后回到进行中」，是**项目级**语义。
+ *   而 §4.3 属性表里新阶段的 `status = StageStatus.NotStarted` 是**对的、不要改** ——
+ *   那是**阶段自己的**状态。两者同名不同域，**不可互换**。
  */
 export interface ApplyStageImpact {
   percentBefore: number;
   percentAfter: number;
-  statusBefore: ProjectStatus;
-  statusAfter: ProjectStatus;
+  statusBefore: ProjectCalendarStatus;
+  statusAfter: ProjectCalendarStatus;
 }
 
 /**

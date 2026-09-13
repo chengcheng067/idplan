@@ -1,6 +1,9 @@
 import type { Project, Stage, Task } from '../core/types/entities';
 import { taskIsDone } from '../core/types/entities';
 import { StageStatus } from '../core/types/enums';
+// ★ v0.7 契约修订 R1：项目日历态的定义已收口到 core/types/enums（它是契约类型）。
+//   此处**引入到本模块作用域**（本文件要拿它当返回类型）+ 下方 re-export 保导出名不变。
+import type { ProjectCalendarStatus } from '../core/types/enums';
 
 /**
  * 进度派生共享层（PRD §5.4 / §8.2）：
@@ -11,8 +14,16 @@ import { StageStatus } from '../core/types/enums';
  * 不持有任何 hex——色值映射由调用方从 STAGE_BAR_COLORS / timelineColors / calendarColors 取。
  */
 
-/** 月历/卡片共用的项目状态枚举（与 PRD §3.4 筛选、§4.2 颜色一一对应） */
-export type ProjectCalendarStatus = 'in_progress' | 'completed' | 'overdue' | 'not_started';
+/**
+ * 月历/卡片共用的项目**日历态**（与 PRD §3.4 筛选、§4.2 颜色一一对应）。
+ *
+ * ★ v0.7 契约修订 R1：定义已**收口**到 `core/types/enums.ts` —— 它属**契约**
+ *   （`ApplyStageImpact` 直接引用它），而本文件是**派生层**；契约放在派生层会造成
+ *   「契约 → 派生」的反向依赖（`agent-payload.ts` 这个纯类型文件被迫 import 本模块）。
+ *   此处改为**引入 + re-export**（本文件自身也要用它作返回类型），
+ *   故导出名与全部既有消费点**零改动**。
+ */
+export type { ProjectCalendarStatus };
 
 /**
  * 当前激活阶段（返回 Stage 对象，全站一致口径）：

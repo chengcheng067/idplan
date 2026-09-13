@@ -1,5 +1,5 @@
 /**
- * taskNo（任务人读号）共享纯函数库 —— **前后端单份实现**。
+ * taskNo（任务人读号）+ 阶段名归一 共享纯函数库 —— **前后端单份实现**。
  *
  * ── 为什么单独成库 ──
  * 号的分配规则同时被三处消费：前端 Dexie 仓储（`local.tasks.repo`）、前端备份导入
@@ -7,6 +7,9 @@
  * 三处各写一遍「下一个号取多少」的算式，就是三份会各自漂移的真相 ——
  * 典型症状是「本地新建 T-1030、NAS 新建也 T-1030」，而两边都不报错。
  * 故规则做成**零 IO 纯函数**，两端 import 同一份。
+ *
+ * v0.7 · T02 追加**阶段名归一**（`normalizeStageName` / `resolveStageByName`，见文件末段）：
+ * 它与 taskNo 是同一类东西 —— 一个必须前后端逐字一致的**判重算式**（§2.3 签名表 / §4.4）。
  *
  * ── 纪律（本文件是服务端 typecheck 的边界守卫，见 §2.15 ⑨）──
  * **零 repo import、零 browser API、零 node API**（只 import 类型）。
@@ -21,7 +24,7 @@
  *      空库 → 1000 → 第一个号 `T-1000`。
  */
 
-import type { Task } from '../types/entities';
+import type { Stage, Task } from '../types/entities';
 
 /**
  * 计数器在 `settings` 表中的键名（**单一出处**）。
@@ -251,4 +254,130 @@ export function createTaskNoCounter(input: InitTaskNoSeqInput): TaskNoCounter {
     },
     peek: () => next,
   };
+}
+
+/* ============================================================================================
+ * 阶段名归一与按名解析（v0.7 · T02 · 设计文档 §2.3 签名表 / §4.4）
+ *
+ * ── 为什么与 taskNo 同库（而不是放进 stage-resolve.ts）──
+ * 与 taskNo 是**同一类东西**：一个必须前后端逐字一致的**判重算式**。放同一处有两层理由：
+ *   ① §2.3 的签名表把它列在本文件，§7.2-T01 的文件清单亦然 —— 契约归属只有一处；
+ *   ② 本文件是「**零 repo import / 零 browser API / 零 node API**」的边界守卫
+ *      （见文件头纪律）：把它放在这里，`npm run typecheck:server` 就自动成了它的探针。
+ *      若放在 `stage-resolve.ts`（那边 import `lib/progress.ts`，链路更长），
+ *      归一函数自身的「零依赖」性质就没有守卫。
+ * 而 `stage-resolve.ts` 保留 `buildCreatedStage` / `planImpact`（它们要 Project / StageStatus
+ * 等**领域**依赖），从本文件 import 下面这两个函数 —— 于是「判重只有一份实现」仍然成立。
+ *
+ * 对应关系：`normalizeStageName` ↔ `normalizeTitle`（`markdown-ingest`）的定位相同 ——
+ * 都是「幂等键的归一」，都是**仅用于判重、不入库**。
+ * ============================================================================================ */
+
+/**
+ * 阶段名归一（§4.4 五步，逐字照实现）。
+ *
+ * ```
+ * s = raw.trim()
+ * s = s.replace(/\s+/g, ' ')                 // 折叠连续空白（含 tab / 换行）
+ * s = s.replace(/\u3000/g, ' ')              // 全角空格
+ * s = 全角→半角（U+FF01–U+FF5E → U+0021–U+007E）
+ * s = s.replace(/[。．.，,；;、：:！!？?）)】]》>]+$/g, '')   // 去尾标点
+ * ```
+ *
+ * ── 为什么必须做这一步（坑 C6）──
+ * 不做归一时，`Agent 排期` 与 `Agent 排期。` 会被判为两个不同的名字 ——
+ * 于是**每次同步都新建一个阶段**（正是主 PRD §4.2.2-① 的 runId 翻车模式：
+ * 每天重复建）。归一是「同名复用」这个幂等语义的**唯一保障**。
+ *
+ * ── 相对 §4.4 的唯一一处**加严**（已登记，非自由发挥）──
+ * 末尾多一次 `.trim()`。理由：去尾标点可能**露出**尾部空白
+ * （`'Agent 排期 .'` → 去尾部 `.` → `'Agent 排期 '`），此时归一键会带上尾部空格，
+ * 与 `'Agent 排期'` 判为不同 → 又回到「每次同步新建一个阶段」。
+ * 该加严**只可能让更多变体被判为同名**，不会漏判同名；判定方向与 §4.4 一致。
+ *
+ * ⚠️ **不做**大小写折叠：`Fix bug` 与 `fix bug` 视为两个阶段名。
+ * 理由与 `markdown-ingest.normalizeTitle` 同款 —— 大小写可能承载语义，
+ * 静默合并比「少合并一次」危险得多。
+ *
+ * ⚠️ **返回值只用于判重，绝不入库**（§4.3：`Stage.name` 写的是「声明名 trim 后的原样文本」）。
+ *   归一值是**判定键**，不是展示值 —— 写进去会让用户看到 `Agent 排期` 变成去掉了句号的形态。
+ */
+export function normalizeStageName(raw: string): string {
+  let s = raw.trim();
+  s = s.replace(/\s+/g, ' ');
+  s = s.replace(/\u3000/g, ' ');
+  // 全角字符区整体平移 0xFEE0（U+FF01..U+FF5E → U+0021..U+007E）
+  s = s.replace(/[\uFF01-\uFF5E]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
+  s = s.replace(/[。．.，,；;、：:！!？?）)】\]》>]+$/g, '');
+  return s.trim();
+}
+
+/**
+ * 新阶段序号的**下限**。
+ *
+ * ★ 不是「风格选择」，是**权威 schema 的硬约束**：
+ *   `server/schema.sql:45` → `order_index INTEGER NOT NULL CHECK (order_index BETWEEN 1 AND 99)`。
+ *   新建阶段的 `orderIndex` 一旦取 0，`POST /api/stages/bulk` 会抛
+ *   `SQLITE_CONSTRAINT_CHECK`（整批 500）——而「零阶段项目 + 显式声明」正是
+ *   §8-V1-17 的**首要验收场景**。详见 `resolveStageByName` 内的说明。
+ */
+const STAGE_ORDER_MIN = 1;
+
+/** `resolveStageByName` 的结果：命中的阶段（未命中为 null）+ 新阶段应落的 orderIndex */
+export interface StageNameResolution {
+  /** 归一后同名的**可见**阶段；同名多命中取 `orderIndex` 最小者。未命中 → null */
+  hit: Stage | null;
+  /**
+   * `hit` 非空 → 即该阶段的 `orderIndex`（落点就是它）；
+   * `hit` 为空 → **新阶段应落的 `orderIndex`** = `max(该项目全部阶段.orderIndex) + 1`，
+   * 且**下限为 1**（`STAGE_ORDER_MIN`，schema CHECK 约束）。
+   */
+  orderIndex: number;
+}
+
+/**
+ * 按名解析落点（§4.4）。
+ *
+ * **必须传入该项目的「全部」阶段（含 `visible === false`）**：
+ *   - 同名命中只在**可见**阶段里找（隐藏阶段不是合法落点，命中它 = 任务落到黑洞）；
+ *   - 而新阶段的 `orderIndex` 取**全部**阶段（含隐藏）的 max + 1 —— 隐藏阶段也占位，
+ *     只按可见取 max 会与隐藏阶段**撞号**，排序随即不稳定（坑 C4 / C5）。
+ *
+ * 同名多命中取 `orderIndex` 最小者：稳定、可解释，且与「落点 = 最早那一段」的直觉一致。
+ *
+ * ★ **本函数存在的唯一理由**是 §4.4 那句加粗警告：只做「缺则建」而不做「按名选点」，
+ *   用户显式声明的 `Agent 排期` 会被静默忽略（任务落到 orderIndex 最大的那个可见阶段）。
+ *   故命中分支与未命中分支各自都有单测（坑 C2）。
+ */
+export function resolveStageByName(
+  declaredName: string,
+  stages: readonly Stage[],
+): StageNameResolution {
+  // ── 新阶段序号：`max(全部阶段.orderIndex) + 1`，且**下限锁 1** ──
+  // ★ 与 §4.4 伪码的**唯一一处偏离**（已登记，见下）：伪码写「默认 -1」，
+  //   对**零阶段**项目会算出 `-1 + 1 = 0`；而权威 schema 明文
+  //   `CHECK (order_index BETWEEN 1 AND 99)`（server/schema.sql:45）→ 0 直接撞约束、
+  //   `POST /api/stages/bulk` 抛 `SQLITE_CONSTRAINT_CHECK`、整批 500。
+  //   零阶段项目 + 显式声明恰恰是 §8-V1-17 的**首要验收场景**（「不预先手建阶段就说
+  //   同步进 ID Plan」），也就是说：照伪码的「默认 -1」实现，V1-17 永远不可能通过。
+  //   故累加初值取 `STAGE_ORDER_MIN - 1`（= 0）并把结果夹到 `>= 1`：
+  //     · 零阶段      → 1（与 schema 一致）
+  //     · 非空项目    → 与 §4.4 伪码**逐字同结果**（[1]→2、[1,5,9]→10、隐藏 8→9）
+  //   上限（99）不夹：需项目已有 99 个阶段才可达，而 `MAX_STAGE_COUNT`（12）在其它路径
+  //   已封顶，属不可达状态；静默夹到 99 反而会造出重复序号（排序歧义）比报错更糟。
+  const maxOrderIndex = stages.reduce(
+    (max, s) => Math.max(max, s.orderIndex),
+    STAGE_ORDER_MIN - 1,
+  );
+  const nextOrderIndex = Math.max(STAGE_ORDER_MIN, maxOrderIndex + 1);
+  const key = normalizeStageName(declaredName);
+  // 空键（声明名归一后为空，如 `'.'` / `'　'`）不参与同名命中：否则会与
+  // 「名字本身只有标点」的阶段误配，把一批任务落到一个名字为空语义的阶段上。
+  if (key.length === 0) return { hit: null, orderIndex: nextOrderIndex };
+
+  const hits = stages.filter((s) => s.visible && normalizeStageName(s.name) === key);
+  if (hits.length === 0) return { hit: null, orderIndex: nextOrderIndex };
+
+  const hit = hits.reduce((min, s) => (s.orderIndex < min.orderIndex ? s : min));
+  return { hit, orderIndex: hit.orderIndex };
 }

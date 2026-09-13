@@ -1,5 +1,5 @@
 /**
- * Agent payload 落库编排（v0.6 · 设计文档 T09 / §4.1）。
+ * Agent payload 落库编排（v0.6 · 设计文档 T09 / §4.1；v0.7 T02 增阶段落点解析）。
  *
  * 两个出口：
  *   - `previewAgentPayload()`：只算不写（差异预览：created / updated / rejected）；
@@ -27,8 +27,14 @@
  *   - `stageId` 缺省 → 落该项目 orderIndex 最大的**可见** Stage；项目无 Stage →
  *     `rejected('stage_limit')`。
  *     ★ 绝不静默自动建 Stage；仅当导入请求显式声明落点阶段名、且该项目无同名阶段时才创建。
+ *     未声明 → 行为与 v0.6 逐字节一致（无可用阶段 → `stage_limit`，不建），项目仍绝不自动建。
+ *     显式声明的载体为 query `?stageName=`（见 §4.2）。
  *     （用户 2026-09-09 拍板 / §10-R3；MAX_STAGE_COUNT 只在建档时校验、DB 层无约束，
  *     自动建会让反复导入静默造出 20+ 批次拉垮 Timeline）
+ *     ⚠️ 上面这段「铁律措辞」是**唯一有效版本**（§4.1 标准措辞），三处必须逐字一致；
+ *     旧措辞（只写「绝不自动新建 Stage」、不提 `?stageName=`）会在本文件与 §4.2 之间
+ *     留下「文档说可以声明、注释说绝不建」的自相矛盾，下一位工程师读到旧注释会
+ *     把这个功能当 bug 删掉。
  */
 
 import {
@@ -47,6 +53,8 @@ import type {
 } from '../types/agent-payload';
 import type { IRepositoryBundle, TaskUpsertRow } from '../repositories/interfaces';
 import { buildDependencyGraph, topoLayers } from './dag';
+// v0.7 T02：落点阶段的**按名解析 / 新建 / 连带效应**全部收口在 stage-resolve（纯函数）
+import { buildCreatedStage, planImpact, resolveStageByName } from './stage-resolve';
 
 /** Agent 成员落库时的默认头像色（与既有 member 行同款 hex 格式；UI 语义色仍走 token） */
 const AGENT_MEMBER_AVATAR = '#6B5B8C';
@@ -56,7 +64,19 @@ const BATCH_NODE_PREFIX = 'ext::';
 
 /** 应用选项：payload.projectId 为 null 时由调用方（UI）显式指定目标项目 */
 export interface ApplyOptions {
+  /** 目标项目（payload.projectId 为空时使用） */
   projectId?: string;
+  /**
+   * v0.7 T02 · **显式声明的落点阶段名**（query `?stageName=` / 其同义别名）。
+   *
+   * 语义（§4.2 决策树 / §4.5 解析失败矩阵）：
+   *   - `undefined` / `null` → **未声明**：行为与 v0.6 逐字节一致（缺省落最后一个可见批次；
+   *     无可见批次 → `stage_limit`，**绝不自动建**）；
+   *   - 非空字符串 → 项目存在**同名可见**阶段则复用（`mode:'existing'`），
+   *     否则计划新建（预览 `mode:'planned'` / 实写 `mode:'created'`）；
+   *   - 空串 / 仅空白 → 抛 `ChangxiaError(Validation)`，**绝不静默降级为「未声明」**（C7）。
+   */
+  stageName?: string | null;
 }
 
 /** resolve 的中间产物（preview 与 apply 共用） */
@@ -64,12 +84,23 @@ interface ResolvedPlan {
   projectId: string;
   stageId: string | null;
   /**
-   * v0.7 **恒定字段**：本批的落点阶段。
-   * 命中已有批次 → `mode:'existing'`；无落点（项目无可见批次 / 指定批次不存在）
-   * → `mode:'none'` + `id:null` + `name:''` + `orderIndex:-1`。
-   * ★ 本批不产出 `planned` / `created`（依赖按名新建，属 T02）。
+   * v0.7 恒定字段：本批的落点阶段（R1 四键恒定）。
+   *   - 命中已有批次 → `existing`（id 非空）；
+   *   - 声明了名字但无同名阶段 → `planned`（`id:null` + `impact` 必出现，R4/R5）；
+   *   - 无落点（项目无可见批次且**未**声明名字）→ `none`
+   *     （`{mode:'none', id:null, name:'', orderIndex:-1}` 哨兵，§10.2 裁定 A / 样例 C）。
    */
   stage: ApplyStageResolution;
+  /**
+   * `mode === 'planned'` 时**待创建**的阶段整行（含已生成的 id）；其余为 null。
+   *
+   * ★ 为什么把它放在 plan 里而不是只留 `stage.name`：id 在 `resolve()` 内就生成，
+   *   于是**行的 `stageId` 从一开始就是真 id**，不存在「先写空 stageId、建完再补」的窗口
+   *   —— 那个窗口正是 §4.6 点名的「本功能最容易出的一个致命 bug」（C1：行落到
+   *   `stage_id=''` → DB 层外键/查询全崩）。`applyAgentPayload` 仍会再重写一次
+   *   （幂等，见该函数注释），使「建阶段 → 行落点」之间没有第二种可能。
+   */
+  plannedStage: Stage | null;
   /** 待写入行（已被拒绝的条目不在其中） */
   rows: TaskUpsertRow[];
   /** 每行的 payload externalId（与 rows 同序，供两段式 upsert 回查） */
@@ -80,6 +111,26 @@ interface ResolvedPlan {
   /** 预览计数（apply 以真实 upsert 返回为准） */
   created: number;
   updated: number;
+}
+
+/**
+ * 读取**显式声明**的落点阶段名（§4.5 最后两行的解析失败矩阵）。
+ *
+ * - `undefined` / `null` → `null`：**未声明**（走 v0.6 既有行为）；
+ * - 空串 / 仅空白 → 抛 `ChangxiaError(Validation)`：显式声明却无名称 = 调用方 bug，
+ *   静默当「未声明」会把它掩盖成「任务落到别的批次」（C7）；
+ * - 其余 → `trim()` 后的名字（后续归一由 `resolveStageByName` 负责）。
+ */
+function readDeclaredStageName(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.Validation,
+      'stageName 不能为空；未声明落点阶段名时请完全不要传该参数。',
+    );
+  }
+  return trimmed;
 }
 
 /**
@@ -104,41 +155,66 @@ async function resolve(
 
   const rejected: ApplyRejection[] = [];
 
-  /* ---- 批次策略（§10-R3）：指定 → 校验存在；缺省 → 最后一个可见批次；无 → 拒绝 ---- */
-  const stages = (await repos.stages.listByProject(projectId))
+  /* ---- 批次策略（§4.2 决策树 / §10-R3 铁律 / §4.1 ②）----
+   * 本段判序：
+   *   ① `payload.stageId` 命中**可见**批次 → `existing`；给了但查不到 → 无落点（不建）；
+   *   ② 未给 stageId 且**声明了**落点阶段名 → 同名可见阶段复用（`existing`）；
+   *      无同名 → 计划新建（`planned`，实写在 apply 里升级为 `created`）；
+   *   ③ 未给且**未声明** → 落 orderIndex 最大的可见批次（现状行为，`existing`）；
+   *   ④ 未给、未声明且**无可见批次** → 整批 `stage_limit`、零写入、`stage:'none'`。
+   *
+   * ★ 此分支**先**检查 `stageName`，未声明才走 `stage_limit`（§4.1 ② 明文要求）。
+   * ★ 绝不静默自动建 Stage；仅当导入请求显式声明落点阶段名、且该项目无同名阶段时才创建。
+   */
+  const allStages = await repos.stages.listByProject(projectId);
+  // 合法落点只能是**可见**阶段（隐藏阶段的 orderIndex 仍参与新阶段序号计算，见下）
+  const visibleStages = allStages
     .filter((s) => s.visible)
     .sort((a, b) => a.orderIndex - b.orderIndex);
+
   let stageId: string | null = null;
   /** 命中的批次**对象**（不只留 id —— `stage` 需要 name / orderIndex 回填） */
   let stageHit: Stage | null = null;
+  /** 计划新建的批次整行（`mode:'planned'` 时非空；id 已生成，见 ResolvedPlan 注释） */
+  let plannedStage: Stage | null = null;
+
+  const declaredName = readDeclaredStageName(opts?.stageName);
+
   if (payload.stageId) {
-    const hit = stages.find((s) => s.id === payload.stageId);
-    if (!hit) {
-      rejected.push({
-        externalId: '(batch)',
-        code: 'stage_limit',
-        reason: '指定的批次不存在，请检查 stageId。',
-      });
-    } else {
+    const hit = visibleStages.find((s) => s.id === payload.stageId);
+    if (hit) {
       stageId = hit.id;
       stageHit = hit;
     }
-  } else if (stages.length > 0) {
-    stageHit = stages[stages.length - 1]!; // orderIndex 最大的可见批次
+    // 未命中 → 无落点：由下方 `!stageId` 分支逐条 `stage_limit` 拒绝，**绝不自动建**
+  } else if (declaredName !== null) {
+    // ★ **按名选点**：声明了名字就必须按名字命中，哪怕项目里还有别的可见批次。
+    //   只做「缺则建」而不做「按名选点」，用户的显式声明会被静默忽略（§4.4 / C2）。
+    //   传入的是**全部**阶段：同名只看可见，而新阶段序号要含隐藏阶段取 max（C4/C5）。
+    const resolution = resolveStageByName(declaredName, allStages);
+    if (resolution.hit) {
+      stageHit = resolution.hit;
+      stageId = resolution.hit.id;
+    } else {
+      plannedStage = buildCreatedStage({
+        id: `stg_${crypto.randomUUID()}`,
+        project,
+        declaredName,
+        orderIndex: resolution.orderIndex,
+      });
+      stageId = plannedStage.id;
+    }
+  } else if (visibleStages.length > 0) {
+    stageHit = visibleStages[visibleStages.length - 1]!; // orderIndex 最大的可见批次
     stageId = stageHit.id;
-  } else {
-    // 不自动新建 Stage：MAX_STAGE_COUNT 只在建档时校验、DB 层无约束，
-    // 自动建会让反复导入静默造出 20+ 批次拉垮 Timeline（§10-R3）
-    rejected.push({
-      externalId: '(batch)',
-      code: 'stage_limit',
-      reason: '该项目暂无批次，请先建立批次后再导入。',
-    });
   }
+  // else：无落点 → 下方 `!stageId` 分支逐条 stage_limit（铁律：不建）
+
   /**
-   * 落点解析结果（R1 四键恒定 / R4 四态表）：
-   *   命中已有批次 → `existing`（id 非空）；
-   *   无落点      → `none`（`id:null` + `name:''` + `orderIndex:-1` 哨兵）。
+   * 落点解析结果（R1 四键恒定 / R4 四态表 / R5 正向白名单）：
+   *   命中已有批次 → `existing`（id 非空，**无 `impact` 键**）；
+   *   无同名阶段的显式声明 → `planned`（`id:null` + `name` + 预计 `orderIndex` + `impact`）；
+   *   无落点 → `none`（`id:null` + `name:''` + `orderIndex:-1`，**无 `impact` 键**）。
    */
   const stage: ApplyStageResolution = stageHit
     ? {
@@ -147,13 +223,29 @@ async function resolve(
         name: stageHit.name,
         orderIndex: stageHit.orderIndex,
       }
-    : { mode: 'none', id: null, name: '', orderIndex: -1 };
+    : plannedStage
+      ? {
+          mode: 'planned',
+          id: null, // R4：planned 恒为 null（阶段尚未落库）
+          name: plannedStage.name,
+          orderIndex: plannedStage.orderIndex,
+          // ★ R5 **正向白名单**：impact 出现 ⟺ mode ∈ {'planned','created'}。
+          //   绝不写 `mode !== 'existing'` —— 枚举一扩张（本轮新增 'none'）就会把
+          //   一次零写入的批次也卷进来，吐出「将新建阶段『』，完成度 62%→56%」的
+          //   错误回执（C15/C16）。
+          impact: planImpact(project, allStages),
+        }
+      : { mode: 'none', id: null, name: '', orderIndex: -1 };
+
   if (!stageId) {
-    // 批次不可用 → 全部条目按批次级拒绝返回（保持 ApplyResult 形状恒定）
+    // 批次不可用 → 全部条目按批次级拒绝返回（保持 ApplyResult 形状恒定，C11）。
+    // 注意：这里是 `stage_limit` 的**唯一**出口，逐条给出 reason（样例 C 的形状），
+    // 故本函数内不再另推一条批次级 `(batch)` 条目 —— 那一条会被这里整体覆盖（死代码）。
     return {
       projectId,
       stageId: null,
       stage,
+      plannedStage: null,
       rows: [],
       rowExternalIds: [],
       rowBatchDeps: [],
@@ -166,6 +258,8 @@ async function resolve(
       updated: 0,
     };
   }
+  // 窄化一次并复用：本批所有行的落点恒为它（`planned` 时即「待建阶段的 id」）
+  const effectiveStageId: string = stageId;
 
   /* ---- ① 既有任务 externalId → id 映射（仅本项目） ---- */
   const existingTasks = await repos.tasks.listByProject(projectId);
@@ -273,7 +367,7 @@ async function resolve(
       return {
         id: `${BATCH_NODE_PREFIX}${e.task.externalId}`,
         projectId,
-        stageId,
+        stageId: effectiveStageId,
         title: e.task.title,
         done: status === TaskStatus.Done,
         assigneeId: null,
@@ -303,8 +397,9 @@ async function resolve(
     // 环命中 → 整批拒绝（created=0 / updated=0，全部条目进 rejected，库零写入）
     return {
       projectId,
-      stageId,
+      stageId: effectiveStageId,
       stage,
+      plannedStage,
       rows: [],
       rowExternalIds: [],
       rowBatchDeps: [],
@@ -327,7 +422,7 @@ async function resolve(
   // 新建行的 orderIndex 基准 = 目标批次内既有最大值（更新路径不会覆写既有排序，
   // 见 local.tasks.repo / tasks.routes upsert 的「orderIndex 仅新建语义」注释）
   const stageBaseOrder = existingTasks
-    .filter((t) => t.stageId === stageId)
+    .filter((t) => t.stageId === effectiveStageId)
     .reduce((max, t) => Math.max(max, t.orderIndex), 0);
   for (const e of entries) {
     if (!e.ok) continue;
@@ -359,7 +454,7 @@ async function resolve(
     else created += 1;
     rows.push({
       projectId,
-      stageId,
+      stageId: effectiveStageId,
       title: t.title,
       assigneeId,
       assigneeIds: assigneeId ? [assigneeId] : [],
@@ -379,7 +474,18 @@ async function resolve(
     rowBatchDeps.push([...e.batchRefs]);
   }
 
-  return { projectId, stageId, stage, rows, rowExternalIds, rowBatchDeps, rejected, created, updated };
+  return {
+    projectId,
+    stageId: effectiveStageId,
+    stage,
+    plannedStage,
+    rows,
+    rowExternalIds,
+    rowBatchDeps,
+    rejected,
+    created,
+    updated,
+  };
 }
 
 /**
@@ -410,7 +516,12 @@ export async function ensureAgentMember(
   return created.id;
 }
 
-/** 差异预览：只算不写（preview 不建 Agent 成员、不触任何仓储写路径） */
+/**
+ * 差异预览：只算不写。
+ *
+ * ★ **永不创建阶段**（C3）：`resolve()` 只返回计划（`mode:'planned'` + `id:null`），
+ * 本函数原样转发 `plan.stage`。若预览就建了阶段，用户取消后会留下一个空阶段。
+ */
 export async function previewAgentPayload(
   repos: IRepositoryBundle,
   payload: AgentPayloadV1,
@@ -432,16 +543,41 @@ export async function applyAgentPayload(
   opts?: ApplyOptions,
 ): Promise<ApplyResult> {
   const plan = await resolve(repos, payload, opts);
+
   if (plan.rows.length === 0) {
+    // ★ 零写入分支**原样转发** `plan.stage`，绝不在这里改写 `mode`。
+    //   写成 `{...plan.stage, mode:'planned'}` 会把样例 C 的 `'none'` 篡改成
+    //   「将要新建阶段」—— 一次零写入的操作被描述成会改阶段、还会让完成度倒退的
+    //   操作，等于把回执变成错误信息（C15）。此处的形状由 §10.2 裁定 A 定死。
     return { created: 0, updated: 0, rejected: plan.rejected, stage: plan.stage };
+  }
+
+  /* ---- ★ 创建时机（§4.6）：resolve() 完成之后、第一段 upsert 之前，且仅当 `rows.length > 0` ----
+   * 若在 `resolve()` 内（或零写入时）建阶段：依赖成环 / 全部 dep_unresolved → `rows` 为空 →
+   * 用户会看到一个**空的、永远不用的**阶段被凭空创建，而整批任务一条没进 ——
+   * 这既违反「库内零写入」铁律，也正是「静默造脏数据」。
+   * 只为「本次批量新建的第一条」建**一个**阶段（而不是每行建一个）。 */
+  let stage: ApplyStageResolution = plan.stage;
+  let rows = plan.rows;
+  if (plan.plannedStage) {
+    const planned = plan.plannedStage;
+    // 复用既有底层能力（远端 = POST /api/stages/bulk），不新增任何建阶段能力（§4.3）
+    await repos.stages.bulkInsert([planned]);
+    // planned → created：id 换成刚落库的真实 id（R4：created 的 id 非空）
+    stage = { ...stage, mode: 'created', id: planned.id };
+    // ★ C1：**必须**重写行的 stageId。`resolve()` 已用「预生成 id」填过（更好：没有
+    //   空 stageId 的窗口），这里再重写一次是**幂等**的，作用是让「建阶段 → 行落点」
+    //   之间不存在第二种可能。漏这一步的后果：所有行插到 `stage_id=''` →
+    //   DB 层外键/查询全崩，且看板看不到、时间轴崩。
+    rows = rows.map((r) => ({ ...r, stageId: planned.id }));
   }
 
   // Agent 身份 Member（幂等）→ 补 agentId / source
   const agentMemberId = await ensureAgentMember(repos, payload.producedBy);
-  const rows = plan.rows.map((r) => ({ ...r, agentId: agentMemberId }));
+  const rowsWithAgent = rows.map((r) => ({ ...r, agentId: agentMemberId }));
 
   // 第一段：全部行落库（批内依赖暂剥除——此时目标行的真实 id 尚未产生）
-  const first = await repos.tasks.upsertByExternalId(rows);
+  const first = await repos.tasks.upsertByExternalId(rowsWithAgent);
 
   // 回读建全量 externalId → id 映射（含本段新建行）
   const allTasks = await repos.tasks.listByProject(plan.projectId);
@@ -452,7 +588,7 @@ export async function applyAgentPayload(
 
   // 第二段：仅对含批内依赖的行重写完整 dependsOn（幂等命中 → 计入 updated）
   const fixRows: TaskUpsertRow[] = [];
-  plan.rows.forEach((row, i) => {
+  rows.forEach((row, i) => {
     const batchDeps = plan.rowBatchDeps[i] ?? [];
     if (batchDeps.length === 0) return;
     const resolvedBatchDeps = batchDeps
@@ -474,6 +610,6 @@ export async function applyAgentPayload(
     created: first.created,
     updated: first.updated + second.updated,
     rejected: plan.rejected,
-    stage: plan.stage,
+    stage,
   };
 }

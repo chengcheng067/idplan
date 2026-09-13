@@ -18,6 +18,12 @@
  *   也会被纳入类型检查，避免其悄悄带上浏览器 API 而无人发现。
  *   注意：`../src/core/**` 的 import 图含 `zod`（共享内核已依赖）与
  *   `../src/lib/date.ts`，二者均可被服务端正常解析（zod 在 dependencies 内）。
+ *
+ *   v0.7 · T02 追加 `../src/lib/progress.ts`：`src/core/agent/stage-resolve.ts` 的
+ *   `planImpact` 复用它的 `computeProjectPercent` / `computeProjectStatus`（项目完成度
+ *   与状态**只有一份算式**，见该文件头）。它零 DOM、零 Node，技术上能过；显式列出是为了
+ *   不让这条依赖停在「隐式副产物」——将来有人在 progress.ts 里加一句 `document.*`，
+ *   本配置会当场报错，而不是等到某次 `npm run dev:server` 才炸。
  */
 {
   "compilerOptions": {
@@ -39,9 +45,13 @@
     // 共享内核：前后端**单份实现**，服务端经相对路径 import 消费（J2）
     "../src/core/agent/**/*.ts",
     "../src/core/types/**/*.ts",
+    "../src/core/lib/task-no.ts",
     "../src/core/repositories/interfaces.ts",
     "../src/core/services/task.service.ts",
-    // 共享内核的纯函数依赖（src/lib/date.ts 零 DOM 零 Node，两端可跑）
-    "../src/lib/date.ts"
+    "../src/constants/agentTerms.ts",
+    // 共享内核的纯函数依赖（零 DOM 零 Node，两端可跑）
+    "../src/lib/date.ts",
+    // v0.7 · T02：`stage-resolve.planImpact` 的完成度/状态口径（唯一出处）
+    "../src/lib/progress.ts"
   ]
 }

@@ -11,6 +11,27 @@ export enum ProjectStatus {
   Archived = 'archived',
 }
 
+/**
+ * 项目**日历态**（月历/卡片色带与筛选口径，PRD §3.4 筛选、§4.2 颜色一一对应）。
+ *
+ * ★ v0.7 契约修订 R1：为 `ApplyStageImpact` 引入本定义并**收口到这里**。
+ *
+ * ── 为什么必须与 `ProjectStatus` 分开（两者不可互换）──
+ * `ProjectStatus` 只有 `active | archived`，回答的是「这个项目在不在归档区」；
+ * 本类型回答的是「这个项目现在处于排期的哪一阶段」。§3.1.1 样例 B/B′ 要求
+ * `"statusBefore": "completed", "statusAfter": "in_progress"`，而 §8-V1-21 亦断言
+ * `statusBefore === 'completed'` —— 一个 `active | archived` 的类型**不可能**同时成立。
+ * v0.7 契约冻结时把 `ApplyStageImpact.statusBefore/After` 误记为 `ProjectStatus`，
+ * 经主理人裁定按**验收口径**更正为本类型（R1）。
+ *
+ * ── 为什么定义在 enums 而不是留在 lib/progress ──
+ * 它属于**契约**（`src/core/types/agent-payload.ts` 的 `ApplyStageImpact` 直接引用它），
+ * 而 `lib/progress.ts` 是**派生层**。契约类型放在派生层会出现「契约 → 派生」的反向依赖，
+ * 于是 `agent-payload.ts`（纯类型文件）被迫 import 一个 400 行的派生模块。
+ * `lib/progress.ts` 改为从本文件 **re-export** —— 导出名与全部消费点零改动。
+ */
+export type ProjectCalendarStatus = 'in_progress' | 'completed' | 'overdue' | 'not_started';
+
 /** 阶段四态流转：未开始 → 进行中 → 已完成；延期可自任意态进入（重置回未开始亦允许） */
 export enum StageStatus {
   NotStarted = 'not_started',

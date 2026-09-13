@@ -211,6 +211,162 @@ function insertValues(v: TaskInsertValues): unknown[] {
   ];
 }
 
+/**
+ * 幂等批量写入的**唯一实现**（v0.7 · §3.7：「路由与适配器共用一份」）。
+ *
+ * ★ 为什么抽成导出函数（T02）：
+ *   `server/adapters/sqlite.bundle.ts` 的 `tasks.upsertByExternalId` 必须与
+ *   `POST /api/tasks/upsert` **跑同一段代码**。若适配器改走 `app.inject`
+ *   （HTTP 自调用），会引入 HTTP 层耦合、一次多余的 JSON 序列化/反序列化，
+ *   以及一个针对自己的伪造请求 —— 那是在绕开 §3.7 的设计意图，不是复用它。
+ *   抽出来之后：路由是个薄壳（校验 → 调本函数 → 回响应），适配器直接调本函数。
+ *
+ * ★ 本函数**自带事务外壳**（`db.transaction(...)` + `.immediate()`），调用方不要再套一层：
+ *   better-sqlite3 不支持嵌套事务，重复 BEGIN 会直接抛错。
+ *
+ * 返回 `{ created, updated }`；**校验失败时返回 `{ error }`**（而不是抛）——
+ * 「缺 projectId」是**可预期的调用方错误**（400），不是运行期故障（500）。
+ * 用返回值而不是异常表达它，路由与适配器都能各自决定怎么处理（一个回 400、
+ * 一个抛 `ChangxiaError`），而不必去 catch 一个「其实不是异常」的异常。
+ *
+ * ⚠️ 校验**先于事务**：拒绝时全库零写入，不留半套数据。
+ */
+export type TaskUpsertOutcome =
+  | { created: number; updated: number; error?: undefined }
+  | { error: { code: string; userMessage: string } };
+
+export function runTaskUpsert(
+  db: Database.Database,
+  rows: readonly Record<string, unknown>[],
+): TaskUpsertOutcome {
+  // 形参收 `readonly`（调用方不该被本函数改写行），但 `.immediate()` 的签名要可变数组
+  // → 拷一份**数组外壳**即可（行对象仍共享引用，零深拷贝开销）。
+  const batch: Array<Record<string, unknown>> = rows ? Array.from(rows) : [];
+
+  // ── 前置校验：缺 projectId 的行必须**显式拒绝**（fail-closed），绝不能猜 ──
+  // 缺失时无法确定幂等查找的作用域，退回全局查找就会重演 BUG-03 的跨项目污染；
+  // 而 `String(undefined)` 会写出 project_id='undefined' 的幽灵行（外键报 500）。
+  // 选择 400 而不是「跳过并计入 skipped」的理由：
+  //   ① 与 local（Dexie）适配器同语义 —— 那边对 !r.projectId 直接抛
+  //      ChangxiaError(Validation, '任务字段不完整，无法写入。')。两端若一个抛错、
+  //      一个静默跳过，同一份 payload 在 NAS 与本地会得到不同结果，而「两套适配器
+  //      语义逐字一致」是本项目的硬约束（见 interfaces.ts 的 TaskUpsertRow 注释）。
+  //   ② 与本路由既有的 400 约定一致（POST /tasks 空标题 → 400 code:'validation'）。
+  //   ③ 静默跳过本身就是 BUG-03 的失效模式（数据静默分叉）；此处刻意选择响亮失败。
+  for (const t of batch) {
+    const projectId = t.projectId;
+    if (typeof projectId !== 'string' || projectId.length === 0) {
+      return {
+        error: {
+          code: 'validation',
+          userMessage: '任务行缺少 projectId，无法确定幂等键的项目作用域。',
+        },
+      };
+    }
+  }
+
+  let created = 0;
+  let updated = 0;
+  const tx = db.transaction((list: Array<Record<string, unknown>>) => {
+    // 语句提到循环外：本循环逐行执行，每行都重新 prepare 是纯开销（无行为差异）
+    const selectExisting = db.prepare(
+      'SELECT * FROM tasks WHERE external_id = ? AND project_id = ?',
+    );
+    const updateExisting = db.prepare(
+      `UPDATE tasks SET title=?, status=?, done=?, description=?, depends_on=?,
+         artifacts=?, start_at=?, due_date=?, assignee_id=?, assignee_ids=?,
+         agent_id=?, source=?, claimed_at=?, order_index=?, revision=?, updated_at=?
+       WHERE id=?`,
+    );
+    const insertNew = db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`);
+
+    // ★ v0.7：号计数器**整批只开一次**（懒开 —— 纯 UPDATE 批次既不读也不写计数器）。
+    //   两种写法都会坏：① 循环外一次性求值再给每行 → 全批同号；② 每行重新
+    //   openTaskNoCounter → 仍全批同号（都取到第一条的号）。全程不报错。
+    let counter: TaskNoCounter | null = null;
+    let allocated = 0;
+    const ensureCounter = (): TaskNoCounter => {
+      if (counter === null) counter = openTaskNoCounter(db);
+      return counter;
+    };
+
+    for (const t of list) {
+      const externalId = (t.externalId as string | null) ?? null;
+      // ★ 项目作用域查找：与 idx_tasks_external_id 的复合列形 (project_id, external_id) 对齐
+      const projectId = String(t.projectId);
+      const existing = externalId
+        ? (selectExisting.get(externalId, projectId) as TaskRow | undefined)
+        : undefined;
+      if (existing) {
+        // 命中 → UPDATE，bump revision（即使字段未变，保留「被 Agent 触碰过几次」的溯源）
+        const nextStatus = String(t.status ?? existing.status);
+        updateExisting.run(
+          String(t.title ?? existing.title),
+          nextStatus,
+          nextStatus === 'done' ? 1 : 0, // ★ done 由 status 派生
+          (t.description as string | null) ?? existing.description,
+          serializeJson(t.dependsOn ?? parseJsonArray<string>(existing.depends_on)),
+          serializeJson(t.artifacts ?? parseJsonArray<TaskArtifact>(existing.artifacts)),
+          (t.startAt as string | null) ?? existing.start_at,
+          (t.dueDate as string | null) ?? existing.due_date,
+          (t.assigneeId as string | null) ?? existing.assignee_id,
+          serializeAssigneeIds(t.assigneeIds ?? parseJsonArray<string>(existing.assignee_ids)),
+          (t.agentId as string | null) ?? existing.agent_id,
+          String(t.source ?? existing.source),
+          // ★ B-01 不变式：Agent 重发 payload 时若把状态带回 ready，必须同时清掉
+          // claimed_at，否则一次重导入就再制造一个认领僵尸。
+          normalizeClaimedAt(nextStatus, (t.claimedAt as string | null) ?? existing.claimed_at),
+          // order_index 仅新建语义：更新路径保持既有排序，防止重导入反复重排
+          existing.order_index,
+          existing.revision + 1,
+          nowIso(),
+          existing.id,
+        );
+        updated += 1;
+      } else {
+        const status = deriveStatus(t);
+        // ★ v0.7：号是仓储分配字段 —— 请求体里带了也一律忽略（TaskUpsertRow 已用
+        //   Omit 放行，这里再兜一层：谁能提供号，谁就能制造重号）。
+        //   `.take()` 逐行自增，绝不能提到循环外求值一次（否则全批同号）。
+        const taskNo = ensureCounter().take();
+        allocated += 1;
+        insertNew.run(
+          ...insertValues({
+            id: String(t.id ?? crypto.randomUUID()),
+            taskNo,
+            projectId,
+            stageId: String(t.stageId),
+            title: String(t.title ?? ''),
+            assigneeId: (t.assigneeId as string | null) ?? null,
+            assigneeIds: t.assigneeIds ?? [],
+            dueDate: (t.dueDate as string | null) ?? null,
+            source: String(t.source ?? 'agent'),
+            externalId,
+            agentId: (t.agentId as string | null) ?? null,
+            status,
+            description: (t.description as string | null) ?? null,
+            dependsOn: t.dependsOn ?? [],
+            artifacts: t.artifacts ?? [],
+            startAt: (t.startAt as string | null) ?? null,
+            claimedAt: (t.claimedAt as string | null) ?? null,
+            orderIndex: Number(t.orderIndex ?? 1),
+            revision: 1,
+            updatedAt: nowIso(),
+          }),
+        );
+        created += 1;
+      }
+    }
+    // 仅当真的分配过号才回写计数器：纯 UPDATE 批次不该无谓改写 settings
+    // （保持「备份往返后 settings 逐字节不变」的往返判据）。
+    if (allocated > 0) writeTaskNoSeq(db, ensureCounter().peek());
+  });
+  // ★ `.immediate()`：本事务**先读后写**（读计数器 → 写任务与计数器）。
+  //   默认 DEFERRED 在并发下先拿读锁、升级写锁时失败（SQLITE_BUSY）。
+  tx.immediate(batch);
+  return { created, updated };
+}
+
 export function registerTaskRoutes(app: FastifyInstance, db: Database.Database): void {
   // GET /tasks?projectId=&stageId=&assigneeId=&done=&source=&agentId=&status=&externalId=
   // （status 支持逗号分隔多值，与 remote 适配器 qs() 约定一致）
@@ -374,134 +530,18 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
   //   随即走下面 `UPDATE ... WHERE id = <A 的行 id>` 把 A 的任务内容整体改写成 B 的，
   //   而 B 该有的行根本没建。全程不报错、计数还显示 updated:1 —— 静默跨项目数据污染。
   //   回归防线：tests/server.upsert-scope.spec.ts（跨项目同键 / 各自重发 / 批内同键）。
+  //
+  // ★ v0.7（T02）：处理器本体已抽成 `runTaskUpsert`（见上方导出），路由只剩薄壳 ——
+  //   这样 `server/adapters/sqlite.bundle.ts` 能**直接调用同一份实现**（§3.7 的
+  //   「路由与适配器共用一份」），而不是靠 HTTP 自调用绕开设计意图。
   app.post('/api/tasks/upsert', async (req, reply) => {
     const { rows } = req.body as { rows: Array<Record<string, unknown>> };
-    const batch = rows ?? [];
-
-    // ── 前置校验：缺 projectId 的行必须**显式拒绝**（fail-closed），绝不能猜 ──
-    // 缺失时无法确定幂等查找的作用域，退回全局查找就会重演 BUG-03 的跨项目污染；
-    // 而 `String(undefined)` 会写出 project_id='undefined' 的幽灵行（外键报 500）。
-    // 选择 400 而不是「跳过并计入 skipped」的理由：
-    //   ① 与 local（Dexie）适配器同语义 —— 那边对 !r.projectId 直接抛
-    //      ChangxiaError(Validation, '任务字段不完整，无法写入。')。两端若一个抛错、
-    //      一个静默跳过，同一份 payload 在 NAS 与本地会得到不同结果，而「两套适配器
-    //      语义逐字一致」是本项目的硬约束（见 interfaces.ts 的 TaskUpsertRow 注释）。
-    //   ② 与本路由既有的 400 约定一致（POST /tasks 空标题 → 400 code:'validation'）。
-    //   ③ 静默跳过本身就是 BUG-03 的失效模式（数据静默分叉）；此处刻意选择响亮失败。
-    // 校验先于事务：拒绝时全库零写入，不留半套数据。
-    for (const t of batch) {
-      const projectId = t.projectId;
-      if (typeof projectId !== 'string' || projectId.length === 0) {
-        void reply.status(400);
-        return {
-          error: {
-            code: 'validation',
-            userMessage: '任务行缺少 projectId，无法确定幂等键的项目作用域。',
-          },
-        };
-      }
+    const outcome = runTaskUpsert(db, rows ?? []);
+    if (outcome.error) {
+      void reply.status(400);
+      return { error: outcome.error };
     }
-
-    let created = 0;
-    let updated = 0;
-    const tx = db.transaction((list: Array<Record<string, unknown>>) => {
-      // 语句提到循环外：本循环逐行执行，每行都重新 prepare 是纯开销（无行为差异）
-      const selectExisting = db.prepare(
-        'SELECT * FROM tasks WHERE external_id = ? AND project_id = ?',
-      );
-      const updateExisting = db.prepare(
-        `UPDATE tasks SET title=?, status=?, done=?, description=?, depends_on=?,
-           artifacts=?, start_at=?, due_date=?, assignee_id=?, assignee_ids=?,
-           agent_id=?, source=?, claimed_at=?, order_index=?, revision=?, updated_at=?
-         WHERE id=?`,
-      );
-      const insertNew = db.prepare(`INSERT INTO tasks ${TASK_INSERT_COLUMNS}`);
-
-      // ★ v0.7：号计数器**整批只开一次**（懒开 —— 纯 UPDATE 批次既不读也不写计数器）。
-      //   两种写法都会坏：① 循环外一次性求值再给每行 → 全批同号；② 每行重新
-      //   openTaskNoCounter → 仍全批同号（都取到第一条的号）。全程不报错。
-      let counter: TaskNoCounter | null = null;
-      let allocated = 0;
-      const ensureCounter = (): TaskNoCounter => {
-        if (counter === null) counter = openTaskNoCounter(db);
-        return counter;
-      };
-
-      for (const t of list) {
-        const externalId = (t.externalId as string | null) ?? null;
-        // ★ 项目作用域查找：与 idx_tasks_external_id 的复合列形 (project_id, external_id) 对齐
-        const projectId = String(t.projectId);
-        const existing = externalId
-          ? (selectExisting.get(externalId, projectId) as TaskRow | undefined)
-          : undefined;
-        if (existing) {
-          // 命中 → UPDATE，bump revision（即使字段未变，保留「被 Agent 触碰过几次」的溯源）
-          const nextStatus = String(t.status ?? existing.status);
-          updateExisting.run(
-            String(t.title ?? existing.title),
-            nextStatus,
-            nextStatus === 'done' ? 1 : 0, // ★ done 由 status 派生
-            (t.description as string | null) ?? existing.description,
-            serializeJson(t.dependsOn ?? parseJsonArray<string>(existing.depends_on)),
-            serializeJson(t.artifacts ?? parseJsonArray<TaskArtifact>(existing.artifacts)),
-            (t.startAt as string | null) ?? existing.start_at,
-            (t.dueDate as string | null) ?? existing.due_date,
-            (t.assigneeId as string | null) ?? existing.assignee_id,
-            serializeAssigneeIds(t.assigneeIds ?? parseJsonArray<string>(existing.assignee_ids)),
-            (t.agentId as string | null) ?? existing.agent_id,
-            String(t.source ?? existing.source),
-            // ★ B-01 不变式：Agent 重发 payload 时若把状态带回 ready，必须同时清掉
-            // claimed_at，否则一次重导入就再制造一个认领僵尸。
-            normalizeClaimedAt(nextStatus, (t.claimedAt as string | null) ?? existing.claimed_at),
-            // order_index 仅新建语义：更新路径保持既有排序，防止重导入反复重排
-            existing.order_index,
-            existing.revision + 1,
-            nowIso(),
-            existing.id,
-          );
-          updated += 1;
-        } else {
-          const status = deriveStatus(t);
-          // ★ v0.7：号是仓储分配字段 —— 请求体里带了也一律忽略（TaskUpsertRow 已用
-          //   Omit 放行，这里再兜一层：谁能提供号，谁就能制造重号）。
-          //   `.take()` 逐行自增，绝不能提到循环外求值一次（否则全批同号）。
-          const taskNo = ensureCounter().take();
-          allocated += 1;
-          insertNew.run(
-            ...insertValues({
-              id: String(t.id ?? crypto.randomUUID()),
-              taskNo,
-              projectId,
-              stageId: String(t.stageId),
-              title: String(t.title ?? ''),
-              assigneeId: (t.assigneeId as string | null) ?? null,
-              assigneeIds: t.assigneeIds ?? [],
-              dueDate: (t.dueDate as string | null) ?? null,
-              source: String(t.source ?? 'agent'),
-              externalId,
-              agentId: (t.agentId as string | null) ?? null,
-              status,
-              description: (t.description as string | null) ?? null,
-              dependsOn: t.dependsOn ?? [],
-              artifacts: t.artifacts ?? [],
-              startAt: (t.startAt as string | null) ?? null,
-              claimedAt: (t.claimedAt as string | null) ?? null,
-              orderIndex: Number(t.orderIndex ?? 1),
-              revision: 1,
-              updatedAt: nowIso(),
-            }),
-          );
-          created += 1;
-        }
-      }
-      // 仅当真的分配过号才回写计数器：纯 UPDATE 批次不该无谓改写 settings
-      // （保持「备份往返后 settings 逐字节不变」的往返判据）。
-      if (allocated > 0) writeTaskNoSeq(db, ensureCounter().peek());
-    });
-    // ★ `.immediate()`：本事务**先读后写**（读计数器 → 写任务与计数器）。
-    //   默认 DEFERRED 在并发下先拿读锁、升级写锁时失败（SQLITE_BUSY）。
-    tx.immediate(batch);
-    return { created, updated };
+    return { created: outcome.created, updated: outcome.updated };
   });
 
   // POST /tasks/:id/claim —— v0.6 新增：原子认领（仅 status='ready' 可认领；

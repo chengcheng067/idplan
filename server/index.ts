@@ -15,6 +15,8 @@ import { registerStageRoutes } from './routes/stages.routes';
 import { registerTaskRoutes } from './routes/tasks.routes';
 import { registerMemberRoutes } from './routes/members.routes';
 import { registerMetaRoutes } from './routes/meta.routes';
+// v0.7（T02）：Agent 导入通道（独立 token `IDPLAN_AGENT_API_TOKEN`，与备份通道分离）
+import { registerAgentRoutes } from './routes/agent.routes';
 
 const PORT = Number(process.env.PORT ?? 7788);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -45,6 +47,11 @@ async function main(): Promise<void> {
   registerTaskRoutes(app, db);
   registerMemberRoutes(app, db);
   registerMetaRoutes(app, db);
+  // ★ v0.7（T02）：**必须排在既有路由之后**——Agent 通道的服务端 bundle
+  //   （`server/adapters/sqlite.bundle.ts`）通过 `app.inject` 委托既有处理器完成
+  //   幂等 upsert 与成员写入（详见该文件头「三条实现策略」）。先后顺序不影响
+  //   注册正确性（委托发生在请求期），但放在最后读起来与依赖方向一致。
+  registerAgentRoutes(app, db);
 
   await app.listen({ port: PORT, host: HOST });
 }
