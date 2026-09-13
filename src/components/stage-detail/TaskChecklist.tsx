@@ -7,7 +7,12 @@ import type { Member, Stage, Task } from '../../core/types/entities';
 import { taskIsDone } from '../../core/types/entities';
 import { createTaskActions } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
-import { useRoleGuard, canMemberToggleTask, taskAssigneeIds } from '../../hooks/useRoleGuard';
+import {
+  useRoleGuard,
+  isRestrictedView,
+  canMemberToggleTask,
+  taskAssigneeIds,
+} from '../../hooks/useRoleGuard';
 import { ImeInput } from '../common/ImeInput';
 
 /**
@@ -17,6 +22,13 @@ import { ImeInput } from '../common/ImeInput';
  *   #9  参与人可勾选（v0.3：taskAssigneeIds 包含语义），其余 checkbox disabled；
  *   #10 成员只读：隐藏新增/删除按钮、标题 input 只读、截止日只读；
  *       管理员保持既有全部能力。
+ * v0.7 C2（P0-19 收紧既有漏网）：
+ *   - **截止日**由「D 禁用」改为「**H 隐藏**」：受限角色**不再渲染**
+ *     `<input type="date">`（旧版 `readOnly` 只是禁用档，控件照旧渲染在成员眼前，
+ *     且 readonly 对日期选择器并非处处拦得住），改以纯文本展示，见
+ *     `data-task-due-readonly`；管理员侧照旧是 `data-task-due-input`。
+ *   - 权限派生统一走 `isRestrictedView(role)` / `isAdmin`，**页面内不再写
+ *     `!isXxx` 派生**（未进入身份 role=null 与成员同档受限 —— BUG-1 教训）。
  * v0.3 变更 C（多人参与）：
  *   - admin 点击行内「指派」按钮 → 玻璃浮层（glass-medium + menuFadeIn）多选参与人；
  *   - 勾选即加入/移除，浮层实时显示已选胶囊；「确定」保存
@@ -35,8 +47,19 @@ export function TaskChecklist({
   members: Member[];
 }): JSX.Element {
   const repos = useRepos();
-  const { isAdmin, currentMember } = useRoleGuard();
-  const isMember = !isAdmin;
+  const { isAdmin, role, currentMember } = useRoleGuard();
+  /**
+   * 受限视图判定：**唯一出口** `isRestrictedView(role)`（`= role !== 'admin'`），
+   * **未进入身份（role=null）同样受限** —— 这是 BUG-1 的教训：按 `isMember`
+   * （`role === 'member'`）判断时，role=null 会被当成管理员放行。
+   *
+   * 为何不用 `isMember` 这个旧变量：它虽由 `!isAdmin` 赋值（语义正确），但名字
+   * 却是「成员」，于是页面里长出了 `!isMember`（= 管理员）这种双重否定派生；
+   * 哪天有人按字面把它改成 `role === 'member'`，`!isMember` 就会把 role=null
+   * 放成管理员（BUG-1 同款泄漏）。故改名为 `isRestricted`，管理员分支一律写
+   * `isAdmin`，**页面内不再出现 `!isXxx` 派生**。
+   */
+  const isRestricted = isRestrictedView(role);
   const meId = currentMember?.id ?? null;
   const operatorName = currentMember?.name ?? '设计师本人';
 
@@ -67,7 +90,7 @@ export function TaskChecklist({
       .map((id) => {
         const m = memberOf(id);
         if (!m) return '未知';
-        return isMember ? m.role || '负责人' : m.name;
+        return isRestricted ? m.role || '负责人' : m.name;
       })
       .join('、');
   };
@@ -146,14 +169,14 @@ export function TaskChecklist({
 
               <ImeInput
                 value={t.title}
-                readOnly={isMember}
+                readOnly={isRestricted}
                 onChange={(e) => void actions.updateTask(t.id, { title: e.target.value })}
                 className={`min-w-0 flex-1 bg-transparent text-sm outline-none ${
                   taskIsDone(t) ? 'text-mist line-through' : 'text-ink'
-                } ${isMember ? 'cursor-default' : ''}`}
+                } ${isRestricted ? 'cursor-default' : ''}`}
               />
 
-              {isMember ? (
+              {isRestricted ? (
                 <span
                   className="shrink-0 rounded-md bg-sand/60 px-2 py-0.5 text-xs text-mist"
                   title={t.assigneeId ? `主负责人：${memberOf(t.assigneeId)?.name ?? '未知'}` : undefined}
@@ -255,17 +278,34 @@ export function TaskChecklist({
                 </div>
               )}
 
-              <input
-                type="date"
-                value={t.dueDate?.slice(0, 10) ?? ''}
-                readOnly={isMember}
-                onChange={(e) => void actions.updateTask(t.id, { dueDate: e.target.value || null })}
-                className={`w-[120px] shrink-0 rounded-md border border-transparent px-1 py-0.5 text-xs tabular-nums text-mist hover:border-line focus:border-pine focus:bg-paper focus:outline-none ${
-                  isMember ? 'cursor-default' : ''
-                }`}
-              />
+              {/*
+                截止日（v0.7 C2 · P0-19-① 收紧）：**默认档 H 隐藏**，不是 D 禁用。
+                旧实现是 `<input type="date" readOnly={isRestricted}>` —— `readOnly`
+                是「禁用」档：控件**照样渲染**在成员眼前（点不动但看得见），且
+                `readonly` 对 `input[type=date]` 的日历选择器在各浏览器下并不都拦得住。
+                故改为受限角色**根本不渲染**该写入口，改以纯文本展示截止日：
+                  · 成员 / 未进入身份 → `<span>` 文本（无值显示 `—`），**无 input**；
+                  · 管理员 → 照旧是 `<input type="date">`（对照组，收紧不得收过头）。
+                值与 `ResourcePathButton` 的处理同款：**信息仍可见，写入口被摘掉**。
+              */}
+              {isRestricted ? (
+                <span
+                  data-task-due-readonly=""
+                  className="w-[120px] shrink-0 px-1 py-0.5 text-xs tabular-nums text-mist"
+                >
+                  {t.dueDate?.slice(0, 10) ?? '—'}
+                </span>
+              ) : (
+                <input
+                  type="date"
+                  data-task-due-input=""
+                  value={t.dueDate?.slice(0, 10) ?? ''}
+                  onChange={(e) => void actions.updateTask(t.id, { dueDate: e.target.value || null })}
+                  className="w-[120px] shrink-0 rounded-md border border-transparent px-1 py-0.5 text-xs tabular-nums text-mist hover:border-line focus:border-pine focus:bg-paper focus:outline-none"
+                />
+              )}
 
-              {!isMember && (
+              {isAdmin && (
                 <button
                   type="button"
                   onClick={() => void actions.removeTask(t.id)}
@@ -281,7 +321,7 @@ export function TaskChecklist({
       </ul>
 
       {/* 新增条目（成员只读：隐藏） */}
-      {!isMember &&
+      {isAdmin &&
         (adding ? (
           <div className="mt-2 flex items-center gap-2">
             <ImeInput
