@@ -28,6 +28,19 @@
  * 自己需要的最小形状**，两端 lib 差异就完全不影响本文件。同理，`AbortController` /
  * `AbortSignal` 也**不写类型名**（那是 DOM 类型），只按结构取构造器。
  *
+ * ── 🛑 后人勿改（本文件唯一容易被「顺手整理」弄红的点）──
+ * 下面这些写法**看起来像偷懒，其实是必需的**，改动前请先跑 `npm run typecheck:server`
+ * （前端那条 `npm run typecheck` 对本文件**测不出**这类问题——它那套 lib 带 DOM，
+ * 换成 DOM 类型名它照样绿；必须在**服务端**那条上验）：
+ *   ✗ 别把 `RequestInitLike` 换成 DOM 的 `RequestInit`；
+ *   ✗ 别把 `HttpResponseLike` 换成 DOM 的 `Response`；
+ *   ✗ 别引入 `AbortSignal` / `AbortController` 的**类型名**（构造器按结构取，可以）；
+ *   ✗ 别删掉 `getFetch()` 直接写成裸 `fetch(...)`；
+ *   ✗ 别在本文件里 import 任何 `.tsx`（如 `AgentIngressPanel` 的 `IngressProbeView`）——
+ *     `.tsx` 会把 JSX 拉进**没配 `jsx` 选项**的服务端编译单元，`typecheck:server` 立刻红。
+ * 理由同上：本文件被**前端与服务端两套 tsconfig 同时编译**，只有前端 lib 有 DOM。
+ * 用 DOM 类型名 = 在服务端单边炸红，而前端全绿 —— 属于「另一端才暴露」的事故。
+ *
  * ── 错误语义（两条通道**刻意不同**，别"统一"）──
  *   · `probe()` —— **永不抛**。探活是"问一句在不在"，答"不在"是**正常结果**
  *     （返回 `{ ok:false }`），不是异常。若它抛，页面就得为"服务没开着"这种
