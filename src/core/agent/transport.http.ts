@@ -29,9 +29,17 @@
  * `AbortSignal` 也**不写类型名**（那是 DOM 类型），只按结构取构造器。
  *
  * ── 🛑 后人勿改（本文件唯一容易被「顺手整理」弄红的点）──
- * 下面这些写法**看起来像偷懒，其实是必需的**，改动前请先跑 `npm run typecheck:server`
- * （前端那条 `npm run typecheck` 对本文件**测不出**这类问题——它那套 lib 带 DOM，
- * 换成 DOM 类型名它照样绿；必须在**服务端**那条上验）：
+ * 下面这些写法**看起来像偷懒，其实是必需的**，改动前请先跑这两条：
+ *   · `npx vitest run tests/arch-boundary.spec.ts` —— 守卫「共享内核不得含浏览器 API
+ *     （window/document/localStorage）或 Node 专属模块」，`npm test` 必跑、违规即红；
+ *   · `npm run typecheck:server` —— 守卫**类型名**层面的泄漏。DOM 的 `RequestInit` /
+ *     `Response` / `AbortSignal` 只出现在**类型位置**，源码 grep 扫不到（上面的守卫
+ *     也扫不到），只有真按服务端 lib 编一遍才会红 —— 这就是本文件必须靠它兜底的原因。
+ * ⚠️ 前端那条 `npm run typecheck` 对本文件**测不出**这类问题——它那套 lib 带 DOM，
+ * 换成 DOM 类型名它照样绿。另注：`typecheck:server` 目前另**有 8 条报错**，但全在
+ * `src/config/env.ts` / `dexie.database.ts` / `rest.client.ts` / `backup.service.ts`
+ * （它们经 `include` 的 import 图被连带纳入，与本文件无关）；**本文件零报错**——
+ * 看结果时请只认「有没有 `transport.http.ts`」，别被那 8 条历史报错带偏。
  *   ✗ 别把 `RequestInitLike` 换成 DOM 的 `RequestInit`；
  *   ✗ 别把 `HttpResponseLike` 换成 DOM 的 `Response`；
  *   ✗ 别引入 `AbortSignal` / `AbortController` 的**类型名**（构造器按结构取，可以）；
