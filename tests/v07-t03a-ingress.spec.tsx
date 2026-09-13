@@ -32,8 +32,8 @@ import { useSettingsStore } from '../src/store/useSettingsStore';
 import { MemberActorKind, MemberRoleKind } from '../src/core/types/enums';
 import type { Member } from '../src/core/types/entities';
 
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+/* act 环境开关由 `tests/setup.ts` 统一置位（本文件不再自行置位/还原）——
+ * 逐文件置位会让同进程的下游 spec 连坐，理由详见 setup.ts 的注释。 */
 
 /* --------------------------------- 夹具 --------------------------------- */
 

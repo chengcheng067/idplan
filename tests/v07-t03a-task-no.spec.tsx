@@ -35,9 +35,8 @@ import { useLayoutStore } from '../src/store/useLayoutStore';
 import { TaskStatus } from '../src/core/types/enums';
 import type { Task } from '../src/core/types/entities';
 
-/** React 18 的 act 环境开关：不设会打出「not wrapped in act」噪声，且收敛不稳定 */
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+/* act 环境开关由 `tests/setup.ts` 统一置位（本文件不再自行置位/还原）——
+ * 逐文件置位会让同进程的下游 spec 连坐，理由详见 setup.ts 的注释。 */
 
 /* --------------------------------- 夹具 --------------------------------- */
 
@@ -72,7 +71,25 @@ function makeTask(partial: Partial<Task> & { title: string }): Task {
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
+/** 卸载当前挂载的树。**同一用例内多次 render 时必须先收掉前一棵**，否则：
+ *  ① 旧 root 不被 unmount，其 DOM host 也不被 remove → 孤儿树永久留在 `document.body`；
+ *  ② 孤儿树仍订阅 store，同进程后续 spec 的 setState 会把它「未挂载完成」地唤醒 → 跨文件污染。
+ *  vitest 配的是 `pool: 'threads'` + `singleThread: true`（见 `vite.config.ts`），
+ *  所有 spec 共用一个进程 → 这里的泄漏会打到下游任意文件，且远端报错点与被改文件无关。 */
+function unmountCurrent(): void {
+  const r = root;
+  if (r) {
+    act(() => {
+      r.unmount();
+    });
+  }
+  host?.remove();
+  root = null;
+  host = null;
+}
+
 function renderInto(node: React.ReactElement): HTMLDivElement {
+  unmountCurrent(); // 防御：同一用例内重复 render 不泄漏前一棵树
   host = document.createElement('div');
   document.body.appendChild(host);
   const localHost = host;
@@ -83,17 +100,18 @@ function renderInto(node: React.ReactElement): HTMLDivElement {
   return localHost;
 }
 
+/** 切看板模式 —— **一律走这里**，不要在用例里裸调 `setState`。
+ *  裸调同样触发 React 更新且不包 act：告警是**异步**落盘的，会飘到同进程的下一个 spec 文件上，
+ *  表现为「StageDrawer 报了 act 告警」而肇事文件却是本文件（实测：本文件在场 → 下游 7 条告警）。 */
+function setBoardMode(mode: 'human' | 'tech'): void {
+  act(() => {
+    useLayoutStore.setState({ agentBoardMode: mode });
+  });
+}
+
 afterEach(() => {
-  const r = root;
-  if (r) {
-    act(() => {
-      r.unmount();
-    });
-  }
-  host?.remove();
-  root = null;
-  host = null;
-  useLayoutStore.setState({ agentBoardMode: 'human' });
+  unmountCurrent();
+  setBoardMode('human');
 });
 
 /* ========================= ① 纯函数：格式化不变量 ========================= */
@@ -166,7 +184,7 @@ describe('① taskMetaText —— 号格式与来源串（唯一出处）', () =
 
 describe('② 技术卡元信息第二行 = 短号 · 来源', () => {
   it('有号：渲染 `T-1042 · agent`，且**不再**显示 externalId（行为变更点）', () => {
-    useLayoutStore.setState({ agentBoardMode: 'tech' });
+    setBoardMode('tech');
     const task = makeTask({
       title: '接线法务条款',
       taskNo: 1042,
@@ -185,7 +203,7 @@ describe('② 技术卡元信息第二行 = 短号 · 来源', () => {
   });
 
   it('★ 老数据（taskNo=null）：显示 `— · agent`，不是 `T-null`', () => {
-    useLayoutStore.setState({ agentBoardMode: 'tech' });
+    setBoardMode('tech');
     const task = makeTask({ title: '存量老任务', taskNo: null, source: 'agent' });
 
     const el = renderInto(<AgentTaskCard task={task} onOpen={() => undefined} />);
@@ -196,7 +214,7 @@ describe('② 技术卡元信息第二行 = 短号 · 来源', () => {
   });
 
   it('human 来源显示 `· human`', () => {
-    useLayoutStore.setState({ agentBoardMode: 'tech' });
+    setBoardMode('tech');
     const task = makeTask({ title: '人工任务', taskNo: 1000, source: 'human' });
 
     const el = renderInto(<AgentTaskCard task={task} onOpen={() => undefined} />);
@@ -254,19 +272,28 @@ describe('③ Ready 卡 = 同一函数，同一串', () => {
     const taskNo = 1042;
     const cardText = taskMetaText({ taskNo, source: 'agent' });
 
-    useLayoutStore.setState({ agentBoardMode: 'tech' });
-    const cardEl = renderInto(
-      <AgentTaskCard task={makeTask({ title: 'A', taskNo, source: 'agent' })} onOpen={() => undefined} />,
-    );
-    const readyEl = renderInto(
-      <ReadyQueue
-        tasks={[makeTask({ title: 'B', status: TaskStatus.Ready, taskNo, source: 'agent' })]}
-        onOpenTask={() => undefined}
-        onClaim={() => undefined}
-      />,
+    setBoardMode('tech');
+    // ★ 两棵树必须在**同一次 render** 里并存：分两次 renderInto 会（且应当）把前一棵树收掉，
+    //   那样 cardEl 已 unmount、querySelector 恒为 null —— 断言会以「读 null」的形式假失败。
+    const el = renderInto(
+      <div>
+        <AgentTaskCard
+          task={makeTask({ title: 'A', taskNo, source: 'agent' })}
+          onOpen={() => undefined}
+        />
+        <ReadyQueue
+          tasks={[makeTask({ title: 'B', status: TaskStatus.Ready, taskNo, source: 'agent' })]}
+          onOpenTask={() => undefined}
+          onClaim={() => undefined}
+        />
+      </div>,
     );
 
-    expect(cardEl.querySelector('[data-task-no]')!.textContent).toBe(cardText);
-    expect(readyEl.querySelector('[data-task-no]')!.textContent).toBe(cardText);
+    const anchors = Array.from(el.querySelectorAll('[data-task-no]'));
+    // 必须是两张卡各自的锚点，而不是「一个锚点出现了两次」——先锁数量，再锁内容
+    expect(anchors).toHaveLength(2);
+    for (const anchor of anchors) {
+      expect(anchor.textContent).toBe(cardText);
+    }
   });
 });

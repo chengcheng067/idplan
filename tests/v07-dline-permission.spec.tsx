@@ -35,12 +35,8 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 
-/**
- * 打开 React 的 act 环境开关。
- * 不设这一条时 `act()` 只发警告而不保证同步 flush，下面的「点『修改』→ 出现『保存』」
- * 这类**由事件驱动的状态更新**断言会读到更新前的 DOM（实测即为该失败）。
- */
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+/* act 环境开关由 `tests/setup.ts` 统一置位（本文件不再自行置位）——
+ * 原来在此置 true 且不还原，会把告警转嫁给同进程的下游 spec，理由详见 setup.ts。 */
 
 /**
  * 顶掉真实仓储：`ResourcePathButton` / `StageDrawer` 经 `useRepos()` 读 Context，
