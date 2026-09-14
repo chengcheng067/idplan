@@ -78,10 +78,17 @@ export function SidebarNav({
       Icon: CalendarRange,
       match: (p) => p === '/my-tasks',
     },
-    // v0.6：Agent Board 独立入口（所有角色可见，沿用既有 nav 规则不自创）
+    /*
+     * v0.6：Agent 工作区独立入口（所有角色可见，沿用既有 nav 规则不自创）。
+     * v0.8 · TBD-7：一级项文案 `Agent` → 「工作区」。
+     *   为什么改：v0.8 把 Agent 侧做成与人类项目**完全隔离**的独立工作区，导航项叫「Agent」
+     *   会被读成"某个叫 Agent 的功能"，而它其实是**另一个工作区**（点击后整屏内容都换一套数据）。
+     *   页面标题（AgentBoardPage 的 h1）落地为「Agent 看板」，与本项的「工作区」构成
+     *   「工作区 → 里面的看板」两级语义，不再与人类侧「项目」混淆。
+     */
     {
       to: '/agent',
-      label: 'Agent',
+      label: '工作区',
       Icon: Bot,
       match: (p) => p.startsWith('/agent'),
     },

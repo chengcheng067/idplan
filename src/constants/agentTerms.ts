@@ -43,7 +43,7 @@ export type AgentTermKey =
   | 'timeline' // human: 时间轴      / tech: Timeline
   | 'client' // human: 委托方      / tech: 客户 / 委托方（行业旧称已被 §0.5 常驻约束禁用）
   | 'onsite' // human: 现场        / tech: 现场（同上）
-  | 'board' // human: 项目看板    / tech: Agent Board
+  | 'board' // human: Agent 看板   / tech: Agent Board
   | 'claimedBy' // human: 负责人      / tech: claimed by
   | 'blockedBy'; // human: 被…阻塞    / tech: blocked by
 
@@ -63,7 +63,22 @@ export const AGENT_TERMS: Readonly<Record<AgentTermKey, Record<AgentTermMode, st
   timeline: { human: '时间轴', tech: 'Timeline' },
   client: { human: '委托方', tech: '客户 / 委托方' },
   onsite: { human: '现场', tech: '现场' },
-  board: { human: '项目看板', tech: 'Agent Board' },
+  /*
+   * ★ v0.8 · TBD-7：`board.human` 由「项目看板」改为「Agent 看板」。
+   *
+   * 为什么改的是**这里**而不是在 `AgentBoardPage` 里硬编码标题：本表是文案的**唯一出处**
+   * （文件头第 5 行「文案唯一出处，组件不得自己硬编码」）。若把标题写死在页面里，
+   * 本词条就退化成「零组件消费」的孤儿——正是本项目连续在防的那类「两份真相 / 死词条」
+   * （参见下方 `READY_NOW_LABEL` 的删除说明）。
+   *
+   * 为什么 human 列也可以出现「Agent」字样：TBD-7 明确定「页面标题 ＝「Agent 看板」」，
+   * 与 V1-9（人话模式不显示**来源标签**）不冲突 —— V1-9 管的是任务卡上的来源角标，
+   * 而这里是**整个工作区的名字**。侧栏一级项也同步收口为「工作区」（`SidebarNav.tsx`），
+   * 于是「工作区（侧栏）→ 里面的 Agent 看板（页面标题）」成为两级语义。
+   * 两列取值仍然不同（`Agent 看板` vs `Agent Board`），`agent-ui-terms.spec.ts` 的
+   * 「双模式取值必须不同」断言依旧成立。
+   */
+  board: { human: 'Agent 看板', tech: 'Agent Board' },
   claimedBy: { human: '负责人', tech: 'claimed by' },
   blockedBy: { human: '被…阻塞', tech: 'blocked by' },
 };
