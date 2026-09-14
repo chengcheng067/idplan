@@ -78,7 +78,8 @@ export function ProjectDetailPage(): JSX.Element {
 
   if (!project) {
     return (
-      <div className="py-16 text-center text-mist">
+      // px-8 与正文根节点的 p-8 同口径（画板 04 内容区 pad=32），下同
+      <div className="px-8 py-16 text-center text-mist">
         <p className="mb-3">未找到该项目（可能已被归档或删除）。</p>
         <Link to="/" className="text-pine underline underline-offset-2">
           ← 返回项目列表
@@ -90,7 +91,7 @@ export function ProjectDetailPage(): JSX.Element {
   // 非管理员且无任何相关阶段 → 受限空态（未进入用户同样命中：currentMember=null → 空集）
   if (memberView && visibleStages.length === 0) {
     return (
-      <div className="py-16 text-center text-mist">
+      <div className="px-8 py-16 text-center text-mist">
         <p className="mb-3">
           {currentMember ? '该项目的阶段与你无关。' : '请先点击右上角「进入身份」，再查看项目。'}
         </p>
@@ -118,15 +119,40 @@ export function ProjectDetailPage(): JSX.Element {
   const actions = createProjectActions(repos);
 
   return (
-    <div>
-      {/* 返回行 */}
-      <div className="mb-3 flex items-center justify-between">
-        <Link
-          to={memberView ? (currentMember ? '/my-tasks' : '/') : '/'}
-          className="inline-flex items-center gap-1 text-sm text-mist transition-colors hover:text-pine"
-        >
-          <ArrowLeft size={14} /> {memberView ? (currentMember ? '我的任务' : '首页') : '全部项目'}
-        </Link>
+    /*
+      内容区内边距由本页根节点自持（AppShell 的 <main> 已移除全部内边距）。
+      值取 **32**，出处是画板 04「项目详情 · 阶段时间轴」：
+        内容区  [col gap=20 pad=32]
+        顶栏    [row gap=16 pad=24]
+      即「顶栏 24 / 正文 32」是设计稿**刻意不同的两档**，不是没对齐。
+      为什么必须补：本页根节点原先无任何内边距，正文第一行贴在顶栏下沿 0 间距，
+      用户读作「过于靠近上沿、没有上下居中」（实为整行贴顶）。gap=20 由下方
+      信息环的 mb-5（20px）承担，与画板 col gap=20 同值。
+    */
+    <div className="p-8">
+      {/*
+        操作行（日程表 / Agent Board / 归档）—— **右对齐、无左侧返回链接**。
+
+        ⚠️ v0.7 增量：这里原有一个「← 全部项目 / ← 我的任务」文字链接，**已删除**。
+        依据：画板 04 顶栏只有「返回与面包屑块」（36×36 返回按钮 + 面包屑「项目 /
+        {项目名}」），正文区里**根本没有这条二级栏返回行**。返回入口统一收敛到
+        TopBar 的面包屑（TopBar.tsx 的 Breadcrumbs：返回箭头 + 项目 / 我的项目 / {项目名}）。
+        保留两个返回箭头会指向同一目的地（原链接与面包屑的「我的项目」都 navigate('/')），
+        用户原话读作「是否重复？而且它们没有对齐」——不对齐的根因是顶栏有 px-4/xl:px-6
+        而本页为 0，补上 p-8 后错位自然消失。
+
+        ⚠️ 成员视角可达性（已读码逐条核实，不是想当然）：
+          · 面包屑在 TopBar 里是 `hidden min-w-0 md:flex`，即 **≥768 才渲染**。
+          · ≥768 的成员：面包屑「我的项目」按钮 `navigate('/')` → HomeRouteGuard 判
+            isMember 后 <Navigate to="/member-board">（homeRouteTarget(true)），
+            落点是成员看板而非首页；返回箭头是 `navigate(-1)`。
+            两条都在，member 仍有回程（目的地由守卫决定，不是首页）。
+          · <768 的成员：面包屑整块不渲染，本页**没有**行内返回入口，
+            回程只剩顶栏汉堡 → 侧栏抽屉的导航项（成员的「看板 / 我的任务」）。
+          · 另外本页两处早退分支（未找到项目 / 受限空态）各自保留了专属返回链接，
+            这两种情况下 member 仍有明确的回程，不受本次删除影响。
+      */}
+      <div className="mb-3 flex items-center justify-end">
         <div className="flex items-center gap-2 text-sm">
           {/* v0.7-D · 打印/导出入口对「已进入身份」开放（管理员 + 成员）：
               用户已拍板「放开成员打印」——成员可查看并打印/导出（只读导出），不放开编辑。

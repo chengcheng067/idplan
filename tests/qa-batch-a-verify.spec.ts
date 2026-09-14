@@ -511,9 +511,9 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
     }
   }, HEAVY);
 
-  /* ================= A2 · 设置弹窗：距顶≈距底 + 底部圆角可见 ================= */
+  /* ================= A2 · 设置弹窗：避让原生三键 + 底部圆角可见 ================= */
 
-  it('Q-A2-1 · 管理员打开设置抽屉：面板距顶 == 距底（±2px）、底圆角在视口内、亮暗一致', async () => {
+  it('Q-A2-1 · 管理员打开设置抽屉：面板顶让开原生三键（≥titleBarHeight）、底圆角在视口内、亮暗一致', async () => {
     for (const theme of ['light', 'dark'] as const) {
       const { ctx, page } = await open(1600, 900);
       try {
@@ -545,8 +545,12 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
           const cs = getComputedStyle(panel);
           return {
             vh: window.innerHeight,
+            // titleBarHeight 口径（src/lib/titleBarTheme.ts）：<1280→56，≥1280→64。
+            // 本页视口 1600 ⇒ 64。这里独立算一遍，不 import（页面上下文里拿不到模块）。
+            titleBarH: window.innerWidth >= 1280 ? 64 : 56,
             topGap: Math.round(pr.top),
             bottomGap: Math.round(window.innerHeight - pr.bottom),
+            panelH: Math.round(pr.height),
             padTop: acs.paddingTop,
             padBottom: acs.paddingBottom,
             bottomInViewport: pr.bottom <= window.innerHeight + 0.5 && pr.top >= 0,
@@ -559,8 +563,17 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
         expect(m!.theme).toBe(theme);
         // 容器 padding 必须上下对称（曾因内联 paddingTop 变成上 48 / 下 24）
         expect(m!.padTop).toBe(m!.padBottom);
-        // 视觉间距对称（内容溢出 max-h 时面板贴满可用高度）
-        expect(Math.abs(m!.topGap - m!.bottomGap)).toBeLessThanOrEqual(2);
+        /*
+          视觉间距**不再对称**，这是 v0.7 增量的刻意结果，不是回归：
+          Windows 自绘标题栏的三键（尺寸应用改不了，见 src/lib/titleBarTheme.ts 的说明）
+          浮在 y ∈ [0, titleBarHeight) 之上，浮层不整体让位就会把面板头部右端的
+          「关闭设置」按钮压住——那正是用户原话「三键侵入了我们的 UI」的观感来源。
+          故断言从「距顶 == 距底（±2px）」改判为「顶边 ≥ 三键底边，且底部不再贴死」。
+        */
+        expect(m!.topGap).toBeGreaterThanOrEqual(m!.titleBarH);
+        expect(m!.bottomGap).toBeGreaterThan(0);
+        // 仍必须贴满可用高度：max-h 已扣掉避让量，不能因此把面板缩矮（否则白丢一屏内容）
+        expect(m!.topGap + m!.panelH + m!.bottomGap).toBeGreaterThanOrEqual(m!.vh - 2);
         // 底部圆角不得被推出视口（用户原始投诉）
         expect(m!.bottomInViewport).toBe(true);
         expect(m!.blRadius).not.toBe('0px');
@@ -600,8 +613,9 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       expect(m!.radius).toBe('16px');
       /**
        * 记录口径偏差（非本 spec 判失败项，供 team-lead 裁决）：
-       * 内容短于 max-h 时面板顶对齐 → 上 24 / 下 46（差 22px）。
-       * 「距顶 == 距底 ±2px」只在内容撑满 max-h（管理员场景）时成立。
+       * 内容短于 max-h 时面板顶对齐 → 上 = titleBarHeight（1600 视口下 64）/ 下 46 起。
+       * 「距顶 == 距底 ±2px」自 v0.7 增量起**已被取代**（顶边要让开原生三键），
+       * 见 Q-A2-1 的注释；此处只保留「底部不被裁」这条底线。
        */
       expect(m!.bottomGap).toBeGreaterThanOrEqual(24);
     } finally {

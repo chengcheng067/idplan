@@ -12,6 +12,7 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useRepos } from '../../hooks/useRepos';
 import { BUILD_VERSION, FRONTEND_STACK, REPO_URL } from '../../constants/version';
 import { isDesktop } from '../../lib/desktopBridge';
+import { titleBarHeight } from '../../lib/titleBarTheme';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
@@ -35,6 +36,22 @@ import { useEffect } from 'react';
  *
  * 边界：所有角色可用（导出日志不限管理员，调试友好）。破坏性动作（清空日志）走二次确认。
  */
+/**
+ * Modal `right-float` 锚点容器在 **≥sm** 档的上/下内边距（Modal.tsx 的 `sm:p-6` = 24px）。
+ * 桌面端窗口最小宽 960（electron/main.cjs 的 `minWidth`）⇒ 恒 ≥sm(640) ⇒ 该档即桌面端实际生效档。
+ * 这个数字只用于「面板还要再让多少」，即 titleBarHeight() − 24；Modal 一改就要跟着改。
+ */
+const RIGHT_FLOAT_PADDING_SM = 24;
+
+/**
+ * 需要避让的原生标题栏高度（px）。0 = 无需避让（浏览器 / NAS 端 / 非 Windows 平台）。
+ * 三键由系统绘制并**浮在网页内容之上**，不避让就会盖住浮层头部。
+ */
+function nativeTitleBarInset(): number {
+  if (!isDesktop() || window.idplan?.platform !== 'win32') return 0;
+  return titleBarHeight();
+}
+
 export function SettingsDialog({
   open,
   onClose,
@@ -87,6 +104,22 @@ export function SettingsDialog({
   // 打包日期（构建时静态快照，便于排查版本）
   const buildDate = new Date().toISOString().slice(0, 10);
 
+  /**
+   * 原生标题栏占位高度（px，0 = 无需避让）。
+   * 视口跨 xl 断点时 `titleBarHeight()` 会 56 ↔ 64 变（与 TopBar 的 h-14/xl:h-16 同口径），
+   * 故监听 resize 重算一次——否则用户把窗口拉过 1280 后面板会被三键压掉 8px。
+   */
+  const [titleBarInset, setTitleBarInset] = useState(0);
+  useEffect(() => {
+    const sync = (): void => setTitleBarInset(nativeTitleBarInset());
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, []);
+
+  /** 面板还需额外下移的量：三键底边 − 容器已给的上内边距 */
+  const avoidTitleBarTop = Math.max(0, titleBarInset - RIGHT_FLOAT_PADDING_SM);
+
   // 主题三选控件
   const themeOptions = [
     { key: 'light' as const, label: '浅色', icon: <Sun size={15} aria-hidden /> },
@@ -121,7 +154,27 @@ export function SettingsDialog({
           原实现把 `sm:mr-2 sm:mt-2` 叠在容器 sm:p-6 之上，等于又多让 8px 且只让右侧/顶部，
           破坏了「对称」这一修复目标，故一并去掉——间距统一由容器 sm:p-6 控制。
         */}
-        <div className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-full sm:max-h-[calc(100dvh-3rem)] sm:w-[400px] sm:self-start">
+        <div
+          className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-full sm:max-h-[calc(100dvh-3rem)] sm:w-[400px] sm:self-start"
+          /*
+            ── 原生三键避让（仅 Windows 桌面端，其余环境 style 为 undefined）──
+            marginTop：容器已给上 24，再补 avoidTitleBarTop，使面板顶边正好落在
+              y = titleBarHeight()，与顶栏下沿齐平（视觉上像「顶栏之下的一张卡片」）。
+            maxHeight：必须同步扣掉这段，否则「上 24 + 避让 + 原 max-h(100dvh-48)」会超出
+              视口，面板底部连圆角一起被裁出屏幕（批次 A 修过的同一个坑，不能重犯）。
+              这里用内联值而不加 Tailwind 类，是因为类名不能动态拼接（本仓库 BUG-05：
+              静态扫描的类名一旦拼接就整条不生成 CSS），而这里只有 32 / 40 两个取值。
+              ≥sm 的窗口最小宽 960 ⇒ 桌面端不会落进 <sm 分支，故内联不会压坏手机档。
+          */
+          style={
+            avoidTitleBarTop > 0
+              ? {
+                  marginTop: avoidTitleBarTop,
+                  maxHeight: `calc(100dvh - ${titleBarInset + RIGHT_FLOAT_PADDING_SM}px)`,
+                }
+              : undefined
+          }
+        >
           {/* 头部 */}
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div className="flex items-center gap-2">

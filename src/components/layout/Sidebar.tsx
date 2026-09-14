@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FolderKanban, PenLine, Save, Settings, Upload } from 'lucide-react';
+import { ChevronDown, FolderKanban, PenLine, Save, Settings, Upload } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { SettingsDialog } from './SettingsDialog';
@@ -108,6 +108,13 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   /**
+   * 项目列表是否已「展开全部」（v0.7 增量 · 用户反馈「还有 N 个项目…」点不到）。
+   * 默认 false：仍按 SIDEBAR_PROJECT_LIMIT 截断（画板 02/04 的截断是**刻意设计**，
+   * 不是 bug）；点一下截断提示即展开全量。状态在组件内，换页不重置——
+   * 用户主动展开过就认为他想一直看到全部，避免每次跳页都被收回。
+   */
+  const [projectsExpanded, setProjectsExpanded] = useState(false);
+  /**
    * 是否达到 xl（≥1280）。用于决定「持久栏是否真正参与布局」——虽显隐由
    * `hidden xl:flex` 承担，但折叠开关语义需 JS 侧同一口径。
    */
@@ -196,13 +203,39 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           {/* 主导航（§2.2：纵向 gap 4；每项高 40、横向 padding 12、gap 10、圆角 12） */}
           <SidebarNav collapsed={false} drawer={inDrawer} />
 
-          {/* 项目列表（§2.2）：容器 gap 2、padding 4；标题行高 28「项目」11/500 mist；
+          {/* 项目列表（§2.2）：容器 gap 2、padding 4；标题行高 28「我的项目」11/500 mist；
               条目高 36、padding 8、gap 8、圆角 12，含阶段色条 + 项目名 + 状态点 */}
           {projects.length > 0 && (
             <div className="mt-3 px-3">
-              <div className="pb-1 text-[11px] font-medium text-mist">项目</div>
+              {/*
+                标题行（画板 02 / 04「项目列表标题行」fill_container×28 [row pad=8]）：
+                左「我的项目」11/500 mist，右「查看全部」11/Regular **主色**（画板裸 hex #6366F1 = pine）。
+
+                ⚠️ 「查看全部」不是本轮新造：它是**画板本来就有的**（画板 02 L52-53 与画板 04 L52-53
+                各一次，文案逐字为「查看全部」）。此前实现漏掉了它，于是「被截断的项目怎么看到」
+                在侧栏里根本没有出口 —— 本轮补的就是这个缺口。
+                为什么指向 `/` 而不是新开一个「全部项目」页：全站没有该路由，而首页
+                HomeRouteGuard 对成员会重定向到 /member-board（成员看板），
+                这正是成员该看到的「全部」形态，故一个 to="/" 同时满足两种身份。
+              */}
+              <div className="flex h-7 items-center justify-between pb-1">
+                <span className="text-[11px] font-medium text-mist">项目</span>
+                <Link
+                  to="/"
+                  data-sidebar-see-all=""
+                  title="查看全部项目"
+                  className="rounded-sm text-[11px] text-pine outline-none transition-colors hover:text-pine-deep focus-visible:ring-2 focus-visible:ring-pine/40"
+                >
+                  查看全部
+                </Link>
+              </div>
+              {/*
+                ⚠️ 容器必须可滚动，否则「展开全部」会把侧栏底部（设置/备份/新建/身份行）挤出视口。
+                已由外层 `min-h-0 flex-1 overflow-y-auto py-1`（可滚动区）承担，高度约束在
+                flex 布局下由 `flex-1 + min-h-0` 共同给出；展开后条目多于此区高度时内部滚动。
+              */}
               <ul className="flex flex-col gap-0.5">
-                {projects.slice(0, SIDEBAR_PROJECT_LIMIT).map((p) => {
+                {projects.slice(0, visibleProjectCount(projects.length, projectsExpanded)).map((p) => {
                   const active = currentProjectId === p.id;
                   const colorIdx = resolveStageColorIndex(projectStageOrder(p.id, stages));
                   return (
@@ -247,9 +280,29 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                     </li>
                   );
                 })}
-                {projects.length > SIDEBAR_PROJECT_LIMIT && (
-                  <li className="px-2 pt-1 text-[11px] text-mist">
-                    还有 {projects.length - SIDEBAR_PROJECT_LIMIT} 个项目…
+                {/*
+                  截断提示（v0.7 增量 · 修真 bug）。
+                  原实现是一个**纯文本 <li>，零交互** —— 用户有 9 个项目，第 9 个起
+                  根本没渲染，而唯一的线索「还有 1 个项目…」点不动，等于项目不可达。
+                  现在改为按钮：点击即展开全量（见 projectsExpanded）。
+                  文案与视觉保持原样（11px mist 行高不变），只补可点性 + 展开后消失；
+                  用 pine 主色 + ChevronDown 让「可点」这件事可见——否则修完仍像死文本。
+                */}
+                {projects.length > SIDEBAR_PROJECT_LIMIT && !projectsExpanded && (
+                  <li>
+                    <button
+                      type="button"
+                      data-sidebar-more-projects=""
+                      onClick={() => setProjectsExpanded(true)}
+                      aria-expanded={projectsExpanded}
+                      title={`展开显示全部 ${projects.length} 个项目`}
+                      className="flex h-7 w-full items-center gap-1 rounded-md px-2 text-left text-[11px] text-pine outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
+                    >
+                      <ChevronDown size={12} aria-hidden className="shrink-0" />
+                      <span className="truncate">
+                        还有 {projects.length - SIDEBAR_PROJECT_LIMIT} 个项目…
+                      </span>
+                    </button>
                   </li>
                 )}
               </ul>
@@ -593,8 +646,22 @@ function projectStatusDotClass(project: Project, stages: Stage[], todayIso: stri
 
 /* ------------------------------ 纯函数辅助 ------------------------------ */
 
-/** 侧栏项目列表上限（超出提示「还有 N 个」，避免侧栏被长列表淹没） */
-const SIDEBAR_PROJECT_LIMIT = 8;
+/**
+ * 侧栏项目列表上限（超出提示「还有 N 个」，避免侧栏被长列表淹没）。
+ * 画板 02/04 只画了 5 条 + 截断观感，未规定具体数字；8 是既有取值，本轮不改。
+ */
+export const SIDEBAR_PROJECT_LIMIT = 8;
+
+/**
+ * 侧栏项目列表**实际渲染**的条目数。
+ * 未展开 → 封顶 SIDEBAR_PROJECT_LIMIT（画板口径）；已展开 → 全量。
+ * 抽成纯函数是为了让「第 9 个到底渲没渲染」这件事可被单测直接断言，
+ * 而不必去猜 DOM（此前正是这里把第 9 个起彻底吞掉，且没有任何可见/可测信号）。
+ */
+export function visibleProjectCount(total: number, expanded: boolean): number {
+  if (total <= 0) return 0;
+  return expanded ? total : Math.min(total, SIDEBAR_PROJECT_LIMIT);
+}
 
 /** 从 pathname 提取当前项目 id（`/project/:id[/...]`），非项目路由返回 null */
 export function matchProjectId(pathname: string): string | null {

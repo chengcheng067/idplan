@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 import { Button } from '../components/ui/Button';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
@@ -33,6 +33,15 @@ import { cn } from '../lib/cn';
  *
  * 看板分桶逻辑（deriveColumns / groupByColumn）保留导出：
  *   成员看板页（MemberBoardPage）仍依赖它按行业派生列，契约不变，此处仅不再渲染四列看板。
+ *
+ * 建档入口（v0.7 增量 · 用户要求去重）：
+ *   本页页头**不再**渲染「新建项目」按钮。全站建档入口收敛为三处，全部带
+ *   `isAdmin && onProjectPage` 门槛：侧栏底部展开态（Sidebar.tsx）、侧栏底部收起态、
+ *   手机档 ⋮ 更多菜单（MobileMoreMenu.tsx）。
+ *   ⚠️ 本页仍有两条**无身份门槛**的建档触发点：空态的「直接手动建档」（EmptyState）
+ *      与月历视图的 `onManual`。二者是「还没有项目时先把第一个建出来」的引导路径，
+ *      成员被 HomeRouteGuard 重定向出首页后到不了，实际可达者是未进入身份的首启用户。
+ *      是否收紧由主理人决策，本轮未动。
  */
 export function HomePage(): JSX.Element {
   const navigate = useNavigate();
@@ -93,14 +102,17 @@ export function HomePage(): JSX.Element {
 
   return (
     <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
-      {/* 1. 页面标题行 */}
+      {/*
+        1. 页面标题行 —— 右端**刻意留空**（v0.7 增量 · 用户要求去重）。
+        画板 02 此行的右端原本画着「+ 新建项目」按钮，本页**已删除**：
+          · 同一动作在侧栏底部（展开态 / 收起态各一处）与手机档 ⋮ 菜单里都已存在，
+            三处都带 `isAdmin && onProjectPage` 门槛，用户读作「重复入口」；
+          · 而这个页头按钮**没有任何身份门槛**——非管理员也能点。
+            删掉它同时收敛了「非管理员可建档」这个权限漏口（见 commit message）。
+        故本行现在只承载标题（副标题若日后补，落在这里，不要再放建档按钮）。
+      */}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-[24px] font-bold text-ink">我的项目</h1>
-        <div className="flex items-center gap-3">
-          <Button variant="primary" icon={<Plus size={14} aria-hidden />} onClick={openManual}>
-            新建项目
-          </Button>
-        </div>
       </div>
 
       {/* 2. 统计卡行（响应式：桌面 4 列 / 平板 2×2 / 手机单列） */}
