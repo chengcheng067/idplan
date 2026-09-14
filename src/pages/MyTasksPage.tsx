@@ -17,10 +17,10 @@ import { taskAssigneeIds } from '../hooks/useRoleGuard';
 import { cn } from '../lib/cn';
 import { remainingDays } from '../lib/date';
 import { StatCard } from '../components/project/StatCard';
-import { STAGE_BAR_COLORS } from '../components/timeline/stageColors';
+import { stageSolidColor } from '../components/timeline/stageColors';
+import { customStageColor } from '../components/timeline/stageColorKey';
 import type { Project, Stage, Task } from '../core/types/entities';
 import { taskIsDone } from '../core/types/entities';
-import { resolveStageColorIndex } from '../core/template/stage-fallback';
 
 type FilterMode = 'by-project' | 'by-time';
 
@@ -303,17 +303,25 @@ function TaskCard({
 }): JSX.Element {
   const days = task.dueDate ? remainingDays(task.dueDate.slice(0, 10), todayIso) : null;
   const overdue = days !== null && days < 0;
+  /*
+    v0.8 BUG-06：行首阶段色条接上自定义色通路（色值 + 属性成对，缺一则 var() 解析为空）。
+    无阶段时的回落沿用改造前的内置 9 号槽：`stageSolidColor(9, null, null)`
+    === `STAGE_BAR_COLORS[resolveStageColorIndex(9, null)]` === `STAGE_BAR_COLORS[9]`。
+  */
+  const stagePaint = customStageColor(stage?.customColor ?? null);
   const stageColor = stage
-    ? STAGE_BAR_COLORS[resolveStageColorIndex(stage.orderIndex, stage.colorIndex)] ?? STAGE_BAR_COLORS[9]
-    : STAGE_BAR_COLORS[9];
+    ? stageSolidColor(stage.orderIndex, stage.colorIndex, stage.customColor)
+    : stageSolidColor(9, null, null);
 
   return (
     <li className="glass-medium flex items-center gap-2.5 overflow-hidden rounded-[12px] border border-line p-2.5">
       {/* 行首阶段色条 */}
       <span
+        data-task-stage-bar=""
         className="h-7 w-1 shrink-0 rounded-full"
         style={{ backgroundColor: stageColor }}
         aria-hidden
+        {...stagePaint.attrs}
       />
 
       <button

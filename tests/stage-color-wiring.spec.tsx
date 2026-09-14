@@ -67,6 +67,8 @@ import { StageRowsColumn } from '../src/components/timeline/StageRowsColumn';
 import { MobileStageList } from '../src/components/timeline/MobileStageList';
 import { MonthDayCell } from '../src/components/calendar/MonthDayCell';
 import { ProjectCard } from '../src/components/project/ProjectCard';
+import { ProjectAppearanceDialog } from '../src/components/project/ProjectAppearanceDialog';
+import { Sidebar } from '../src/components/layout/Sidebar';
 import {
   stageBandClass,
   stageBandColor,
@@ -76,7 +78,11 @@ import {
   stageSolidClass,
   stageSolidColor,
 } from '../src/components/timeline/stageColors';
-import { stageColorAttrs, STAGE_COLOR_KEY_ATTR } from '../src/components/timeline/stageColorKey';
+import {
+  customStageColor,
+  stageColorAttrs,
+  STAGE_COLOR_KEY_ATTR,
+} from '../src/components/timeline/stageColorKey';
 import {
   __resetRegistryForTest,
   buildStageColorCss,
@@ -98,7 +104,9 @@ import type { GridDay } from '../src/components/calendar/calendarGrid';
 import { buildScheduleSections } from '../src/lib/schedule-print';
 import { SchedulePrintPage } from '../src/pages/SchedulePrintPage';
 import { CalendarPrintPage } from '../src/pages/CalendarPrintPage';
+import { MyTasksPage } from '../src/pages/MyTasksPage';
 import { useProjectsStore } from '../src/store/useProjectsStore';
+import { useLayoutStore } from '../src/store/useLayoutStore';
 import { useMembersStore } from '../src/store/useMembersStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import {
@@ -303,11 +311,15 @@ function seedStores(stages: Stage[], project: Project = makeProject(), tasks: Ta
  * matchMedia 恒 `matches:false`（= 桌面稿），ResizeObserver 为空实现。
  * `tests/v07-dline-print-access.spec.tsx:415-433` 同款。
  */
-function installEnvStubs(): void {
+/**
+ * @param xl 是否让 `matchMedia` 命中「xl 视口」。默认 false（= 桌面稿 1024–1280）。
+ *   仅 Sidebar 那组需要传 `true`：它的展开态要求 `xl === true`，否则会渲染成折叠态。
+ */
+function installEnvStubs(xl = false): void {
   const w = window as unknown as Record<string, unknown>;
   w.matchMedia = (query: string): MediaQueryList =>
     ({
-      matches: false,
+      matches: xl,
       media: query,
       onchange: null,
       addEventListener: () => undefined,
@@ -1061,8 +1073,12 @@ describe('④ 打印 · 月历 CalendarPrintPage', () => {
 /** A13 场景的段数（PRD 指定 20 段） */
 const A13_STAGE_COUNT = 20;
 
-/** 单条任务（只需满足 `buildScheduleSections` 的 `stageId` 归组与 `taskIsDone`） */
-function makeTask(id: string, stageId: string): Task {
+/**
+ * 单条任务（只需满足 `buildScheduleSections` 的 `stageId` 归组与 `taskIsDone`）。
+ * `over` 供 MyTasksPage 那组用：它的列表只显示「参与人含当前成员」的任务，
+ * 故必须能覆写 `assigneeIds`。
+ */
+function makeTask(id: string, stageId: string, over: Partial<Task> = {}): Task {
   return {
     id,
     taskNo: null,
@@ -1085,6 +1101,7 @@ function makeTask(id: string, stageId: string): Task {
     orderIndex: 1,
     revision: 1,
     updatedAt: '2026-06-01T00:00:00Z',
+    ...over,
   };
 }
 
@@ -1146,6 +1163,252 @@ describe('⑥ A13 · 打印前显示预计页数（文案 + 与实际分页一�
     const home = renderAt('/');
     expect(must(home, '[data-home-marker]', '首页占位'), '应已离开打印路由').not.toBeNull();
     expect(q(home, '.print-root'), '离开路由后打印页子树不得残留（模态实现会残留）').toBeNull();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * 组 7 · BUG-06：五处「绕过自定义色通路」的消费点补接
+ *
+ * T05 只接了 A11 那四处，而 `STAGE_BAR_COLORS` 另有 5 个消费点直查内置表：
+ *   ① ProjectCard 进度轨道段  ② ProjectCard 强调色（→ 外观弹窗）
+ *   ③ Sidebar 展开态彩条      ④ Sidebar 折叠态彩条   ⑤ MyTasksPage 行首色条
+ * ⇒ 用户设了自定义阶段色后，这几处仍显示内置色（改了色一半界面不跟）。
+ *
+ * 每处都断言**两个方向**，缺一即假断言：
+ *   · 自定义：色值 === var(--stage-local-solid) **且** 锚点存在
+ *             （只测其一 ⇒ 「色块其实透明了」也照样绿）
+ *   · 内置　：色值与改造前**逐字节同值** **且** 不挂锚点（本笔最重要的回归锁）
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+/** 五处共用：自定义色一侧的**两个半件**都必须在 */
+function expectLocalSolid(el: Element, expectedKey: string): void {
+  expect(inline(el).backgroundColor, '自定义色必须取本地 solid 令牌').toBe(
+    'var(--stage-local-solid)',
+  );
+  expectWired(el, expectedKey);
+}
+
+/** 五处共用：内置色一侧必须**逐字节同值**且不挂锚点 */
+function expectBuiltinSolid(el: Element, slot: number): void {
+  expect(inline(el).backgroundColor, `内置色必须与改造前逐字节同值（s${slot}）`).toBe(
+    `var(--stage-s${slot})`,
+  );
+  expect(keyAnchor(el), '内置色不得挂 data-stage-key').toBeNull();
+}
+
+describe('⑦ BUG-06 · ① ProjectCard 阶段进度轨道段', () => {
+  function renderCard(stages: Stage[]): HTMLDivElement {
+    return mount(
+      <MemoryRouter>
+        <ProjectCard
+          project={makeProject()}
+          stages={stages}
+          tasks={[]}
+          members={[ADMIN]}
+          todayIso="2026-06-10"
+          onOpen={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  it('自定义色：轨道段取 var(--stage-local-solid) 且挂锚点', () => {
+    const key = registerStageColor(CUSTOM);
+    seedStores([]);
+    const h = renderCard([makeStage('stg_seg', 3, { customColor: CUSTOM })]);
+
+    const segs = qa(h, '[data-stage-track-seg]');
+    expect(segs, '进度轨道应渲染 1 段').toHaveLength(1);
+    expectLocalSolid(segs[0]!, key);
+  });
+
+  it('内置色：轨道段与改造前逐字节同值，且不挂锚点', () => {
+    seedStores([]);
+    const h = renderCard([makeStage('stg_seg', 3, { customColor: null })]);
+
+    const segs = qa(h, '[data-stage-track-seg]');
+    expect(segs).toHaveLength(1);
+    expectBuiltinSolid(segs[0]!, 3);
+  });
+
+  it('★ 混排：自定义段走通路 B、内置段走通路 A（互不影响）', () => {
+    const key = registerStageColor(CUSTOM);
+    seedStores([]);
+    const h = renderCard([
+      makeStage('stg_seg_a', 1, { customColor: CUSTOM }),
+      makeStage('stg_seg_b', 2, { customColor: null }),
+    ]);
+
+    const segs = qa(h, '[data-stage-track-seg]');
+    expect(segs, '进度轨道应渲染 2 段').toHaveLength(2);
+    expectLocalSolid(segs[0]!, key);
+    expectBuiltinSolid(segs[1]!, 2);
+  });
+});
+
+describe('⑦ BUG-06 · ② ProjectCard 强调色 → ProjectAppearanceDialog', () => {
+  /**
+   * 直接渲染弹窗，色值与属性按 ProjectCard 的同一口径算好传入。
+   * 单独测弹窗是为了把「coverColor 命中时阶段色**根本不参与**」这一最难写对的分支钉死；
+   * ProjectCard 是否真把两者一起传下去，由下面那条「接线」用例经 ⋯ 菜单实证。
+   */
+  function renderAccentPreview(coverColor: string | null, customColor: string | null): Element {
+    const stage = makeStage('stg_accent', 1, { customColor });
+    mount(
+      <ProjectAppearanceDialog
+        open
+        project={makeProject({ coverColor })}
+        stageAccentColor={stageSolidColor(stage.orderIndex, null, stage.customColor)}
+        stageAccentAttrs={customStageColor(stage.customColor).attrs}
+        onClose={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+    // Modal 走 createPortal 挂到 document.body ⇒ 不能只在宿主容器里找
+    return must(document.body, '[data-project-accent-preview]', '方块预览色块');
+  }
+
+  it('内置色：强调色与改造前逐字节同值，且不挂锚点', () => {
+    expectBuiltinSolid(renderAccentPreview(null, null), 1);
+  });
+
+  it('coverColor 未命中 ⇒ 预览走阶段色（挂锚点）；命中 ⇒ 走封面色（不挂锚点）', () => {
+    const key = registerStageColor(CUSTOM);
+
+    // ① 未命中：预览取的就是阶段色 ⇒ 两个半件都必须在
+    expectLocalSolid(renderAccentPreview(null, CUSTOM), key);
+
+    // ② 命中白名单 token：预览取封面色，阶段色根本不参与 ⇒ 属性一个都不许挂
+    const covered = renderAccentPreview('pine', CUSTOM);
+    expect(inline(covered).backgroundColor, '命中 coverColor 时预览必须走封面色').toBe(
+      'rgb(var(--pine-rgb))',
+    );
+    expect(
+      keyAnchor(covered),
+      'coverColor 命中时阶段色不参与 ⇒ 不得挂 data-stage-key（挂了既语义错又污染判定）',
+    ).toBeNull();
+  });
+
+  it('接线：ProjectCard 真的把自定义色与属性一起传进弹窗（经 ⋯ 菜单打开）', () => {
+    const key = registerStageColor(CUSTOM);
+    seedStores([makeStage('stg_accent', 2, { customColor: CUSTOM })]);
+    const h = mount(
+      <MemoryRouter>
+        <ProjectCard
+          project={makeProject()}
+          stages={[makeStage('stg_accent', 2, { customColor: CUSTOM })]}
+          tasks={[]}
+          members={[ADMIN]}
+          todayIso="2026-06-10"
+          onOpen={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+
+    const menuBtn = must(h, 'button[aria-label="项目更多操作"]', '⋯ 菜单按钮') as HTMLElement;
+    act(() => {
+      menuBtn.click();
+    });
+    const trigger = must(
+      document.body,
+      '[data-project-appearance-trigger]',
+      '「侧栏方块外观」入口',
+    ) as HTMLElement;
+    act(() => {
+      trigger.click();
+    });
+
+    // 「跟随阶段色」那枚色块恒取阶段色 ⇒ 自定义时必须带锚点
+    const swatch = must(document.body, '[data-cover-swatch="auto"] span', '「跟随阶段色」色块');
+    expectLocalSolid(swatch, key);
+  });
+});
+
+describe('⑦ BUG-06 · ③④ Sidebar 彩条（展开态 + 折叠态各一处）', () => {
+  /**
+   * 展开态的成立条件是 `collapsed = xl ? !sidebarExpanded : true` ⇒
+   * 必须 `matchMedia` 命中 xl **且** `sidebarExpanded = true`，
+   * 两者缺一都会渲染成折叠态 —— 那样就只测到一处、另一处静默漏掉。
+   */
+  function renderSidebar(xl: boolean): HTMLDivElement {
+    installEnvStubs(xl);
+    act(() => {
+      useLayoutStore.setState({ sidebarExpanded: true });
+    });
+    return mount(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+  }
+
+  it('自定义色：展开态与折叠态**两处**都走通路 B', () => {
+    const key = registerStageColor(CUSTOM);
+    seedStores([makeStage('stg_side', 2, { customColor: CUSTOM })]);
+
+    const expanded = renderSidebar(true);
+    expectLocalSolid(must(expanded, '[data-project-accent-bar="expanded"]', '展开态彩条'), key);
+
+    const collapsed = renderSidebar(false);
+    expectLocalSolid(must(collapsed, '[data-project-accent-bar="collapsed"]', '折叠态彩条'), key);
+  });
+
+  it('内置色：两处都与改造前逐字节同值，且不挂锚点', () => {
+    seedStores([makeStage('stg_side', 3, { customColor: null })]);
+
+    const expanded = renderSidebar(true);
+    expectBuiltinSolid(must(expanded, '[data-project-accent-bar="expanded"]', '展开态彩条'), 3);
+
+    const collapsed = renderSidebar(false);
+    expectBuiltinSolid(must(collapsed, '[data-project-accent-bar="collapsed"]', '折叠态彩条'), 3);
+  });
+
+  it('coverColor 命中 ⇒ 彩条走封面色且不挂锚点（阶段色不参与）', () => {
+    registerStageColor(CUSTOM);
+    seedStores(
+      [makeStage('stg_side', 2, { customColor: CUSTOM })],
+      makeProject({ coverColor: 'pine' }),
+    );
+
+    const bar = must(renderSidebar(true), '[data-project-accent-bar="expanded"]', '展开态彩条');
+    expect(inline(bar).backgroundColor, '命中 coverColor 时彩条必须走封面色').toBe(
+      'rgb(var(--pine-rgb))',
+    );
+    expect(keyAnchor(bar), '阶段色不参与 ⇒ 不得挂 data-stage-key').toBeNull();
+  });
+});
+
+describe('⑦ BUG-06 · ⑤ MyTasksPage 任务行首阶段色条', () => {
+  /** 列表只显示「参与人含当前成员」的任务 ⇒ 夹具必须给 `assigneeIds: [ADMIN_ID]` */
+  function seedMyTasks(customColor: string | null): void {
+    seedStores(
+      [makeStage('stg_mt', 4, { customColor })],
+      makeProject(),
+      [makeTask('tsk_mt', 'stg_mt', { assigneeIds: [ADMIN_ID] })],
+    );
+  }
+
+  it('自定义色：行首色条取本地 solid 令牌且挂锚点', () => {
+    const key = registerStageColor(CUSTOM);
+    seedMyTasks(CUSTOM);
+
+    const h = mount(
+      <MemoryRouter>
+        <MyTasksPage />
+      </MemoryRouter>,
+    );
+    expectLocalSolid(must(h, '[data-task-stage-bar]', '任务行首阶段色条'), key);
+  });
+
+  it('内置色：行首色条与改造前逐字节同值，且不挂锚点', () => {
+    seedMyTasks(null);
+
+    const h = mount(
+      <MemoryRouter>
+        <MyTasksPage />
+      </MemoryRouter>,
+    );
+    expectBuiltinSolid(must(h, '[data-task-stage-bar]', '任务行首阶段色条'), 4);
   });
 });
 

@@ -14,7 +14,8 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ImeInput } from '../common/ImeInput';
 import { Modal } from '../common/Modal';
 import { Tag } from '../ui/Tag';
-import { STAGE_BAR_COLORS } from '../timeline/stageColors';
+import { stageSolidColor } from '../timeline/stageColors';
+import { customStageColor } from '../timeline/stageColorKey';
 import { ProjectAppearanceDialog } from './ProjectAppearanceDialog';
 import { cn } from '../../lib/cn';
 
@@ -119,17 +120,39 @@ export function ProjectCard({
     const s0 = Date.parse(s.startAt ?? '');
     const e0 = Date.parse(s.endAt ?? '');
     const dur = Number.isFinite(s0) && Number.isFinite(e0) ? Math.max(e0 - s0, 1) : 1;
-    return { dur, color: STAGE_BAR_COLORS[s.orderIndex] ?? STAGE_BAR_COLORS[9] };
+    /*
+      v0.8 BUG-06：进度轨道段接上自定义色通路。
+      色值与属性必须**成对**取（只写一半 ⇒ var() 解析为空 ⇒ 整段透明），
+      故用 `customStageColor()` 一次取齐，不拆成两次判定。
+
+      ⚠️ 第二个形参刻意传 `null`（**不**传 `s.colorIndex`）：本处改造前是
+      `STAGE_BAR_COLORS[s.orderIndex]`，而 `stageSolidColor` 内部走
+      `resolveStageColorIndex(orderIndex, colorIndex)` —— 只有传 null 才会回落到
+      「按 orderIndex 夹取」，与改造前**逐字节同值**。传 colorIndex 会在
+      `colorIndex !== orderIndex` 的阶段上静默换色（超出本笔「补接」范围）。
+    */
+    const paint = customStageColor(s.customColor);
+    return { dur, color: stageSolidColor(s.orderIndex, null, s.customColor), attrs: paint.attrs };
   });
   const total = segs.reduce((a, s) => a + s.dur, 0) || 1;
 
   /**
    * 本项目当前阶段色 —— 侧栏方块「跟随阶段色」时的取值（v0.7 B1）。
    * 与 Sidebar 折叠态方块的回落口径一致：取最早可见阶段的实心块色。
-   * 本文件既有 segs 也用 `STAGE_BAR_COLORS[s.orderIndex]`，故此处沿用同一口径，
+   * 本文件既有 segs 也用「按 orderIndex 取实心块」的口径，故此处沿用同一口径，
    * 不额外引入 resolveStageColorIndex（避免同一文件出现两套取色约定）。
+   *
+   * v0.8 BUG-06：本值唯一的消费方是 ProjectAppearanceDialog 里的两个色块，
+   * 而真正的 DOM 元素在那边 ⇒ **属性必须跟着色值一起传过去**，只传色值会让它变透明。
+   * 故这里同时算出 `accentPaint.attrs`，与 segs 走同一套成对口径。
    */
-  const stageAccentColor = STAGE_BAR_COLORS[ordered[0]?.orderIndex ?? 1] ?? STAGE_BAR_COLORS[9];
+  const accentStage = ordered[0] ?? null;
+  const accentPaint = customStageColor(accentStage?.customColor ?? null);
+  const stageAccentColor = stageSolidColor(
+    accentStage?.orderIndex ?? 1,
+    null,
+    accentStage?.customColor ?? null,
+  );
 
   // 外点关闭菜单
   useEffect(() => {
@@ -312,8 +335,11 @@ export function ProjectCard({
           {segs.map((s, i) => (
             <div
               key={i}
+              data-stage-track-seg=""
               className="h-full"
               style={{ width: `${(s.dur / total) * 100}%`, backgroundColor: s.color }}
+              /* 通路 B 的第二个半件：与上面的 `s.color` 成对，缺一则 var() 解析为空 */
+              {...s.attrs}
             />
           ))}
         </div>
@@ -380,6 +406,7 @@ export function ProjectCard({
         open={appearanceOpen}
         project={project}
         stageAccentColor={stageAccentColor}
+        stageAccentAttrs={accentPaint.attrs}
         onClose={() => setAppearanceOpen(false)}
         onSave={(patch) => void actions.updateProject(project.id, patch)}
       />

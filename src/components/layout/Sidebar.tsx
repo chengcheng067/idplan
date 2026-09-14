@@ -12,9 +12,13 @@ import { useHumanProjects, useHumanStages } from '../../core/project/visibility'
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore, isXlViewport } from '../../store/useLayoutStore';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
-import { resolveStageColorIndex } from '../../core/template/stage-fallback';
-import { STAGE_BAR_COLORS } from '../timeline/stageColors';
-import { resolveProjectAccentColor, resolveProjectShortLabel } from '../../lib/projectAccent';
+import { stageSolidColor } from '../timeline/stageColors';
+import { customStageColor } from '../timeline/stageColorKey';
+import {
+  projectCoverColorCss,
+  resolveProjectAccentColor,
+  resolveProjectShortLabel,
+} from '../../lib/projectAccent';
 import { MEMBER_ROLE_LABELS } from '../../core/types/enums';
 import { computeProjectStatus } from '../../lib/progress';
 import type { Project, Stage } from '../../core/types/entities';
@@ -253,7 +257,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               <ul className="flex flex-col gap-0.5">
                 {projects.slice(0, visibleProjectCount(projects.length, projectsExpanded)).map((p) => {
                   const active = currentProjectId === p.id;
-                  const colorIdx = resolveStageColorIndex(projectStageOrder(p.id, stages));
+                  const accentStage = projectAccentStage(p.id, stages);
+                  const accentPaint = customStageColor(accentStage?.customColor ?? null);
                   return (
                     <li key={p.id}>
                       <Link
@@ -275,16 +280,27 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                             值域白名单与取色分支的唯一出处是 src/lib/projectAccent.ts；
                             本处只做取值，绝不在此再写一遍 `coverColor || stage` 回落
                             （否则折叠态/展开态/项目卡三处会各有一套口径）。
+
+                          ★ v0.8 BUG-06：阶段色那一路接上自定义色通路（色值 + 属性成对）。
+                          注意属性**不能无条件铺**：`resolveProjectAccentColor` 是覆盖式的，
+                          coverColor 命中时阶段色根本不参与，此时挂 data-stage-key 既语义错、
+                          又污染判定 ⇒ 与色值按同一条件（`projectCoverColorCss(...) === null`）决定。
                         */}
                         <span
                           aria-hidden
+                          data-project-accent-bar="expanded"
                           className="h-4 w-1 shrink-0 rounded-[2px]"
                           style={{
                             backgroundColor: resolveProjectAccentColor(
                               p.coverColor,
-                              STAGE_BAR_COLORS[colorIdx] ?? 'transparent',
+                              stageSolidColor(
+                                accentStage?.orderIndex ?? 1,
+                                null,
+                                accentStage?.customColor ?? null,
+                              ),
                             ),
                           }}
+                          {...(projectCoverColorCss(p.coverColor) === null ? accentPaint.attrs : {})}
                         />
                         <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{p.name}</span>
                         {/* 状态点 6×6：正常 moss / 临期 amber / 逾期 clay */}
@@ -473,7 +489,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         {top3.length > 0 && (
           <div className="flex flex-col items-center gap-1 py-2">
             {top3.map((p) => {
-              const colorIdx = resolveStageColorIndex(projectStageOrder(p.id, stages));
+              const accentStage = projectAccentStage(p.id, stages);
+              const accentPaint = customStageColor(accentStage?.customColor ?? null);
               const shortLabel = resolveProjectShortLabel(p.name, p.shortLabel);
               return (
                 <Link
@@ -483,16 +500,23 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                   aria-label={p.name}
                   className="flex h-9 w-10 items-center justify-center gap-1 rounded-md bg-sunken outline-none transition-colors hover:bg-line focus-visible:ring-2 focus-visible:ring-pine/40"
                 >
-                  {/* 竖条颜色：覆盖式（自定义方块色优先，否则阶段 main 色；零裸 hex） */}
+                  {/* 竖条颜色：覆盖式（自定义方块色优先，否则阶段 main 色；零裸 hex）
+                      v0.8 BUG-06：阶段色那一路接自定义色通路，属性与展开态同条件（见上） */}
                   <span
                     aria-hidden
+                    data-project-accent-bar="collapsed"
                     className="h-5 w-1 shrink-0 rounded-[2px]"
                     style={{
                       backgroundColor: resolveProjectAccentColor(
                         p.coverColor,
-                        STAGE_BAR_COLORS[colorIdx] ?? 'transparent',
+                        stageSolidColor(
+                          accentStage?.orderIndex ?? 1,
+                          null,
+                          accentStage?.customColor ?? null,
+                        ),
                       ),
                     }}
+                    {...(projectCoverColorCss(p.coverColor) === null ? accentPaint.attrs : {})}
                   />
                   {/*
                     ★ 有意偏离画板 ①：画板 03 的折叠态方块里**只有色条、没有文字**。
@@ -690,14 +714,25 @@ export function onProjectPage(pathname: string): boolean {
   return pathname === '/' || pathname.startsWith('/project');
 }
 
-/** 该项目当前阶段序号（取最早 orderIndex）→ 供彩条选色；无阶段回落 0 */
-export function projectStageOrder(
+/**
+ * 该项目「当前阶段」的最小取色信息（取最早 orderIndex）→ 供彩条选色；无阶段返回 `null`。
+ *
+ * ── v0.8 BUG-06：为什么返回形状从 `number` 改成对象 ──
+ * 彩条要走自定义色通路就必须同时拿到 `customColor`，而旧签名只吐 `orderIndex`。
+ * 返回 `{ orderIndex, customColor }` 是**刻意不**带回 `colorIndex`：调用点改造前是
+ * `resolveStageColorIndex(orderIndex)`（单参 ⇒ 按 orderIndex 夹取），带 colorIndex 会在
+ * `colorIndex !== orderIndex` 的阶段上静默换色，超出「补接」范围。
+ * （`tests/` 全目录零引用 ⇒ 本次改签名无测试锁。）
+ */
+export function projectAccentStage(
   projectId: string,
-  stages: Array<{ projectId: string; orderIndex: number }>,
-): number {
+  stages: Array<{ projectId: string; orderIndex: number; customColor?: string | null }>,
+): { orderIndex: number; customColor: string | null } | null {
   const own = stages.filter((s) => s.projectId === projectId);
-  if (own.length === 0) return 0;
-  return Math.min(...own.map((s) => s.orderIndex));
+  if (own.length === 0) return null;
+  const minOrder = Math.min(...own.map((s) => s.orderIndex));
+  const first = own.find((s) => s.orderIndex === minOrder) ?? own[0]!;
+  return { orderIndex: minOrder, customColor: first.customColor ?? null };
 }
 
 /**

@@ -39,6 +39,7 @@ export function ProjectAppearanceDialog({
   open,
   project,
   stageAccentColor,
+  stageAccentAttrs = {},
   onClose,
   onSave,
 }: {
@@ -46,6 +47,12 @@ export function ProjectAppearanceDialog({
   project: Project;
   /** 「跟随阶段色」时方块的取色（由调用方按当前阶段算好传入，本组件不认识 Stage） */
   stageAccentColor: string;
+  /**
+   * `stageAccentColor` 若走自定义色通路，这里是配对的 `data-stage-key` 属性（v0.8 BUG-06）。
+   * 色值落在 `var(--stage-local-*)` 时**必须**同挂该属性，否则解析为空 ⇒ 色块透明。
+   * 内置色由调用方传 `{}`（默认），本组件不做任何判定。
+   */
+  stageAccentAttrs?: Record<string, string>;
   onClose(): void;
   onSave(patch: UpdateProjectCmd): void;
 }): JSX.Element {
@@ -83,6 +90,14 @@ export function ProjectAppearanceDialog({
   /** 预览用取色：未指定 → 阶段色；指定 → 白名单取色（不合法则仍回落阶段色） */
   const previewAccent =
     color === null ? stageAccentColor : (projectCoverColorCss(color) ?? stageAccentColor);
+
+  /**
+   * 预览块**是否真的用了阶段色**（v0.8 BUG-06）。
+   * 命中封面色时 `previewAccent` 取的是 cover 的 css 表达式，阶段色**根本不参与** ⇒
+   * 此时挂 `data-stage-key` 既语义错、又会给「这块的色是不是自定义阶段色」的判定造成噪声。
+   * 故属性与色值一样，按「最终实际用的是不是阶段色」来决定铺不铺。
+   */
+  const previewUsesStageColor = projectCoverColorCss(color) === null;
 
   return (
     <Modal open={open} onClose={onClose} ariaLabel="侧栏方块外观">
@@ -148,6 +163,8 @@ export function ProjectAppearanceDialog({
               aria-hidden
               className="h-5 w-5 rounded-full"
               style={{ backgroundColor: stageAccentColor }}
+              /* 这里恒取阶段色（不含 cover 回落）⇒ 属性无条件铺 */
+              {...stageAccentAttrs}
             />
           </button>
 
@@ -180,8 +197,11 @@ export function ProjectAppearanceDialog({
           <span className="flex h-9 w-10 items-center justify-center gap-1 rounded-md bg-paper">
             <span
               aria-hidden
+              data-project-accent-preview=""
               className="h-5 w-1 rounded-[2px]"
               style={{ backgroundColor: previewAccent }}
+              /* coverColor 命中时阶段色不参与 ⇒ 属性也不铺（见 previewUsesStageColor） */
+              {...(previewUsesStageColor ? stageAccentAttrs : {})}
             />
             <span className="max-w-[24px] truncate text-[12px] font-medium leading-4 text-ink">
               {resolveProjectShortLabel(project.name, nextLabel)}
