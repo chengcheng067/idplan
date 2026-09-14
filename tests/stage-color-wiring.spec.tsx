@@ -108,8 +108,9 @@ import {
   ProjectType,
   ScheduleBasis,
   StageStatus,
+  TaskStatus,
 } from '../src/core/types/enums';
-import type { Member, Project, Stage } from '../src/core/types/entities';
+import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 import type { TimelineRange } from '../src/lib/date';
 
 /**
@@ -283,10 +284,15 @@ function renderAt(path: string): HTMLDivElement {
 }
 
 /** 装 store（须在挂载**之前**、且包在 `act()` 里，避免 act 告警） */
-function seedStores(stages: Stage[], project: Project = makeProject()): void {
+/**
+ * 装 store（须在挂载**之前**、且包在 `act()` 里，避免 act 告警）。
+ * `tasks` 为可选第三参：既有调用点全都只给 stages（任务为空不影响它们的断言），
+ * 只有 A13 的「预计页数」组需要「每段恰好 1 任务」来决定期望页数。
+ */
+function seedStores(stages: Stage[], project: Project = makeProject(), tasks: Task[] = []): void {
   unmountCurrent();
   act(() => {
-    useProjectsStore.getState().replaceAll({ projects: [project], stages, tasks: [] });
+    useProjectsStore.getState().replaceAll({ projects: [project], stages, tasks });
     useMembersStore.getState().setAll([ADMIN]);
     useSettingsStore.setState({ currentMemberId: ADMIN_ID, hydrated: true });
   });
@@ -1028,6 +1034,118 @@ describe('④ 打印 · 月历 CalendarPrintPage', () => {
 
     expect(must(h, '.print-root .schedule-bar-segment', '月历格内色带')).not.toBeNull();
     expectNotWired(h);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * 组 ⑥ · A13「打印前显示预计页数」（PRD v0.8 增量稿:179 / 设计文档验收标准 3）
+ *
+ * 逐字要求：`| A13 | P1 | 打印前显示预计页数 | 20 段时显示「预计 M 页」且 M 与实际
+ *           pages.length 一致 |`
+ *
+ * ── 为什么这组断言不是同义反复 ──
+ * 「M 与 pages.length 一致」若直接写 `expect(pages.length).toBe(pages.length)` 是废话。
+ * 故这里的两侧取自**两个互相独立**的来源：
+ *   · 文本侧 M  ← 从 DOM 里那段文案用正则捕获（用户真正看到的数字）；
+ *   · 分页侧 N  ← 数渲染出的 `.a4-page` 容器个数（DOM 里真实存在的页数）。
+ * 而期望值 4 是**按 src/lib/schedule-print.ts 的真实常量独立复算**出来的硬编码常量：
+ *   可用高 = A4 1123 − padding 88 − 页眉带 58 − 页脚 48 = **929**
+ *   单段高（1 任务）= sectionHeader 52 + row 46 + sectionGap 24 = **122**
+ *   首页另扣 firstPageHeader 210 ⇒ 首屏限 929 − 210 = 719 → 5 段
+ *   其后每页限 929                                 → 7 段
+ *   20 = 5 + 7 + 7 + 1 ⇒ **4 页**（分布 5/7/7/1）
+ * （复算方式：用 `node -e` 照抄上述常量重演 `paginateSections` 的循环，见交付报告。
+ *   注：`emptySection` 是 44，本用例每段都有 1 任务，走 `tasks.length * EST.row` 一支，用不到它。）
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+/** A13 场景的段数（PRD 指定 20 段） */
+const A13_STAGE_COUNT = 20;
+
+/** 单条任务（只需满足 `buildScheduleSections` 的 `stageId` 归组与 `taskIsDone`） */
+function makeTask(id: string, stageId: string): Task {
+  return {
+    id,
+    taskNo: null,
+    projectId: PROJECT_ID,
+    stageId,
+    title: `任务${id}`,
+    done: false,
+    assigneeId: null,
+    assigneeIds: [],
+    dueDate: null,
+    source: 'human',
+    externalId: null,
+    agentId: null,
+    status: TaskStatus.Draft,
+    description: null,
+    dependsOn: [],
+    artifacts: [],
+    startAt: null,
+    claimedAt: null,
+    orderIndex: 1,
+    revision: 1,
+    updatedAt: '2026-06-01T00:00:00Z',
+  };
+}
+
+/** 20 段 × 每段恰好 1 任务（⇒ 每个 section 高 122，期望页数 4） */
+function a13Fixture(): { stages: Stage[]; tasks: Task[] } {
+  const stages: Stage[] = [];
+  const tasks: Task[] = [];
+  for (let n = 1; n <= A13_STAGE_COUNT; n++) {
+    const sid = `stg_a13_${String(n).padStart(2, '0')}`;
+    // colorIndex 循环 1..9（orderIndex 会到 20，直接当 colorIndex 会越界）
+    stages.push(makeStage(sid, n, { colorIndex: ((n - 1) % 9) + 1 }));
+    tasks.push(makeTask(`tsk_a13_${String(n).padStart(2, '0')}`, sid));
+  }
+  return { stages, tasks };
+}
+
+describe('⑥ A13 · 打印前显示预计页数（文案 + 与实际分页一致）', () => {
+  it('20 段 × 每段 1 任务：文案必须是「预计 M 页」，且 M === DOM 里 .a4-page 容器数', () => {
+    const { stages, tasks } = a13Fixture();
+    seedStores(stages, makeProject(), tasks);
+    const h = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+
+    // 选择器锚在「… 页 · A4」这一处（页脚另有「第 N / M 页」，但它属 .print-root 内、且不含「· A4」）
+    const labelEl = qa(h, '.no-print span').find((el) => /页\s*·\s*A4/.test(el.textContent ?? ''));
+    expect(labelEl, '操作栏里必须存在「… 页 · A4」那段文案').toBeDefined();
+    const label = labelEl?.textContent ?? '';
+
+    // ① 文案逐字含「预计」—— 旧文案「共 N 页」在这一行立刻红（这就是判别力来源）
+    const m = /预计\s*(\d+)\s*页/.exec(label);
+    expect(m, `文案必须形如「预计 N 页」，实测「${label}」`).not.toBeNull();
+    const shown = Number(m![1]);
+
+    // ② DOM 里真实渲染出的页数（与文本侧相互独立）
+    const printedPages = qa(h, '.a4-page').length;
+
+    // ③ 20 段 ⇒ 期望 4 页（常量独立复算，见本组头部注释）
+    expect(printedPages, '20 段 × 每段 1 任务 ⇒ 应为 4 页').toBe(4);
+
+    // ④ M 必须等于真实页数（PRD 的「与 pages.length 一致」）
+    expect(shown, `文案数字(${shown}) 必须等于实际页数(${printedPages})`).toBe(printedPages);
+
+    // ⑤ 反向断言：数字不得等于段数 —— 防有人退回「按段数当页数」
+    const renderedRows = qa(h, 'table.schedule-table tbody tr').length;
+    expect(renderedRows, '阶段清单应渲染全部 20 段').toBe(A13_STAGE_COUNT);
+    expect(shown, '页数不得等于段数（段数 20 ≠ 页数 4）').not.toBe(A13_STAGE_COUNT);
+    expect(shown, '页数必须真的大于 1（否则 ⑤ 会退化成平凡断言）').toBeGreaterThan(1);
+  });
+
+  it('TS-08 · 打印页是独立路由、不是模态：该路径渲染 .print-root 且无 dialog/aria-modal，离开即消失', () => {
+    seedStores([makeStage('stg_p1', 1)], makeProject(), [makeTask('tsk_p1', 'stg_p1')]);
+
+    const at = renderAt(`/project/${PROJECT_ID}/schedule-print`);
+    expect(must(at, '.print-root', '打印页根节点')).not.toBeNull();
+    expect(qa(at, '[role="dialog"]').length, '打印页不得是模态对话框').toBe(0);
+    expect(qa(at, '[aria-modal="true"]').length, '打印页不得带 aria-modal').toBe(0);
+
+    // 路由化 ⇒ 离开该路径后整棵打印子树随之消失
+    // （若将来有人改成常驻模态/浮层，`.print-root` 会残留 ⇒ 本断言红）
+    const home = renderAt('/');
+    expect(must(home, '[data-home-marker]', '首页占位'), '应已离开打印路由').not.toBeNull();
+    expect(q(home, '.print-root'), '离开路由后打印页子树不得残留（模态实现会残留）').toBeNull();
   });
 });
 

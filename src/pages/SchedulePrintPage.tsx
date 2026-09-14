@@ -309,7 +309,16 @@ export function SchedulePrintPage(): JSX.Element {
             位置紧挨「返回项目」：用户点进来第一眼就在这一行。 */}
         <ProjectSourceBadge project={project} />
         <span className="ml-auto" />
-        <span className="text-xs text-mist">共 {pages.length} 页 · A4</span>
+        {/* ★ A13（PRD v0.8 增量稿:179 / 设计文档验收标准 3）：「打印前显示预计页数」。
+            文案必须是「**预计**」而不是「共」—— `pages` 来自 `paginateSections()`，
+            而它依据的是 `estimateSectionHeight()` 的**高度估算**（常量近似，不是浏览器实际
+            排版高度），故这是预估值而非承诺值。用户据此判断要不要少打几个阶段，
+            写成「共」会在估算落空时变成一句假话。
+            ⚠️ 数字仍取 `pages.length` 本身（同一 `useMemo` 的产物，见 :109）——
+            「预计」只修饰语义，**不是**另算一个近似值；另算必然与真实分页漂移。
+            下方 `导出 PNG（N 张）` 保持原样：它数的是**实际会产出的文件数**
+            （`exportSchedulePngPages` 逐页导，页数就是 `pages.length`），是确定值不用「预计」。 */}
+        <span className="text-xs text-mist">预计 {pages.length} 页 · A4</span>
         <button
           type="button"
           onClick={onPrint}
