@@ -533,13 +533,36 @@ export function AgentBoardPage(): JSX.Element {
 
   /* ------------------------------ 派生 ------------------------------ */
   const project: Project | undefined = agentBoards.find((p) => p.id === currentProjectId);
+
+  /*
+   * ★ 反向泄漏闸门（§7.2 #20/#21，判据见 tests/isolation-census.spec.ts 的 L3「反向泄漏 · 组件级」）。
+   *
+   * 为什么**不能**直接拿 `currentProjectId` 去 filter：
+   *   `currentProjectId` 可能是**人类项目 id**（历史遗留 / 深链 / v0.6 旧按钮）。
+   *   上面 `project` 已经按漏斗收窄（只在 `agentBoards` 里找 ⇒ 人类 id ⇒ `undefined`），
+   *   若两条派生仍以裸 id 过滤，两者就**自相矛盾**：`project` 是 undefined，
+   *   而 `projectTasks`/`projectStages` 却装满了**人类项目**的任务与阶段 ——
+   *   屏幕上表现为「Agent 工作区里列出人类任务」。
+   *
+   * 收窄方式：过滤 key 取 `project?.id ?? null`（即「已确认为 Agent 看板」的 id）。
+   *   - 是人类 id ⇒ `project` 为 undefined ⇒ key 为 null ⇒ 两条派生**必为空**；
+   *   - 是 Agent id ⇒ key 即该 id，行为与原先完全一致。
+   *
+   * ⚠️ 注意这里**不用** `useProjectStages`/`useProjectTasks`（那对是「只按 id 收窄、
+   *   不按 kind」的详情页/打印页单项目直达特判，§7.3 #17/#18/#27）——
+   *   本处的泄漏正是「id 本身是人类 id」，那对救不了。
+   *
+   * 上面 519-532 的 useEffect 虽然会把陈旧选择 setCurrentProject(null) 掉，
+   * 但那发生在 **effect 阶段**：首帧仍会用人类 id 渲染一次。这里堵的就是那一帧。
+   */
+  const scopedProjectId: Project['id'] | null = project?.id ?? null;
   const projectStages = useMemo(
-    () => stages.filter((s) => s.projectId === currentProjectId),
-    [stages, currentProjectId],
+    () => (scopedProjectId === null ? [] : stages.filter((s) => s.projectId === scopedProjectId)),
+    [stages, scopedProjectId],
   );
   const projectTasks = useMemo(
-    () => tasks.filter((t) => t.projectId === currentProjectId),
-    [tasks, currentProjectId],
+    () => (scopedProjectId === null ? [] : tasks.filter((t) => t.projectId === scopedProjectId)),
+    [tasks, scopedProjectId],
   );
 
   /** memberId → 展示名（human 成员名 / agent 的 agentKind；与 HandoffPanel 同口径） */
