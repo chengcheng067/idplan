@@ -132,12 +132,50 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
 
   // POST /projects
   app.post('/api/projects', async (req, reply) => {
-    const body = req.body as Record<string, unknown>;
+    // `?? {}`：空 body 时给出 PATCH 同款的空对象（此前 `req.body` 为 undefined 会在下面炸 TypeError）
+    const body = (req.body ?? {}) as Record<string, unknown>;
     const id = (body.id as string) ?? crypto.randomUUID();
     const name = String(body.name ?? '').trim();
     if (!name) {
       void reply.status(400);
       return { error: { code: 'validation', userMessage: '项目名称不能为空' } };
+    }
+
+    /* ======================================================================================
+     * v0.8 · T04-SRV · 归属侧（`kind`）的**建项目侧**值域校验
+     *
+     * ── 为什么建项目也必须校验（与 PATCH 那道门对称）──
+     * PATCH 对脏 `kind` 返回 400，而这里原本是 `String(body.kind ?? 'human')` —— **零校验、
+     * 静默落库**。同一个字段一条路拒脏值、另一条路照收，是最典型的口径漂移。
+     *
+     * ── 具体后果：两侧对同一条项目的判断会不一致（不是洁癖）──
+     * `listProjectCandidates()`（agent.routes.ts）刻意用**等值** `kind = 'human'` 而不是
+     * `<> 'agent'`，为的是「让将来新增的 kind 默认不可见」。等值谓词的**反面**就是：
+     * **任何非 `'human'` 的值都被排除**，脏值也不例外。而前端 `projectKindOf`
+     * （`src/core/project/visibility.ts`）只认字面量 `'agent'`，其余（含脏值）一律按人类侧。
+     * 于是 `kind = ''` 的项目会同时是：
+     *   · 前端：**人类项目**（可见、可编辑）；
+     *   · 服务端候选清单：**被排除**（Agent 通道解析不到它）。
+     * 两侧对同一条记录判断相反 —— 正是等值谓词要防的那类状态，只是入口在建项目。
+     *
+     * ── 触发路径是现实的 ──
+     * 任何「字段总是带上、没值就给空串」的客户端（`kind: ''`，`String('')` 不报错）或
+     * 照搬字段映射的旧脚本，都能把它写进来。
+     *
+     * ── ⚠️ 刻意**不**要求 `takeover` ──
+     * 建项目不是「接管」。接管（变更**已有**项目的归属侧）才需要显式意图。
+     * 本处只做**值域**校验，把 PATCH 那道门不该有的约束加到这里，就是把边界越收越严。
+     *
+     * 值域白名单复用 PATCH 同一份 `isProjectKind()`（单一出处，改一处即两处同改）。
+     * `kind` **未传** → 默认 `'human'`，行为与今天逐字一致。
+     * ==================================================================================== */
+    if (body.kind !== undefined && !isProjectKind(String(body.kind))) {
+      void reply.status(400);
+      return invalidField(
+        `归属侧 kind 只接受 'human' / 'agent' 两个取值，收到「${String(body.kind)}」。` +
+          '（归属侧是隔离谓词的判据，脏值会让前端与服务端对同一条项目判断不一致：' +
+          '前端按人类侧显示它，服务端候选清单却把它排除。）',
+      );
     }
     // ⚠️ 列清单与占位符个数必须逐一对齐（v0.8 起 17 个 ?）。加列时三处同改：
     //    列清单 / VALUES / .run() 实参，漏一处就是运行期 'too few/many parameters'。
@@ -168,6 +206,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       (body.domain as string | null) ?? null,
       // 归属侧：不传 → 'human'。Agent 通道建板由 T04 显式传 'agent'（§7.6）。
       // 这里必须与 DDL 的 DEFAULT 同值——显式写入而非依赖 DEFAULT，读回才稳定。
+      // ★ 值域合法性已由本函数上方的建项目侧校验拦下（与 PATCH 同一份 `isProjectKind`），
+      //   故此处只做「不写进非字符串」的收尾，不重复校验（两处规则必然漂移）。
       String(body.kind ?? 'human'),
       nowIso(),
     );
