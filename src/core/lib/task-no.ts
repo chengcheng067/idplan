@@ -363,8 +363,8 @@ export function resolveStageByName(
   //   故累加初值取 `STAGE_ORDER_MIN - 1`（= 0）并把结果夹到 `>= 1`：
   //     · 零阶段      → 1（与 schema 一致）
   //     · 非空项目    → 与 §4.4 伪码**逐字同结果**（[1]→2、[1,5,9]→10、隐藏 8→9）
-  //   上限（99）不夹：需项目已有 99 个阶段才可达，而 `MAX_STAGE_COUNT`（12）在其它路径
-  //   已封顶，属不可达状态；静默夹到 99 反而会造出重复序号（排序歧义）比报错更糟。
+  //   上限（99）不夹：需项目已有 99 个阶段才可达，而 `MAX_STAGE_COUNT`（v0.8 起 20）
+  //   在其它路径已封顶，属不可达状态；静默夹到 99 反而会造出重复序号（排序歧义）比报错更糟。
   const maxOrderIndex = stages.reduce(
     (max, s) => Math.max(max, s.orderIndex),
     STAGE_ORDER_MIN - 1,

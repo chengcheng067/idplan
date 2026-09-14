@@ -64,6 +64,20 @@ const projectSchema = z
     stagePresetKey: z.string().nullable().optional(),
     stageTemplateVersion: z.number().int().nonnegative().optional(),
     scheduleBasis: z.nativeEnum(ScheduleBasis).optional(),
+    /**
+     * v0.8 主板块。**用 `z.string()` 而非设计文档 §3.3 写的 `z.nativeEnum(...)`**——
+     * `StageTemplateDomain`（`dto.ts:326`）是**字符串字面量联合类型**而不是 TS enum，
+     * `z.nativeEnum()` 只吃 `enum` 对象，写上去直接**编译不过**。
+     * 改用宽收也正合本文件既有策略：枚举字段一律 `z.string()`（见 `type` / `status`），
+     * 保证将来新增行业值时旧客户端不被拒绝；窄化在 `normalizeProjectRow` 内完成。
+     */
+    domain: z.string().nullable().optional(),
+    /**
+     * v0.8 归属侧。同上用 `z.string()`：`ProjectKind` 是字面量联合（承载对外契约的
+     * Agent 通道标记，刻意**不封闭**，与 `Member.agentKind` 同策略）。
+     * 归一后恒有值（回落 DEFAULT_PROJECT_KIND）——故实体侧 `kind` 是必填。
+     */
+    kind: z.string().nullable().optional(),
     status: z.string(),
     revision: z.number().int().nonnegative(),
     updatedAt: isoString,
@@ -84,6 +98,12 @@ const stageSchema = z
     orderIndex: z.number().int().min(1).max(99),
     templateKey: z.string().nullable().optional(),
     colorIndex: z.number().int().min(1).max(9).optional(),
+    /**
+     * v0.8 用户自定义主色（#RRGGBB）。v0.8 前的备份没有这个键 → 可选，归一补 null。
+     * 不收窄成 hex 正则：主色是**用户数据**，格式异常不该让整份备份导不回来
+     * （与 `colorIndex` 越界走读时夹取同一取向——排版层有 `deriveStageColors` 兜底）。
+     */
+    customColor: z.string().nullable().optional(),
     name: z.string(),
     ratioPercent: z.number(),
     startAt: dateLike,

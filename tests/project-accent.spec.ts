@@ -143,6 +143,9 @@ describe('项目行归一 · shortLabel 的键位（四处同步铁律 · 第二
       'stagePresetKey',
       'stageTemplateVersion',
       'scheduleBasis',
+      // v0.8：Project 链新增两列（插在 scheduleBasis 之后、status 之前）
+      'domain',
+      'kind',
       'status',
       'revision',
       'updatedAt',

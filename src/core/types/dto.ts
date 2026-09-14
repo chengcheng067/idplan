@@ -14,6 +14,7 @@ import {
   StageLogType,
   StageStatus,
   TaskStatus,
+  type ProjectKind,
   type TaskSource,
 } from './enums';
 import type { Member, Project, Stage, Task, TaskArtifact } from './entities';
@@ -46,11 +47,22 @@ export interface CreateProjectCmd {
   /** 排期基准；不传 → DEFAULT_SCHEDULE_BASIS（自然日，与改造前口径一致） */
   scheduleBasis?: ScheduleBasis;
   /**
-   * 本次服务包含的阶段项（顺序即 orderIndex 1..N，1 ≤ N ≤ 12）。
+   * 主板块（v0.8 新增）。建档第 2 层「主板块」的选择结果，落 `Project.domain`。
+   * 不传 → repo 落 null → 读时回落（见 stage-fallback.resolveProjectDomain）。
+   * 看板列归属一律读它，**不再**从 stagePresetKey 反推（后者在 'custom' 时退化）。
+   */
+  domain?: StageTemplateDomain | null;
+  /**
+   * 归属侧（v0.8 新增）。人类建档路径**不传**（落 DEFAULT_PROJECT_KIND）；
+   * Agent 通道建板传 'agent'（T04 §7.6）。
+   */
+  kind?: ProjectKind;
+  /**
+   * 本次服务包含的阶段项（顺序即 orderIndex 1..N，1 ≤ N ≤ 20）。
    * 不传 → previewSplit 回落到全量九段模板（行为与改造前一致）。
    * 键序/双写口径：Project 侧不冗余存 key 列表，Stage 表是唯一事实源。
    */
-  stageItems?: StageTemplateItem[];
+  stageItems?: StageSelectionItem[];
 }
 
 /** 项目信息编辑命令（不含状态与日期切分，改期走 stage.service） */
@@ -90,6 +102,14 @@ export interface ConfirmedContractPayload {
   stageTemplateVersion?: number;
   /** 排期基准；不传 → DEFAULT_SCHEDULE_BASIS（自然日） */
   scheduleBasis?: ScheduleBasis;
+  /**
+   * 主板块（v0.8 新增）。向导第 2 层「主板块」选择结果，落 `Project.domain`。
+   * 不传 → null → 读时回落。**本条是向导路径的唯一 domain 来源**：
+   * 向导产出 ConfirmedContractPayload，由 project.service 转 CreateProjectCmd 落库。
+   */
+  domain?: StageTemplateDomain | null;
+  /** 归属侧（v0.8 新增）。向导恒为人类建档 ⇒ 不传（落 DEFAULT_PROJECT_KIND）。 */
+  kind?: ProjectKind;
   createdByManual: boolean;
   sourceFileName: string | null;
   rawTextDigest: string;
@@ -107,6 +127,28 @@ export interface StageOverride {
   visible?: boolean;
 }
 
+/**
+ * 建档时**被用户选中**的阶段项（v0.8 新增）：模板项 ＋ 可选的自定义主色。
+ *
+ * 为什么不在 `StageTemplateItem` 上直接加 `customColor`：那个类型描述的是
+ * `templates/stage-library.json` 的**库数据形状**（随版本发布、用户不可编辑），
+ * 而 `customColor` 是**用户数据**。混在一起会让「模板项」这个概念带上用户态，
+ * 是 v0.8 §3.5「模板类数据只存在于该 JSON」铁律的反例。
+ *
+ * 为什么不用 `StageOverride` 承载颜色：override 的键是 `orderIndex`（切分后才有），
+ * 而颜色在**选阶段时**就已确定（`orderIndex` 尚未重编号）——归属不同生命周期。
+ *
+ * 向后兼容：`customColor` 可选 ⇒ `StageTemplateItem` 天然可赋给本类型，
+ * 既有只传模板项的调用点一处都不用改。
+ */
+export interface StageSelectionItem extends StageTemplateItem {
+  /**
+   * 用户为该阶段指定的主色（#RRGGBB）。null / 缺省 = 用内置 `colorIndex` 色。
+   * 建档时无论是否跨项目复用自定义阶段，**都**经此字段落进 `Stage.customColor`。
+   */
+  customColor?: string | null;
+}
+
 /** 切分产出的阶段草稿（确认后才入库） */
 export interface StageDraft {
   orderIndex: number;
@@ -114,6 +156,15 @@ export interface StageDraft {
   templateKey: string | null;
   /** 色号 1..9（取色/圆圈序号/阶段筛选）。键序与 Stage 实体对齐 */
   colorIndex: number;
+  /**
+   * 用户自定义主色（v0.8 新增）。null = 用 colorIndex 对应的内置 9 色。
+   *
+   * ⚠️ **必填而非可选**：草稿是「即将落库的行」，漏给会静默丢色（存 null 但用户选了色）。
+   * 因此所有构造点（`split.ts` 三处 + `stage-resolve.ts` 一处）必须显式给值——
+   * 类型系统在这里替我们兜住「新增草稿构造点忘了带色」这个失效模式。
+   * 键序与 Stage 实体对齐（colorIndex 之后、name 之前）。
+   */
+  customColor: string | null;
   name: string;
   ratioPercent: number;
   startAt: string;
@@ -395,6 +446,22 @@ export interface StagePreset {
   itemKeys: string[];
 }
 
+/**
+ * 行业大类（v0.8 新增，`templates/stage-library.json` 的 `industryGroups` 段）。
+ *
+ * 建档第 1 层「行业大类」= 本条目：`domains.length > 1` ⇒ **大类**（展开第 2 层选主板块）；
+ * `=== 1` ⇒ **一级平铺**（点了即定主板块，不出现第 2 层）。
+ * 用长度判定而不引入 `kind` 字段——少一套枚举就少一处漂移。
+ *
+ * 数组顺序即第 1 层显示顺序（同 `getDomains()` 返回数组而非对象之理由：对象不保序）。
+ */
+export interface IndustryGroup {
+  key: string;
+  name: string;
+  /** 本大类覆盖的领域，顺序即第 2 层显示顺序 */
+  domains: StageTemplateDomain[];
+}
+
 /** templates/stage-library.json 的类型化形状 */
 export interface StageTemplateLibraryFile {
   /**
@@ -405,6 +472,12 @@ export interface StageTemplateLibraryFile {
   source: string;
   /** 行业键 → 行业定义（含看板列） */
   domains: Record<string, StageDomain>;
+  /**
+   * v0.8：行业大类分组表（建档第 1 层）。**可选**——老 JSON 无此段时访问器返回 []，
+   * 调用方回退到「按 domains 一级平铺」，不崩。本版随版本发布必然存在。
+   * 纯增量 ⇒ `version` 仍为 2，不影响 `Project.stageTemplateVersion` 的既有语义。
+   */
+  industryGroups?: IndustryGroup[];
   items: StageTemplateItem[];
   presets: StagePreset[];
 }

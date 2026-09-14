@@ -84,6 +84,13 @@ export function buildCreatedStage(input: BuildCreatedStageInput): Stage {
     orderIndex,
     templateKey: null,
     colorIndex: Math.min(STAGE_COLOR_MAX, Math.max(STAGE_COLOR_MIN, orderIndex)),
+    /**
+     * v0.8：Agent 自动建出的阶段**不带用户色**（恒 null → 用内置色）。
+     * 依据：Agent 通道按名建阶段（`?stageName=` / `stageNames[]`）时只声明名字，
+     * 没有携带颜色的字段；凭空给个颜色属于「猜测」，违反本项目「绝不猜测」纪律。
+     * 键序：colorIndex 之后、name 之前（与 Stage 实体一致）。
+     */
+    customColor: null,
     name: declaredName.trim(),
     ratioPercent: 0,
     startAt: project.plannedStartAt,

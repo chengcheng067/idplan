@@ -12,6 +12,8 @@ interface StageRow {
   /** v2 阶段自定义字段（与 entities.Stage 同构） */
   template_key: string | null;
   color_index: number | null;
+  /** v0.8 用户自定义主色（NULL = 用内置 colorIndex 色）。键序：color_index 之后、name 之前 */
+  custom_color: string | null;
   name: string;
   ratio_percent: number;
   start_at: string;
@@ -31,6 +33,7 @@ export function rowToStage(r: StageRow): Record<string, unknown> {
     orderIndex: r.order_index,
     templateKey: r.template_key ?? null,
     colorIndex: r.color_index ?? null,
+    customColor: r.custom_color ?? null,
     name: r.name,
     ratioPercent: r.ratio_percent,
     startAt: r.start_at,
@@ -72,9 +75,10 @@ export function registerStageRoutes(app: FastifyInstance, db: Database.Database)
     const { rows } = req.body as { rows: Array<Record<string, unknown>> };
     const insert = db.prepare(
       `INSERT INTO stages
-        (id, project_id, order_index, template_key, color_index, name, ratio_percent, start_at, end_at,
+        (id, project_id, order_index, template_key, color_index, custom_color,
+         name, ratio_percent, start_at, end_at,
          status, owner_id, visible, resource_path, revision, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const tx = db.transaction((list: Array<Record<string, unknown>>) => {
       for (const s of list) {
@@ -84,6 +88,7 @@ export function registerStageRoutes(app: FastifyInstance, db: Database.Database)
           Number(s.orderIndex),
           (s.templateKey as string | null) ?? null,
           s.colorIndex == null ? null : Number(s.colorIndex),
+          (s.customColor as string | null) ?? null,
           String(s.name),
           Number(s.ratioPercent),
           String(s.startAt),
@@ -124,12 +129,15 @@ export function registerStageRoutes(app: FastifyInstance, db: Database.Database)
         b.colorIndex !== undefined
           ? (b.colorIndex as number | null)
           : existing.color_index,
+      // v0.8：允许显式 null（= 回到内置色）。undefined 保持原值（字段级更新语义）。
+      custom_color:
+        b.customColor !== undefined ? (b.customColor as string | null) : existing.custom_color,
       revision: existing.revision + 1,
       updated_at: nowIso(),
     };
     db.prepare(
       `UPDATE stages SET name=?, ratio_percent=?, owner_id=?, visible=?, resource_path=?,
-        template_key=?, color_index=?, revision=?, updated_at=? WHERE id=?`,
+        template_key=?, color_index=?, custom_color=?, revision=?, updated_at=? WHERE id=?`,
     ).run(
       merged.name,
       merged.ratio_percent,
@@ -138,6 +146,7 @@ export function registerStageRoutes(app: FastifyInstance, db: Database.Database)
       merged.resource_path,
       merged.template_key,
       merged.color_index,
+      merged.custom_color,
       merged.revision,
       merged.updated_at,
       id,

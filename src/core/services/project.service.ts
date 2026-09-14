@@ -72,6 +72,11 @@ export class ProjectService {
       stagePresetKey: confirmed.stagePresetKey ?? null,
       stageTemplateVersion: confirmed.stageTemplateVersion ?? getStageLibraryVersion(),
       scheduleBasis: confirmed.scheduleBasis ?? DEFAULT_SCHEDULE_BASIS,
+      // v0.8 主板块：向导第 2 层的选择结果，直接透传（不传 → null → 读时回落）。
+      // 这是 Project.domain 的**唯一人类写入点**（T04 的 confirmProjectDomain 是另一处）。
+      domain: confirmed.domain ?? null,
+      // v0.8 归属侧：向导恒为人类建档 ⇒ 不传 kind，由 repo 落 DEFAULT_PROJECT_KIND。
+      // Agent 通道建板走的是另一条路径（T04），不经过本方法。
     };
 
     const exec = async (): Promise<Project> => {
@@ -97,10 +102,13 @@ export class ProjectService {
         id: createId('stg'),
         projectId: project.id,
         orderIndex: d.orderIndex,
-        // 键序铁律：templateKey/colorIndex 插在 orderIndex 之后、name 之前
+        // 键序铁律：templateKey/colorIndex/customColor 插在 orderIndex 之后、name 之前
         // （与 entities.Stage / backup.service stageSchema 三处同步，漏一处 roundtrip 就挂）
         templateKey: d.templateKey,
         colorIndex: d.colorIndex,
+        // v0.8 用户自定义主色：草稿里已归一为 `string | null`，直接透传。
+        // StageDraft.customColor 是**必填**字段 ⇒ 这里不可能读到 undefined（漏给色会编译失败）。
+        customColor: d.customColor,
         name: d.name,
         ratioPercent: d.ratioPercent,
         startAt: d.startAt,
@@ -220,6 +228,8 @@ export class ProjectService {
         (cmd.stageItems?.length ? CUSTOM_STAGE_PRESET_KEY : INTERIOR_FULL_PRESET_KEY),
       stageTemplateVersion: cmd.stageTemplateVersion,
       scheduleBasis: cmd.scheduleBasis,
+      // v0.8 主板块：手动兜底表单与向导共用同一字段（两条建档路径都写 domain）
+      domain: cmd.domain ?? null,
       createdByManual: true,
       sourceFileName: null,
       rawTextDigest: digestOf(''),
@@ -229,7 +239,7 @@ export class ProjectService {
   }
 
   /**
-   * 阶段数由「固定 9」放宽为「所选 N ∈ [1, 12]」；
+   * 阶段数由「固定 9」放宽为「所选 N ∈ [1, 20]」（v0.8：上限 12 → 20）；
    * orderIndex 必须仍是 1..N 连续无空缺——stage.service 的 orderIndex+1 取下一段、
    * TimelineView 的 orderIndex> 取后继段都依赖这个连续性。
    */

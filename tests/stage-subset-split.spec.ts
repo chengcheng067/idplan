@@ -89,7 +89,7 @@ describe('stage-subset：子集切分产出 N 段且 orderIndex 连续', () => {
     expect(dayCount(drafts[0]!.startAt, drafts[0]!.endAt)).toBe(90);
   });
 
-  it('传 12 个阶段项（上限）→ 正常切分不报错', () => {
+  it(`传 ${MAX_STAGE_COUNT} 个阶段项（上限）→ 正常切分不报错`, () => {
     const pool = getStageLibraryItems();
     expect(pool.length).toBeGreaterThanOrEqual(MAX_STAGE_COUNT);
     const drafts = previewSplit({
@@ -205,13 +205,13 @@ describe('stage-subset：子集内占比归一化（Σ段长 == 总工期）', (
 describe('stage-subset：阶段数边界校验', () => {
   it(`传 ${MAX_STAGE_COUNT + 1} 个阶段项 → 拒绝（超出上限 ${MAX_STAGE_COUNT}）`, () => {
     const pool = getStageLibraryItems();
-    // 阶段库只有 22 项，凑满 13 项需要重复取——上限校验只看长度
+    // 阶段库有 50+ 项，取 MAX+1 项无需重复——上限校验本身只看长度
     const tooMany = Array.from({ length: MAX_STAGE_COUNT + 1 }, (_, i) => pool[i % pool.length]!);
     expect(tooMany).toHaveLength(MAX_STAGE_COUNT + 1);
 
     expect(() =>
       previewSplit({ startAt: '2026-01-01', endAt: '2026-12-31', stageItems: tooMany }),
-    ).toThrowError(/最多 12 个阶段/);
+    ).toThrowError(new RegExp(`最多 ${MAX_STAGE_COUNT} 个阶段`));
   });
 
   it('传空数组 → 拒绝（至少 1 个阶段）', () => {
@@ -220,9 +220,9 @@ describe('stage-subset：阶段数边界校验', () => {
     ).toThrowError(/至少选择 1 个阶段/);
   });
 
-  it('MIN/MAX 常量与产品裁定一致（1..12）', () => {
+  it('MIN/MAX 常量与产品裁定一致（1..20，v0.8 由 12 放宽）', () => {
     expect(MIN_STAGE_COUNT).toBe(1);
-    expect(MAX_STAGE_COUNT).toBe(12);
+    expect(MAX_STAGE_COUNT).toBe(20);
   });
 });
 
@@ -335,6 +335,8 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       'orderIndex',
       'templateKey',
       'colorIndex',
+      // v0.8：Stage 链新增 customColor（colorIndex 之后、name 之前）
+      'customColor',
       'name',
       'ratioPercent',
       'startAt',
@@ -361,13 +363,16 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       'stagePresetKey',
       'stageTemplateVersion',
       'scheduleBasis',
+      // v0.8：Project 链新增两列（scheduleBasis 之后、status 之前）
+      'domain',
+      'kind',
       'status',
       'revision',
       'updatedAt',
     ]);
   });
 
-  it('12 段项目可落库（解除 9 阶段硬约束）', async () => {
+  it(`${MAX_STAGE_COUNT} 段项目可落库（解除 9 阶段硬约束）`, async () => {
     const svc = makeService();
     const project = await svc.createManualProject({
       name: '十二段项目',
@@ -383,13 +388,13 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
     });
 
     const rows = await bundle.stages.listByProject(project.id);
-    expect(rows).toHaveLength(12);
+    expect(rows).toHaveLength(MAX_STAGE_COUNT);
     expect(rows.map((s) => s.orderIndex)).toEqual(
-      Array.from({ length: 12 }, (_, i) => i + 1),
+      Array.from({ length: MAX_STAGE_COUNT }, (_, i) => i + 1),
     );
   });
 
-  it('草稿 0 段 / 13 段 → assertDraftsValid 拒绝', async () => {
+  it(`草稿 0 段 / ${MAX_STAGE_COUNT + 1} 段 → assertDraftsValid 拒绝`, async () => {
     const svc = makeService();
     await expect(
       svc.createProjectFromContract(
@@ -412,16 +417,16 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       ),
     ).rejects.toThrowError(/至少选择 1 个阶段/);
 
-    // previewSplit 已在上游拦截 >12 项，这里手工构造 13 条草稿验证 service 侧闸门同样生效
+    // previewSplit 已在上游拦截超限项，这里手工构造 MAX+1 条草稿验证 service 侧闸门同样生效
     const base = previewSplit({ startAt: '2026-01-01', endAt: '2026-12-31' })[0]!;
-    const thirteen = Array.from({ length: MAX_STAGE_COUNT + 1 }, (_, i) => ({
+    const overLimit = Array.from({ length: MAX_STAGE_COUNT + 1 }, (_, i) => ({
       ...base,
       orderIndex: i + 1,
     }));
     await expect(
       svc.createProjectFromContract(
         {
-          projectName: '十三段项目',
+          projectName: '超限段项目',
           projectType: 'dining' as never,
           address: '',
           clientName: '',
@@ -435,9 +440,9 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
           rawTextDigest: '',
           parsedResultJsonSnapshot: '{}',
         },
-        thirteen,
+        overLimit,
       ),
-    ).rejects.toThrowError(/最多 12 个阶段/);
+    ).rejects.toThrowError(new RegExp(`最多 ${MAX_STAGE_COUNT} 个阶段`));
   });
 });
 
@@ -500,6 +505,8 @@ describe('stage-subset：老数据（无 templateKey / colorIndex）读时回落
       'orderIndex',
       'templateKey',
       'colorIndex',
+      // v0.8：Stage 链新增 customColor（colorIndex 之后、name 之前）
+      'customColor',
       'name',
       'ratioPercent',
       'startAt',

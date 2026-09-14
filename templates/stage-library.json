@@ -218,6 +218,52 @@
       ]
     }
   },
+  "industryGroups": [
+    {
+      "key": "space",
+      "name": "建筑设计行业",
+      "domains": [
+        "architecture",
+        "landscape",
+        "indoor"
+      ]
+    },
+    {
+      "key": "software",
+      "name": "软件开发",
+      "domains": [
+        "software"
+      ]
+    },
+    {
+      "key": "marketing",
+      "name": "市场活动",
+      "domains": [
+        "marketing"
+      ]
+    },
+    {
+      "key": "film",
+      "name": "影视制作",
+      "domains": [
+        "film"
+      ]
+    },
+    {
+      "key": "wedding",
+      "name": "婚礼策划",
+      "domains": [
+        "wedding"
+      ]
+    },
+    {
+      "key": "consulting",
+      "name": "咨询交付",
+      "domains": [
+        "consulting"
+      ]
+    }
+  ],
   "items": [
     {
       "key": "indoor.proposal",

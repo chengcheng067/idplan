@@ -267,6 +267,73 @@ describe('R1 顺序修复：老库 createDb 不崩（表 → 补列 → 索引�
     legacy.close();
   });
 
+  /**
+   * T01 验收 7：v0.8 三列走 `migrateColumns` 幂等 ALTER，**不占 `user_version`**。
+   *
+   * 防的失效模式（v0.6 §6.2 R1 的同款）：老库（v0.7 表结构、无 domain/kind/custom_color）
+   * 直接启动 → `no such column` → 服务起不来；或列迁移顺手写了 `user_version`，
+   * 把 `migrateDoneToStatus`(→3) / `migrateAgentIndex`(→4) 的守卫截胡。
+   */
+  it('v0.8 老库（无 domain/kind/custom_color）→ createDb 成功、三列补齐、存量行 kind=human、user_version 不变', () => {
+    const legacy = new Database(':memory:');
+    legacy.exec(`
+      CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
+        address TEXT NOT NULL DEFAULT '', client_name TEXT NOT NULL DEFAULT '',
+        contract_amount INTEGER, signed_at TEXT, planned_start_at TEXT NOT NULL,
+        planned_end_at TEXT NOT NULL, cover_color TEXT, short_label TEXT,
+        stage_preset_key TEXT, stage_template_version INTEGER NOT NULL DEFAULT 0,
+        schedule_basis TEXT NOT NULL DEFAULT 'calendar',
+        status TEXT NOT NULL DEFAULT 'active',
+        revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL);
+      CREATE TABLE stages (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, order_index INTEGER NOT NULL,
+        template_key TEXT, color_index INTEGER, name TEXT NOT NULL, ratio_percent REAL NOT NULL,
+        start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'not_started',
+        owner_id TEXT, visible INTEGER NOT NULL DEFAULT 1, resource_path TEXT,
+        revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL);
+      INSERT INTO projects (id, name, type, planned_start_at, planned_end_at, updated_at)
+        VALUES ('p1','存量项目','dining','2026-01-01','2026-06-30','2026-01-01T00:00:00.000Z');
+      INSERT INTO stages (id, project_id, order_index, name, ratio_percent, start_at, end_at, updated_at)
+        VALUES ('s1','p1',1,'SU 建模',100,'2026-01-01','2026-06-30','2026-01-01T00:00:00.000Z');
+    `);
+    // 假装这台机器已经跑过 v0.7 的索引换轨（user_version 停在 4）
+    legacy.pragma('user_version = 4');
+
+    expect(() => createDb(legacy)).not.toThrow();
+
+    const pCols = (legacy.prepare('PRAGMA table_info(projects)').all() as Array<{ name: string }>).map(
+      (c) => c.name,
+    );
+    expect(pCols).toEqual(expect.arrayContaining(['domain', 'kind']));
+    const sCols = (legacy.prepare('PRAGMA table_info(stages)').all() as Array<{ name: string }>).map(
+      (c) => c.name,
+    );
+    expect(sCols).toEqual(expect.arrayContaining(['custom_color']));
+
+    // ★ 存量行必须落回人类侧（DDL 的 NOT NULL DEFAULT 'human' 自动补齐），domain 保持 NULL
+    const p = legacy.prepare('SELECT kind, domain FROM projects WHERE id=?').get('p1') as {
+      kind: string;
+      domain: string | null;
+    };
+    expect(p.kind).toBe('human');
+    expect(p.domain).toBeNull();
+    const s = legacy.prepare('SELECT custom_color FROM stages WHERE id=?').get('s1') as {
+      custom_color: string | null;
+    };
+    expect(s.custom_color).toBeNull();
+
+    // ★ user_version 必须仍是 4（列迁移绝不掺进这个单调计数器）
+    expect(legacy.pragma('user_version', { simple: true })).toBe(4);
+
+    // 幂等：再跑一次不抛错、不重复加列
+    expect(() => createDb(legacy)).not.toThrow();
+    expect(
+      (legacy.prepare('PRAGMA table_info(projects)').all() as Array<{ name: string }>).filter(
+        (c) => c.name === 'kind',
+      ),
+    ).toHaveLength(1);
+    legacy.close();
+  });
+
   it('sectionOf：正确切出 TABLES / INDEXES 段，表段内不含 CREATE INDEX', () => {
     const ddl = readFileSync(join(serverDir, 'schema.sql'), 'utf-8');
     const tables = sectionOf(ddl, 'TABLES');

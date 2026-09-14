@@ -22,6 +22,13 @@ interface ProjectRow {
   stage_preset_key: string | null;
   stage_template_version: number;
   schedule_basis: string;
+  /**
+   * v0.8 主板块（NULL = 未确认/老数据 → 前端 `resolveProjectDomain` 读时回落）。
+   * 服务端不做回落：回落口径只在 `stage-fallback.ts` 一处，避免两套规则漂移。
+   */
+  domain: string | null;
+  /** v0.8 归属侧。新库 DDL 有 `NOT NULL DEFAULT 'human'`，故读到的不会是 null */
+  kind: string;
   status: string;
   revision: number;
   updated_at: string;
@@ -29,8 +36,8 @@ interface ProjectRow {
 
 /**
  * snake_case 行 → 前端 camelCase 实体。
- * 键序与 entities.Project 一致（shortLabel 紧随 coverColor）——前端读取侧不做键序断言，
- * 但保持同序能让「人工比对两侧字段」这件事不需要额外心智负担。
+ * 键序与 entities.Project 一致（shortLabel 紧随 coverColor，domain/kind 紧随 scheduleBasis）
+ * ——前端读取侧不做键序断言，但保持同序能让「人工比对两侧字段」这件事不需要额外心智负担。
  * `?? null` 兜底：老库（未跑 createDb 的极老实例 / 测试里手搓的表）读不到该列时为 undefined。
  */
 export function rowToProject(r: ProjectRow): Record<string, unknown> {
@@ -49,6 +56,10 @@ export function rowToProject(r: ProjectRow): Record<string, unknown> {
     stagePresetKey: r.stage_preset_key ?? null,
     stageTemplateVersion: r.stage_template_version ?? 0,
     scheduleBasis: r.schedule_basis ?? 'calendar',
+    domain: r.domain ?? null,
+    // 老库可能没有该列（未跑过 createDb 的实例）→ 回落 'human'，与前端同口径，
+    // 保证「服务端读到的项目」永远不会在 Agent 隔离谓词里被误判成 agent。
+    kind: r.kind ?? 'human',
     status: r.status,
     revision: r.revision,
     updatedAt: r.updated_at,
@@ -95,15 +106,16 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       void reply.status(400);
       return { error: { code: 'validation', userMessage: '项目名称不能为空' } };
     }
-    // ⚠️ 列清单与占位符个数必须逐一对齐（15 个 ?）。加列时三处同改：
+    // ⚠️ 列清单与占位符个数必须逐一对齐（v0.8 起 17 个 ?）。加列时三处同改：
     //    列清单 / VALUES / .run() 实参，漏一处就是运行期 'too few/many parameters'。
     db.prepare(
       `INSERT INTO projects
         (id, name, type, address, client_name, contract_amount, signed_at,
          planned_start_at, planned_end_at, cover_color, short_label,
          stage_preset_key, stage_template_version, schedule_basis,
+         domain, kind,
          status, revision, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
     ).run(
       id,
       name,
@@ -119,6 +131,11 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       (body.stagePresetKey as string | null) ?? null,
       Number(body.stageTemplateVersion ?? 0),
       String(body.scheduleBasis ?? 'calendar'),
+      // 主板块：不传 → NULL（服务端**不猜**，回落口径只在 stage-fallback 一处）
+      (body.domain as string | null) ?? null,
+      // 归属侧：不传 → 'human'。Agent 通道建板由 T04 显式传 'agent'（§7.6）。
+      // 这里必须与 DDL 的 DEFAULT 同值——显式写入而非依赖 DEFAULT，读回才稳定。
+      String(body.kind ?? 'human'),
       nowIso(),
     );
     const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow;
@@ -158,6 +175,11 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
           : existing.stage_template_version,
       schedule_basis:
         b.scheduleBasis !== undefined ? String(b.scheduleBasis) : existing.schedule_basis,
+      // v0.8：domain 允许显式 null（= 清除，回到读时回落）；
+      // kind 走 String() 而非原样透传——归属侧只有 human/agent 两个合法值，
+      // 上层（T04 的接管/建板）已校验，此处只保证不写进非字符串。
+      domain: b.domain !== undefined ? (b.domain as string | null) : existing.domain,
+      kind: b.kind !== undefined ? String(b.kind) : existing.kind,
       status: b.status !== undefined ? String(b.status) : existing.status,
       revision: existing.revision + 1,
       updated_at: nowIso(),
@@ -165,7 +187,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     db.prepare(
       `UPDATE projects SET name=?, type=?, address=?, client_name=?, contract_amount=?,
         signed_at=?, cover_color=?, short_label=?, stage_preset_key=?, stage_template_version=?,
-        schedule_basis=?, status=?, revision=?, updated_at=? WHERE id=?`,
+        schedule_basis=?, domain=?, kind=?, status=?, revision=?, updated_at=? WHERE id=?`,
     ).run(
       merged.name,
       merged.type,
@@ -178,6 +200,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       merged.stage_preset_key,
       merged.stage_template_version,
       merged.schedule_basis,
+      merged.domain,
+      merged.kind,
       merged.status,
       merged.revision,
       merged.updated_at,

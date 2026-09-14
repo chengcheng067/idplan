@@ -5,7 +5,7 @@
  * ★ createDb() 的执行顺序是硬约束（v0.6 · 设计文档 §6.2 / R1 缺陷修复；
  *   v0.7 §6.1 增补第 ④ 步）：
  *     ① 表结构段（-- @SECTION:TABLES）
- *     ② 幂等补列（V2 + V3 的 ALTER TABLE ADD COLUMN）
+ *     ② 幂等补列（V2 + V3 + V7 + V8 + V0.8 的 ALTER TABLE ADD COLUMN）
  *     ③ 数据归一（done=1 → status='done'，user_version ⇒ 3）
  *     ④ 索引换轨（idx_tasks_external_id ⇒ 复合唯一，user_version ⇒ 4）
  *     ⑤ 索引段（-- @SECTION:INDEXES）
@@ -14,6 +14,8 @@
  *       → `no such column` → 服务启动即崩；
  *     · ④ 早于 ③ → 二者共用的 user_version 被抢先置 4，③ 的 `>= 3` 守卫恒真
  *       → 老库状态归一被静默跳过（界面不报错，只是历史完成任务退回 draft）。
+ *   ⚠️ user_version 是**单一单调计数器**：任何新增列迁移都**不得**写它
+ *      （v0.8 的 V08_COLUMN_MIGRATIONS 同理，见其注释）。
  */
 
 import Database from 'better-sqlite3';
@@ -140,6 +142,42 @@ const V8_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
   },
 ];
 
+/**
+ * v0.8 数据层列迁移（3 项）：`projects.domain` / `projects.kind` / `stages.custom_color`。
+ *
+ * 与 V7/V8 同款：**只加列、不做一次性数据迁移**。
+ *   · `domain`：NULL 即「未确认/老数据」→ 读取侧 `resolveProjectDomain` 按
+ *     `stage_preset_key` 反查套餐 domain、再退 'indoor'（与改造前观感逐字一致）；
+ *   · `kind`：DDL 自带 `NOT NULL DEFAULT 'human'` ⇒ 老库经本步 ALTER 后
+ *     **存量行全部读出 'human'**，自动落回人类侧（PRD B1）。无需 UPDATE 语句；
+ *   · `custom_color`：NULL 即「用内置色」→ 读取侧直接用 `color_index`。
+ *
+ * ★ **绝对不占 `user_version`**（同 V8 的理由，见其注释）：user_version 是
+ *   `migrateDoneToStatus`(→3) 与 `migrateAgentIndex`(→4) 共用的单一单调计数器，
+ *   列迁移掺进去会截胡两者的 `>= 自己那档` 守卫。列迁移靠 `PRAGMA table_info`
+ *   判存在，天然幂等，**不需要版本标记**。
+ *
+ * ⚠️ 注意 SQLite 的 ALTER TABLE ADD COLUMN 对 `NOT NULL` 列的约束：
+ *   带非常量 DEFAULT 才不允许；这里 `'human'` 是字面量常量，合法。
+ */
+const V08_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: string }> = [
+  {
+    table: 'projects',
+    column: 'domain',
+    ddl: 'ALTER TABLE projects ADD COLUMN domain TEXT',
+  },
+  {
+    table: 'projects',
+    column: 'kind',
+    ddl: "ALTER TABLE projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'human'",
+  },
+  {
+    table: 'stages',
+    column: 'custom_color',
+    ddl: 'ALTER TABLE stages ADD COLUMN custom_color TEXT',
+  },
+];
+
 /** 一次性数据迁移的版本标记（PRAGMA user_version）：>=3 表示已归一，跳过全表扫 */
 const V3_DATA_MIGRATION_VERSION = 3;
 
@@ -232,14 +270,17 @@ export function createDb(db: ChangxiaServerDb): void {
   const ddl = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
   // ① 只执行「表结构」段
   db.exec(sectionOf(ddl, 'TABLES'));
-  // ② 幂等补列（v2 既有 8 项 + v3 新增 11 项 + v0.7 新增 2 项：projects.short_label、tasks.task_no）
+  // ② 幂等补列（v2 既有 8 项 + v3 新增 11 项 + v0.7 新增 2 项：projects.short_label、tasks.task_no
+  //    + v0.8 新增 3 项：projects.domain / projects.kind / stages.custom_color）
   //    ⚠️ 本步必须早于 ⑤（索引段）：新列若被索引段引用，顺序颠倒会在建索引时
   //       `no such column` → 服务启动即崩（见文件头「顺序错了有两种崩法」）。
+  //    v0.8 三列**不进任何索引**，但保持同一注册处便于审计。
   migrateColumns(db, [
     ...V2_COLUMN_MIGRATIONS,
     ...V3_COLUMN_MIGRATIONS,
     ...V7_COLUMN_MIGRATIONS,
     ...V8_COLUMN_MIGRATIONS,
+    ...V08_COLUMN_MIGRATIONS,
   ]);
   // ③ 一次性数据迁移（done=1 → status='done'，user_version 打标为 3）
   migrateDoneToStatus(db);

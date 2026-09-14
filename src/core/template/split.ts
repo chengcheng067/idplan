@@ -7,11 +7,16 @@
  *      约束下重切剩余天数
  *   5. 输出 StageDraft[]（status 恒 not_started），确认后才入库
  *
- * 阶段集合由 `SplitInput.stageItems` 决定（1 ≤ N ≤ 12，顺序即 orderIndex 1..N）；
+ * 阶段集合由 `SplitInput.stageItems` 决定（1 ≤ N ≤ 20，顺序即 orderIndex 1..N）；
  * **未传时回落到全量九段模板**，输出与「固定 9 阶段」版本逐字段一致（零回归锚点）。
  */
 
-import type { StageDraft, StageOverride, StageTemplateItem } from '../types/dto';
+import type {
+  StageDraft,
+  StageOverride,
+  StageSelectionItem,
+  StageTemplateItem,
+} from '../types/dto';
 import { getTemplateStages } from './nine-stages';
 import { legacyColorIndexOf, legacyTemplateKeyOf } from './stage-fallback';
 import { ChangxiaError, ChangxiaErrorCode, ScheduleBasis, StageStatus } from '../types/enums';
@@ -31,8 +36,16 @@ export function stageColorIndex(orderIndex: number): number {
 /** 单次项目最少阶段数（0 段会让完成度、当前阶段、时间轴全部无定义） */
 export const MIN_STAGE_COUNT = 1;
 
-/** 单次项目最多阶段数（色板 9 色 + 单项目时间轴可读性 + A4 打印分页，产品已拍板） */
-export const MAX_STAGE_COUNT = 12;
+/**
+ * 单次项目最多阶段数。
+ *
+ * v0.8：12 → 20。为什么能到 20：
+ *   · 色板不再是 9 个死数——`Stage.customColor` 让用户可以给第 10 段起自己指定颜色，
+ *     颜色重复不再是硬约束（T02 的 `palette-20` 亦把内置色扩到 20）；
+ *   · 打印按 A4 高度估算分页（`paginateSections`），段数只影响页数，不会崩。
+ * 代价（已知、接受）：20 段的时间轴在窄屏需要横向滚动——这是可读性问题，不是正确性问题。
+ */
+export const MAX_STAGE_COUNT = 20;
 
 export interface SplitInput {
   startAt: string;
@@ -42,8 +55,11 @@ export interface SplitInput {
    * 本次服务包含的阶段项（顺序即 orderIndex 1..N，N ∈ [MIN_STAGE_COUNT, MAX_STAGE_COUNT]）。
    * 显式传空数组 / 超过 N 上限 → 抛 Validation。
    * **未传（undefined）→ 回落到 getTemplateStages() 全量九段**，行为与改造前完全一致。
+   *
+   * v0.8：元素类型放宽为 `StageSelectionItem`（＝模板项 ＋ 可选 `customColor`）。
+   * 因 `customColor` 是可选字段，既有的 `StageTemplateItem[]` 入参仍然合法。
    */
-  stageItems?: StageTemplateItem[];
+  stageItems?: StageSelectionItem[];
   /** 排期基准：不传 → DEFAULT_SCHEDULE_BASIS（自然日）。Workday 时按休息制度跳过休息日切分。 */
   scheduleBasis?: ScheduleBasis;
   /** 公司休息制度：不传 → DEFAULT_REST_POLICY（双休）。仅 scheduleBasis=Workday 时消费。 */
@@ -261,6 +277,8 @@ interface SplitStage {
   defaultTasks: string[];
   templateKey: string | null;
   colorIndex: number;
+  /** v0.8 用户自定义主色；null = 用 colorIndex 的内置色 */
+  customColor: string | null;
 }
 
 /**
@@ -268,7 +286,7 @@ interface SplitStage {
  *   - 传了 stageItems → 按数组顺序重编号为 1..N（项目内必须连续无空缺）；
  *   - 未传 → 回落全量九段模板（name/ratioPercent/defaultTasks 逐字段不变，零回归锚点）。
  */
-function resolveSplitStages(stageItems: StageTemplateItem[] | undefined): SplitStage[] {
+function resolveSplitStages(stageItems: StageSelectionItem[] | undefined): SplitStage[] {
   if (stageItems === undefined) {
     return getTemplateStages().map((s) => ({
       orderIndex: s.orderIndex,
@@ -278,6 +296,8 @@ function resolveSplitStages(stageItems: StageTemplateItem[] | undefined): SplitS
       // 老数据口径：9 段一一对应 indoor_full 套餐，色号 == orderIndex
       templateKey: legacyTemplateKeyOf(s.orderIndex),
       colorIndex: legacyColorIndexOf(s.orderIndex),
+      // 回落路径 = 「改造前的九段」，用户没机会指定颜色 ⇒ 恒 null（零回归锚点）
+      customColor: null,
     }));
   }
   if (stageItems.length < MIN_STAGE_COUNT) {
@@ -296,6 +316,8 @@ function resolveSplitStages(stageItems: StageTemplateItem[] | undefined): SplitS
     defaultTasks: item.defaultTasks,
     templateKey: item.key,
     colorIndex: stageColorIndex(item.colorIndex),
+    // 用户色随选中项带入草稿（自定义阶段 / 取色器指定）；未指定 → null（内置色）
+    customColor: item.customColor ?? null,
   }));
 }
 
@@ -378,6 +400,8 @@ export function previewSplit(input: SplitInput): StageDraft[] {
       // 键序铁律：与 Stage 实体 / stageSchema / project.service stageRows 四处一致
       templateKey: tpl?.templateKey ?? null,
       colorIndex: tpl?.colorIndex ?? stageColorIndex(seg.orderIndex),
+      // v0.8：用户自定义主色随草稿下传（null = 用内置色）。漏这一行 = 静默丢色。
+      customColor: tpl?.customColor ?? null,
       name: ov?.name ?? tpl?.name ?? `阶段 ${seg.orderIndex}`,
       ratioPercent: ov?.ratioPercent ?? tpl?.ratioPercent ?? 0,
       startAt: useWorkday

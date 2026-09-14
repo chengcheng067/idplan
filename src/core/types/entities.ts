@@ -7,6 +7,7 @@ import {
   AssignmentAction,
   MemberActorKind,
   MemberRoleKind,
+  ProjectKind,
   ProjectStatus,
   ProjectType,
   RestPolicyKind,
@@ -16,6 +17,11 @@ import {
   TaskStatus,
   type TaskSource,
 } from './enums';
+// ⚠️ 仅类型导入（编译期擦除）。dto.ts 第 19 行同样是 type-only 反向导入本文件，
+// 两侧都被擦除 ⇒ **不存在运行时循环依赖**。`StageTemplateDomain` 是「阶段模板库」的
+// 领域联合类型，实体 `Project.domain` 需要它做列归属，故此处引用而不复制定义
+// （复制一份会导致两处漂移，正是 v0.8 §3.5 要避免的）。
+import type { StageTemplateDomain } from './dto';
 
 /**
  * 任务产出物（v0.6 · PRD §6.2 / AF-02）。
@@ -247,6 +253,28 @@ export interface Project {
    * 与改造前口径逐字节一致，tests/stage-split.spec.ts 的自然日契约才不受影响。
    */
   scheduleBasis: ScheduleBasis;
+  /**
+   * 主板块（v0.8 新增，来自建档第 2 层「主板块」选择）。**可空**——老数据无法可靠推断，
+   * 用读时回落替代一次性数据改写（与 shortLabel / stagePresetKey 同手法）。
+   *
+   * 与 `stagePresetKey` 的关系（两者并存，各司其职）：
+   *   `stagePresetKey` = 溯源（选的哪个套餐）；`domain` = 分类（归到哪个板块）。
+   * 看板列归属一律读本字段（`deriveColumns`），**不再**从 preset 反推——
+   * 后者在 `stagePresetKey === 'custom'` 时会退化（getPreset('custom') 返回 null）。
+   *
+   * 键序铁律（v0.8 · Project 链四处同步）：紧跟 `scheduleBasis` 之后、`kind` 之前 ——
+   *   entities.Project / backup.service projectSchema /
+   *   local.projects.repo insert 字面量 / stage-fallback.normalizeProjectRow
+   */
+  domain: StageTemplateDomain | null;
+  /**
+   * 归属侧：人类工作区 / Agent 工作区（v0.8 新增）。**非可选**——由四处归一保证运行时必有值。
+   *
+   * 不建索引：隔离是「全量读入后按 kind 分流」（bootstrapAllStores 本就取全量），
+   * 过滤发生在内存的单一谓词出口，不走 `.where('kind')`。故 **Dexie 版本不 bump**。
+   * 老库读不到该列 → 回落 DEFAULT_PROJECT_KIND（'human'），全部项目仍显示在人类侧。
+   */
+  kind: ProjectKind;
   status: ProjectStatus;
   revision: number;
   updatedAt: string;
@@ -272,6 +300,18 @@ export interface Stage {
    * 与 orderIndex 解耦——老数据回落 clamp(orderIndex,1,9)，与改造前口径完全一致。
    */
   colorIndex: number;
+  /**
+   * 用户自定义主色（v0.8 新增）。**可空**，null = 用 `colorIndex` 对应的内置 9 色。
+   *
+   * 只存**主色**（不存三层）——band / ink 由 `deriveStageColors(mainHex)` 在运行时派生并
+   * 注册为同结构 CSS 变量（亮/暗/打印三套自动跟随）。存三层会引入「三者不一致」的新失效模式。
+   *
+   * 键序铁律（v0.8 · Stage 链四处同步）：紧跟 `colorIndex` 之后、`name` 之前 ——
+   *   entities.Stage / backup.service stageSchema /
+   *   project.service stageRows 字面量 / stage-fallback.normalizeStageRow
+   *   ⚠️ 注意第 ③ 处与 Project 链**不是同一个文件**（Project 走 repo insert，Stage 走 service）。
+   */
+  customColor: string | null;
   name: string;
   /** 设计工作量占比 %（项目级可覆写模板默认值） */
   ratioPercent: number;

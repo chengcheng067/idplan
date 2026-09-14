@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode, ProjectStatus } from '../../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, DEFAULT_PROJECT_KIND, ProjectStatus } from '../../types/enums';
 import { DEFAULT_SCHEDULE_BASIS, type Project } from '../../types/entities';
 import type {
   CreateProjectCmd,
@@ -65,10 +65,17 @@ export class LocalProjectsRepository implements IProjectsRepository {
       shortLabel: cmd.shortLabel ?? null,
       // 键序铁律（四处同步：entities.Project / backup.service projectSchema /
       // 本处 insert 字面量 / stage-fallback.normalizeProjectRow）：
-      // 三个阶段字段紧随外观类字段之后、status 之前
+      // 三个阶段字段紧随外观类字段之后、v0.8 的 domain/kind 再紧随其后、status 之前
       stagePresetKey: cmd.stagePresetKey ?? null,
       stageTemplateVersion: cmd.stageTemplateVersion ?? 0,
       scheduleBasis: cmd.scheduleBasis ?? DEFAULT_SCHEDULE_BASIS,
+      // v0.8 主板块：可空（老项目无法推断；缺失由 resolveProjectDomain 读时回落）。
+      // 建档路径一律显式带上（T03 的 domain 写入点），此处只兜底。
+      domain: cmd.domain ?? null,
+      // v0.8 归属侧：**非可选**，故这里必须给默认值而不是 null。
+      // 人类侧建档（唯一的常规建档路径）不传 kind ⇒ 落 DEFAULT_PROJECT_KIND；
+      // Agent 通道建板传 'agent'（T04）。
+      kind: cmd.kind ?? DEFAULT_PROJECT_KIND,
       status: ProjectStatus.Active,
       revision: 1,
       updatedAt: now,

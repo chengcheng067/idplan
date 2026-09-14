@@ -24,7 +24,7 @@ import { useProjectsStore } from '../../store/useProjectsStore';
  *   1. 快捷套餐：遍历 getPresets()，点击整体替换为套餐集合；
  *   2. 阶段池：遍历 getStageLibraryItems()，按 domain 分组，勾选即追加到末尾；
  *   3. 已选顺序列表：序号即最终 orderIndex（1..N 连续），支持 ↑↓ 调序与 ✕ 移除；
- *   4. 边界：至少 1 项（清空时行内提示），最多 12 项（达上限禁止勾选并 toast）。
+ *   4. 边界：至少 1 项（清空时行内提示），最多 20 项（达上限禁止勾选并 toast；v0.8 起上限由 12 放宽到 20）。
  *
  * 套餐归属由父组件经 `presetKeyOfItems(selected)` 推导：与任一内置套餐的
  * itemKeys 顺序一致 → 该套餐 key；否则 'custom'（PRD §3.2.2 / AC-09）。

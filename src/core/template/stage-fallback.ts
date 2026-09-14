@@ -15,6 +15,10 @@
  *   Project.scheduleBasis       → DEFAULT_SCHEDULE_BASIS（自然日）
  *   Project.shortLabel          → null（v0.7 侧栏增强；「项目名首字」的文字级回落
  *                                 在 src/lib/projectAccent.ts，属展示层，不进本文件）
+ *   Project.domain              → null（v0.8；**不在归一里反查**，见 normalizeProjectRow 注释。
+ *                                 消费侧用 resolveProjectDomain() 反查套餐 domain 再退 'indoor'）
+ *   Project.kind                → DEFAULT_PROJECT_KIND（'human'；v0.8）
+ *   Stage.customColor           → null（v0.8；null = 用 colorIndex 的内置色）
  *
  * ── v0.7 B1 决策留痕：`Project.shortLabel` **刻意不升 Dexie 版本** ──
  *   判据是「有没有索引变化」：
@@ -31,8 +35,13 @@
  */
 
 import { DEFAULT_SCHEDULE_BASIS, type Project, type Stage } from '../types/entities';
-import type { ScheduleBasis } from '../types/enums';
-import { getPresetItems } from './stage-library';
+import {
+  DEFAULT_PROJECT_KIND,
+  type ProjectKind,
+  type ScheduleBasis,
+} from '../types/enums';
+import type { StageTemplateDomain } from '../types/dto';
+import { getPreset, getPresetItems } from './stage-library';
 
 /**
  * 室内·全流程套餐 key。双重身份：
@@ -45,6 +54,23 @@ export const INTERIOR_FULL_PRESET_KEY = 'indoor_full';
 export const CUSTOM_STAGE_PRESET_KEY = 'custom';
 
 export const LEGACY_STAGE_TEMPLATE_VERSION = 0;
+
+/**
+ * 主板块（`Project.domain`）的最终回落值（v0.8）。
+ *
+ * 为什么是 `'indoor'`：改造前 `HomePage.deriveColumns()` 的逻辑就是
+ * 「项目所属段落为空时落到 indoor 三列」（`getDomains()` 把 indoor 声明在最前，
+ * 且 indoor 是历史默认行业）。**存量项目必须观感零变化** ⇒ 回落值只能是 indoor。
+ *
+ * ⚠️ `'custom'` 套餐的项目 `getPreset('custom')` 返回 `null`（`stage-library.ts:41-43`），
+ * 反查失败 ⇒ 也落 indoor。这正是纠错③ 的老 BUG，**对存量数据有意不自动修**
+ * （不猜 = 与今天逐字一致；自动猜 = 违反「绝不猜测」纪律）。补救入口见
+ * v0.8 §3.2.1（`visibility.needsDomainConfirm` ＋ 用户点「确认」才写）。
+ *
+ * 调用点：**消费侧**（`resolveProjectDomain(project.stagePresetKey, project.domain)`），
+ * 不是归一函数——理由见 `normalizeProjectRow` 内的长注释（保 roundtrip 幂等）。
+ */
+export const DEFAULT_PROJECT_DOMAIN: StageTemplateDomain = 'indoor';
 
 /** 色号下限/上限（STAGE_BAR_COLORS 只有 1..9） */
 export const MIN_COLOR_INDEX = 1;
@@ -77,13 +103,40 @@ export function resolveStageColorIndex(orderIndex: number, colorIndex?: number |
 }
 
 /**
+ * 读时回落：`Project.domain` 缺失时（v0.8 前落库的数据、或 v0.8 前导出的备份）
+ * 按 `stagePresetKey` 反查套餐的 domain，反查不到再退 `DEFAULT_PROJECT_DOMAIN`。
+ *
+ * 反查而不是一律 indoor：`stagePresetKey` 是 v2 起就有的字段，景观/软件等非室内项目
+ * 的套餐 key 一直存在 ⇒ 反查能让**这些**存量项目落回正确的板块，
+ * 观感与改造前 `deriveColumns()`（同样读 `getPreset(...).domain`）**逐字一致**。
+ *
+ * 显式 `null` 也走回落——语义是「未确认」，与「缺失」同待遇（v0.8 §3.2.1：
+ * 未确认的存量项目行为必须与今天一致，不得因为多了个 null 就换列）。
+ */
+export function resolveProjectDomain(
+  stagePresetKey: string | null | undefined,
+  domain?: string | null,
+): StageTemplateDomain {
+  if (domain) return domain as StageTemplateDomain;
+  const preset = getPreset(stagePresetKey ?? '');
+  return preset?.domain ?? DEFAULT_PROJECT_DOMAIN;
+}
+
+/**
  * 导入侧的行形状（zod 校验产物）：枚举字段在 schema 里是 `z.string()`（导入不做枚举收窄，
  * 保证将来新增枚举值不被旧客户端拒绝），故这里按 string 收，归一后原样透传。
  * 形状由 Project / Stage 派生（Omit），不重复声明实体（铁律 7）。
  */
 export type ProjectRowInput = Omit<
   Project,
-  'type' | 'status' | 'stagePresetKey' | 'stageTemplateVersion' | 'scheduleBasis' | 'shortLabel'
+  | 'type'
+  | 'status'
+  | 'stagePresetKey'
+  | 'stageTemplateVersion'
+  | 'scheduleBasis'
+  | 'shortLabel'
+  | 'domain'
+  | 'kind'
 > & {
   type: string;
   status: string;
@@ -97,12 +150,27 @@ export type ProjectRowInput = Omit<
   stagePresetKey?: string | null;
   stageTemplateVersion?: number;
   scheduleBasis?: ScheduleBasis;
+  /**
+   * v0.8 主板块：同样 Omit 后重声明为**可选**（v0.8 前的备份没有这个键）。
+   *
+   * ⚠️ 这里收的是 `string` 而非 `StageTemplateDomain`——与 `type` 同理由：
+   * zod schema 用 `z.string()` 宽收（不做枚举收窄，保证将来新增行业不被旧客户端拒绝），
+   * 故入参类型必须与解析产物一致，归一函数体内再 `as` 回窄类型。
+   */
+  domain?: string | null;
+  /**
+   * v0.8 归属侧：同上，`z.string()` 宽收 → 这里收 `string`。
+   * 归一保证产出的 `Project.kind` 恒有值（回落 DEFAULT_PROJECT_KIND）。
+   */
+  kind?: string | null;
 };
 
-export type StageRowInput = Omit<Stage, 'status' | 'templateKey' | 'colorIndex'> & {
+export type StageRowInput = Omit<Stage, 'status' | 'templateKey' | 'colorIndex' | 'customColor'> & {
   status: string;
   templateKey?: string | null;
   colorIndex?: number;
+  /** v0.8 用户自定义主色：v0.8 前的备份没有这个键 → 可选，归一补 null */
+  customColor?: string | null;
 };
 
 /**
@@ -117,6 +185,7 @@ export function normalizeStageRow(row: StageRowInput): Stage {
     orderIndex: row.orderIndex,
     templateKey: resolveStageTemplateKey(row.orderIndex, row.templateKey),
     colorIndex: resolveStageColorIndex(row.orderIndex, row.colorIndex),
+    customColor: row.customColor ?? null,
     name: row.name,
     ratioPercent: row.ratioPercent,
     startAt: row.startAt,
@@ -132,7 +201,8 @@ export function normalizeStageRow(row: StageRowInput): Stage {
 
 /**
  * 整行归一：补齐 shortLabel / stagePresetKey / stageTemplateVersion / scheduleBasis
- * （键序同 entities.ts：shortLabel 紧随 coverColor，三个阶段字段再紧随其后）。
+ * / domain / kind（键序同 entities.ts：shortLabel 紧随 coverColor，
+ * 三个阶段字段 + v0.8 的 domain/kind 再紧随其后）。
  */
 export function normalizeProjectRow(row: ProjectRowInput): Project {
   return {
@@ -150,6 +220,29 @@ export function normalizeProjectRow(row: ProjectRowInput): Project {
     stagePresetKey: row.stagePresetKey ?? null,
     stageTemplateVersion: row.stageTemplateVersion ?? LEGACY_STAGE_TEMPLATE_VERSION,
     scheduleBasis: row.scheduleBasis ?? DEFAULT_SCHEDULE_BASIS,
+    /**
+     * ⚠️ **此处刻意不做 domain 反查**（偏离 v0.8 设计文档 §3.2 的字面表达式）。
+     *
+     * 文档原文写的是 `row.domain ?? getPreset(row.stagePresetKey ?? '')?.domain ?? 'indoor'`。
+     * 照抄会破坏「导出 → 导入 → 再导出 逐表 diff 为空」这条**既有已测不变量**
+     * （`tests/task-no.roundtrip.spec.ts` 与 `tests/backup.roundtrip.spec.ts` 都断言它）：
+     *   · 建档侧 `repo.insert` 落的是 `cmd.domain ?? null` ⇒ 首次导出 `domain: null`；
+     *   · 导入侧走本函数 ⇒ 若在此反查，落库变 'indoor' ⇒ 二次导出 `domain: "indoor"`；
+     *   · 两次导出不等 ⇒ 往返被判定不稳定（实测 4 个 roundtrip 用例同时红）。
+     * 对照 `scheduleBasis`：它能在此补默认值，是因为**建档侧也写同一个默认值**，
+     * 两侧口径一致才幂等。domain 满足不了这个前提（建档侧写 null）。
+     *
+     * 更关键的是语义：`null` = 「**不知道**」，而 'indoor' = 「**知道是室内**」。
+     * 在归一里把 null 改写成 'indoor' 属于**伪造数据**，直接废掉 §3.2.1 的
+     * `needsDomainConfirm`（它判的正是 `domain == null`）——存量 custom 项目一点「确认」
+     * 就被静默当成已确认，用户永远看不到提示条。
+     *
+     * ⇒ 反查移到**消费侧**：由 `resolveProjectDomain(p.stagePresetKey, p.domain)` 在
+     * 派生时完成（`deriveColumns` / `columnOf` / 详情页）。实体里保持 null，
+     * 与 `shortLabel`（实体 null、展示层 `resolveProjectShortLabel` 回落）同一手法。
+     */
+    domain: (row.domain as StageTemplateDomain | null | undefined) ?? null,
+    kind: (row.kind as ProjectKind | null | undefined) ?? DEFAULT_PROJECT_KIND,
     status: row.status as Project['status'],
     revision: row.revision,
     updatedAt: row.updatedAt,

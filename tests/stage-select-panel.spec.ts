@@ -182,12 +182,12 @@ async function click(button: HTMLButtonElement): Promise<void> {
 }
 
 describe('StageSelectPanel：套餐 / 阶段池 / 已选列表', () => {
-  it('默认预选 indoor_full 时，已选列表渲染 9 行，头部显示「已选 9 / 上限 12」', async () => {
+  it(`默认预选 indoor_full 时，已选列表渲染 9 行，头部显示「已选 9 / 上限 ${MAX_STAGE_COUNT}」`, async () => {
     const items = getPresetItems('indoor_full');
     await mountHarness({ initialSelected: items });
     const rows = container.querySelectorAll('[data-testid^="selected-row-"]');
     expect(rows).toHaveLength(9);
-    expect(container.textContent).toContain('已选 9 / 上限 12');
+    expect(container.textContent).toContain(`已选 9 / 上限 ${MAX_STAGE_COUNT}`);
   });
 
   it('阶段池渲染全部模板项（按 domain 分组，室内/景观/建筑齐全）', async () => {
@@ -244,7 +244,7 @@ describe('StageSelectPanel：套餐 / 阶段池 / 已选列表', () => {
   });
 });
 
-describe('StageSelectPanel：边界（下限 1 / 上限 12）', () => {
+describe(`StageSelectPanel：边界（下限 1 / 上限 ${MAX_STAGE_COUNT}）`, () => {
   it('清空全部 → 行内提示「至少选择 1 个阶段」', async () => {
     await mountHarness({ initialSelected: [] });
     expect(container.textContent).toContain(`至少选择 ${MIN_STAGE_COUNT} 个阶段`);
@@ -256,7 +256,7 @@ describe('StageSelectPanel：边界（下限 1 / 上限 12）', () => {
     await mountHarness({ initialSelected: selected });
     // mount 不触发 onChange，快照对齐初始选择
     latest = selected;
-    // 未选中的第 13 项标记 aria-disabled（点击被拒并 toast）
+    // 未选中的下一个阶段标记 aria-disabled（点击被拒并 toast）
     const nextBtn = btn(`选择阶段 ${pool[MAX_STAGE_COUNT]!.name}`);
     expect(nextBtn.getAttribute('aria-disabled')).toBe('true');
     await click(nextBtn);
@@ -402,7 +402,7 @@ describe('建档路径：所选阶段数决定落库阶段数', () => {
     const tooMany = Array.from({ length: MAX_STAGE_COUNT + 1 }, (_, i) => pool[i % pool.length]!);
     await expect(
       svc.createManualProject({
-        name: '十三段项目',
+        name: '超限段项目',
         type: ProjectType.Dining,
         address: '',
         clientName: '',
@@ -413,7 +413,7 @@ describe('建档路径：所选阶段数决定落库阶段数', () => {
         coverColor: null,
         stageItems: tooMany,
       }),
-    ).rejects.toThrowError(/最多 12 个阶段/);
+    ).rejects.toThrowError(new RegExp(`最多 ${MAX_STAGE_COUNT} 个阶段`));
   });
 
   it('清空被拒（0 项）', async () => {

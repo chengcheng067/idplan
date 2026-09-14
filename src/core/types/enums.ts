@@ -92,6 +92,22 @@ export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   [ProjectType.Other]: '其他',
 };
 
+/**
+ * 项目归属侧（v0.8 新增）：人类工作区 / Agent 工作区。
+ *
+ * 为什么是**字符串字面量联合**而不是 `enum`：`kind` 是对外契约——它会出现在
+ * 备份 JSON、服务端 `projects.kind` 列、以及 Agent 通道的 payload 里，必须与字符串
+ * 稳定对应。本项目同类开放标记（`Member.agentKind`、`TaskSource`）已确立该风格。
+ *
+ * 隔离语义：`'agent'` 的项目只出现在 Agent 工作区，**绝不出现在**首页看板 / 月历 /
+ * 我的任务 / 成员看板 / 打印稿（见 v0.8 设计文档 §7 单一谓词出口）。
+ * 老数据（无该列）回落 `DEFAULT_PROJECT_KIND`，即全部项目仍显示在人类侧。
+ */
+export type ProjectKind = 'human' | 'agent';
+
+/** 出厂默认归属侧。⚠️ **绝不改为 'agent'** —— 老库无该列时必须落回人类侧。 */
+export const DEFAULT_PROJECT_KIND: ProjectKind = 'human';
+
 /** 公司休息制度（决定排期的工作日口径） */
 export enum RestPolicyKind {
   /** 双休：周六 + 周日休息 */

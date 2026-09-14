@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS projects (
   stage_preset_key TEXT,
   stage_template_version INTEGER NOT NULL DEFAULT 0,
   schedule_basis TEXT NOT NULL DEFAULT 'calendar',
+  -- v0.8 主板块（哪个行业板块）。NULL = 未确认/老数据 → 前端读时回落
+  -- （stage-fallback.resolveProjectDomain）。**不建索引**：板块过滤发生在内存派生层，
+  -- 走不到 SQL（见 v0.8 §3.2「不建索引」）。
+  domain TEXT,
+  -- v0.8 归属侧（human / agent）。NOT NULL DEFAULT 'human'：
+  -- ① 老库经 migrateColumns 只加列不填值 → SQLite 用 DEFAULT 补齐存量行 ⇒ 全部落回人类侧；
+  -- ② 前端读侧另有 `?? 'human'` 兜底（未跑 createDb 的极老实例）。
+  -- **绝不改为 'agent'** —— 老数据必须显示在人类侧。
+  kind TEXT NOT NULL DEFAULT 'human',
   status TEXT NOT NULL DEFAULT 'active',
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL
@@ -41,10 +50,13 @@ CREATE TABLE IF NOT EXISTS stages (
   project_id TEXT NOT NULL REFERENCES projects(id),
   -- v2：阶段自定义字段（键序与 entities.Stage / stageSchema 一致：order_index 之后、name 之前）
   -- CHECK 上限由 9 放宽到 99：前端备份 schema（backup.service.stageSchema）已放宽到 1..99，
-  -- 自定义阶段组合（MAX_STAGE_COUNT=12）与老项目迁移场景需要 >9 的序号。
+  -- 自定义阶段组合（MAX_STAGE_COUNT，v0.8 起 20）与老项目迁移场景需要 >9 的序号。
   order_index INTEGER NOT NULL CHECK (order_index BETWEEN 1 AND 99),
   template_key TEXT,
   color_index INTEGER,
+  -- v0.8 用户自定义主色（#RRGGBB）。NULL = 用内置 color_index 色。
+  -- 只存主色不存三层：band/ink 由前端 deriveStageColors 运行时派生（v0.8 §2.4.3）。
+  custom_color TEXT,
   name TEXT NOT NULL,
   ratio_percent REAL NOT NULL,
   start_at TEXT NOT NULL,

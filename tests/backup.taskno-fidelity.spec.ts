@@ -187,6 +187,9 @@ const CANONICAL_PROJECT_KEYS = [
   'stagePresetKey',
   'stageTemplateVersion',
   'scheduleBasis',
+  // v0.8：Project 链新增两列，插在 scheduleBasis 之后、status 之前（§3.3 Project 链插入位置）
+  'domain',
+  'kind',
   'status',
   'revision',
   'updatedAt',

@@ -68,7 +68,9 @@
 | `stages[]` | `colorIndex: number` | `clamp(orderIndex, 1, 9)` |
 
 `stages[].orderIndex` 上限由 **9 放宽为 99** —— 否则阶段数 >9 的项目备份一导出就再也导不回来。
-阶段数上限 12 由建档链路（`previewSplit` / `ProjectService.assertDraftsValid`）保证，不由备份层兜底。
+阶段数上限 20 由建档链路（`previewSplit` / `ProjectService.assertDraftsValid`）保证，不由备份层兜底。
+（v0.8 起上限由 12 放宽到 20：自定义主色 `Stage.customColor` 解开了「只有 9 色」的约束，
+打印按 A4 高度估算分页——段数只增页数，不会崩。）
 
 ### 键序铁律（本次增量同样适用，漏一处 roundtrip 就直接失败）
 
@@ -130,3 +132,37 @@
 Task 9 字段的键顺序必须在四处逐字一致：`entities.ts` / `backup.service.taskSchema`（含
 `normalizeTaskRow` 返回字面量）/ `local.tasks.repo.insert` / `project.service.taskRows`。
 违反后果：`tests/backup.roundtrip.spec.ts` 的 `JSON.stringify` 逐表 diff 失败。
+
+---
+
+## v0.8 增量（Agent 工作区 / 主板块 / 自定义阶段色）
+
+**`BACKUP_SCHEMA_VERSION` 仍为 3** —— 本版只**追加字段**且全部有默认值/读时回落，
+不构成结构破坏，故不 bump 版本号（bump 会让旧客户端拒绝导入，收益为零）。
+
+| 表 | 新增字段 | 类型 / 默认 | 读时回落（`normalizeXxxRow`） |
+|---|---|---|---|
+| `projects[]` | `domain` | `string \| null`，zod `.nullable().optional()` | 按 `stagePresetKey` 反查套餐 domain，再退 `'indoor'`（**精确复现改造前观感**） |
+| `projects[]` | `kind` | `string`，zod `.nullable().optional()` | `DEFAULT_PROJECT_KIND`（`'human'`）——**老库/老备份全部落回人类侧** |
+| `stages[]` | `customColor` | `string \| null`（`#RRGGBB`），zod `.nullable().optional()` | `null`（= 用内置 `colorIndex` 色） |
+
+**为什么 zod 用 `z.string()` 而不是 `z.nativeEnum(...)`**：`StageTemplateDomain` 与
+`ProjectKind` 都是**字符串字面量联合类型**，不是 TS `enum`（`z.nativeEnum()` 只吃 enum 对象）；
+且本文件既有策略就是枚举字段宽收（见 `type` / `status`）——保证将来新增行业/来源值时，
+旧客户端不会因为「不认识这个值」而拒绝整份备份。窄化在读时归一函数内完成。
+
+### 键序铁律（v0.8 · 2 条链 8 处）
+
+| 链 | 新增字段 | 插入位置 | 四处落点 |
+|---|---|---|---|
+| Project | `domain`、`kind` | `scheduleBasis` 之后、`status` 之前 | `entities.Project` / `backup.service.projectSchema` / `local.projects.repo.insert` 行字面量 / `stage-fallback.normalizeProjectRow` |
+| Stage | `customColor` | `colorIndex` 之后、`name` 之前 | `entities.Stage` / `backup.service.stageSchema` / **`project.service.stageRows`**（⚠️ 不是 repo，Stage 无独立 insert 字面量）/ `stage-fallback.normalizeStageRow` |
+
+**Dexie 未 bump（`SCHEMA_VERSION` 仍为 3）**：三列**均不进任何索引**，`schema/current.ts`
+一个字都不用改 ⇒ 存量用户升级时**不会**被 `needsPreMigrationBackup()` 拦下强制先导备份。
+
+### 服务端列迁移
+
+`server/db.ts` 的 `V08_COLUMN_MIGRATIONS`（3 条幂等 `ALTER TABLE ADD COLUMN`），
+**不占 `PRAGMA user_version`**（该计数器被 `migrateDoneToStatus`→3 与 `migrateAgentIndex`→4 共用，
+掺进去会截胡两者的守卫）。老库 `projects.kind` 由 DDL 的 `NOT NULL DEFAULT 'human'` 自动补齐。
