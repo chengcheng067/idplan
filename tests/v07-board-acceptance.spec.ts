@@ -3,6 +3,9 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+/** IndexedDB 库名 —— 唯一出处 `src/core/schema/current.ts`（不在测试里硬编码） */
+import { DB_NAME } from '../src/core/schema/current';
+
 /**
  * v0.7 阶段 B · 人话/技术双模式看板验收（T06–T08；真实构建产物 + 真 Chromium 实测）。
  *
@@ -66,9 +69,26 @@ import { resolve } from 'node:path';
 
 /** 构建产物入口 */
 const DIST_INDEX = resolve(__dirname, '..', 'build-dist', 'index.html');
-/** 种子备份包（应用自身 zod schema 校验通过的真备份格式） */
+/**
+ * 种子备份包（应用自身 zod schema 校验通过的真备份格式）。
+ *
+ * ⚠️ **本文件不得改它的 `kind`。** 这一份是**共享**的 ——`v07-dline-shell.spec.ts`
+ * 也读它（`:71` 同款常量），而它的用例走 `/member-board`（成员看板按 `Pid` 收窄）
+ * 与 `/project/prj-v07b` ⇒ 那里**必须**是 human-kind。本文件测的是 `/agent`
+ * 这个 Agent 工作区 ⇒ **必须**是 agent-kind。两边诉求相反 ⇒ 只能**分叉**，
+ * 见 `writeAgentSeed()`。
+ *
+ * 11 条任务数据**只有这一份定义**：分叉只翻 `kind` 一位，不复制任何数据。
+ */
 const SEED_FIXTURE = resolve(__dirname, 'fixtures', 'v07-board-seed.json');
-/** 截图目录（8 项验收的证据） */
+/**
+ * 派生出来的 agent-kind 种子文件名（写进 `SHOT_DIR`，与截图同为产物）。
+ *
+ * 文件名与 `v07-t03b-ingress-geometry` 的**不同**：两支 spec 各写各的。若共用同一个
+ * 路径，vitest 并发跑两支时会出现「一支正在写、另一支正在读」的半截文件。
+ */
+const AGENT_SEED_FILE = 'seed-agent.json';
+/** 截图目录（8 项验收的证据；派生种子也落这里——`qa-scratch/` 已在 .gitignore） */
 const SHOT_DIR = resolve(__dirname, '..', 'qa-scratch', 'v07-stageB');
 
 /** 探测已安装的 chromium 可执行文件（跨平台；与阶段 A 同一实现） */
@@ -263,22 +283,89 @@ const LANE_COUNTS: Record<string, number> = {
 };
 /** 加载屏障：这条任务在两种模式、两种主题下都可见 */
 const READY_BARRIER_TITLE = '确认材料清单';
-const PROJECT_NAME = '验收样例项目';
 
 /**
- * 从主种子**派生**一个变体备份包并落盘，返回其路径。
+ * 从共享夹具**派生**一份 **agent-kind** 种子备份并落盘，返回其路径。
+ *
+ * ── 为什么必须派生（既不能直改共享夹具，也不能手抄一份）──
+ *   · **不能直改共享夹具**：`tests/fixtures/v07-board-seed.json` 被本文件与
+ *     `v07-dline-shell.spec.ts` **共用**（后者 `:71` 读同一路径）。那份 spec 走人类侧
+ *     路由（`/member-board`、`/project/prj-v07b`）⇒ 它要求 human-kind；本文件走 `/agent`
+ *     ⇒ 要求 agent-kind。两边诉求相反，任何一边的直改都会把另一边染红。
+ *   · **不能手抄一份**：下面「种子数据的期望分布」（四组计数 / 泳道条数 / 隐藏 3 条）
+ *     是本文件全部断言的**唯一真相源**；抄两份必然漂移，而漂移后的表现是
+ *     「断言数的是一套、界面渲染的是另一套」——最难发现的一类假绿。
+ *   故：读共享夹具 → **只翻 `projects[].kind` 一位** → 落盘。任务数据一字未复制。
+ *
+ * ── 为什么 kind 必须是 agent（v0.8）──
+ *   v0.8 把 Agent 工作区与人类侧做成**物理隔离**，`src/core/project/visibility.ts`
+ *   是全仓唯一判 kind 的地方；缺 `kind` 列的老数据一律按 `'human'` 处理。
+ *   共享夹具恰好没有 `kind` 列 ⇒ 直接拿来跑 `/agent` 会被隔离层（**正确地**）滤掉，
+ *   看板渲染空态、装载屏障（`READY_BARRIER_TITLE`）必然超时。
+ *   故这里把 `kind` 显式置 `'agent'` —— 差异由**构造**产生，不靠放宽断言。
+ *
+ * @returns 派生文件的绝对路径（落 `SHOT_DIR`，与截图同为产物；`qa-scratch/` 已 gitignore）
+ */
+function writeAgentSeed(): string {
+  const pkg = JSON.parse(readFileSync(SEED_FIXTURE, 'utf8')) as {
+    data: { projects: Array<Record<string, unknown>> };
+  };
+  if (pkg.data.projects.length === 0) {
+    throw new Error('[v07-board-acceptance] 共享夹具里没有 projects[]，无法派生 agent 种子。');
+  }
+  for (const p of pkg.data.projects) p['kind'] = 'agent';
+  const out = resolve(SHOT_DIR, AGENT_SEED_FILE);
+  writeFileSync(out, JSON.stringify(pkg, null, 2), 'utf8');
+  return out;
+}
+
+/**
+ * 读一份种子备份里**声明**的项目（id / name / 归一后的 kind）。
+ *
+ * 用途：把「种子真的进了库」写成一条**与 kind 无关**的事实断言 —— 落库行必须与
+ * 夹具声明逐字段一致。`kind` 的归一口径与 `normalizeProjectRow`（`stage-fallback.ts`）
+ * 一致：只有字面量 `'agent'` 算 agent，其余（含缺列）算 `'human'`。
+ * 这样同一条判据对 human / agent 两种种子都成立，不会因「种子换成 agent-kind」而失效。
+ */
+function readSeedProjects(fixturePath: string): Array<{ id: string; name: string; kind: string }> {
+  const pkg = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
+    data: { projects: Array<{ id?: unknown; name?: unknown; kind?: unknown }> };
+  };
+  return pkg.data.projects
+    .filter((p): p is { id: string } & Record<string, unknown> => typeof p.id === 'string')
+    .map((p) => ({
+      id: p.id,
+      name: String(p.name ?? ''),
+      kind: p.kind === 'agent' ? 'agent' : 'human',
+    }));
+}
+
+/**
+ * 从 `source`（应为 `writeAgentSeed()` 的产物）**派生**一个变体备份包并落盘，返回其路径。
  *
  * 为什么不另存一份手写的变体 JSON：两份种子迟早漂移（改一处忘另一处），
  * 而「两套数据只差被删掉的那几条」是变体用例的全部前提——前提悄悄失效时，
  * 用例仍会绿，只是它证明的东西已经不同了。派生则让前提由构造保证。
+ *
+ * ★ 源必须是 agent-kind：本 spec 的两套环境都跑 `/agent`。若源被换成人类种子
+ *   （例如误传 `SEED_FIXTURE`），派生出的变体会渲染空态，用例会以「装载屏障超时」
+ *   这种**看不出真因**的方式红 —— 故在此显式守卫、当场报错。
  */
 function writeSeedVariant(
+  source: string,
   fileName: string,
   keep: (task: Record<string, unknown>) => boolean,
 ): string {
-  const pkg = JSON.parse(readFileSync(SEED_FIXTURE, 'utf8')) as {
-    data: { tasks: Array<Record<string, unknown>> };
+  const pkg = JSON.parse(readFileSync(source, 'utf8')) as {
+    data: { projects: Array<Record<string, unknown>>; tasks: Array<Record<string, unknown>> };
   };
+  const notAgent = pkg.data.projects.filter((p) => p['kind'] !== 'agent');
+  if (notAgent.length > 0) {
+    throw new Error(
+      `[v07-board-acceptance] 变体源种子不是 agent-kind（${notAgent.length}/${pkg.data.projects.length} ` +
+        "个项目的 kind ≠ 'agent'）：本 spec 两套环境都跑 /agent，源必须来自 writeAgentSeed()。",
+    );
+  }
   const before = pkg.data.tasks.length;
   pkg.data.tasks = pkg.data.tasks.filter(keep);
   if (pkg.data.tasks.length === before) {
@@ -434,6 +521,113 @@ async function clickTab(page: Page, name: string): Promise<void> {
   await page.waitForTimeout(250);
 }
 
+/**
+ * 页面内：读 IndexedDB `projects` 表里 `wanted` 那几行（**只读，绝不建库**）。
+ *
+ * ⚠️ 必须定义在**模块级**（不能内联成闭包）：Playwright 是把函数**序列化**后送进页面的，
+ *   闭包变量不可用（只能经参数传入）。放在模块级同时保证 Node 侧只有这一份实现。
+ *
+ * 返回 `[]` 表示「库还不存在」或「库在但没有这几行」——两者对调用方语义相同（都算「还没到」）。
+ */
+function readSeedProjectsInPage(arg: {
+  dbName: string;
+  wanted: string[];
+}): Promise<Array<{ id: string; name: string; kind: string | null }>> {
+  const { dbName, wanted } = arg;
+  return new Promise((resolve) => {
+    const read = async (): Promise<void> => {
+      /**
+       * ⚠️ 先问「库在不在」，再 `open`。
+       *   不带版本号的 `indexedDB.open(name)` 对**不存在的库**会顺手把它**建出来**
+       *   （空库、版本 1）。而 Dexie 的三段 `version(n).stores()` 里，v1 的声明只在
+       *   「首次建库」那一次生效 —— 被我们抢先建成空 v1 后，后续升级不会补建
+       *   `projects` 表，整个应用会读不到数据。`databases()` 在 Chromium 下可用。
+       */
+      const dbs = indexedDB.databases;
+      if (typeof dbs === 'function') {
+        try {
+          const list = await dbs();
+          if (!list.some((d) => d.name === dbName)) {
+            resolve([]);
+            return;
+          }
+        } catch {
+          /* 拿不到名单就按「在」处理（下面只读，不建表） */
+        }
+      }
+      const req = indexedDB.open(dbName);
+      req.onerror = () => resolve([]);
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('projects')) {
+          db.close();
+          resolve([]);
+          return;
+        }
+        const storeReq = db.transaction('projects', 'readonly').objectStore('projects').getAll();
+        storeReq.onerror = () => {
+          db.close();
+          resolve([]);
+        };
+        storeReq.onsuccess = () => {
+          const result = (storeReq.result ?? []) as Array<Record<string, unknown>>;
+          db.close();
+          resolve(
+            result
+              .filter((r) => wanted.includes(String(r['id'])))
+              .map((r) => ({
+                id: String(r['id']),
+                name: String(r['name'] ?? ''),
+                kind: r['kind'] == null ? null : String(r['kind']),
+              })),
+          );
+        };
+      };
+    };
+    void read();
+  });
+}
+
+/**
+ * 等「种子项目真的落进 IndexedDB」——**与 kind 无关**的「导入成功」判据。
+ *
+ * ── 为什么不再沿用「页面文本里出现项目名」──
+ *   v0.8 起 Agent 看板与人类侧**物理隔离**：导入 agent-kind 项目时，人类首页
+ *   （`index.html`）**不会**渲染它的名字 ⇒ 那个 `waitForFunction` 必然超时。
+ *   而「库里出现了这几行」这件事对 human / agent 一视同仁，正是我们要的直接证据。
+ *
+ * ── 为什么用 Node 侧轮询，而不是 `page.waitForFunction` ──
+ *   导入成功会 `window.location.reload()`；在跨导航的窗口里跑 page 函数会得到
+ *   「Execution context destroyed」这种掩盖真因的报错。改为：先等 reload 的 `load`
+ *   事件，再用普通 `evaluate` 轮询库里的行，且**容忍**导航窗口内的瞬时异常。
+ *
+ * @param expected 夹具声明的项目（id / name / kind），来自 `readSeedProjects()`
+ * @returns 命中的库内行（含原始 id / name / kind，供调用方逐字段核对）
+ */
+async function pollSeedInDb(
+  page: Page,
+  expected: Array<{ id: string; name: string; kind: string }>,
+  timeoutMs = 20000,
+): Promise<Array<{ id: string; name: string; kind: string | null }>> {
+  const ids = expected.map((p) => p.id);
+  const deadline = Date.now() + timeoutMs;
+  let rows: Array<{ id: string; name: string; kind: string | null }> = [];
+  for (;;) {
+    try {
+      rows = await page.evaluate(readSeedProjectsInPage, { dbName: DB_NAME, wanted: ids });
+    } catch {
+      /*
+       * `evaluate` 可能因**导航**（reload 正在发生）抛出「Execution context was
+       * destroyed」——那是「还没到」而不是「失败了」。吞掉本轮异常当作「尚未落库」，
+       * 继续轮询；真正的失败由 deadline 兜底，并由调用方带着「页面原文」报错。
+       */
+    }
+    if (ids.every((id) => rows.some((r) => r.id === id))) return rows;
+    if (Date.now() >= deadline) return rows;
+    await page.waitForTimeout(200);
+  }
+}
+
 describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模式看板验收（真实构建产物）', () => {
   /**
    * 一个「验收环境」= 独立 BrowserContext（自带 localStorage + IndexedDB）+ 一个常驻同源操作页。
@@ -471,14 +665,25 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     base = server.url.replace(/index\.html$/, ''); // http://127.0.0.1:<port>/
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH ?? undefined });
 
-    mainEnv = await createSeededEnv(SEED_FIXTURE);
+    /*
+     * ★ v0.8 夹具适配：本 spec 的**唯一**种子来源 = 从共享夹具派生的 agent-kind 副本。
+     *   本页测的是 `/agent`（Agent 工作区）⇒ 种子项目必须是 agent-kind，否则 v0.8 的
+     *   物理隔离会（正确地）把它滤掉，`/agent` 渲染空态、装载屏障必然超时。
+     *   共享夹具不能直改（`v07-dline-shell.spec.ts` 也读它、且需要 human-kind），
+     *   故走 `writeAgentSeed()` 只翻 `kind` 一位。
+     */
+    const agentSeed = writeAgentSeed();
+    mainEnv = await createSeededEnv(agentSeed);
 
     /*
-     * 变体种子**从同一份 fixture 派生**（删掉隐藏那 3 条），不另存一份 300 行 JSON：
+     * 变体种子**从 agent 种子派生**（删掉隐藏那 3 条），不另存一份 300 行 JSON：
      * 手抄的第二份必然与主种子漂移，而一旦漂移，「两套数据只差隐藏条数」这个前提就
      * 悄悄失效了——那正是最难发现的一类假绿。派生文件写进截图目录（与截图同为产物）。
+     * ⚠️ 必须从 `agentSeed`（而非 `SEED_FIXTURE`）派生：源若不是 agent-kind，
+     *    变体环境同样会渲染空态（`writeSeedVariant` 内有显式守卫，会当场抛错）。
      */
     const noHiddenFixture = writeSeedVariant(
+      agentSeed,
       'seed-no-hidden.json',
       (t) => !HIDDEN_TITLES.includes(String(t['title'])),
     );
@@ -530,8 +735,21 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
   /**
    * 灌种子数据：走应用自己的备份导入链路（隐藏 file input → 预检 → 二次确认 → 整库替换 → reload）。
    * 任何一步失败都抛出**带页面原文**的错误，避免「卡在 waitFor 超时」这种无信息失败。
+   *
+   * ── 成功判据（v0.8 夹具适配后）──
+   *   **种子项目已落 IndexedDB 的 `projects` 表**（见 `pollSeedInDb`）。三条约束：
+   *     ① **与 kind 无关** —— 不再看页面文本里有没有项目名（agent-kind 项目在人类首页
+   *        本来就不渲染，那是隔离的正确表现，不是导入失败）；
+   *     ② **是导入成功的直接证据** —— 行在库里，比「某个字符串出现在某处」硬；
+   *     ③ **失败时保留带页面原文的报错**（每一步失败都把 body 前 500 字带出来）。
+   *   顺带逐字段核对落库行（含 `kind`）与夹具声明一致 —— 钉住 §7.2 #22：
+   *   `kind` 经「整库替换」后仍在，这正是本次夹具适配所依赖的前提。
    */
   async function seedViaBackupImport(page: Page, fixture: string): Promise<void> {
+    // 从**正在导入的那份夹具**读出应有的事实（不硬编码）：夹具一改这里自动跟随，
+    // 且判据对 human / agent 两种种子都成立。
+    const expected = readSeedProjects(fixture);
+
     await page.goto(`${base}index.html`);
     await page.waitForSelector('header', { timeout: 20000 });
 
@@ -552,20 +770,41 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
           `页面文本片段：${text.slice(0, 500)}`,
       );
     }
-    await confirm.click({ force: true });
 
-    // 导入成功 → `window.location.reload()`；用「项目名出现在页面里」作为新文档就绪的信号
+    /*
+     * 导入成功 → `BackupService.importAndReplace` 后 `window.location.reload()`。
+     * 用 `load` 事件作为「新文档已就绪」的信号；**必须在 click 之前**注册监听，
+     * 否则 reload 可能在监听挂上之前就发生（竞态）。
+     */
+    const reloaded = page.waitForEvent('load', { timeout: 20000 });
+    await confirm.click({ force: true });
     try {
-      await page.waitForFunction(
-        (name) => document.body.innerText.includes(name),
-        PROJECT_NAME,
-        { timeout: 20000 },
-      );
+      await reloaded;
     } catch {
       const text = await page.locator('body').innerText();
       throw new Error(
-        `备份导入后未观察到种子项目「${PROJECT_NAME}」。页面文本片段：${text.slice(0, 500)}`,
+        '备份导入未触发页面重载：可能未通过 zod 预检，或 `importAndReplace` 抛错' +
+          '（页面会 toast 失败原因，且本地数据未受影响）。' +
+          `页面文本片段：${text.slice(0, 500)}`,
       );
+    }
+
+    // ★ 直接证据：种子项目已落库（与 kind 无关）
+    const rows = await pollSeedInDb(page, expected);
+    const missing = expected.filter((p) => !rows.some((r) => r.id === p.id));
+    if (missing.length > 0) {
+      const text = await page.locator('body').innerText();
+      throw new Error(
+        `备份导入后未在 IndexedDB 中观察到种子项目 [${missing.map((p) => p.id).join(', ')}]` +
+          `（判据 = 种子行已落库，与项目 kind 无关）。页面文本片段：${text.slice(0, 500)}`,
+      );
+    }
+
+    // 落库行必须与夹具声明逐字段一致（id / name / kind）
+    for (const p of expected) {
+      const row = rows.find((r) => r.id === p.id);
+      expect(row?.name, `项目 ${p.id} 的 name 落库应为「${p.name}」`).toBe(p.name);
+      expect(row?.kind, `项目 ${p.id} 的 kind 落库应为「${p.kind}」（夹具声明）`).toBe(p.kind);
     }
   }
 

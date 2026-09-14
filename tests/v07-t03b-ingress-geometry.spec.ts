@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+/** IndexedDB 库名 —— 唯一出处 `src/core/schema/current.ts`（不在测试里硬编码） */
+import { DB_NAME } from '../src/core/schema/current';
 
 /**
  * v0.7 · T03-B **真浏览器几何验收**：接入配置面板（`AgentIngressPanel`）浮层。
@@ -35,12 +38,28 @@ import { resolve } from 'node:path';
  */
 
 const DIST_INDEX = resolve(__dirname, '..', 'build-dist', 'index.html');
+/**
+ * 共享种子备份包（应用自身 zod schema 校验通过的真备份格式）。
+ *
+ * ⚠️ **本文件不得改它的 `kind`。** 这一份是**共享**的 —— `v07-dline-shell.spec.ts`
+ * 也读它（`:71` 同款常量），而那份 spec 走人类侧路由（`/member-board`、
+ * `/project/prj-v07b`）⇒ 那里**必须**是 human-kind；本文件跑 `/agent`
+ * ⇒ **必须**是 agent-kind。两边诉求相反 ⇒ 只能**分叉**，见 `writeAgentSeed()`。
+ */
 const SEED_FIXTURE = resolve(__dirname, 'fixtures', 'v07-board-seed.json');
+/**
+ * 派生 agent-kind 种子的落点：目录 + 文件名。
+ *
+ * 目录在 `qa-scratch/` 下（已 gitignore），与既有排查产物同处。
+ * ⚠️ 文件名与 `v07-board-acceptance` 的（`seed-agent.json`）**刻意不同**：两支 spec
+ *   各写各的。若共用同一路径，vitest 并发跑两支 spec 时会出现
+ *   「一支正在写、另一支正在读」的半截文件。
+ */
+const SEED_DIR = resolve(__dirname, '..', 'qa-scratch', 'v07-t03b');
+const AGENT_SEED_FILE = 'seed-agent-geometry.json';
 
 /** 种子夹具里的管理员成员 id（`fixtures/v07-board-seed.json` 的 `data.members[0].id`） */
 const ADMIN_ID = 'm-admin';
-/** 种子项目名（导入成功后可观察到它，用作「种子真的进去了」的判据） */
-const SEED_PROJECT_NAME = '验收样例项目';
 /** 本文件专用的令牌原文（几何 spec 与 jsdom spec 各用各的，避免互相误判） */
 const SECRET = 'idplan-agent-token-GEOMETRY-SECRET-xyz789';
 
@@ -315,6 +334,150 @@ function logGeometry(label: string, g: PanelGeometry): void {
 }
 
 /* ================================================================================================
+ * 种子：从共享夹具**派生** agent-kind 副本（v0.8 夹具适配）
+ *
+ * ── 为什么必须派生 ──
+ *   ① **不能直改共享夹具**：`tests/fixtures/v07-board-seed.json` 被本文件与
+ *      `v07-dline-shell.spec.ts` 共用，后者走人类侧路由 ⇒ 要求 human-kind；
+ *      本文件跑 `/agent` ⇒ 要求 agent-kind。两边诉求相反。
+ *   ② **不能手抄一份**：下面所有几何断言不依赖任务明细，但「这个项目在库里、
+ *      且是 Agent 看板」是本 spec 的**前提**；抄一份必然与共享夹具漂移。
+ *   故：读共享夹具 → **只翻 `projects[].kind` 一位** → 落盘。
+ *
+ * ── 为什么 kind 必须是 agent（这才是本次红转绿的真因）──
+ *   测试 ③ 真点「改为手动粘贴排期文件」后，手动粘贴面板（`ApplyPayloadPanel`）的
+ *   渲染条件是 `applyOpen && scopedProjectId`，而 `scopedProjectId` 取自
+ *   **已确认的 Agent 看板**（v0.8 §7.2 #20/#21 收窄）。夹具无 `kind` ⇒ 归一为
+ *   `'human'` ⇒ 库里一块 Agent 看板都没有 ⇒ `scopedProjectId` 恒为 null
+ *   ⇒ 面板**压根不渲染** ⇒ `waitFor` 超时。这不是几何缺陷，是种子侧的前提缺失。
+ * ================================================================================================ */
+
+/** 从共享夹具派生一份 agent-kind 种子并落盘，返回路径（任务数据一字未复制）。 */
+function writeAgentSeed(): string {
+  const pkg = JSON.parse(readFileSync(SEED_FIXTURE, 'utf8')) as {
+    data: { projects: Array<Record<string, unknown>> };
+  };
+  if (pkg.data.projects.length === 0) {
+    throw new Error('[t03b-geom] 共享夹具里没有 projects[]，无法派生 agent 种子。');
+  }
+  for (const p of pkg.data.projects) p['kind'] = 'agent';
+  const out = resolve(SEED_DIR, AGENT_SEED_FILE);
+  writeFileSync(out, JSON.stringify(pkg, null, 2), 'utf8');
+  return out;
+}
+
+/**
+ * 读一份种子备份里**声明**的项目（id / name / 归一后的 kind）。
+ *
+ * `kind` 的归一口径与 `normalizeProjectRow`（`stage-fallback.ts`）一致：只有字面量
+ * `'agent'` 算 agent，其余（含缺列）算 `'human'` ⇒ 同一条判据对 human / agent 都成立。
+ */
+function readSeedProjects(fixturePath: string): Array<{ id: string; name: string; kind: string }> {
+  const pkg = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
+    data: { projects: Array<{ id?: unknown; name?: unknown; kind?: unknown }> };
+  };
+  return pkg.data.projects
+    .filter((p): p is { id: string } & Record<string, unknown> => typeof p.id === 'string')
+    .map((p) => ({
+      id: p.id,
+      name: String(p.name ?? ''),
+      kind: p.kind === 'agent' ? 'agent' : 'human',
+    }));
+}
+
+/**
+ * 页面内：读 IndexedDB `projects` 表里 `wanted` 那几行（**只读，绝不建库**）。
+ *
+ * ⚠️ 必须定义在**模块级**：Playwright 把函数**序列化**后送进页面，闭包变量不可用。
+ *
+ * 返回 `[]` 表示「库还不存在」或「库在但没有这几行」（对调用方语义相同：还没到）。
+ *
+ * ⚠️ 先问「库在不在」再 `open`：不带版本号的 `indexedDB.open(name)` 对**不存在的库**
+ *   会顺手把它**建出来**（空库、v1），而 Dexie 的 v1 `stores()` 只在「首次建库」那次
+ *   生效 —— 被抢先建成空 v1 后，后续升级不会补建 `projects` 表，应用会读不到数据。
+ */
+function readSeedProjectsInPage(arg: {
+  dbName: string;
+  wanted: string[];
+}): Promise<Array<{ id: string; name: string; kind: string | null }>> {
+  const { dbName, wanted } = arg;
+  return new Promise((resolve) => {
+    const read = async (): Promise<void> => {
+      const dbs = indexedDB.databases;
+      if (typeof dbs === 'function') {
+        try {
+          const list = await dbs();
+          if (!list.some((d) => d.name === dbName)) {
+            resolve([]);
+            return;
+          }
+        } catch {
+          /* 拿不到名单就按「在」处理（下面只读，不建表） */
+        }
+      }
+      const req = indexedDB.open(dbName);
+      req.onerror = () => resolve([]);
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('projects')) {
+          db.close();
+          resolve([]);
+          return;
+        }
+        const storeReq = db.transaction('projects', 'readonly').objectStore('projects').getAll();
+        storeReq.onerror = () => {
+          db.close();
+          resolve([]);
+        };
+        storeReq.onsuccess = () => {
+          const result = (storeReq.result ?? []) as Array<Record<string, unknown>>;
+          db.close();
+          resolve(
+            result
+              .filter((r) => wanted.includes(String(r['id'])))
+              .map((r) => ({
+                id: String(r['id']),
+                name: String(r['name'] ?? ''),
+                kind: r['kind'] == null ? null : String(r['kind']),
+              })),
+          );
+        };
+      };
+    };
+    void read();
+  });
+}
+
+/**
+ * 等「种子项目真的落进 IndexedDB」——**与 kind 无关**的「导入成功」判据。
+ *
+ * 为什么不再用「页面文本里出现项目名」：v0.8 起 Agent 看板与人类侧物理隔离，
+ * 导入 agent-kind 项目时人类首页**不会**渲染它的名字 ⇒ 那个判据必然超时。
+ * 为什么用 Node 侧轮询而非 `page.waitForFunction`：导入成功会 `reload()`，
+ * 跨导航的 page 函数会得到「Execution context destroyed」这种掩盖真因的报错；
+ * 这里先等 `load` 事件，再普通 `evaluate` 轮询，并容忍导航窗口内的瞬时异常。
+ */
+async function pollSeedInDb(
+  page: Page,
+  expected: Array<{ id: string; name: string; kind: string }>,
+  timeoutMs = 30000,
+): Promise<Array<{ id: string; name: string; kind: string | null }>> {
+  const ids = expected.map((p) => p.id);
+  const deadline = Date.now() + timeoutMs;
+  let rows: Array<{ id: string; name: string; kind: string | null }> = [];
+  for (;;) {
+    try {
+      rows = await page.evaluate(readSeedProjectsInPage, { dbName: DB_NAME, wanted: ids });
+    } catch {
+      /* 导航窗口内的瞬时失败 = 「还没到」，下一轮再试；真失败由 deadline 兜底 */
+    }
+    if (ids.every((id) => rows.some((r) => r.id === id))) return rows;
+    if (Date.now() >= deadline) return rows;
+    await page.waitForTimeout(200);
+  }
+}
+
+/* ================================================================================================
  * 前置检查（**单列一组**，理由：`describe.skipIf` 的 skip 在输出里长得像「通过」，
  * 极易被读成「已验收」。本仓已有先例，故照 `v07-dline-shell.spec.ts` 的做法显式提示。）
  * ================================================================================================ */
@@ -334,6 +497,8 @@ describe('v0.7 · T03-B 真 Chromium 几何验收前置检查', () => {
     expect(existsSync(DIST_INDEX)).toBe(true);
     expect(CHROMIUM_PATH).not.toBeNull();
     expect(STALE_INPUTS).toEqual([]);
+    // 派生 agent 种子的**源头**必须在（缺了它 writeAgentSeed 会在 beforeAll 抛 ENOENT）
+    expect(existsSync(SEED_FIXTURE)).toBe(true);
   });
 });
 
@@ -354,7 +519,16 @@ describe.skipIf(!CAN_RUN_FRESH)(
       server = await startStaticServer(resolve(__dirname, '..', 'build-dist'));
       BASE = server.url.replace(/index\.html$/, '');
       browser = await chromium.launch({ executablePath: CHROMIUM_PATH ?? undefined });
-      adminCtx = await createSeededAdminEnv();
+      /*
+       * ★ v0.8 夹具适配：种子必须是 **agent-kind**（从共享夹具派生，只翻 kind 一位）。
+       *   本 spec 全部用例都在 `/agent`；且测试 ③ 需要**已存在的 Agent 看板** ——
+       *   手动粘贴面板的渲染条件是 `applyOpen && scopedProjectId`，而 `scopedProjectId`
+       *   取自「已确认的 Agent 看板」（§7.2 #20/#21 收窄）。human-kind 种子下它恒为
+       *   null ⇒ 面板压根不渲染 ⇒ ③ 以「等 textarea 超时」这种看不出真因的方式红。
+       */
+      mkdirSync(SEED_DIR, { recursive: true });
+      const agentSeed = writeAgentSeed();
+      adminCtx = await createSeededAdminEnv(agentSeed);
     }, 240000);
 
     afterAll(async () => {
@@ -373,7 +547,14 @@ describe.skipIf(!CAN_RUN_FRESH)(
      * 既确立刻身份（`isAdmin` → 页侧 `{isAdmin && …}` 才可能放行），也顺带关掉首启引导弹窗
      * （`useFirstRunGate` 条件含 `currentMemberId === null`），免得遮罩干扰点击。
      */
-    async function createSeededAdminEnv(): Promise<BrowserContext> {
+    /**
+     * @param fixture 要导入的种子备份路径。**必须是 agent-kind**（本 spec 跑 `/agent`）：
+     *   测试 ③ 需要一块**已存在的 Agent 看板**（手动粘贴面板的渲染条件是
+     *   `applyOpen && scopedProjectId`，后者取自「已确认的 Agent 看板」）。
+     *   传共享夹具（human-kind）会让该面板不渲染、③ 以「等 textarea 超时」红
+     *   —— 真因见 `writeAgentSeed()` 的说明。
+     */
+    async function createSeededAdminEnv(fixture: string): Promise<BrowserContext> {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       await ctx.addInitScript((id: string) => {
         try {
@@ -392,7 +573,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await page
         .locator('input[type="file"][accept*="json"]')
         .first()
-        .setInputFiles(SEED_FIXTURE, { force: true });
+        .setInputFiles(fixture, { force: true });
 
       const confirm = page.getByRole('button', { name: '确认恢复' });
       try {
@@ -404,20 +585,44 @@ describe.skipIf(!CAN_RUN_FRESH)(
             `页面文本片段：${text.slice(0, 500)}`,
         );
       }
+      /*
+       * 导入成功 → `BackupService.importAndReplace` 后 `window.location.reload()`。
+       * `load` 监听**必须在 click 之前**注册，否则 reload 可能先发生（竞态）。
+       */
+      const reloaded = page.waitForEvent('load', { timeout: 30000 });
       await confirm.click({ force: true });
-
       try {
-        await page.waitForFunction(
-          (name) => document.body.innerText.includes(name),
-          SEED_PROJECT_NAME,
-          { timeout: 30000 },
-        );
+        await reloaded;
       } catch {
         const text = await page.locator('body').innerText();
         throw new Error(
-          `备份导入后未观察到种子项目「${SEED_PROJECT_NAME}」。页面文本片段：${text.slice(0, 500)}`,
+          '备份导入未触发页面重载：可能未通过 zod 预检，或 `importAndReplace` 抛错' +
+            `（页面会 toast 失败原因，且本地数据未受影响）。页面文本片段：${text.slice(0, 500)}`,
         );
       }
+
+      /*
+       * ★ 导入成功的**直接证据** = 种子项目已落 IndexedDB（**与 kind 无关**）。
+       *   旧判据是「人类首页文本里出现项目名」—— 对 agent-kind 项目恒不成立
+       *   （物理隔离 ⇒ 人类首页压根不渲染它），会以「屏障超时」的形式假红。
+       */
+      const seedExpected = readSeedProjects(fixture);
+      const rows = await pollSeedInDb(page, seedExpected);
+      const missing = seedExpected.filter((p) => !rows.some((r) => r.id === p.id));
+      if (missing.length > 0) {
+        const text = await page.locator('body').innerText();
+        throw new Error(
+          `备份导入后未在 IndexedDB 中观察到种子项目 [${missing.map((p) => p.id).join(', ')}]` +
+            `（判据 = 种子行已落库，与项目 kind 无关）。页面文本片段：${text.slice(0, 500)}`,
+        );
+      }
+      // 落库行必须与夹具声明逐字段一致 —— 顺带钉住 §7.2 #22：`kind` 经整库替换后仍在
+      for (const p of seedExpected) {
+        const row = rows.find((r) => r.id === p.id);
+        expect(row?.name, `项目 ${p.id} 的 name 落库应为「${p.name}」`).toBe(p.name);
+        expect(row?.kind, `项目 ${p.id} 的 kind 落库应为「${p.kind}」（夹具声明）`).toBe(p.kind);
+      }
+
       await page.close();
       return ctx;
     }
@@ -622,7 +827,3 @@ describe.skipIf(!CAN_RUN_FRESH)(
     }, 120000);
   },
 );
-
-/** 保留：夹具存在性由上面的前置检查覆盖；此处仅在文件被单独 review 时提示路径来源 */
-void SEED_FIXTURE;
-void readFileSync;
