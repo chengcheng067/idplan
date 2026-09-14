@@ -24,6 +24,16 @@
  *   与状态**只有一份算式**，见该文件头）。它零 DOM、零 Node，技术上能过；显式列出是为了
  *   不让这条依赖停在「隐式副产物」——将来有人在 progress.ts 里加一句 `document.*`，
  *   本配置会当场报错，而不是等到某次 `npm run dev:server` 才炸。
+ *
+ *   v0.8 · T04-SRV 追加 `../src/core/template/stage-library.ts` 与 `../src/core/template/split.ts`：
+ *   `server/routes/agent.routes.ts` 的 `POST /api/agent/boards` 需要①阶段骨架的**唯一数据源**
+ *   （`templates/stage-library.json` 的强类型访问器）与②`MAX_STAGE_COUNT` / `stageColorIndex`
+ *   的**唯一实现**（不写第二份字面量）。二者均为纯模块（零 DOM、零 Node；已实测：
+ *   `stage-library.ts` 只 import 类型 + 该 JSON，`split.ts` 经 import 图带上
+ *   `nine-stages.ts` / `stage-fallback.ts` / `../lib/workdays.ts`——其中 `workdays.ts`
+ *   只依赖 dayjs 与其 isoWeek 插件，`dayjs` 在 dependencies 内，服务端可解析）。
+ *   同样地，**显式列出**而不是让它停在 import 图的隐式副产物里：将来有人往这批文件里
+ *   加一句 `document.*` 或 `node:fs`，`npm run typecheck:server` 会当场红。
  */
 {
   "compilerOptions": {
@@ -52,6 +62,9 @@
     // 共享内核的纯函数依赖（零 DOM 零 Node，两端可跑）
     "../src/lib/date.ts",
     // v0.7 · T02：`stage-resolve.planImpact` 的完成度/状态口径（唯一出处）
-    "../src/lib/progress.ts"
+    "../src/lib/progress.ts",
+    // v0.8 · T04-SRV：建板的阶段骨架数据源 + 阶段上限/色号夹取的唯一实现（见文件头）
+    "../src/core/template/stage-library.ts",
+    "../src/core/template/split.ts"
   ]
 }

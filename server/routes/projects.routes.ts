@@ -68,6 +68,14 @@ export function rowToProject(r: ProjectRow): Record<string, unknown> {
 
 const nowIso = (): string => new Date().toISOString();
 
+/** `invalid_field` 的统一出口（与 `/api/agent/*` 的机器码同形，见设计 §3.1） */
+const invalidField = (userMessage: string): { error: { code: string; userMessage: string } } => ({
+  error: { code: 'invalid_field', userMessage },
+});
+
+/** 归属侧（`Project.kind`）的合法取值 —— 与 `src/core/types/enums.ts` 的 `ProjectKind` 同一枚举 */
+const PROJECT_KINDS: ReadonlyArray<string> = ['human', 'agent'];
+
 export function registerProjectRoutes(app: FastifyInstance, db: Database.Database): void {
   // GET /projects?status=&keyword=
   app.get('/api/projects', async (req) => {
@@ -151,6 +159,52 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       return { error: { code: 'not_found', userMessage: '项目不存在' } };
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
+
+    /* ======================================================================================
+     * v0.8 §7.4 · 「接管」的服务端边界（PRD B11/B12 · TBD-9/TBD-10 的 D5 口径）
+     *
+     * ── 设计文档要求的是什么 ──
+     * 接管（Agent 看板 ⇄ 人类项目，即改 `kind`）要求**双层门**：
+     *   ① 服务端 `assert`（**真正的安全边界**）；② UI 隐藏入口（体验层，**不是**安全边界）。
+     * 领队 TBD-9 原文「UI 隐藏不是安全边界，这条对」⇒ 服务端这一层是**必做项**。
+     *
+     * ── ⚠️ 这条边界的**真实内容**与它的**局限**（如实写在这里，不粉饰）──
+     * 本服务端**没有角色模型**：全仓 `server/` 唯一的鉴权是 Agent 通道的共享密钥
+     * （`requireAgentToken`，且只覆盖 `/api/agent/*`），人类客户端的请求（本路由）**无鉴权**。
+     * 因此「校验请求者是 admin」在当前架构下**不可能实现** —— 硬编码一个 header 就当管理员
+     * 是自欺（任何客户端都能伪造）。
+     *
+     * 于是本层实现的是当前架构能支持的**最强边界：「显式意图」**——
+     * 变更归属侧必须在请求体里**显式声明** `takeover === true`。它挡住的是**误操作**
+     * （前端某处顺手带上 kind、批量脚本照搬字段映射把 `kind` 一起 PATCH 过去、
+     * 旧客户端重放一份含 kind 的 payload），**不是**恶意调用方：本地单机部署模型下
+     * 能发这个请求的人本来就能直接改库，这里不构成提权面。
+     * 若将来服务端要暴露到多用户环境，**这里必须补真正的会话/角色校验** ——
+     * 本注释就是留给那时的待办（不是「已实现 admin 校验」）。
+     * ==================================================================================== */
+    if (b.kind !== undefined) {
+      const nextKind = String(b.kind);
+      // ★ 只在**真的发生变化**时启用本门；kind 未变化（含完全没传）→ 与今天逐字一致，
+      //   不引入任何新校验（零回归的硬要求：老客户端的普通 PATCH 不受任何影响）。
+      if (nextKind !== existing.kind) {
+        if (!PROJECT_KINDS.includes(nextKind)) {
+          void reply.status(400);
+          return invalidField(
+            `归属侧 kind 只接受 'human' / 'agent' 两个取值，收到「${nextKind}」。` +
+              '（现状是原样透传，会把脏值写进库 —— 归属侧是隔离谓词的判据，脏值等于把数据放进一个谁也看不见的桶。）',
+          );
+        }
+        if (b.takeover !== true) {
+          void reply.status(400);
+          return invalidField(
+            '变更项目归属侧（kind）属于「接管」动作，必须显式声明接管意图（body.takeover === true）。' +
+              '本服务端当前**没有角色模型**，因此这道门校验的是「显式意图」而不是「请求者身份」——' +
+              '它能挡住误操作（顺手带上 kind 的字段级更新），但挡不住本来就拥有本机文件访问权的调用方。',
+          );
+        }
+      }
+    }
+
     // undefined = 不变（字段级更新语义），null = 显式清除。两态必须分开处理，
     // 否则「只改简称」的请求会把封面/阶段溯源字段一并擦掉。
     const merged: ProjectRow = {
@@ -176,8 +230,9 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       schedule_basis:
         b.scheduleBasis !== undefined ? String(b.scheduleBasis) : existing.schedule_basis,
       // v0.8：domain 允许显式 null（= 清除，回到读时回落）；
-      // kind 走 String() 而非原样透传——归属侧只有 human/agent 两个合法值，
-      // 上层（T04 的接管/建板）已校验，此处只保证不写进非字符串。
+      // kind 走 String() 而非原样透传——归属侧只有 human/agent 两个合法值。
+      // ★ 变更合法性**已由本函数上方的「接管显式意图门」拦下**（值域白名单 + takeover === true），
+      //   故这里只做「不写进非字符串」的收尾，不重复校验（两处规则必然漂移）。
       domain: b.domain !== undefined ? (b.domain as string | null) : existing.domain,
       kind: b.kind !== undefined ? String(b.kind) : existing.kind,
       status: b.status !== undefined ? String(b.status) : existing.status,
