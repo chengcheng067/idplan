@@ -3,6 +3,11 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// ★ 顶栏高度口径的**单一出处**（与产品同一份实现）。
+//   绝不在 `page.evaluate` 里重算 `innerWidth >= 1280 ? 64 : 56`：
+//   那份副本会在口径变更时静默不同步，而它恰是断言另一边的基准 → 直接放进假绿。
+import { titleBarHeightFor } from '../src/lib/titleBarTheme';
+
 /**
  * QA 独立复核（批次 A）· 真构建产物 + 真 Chromium。
  *
@@ -544,10 +549,8 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
           const acs = getComputedStyle(anchor);
           const cs = getComputedStyle(panel);
           return {
+            vw: window.innerWidth,
             vh: window.innerHeight,
-            // titleBarHeight 口径（src/lib/titleBarTheme.ts）：<1280→56，≥1280→64。
-            // 本页视口 1600 ⇒ 64。这里独立算一遍，不 import（页面上下文里拿不到模块）。
-            titleBarH: window.innerWidth >= 1280 ? 64 : 56,
             topGap: Math.round(pr.top),
             bottomGap: Math.round(window.innerHeight - pr.bottom),
             panelH: Math.round(pr.height),
@@ -569,11 +572,29 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
           浮在 y ∈ [0, titleBarHeight) 之上，浮层不整体让位就会把面板头部右端的
           「关闭设置」按钮压住——那正是用户原话「三键侵入了我们的 UI」的观感来源。
           故断言从「距顶 == 距底（±2px）」改判为「顶边 ≥ 三键底边，且底部不再贴死」。
+
+          ★ 基准值取自**单一出处** `titleBarHeightFor(vw)`，不在页面里重算：
+            口径一改，这里自动跟着改，不会出现「断言比真实要求更松」的假绿。
         */
-        expect(m!.topGap).toBeGreaterThanOrEqual(m!.titleBarH);
+        const expectedTopGap = titleBarHeightFor(m!.vw);
+        expect(m!.topGap).toBeGreaterThanOrEqual(expectedTopGap);
         expect(m!.bottomGap).toBeGreaterThan(0);
-        // 仍必须贴满可用高度：max-h 已扣掉避让量，不能因此把面板缩矮（否则白丢一屏内容）
-        expect(m!.topGap + m!.panelH + m!.bottomGap).toBeGreaterThanOrEqual(m!.vh - 2);
+        /*
+          「面板必须贴满可用高度、不得被缩矮」（否则白丢一屏内容）。
+
+          ★ 这条**原先写成一个恒真断言**，已订正：
+              expect(topGap + panelH + bottomGap).toBeGreaterThanOrEqual(vh - 2)
+            由定义 `bottomGap = vh − (topGap + panelH)` 可知三项相加**恒等于 vh**，
+            故该式永远成立、测不出任何东西。实测：把面板 max-h 压到 300px
+            （白丢 ~512px 内容）它**依然全绿** —— 属「恒绿 = 无效断言」。
+
+          正确判据是「面板**底边**必须贴到容器的下内边距」：
+          内容被 max-h 截断时，面板底边应停在 vh − padBottom（容器留白处），
+          实测 1600×900 下为 topGap=64 / panelH=812 / bottomGap=24（= padBottom）。
+          基准直接取**同一次测量**里的容器下内边距，不另引常量、也不重算。
+        */
+        const containerPadBottom = Number.parseFloat(m!.padBottom);
+        expect(m!.bottomGap).toBeLessThanOrEqual(containerPadBottom + 2);
         // 底部圆角不得被推出视口（用户原始投诉）
         expect(m!.bottomInViewport).toBe(true);
         expect(m!.blRadius).not.toBe('0px');

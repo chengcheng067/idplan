@@ -67,12 +67,32 @@ function readTokenHex(varName: string, fallback: string): string {
 }
 
 /**
+ * 给定视口宽度下的顶栏高度（px）——**纯函数，不依赖 `window`**。
+ *
+ * 口径与 `TopBar` 的 `h-14 xl:h-16` 同一份：<1280 → 56，≥1280 → 64。
+ *
+ * ── 为什么单独导出（而不是让调用方自己比一下 innerWidth）──
+ *   `titleBarHeight()` 读的是**当前** `window`，在 Node / jsdom 里拿不到；
+ *   而验收测试需要在 **Node 侧**算出「原生三键占多高」，再拿它当基准去断言
+ *   「浮层顶边 ≥ 三键底边」。若测试自己抄一份 `innerWidth >= 1280 ? 64 : 56`，
+ *   本模块的口径一变（56/64 改成别的值），那份副本会**静默不同步** ——
+ *   而它恰是断言另一边的基准，会直接把假绿放进来（断言比真实要求更松）。
+ *   故把「按宽度取高度」这件事做成单一出处，测试与产品共用。
+ */
+export function titleBarHeightFor(viewportWidth: number): number {
+  return viewportWidth >= XL_MIN_WIDTH ? TOPBAR_HEIGHT_DESKTOP : TOPBAR_HEIGHT_COMPACT;
+}
+
+/**
  * 当前顶栏高度（px）。与 TopBar 的 `h-14 xl:h-16` 同一口径：
  * <1280 → 56，≥1280 → 64。两者必须一致，否则原生三键会与顶栏内容纵向错位。
+ *
+ * 无 `window`（Node / 测试主进程）时返回桌面档 —— 仅作兜底，
+ * 需要按宽度求值的调用方请直接用 `titleBarHeightFor`。
  */
 export function titleBarHeight(): number {
   if (typeof window === 'undefined') return TOPBAR_HEIGHT_DESKTOP;
-  return window.innerWidth >= XL_MIN_WIDTH ? TOPBAR_HEIGHT_DESKTOP : TOPBAR_HEIGHT_COMPACT;
+  return titleBarHeightFor(window.innerWidth);
 }
 
 /**

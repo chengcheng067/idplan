@@ -113,6 +113,69 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /**
+ * 参与「产物是否过期」判定的构建输入：源码目录 + 根级构建配置。
+ * 排除 `build-dist` 自身与 `tests`（改测试不该让产物判定过期）。
+ * 与 `layout-walkthrough.spec.ts` / `ui-batch-a-geometry.spec.ts` / `v07-dline-shell.spec.ts`
+ * 同一口径。
+ */
+const BUILD_INPUT_DIRS = ['src', 'electron'];
+const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
+
+/** 递归收集目录下所有文件的绝对路径（目录不存在返回空数组） */
+function collectFiles(dir: string): string[] {
+  const fs = require('node:fs') as typeof import('node:fs');
+  const { join } = require('node:path') as typeof import('node:path');
+  if (!fs.existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...collectFiles(full));
+    } else if (entry.isFile()) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+/**
+ * 产物是否**已过期**（任一构建输入比 `build-dist/index.html` 新）。
+ * 返回过期样例文件名（最多 3 个），不过期返回空数组。
+ */
+function staleInputs(): string[] {
+  const fs = require('node:fs') as typeof import('node:fs');
+  const { resolve: res } = require('node:path') as typeof import('node:path');
+  if (!existsSync(DIST_INDEX)) return [];
+  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
+
+  const candidates = [
+    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(res(__dirname, '..', d))),
+    ...BUILD_INPUT_FILES.map((f) => res(__dirname, '..', f)).filter((f) => existsSync(f)),
+  ];
+
+  return candidates
+    .filter((f) => fs.statSync(f).mtimeMs > distMs)
+    .map((f) => f.replace(res(__dirname, '..') + '\\', '').replace(res(__dirname, '..') + '/', ''))
+    .slice(0, 3);
+}
+
+const STALE_INPUTS = CAN_RUN ? staleInputs() : [];
+
+/**
+ * 本 spec 断言的是**产物里的 DOM / 文案**，故产物必须是当前源码构建出来的。
+ *
+ * ⚠️ 为什么必须有这一层（R12，2026-09-14 补）：
+ *   本文件原先**只判 `CAN_RUN`**（产物存在 + Chromium 可用），**不判新鲜度**。
+ *   后果实测：源码改动后未重跑 `npm run build` 时，其余四支真浏览器 spec
+ *   （`layout-walkthrough` / `ui-batch-a-geometry` / `v07-dline-shell` / `qa-batch-a-verify`）
+ *   会整组 skip 并告警，而**本文件照跑 13 条并全绿** —— 绿的是**上一版产物的界面**。
+ *   这是最危险的一类假绿：它恰恰是全队最依赖的一支（B-01…B-12 验收），
+ *   且它的绿会被读成「人话/技术双模式看板已验收」。
+ *   与 `layout-walkthrough.spec.ts:122-131` 的注释同因同理。
+ */
+const CAN_RUN_FRESH = CAN_RUN && STALE_INPUTS.length === 0;
+
+/**
  * 产物须经 **HTTP** 提供，不能走 `file://`。
  *
  * `vite.config.ts` 的 `base: '/'` 使产物内资源引用为绝对路径 `/assets/*.js`，
@@ -371,7 +434,7 @@ async function clickTab(page: Page, name: string): Promise<void> {
   await page.waitForTimeout(250);
 }
 
-describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看板验收（真实构建产物）', () => {
+describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模式看板验收（真实构建产物）', () => {
   /**
    * 一个「验收环境」= 独立 BrowserContext（自带 localStorage + IndexedDB）+ 一个常驻同源操作页。
    *
@@ -1099,14 +1162,23 @@ describe.skipIf(!CAN_RUN)('v0.7 阶段 B · T06–T08 人话/技术双模式看�
   });
 });
 
-// 产物/浏览器缺失时给出可操作的提示（避免「skip 静默通过」被误读为已验收）
+// 产物/浏览器缺失或**产物过期**时给出可操作的提示（避免「skip 静默通过」被误读为已验收）
 describe('v0.7 阶段 B · 验收前置检查', () => {
-  it('构建产物、种子 fixture 与 Chromium 可用（缺失则上面的验收被跳过）', () => {
+  it('构建产物新鲜、种子 fixture 与 Chromium 可用（缺失/过期则上面的验收被跳过）', () => {
     if (!CAN_RUN) {
       // eslint-disable-next-line no-console
       console.warn(
         `[v07-board-acceptance] 跳过验收：build-dist 存在=${existsSync(DIST_INDEX)} chromium 存在=${CHROMIUM_PATH !== null}。` +
           ' 请先 npm run build（Chromium 由 playwright-core 依赖安装）。',
+      );
+    } else if (STALE_INPUTS.length > 0) {
+      // ★ R12：产物比源码旧时必须**大声说明**，否则「跳过」会被读成「通过」。
+      //   这正是本文件此前缺失的一层：不判新鲜度 → 拿旧产物跑绿 → 假绿。
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[v07-board-acceptance] 跳过验收：产物比源码旧，样例=${STALE_INPUTS.join(', ')}。` +
+          ' 请先 npm run build 再跑 npm test —— 否则测的是上一版界面，可能误报绿' +
+          '（且本 spec 是 B-01…B-12 的验收载体，误报绿的危害最大）。',
       );
     }
     expect(existsSync(SEED_FIXTURE)).toBe(true);
