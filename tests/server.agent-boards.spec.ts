@@ -16,6 +16,8 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 
@@ -566,5 +568,78 @@ describe('§7.6 / §7.2 #26 · listProjectCandidates() 只列人类项目', () =
     const tasks = db.prepare('SELECT COUNT(*) AS c FROM tasks').get() as { c: number };
     expect(tasks.c).toBe(1); // 人类项目这条通道一个字都没改
     expect(stageRows('p_human')).toHaveLength(1);
+  });
+});
+
+/* ======================================================================================
+ * 五、源码锁 · fail-closed 启动告警的端点清单 ⇄ 实际注册清单，**双向**对账
+ *
+ * ── 为什么值得单开一段锁 ──
+ * `server/lib/agent-auth.ts` 的启动告警（env 未配置时打印）存在**唯一**理由：
+ * 让用户在启动日志里认出他刚踩的那个 401 属于哪个端点。否则 Skill 拿到 401，
+ * 用户在日志里找不到任何提到它的线索，只会回到「是不是 ID Plan 没起来」——
+ * 即 V1-13 的「假无响应」原样复发。v0.8 加建板端点时，这条清单确实漏了
+ * `POST /api/agent/boards`（本段就是那次漏报的回归锁）。
+ *
+ * ── 为什么是「双向」而不是「清单里有建板」──
+ * 单向断言（「告警里含 boards」）只锁住这一次补丁的形状，下次新增端点照样漏。
+ * 双向对账锁的是**规则本身**：实际注册了什么，就必须一字不差地宣告什么。
+ * 反向那一半还顺带防「删了端点、文案留着」——那种陈旧文案会把人引向不存在的端点。
+ *
+ * 端点的**唯一事实来源**是 `agent.routes.ts` 的 `scope.<verb>('/api/agent/...')`；
+ * 告警侧用「以单引号开头且以 /api/agent/ 开头」的行来定位（不用宽泛 includes，
+ * 免得把本文件新增的注释文字误当清单）。
+ * ==================================================================================== */
+describe('源码锁 · fail-closed 启动告警的端点清单 ⇄ 实际注册清单', () => {
+  const ROOT = join(__dirname, '..');
+  const readSrc = (rel: string): string => readFileSync(join(ROOT, rel), 'utf-8');
+
+  /** 实际注册的 `/api/agent/*` 端点（读 `agent.routes.ts` 的真实注册语句） */
+  const registeredEndpoints = (): string[] =>
+    [...readSrc('server/routes/agent.routes.ts').matchAll(
+      /scope\.(?:get|post|put|patch|delete)\(\s*'(\/api\/agent\/[^']*)'/g,
+    )].map((m) => m[1]!);
+
+  /** 告警文案**宣告**会拒绝的端点（读 `agent-auth.ts` 里那行单引号字面量） */
+  const announcedEndpoints = (): string[] => {
+    const line = readSrc('server/lib/agent-auth.ts')
+      .split('\n')
+      .find((l) => /^\s*'\/api\/agent\//.test(l));
+    if (!line) return [];
+    return [...line.matchAll(/\/api\/agent\/[a-z0-9-]+/g)].map((m) => m[0]);
+  };
+
+  it('★ 双向对账：注册了几个就宣告几个（漏报 / 陈旧文案都会红）', () => {
+    const registered = registeredEndpoints();
+    const announced = announcedEndpoints();
+
+    // 防「正则没匹配到」造成的假绿：两侧都必须非空，且实际注册数就是当前的 4 个。
+    expect(registered.length, '未匹配到任何 /api/agent 注册语句——正则已失效').toBeGreaterThan(0);
+    expect(announced.length, '未匹配到告警端点清单行——定位方式已失效').toBeGreaterThan(0);
+
+    // ① 一个不漏：新增端点忘记改告警文案 → 这里红
+    expect(
+      registered.filter((e) => !announced.includes(e)),
+      '以下已注册端点未出现在 fail-closed 启动告警里（用户会搜不到自己踩的 401）',
+    ).toEqual([]);
+
+    // ② 一个不剩：删了端点却没删文案 → 这里红（陈旧文案会把人引向不存在的端点）
+    expect(
+      announced.filter((e) => !registered.includes(e)),
+      '以下端点已不在路由里，却仍被启动告警宣告为「会被拒绝」',
+    ).toEqual([]);
+
+    // ③ 顺序也对齐：`agent.routes.ts` 的端点按 ①②③④ 编号排列，告警沿用同序便于人工比对
+    expect(announced).toEqual(registered);
+  });
+
+  it('★ 每个 /api/agent 端点都被 requireAgentToken 覆盖（新增端点忘了鉴权 → 这里红）', () => {
+    const code = readSrc('server/routes/agent.routes.ts');
+    const gated = [...code.matchAll(/if\s*\(\s*!requireAgentToken\(req\)\s*\)/g)];
+    // 本锁的语义：鉴权调用点数 == 端点数。少一处 = 有一个端点在裸奔。
+    expect(
+      gated.length,
+      `注册端点 ${registeredEndpoints().length} 个，但 requireAgentToken 只出现 ${gated.length} 处`,
+    ).toBe(registeredEndpoints().length);
   });
 });

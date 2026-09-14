@@ -5,6 +5,10 @@
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 
+// 共享内核（单份实现）：归属侧的**类型**出处。相对路径而非 `@core/*` alias ——
+// 服务端由 `tsx` 直跑，`tsx` 不读 tsconfig 的 `paths`（见 server/tsconfig.json 文件头）。
+import type { ProjectKind } from '../../src/core/types/enums';
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -73,8 +77,29 @@ const invalidField = (userMessage: string): { error: { code: string; userMessage
   error: { code: 'invalid_field', userMessage },
 });
 
-/** 归属侧（`Project.kind`）的合法取值 —— 与 `src/core/types/enums.ts` 的 `ProjectKind` 同一枚举 */
-const PROJECT_KINDS: ReadonlyArray<string> = ['human', 'agent'];
+/**
+ * 归属侧（`Project.kind`）的合法取值白名单。
+ *
+ * ⚠️ 为什么必须是 `as const satisfies readonly ProjectKind[]` 而**不是** `ReadonlyArray<string>`：
+ * 后者让它完全脱离类型系统 —— 将来有人把 `ProjectKind` 里的 `'agent'` 改名或删掉，**服务端不会
+ * 报错**，只会在运行时静默接受一个「类型系统里已不存在的值」，把它写进 `projects.kind`；而
+ * `kind` 正是隔离谓词的判据 ⇒ 脏值等于把数据放进一个谁也看不见的桶（比报错难查得多）。
+ * `satisfies` 让「本白名单 ⊆ `ProjectKind`」成为**编译期**约束：枚举侧一改，`tsc` 当场红。
+ *
+ * 为什么是**本地一份**而不是从 `src/core/types/enums.ts` 导入数组：`enums.ts` 只导出**类型**
+ * `ProjectKind`（`:106`）与 `DEFAULT_PROJECT_KIND`（`:109`），**没有**运行时数组 —— 服务端若要
+ * 「值」就只能自己声明一份。刻意**不**去 `enums.ts` 加数组：那是 T01 已冻结的跨端契约文件，
+ * 在服务端任务里改它属于跨任务范围扩张（且会牵动前端 import 面）。
+ *
+ * ⚠️ 注意 `.includes()` 不能在 `readonly ['human','agent']` 上收 `string`，故**在调用点**放宽为
+ * `readonly string[]`（见 `isProjectKind`）—— 放宽的是「查询参数」的类型，**不是白名单本身**，
+ * 所以上面的漂移守卫依然生效。
+ */
+const PROJECT_KINDS = ['human', 'agent'] as const satisfies readonly ProjectKind[];
+
+/** 值域判定（入参是任意 `string`，须能测「不在白名单」）。 */
+const isProjectKind = (value: string): boolean =>
+  (PROJECT_KINDS as readonly string[]).includes(value);
 
 export function registerProjectRoutes(app: FastifyInstance, db: Database.Database): void {
   // GET /projects?status=&keyword=
@@ -187,7 +212,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       // ★ 只在**真的发生变化**时启用本门；kind 未变化（含完全没传）→ 与今天逐字一致，
       //   不引入任何新校验（零回归的硬要求：老客户端的普通 PATCH 不受任何影响）。
       if (nextKind !== existing.kind) {
-        if (!PROJECT_KINDS.includes(nextKind)) {
+        if (!isProjectKind(nextKind)) {
           void reply.status(400);
           return invalidField(
             `归属侧 kind 只接受 'human' / 'agent' 两个取值，收到「${nextKind}」。` +

@@ -56,6 +56,7 @@ import { buildCreatedStage } from '../../src/core/agent/stage-resolve';
 import { validateAgentPayload } from '../../src/core/types/agent-payload';
 import type { AgentPayloadV1 } from '../../src/core/types/agent-payload';
 import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../../src/core/types/enums';
+import type { ProjectKind } from '../../src/core/types/enums';
 import type { StageTemplateItem } from '../../src/core/types/dto';
 import type { Project, Stage } from '../../src/core/types/entities';
 /**
@@ -678,7 +679,10 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           // 服务端**不做回落**（回落口径只在 `stage-fallback.ts` 一处，避免两套规则漂移）。
           domain,
           // ★ 归属侧恒 'agent'。这是「新建一条 agent 记录」，不是「把某条人类记录改成 agent」。
-          kind: 'agent',
+          //   末尾的 `satisfies ProjectKind` 是**编译期锚定**（运行时零开销、值不变）：归属侧
+          //   只有 `enums.ts` 一处定义，若哪天有人把 `'agent'` 改名/删掉，本行当场红 —— 而不是
+          //   静默把「类型系统里已不存在的值」写进 `projects.kind`（隔离谓词的判据）。
+          kind: 'agent' satisfies ProjectKind,
           // 纯 stageNames 建板 → null：'custom' 是**人工建档**在阶段池里增删后的归属，
           // Agent 建板没走池子 ⇒ 落 null 更诚实。观感无差异：读时回落
           // `resolveProjectDomain(null)` 与 `resolveProjectDomain('custom')` 都落 indoor。

@@ -109,11 +109,20 @@ export const AGENT_API_TOKEN_ENV = 'IDPLAN_AGENT_API_TOKEN';
 // 模块加载即告警（fail-closed）：未配置 = `/api/agent/*` 全拒，必须在启动日志里可见，
 // 否则用户只会看到 Skill 报「ID Plan 未运行」，而真相是「服务活着但没配 token」——
 // 这正是 V1-13 要防的「假无响应」。
+//
+// ⚠️ **下面这串端点名是「必须与 `server/routes/agent.routes.ts` 的实际注册清单逐字对账」的**，
+//    不是装饰性文案：告警的存在理由就是让用户能在启动日志里**认出**他刚踩的那个 401 属于哪个
+//    端点。漏一个端点 = 让 V1-13 的「假无响应」在该端点上**原样复发**（Skill 拿到 401，用户在
+//    日志里找不到任何提到它的线索，又回到「是不是 ID Plan 没起来」）。
+//    v0.8 · T04-SRV 已按对账补上 `POST /api/agent/boards`（同一 `requireAgentToken` ⇒ 未配
+//    token 时同样全拒，同样会 401）。
+//    **新增 `/api/agent/*` 端点时，本行必须同批更新**；定期核对方式（以实际注册为准，不以人记为准）：
+//      grep -n "scope\.\(get\|post\|put\|patch\|delete\)('/api/agent" server/routes/agent.routes.ts
 if (typeof process !== 'undefined' && !(process.env[AGENT_API_TOKEN_ENV] ?? '').trim()) {
   // eslint-disable-next-line no-console -- 启动告警必须走 stdout，不走 app logger（模块加载早于 app 创建）
   console.warn(
     `[IDPLAN-SECURITY] 环境变量 ${AGENT_API_TOKEN_ENV} 未配置：` +
-      '/api/agent/import、/api/agent/health、/api/agent/tasks 将拒绝所有请求（fail-closed）。' +
+      '/api/agent/import、/api/agent/health、/api/agent/tasks、/api/agent/boards 将拒绝所有请求（fail-closed）。' +
       `WorkBuddy 侧的 Agent 同步功能需在服务端配置该共享密钥后重启（与备份用的 ${AGENT_TOKEN_ENV} 相互独立）。`,
   );
 }
