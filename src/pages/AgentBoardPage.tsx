@@ -62,7 +62,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AlertTriangle, ClipboardPaste, FileOutput, Plug } from 'lucide-react';
+import { AlertTriangle, ClipboardPaste, FileOutput, Plug, Plus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
@@ -96,6 +96,7 @@ import {
 } from '../constants/agentTerms';
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
 import { AgentBoardList } from '../components/agent/AgentBoardList';
+import { CreateAgentBoardDialog } from '../components/agent/CreateAgentBoardDialog';
 import {
   AgentIngressPanel,
   LOOPBACK_ORIGIN,
@@ -311,6 +312,14 @@ export function AgentBoardPage(): JSX.Element {
   const [loaded, setLoaded] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const [handoffOpen, setHandoffOpen] = useState(false);
+  /**
+   * 「新建 Agent 看板」弹窗（§6.1 时序图第 1 步）。
+   *
+   * ⚠️ **不用** `useRoleGuard` 拦它：§7.4 的权限表明定「创建 Agent 看板 ✅✅」
+   * （member 与 admin 皆可，`createAgentBoard` 不做 admin 校验）。真正受限的是**接管**
+   * （那个在 `TransferDialog` 里判 admin）。在这里加门控会造出一个设计上不存在的限制。
+   */
+  const [createOpen, setCreateOpen] = useState(false);
   /**
    * ★ §7.5：**本页自己的 Agent 看板集合**（局部 state），由 `loadAll` 直读 repo 后就地收窄填充。
    *
@@ -656,6 +665,33 @@ export function AgentBoardPage(): JSX.Element {
               ))}
             </select>
             {/*
+              「新建 Agent 看板」（§6.1 时序图第 1 步）。
+
+              ── 为什么这里**也要**一个入口，而空态里已经有一个 ──
+                空态（`AgentBoardList`）只在 `agentBoards.length === 0` 时渲染。用户建了
+                第一块之后空态就消失，若不在这里留入口，「再建一块」就**没有**任何可达路径
+                ——`createAgentBoard` 会变成只能建第一块的服务（可测性上完全看不出来，
+                因为单测/验收都从空库开始）。
+
+              ── 为什么不用 `disabled={…}` 按角色关掉 ──
+                §7.4 权限表：创建 Agent 看板对 member 与 admin 都是 ✅（`createAgentBoard`
+                不做 admin 校验）。真正受限的是接管（在 `TransferDialog` 里判）。见 `createOpen`
+                声明处的注释。
+
+              ── 视觉分档 ──
+                白底描边=次要操作（与「导入任务」同档）。它不抢「生成交接包」（主操作，pine 实底）
+                的注意力：建板是低频的一次性动作，交接包是高频的日常动作。
+            */}
+            <button
+              type="button"
+              data-agent-create-open=""
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl border border-line bg-paper px-4 text-sm text-ink transition-colors hover:bg-sunken"
+            >
+              <Plus size={14} aria-hidden />
+              新建 Agent 看板
+            </button>
+            {/*
               「导入任务」= WorkBuddy 排期入口（画板 06/07 的第二位按钮，白底描边=次要操作）。
 
               ★ 本按钮打开的是**接入配置面板**（通道配置），不是手动粘贴面板。
@@ -702,8 +738,17 @@ export function AgentBoardPage(): JSX.Element {
            *
            * ★ 空态**绝不**回退去显示人类项目：库里只有人类项目时，本页就显示空态。
            *   这正是 v0.8 要修掉的那条（Agent 页曾经列出一堆人类项目、看起来像"数据串味了"）。
+           *
+           * ★ `onCreate` 从这里接上（§6.1 时序图第 1 步「点『新建 Agent 看板』」）：
+           *   不接的话空态只会描述"外部写入方接上后会建板"，而用户手动建板这条路
+           *   在界面上**根本不存在**（`createAgentBoard` 会成为一个没有入口的服务）。
            */
-          <AgentBoardList boards={[]} currentId={null} onSelect={() => undefined} />
+          <AgentBoardList
+            boards={[]}
+            currentId={null}
+            onSelect={() => undefined}
+            onCreate={() => setCreateOpen(true)}
+          />
         ) : (
           <>
         {/*
@@ -978,6 +1023,27 @@ export function AgentBoardPage(): JSX.Element {
           </>
         )}
       </div>
+
+      {/*
+        「新建 Agent 看板」弹窗（§6.1 时序图第 1–3 步）。
+        ★ **无角色门控**（与下面的接入面板正相反）：§7.4 明定创建对 member 也可。
+      */}
+      {createOpen && (
+        <CreateAgentBoardDialog
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          /*
+           * 建完即选中（§6.1 时序图第 9 步：`P->>V: selectAgentProjects()`）。
+           *
+           * 只做一件事：`setCurrentProject(新 id)`。**不**在这里再调 `loadProject` ——
+           * 下面的选中 effect 已经负责"选中就装阶段/任务"，此处再调就是两份装载逻辑，
+           * 而后者的 `agentBoards` 派生日志恰好是"新看板能不能被认出来"的唯一判据：
+           * store action 已经 `putProject` 过（同步写），故下一帧 `useAgentProjects()`
+           * 就包含它，effect 会看到 `isAgentBoard === true` 并照常装载。
+           */
+          onCreated={(id) => setCurrentProject(id)}
+        />
+      )}
 
       {/*
         接入配置面板（v0.7 · T03-B 接线）。
