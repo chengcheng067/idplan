@@ -280,10 +280,97 @@ const NEW_TOKEN = 'refs-new';
  */
 const PLANNED_NEW_HEADING_RE = /新增\s*[（(]\s*\d|新建\s*[（(]\s*\d|新增文件|新建文件|计划新建|待创建文件/;
 
-/** 从标题/加粗小标签里取「声明的数量」，用于与实列条数对账。兼容「新增（17）」与「新增（13 个）」。 */
-const DECLARED_COUNT_RE = /[（(]\s*(\d+)\s*(?:个|项|条|处|份|只|份)?\s*[)）]/;
+/**
+ * 从标题/加粗小标签里取「声明的数量」，用于与实列条数对账。
+ * 兼容三种真实写法：「新增（17）」「新增（13 个）」「修改（33 个文件）」。
+ * 最后一种（量词后又带名词）必须支持 —— 本仓库附录 A 正是 `**修改（33 个文件）**`，
+ * 旧正则只吃到「个」就要求右括号，故对它是 null ⇒ 那条清单**从来没被对账过**。
+ * 尾部名词用**显式小词表**而非 `[^)）]*` 通配：宁可漏认，也不要在无关括号上误认。
+ */
+const DECLARED_COUNT_RE = /[（(]\s*(\d+)\s*(?:个|项|条|处|份|只|页|次|张)?\s*(?:文件|条目|小节|章节|处|项|条|张|份)?\s*[)）]/;
+
+/**
+ * 取出声明括号里的**单位**。返回 'file' 表示声明的单位是「文件」。
+ *
+ * 为什么必须区分单位（真实案例，v0.7-系统设计与任务分解-合并范围.md 附录 A）：
+ * 标题写 `**修改（33 个文件）**`，而表格只有 **29 行**。文档自己第 1891 行解释了口径：
+ * 「27 个单文件行 + `electron/` 2 个 + 既有 spec 4 个 = 33」—— 即
+ *   · 第 1888 行 1 行打包了 2 个文件（`electron/main.cjs` / `electron/preload.cjs`）
+ *   · 第 1889 行 1 行写明「等 4 个既有 spec」，但只点名 1 个
+ * **文档是对的**：它数的是**文件**，而工具能枚举的结构是**行/条目**，两者本就不可直接比对。
+ * 若强行比行数，就会在正确文档上报 29≠33 —— 正是本工具最不能犯的「在正确输入上误报」。
+ * 故单位是「文件」时**不做判定**，如实报为「不可对账」（见下），而不是猜一个数去比。
+ */
+function declaredUnit(headingText) {
+  if (!headingText) return null;
+  const m = headingText.match(
+    /[（(]\s*\d+\s*(?:个|项|条|处|份|只|页|次|张)?\s*([文件条目小节章节处项条张份]*)\s*[)）]/,
+  );
+  if (m && m[1] && m[1].includes('文件')) return 'file';
+  return null;
+}
+
+/**
+ * 哪些标题/加粗小标签**参与数量对账**。
+ *
+ * 为什么必须带「新增/新建/修改/变更/删除」这类**清单语义关键词**，而不能只凭 `DECLARED_COUNT_RE`：
+ * 真实文档里有大量**恰好也带括号数字、但根本不是清单条数**的标题，例如
+ *   `### R2 · 🔴 Dexie version(2).stores() 会整体替换索引定义（必守）` ← 那个 (2) 是版本号
+ *   `#### ⚠️ 19 → 31 的差额（12 处）是什么`                       ← 那 12 处不是 12 个条目
+ *   `## 3.2 用户故事（5 个）`                                     ← 正文散文，不是列表
+ * 只按「括号里有数字」就对账，会在这类标题上批量误报 —— 而**在正确输入上误报的关卡会被关掉**，
+ * 那等于这个能力不存在。故此处刻意收窄到「清单语义 + 括号数量」。
+ *
+ * 覆盖范围：新增（17）／修改（32）／新增文件（26）／修改文件（37）等；
+ * 「新增（N）」同时决定**存在性豁免**（见 PLANNED_NEW_HEADING_RE），
+ * 而「修改（N）」**不豁免存在性** —— 被修改的文件本来就该存在、必须照常校验。
+ * 这两件事必须分开：若把「修改」并入 PLANNED_NEW_HEADING_RE，§4.2 整节会退化成 ➖，
+ * 等于放掉「开发者照着改的那张表」的全部校验。
+ */
+const COUNTED_HEADING_RE = /新增|新建|修改|变更|删除/;
+
+/**
+ * 块级条目判定（对账口径：**条目数**，不是**引用数**）。
+ *
+ * 起因（真实误报，2026-09，v0.8 §4.1）：第 3 行是
+ *   `| 3 | ★ \`src/core/color/derive-stage-colors.ts\` | …（与工作区根 \`tmp/build_palette2.py\` 逐行对齐）… |`
+ * 一行里有两个 code span ⇒ 旧口径数成 2 ⇒ 18 ≠ 声明 17 ⇒ **在正确的文档上报错**。
+ * 而该小节 `awk '/^### 4\.1/,/^### 4\.2/' | grep -cE '^\| *[0-9]+ \|'` 恰好 17 行，文档是对的。
+ *
+ * 口径（**只有这三类算条目**）：
+ *   · 表格数据行（`|…|`，排除 `|---|` 分隔行）
+ *   · 无序列表项（`-` / `*` / `+`）
+ *   · 顶层编号项（`1.` / `1)`）
+ * **正文行、引用块（`>`）等一律不算条目** —— 这正是 §4.2 那条
+ * `> **TBD-7b 裁决后的清单变动**（原 34 项 → 32 项）：…` 的性质：它是**旁注**，
+ * 里面顺带提到的 `dexie.database.ts` 不该让 32 变成 33。
+ * 同一行/同一项里的额外引用**照常逐个校验**，只是不参与计数。
+ */
+const TABLE_ROW_RE = /^\s*\|/;
+const TABLE_SEP_RE = /^\s*\|[\s:|-]+\|\s*$/; // |---|---| 分隔行，不是条目
+const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)])\s/; // 无序项 或 顶层编号项
+const LIST_CONT_RE = /^\s{2,}\S/; // 列表项的**续行**（缩进 ≥2）→ 并入所属条目，不新起一条
 
 const MODE = { INLINE: 'inline', INFERRED: 'inferred', LINK: 'link' };
+
+/**
+ * 本行属于哪个「块级条目」；`id` 为 null 表示本行**不构成条目**（正文 / 旁注 / 分隔行）。
+ * 同一列表项的续行返回**同一个** id，故「1 项写 3 行」仍只算 1 条。
+ */
+function blockIdForLine(i, scannable, currentItemBlock) {
+  const t = scannable.trim();
+  if (t === '') return { id: null, item: null };
+  if (TABLE_ROW_RE.test(scannable)) {
+    return TABLE_SEP_RE.test(scannable)
+      ? { id: null, item: null }
+      : { id: `row:${i}`, item: null };
+  }
+  if (LIST_ITEM_RE.test(scannable)) return { id: `item:${i}`, item: `item:${i}` };
+  if (LIST_CONT_RE.test(scannable) && currentItemBlock) {
+    return { id: currentItemBlock, item: currentItemBlock };
+  }
+  return { id: null, item: null }; // 正文 / 引用块：不是条目，不参与计数
+}
 
 /* ============================ 参数 ============================ */
 
@@ -534,8 +621,12 @@ function readHint(lineText, afterIndex) {
 /* ============================ 小节上下文（计划新建） ============================ */
 
 /**
- * 维护「当前标题栈」。传入本行原文，若该行是标题则更新栈，返回是否命中「计划新建」小节。
- * 返回命中的标题文本（作为分组 key），未命中返回 null。
+ * 维护「当前标题栈」。传入本行原文，若该行是标题则更新栈。
+ *
+ * 返回两个**不同用途**的 key（刻意不合并，见 COUNTED_HEADING_RE 的注释）：
+ *   · plannedKey —— 命中「新增/新建」清单语义的标题 → 该节引用按**预期不存在**豁免（➖）
+ *   · countKey   —— 命中「清单语义 + 括号数量」的标题 → 该节参与**条目数对账**
+ * 二者对「新增（17）」是同一个标题；对「修改（32）」只有 countKey 命中（存在性照常校验）。
  */
 function trackHeadings(headings, lineText) {
   const m = lineText.match(/^(#{1,6})\s+(.+?)\s*$/);
@@ -544,15 +635,21 @@ function trackHeadings(headings, lineText) {
     headings[level] = m[2];
     for (let l = level + 1; l <= 6; l++) delete headings[l];
   }
-  // 从**最深**的标题向上找：命中「新增/新建」的那个标题即为归属小节。
+  // 从**最深**的标题向上找：命中的那个标题即为归属小节。
   // 不能只看最深一级 —— 「### 4.1 新增（17）」下面还可能有「#### 4.1.1 …」子标题，
   // 若只让最深一级裁决，那些子标题下的引用会漏判成 ❌。
   // 同级的「### 4.3 明确不改」会自然替换掉「### 4.1」，故不存在「新增小节吞掉明确不改」的问题。
+  let plannedKey = null;
+  let countKey = null;
   for (let l = 6; l >= 1; l--) {
     const text = headings[l];
-    if (text && PLANNED_NEW_HEADING_RE.test(text)) return text;
+    if (!text) continue;
+    if (plannedKey === null && PLANNED_NEW_HEADING_RE.test(text)) plannedKey = text;
+    if (countKey === null && COUNTED_HEADING_RE.test(text) && declaredCount(text) != null) {
+      countKey = text;
+    }
   }
-  return null;
+  return { plannedKey, countKey };
 }
 
 /** 从「新增（17）」这类标题里取声明数量；取不到返回 null。 */
@@ -751,6 +848,7 @@ const ICON = {
   'planned-new-bare': '⚠️',
   'count-warn': '⚠️',
   'count-mismatch': '❌',
+  'count-unreconcilable': '➖',
 };
 
 function failStatuses(opts) {
@@ -845,10 +943,18 @@ function main() {
     // 大量用它分节（附录 A 就是 `**新增（13 个）**` / `**修改（33 个文件）**` / `**明确不改（本轮）**`）。
     let boldPlanned = false;
     // 「加粗小标签」小节也要能对账：boldPlanned 决定本行是否按「计划新建」处理，
-    // 但 boldSectionKey 必须像标题栈那样**持续到下一个标题 / 下一个加粗小标签**，
-    // 否则 `**新增（13 个）**` 下面列表里的引用拿到 sectionKey=null → 对上账永远不触发
+    // 而 boldCountKey 决定本行归属哪个**待对账**小节，必须像标题栈那样
+    // **持续到下一个标题 / 下一个加粗小标签**，否则 `**新增（13 个）**` 下面列表里的引用
+    // 拿到 countKey=null → 对账永远不触发
     // （附录 A 正是 `**新增（N）**` / `**修改（N 个文件）**` / `**明确不改（本轮）**` 三段加粗小标签）。
-    let boldSectionKey = null;
+    let boldCountKey = null;
+    // ⚠️ 加粗小标签必须能**顶掉**祖先标题对账：否则
+    //     `## 修改（5）` … `**修改（7 个文件）**` 这种「标题下面再挂一个加粗清单」的写法，
+    //     加粗清单里的条目会被算进上面那个**已过时的标题**（实测：5 变 3、下面的 7 完全不报）。
+    //     故用一个显式作用域标志：处于加粗小标签作用域内时，对账 key 只认加粗标签，不再回落到标题栈。
+    let boldScopeActive = false;
+    // 当前列表项条目的 id（供 blockIdForLine 判断「续行并入本项」）
+    let currentItemBlock = null;
     for (let i = 0; i < lines.length; i++) {
       const lineText = lines[i];
       // 围栏判定**只此一处**（见 scanFenceLine）：行中开/合栏也认，且返回等长的可校验文本。
@@ -863,19 +969,32 @@ function main() {
       const isHeading = /^#{1,6}\s/.test(scannable);
       const boldMarker = scannable.match(/^\s*\*\*([^*]+)\*\*\s*$/);
       if (boldMarker) {
+        boldScopeActive = true;
         boldPlanned = PLANNED_NEW_HEADING_RE.test(boldMarker[1]);
-        boldSectionKey = boldPlanned ? boldMarker[1] : null;
+        boldCountKey =
+          COUNTED_HEADING_RE.test(boldMarker[1]) && declaredCount(boldMarker[1]) != null
+            ? boldMarker[1]
+            : null;
       }
-      if (isHeading) { boldPlanned = false; boldSectionKey = null; } // 真标题取代加粗小标签的作用域
+      if (isHeading) {
+        // 真标题取代加粗小标签的作用域
+        boldScopeActive = false;
+        boldPlanned = false;
+        boldCountKey = null;
+      }
 
       // 标题栈只按「非围栏文本」维护（围栏里的 `# 注释` 不是标题）；
       // 一律用 scannable —— 它与 lineText **等长**，故 extractRefsFromLine/readHint 的下标仍然对齐。
-      const plannedHeading = trackHeadings(headings, scannable);
+      const { plannedKey, countKey } = trackHeadings(headings, scannable);
       const inlineNew = scannable.includes(NEW_TOKEN);
-      const planned = Boolean(plannedHeading) || boldPlanned || inlineNew;
-      const sectionKey = plannedHeading
-        || boldSectionKey
-        || (inlineNew ? '（行内 refs-new 标记）' : null);
+      const planned = Boolean(plannedKey) || boldPlanned || inlineNew;
+      // 对账用的 countKey：处于加粗小标签作用域内时只认加粗标签（它能顶掉祖先标题），
+      // 否则用标题栈里最近一个「清单语义 + 括号数量」的标题。
+      const sectionKey = boldScopeActive ? boldCountKey : countKey;
+
+      // 块级条目：本次累计「本行是否新增了一个条目」，供对账按**条目数**而非**引用数**统计
+      const block = blockIdForLine(i, scannable, currentItemBlock);
+      currentItemBlock = block.item;
 
       const refs = extractRefsFromLine(scannable);
       const ignoreSpec = parseIgnore(scannable);
@@ -903,11 +1022,13 @@ function main() {
           continue;
         }
 
-        if (sectionKey && ref.path) {
+        // 对账按**块级条目数**统计（不是引用条数、也不是不同路径数）：
+        // 同一行/同一项里多写几个引用不改变条目数，但那几个引用**上面照常逐个校验过**。
+        if (sectionKey && ref.path && block.id) {
           if (!sections.has(sectionKey)) {
-            sections.set(sectionKey, { declared: declaredCount(sectionKey), paths: new Set() });
+            sections.set(sectionKey, { declared: declaredCount(sectionKey), blocks: new Set() });
           }
-          sections.get(sectionKey).paths.add(ref.path);
+          sections.get(sectionKey).blocks.add(block.id);
         }
 
         if (opts.list) {
@@ -921,9 +1042,16 @@ function main() {
     }
 
     // 「声明 N 个 / 实列 M 个」对账 —— 本类计数错误在本项目已发生 4 次以上
+    // 口径：M = 本节的**块级条目数**（表格数据行 / 列表项各算 1 条；正文与旁注不计）
     for (const [key, sec] of sections) {
       if (sec.declared == null) continue;
-      const listed = sec.paths.size;
+      const listed = sec.blocks.size;
+      // 声明单位是「文件」时，枚列单位（行/条目）与它不同构（一行可能打包 N 个文件），
+      // **不做判定**：不猜、也不报假错，只如实标注「不可对账」。
+      if (declaredUnit(key) === 'file') {
+        countChecks.push({ doc, heading: key, declared: sec.declared, listed, status: 'count-unreconcilable' });
+        continue;
+      }
       if (listed !== sec.declared) {
         countChecks.push({
           doc,
@@ -984,7 +1112,12 @@ function main() {
     out.push('── 「声明 N 个 / 实列 M 个」对账');
     for (const c of countChecks) {
       out.push(`${ICON[c.status] || '·'} ${c.heading}`);
-      out.push(`     · 标题声明 ${c.declared} 个，本节实际列出 ${c.listed} 个不同路径`);
+      out.push(`     · 标题声明 ${c.declared} 个，本节实际列出 ${c.listed} 个条目（只数表格数据行与列表项；正文/旁注行不计，同行额外引用照常校验但不计数）`);
+      if (c.status === 'count-unreconcilable') {
+        out.push('     · 声明单位是「文件」而可枚举的结构是「行/条目」，一行可能打包 N 个文件（如「`a.cjs` / `b.cjs`」、「…等 4 个」）');
+        out.push('     · ⇒ 二者不同构，**本工具不做判定**（不猜、也不报假错）—— 需人工核对两列');
+        continue;
+      }
       out.push(`     · 差异 ${c.listed - c.declared >= 0 ? '+' : ''}${c.listed - c.declared}${c.status === 'count-mismatch' ? '（--strict-counts：计入失败）' : '（默认只告警；加 --strict-counts 可计入失败）'}`);
     }
     out.push('');
