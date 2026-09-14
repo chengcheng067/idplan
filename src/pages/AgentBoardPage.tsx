@@ -75,6 +75,13 @@ import {
   groupTasksForHuman,
   type HumanBoardGroup,
 } from '../core/agent/board';
+/*
+ * ★ 第 28 处漏斗旁路修复（设计 §7.5）—— 本页的 Agent 看板集合走**单一谓词出口**。
+ * `useAgentProjects` 是订阅式（随 store 更新），`visibleProjectsFor` 是纯函数
+ * （给 `loadAll` 直读 repo 的结果就地收窄用）。二者共用 `visibility.ts::projectKindOf`
+ * —— 全仓唯一允许判 `kind` 的地方，故本页不会出现第二份 kind 判定。
+ */
+import { useAgentProjects, visibleProjectsFor } from '../core/project/visibility';
 import { useRepos } from '../hooks/useRepos';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { useAgentStore } from '../store/useAgentStore';
@@ -88,6 +95,7 @@ import {
   type AgentTermMode,
 } from '../constants/agentTerms';
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
+import { AgentBoardList } from '../components/agent/AgentBoardList';
 import {
   AgentIngressPanel,
   LOOPBACK_ORIGIN,
@@ -271,7 +279,17 @@ function BoardModeTabs({
 
 export function AgentBoardPage(): JSX.Element {
   const repos = useRepos();
-  const projects = useProjectsStore((s) => s.projects);
+  /**
+   * ★ 第 28 处漏斗旁路修复（设计 §7.5）—— 本页的 Agent 看板集合走**单一谓词出口**。
+   *
+   * 旧实现是 `useProjectsStore((s) => s.projects)`：页面直接订阅**全量**项目，
+   * 于是人类项目出现在 Agent 页的项目下拉里（§7.2 #20「现状最刺眼处」），
+   * 而且它是"页面直读 store.projects"这一坏样例最容易被照抄的位置（§7.5 的防模仿守卫要抓的正是它）。
+   *
+   * 现在改为 `useAgentProjects()`：kind 判定只发生在 `visibility.ts::projectKindOf`
+   * （全仓唯一），原始读点也只在那个文件里 —— 守卫 spec 的白名单内。
+   */
+  const funnelAgentBoards = useAgentProjects();
   const stages = useProjectsStore((s) => s.stages);
   const tasks = useProjectsStore((s) => s.tasks);
   /** 接入面板的动作反馈（保存/复制令牌）走全站既有 toast 通道，不另造提示条 */
@@ -293,6 +311,17 @@ export function AgentBoardPage(): JSX.Element {
   const [loaded, setLoaded] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const [handoffOpen, setHandoffOpen] = useState(false);
+  /**
+   * ★ §7.5：**本页自己的 Agent 看板集合**（局部 state），由 `loadAll` 直读 repo 后就地收窄填充。
+   *
+   * 为什么可以直读全量、却**不能**写回 store：
+   *   · 本页需要全量才能筛出 Agent 看板（这正是 Agent 页要看的东西）；
+   *   · 但 `store.projects` 的**唯一写入者**是 `useRepos.ts::bootstrapAllStores()`
+   *     （设计 §7.1 纪律 2）。旧 `loadAll` 把全量 `setState` 进 store，会让 §7.2 的 27 项
+   *     接线**全部白做**——此后任何一个人类侧页面忘了过滤就会拿到 Agent 数据，且**不报错**。
+   *   故：全量结果只落在本 state，本页**不再**成为人类侧数据的来源。
+   */
+  const [loadedAgentBoards, setLoadedAgentBoards] = useState<readonly Project[]>([]);
 
   /* ------------------------------ 接入配置面板（v0.7 · T03-B 接线） ------------------------------ */
 
@@ -404,17 +433,44 @@ export function AgentBoardPage(): JSX.Element {
         bundle.projects.list({ status: 'all' }),
         bundle.members.list(true),
       ]);
-      useProjectsStore.setState((st) => ({
-        projects: projectRows,
-        stages: st.stages, // stages/tasks 按选中项目在 loadProject 中刷新
-        tasks: st.tasks,
-      }));
+      /*
+       * ★★ 第 28 处漏斗旁路修复（设计 §7.5）★★
+       *
+       * 这里**删掉**了原来的一整块：
+       *     useProjectsStore.setState((st) => ({ projects: projectRows, stages: st.stages, tasks: st.tasks }));
+       * 它把**全量**项目（含人类项目）灌进全局 store，绕过 `visibility.ts` 的单一漏斗。
+       * 危害不是"多写了一份数据"，而是**把旁路变成默认**：此后任何人类侧页面直读
+       * `store.projects` 都会拿到 Agent 数据，且不报错、不崩、tsc 不管 —— §7.2 的 27 项接线
+       * 只要有一处依赖"store 里只有该看的东西"就会静默失效。
+       *
+       * 现在：全量结果**就地按 kind 收窄**（经同一谓词 `visibleProjectsFor('agent', …)`，
+       * 不自己写 `p.kind === 'agent'`，避免出现第二份 kind 判定），只进本页局部 state。
+       * `stages` / `tasks` 也不再自赋自（原来那两行是 `st.stages`/`st.tasks` 原样写回 = no-op）。
+       */
+      setLoadedAgentBoards(visibleProjectsFor('agent', projectRows));
       useMembersStore.getState().setAll(memberRows);
       setLoaded(true);
     },
     [],
   );
 
+  /**
+   * 选中看板后，把它名下的阶段 / 任务拉进 store。
+   *
+   * ── 为什么这里的 `useProjectsStore.setState({ stages, tasks })` 是**保留**的（设计 §7.5）──
+   * §7.5 要删的是 **`projects` 的写入**，不是 stages/tasks。三条理由：
+   *   ① 形态不同：这里是**按 projectId 局部替换**（先滤掉本项目的旧行再并入新行），
+   *      不是"全量灌入"；因此不存在"把别的看板的数据顺手带进来"这种失效模式。
+   *   ② 不构成旁路：stages/tasks 没有 kind 字段，它们的归属靠 `projectId → projects` 反查；
+   *      人类侧读它们走的是 `useVisibleStages('human')` / `useVisibleTasks('human')`
+   *      （按 human 的 projectId 集合收窄），本页写这两行不会让人类侧多看到任何东西。
+   *   ③ 既有契约：任务抽屉 / 交接包等既有组件读的就是 store 里的 stages / tasks。
+   *      把它们改成局部 state 会把一份数据源拆成两份（同一事实两处来源），
+   *      那是比"保留一次局部替换"大得多的改动，**不在本任务范围**。
+   *
+   * ⚠️ 若将来要把这两行也搬走，必须**同时**改掉所有读 `store.stages` / `store.tasks` 的既有
+   * 消费点，并重新论证它们的 kind 收窄 —— 单独删这一处只会让抽屉与交接包读不到数据。
+   */
   const loadProject = useCallback(
     async (bundle: IRepositoryBundle, projectId: string): Promise<void> => {
       const [stageRows, taskRows] = await Promise.all([
@@ -433,17 +489,41 @@ export function AgentBoardPage(): JSX.Element {
     void loadAll(repos);
   }, [loadAll, repos]);
 
-  // 选中项目（URL 无状态；首次进入取第一个项目）
+  /**
+   * 本页渲染用的 Agent 看板集合 = 漏斗出口 ∪ 本页装载时的局部快照（按 id 去重）。
+   *
+   * 为什么取并集而不是二选一：
+   *   · 漏斗（`useAgentProjects`）是 `store.projects` 的**唯一合法视图**，bootstrap 后即有、
+   *     且随 store 更新；
+   *   · 局部快照（`loadedAgentBoards`）是本页 `loadAll` 直读 repo 的**最新**结果 ——
+   *     刚建的看板已经在库里、却还没进 store（store 只在 bootstrap 时被写），只有它也认，
+   *     用户才能"建完即见"。
+   * 两条来源都经同一谓词收窄（前者在 `visibility.ts`，后者用 `visibleProjectsFor`），
+   * 故并集**不可能**漏进人类项目。
+   */
+  const agentBoards = useMemo(() => {
+    const seen = new Set(funnelAgentBoards.map((p) => p.id));
+    return [...funnelAgentBoards, ...loadedAgentBoards.filter((p) => !seen.has(p.id))];
+  }, [funnelAgentBoards, loadedAgentBoards]);
+
+  // 选中看板（URL 无状态；首次进入取第一块 Agent 看板）
   useEffect(() => {
     if (!loaded) return;
-    const target = currentProjectId ?? projects[0]?.id ?? null;
+    // ★ 只认 Agent 看板：`currentProjectId` 可能是历史遗留 / 深链带来的**人类项目** id。
+    //   若原样喂给下面的派生，Agent 页会渲染人类项目的阶段与任务 ——
+    //   这正是 §7.2 #20/#21 要堵的**反向泄漏**（人类数据出现在 Agent 侧）。
+    const isAgentBoard =
+      currentProjectId !== null && agentBoards.some((b) => b.id === currentProjectId);
+    // 陈旧选择先清掉：否则手动粘贴面板 / 交接包会拿着这个 id 去操作人类项目
+    if (currentProjectId !== null && !isAgentBoard) setCurrentProject(null);
+    const target = (isAgentBoard ? currentProjectId : null) ?? agentBoards[0]?.id ?? null;
     if (target && target !== currentProjectId) setCurrentProject(target);
     if (target) void loadProject(repos, target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, projects, currentProjectId]);
+  }, [loaded, agentBoards, currentProjectId]);
 
   /* ------------------------------ 派生 ------------------------------ */
-  const project: Project | undefined = projects.find((p) => p.id === currentProjectId);
+  const project: Project | undefined = agentBoards.find((p) => p.id === currentProjectId);
   const projectStages = useMemo(
     () => stages.filter((s) => s.projectId === currentProjectId),
     [stages, currentProjectId],
@@ -552,14 +632,24 @@ export function AgentBoardPage(): JSX.Element {
           </h1>
           <BoardModeTabs mode={agentBoardMode} onChange={changeMode} />
           <div className="ml-auto flex flex-wrap items-center gap-2.5">
+            {/*
+              看板选择器（§7.2 #20）：**只列 Agent 看板**。
+
+              旧实现列的是 `projects` 全量（人类项目也在里面）—— 设计 §7.2 表里
+              #20 备注的原话是「现状最刺眼处：下拉里是人类项目」。收窄后：
+                · 空集时给一句明确文案，而不是"（暂无项目）"（后者会让用户以为
+                  自己的项目丢了，实际是他的项目在另一个工作区）；
+                · `aria-label` 也从「选择项目」改成「选择 Agent 看板」，避免读屏把
+                  它读成人类项目选择器。
+            */}
             <select
               value={currentProjectId ?? ''}
               onChange={(e) => setCurrentProject(e.target.value || null)}
-              aria-label="选择项目"
+              aria-label="选择 Agent 看板"
               className="h-[38px] min-w-0 max-w-[240px] rounded-2xl border border-line bg-paper px-3.5 text-sm text-ink outline-none focus:border-pine"
             >
-              {projects.length === 0 && <option value="">（暂无项目）</option>}
-              {projects.map((p) => (
+              {agentBoards.length === 0 && <option value="">（暂无 Agent 看板）</option>}
+              {agentBoards.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -600,6 +690,22 @@ export function AgentBoardPage(): JSX.Element {
           </div>
         </div>
 
+        {agentBoards.length === 0 ? (
+          /*
+           * ★ B16：库里**一块 Agent 看板都没有**时的明确空态（设计 §12.5 把这条列为
+           * 「现状最刺眼的问题」）。
+           *
+           * 为什么必须在**页面层**判空，而不是让下面的四组 / 七列泳道自己渲染成空：
+           *   空的四组会显示一排「—」，用户分不清"是我把数据弄丢了"还是"这里本来就该是空的"。
+           *   空态由 `AgentBoardList` 承载 —— 同一句空态文案的**唯一出处**（侧栏复用同一个
+           *   组件 ⇒ 不会出现两套措辞）。
+           *
+           * ★ 空态**绝不**回退去显示人类项目：库里只有人类项目时，本页就显示空态。
+           *   这正是 v0.8 要修掉的那条（Agent 页曾经列出一堆人类项目、看起来像"数据串味了"）。
+           */
+          <AgentBoardList boards={[]} currentId={null} onSelect={() => undefined} />
+        ) : (
+          <>
         {/*
           指标卡行 —— **仅技术模式**。
           它按 agentKind 聚合、字样含 `human` / `agent`，与人话模式的铁律
@@ -867,6 +973,8 @@ export function AgentBoardPage(): JSX.Element {
                 );
               })}
             </div>
+          </>
+        )}
           </>
         )}
       </div>
