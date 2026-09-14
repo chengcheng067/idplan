@@ -32,6 +32,7 @@ import {
   type GridDay,
 } from './calendarGrid';
 import { stageSolidOf, bandOutlineOf } from './calendarColors';
+import { customStageColor } from '../timeline/stageColorKey';
 import type { CalendarEntry } from './calendarMath';
 
 /**
@@ -118,32 +119,44 @@ export function MonthDayCell({
       <div className={cn('flex min-w-0 flex-1 flex-col gap-[3px] overflow-hidden', !day.inMonth && 'opacity-70')}>
         {/* 折叠态：只画前 limit 条纯色带（画板 14 / 18-A） */}
         {!expanded &&
-          items.slice(0, limit).map((e) => (
-            <button
-              key={e.project.id}
-              type="button"
-              onClick={(ev) => {
-                ev.stopPropagation();
-                onOpen(e.project.id);
-              }}
-              title={`${e.project.name} · ${stageLabelOf(e)} · ${Math.round(e.percent)}%`}
-              className={cn(
-                // 色带：高 11（移动端画板 19）/ 14（桌面画板 14），圆角 6，撑满格宽
-                'block w-full shrink-0 rounded-[6px] transition-transform hover:scale-[1.02]',
-                isMobile ? 'h-[11px]' : 'h-[14px]',
-                // 未开始幽灵态（图例有「未开始」说明，此处保持语义一致）
-                e.isGhost && 'opacity-40',
-              )}
-              // 发丝描边（BUG-04）：浅色带（s5 芽白/s7 米白）在亮色格底上对比度仅 1.10，
-              // 深色带在暗色格底上同为 ~1.1，两侧主题都会「隐形」。描边取该阶段 stage-ink
-              // （天生与带面明度对立），与时间轴色带共用同一份实现。
-              style={{
-                backgroundColor: e.color,
-                boxShadow: bandOutlineOf(e.filterStageIndex, e.activeStage?.colorIndex).boxShadow,
-              }}
-              aria-label={`打开项目 ${e.project.name}`}
-            />
-          ))}
+          items.slice(0, limit).map((e) => {
+            // ★ 通路 B：判定 + `data-stage-key` 一次取齐（只写一半 ⇒ var() 解析为空 ⇒ 透明）
+            const { attrs: colorAttrs } = customStageColor(e.activeStage?.customColor);
+            return (
+              <button
+                key={e.project.id}
+                type="button"
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  onOpen(e.project.id);
+                }}
+                title={`${e.project.name} · ${stageLabelOf(e)} · ${Math.round(e.percent)}%`}
+                className={cn(
+                  // 色带：高 11（移动端画板 19）/ 14（桌面画板 14），圆角 6，撑满格宽
+                  'block w-full shrink-0 rounded-[6px] transition-transform hover:scale-[1.02]',
+                  isMobile ? 'h-[11px]' : 'h-[14px]',
+                  // 未开始幽灵态（图例有「未开始」说明，此处保持语义一致）
+                  e.isGhost && 'opacity-40',
+                )}
+                // 发丝描边（BUG-04）：浅色带（s5 芽白/s7 米白）在亮色格底上对比度仅 1.10，
+                // 深色带在暗色格底上同为 ~1.1，两侧主题都会「隐形」。描边取该阶段 stage-ink
+                // （天生与带面明度对立），与时间轴色带共用同一份实现。
+                // v0.8 通路 B：色值（background）来自 `calendarMath → entry.color`，
+                // 它已带过 customColor；这里再把 `customColor` 透传给描边出口，两者才不会分裂
+                // （带面走自定义色、描边却仍是内置 ink-rgb ⇒ 自定义色下描边完全不见）。
+                style={{
+                  backgroundColor: e.color,
+                  boxShadow: bandOutlineOf(
+                    e.filterStageIndex,
+                    e.activeStage?.colorIndex,
+                    e.activeStage?.customColor,
+                  ).boxShadow,
+                }}
+                {...colorAttrs}
+                aria-label={`打开项目 ${e.project.name}`}
+              />
+            );
+          })}
 
         {/* 折叠入口（§6.3）：拥挤时出现，点击**就地展开**，不跳页不弹窗。
             文案分档：画板 19（移动端专版）写「折叠为「+N」」，§6.3 写「折叠为「+N 个项目」」。
@@ -166,27 +179,38 @@ export function MonthDayCell({
           <div className="flex min-w-0 flex-col gap-[3px]">
             {/* 聚合带：高 20，圆角 10，浅底（画板 18-B 的 #EEF1F5 ≈ sunken「凹陷井」token） */}
             <span aria-hidden className="block h-[20px] w-full shrink-0 rounded-[10px] bg-sunken" />
-            {shownRows.map((e) => (
-              <button
-                key={`row-${e.project.id}`}
-                type="button"
-                onClick={(ev) => {
-                  ev.stopPropagation();
-                  onOpen(e.project.id);
-                }}
-                className="flex min-w-0 items-center gap-[6px] text-left"
-              >
-                {/* 色点 12 × 12，圆角 3，取该阶段「实心块」色（亮 = main / 暗 = lightBar） */}
-                <span
-                  aria-hidden
-                  className="h-[12px] w-[12px] shrink-0 rounded-[3px]"
-                  style={{ backgroundColor: stageSolidOf(e.filterStageIndex, e.activeStage?.colorIndex) }}
-                />
-                <span className="min-w-0 truncate text-[12px] text-ink">
-                  {e.project.name} · {stageLabelOf(e)}
-                </span>
-              </button>
-            ))}
+            {shownRows.map((e) => {
+              // ★ 通路 B（展开态清单色点）：与折叠态色带同一判定出口
+              const { attrs: colorAttrs } = customStageColor(e.activeStage?.customColor);
+              return (
+                <button
+                  key={`row-${e.project.id}`}
+                  type="button"
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    onOpen(e.project.id);
+                  }}
+                  className="flex min-w-0 items-center gap-[6px] text-left"
+                >
+                  {/* 色点 12 × 12，圆角 3，取该阶段「实心块」色（亮 = main / 暗 = lightBar） */}
+                  <span
+                    aria-hidden
+                    className="h-[12px] w-[12px] shrink-0 rounded-[3px]"
+                    style={{
+                      backgroundColor: stageSolidOf(
+                        e.filterStageIndex,
+                        e.activeStage?.colorIndex,
+                        e.activeStage?.customColor,
+                      ),
+                    }}
+                    {...colorAttrs}
+                  />
+                  <span className="min-w-0 truncate text-[12px] text-ink">
+                    {e.project.name} · {stageLabelOf(e)}
+                  </span>
+                </button>
+              );
+            })}
             {restAfterRows > 0 && (
               <span className="text-[12px] text-mist">还有 {restAfterRows} 个项目</span>
             )}

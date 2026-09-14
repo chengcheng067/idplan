@@ -3,8 +3,8 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { xOf, type TimelineRange } from '../../lib/date';
 import type { Stage, Task } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
-import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS, stageBandOutline } from './stageColors';
-import { resolveStageColorIndex } from '../../core/template/stage-fallback';
+import { stageBandColor, stageBandInkColor, stageBandOutline } from './stageColors';
+import { customStageColor } from './stageColorKey';
 import {
   STAGE_ACTIVE_STROKE,
   STAGE_GLOW_COLOR,
@@ -65,17 +65,27 @@ export function StageBar({
   }
 
   const w = Math.max(pxPerDay, xEnd - xStart);
-  // 颜色与 orderIndex 解耦：优先用阶段自带的 colorIndex（多阶段项目 1..9 循环色板），
-  // 缺失/越界时按 orderIndex 安全回落到 indoor_full 套餐对应色（读时回落范式，零迁移）。
-  const idx = resolveStageColorIndex(stage.orderIndex, stage.colorIndex);
-  // 阶段条是**宽面**（设计规格 §1.2）：亮色页用 lightBar、暗色页用 darkBar —— 即 --stage-band-sN。
+  // ── 三条取色出口（v0.8 A11 · ① 时间轴跨度色带；唯一同时消费三个出口的组件）──
+  // 颜色与 orderIndex 解耦：三个出口内部都先 `resolveStageColorIndex(orderIndex, colorIndex)`
+  // （多阶段项目 1..9 循环色板，缺失/越界时读时回落到 orderIndex 对应色）。
+  // 阶段条是**宽面**（设计规格 §1.2）：亮色页 lightBar / 暗色页 darkBar —— 即 --stage-band-sN；
   // 条内文字 / 子刻度线必须配 --stage-ink-sN，否则「芽白 / 米白」段上的白字会彻底看不见。
-  const fill = STAGE_BAND_COLORS[idx] ?? STAGE_BAND_COLORS[9];
-  const ink = STAGE_BAND_INK_COLORS[idx] ?? STAGE_BAND_INK_COLORS[9];
+  // 第三个形参是 v0.8 通路 B 的入口：传了合法 customColor 即改走 --stage-local-band / -ink，
+  // 内置色（null / undefined / 空串 / 脏值）与改造前**逐字节同值**。
+  // ⚠️ 三条都必须传同一个 customColor —— 漏掉任一条，自定义色会出现
+  //    「带面变色、描边还是内置色」这类半截状态。
+  const fill = stageBandColor(stage.orderIndex, stage.colorIndex, stage.customColor);
+  const ink = stageBandInkColor(stage.orderIndex, stage.colorIndex, stage.customColor);
   // 色带发丝描边（BUG-04）：规格 §1.2 未定义「色带 vs 行底」对比度，导致浅带（s5 芽白 /
   // s7 米白）在亮色行底、深带（s1 松墨 / s9 栗褐）在暗色行底双双隐形（对比度 ~1.1）。
   // 描边色取本阶段的 --stage-ink-sN（天生与带面明度对立），一个公式通吃九色与两套主题。
-  const outline = stageBandOutline(stage.orderIndex, stage.colorIndex);
+  // 通路 B 下走 `-rgb` 三元组（global.css 的九色各有 --stage-ink-sN-rgb；注入表同构地备了
+  // 一份 --stage-local-ink-rgb）—— 漏了它，自定义色的描边会**静默消失**。
+  const outline = stageBandOutline(stage.orderIndex, stage.colorIndex, stage.customColor);
+  // 自定义色的 `data-stage-key`：挂在最外层 `<g>` 上一次覆盖全部子元素（主体 rect / 描边 rect /
+  // 交付子刻度 line + text / 左右手柄 / 日期标注）—— 它们共用同一个阶段色，没有理由各挂一次。
+  // 内置色时是 `{}`（铺不开任何属性），本组件对内置色**一个类名都不加**（颜色全走 var() 属性）。
+  const { attrs: colorAttrs } = customStageColor(stage.customColor);
 
   // 拖拽时显示的新日期（用于气泡提示）
   const previewDate =
@@ -92,6 +102,7 @@ export function StageBar({
   return (
     <g
       style={{ cursor: 'pointer' }}
+      {...colorAttrs}
       onDoubleClick={(e) => {
         e.stopPropagation();
         onClick();

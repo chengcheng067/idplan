@@ -64,6 +64,12 @@ export interface ScheduleSection {
   status: StageStatus;
   /** 阶段色号（1..9，多阶段项目循环）；打印时间轴摘要取色用 */
   colorIndex: number;
+  /**
+   * 阶段自定义色（v0.8 通路 B）。**必填而非可选**：`null` = 用内置 9 色，
+   * 与 `undefined`（= 数据层漏接）在渲染层是**同一个后果**（退回内置色），
+   * 故这里强制组装者显式给出，让「漏传」在 tsc 阶段就暴露，而不是变成静默的视觉退化。
+   */
+  customColor: string | null;
   tasks: ScheduleTaskRow[];
 }
 
@@ -98,6 +104,9 @@ export function buildScheduleSections(opts: {
       endAt: s.endAt.slice(0, 10),
       status: s.status,
       colorIndex: s.colorIndex,
+      // ★ v0.8 通路 B：`?? null` 把「字段缺失 / undefined」也归一成明确的内置色信号，
+      //   与 ScheduleSection 的「必填 string | null」契约对齐（渲染层只判 null）。
+      customColor: s.customColor ?? null,
       tasks: stageTasks.map((t) => ({
         id: t.id,
         title: t.title,

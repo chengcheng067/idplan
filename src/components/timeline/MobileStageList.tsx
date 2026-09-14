@@ -1,7 +1,7 @@
 import type { Member, Stage, Task } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
-import { STAGE_BAR_COLORS } from './stageColors';
-import { resolveStageColorIndex } from '../../core/template/stage-fallback';
+import { stageSolidColor } from './stageColors';
+import { customStageColor } from './stageColorKey';
 import { StatusPill } from '../common/StatusPill';
 import { cn } from '../../lib/cn';
 import { totalDaysInclusive } from '../../lib/date';
@@ -18,7 +18,8 @@ const STAGE_NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'
  * 每张卡 = 阶段序号 + 名称 + 状态胶囊 + 起止日 + 进度条 + 负责人 + 任务数；点击打开阶段抽屉。
  * 平板横屏 / 桌面（≥lg）仍保留横向时间轴（更利于改期拖拽）。
  *
- * 不引入新颜色：全程复用 STAGE_BAR_COLORS / StatusPill / token（cream/paper/sand/ink/mist/pine）。
+ * 不引入新颜色：全程复用 `stageSolidColor`（内置 9 槽 `var(--stage-sN)` / 自定义色
+ * `var(--stage-local-solid)`）/ StatusPill / token（cream/paper/sand/ink/mist/pine）。
  */
 export function MobileStageList({
   stages,
@@ -36,8 +37,13 @@ export function MobileStageList({
   return (
     <div className="flex flex-col gap-2">
       {stages.map((s) => {
-        const color =
-          STAGE_BAR_COLORS[resolveStageColorIndex(s.orderIndex, s.colorIndex)] ?? STAGE_BAR_COLORS[9];
+        // ── 两条通路（v0.8 A11 · ② 阶段卡色点 · 移动端）──
+        // 序号块（下方 :66）与进度条内层（下方 :88）**共用这一个变量** ⇒ 改这一处即两处都上色。
+        // 内置色 → `var(--stage-sN)`；自定义色 → `var(--stage-local-solid)` + 属性（见 button 根）。
+        const color = stageSolidColor(s.orderIndex, s.colorIndex, s.customColor);
+        // ⚠️ 属性必须挂在 `<button>` 根上（不是分别挂两个子元素）：序号块与进度条要落在
+        //    **同一个**锚点作用域里，否则两处的主题/打印三态规则各挂各的、容易只改一半。
+        const { attrs: colorAttrs } = customStageColor(s.customColor);
         const active = s.status === StageStatus.InProgress;
         const owner = members.find((m) => m.id === s.ownerId);
         const stageTasks = tasks.filter((t) => t.stageId === s.id);
@@ -58,6 +64,7 @@ export function MobileStageList({
               'glass-medium flex w-full flex-col gap-1.5 rounded-[14px] border p-3 text-left shadow-soft transition-colors',
               active ? 'border-pine bg-pine-soft/20' : 'border-line',
             )}
+            {...colorAttrs}
           >
             {/* 第一行：序号 + 名称 + 状态 */}
             <div className="flex items-center gap-2">

@@ -579,6 +579,12 @@ describe('① 时间轴跨度色带 StageBar', () => {
     const customFill = svgPaint(bandRect(customH), 'fill');
     const customStroke = svgPaint(outlineRect(customH), 'stroke');
     expectWired(bandRect(customH), key);
+    // ⚠️ 锚点引用必须**在这一行**取：下面第二次 `renderStageBar` 会经 `mount()` →
+    //    `unmountCurrent()`（见脚手架注释）把**同一用例上一棵树**卸载掉，React 会把
+    //    `customH` 的子树清空 —— 之后再 `customH.querySelector(...)` 只会恒得 `null`
+    //    （那会让本条断言变成「永远红」或「永远绿」的假断言，取决于写法）。
+    //    取到的 `Element` 引用在卸载后仍然有效，故在断言处直接比较该引用。
+    const customAnchor = customH.querySelector(`[${STAGE_COLOR_KEY_ATTR}]`);
 
     const builtinH = renderStageBar(makeStage('stg_bar', 3, { customColor: null }));
     const builtinFill = svgPaint(bandRect(builtinH), 'fill');
@@ -587,8 +593,8 @@ describe('① 时间轴跨度色带 StageBar', () => {
 
     expect(customFill).not.toBe(builtinFill);
     expect(customStroke).not.toBe(builtinStroke);
-    expect(customH.querySelector(`[${STAGE_COLOR_KEY_ATTR}]`)).not.toBeNull();
-    expect(builtinH.querySelector(`[${STAGE_COLOR_KEY_ATTR}]`)).toBeNull();
+    expect(customAnchor, '自定义态整棵子树必须有 data-stage-key 锚点').not.toBeNull();
+    expect(builtinH.querySelector(`[${STAGE_COLOR_KEY_ATTR}]`), '内置态整棵子树不得有 data-stage-key').toBeNull();
   });
 });
 

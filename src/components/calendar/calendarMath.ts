@@ -202,7 +202,13 @@ export function computeCalendarEntry(
   let isGhost = false;
   switch (status) {
     case 'in_progress':
-      color = activeStage ? stageColorOf(activeStage.orderIndex, activeStage.colorIndex) : COMPLETED_COLOR;
+      // ★ v0.8 通路 B · 月历链的第一环：**必须**把 activeStage.customColor 透传下去，
+      //   否则 `entry.color` 恒为内置 9 色令牌，月历色带在改色后「看起来没生效」。
+      //   只有这一支需要传 —— completed / overdue / not_started 三支用的是语义色
+      //   （s9 / clay / mist），与阶段自定义色无关，传了反而会把语义色顶掉。
+      color = activeStage
+        ? stageColorOf(activeStage.orderIndex, activeStage.colorIndex, activeStage.customColor)
+        : COMPLETED_COLOR;
       break;
     case 'completed':
       color = COMPLETED_COLOR;

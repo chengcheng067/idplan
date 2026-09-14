@@ -3,7 +3,8 @@ import dayjs from 'dayjs';
 import type { Member, Stage } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
 import { remainingDays } from '../../lib/date';
-import { stageSolidClass } from './stageColors';
+import { stageSolidClass, stageSolidColor } from './stageColors';
+import { customStageColor } from './stageColorKey';
 
 /**
  * 左侧锁定列（sticky）：序号圆标 / 阶段名 / 负责人 / 距截止天数。
@@ -69,10 +70,23 @@ export function StageRowsColumn({
 function IndexBadge({ stage }: { stage: Stage }): JSX.Element {
   // 画板 04：阶段点 = 实心块（main 色，圆角 9999），仅作色相指示；
   // 序号由行序 + 阶段抽屉承载，避免「深色 main 上压白/黑字」的对比度问题。
-  // 取色走 stageColors.stageSolidClass 静态映射（禁止动态拼类名）。
+  //
+  // ── 两条通路（v0.8 A11 · ① 阶段卡色点）──
+  //   · 内置 9 色：Tailwind 静态类镜像 `stageSolidClass`（禁止动态拼类名 —— BUG-05）；
+  //   · 用户自定义色：内联 `var(--stage-local-solid)` **＋** `data-stage-key`。
+  // 两个半件成对由 `customStageColor()` 一次给出（只写 var() 不挂属性 ⇒ 解析为空 ⇒ 色点透明）。
+  // 自定义那条路**不拼任何类名**（颜色只经内联 var()），故不经过 Tailwind 扫描器。
+  const { isCustom, attrs } = customStageColor(stage.customColor);
+  const shape = 'inline-block h-2.5 w-2.5 shrink-0 rounded-full';
   return (
     <span
-      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${stageSolidClass(stage.orderIndex)}`}
+      className={isCustom ? shape : `${shape} ${stageSolidClass(stage.orderIndex)}`}
+      style={
+        isCustom
+          ? { backgroundColor: stageSolidColor(stage.orderIndex, stage.colorIndex, stage.customColor) }
+          : undefined
+      }
+      {...attrs}
       aria-hidden
     />
   );

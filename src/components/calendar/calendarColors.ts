@@ -22,10 +22,14 @@ import {
   STAGE_BAND_COLORS,
   STAGE_BAND_INK_COLORS,
   STAGE_BAR_COLORS,
+  stageBandColor,
   stageBandOutline,
+  stageSolidColor,
   type BandOutline,
 } from '../timeline/stageColors';
 import { TODAY_LINE_COLOR, RING_PROGRESS } from '../timeline/timelineColors';
+// `stageBandInkOf` 是本文件自 v0.7 起就**无人调用**的出口（保留仅为兼容外部 import），
+// 它仍按 1-based 口径走同一套兜底，故这个 import 不能随通路 B 的改写一起删掉。
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
 
 /** 未开始幽灵态底色 = --calendar-not-started（亮色 #a0a0a8 / 暗色 #9aa3b2，住 global.css，随主题换肤） */
@@ -46,17 +50,26 @@ export const STAGE_ORDERS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 /** 阶段序号的可读角标（①~⑨） */
 export const CIRCLED_NUMBERS = '①②③④⑤⑥⑦⑧⑨';
 
+/**
+ * 本文件在 v0.8 通路 B 里的角色：**纯转发**。
+ * 三个出口各多收一个 `customColor` 形参并透传给 `timeline/stageColors` 的同名出口 ——
+ * `--stage-local-*` 的语义、归一化、注册都归那边管，本文件**不得**自己拼 `var()` 字符串
+ * （一旦拼了，就会出现第二个「本地令牌」定义点，两处必然漂移）。
+ * 内置色（形参缺省 / null / 脏值）时，三个出口的返回值与改造前**逐字节相同**。
+ */
+
 /** 按阶段取九段色「宽面」变体（时间轴色带同源，跨视图一致）。
- *  colorIndex 优先（多阶段项目 1..9 循环色板），缺失时按 orderIndex 读时回落。 */
-export function stageColorOf(orderIndex: number, colorIndex?: number | null): string {
-  return STAGE_BAND_COLORS[resolveStageColorIndex(orderIndex, colorIndex)] ?? COMPLETED_COLOR;
+ *  colorIndex 优先（多阶段项目 1..9 循环色板），缺失时按 orderIndex 读时回落。
+ *  越界与「连 9 号都没有」的兜底在 `stageBandColor` 内部（它恒回落到 s9），
+ *  故这里直接转发 —— 原先那个 `?? COMPLETED_COLOR` 与它同值（`COMPLETED_COLOR = s9`），是死分支。 */
+export function stageColorOf(
+  orderIndex: number,
+  colorIndex?: number | null,
+  customColor?: string | null,
+): string {
+  return stageBandColor(orderIndex, colorIndex, customColor);
 }
 
-/**
- * 按阶段取「实心块」色（画板 18-B 清单色点 12×12、图例点）。
- * 入参口径与 computeCalendarEntry 的 filterStageIndex 一致（激活阶段 orderIndex /
- * 已完成→9 / 未开始→1），故色点与同一天色带恒为同一色相（只是角色变体不同）。
- */
 /**
  * 月历格内色带的发丝描边（BUG-04）。
  *
@@ -71,14 +84,27 @@ export function stageColorOf(orderIndex: number, colorIndex?: number | null): st
 export function bandOutlineOf(
   filterStageIndex: number,
   colorIndex?: number | null,
+  customColor?: string | null,
 ): BandOutline {
-  return stageBandOutline(filterStageIndex, colorIndex);
+  return stageBandOutline(filterStageIndex, colorIndex, customColor);
 }
 
-export function stageSolidOf(filterStageIndex: number, colorIndex?: number | null): string {
-  return (
-    STAGE_BAR_COLORS[resolveStageColorIndex(filterStageIndex, colorIndex)] ?? STAGE_BAR_COLORS[9]
-  );
+/**
+ * 按阶段取「实心块」色（画板 18-B 清单色点 12×12、图例点）。
+ * 入参口径与 computeCalendarEntry 的 filterStageIndex 一致（激活阶段 orderIndex /
+ * 已完成→9 / 未开始→1），故色点与同一天色带恒为同一色相（只是角色变体不同）。
+ *
+ * v0.8 通路 B：第三个形参透传给 `stageSolidColor`，自定义色 ⇒ `var(--stage-local-solid)`。
+ * 内置色（缺省 / null / 脏值）时返回值与改造前**逐字节相同**
+ * （旧实现 `STAGE_BAR_COLORS[resolveStageColorIndex(...)] ?? STAGE_BAR_COLORS[9]`
+ *  ／ `stageSolidColor` 内部是同一行，故这是纯搬运，不是行为变更）。
+ */
+export function stageSolidOf(
+  filterStageIndex: number,
+  colorIndex?: number | null,
+  customColor?: string | null,
+): string {
+  return stageSolidColor(filterStageIndex, colorIndex, customColor);
 }
 
 /**

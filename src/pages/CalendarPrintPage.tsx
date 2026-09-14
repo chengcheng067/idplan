@@ -19,7 +19,10 @@ import {
   STAGE_COLOR_NAMES,
   stageBandClass,
   stageSolidClass,
+  stageBandColor,
+  stageSolidColor,
 } from '../components/timeline/stageColors';
+import { customStageColor } from '../components/timeline/stageColorKey';
 import { CIRCLED_NUMBERS } from '../components/calendar/calendarColors';
 import { resolveStageColorIndex } from '../core/template/stage-fallback';
 import { isRestDay } from '../lib/workdays';
@@ -45,12 +48,24 @@ interface GridDay {
   isRest: boolean;
   /** 覆盖该日的阶段（用于色带取色，宽面 lightBar） */
   coverStageIndex: number | null;
+  /**
+   * 覆盖该日那一阶段的 `customColor`（v0.8 通路 B · 与 `coverStageIndex` **同源同阶段**）。
+   * 必须与 `coverStageIndex` 一起从 `covered` 那一条取出 —— 若各取各的（比如再 find 一次），
+   * 多阶段重叠时会出现「色带取 A 阶段的色号、属性取 B 阶段的自定义色」的错配。
+   */
+  coverCustomColor: string | null;
 }
 
 function buildCalendarGrid(
   meta: CalendarMonthMeta,
   todayIso: string,
-  visibleStages: { orderIndex: number; colorIndex: number | null; startAt: string; endAt: string }[],
+  visibleStages: {
+    orderIndex: number;
+    colorIndex: number | null;
+    customColor: string | null;
+    startAt: string;
+    endAt: string;
+  }[],
 ): GridDay[] {
   const first = new Date(meta.year, meta.month - 1, 1);
   const startOffset = mondayFirst(first);
@@ -72,6 +87,7 @@ function buildCalendarGrid(
       isToday: iso === todayIso,
       isRest: isRestDay(iso, useSettingsStore.getState().restPolicy),
       coverStageIndex: covered ? resolveStageColorIndex(covered.orderIndex, covered.colorIndex) : null,
+      coverCustomColor: covered ? covered.customColor ?? null : null,
     });
   }
   return days;
@@ -166,6 +182,7 @@ export function CalendarPrintPage(): JSX.Element {
     () => scopedStages.filter((s) => s.visible !== false).map((s) => ({
       orderIndex: s.orderIndex,
       colorIndex: s.colorIndex,
+      customColor: s.customColor ?? null,
       startAt: s.startAt,
       endAt: s.endAt,
     })),
@@ -304,130 +321,187 @@ export function CalendarPrintPage(): JSX.Element {
         </button>
       </div>
 
-      {entries.map(({ meta, entry, grid }, idx) => (
-        <div
-          key={meta.monthStart}
-          ref={(el) => {
-            pageRefs.current[idx] = el;
-          }}
-          className="a4-page mx-auto mb-6 flex flex-col"
-          style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX, padding: 40 }}
-        >
-          {/* 公文头（画板 20：项目名 26/700 · 委托方 13 · 周期 13 · 右上 ID Plan 月历 13 · 分隔线） */}
-          <header className="flex items-start justify-between border-b border-line pb-2">
-            <div>
-              <h1 className="text-[26px] font-bold leading-tight text-ink">{project.name}</h1>
-              {/* 委托方：仅管理员（与 ProjectDetailPage.tsx:181 同一门控口径）。
-                  本页放开成员打印前只对 admin 开放，无条件渲染当时是对的；
-                  放开后若不门控，客户名就成了「同一条数据一处屏蔽一处敞开」的洞。 */}
-              {role === 'admin' && (
-                <p className="mt-0.5 text-[13px] text-mist">
-                  委托方：{project.clientName || '—'}
+      {entries.map(({ meta, entry, grid }, idx) => {
+        /*
+         * ★ v0.8 通路 B：概览色块与图例色块取的都是**激活阶段**的「实心块」色，
+         * 故判定出口只有一个（本页有多处消费点，散着写必然漂移）。
+         * 自定义 ⇒ 内联 `var(--stage-local-solid)` + `data-stage-key`；
+         * 内置 ⇒ 原样 Tailwind 静态类（`expectNotWired` 那条用例靠它守住零回归）。
+         */
+        const overviewCustom = customStageColor(entry.activeStage?.customColor);
+        return (
+          <div
+            key={meta.monthStart}
+            ref={(el) => {
+              pageRefs.current[idx] = el;
+            }}
+            className="a4-page mx-auto mb-6 flex flex-col"
+            style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX, padding: 40 }}
+          >
+            {/* 公文头（画板 20：项目名 26/700 · 委托方 13 · 周期 13 · 右上 ID Plan 月历 13 · 分隔线） */}
+            <header className="flex items-start justify-between border-b border-line pb-2">
+              <div>
+                <h1 className="text-[26px] font-bold leading-tight text-ink">{project.name}</h1>
+                {/* 委托方：仅管理员（与 ProjectDetailPage.tsx:181 同一门控口径）。
+                    本页放开成员打印前只对 admin 开放，无条件渲染当时是对的；
+                    放开后若不门控，客户名就成了「同一条数据一处屏蔽一处敞开」的洞。 */}
+                {role === 'admin' && (
+                  <p className="mt-0.5 text-[13px] text-mist">
+                    委托方：{project.clientName || '—'}
+                  </p>
+                )}
+                <p className="text-[13px] text-mist">
+                  周期：{project.plannedStartAt.slice(0, 10)} – {project.plannedEndAt.slice(0, 10)}
                 </p>
-              )}
+              </div>
+              <span className="shrink-0 text-[13px] text-mist">ID Plan 月历</span>
+            </header>
+
+            {/* 项目概览（当前阶段 / 进度，命名 token） */}
+            <div className="mt-3 flex items-center gap-3">
+              <div
+                className={`h-4 w-4 rounded-sm${
+                  overviewCustom.isCustom
+                    ? ''
+                    : entry.filterStageIndex
+                      ? ` ${stageSolidClass(entry.filterStageIndex)}`
+                      : ' bg-sunken'
+                }`}
+                style={
+                  overviewCustom.isCustom
+                    ? {
+                        backgroundColor: stageSolidColor(
+                          entry.filterStageIndex,
+                          entry.activeStage?.colorIndex,
+                          entry.activeStage?.customColor,
+                        ),
+                      }
+                    : undefined
+                }
+                {...overviewCustom.attrs}
+              />
               <p className="text-[13px] text-mist">
-                周期：{project.plannedStartAt.slice(0, 10)} – {project.plannedEndAt.slice(0, 10)}
+                当前阶段：{entry.activeStage?.name ?? '—'} · 进度 {Math.round(entry.percent)}% · 剩余 {entry.daysRemaining} 天
               </p>
             </div>
-            <span className="shrink-0 text-[13px] text-mist">ID Plan 月历</span>
-          </header>
 
-          {/* 项目概览（当前阶段 / 进度，命名 token） */}
-          <div className="mt-3 flex items-center gap-3">
-            <div
-              className={`h-4 w-4 rounded-sm ${entry.filterStageIndex ? stageSolidClass(entry.filterStageIndex) : 'bg-sunken'}`}
-            />
-            <p className="text-[13px] text-mist">
-              当前阶段：{entry.activeStage?.name ?? '—'} · 进度 {Math.round(entry.percent)}% · 剩余 {entry.daysRemaining} 天
-            </p>
-          </div>
+            {/* 月份区 */}
+            <h2 className="mt-4 text-[18px] font-semibold text-ink">{meta.label}</h2>
 
-          {/* 月份区 */}
-          <h2 className="mt-4 text-[18px] font-semibold text-ink">{meta.label}</h2>
-
-          {/* 星期表头（一–日，11） */}
-          <div className="mt-2 grid grid-cols-7 border border-line bg-sunken text-center text-[11px] font-medium text-mist">
-            {WEEKDAYS.map((w) => (
-              <div key={w} className="border-r border-line py-2 last:border-r-0">
-                {w}
-              </div>
-            ))}
-          </div>
-
-          {/* 日期网格（画板 20：每格 ~113×110；当月 paper / 休息日 rest-day / 非当月 sunken；色带 lightBar） */}
-          <div className="grid grid-cols-7 border-x border-line">
-            {grid.map((day) => {
-              const cellBg = !day.inMonth
-                ? 'bg-sunken text-mist'
-                : day.isRest
-                  ? 'bg-rest-day text-ink'
-                  : 'bg-paper text-ink';
-              const bandCls = day.coverStageIndex ? stageBandClass(day.coverStageIndex) : '';
-              return (
-                <div
-                  key={day.date}
-                  className={`relative min-h-[110px] border-b border-r border-line p-2 last:border-r-0 ${cellBg}`}
-                >
-                  <span
-                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[13px] ${
-                      day.isToday ? 'bg-pine text-white' : ''
-                    }`}
-                  >
-                    {day.day}
-                  </span>
-                  {day.inMonth && day.coverStageIndex !== null && (
-                    <div
-                      className={`schedule-bar-segment absolute inset-x-2 bottom-2 top-9 rounded-sm ${bandCls}`}
-                      title={`${day.date} · 阶段 ${day.coverStageIndex} ${STAGE_COLOR_NAMES[day.coverStageIndex] ?? ''}`}
-                    />
-                  )}
+            {/* 星期表头（一–日，11） */}
+            <div className="mt-2 grid grid-cols-7 border border-line bg-sunken text-center text-[11px] font-medium text-mist">
+              {WEEKDAYS.map((w) => (
+                <div key={w} className="border-r border-line py-2 last:border-r-0">
+                  {w}
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          {/* 阶段色泽说明（D3：动态色名，删去旧版莫兰迪遗留；延续上页提示） */}
-          <div className="mt-3 text-[11px] leading-relaxed text-mist">
-            <p>
-              阶段色泽：
-              {visibleStages.map((s, i) => {
-                const nameIdx = resolveStageColorIndex(s.orderIndex, s.colorIndex);
-                const label = STAGE_COLOR_NAMES[nameIdx] ?? '';
-                const stage = scopedStages.find((st) => st.orderIndex === s.orderIndex && st.visible !== false);
+            {/* 日期网格（画板 20：每格 ~113×110；当月 paper / 休息日 rest-day / 非当月 sunken；色带 lightBar） */}
+            <div className="grid grid-cols-7 border-x border-line">
+              {grid.map((day) => {
+                const cellBg = !day.inMonth
+                  ? 'bg-sunken text-mist'
+                  : day.isRest
+                    ? 'bg-rest-day text-ink'
+                    : 'bg-paper text-ink';
+                const bandCls = day.coverStageIndex ? stageBandClass(day.coverStageIndex) : '';
+                // ★ 通路 B：格内色带的自定义色来自**覆盖该日的那一个阶段**（与 coverStageIndex 同源）
+                const bandCustom = customStageColor(day.coverCustomColor);
                 return (
-                  <span key={s.orderIndex}>
-                    {i > 0 ? '　' : ''}
-                    {CIRCLED_NUMBERS[nameIdx - 1] ?? ''}
-                    {label}
-                    {stage ? `（${stage.name}）` : ''}
-                  </span>
+                  <div
+                    key={day.date}
+                    className={`relative min-h-[110px] border-b border-r border-line p-2 last:border-r-0 ${cellBg}`}
+                  >
+                    <span
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[13px] ${
+                        day.isToday ? 'bg-pine text-white' : ''
+                      }`}
+                    >
+                      {day.day}
+                    </span>
+                    {day.inMonth && day.coverStageIndex !== null && (
+                      <div
+                        className={`schedule-bar-segment absolute inset-x-2 bottom-2 top-9 rounded-sm${
+                          bandCustom.isCustom ? '' : ` ${bandCls}`
+                        }`}
+                        style={
+                          bandCustom.isCustom
+                            ? { backgroundColor: stageBandColor(day.coverStageIndex, day.coverStageIndex, day.coverCustomColor) }
+                            : undefined
+                        }
+                        {...bandCustom.attrs}
+                        title={`${day.date} · 阶段 ${day.coverStageIndex} ${STAGE_COLOR_NAMES[day.coverStageIndex] ?? ''}`}
+                      />
+                    )}
+                  </div>
                 );
               })}
-            </p>
-            <p className="mt-1">色带长度 = 该阶段的起止日期跨度，不代表完成百分比。</p>
-          </div>
+            </div>
 
-          {/* 图例（项目覆盖 + 今天，命名 token） */}
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-mist">
-            <span className="flex items-center gap-1">
-              <span className={`inline-block h-3 w-3 rounded-sm ${entry.filterStageIndex ? stageSolidClass(entry.filterStageIndex) : 'bg-sunken'}`} />
-              项目覆盖
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded-full bg-pine" />
-              今天
-            </span>
-          </div>
+            {/* 阶段色泽说明（D3：动态色名，删去旧版莫兰迪遗留；延续上页提示） */}
+            <div className="mt-3 text-[11px] leading-relaxed text-mist">
+              <p>
+                阶段色泽：
+                {visibleStages.map((s, i) => {
+                  const nameIdx = resolveStageColorIndex(s.orderIndex, s.colorIndex);
+                  const label = STAGE_COLOR_NAMES[nameIdx] ?? '';
+                  const stage = scopedStages.find((st) => st.orderIndex === s.orderIndex && st.visible !== false);
+                  return (
+                    <span key={s.orderIndex}>
+                      {i > 0 ? '　' : ''}
+                      {CIRCLED_NUMBERS[nameIdx - 1] ?? ''}
+                      {label}
+                      {stage ? `（${stage.name}）` : ''}
+                    </span>
+                  );
+                })}
+              </p>
+              <p className="mt-1">色带长度 = 该阶段的起止日期跨度，不代表完成百分比。</p>
+            </div>
 
-          {/* 页脚（画板 20：分隔线 + 第 N / 共 M 页 · ID Plan 月历） */}
-          <footer className="mt-auto flex items-center justify-between border-t border-line pt-2 text-[11px] text-mist">
-            <span>打印人：{currentMember?.name ?? '—'} · {nowText}</span>
-            <span>
-              第 {idx + 1} / {entries.length} 页 · ID Plan 月历
-            </span>
-          </footer>
-        </div>
-      ))}
+            {/* 图例（项目覆盖 + 今天，命名 token） */}
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-mist">
+              <span className="flex items-center gap-1">
+                <span
+                  className={`inline-block h-3 w-3 rounded-sm${
+                    overviewCustom.isCustom
+                      ? ''
+                      : entry.filterStageIndex
+                        ? ` ${stageSolidClass(entry.filterStageIndex)}`
+                        : ' bg-sunken'
+                  }`}
+                  style={
+                    overviewCustom.isCustom
+                      ? {
+                          backgroundColor: stageSolidColor(
+                            entry.filterStageIndex,
+                            entry.activeStage?.colorIndex,
+                            entry.activeStage?.customColor,
+                          ),
+                        }
+                      : undefined
+                  }
+                  {...overviewCustom.attrs}
+                />
+                项目覆盖
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-3 w-3 rounded-full bg-pine" />
+                今天
+              </span>
+            </div>
+
+            {/* 页脚（画板 20：分隔线 + 第 N / 共 M 页 · ID Plan 月历） */}
+            <footer className="mt-auto flex items-center justify-between border-t border-line pt-2 text-[11px] text-mist">
+              <span>打印人：{currentMember?.name ?? '—'} · {nowText}</span>
+              <span>
+                第 {idx + 1} / {entries.length} 页 · ID Plan 月历
+              </span>
+            </footer>
+          </div>
+        );
+      })}
     </div>
   );
 }

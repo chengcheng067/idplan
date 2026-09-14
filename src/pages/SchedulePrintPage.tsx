@@ -15,7 +15,10 @@ import {
   stageSolidClass,
   stageBandClass,
   stageBandOutline,
+  stageSolidColor,
+  stageBandColor,
 } from '../components/timeline/stageColors';
+import { customStageColor } from '../components/timeline/stageColorKey';
 import {
   buildScheduleSections,
   paginateSections,
@@ -383,23 +386,41 @@ export function SchedulePrintPage(): JSX.Element {
                 <div className="space-y-1.5">
                   {sections.map((s) => {
                     const g = bandGeom(s.startAt, s.endAt);
-                    const outline = stageBandOutline(s.orderIndex, s.colorIndex);
+                    // ★ v0.8 通路 B：自定义 ⇒ 描边走 --stage-local-ink(-rgb)；内置 ⇒ 逐字节不变
+                    const outline = stageBandOutline(s.orderIndex, s.colorIndex, s.customColor);
+                    // 判定 + data-stage-key 一次取齐（状态点与色带同属这一行的自定义色作用域，
+                    // 挂在各自元素上即可，不依赖共同祖先）
+                    const sc = customStageColor(s.customColor);
                     return (
                       <div key={s.orderIndex} className="flex items-center gap-3">
                         <div className="flex w-40 shrink-0 items-center gap-1.5">
                           <span
-                            className={`schedule-status-dot inline-block h-2.5 w-2.5 shrink-0 rounded-full ${stageSolidClass(s.orderIndex)}`}
+                            className={`schedule-status-dot inline-block h-2.5 w-2.5 shrink-0 rounded-full${
+                              sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
+                            }`}
+                            style={
+                              sc.isCustom
+                                ? { backgroundColor: stageSolidColor(s.orderIndex, s.colorIndex, s.customColor) }
+                                : undefined
+                            }
+                            {...sc.attrs}
                           />
                           <span className="truncate text-[13px] text-ink">{s.name}</span>
                         </div>
                         <div className="relative h-9 flex-1 rounded-lg bg-sunken">
                           <div
-                            className={`schedule-bar-segment absolute inset-y-1.5 rounded-md ${stageBandClass(s.orderIndex)}`}
+                            className={`schedule-bar-segment absolute inset-y-1.5 rounded-md${
+                              sc.isCustom ? '' : ` ${stageBandClass(s.orderIndex)}`
+                            }`}
                             style={{
                               left: `${g.left}%`,
                               width: `${g.width}%`,
                               boxShadow: outline.boxShadow,
+                              ...(sc.isCustom
+                                ? { backgroundColor: stageBandColor(s.orderIndex, s.colorIndex, s.customColor) }
+                                : {}),
                             }}
+                            {...sc.attrs}
                             title={`${s.orderIndex}. ${s.name}（${s.startAt} — ${s.endAt} · ${statusLabel(s.status)}）`}
                           />
                         </div>
@@ -462,25 +483,38 @@ export function SchedulePrintPage(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {pageSections.map((s, i) => (
-                  <tr key={s.orderIndex} className={i % 2 === 1 ? 'bg-sunken/60' : ''}>
-                    <td className="h-[42px] px-3">
-                      <span
-                        className={`mr-1.5 inline-block h-3 w-3 rounded-sm align-middle ${stageSolidClass(s.orderIndex)}`}
-                      />
-                      <span className="text-ink">{s.orderIndex}</span>
-                    </td>
-                    <td className="px-3 text-ink">{s.name}</td>
-                    <td className="px-3 tabular-nums text-mist">{s.startAt} — {s.endAt}</td>
-                    <td className="px-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusChipCls(s.status)}`}
-                      >
-                        {statusLabel(s.status)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {pageSections.map((s, i) => {
+                  // ★ 与时间轴摘要同一判定出口：阶段清单里的实心小块也必须跟着自定义色走
+                  //   （否则同一阶段在同一页上出现「两个色」——表格退回内置色）
+                  const sc = customStageColor(s.customColor);
+                  return (
+                    <tr key={s.orderIndex} className={i % 2 === 1 ? 'bg-sunken/60' : ''}>
+                      <td className="h-[42px] px-3">
+                        <span
+                          className={`mr-1.5 inline-block h-3 w-3 rounded-sm align-middle${
+                            sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
+                          }`}
+                          style={
+                            sc.isCustom
+                              ? { backgroundColor: stageSolidColor(s.orderIndex, s.colorIndex, s.customColor) }
+                              : undefined
+                          }
+                          {...sc.attrs}
+                        />
+                        <span className="text-ink">{s.orderIndex}</span>
+                      </td>
+                      <td className="px-3 text-ink">{s.name}</td>
+                      <td className="px-3 tabular-nums text-mist">{s.startAt} — {s.endAt}</td>
+                      <td className="px-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusChipCls(s.status)}`}
+                        >
+                          {statusLabel(s.status)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </section>
