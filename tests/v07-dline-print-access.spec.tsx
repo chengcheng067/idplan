@@ -1101,10 +1101,27 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
   it('★ 两页：必须按 projectId 订阅 tasks（收窄的「任务支」唯一输入）', () => {
     for (const file of ['SchedulePrintPage.tsx', 'CalendarPrintPage.tsx']) {
       const code = readCode(file);
-      expect(code, `${file}：必须订阅 tasks（恒空 → 成员被误判零相关阶段）`).toContain(
-        's.tasks.filter',
-      );
-      expect(code, `${file}：tasks 必须按本项目过滤`).toContain('t.projectId === id');
+      /*
+       * ⚠️ v0.8 同批更新（设计 §9.1「会被本版改动的现有测试必须与源码同批改」）：
+       *   本用例原先锁的是**订阅的写法** `useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id))`。
+       *   v0.8 把这两页的原始读收口到单一漏斗（§7.1 纪律 1 / §7.5），
+       *   现在锁的是**同一件事的新写法**：`useProjectTasks(id)` ——
+       *   `visibility.ts` 里那个按 projectId 收窄的唯一出口。
+       *
+       *   这不是"为了让用例变绿而放宽"：**两个方向都还在**——
+       *     ① 正向：必须存在按 id 收窄的订阅（`useProjectTasks(id)`）；
+       *     ② 反向：不得退回**不按项目收窄**的原始 `s.tasks` 订阅
+       *        （退回即"收窄的『任务支』全空 → 成员被误判零相关阶段"，正是本用例要防的那条）。
+       *   行为面（computeRelatedStageIds 的实参窗口）由下面几行继续保证，未改动。
+       */
+      expect(
+        code,
+        `${file}：必须按 projectId 订阅 tasks（恒空 → 成员被误判零相关阶段）`,
+      ).toContain('useProjectTasks(id)');
+      expect(
+        code,
+        `${file}：不得退回不按项目收窄的全量 tasks 订阅（v0.8 §7.1 纪律 1）`,
+      ).not.toContain('.tasks');
       // 反向：订阅了却把它排除在收窄判定之外 = 白订阅。
       // 注意**必须**只看 `computeRelatedStageIds(` 的实参窗口——`tasks,` 在整份文件里
       // 还出现在 `buildScheduleSections({ … tasks … })` 等无关位置，全文 contain 会假绿。

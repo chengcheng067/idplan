@@ -28,7 +28,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright-core';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import {
@@ -521,5 +522,577 @@ describe.skipIf(!CAN_RUN)('T02-BROWSER · 通路 B（自定义阶段色）真 Ch
     expect(bundle).toContain('--stage-local-ink-rgb');
     // BUG-05 的根因形态不得出现在产物里
     expect(bundle).not.toContain('bg-stage-band-s$');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════════
+ * L4 · Agent 隔离的真浏览器验收（v0.8 · 设计 §7.7 的 L4 行 · T04-A）
+ *
+ * ── 为什么 L1/L2/L3 都绿了还要这一层 ──
+ * `tests/isolation-guard.spec.ts`（L1）与 `tests/isolation-census.spec.ts`（L2/L3）
+ * 全部在 **JS 派生**这一层证明"过滤对了"。它们**看不见**下面三类：
+ *   ① 某个页面压根没用漏斗（派生写对了，接线没接上）；
+ *   ② 渲染路径绕过 JS 派生（Tailwind 类名丢失、CSS 变量没挂 —— BUG-05 的教训）；
+ *   ③ 数据装载时序问题（bootstrap 之后才发生的旁路写入）。
+ * 只有把**真实构建产物**在真 Chromium 里跑起来、种入两类数据、读 `innerText`，才能证伪。
+ *
+ * ── 种子数据怎么进去 ──
+ * 走应用**自己的备份导入链路**（隐藏 file input → 预检 → 二次确认 → 整库替换 → reload），
+ * 与 `tests/v07-board-acceptance.spec.ts` 同一条路。**不**直接往 IndexedDB 里写：
+ * 后者会在"归一函数改了口径"时静默偏离真实导入行为（那种偏离会让本 spec 变成
+ * "只验证我自己的写入器"的自证）。
+ *
+ * ── 夹具里刻意埋的泄漏向量 ──
+ * Agent 看板的 5 条任务**全部指派给人类管理员**（`assigneeId` / `assigneeIds`）。
+ * 这是 §7.2 #15 的 ★★ 关键漏点现场：只要我的任务页 / 成员看板不按 `projectId` 收窄，
+ * 这个 Agent 看板就会从那两处漏出去 —— 本段对那两页的断言才有判别力。
+ *
+ * ── 诚实边界（本段测不到的）──
+ *   · 自定义主色的 `getComputedStyle` 非透明：已由上面 T02-BROWSER 段覆盖（B-02/B-03），
+ *     本段不重复；
+ *   · 服务端（remote 模式）的 kind 分流：属 T04-SRV 的面，本段只跑 local 模式。
+ */
+describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真实构建产物）', () => {
+  /* ────────────────────────── 具名常量（断言里只用它们，不写散字符串） ────────────────────────── */
+
+  /** 两类名字刻意都带「L4长夏」前缀：既好认，也让"按名搜索"类的页面不会漏掉它们 */
+  const HUMAN_NAME = 'L4长夏人类项目甲';
+  const AGENT_NAME = 'L4长夏AI看板乙';
+  const HUMAN_TASK = 'L4人类任务0';
+  const AGENT_TASK = 'L4代理任务0';
+  const AGENT_ACTOR = 'L4代理行为体';
+  const MEMBER_NAME = 'L4验收管理员';
+
+  const HUMAN_PROJECT_ID = 'proj_l4_human';
+  const AGENT_PROJECT_ID = 'proj_l4_agent';
+  const ADMIN_MEMBER_ID = 'm-admin';
+
+  /** 与 `ProjectSourceBadge.tsx` 的 `AGENT_SOURCE_BADGE_TEXT` 逐字一致（§7.3 特判的可见产物） */
+  const BADGE_TEXT = 'AI 工作区';
+
+  const NOW_ISO = '2026-09-01T00:00:00.000Z';
+
+  let browser: Browser;
+  let server: { url: string; close(): Promise<void> };
+  /** 形如 `http://127.0.0.1:<port>/`（末尾带斜杠，供 `goto(base + 'agent')` 拼相对路由） */
+  let base = '';
+  let fixtureDir = '';
+
+  interface L4Env {
+    ctx: import('playwright-core').BrowserContext;
+  }
+  /** 主环境：1 个人类项目 ＋ 1 个 Agent 看板 */
+  let mainEnv: L4Env;
+  /** 对照环境：**只有**人类项目（从未建过 Agent 看板）—— `/agent` 空态的现场 */
+  let humanOnlyEnv: L4Env;
+
+  /* ────────────────────────── 种子构造（纯数据，逐字段对齐备份 schema v3） ────────────────────────── */
+
+  function projectRow(over: Record<string, unknown>): Record<string, unknown> {
+    return {
+      id: '',
+      name: '',
+      type: 'dining',
+      address: 'L4 验收地址',
+      clientName: 'L4 验收客户',
+      contractAmount: null,
+      signedAt: null,
+      plannedStartAt: '2026-09-01',
+      plannedEndAt: '2026-09-30',
+      coverColor: null,
+      shortLabel: null,
+      stagePresetKey: 'indoor_full',
+      stageTemplateVersion: 2,
+      scheduleBasis: 'calendar',
+      domain: 'indoor',
+      kind: 'human',
+      status: 'active',
+      revision: 1,
+      updatedAt: NOW_ISO,
+      ...over,
+    };
+  }
+
+  function stageRows(projectId: string, tag: string): Record<string, unknown>[] {
+    const spec: Array<[number, string, string, string]> = [
+      [1, '2026-09-01', '2026-09-02', 'completed'],
+      [2, '2026-09-03', '2026-09-04', 'in_progress'],
+      [3, '2026-09-05', '2026-09-09', 'not_started'],
+    ];
+    return spec.map(([i, startAt, endAt, status]) => ({
+      id: `stg_${tag}_${i}`,
+      projectId,
+      orderIndex: i,
+      templateKey: null,
+      colorIndex: i,
+      customColor: null,
+      name: `${tag}阶段${i}`,
+      ratioPercent: 33,
+      startAt,
+      endAt,
+      status,
+      ownerId: null,
+      visible: true,
+      resourcePath: null,
+      revision: 1,
+      updatedAt: NOW_ISO,
+    }));
+  }
+
+  /**
+   * 每个项目 5 条任务，**全部挂到人类管理员名下**（见文件头「夹具里刻意埋的泄漏向量」）。
+   * `taskNo` 号段分开（人类 3xxx / Agent 31xx），避免两条链撞号。
+   */
+  function taskRows(
+    projectId: string,
+    stageIds: readonly string[],
+    tag: string,
+    titlePrefix: string,
+    source: 'human' | 'agent',
+    taskNoBase: number,
+  ): Record<string, unknown>[] {
+    return [0, 1, 2, 3, 4].map((i) => ({
+      id: `tsk_${tag}_${i}`,
+      taskNo: taskNoBase + i,
+      projectId,
+      stageId: stageIds[i % stageIds.length]!,
+      title: `${titlePrefix}${i}`,
+      done: false,
+      assigneeId: ADMIN_MEMBER_ID,
+      assigneeIds: [ADMIN_MEMBER_ID],
+      dueDate: '2026-09-04',
+      source,
+      externalId: null,
+      agentId: null,
+      status: 'ready',
+      description: null,
+      dependsOn: [],
+      artifacts: [],
+      startAt: null,
+      claimedAt: null,
+      orderIndex: i,
+      revision: 1,
+      updatedAt: NOW_ISO,
+    }));
+  }
+
+  function buildSeed(includeAgent: boolean): Record<string, unknown> {
+    const projects: Record<string, unknown>[] = [
+      projectRow({ id: HUMAN_PROJECT_ID, name: HUMAN_NAME, kind: 'human', domain: 'indoor' }),
+    ];
+    if (includeAgent) {
+      projects.push(
+        projectRow({
+          id: AGENT_PROJECT_ID,
+          name: AGENT_NAME,
+          kind: 'agent',
+          // custom 套餐 ⇒ 纠错③ 的现场（`getPreset('custom')` 返回 null）
+          stagePresetKey: 'custom',
+          domain: 'software',
+          // Agent 看板的看板列与人类项目**完全不相交**（software vs indoor）
+          plannedEndAt: '2026-08-20',
+        }),
+      );
+    }
+
+    const stages: Record<string, unknown>[] = [];
+    const tasks: Record<string, unknown>[] = [];
+
+    const humanStages = stageRows(HUMAN_PROJECT_ID, 'l4h');
+    stages.push(...humanStages);
+    tasks.push(
+      ...taskRows(
+        HUMAN_PROJECT_ID,
+        humanStages.map((s) => String(s['id'])),
+        'l4h',
+        HUMAN_TASK.replace(/\d+$/, ''),
+        'human',
+        3000,
+      ),
+    );
+
+    if (includeAgent) {
+      const agentStages = stageRows(AGENT_PROJECT_ID, 'l4a');
+      stages.push(...agentStages);
+      tasks.push(
+        ...taskRows(
+          AGENT_PROJECT_ID,
+          agentStages.map((s) => String(s['id'])),
+          'l4a',
+          AGENT_TASK.replace(/\d+$/, ''),
+          'agent',
+          3100,
+        ),
+      );
+    }
+
+    return {
+      meta: { app: 'changxia', schemaVersion: 3, exportedAt: NOW_ISO },
+      data: {
+        projects,
+        stages,
+        tasks,
+        members: [
+          {
+            id: ADMIN_MEMBER_ID,
+            name: MEMBER_NAME,
+            role: '设计总监',
+            contact: null,
+            avatarColor: '#5B6B5A',
+            active: true,
+            roleKind: 'admin',
+            passwordHash: null,
+            actorKind: 'human',
+            agentKind: null,
+            revision: 1,
+            updatedAt: NOW_ISO,
+          },
+          {
+            id: 'mem_l4_agent',
+            name: AGENT_ACTOR,
+            role: 'Agent',
+            contact: null,
+            avatarColor: '#3F4A55',
+            active: true,
+            roleKind: 'member',
+            passwordHash: null,
+            actorKind: 'agent',
+            agentKind: 'workbuddy',
+            revision: 1,
+            updatedAt: NOW_ISO,
+          },
+        ],
+        assignments: [],
+        logs: [],
+        contracts: [],
+        settings: [],
+      },
+    };
+  }
+
+  function writeSeed(fileName: string, includeAgent: boolean): string {
+    const path = join(fixtureDir, fileName);
+    writeFileSync(path, JSON.stringify(buildSeed(includeAgent), null, 2), 'utf-8');
+    return path;
+  }
+
+  /* ────────────────────────── 环境与页面 ────────────────────────── */
+
+  /**
+   * 建一个已灌种子的验收环境（独立 BrowserContext ⇒ 自带 localStorage + IndexedDB）。
+   *
+   * `addInitScript` 里预置「已进入身份」是**合适**的：首启闸门（`useFirstRunGate`）的触发
+   * 条件是 `currentMemberId === null ∧ 无管理员 ∧ …`，空库首开会弹 admin_prompt 引导框。
+   * 该框不阻断 `setInputFiles`（赋 value 而非点击），但会让"页面是否正常进入"的判定变浑浊。
+   * 键名 `changxia.currentMemberId` 的唯一出处是 `useSettingsStore.ts`。
+   */
+  async function createEnv(fixturePath: string): Promise<L4Env> {
+    const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 } });
+    await ctx.addInitScript(() => {
+      try {
+        localStorage.setItem('changxia.currentMemberId', 'm-admin');
+      } catch {
+        /* 隐私模式下 localStorage 不可写 —— 种子导入随后会失败并给出清晰报错 */
+      }
+    });
+
+    const seedPage = await ctx.newPage();
+    await seedPage.goto(`${base}index.html`);
+    await seedPage.waitForSelector('header', { timeout: 20000 });
+
+    // 侧栏里那个 `input[type=file].hidden`（useBackupIo）—— `display:none`，故 force 绕过可见性
+    await seedPage
+      .locator('input[type="file"][accept*="json"]')
+      .first()
+      .setInputFiles(fixturePath, { force: true });
+
+    const confirm = seedPage.getByRole('button', { name: '确认恢复' });
+    try {
+      await confirm.waitFor({ state: 'attached', timeout: 15000 });
+    } catch {
+      const text = await seedPage.locator('body').innerText();
+      throw new Error(
+        `备份导入未进入二次确认（fixture 可能未通过 zod 预检）。页面文本片段：${text.slice(0, 500)}`,
+      );
+    }
+    await confirm.click({ force: true });
+
+    try {
+      await seedPage.waitForFunction(
+        (name) => document.body.innerText.includes(name),
+        HUMAN_NAME,
+        { timeout: 20000 },
+      );
+    } catch {
+      const text = await seedPage.locator('body').innerText();
+      throw new Error(
+        `备份导入后未观察到种子项目「${HUMAN_NAME}」。页面文本片段：${text.slice(0, 500)}`,
+      );
+    }
+    await seedPage.close();
+    return { ctx };
+  }
+
+  /** 开一个路由并等数据装载完成（`main` 出现 ＋ 静置一拍，让 zustand 的二次渲染落定） */
+  async function openPage(
+    env: L4Env,
+    route: string,
+    opts: { expectText?: string } = {},
+  ): Promise<Page> {
+    const page = await env.ctx.newPage();
+    await page.goto(base + route);
+    await page.waitForSelector('main', { timeout: 20000 });
+    if (opts.expectText !== undefined) {
+      await page.waitForFunction(
+        (t) => document.body.innerText.includes(t),
+        opts.expectText,
+        { timeout: 20000 },
+      );
+    }
+    await page.waitForTimeout(300);
+    return page;
+  }
+
+  async function bodyText(page: Page): Promise<string> {
+    return page.locator('body').innerText();
+  }
+
+  /** 出现次数（按子串切分；needle 为空时返回 0，避免除零式的假通过） */
+  function countOccurrences(haystack: string, needle: string): number {
+    if (needle.length === 0) return 0;
+    return haystack.split(needle).length - 1;
+  }
+
+  /**
+   * 命中处上下各一行 —— 贴进断言消息里。
+   *
+   * 为什么值得专门写一个：本段的红灯语义是「某处漏过滤了」，而**"哪一处"**才是
+   * 真正要回答的问题（侧栏？下拉？面包屑？某个我没注意到的推荐位）。
+   * 只报一个计数，排查者还得自己去开浏览器；带上上下文，一眼定位。
+   */
+  function contextOf(haystack: string, needle: string): string {
+    if (needle.length === 0) return '<needle 为空>';
+    const lines = haystack.split('\n');
+    const out: string[] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!lines[i]!.includes(needle)) continue;
+      out.push(
+        [lines[i - 1] ?? '', lines[i]!, lines[i + 1] ?? ''].join(' ｜ ').trim().slice(0, 300),
+      );
+    }
+    return out.length === 0 ? '<未命中>' : out.join('\n');
+  }
+
+  beforeAll(async () => {
+    server = await startStaticServer(resolve(__dirname, '..', 'build-dist'));
+    base = server.url.replace(/index\.html$/, '');
+    browser = await chromium.launch({ executablePath: CHROMIUM_PATH ?? undefined });
+
+    fixtureDir = mkdtempSync(join(tmpdir(), 'idplan-isolation-l4-'));
+    mainEnv = await createEnv(writeSeed('seed-main.json', true));
+    humanOnlyEnv = await createEnv(writeSeed('seed-human-only.json', false));
+  }, 180000);
+
+  afterAll(async () => {
+    await mainEnv?.ctx.close();
+    await humanOnlyEnv?.ctx.close();
+    await browser?.close();
+    await server?.close();
+  });
+
+  /* ════════════════════ 人类侧：Agent 看板名一次都不许出现 ════════════════════ */
+
+  it('L4-01 · 首页 `/`：项目网格/侧栏/顶栏里 Agent 看板名出现 0 次', async () => {
+    const page = await openPage(mainEnv, '', { expectText: HUMAN_NAME });
+    try {
+      const text = await bodyText(page);
+      expect(countOccurrences(text, HUMAN_NAME), '夹具未生效：人类项目名都没渲染出来').toBeGreaterThan(0);
+      expect(
+        countOccurrences(text, AGENT_NAME),
+        '人类首页出现了 Agent 看板名（§7.2 #1/#2/#3/#5/#9/#10/#11/#13 任一漏过滤）',
+      ).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('L4-02 · 月历视图（首页切「月历」）：Agent 看板名出现 0 次', async () => {
+    const page = await openPage(mainEnv, '', { expectText: HUMAN_NAME });
+    try {
+      await page.getByRole('tab', { name: '月历' }).click();
+      await page.waitForTimeout(400);
+      const text = await bodyText(page);
+      expect(countOccurrences(text, AGENT_NAME), '月历里出现了 Agent 看板（§7.2 #7）').toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('L4-03 · 我的任务页 `/my-tasks`：Agent 看板名与其任务名都出现 0 次', async () => {
+    const page = await openPage(mainEnv, 'my-tasks');
+    try {
+      const text = await bodyText(page);
+      expect(countOccurrences(text, AGENT_NAME), '我的任务页出现了 Agent 看板名（§7.2 #14）').toBe(0);
+      // ★ 判别力：Agent 任务是**指派给这个人类成员**的 —— 若这一行没过滤，任务名会直接出现
+      expect(
+        countOccurrences(text, AGENT_TASK),
+        '我的任务页出现了 Agent 看板名下的任务（AI 指派给人类成员的任务也不该出现）',
+      ).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('L4-04 · 成员看板 `/member-board`：Agent 看板名与其任务名都出现 0 次', async () => {
+    const page = await openPage(mainEnv, 'member-board', { expectText: MEMBER_NAME });
+    try {
+      const text = await bodyText(page);
+      expect(countOccurrences(text, AGENT_NAME), '成员看板出现了 Agent 看板名（§7.2 #15 ★★ 关键漏点）').toBe(0);
+      expect(countOccurrences(text, AGENT_TASK), '成员看板出现了 Agent 看板名下的任务').toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  /**
+   * ⚠️ **「Agent 面」的判定范围＝`<main>`（页面内容），不含共享侧栏。**
+   *
+   * 实测把范围放到整页时 L4-05 会"红"，而红了的那一处是**设计要求的**：
+   * 侧栏的「我的项目」列表对应 §7.2 **#11**，接法是 **P**（人类侧出口），
+   * 且 PRD B14 要求 Agent 侧的侧栏是「人类项目列表 ＋ 独立的 Agent 看板列表」两段，
+   * 不是"只留 Agent"。所以侧栏出现人类项目名是**正确行为**，不是泄漏。
+   *
+   * 于是本段这样划线，并把它写成断言而不是"心里知道"：
+   *   · Agent 面对 Agent 数据 → 取 `<main>`（#20 的项目下拉 / #21 统计卡都在这里）；
+   *   · 共享侧栏 → 单独断言它**确实**列人类项目（#11 = P 的正向证据），
+   *     于是"人类名 0 次"这条边界的适用范围不再有歧义。
+   */
+  const mainText = async (page: Page): Promise<string> => page.locator('main').innerText();
+  const sidebarText = async (page: Page): Promise<string> =>
+    page.locator('[data-app-sidebar]').first().innerText();
+
+  /* ════════════════════ Agent 侧：人类项目名一次都不许出现 ════════════════════ */
+
+  it('L4-05 · Agent 页 `/agent`：main 里人类项目名 0 次，且 Agent 看板**在**（判别力）', async () => {
+    const page = await openPage(mainEnv, 'agent');
+    try {
+      const text = await mainText(page);
+
+      // ① 页面内容里不得有人类项目
+      expect(
+        countOccurrences(text, HUMAN_NAME),
+        `Agent 页 main 里出现了人类项目（§7.2 #20「现状最刺眼处」）。命中处上下文：\n${contextOf(text, HUMAN_NAME)}`,
+      ).toBe(0);
+
+      // ② #20 的**精确**断言：项目下拉的选项里不得有人类项目，且必须真的列着 Agent 看板
+      const options = (await page.locator('main select option').allInnerTexts()).map((s) => s.trim());
+      expect(options, 'Agent 页的项目下拉没渲染出来 ⇒ 本用例无判别力').not.toHaveLength(0);
+      expect(options).not.toContain(HUMAN_NAME);
+      expect(options).toContain(AGENT_NAME);
+
+      // ③ 判别力：Agent 看板必须真的在 main 上（否则上面的 0 可能是"整页没渲染"造成的假绿）
+      expect(
+        countOccurrences(text, AGENT_NAME),
+        'Agent 页 main 没渲染出 Agent 看板 ⇒ 隔离断言无判别力',
+      ).toBeGreaterThan(0);
+
+      // ④ 边界正向证据：共享侧栏按 #11（P）**应当**列人类项目 —— 且不该列 Agent 看板
+      const side = await sidebarText(page);
+      expect(side, '侧栏（#11 = P）未列人类项目 ⇒ 与 #11 的接法不符').toContain(HUMAN_NAME);
+      expect(side, '侧栏把 Agent 看板混进了「我的项目」列表').not.toContain(AGENT_NAME);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('L4-06 · 从未建过 Agent 看板时，`/agent` 是**明确空态**且不列人类项目', async () => {
+    const page = await openPage(humanOnlyEnv, 'agent');
+    try {
+      expect(
+        await page.locator('[data-agent-board-empty]').count(),
+        '库里只有人类项目时，Agent 页必须给出明确空态（data-agent-board-empty）',
+      ).toBeGreaterThan(0);
+      const text = await mainText(page);
+      expect(
+        countOccurrences(text, HUMAN_NAME),
+        `Agent 页用人类项目把空态面板填满了（v0.8 要修掉的那条）。命中处上下文：\n${contextOf(text, HUMAN_NAME)}`,
+      ).toBe(0);
+      expect(
+        await page.locator('[data-agent-board-item]').count(),
+        '空态下不得渲染任何看板项',
+      ).toBe(0);
+      // 下拉也必须是"暂无"而不是人类项目（#20 在空态下的形态）
+      const options = (await page.locator('main select option').allInnerTexts()).map((s) => s.trim());
+      expect(options).not.toContain(HUMAN_NAME);
+    } finally {
+      await page.close();
+    }
+  });
+
+  /* ════════════════════ §7.3 特判：单项目直达必须带来源标识 ════════════════════ */
+
+  it('L4-07 · `/project/<agent>` 详情页：渲染「AI 工作区」来源标识（穿越允许且有告知）', async () => {
+    const page = await openPage(mainEnv, `project/${AGENT_PROJECT_ID}`, { expectText: AGENT_NAME });
+    try {
+      expect(
+        await page.locator('[data-project-source-badge="agent"]').count(),
+        'Agent 看板详情页缺少来源标识（§7.3 #27）',
+      ).toBeGreaterThan(0);
+      expect(await bodyText(page)).toContain(BADGE_TEXT);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('L4-08 · 两个打印页：`/project/<agent>/{schedule,calendar}-print` 都带来源标识', async () => {
+    for (const route of [
+      `project/${AGENT_PROJECT_ID}/schedule-print`,
+      `project/${AGENT_PROJECT_ID}/calendar-print`,
+    ]) {
+      const page = await openPage(mainEnv, route);
+      try {
+        // 打印页按 :id 直达、**没有列表可过滤** ⇒ 本轮的处置是"保留路由 + 补来源提示"（§7.3 #17/#18）
+        await page
+          .locator('[data-project-source-badge="agent"]')
+          .first()
+          .waitFor({ state: 'attached', timeout: 15000 })
+          .catch(async () => {
+            const text = await bodyText(page);
+            throw new Error(`${route} 未渲染来源标识。页面文本片段：${text.slice(0, 400)}`);
+          });
+        expect(await bodyText(page)).toContain(BADGE_TEXT);
+      } finally {
+        await page.close();
+      }
+    }
+  });
+
+  it('L4-09 · 人类侧不给 Agent 看板任何打印入口（按钮消失；人类项目上仍在 ⇒ 判别力）', async () => {
+    const printEntry = (page: Page) => page.getByRole('button', { name: '日程表' });
+
+    const agentPage = await openPage(mainEnv, `project/${AGENT_PROJECT_ID}`, {
+      expectText: AGENT_NAME,
+    });
+    try {
+      expect(
+        await printEntry(agentPage).count(),
+        'Agent 看板详情页仍暴露「日程表」打印入口（§7.2 #17/#18 的入口侧收口）',
+      ).toBe(0);
+    } finally {
+      await agentPage.close();
+    }
+
+    // 判别力：同一个按钮在**人类项目**上必须存在 —— 否则上面的 0 只说明"选择器写错了"
+    const humanPage = await openPage(mainEnv, `project/${HUMAN_PROJECT_ID}`, {
+      expectText: HUMAN_NAME,
+    });
+    try {
+      expect(
+        await printEntry(humanPage).count(),
+        '人类项目详情页的打印入口不见了 ⇒ L4-09 的断言无判别力',
+      ).toBeGreaterThan(0);
+    } finally {
+      await humanPage.close();
+    }
   });
 });
