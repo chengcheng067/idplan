@@ -16,7 +16,7 @@ import { installFakeIndexedDB } from './setup';
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { ProjectService } from '../src/core/services/project.service';
-import { getPresetItems, getStageLibraryItems } from '../src/core/template/stage-library';
+import { getItemsByDomains, getPresetItems, getStageLibraryItems } from '../src/core/template/stage-library';
 import { MAX_STAGE_COUNT, MIN_STAGE_COUNT, addDaysIso, previewSplit } from '../src/core/template/split';
 import {
   legacyColorIndexOf,
@@ -374,8 +374,19 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
 
   it(`${MAX_STAGE_COUNT} 段项目可落库（解除 9 阶段硬约束）`, async () => {
     const svc = makeService();
+    // v0.8：上限 20 只能在**大类伞**（建筑 6 ＋ 景观 7 ＋ 室内 9 ＝ 22 项）下达到
+    // —— 任一单板块池最多 9 项，永远到不了 20（设计 §1.3）。
+    // 又因 A9「同项目内阶段名不可重复」是落库闸门，这里按名去重（伞内 22 项里有 1 组重名）。
+    const umbrellaPool = getItemsByDomains(['architecture', 'landscape', 'indoor']);
+    const uniqueByName = umbrellaPool.filter(
+      (item, i) => umbrellaPool.findIndex((x) => x.name === item.name) === i,
+    );
+    const stageItems = uniqueByName.slice(0, MAX_STAGE_COUNT);
+    expect(stageItems).toHaveLength(MAX_STAGE_COUNT);
+    expect(new Set(stageItems.map((s) => s.name)).size).toBe(MAX_STAGE_COUNT);
+
     const project = await svc.createManualProject({
-      name: '十二段项目',
+      name: '二十段项目',
       type: 'dining' as never,
       address: '',
       clientName: '',
@@ -384,7 +395,7 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       plannedStartAt: '2026-01-01',
       plannedEndAt: '2026-12-31',
       coverColor: null,
-      stageItems: getStageLibraryItems().slice(0, MAX_STAGE_COUNT),
+      stageItems,
     });
 
     const rows = await bundle.stages.listByProject(project.id);

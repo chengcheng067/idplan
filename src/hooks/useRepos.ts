@@ -14,6 +14,17 @@ import { normalizeLegacyMemberRoles } from './useRoleGuard';
  * 业务代码唯一取数入口（铁律 4）。
  * 依赖 react 组件树 Context —— 只能在组件/自定义 hook 内调用，
  * service 层经由 store action 或 React 层注入的 bundle 工作。
+ *
+ * ── v0.8 隔离守卫白名单（T04 §7.2 第 1 项，**本文件不参与隔离过滤**） ──
+ * 本文件（尤其 `bootstrapAllStores`）是**唯一**被允许「全量读入 projects / stages / tasks」
+ * 的应用层入口：v0.8 的隔离设计是「**全量读入 → 单一谓词出口分流**」
+ * （PRD N11），过滤本身发生在 `src/core/project/visibility.ts` 的出口，不在取数层。
+ * ⇒ 若 T04 的 `tests/isolation-guard.spec.ts` 在本文件命中「未过滤的全量读」，
+ *   那是**预期命中（白名单内）**，请在此文件补白名单登记，**不要**在取数层加过滤 ——
+ *   在取数层过滤会让 Agent 侧同样读不到数据，两个工作区一起变空。
+ *
+ * v0.8 另注：自定义阶段库走 `settings` KV（键 `customStages`），读写唯一出口是
+ * `src/core/services/custom-stage.service.ts`；本文件的 settings 装配**不需要任何改动**。
  */
 export function useRepos(): IRepositoryBundle {
   return useRepoContext();

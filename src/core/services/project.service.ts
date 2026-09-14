@@ -6,7 +6,7 @@
 import { createId } from '../../lib/id';
 import { toIsoDate } from '../../lib/date';
 import { MAX_STAGE_COUNT, MIN_STAGE_COUNT, previewSplit } from '../template/split';
-import { getStageLibraryVersion } from '../template/stage-library';
+import { findStageLibraryItem, getStageLibraryVersion } from '../template/stage-library';
 import {
   CUSTOM_STAGE_PRESET_KEY,
   INTERIOR_FULL_PRESET_KEY,
@@ -104,7 +104,8 @@ export class ProjectService {
         orderIndex: d.orderIndex,
         // 键序铁律：templateKey/colorIndex/customColor 插在 orderIndex 之后、name 之前
         // （与 entities.Stage / backup.service stageSchema 三处同步，漏一处 roundtrip 就挂）
-        templateKey: d.templateKey,
+        // v0.8：自定义阶段的草稿 key 不是模板库 key ⇒ 落 null（禁止伪造 key，N4）
+        templateKey: normalizeDraftTemplateKey(d.templateKey),
         colorIndex: d.colorIndex,
         // v0.8 用户自定义主色：草稿里已归一为 `string | null`，直接透传。
         // StageDraft.customColor 是**必填**字段 ⇒ 这里不可能读到 undefined（漏给色会编译失败）。
@@ -242,6 +243,10 @@ export class ProjectService {
    * 阶段数由「固定 9」放宽为「所选 N ∈ [1, 20]」（v0.8：上限 12 → 20）；
    * orderIndex 必须仍是 1..N 连续无空缺——stage.service 的 orderIndex+1 取下一段、
    * TimelineView 的 orderIndex> 取后继段都依赖这个连续性。
+   *
+   * v0.8 追加：**同项目内阶段名不可重复**（A9）。理由不是洁癖——Agent 通道按名定位阶段
+   * （`?stageName=`），重名会让落点歧义。UI 侧已有行内提示 + 禁用提交，
+   * 这里是**落库前的第二道闸门**（绕过 UI 的调用方同样受约束）。
    */
   private assertDraftsValid(drafts: StageDraft[]): void {
     if (drafts.length < MIN_STAGE_COUNT) {
@@ -264,7 +269,45 @@ export class ProjectService {
         );
       }
     }
+    const duplicated = findDuplicateStageNames(drafts.map((d) => d.name));
+    if (duplicated.length > 0) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `阶段名不能重复：${duplicated.join('、')}。`,
+      );
+    }
   }
+}
+
+/**
+ * 草稿 key → 落库 key。
+ *
+ * 自定义阶段在选中列表里的 key 是 `cst.<id>`（`custom-stage.service` 生成），**不是**
+ * 模板库 key。而 `Stage.templateKey` 的语义是「模板溯源」，只允许两种取值：
+ * 模板库真 key 或 `null`（N4 明文：禁止伪造 key —— `getStageLibraryItem(未知key)` **抛错**，
+ * 伪造 key 会让看板落列、打印分组在读取时炸）。
+ *
+ * 因此这里做一次**收口**：非模板库 key 一律落 `null`，下游按 `orderIndex` 均分落列
+ * （`stage-resolve` 已核该路径不崩）。
+ */
+export function normalizeDraftTemplateKey(templateKey: string | null): string | null {
+  if (!templateKey) return null;
+  return findStageLibraryItem(templateKey) ? templateKey : null;
+}
+
+/** 同项目内重复的阶段名（trim 后同名；保序去重）。与 StageSelectPanel 的口径一致。 */
+export function findDuplicateStageNames(names: readonly string[]): string[] {
+  const count = new Map<string, number>();
+  for (const raw of names) {
+    const name = raw.trim();
+    if (name === '') continue;
+    count.set(name, (count.get(name) ?? 0) + 1);
+  }
+  const out: string[] = [];
+  for (const [name, n] of count) {
+    if (n > 1) out.push(name);
+  }
+  return out;
 }
 
 /** 原文摘要：sha256 前 16 位（webcrypto 异步则退化为简单 hash —— 存证用弱一致性即可） */
