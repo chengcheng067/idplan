@@ -215,18 +215,54 @@ export function ProjectDetailPage(): JSX.Element {
           )}
           {!memberView && (
             <>
-              {/* v0.6 · T13 要点 9：跳 Agent Board（先锚定当前项目再导航） */}
-              <button
-                type="button"
-                onClick={() => {
-                  useAgentStore.getState().setCurrentProject(project.id);
-                  window.location.assign('/agent');
-                }}
-                className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
-                title="在 Agent Board 中查看本项目任务"
-              >
-                <Bot size={14} /> Agent Board
-              </button>
+              {/*
+                ★ v0.8 T04-A · 「跳 Agent 工作区」入口的 kind 门控（PRD 第 27 行 / 设计 §7.3 #27）。
+
+                ── 为什么这个按钮原来缺一道门，以及缺了会怎样 ──
+                  v0.6 · T13 要点 9 加它时的语义是「**在 Agent Board 中查看本项目任务**」：
+                  那时 Agent Board 与人类项目**共用一套**数据，人类项目上这个按钮是通的。
+                  v0.8 把 Agent 工作区做成**物理隔离**的独立工作区之后，这个语义**不再成立** ——
+                  Agent 工作区里只装 `kind === 'agent'` 的看板，人类项目在那里**根本不存在**。
+                  于是人类项目详情页上的这个按钮变成一个死入口：点下去锚定的是人类 id，
+                  落到 `/agent` 后 `currentProjectId` 指向一个 Agent 侧查不到的项目，
+                  页面表现为「选中了一个配不上任何看板的下拉项」（缺陷，非设计）。
+
+                ── 与打印按钮的对照（同一段上方 24 行） ──
+                  `:206` 的打印入口是 `role !== null && projectKindOf(project) !== 'agent'`
+                  （**人类**项目才给），本按钮恰好相反是 `projectKindOf(project) === 'agent'`
+                  （**Agent** 看板才给）。两条门互补，共同实现 §7.3 #17/#18 与 #27 的
+                  「入口侧结构性关闭」：人类侧既不能把 Agent 看板印出来，也不会被误导去
+                  一个不存在的工作区里找人类项目。
+
+                ── 「允许穿越」到底允许什么（本次的关键澄清） ──
+                  PRD 第 27 行：「单项目 | **允许打开**（唯一允许穿越的通道，且**单向**：
+                  人类侧永不出现 Agent 内容）」；§7.3 #27：「允许打开 Agent 看板详情」。
+                  ⇒「穿越」指的是**Agent 看板详情页本身可被打开**（从 `/agent` 点进去，
+                    或深链直达），所以本按钮在 `kind === 'agent'` 时**必须在**。
+                    而「单向」指的是**人类侧永不出现 Agent 内容** —— 这条与本按钮无关
+                    （本按钮在人类项目上出现时泄露的不是 Agent 内容，而是一个坏入口）。
+
+                ── 为什么是嵌套而不是 `!memberView && …` 平铺 ──
+                  本 `<>` 片段里还有一个 `归档` 按钮，它是**写操作**、仍限管理员且
+                  **不按 kind 区分**（Agent 看板也能归档）。若把 kind 门提到片段外层，
+                  归档会被一并关掉 —— 那是回归。两个条件**叠加**作用在本按钮上，
+                  `!memberView`（管"谁"）由外层负责，`projectKindOf(project) === 'agent'`
+                  （管"哪一个"）由本行负责，与上方打印按钮同一套写法（用 `projectKindOf`
+                  而非裸 `project.kind`：读时回落只允许有一个出处，老库无该列）。
+              */}
+              {projectKindOf(project) === 'agent' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    useAgentStore.getState().setCurrentProject(project.id);
+                    window.location.assign('/agent');
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
+                  title="在该 Agent 工作区中打开"
+                >
+                  <Bot size={14} /> Agent Board
+                </button>
+              )}
               {/* 归档是**写操作**，仍限管理员（v0.7-D 只放开打印，未放开任何写） */}
               <button
                 type="button"
