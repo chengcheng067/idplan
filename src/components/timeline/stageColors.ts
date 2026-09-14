@@ -240,12 +240,28 @@ export const STAGE_BAND_CLASS: Readonly<Record<number, string>> = {
 };
 
 /**
- * 阶段序号 → 1..9 取模。
- * 与 stageBandColor 等函数共用同一约定（1..9，越界由 resolveStageColorIndex 兜底）。
+ * 阶段序号（1..9）→ 色板槽位（1..9）；越界取模，0 / 负数折回 1..9。
+ *
+ * ⚠️ 入参是 **1-based**：`stage.orderIndex` / `stage.colorIndex` /
+ *    `resolveStageColorIndex()` 的返回值都是这个口径，**不得传 0-based**。
+ *
+ * ── 为什么本函数曾经「错位一格」（已修）──
+ * 规范口径是「阶段 1 → s1」：`resolveStageColorIndex()`（core/template/stage-fallback.ts:97）
+ * 在 1..9 上**恒等**，`legacyColorIndexOf()` 也是 `clamp(orderIndex, 1, 9)`。
+ * 而本函数原先在 `% 9` 之后**多做了 +1**（`(n % 9) + 1`）⇒ 入 1 出 2、入 9 出 1，
+ * 与其上方 docstring 自称的「与 stageBandColor 等函数共用同一约定」自相矛盾。
+ *
+ * 时序（为什么一直没被发现）：本函数在 `ef5de9d` 带 +1 引入时，全仓**零测试**锁它；
+ * 而 8 个直接调用点（StageRowsColumn:75、SchedulePrintPage:391/397/419/469、
+ * CalendarPrintPage:338/365/413）**全部**传 1-based，于是整体错位一格：
+ * 打印页图例第 n 号色块的标题写着色名 `STAGE_COLOR_NAMES[n]`、渲染的却是 s(n+1) 的色，
+ * 同一阶段的阶段卡色点（s(n+1)）与时间轴色带（s(n)）也不同色。
+ * 唯一 0-based 调用点（`ProjectCard.tsx` 的 `<Tag stageIndex={orderIndex - 1}>`）
+ * 反而**碰巧是对的**，本次一并改回 1-based 传参。
  */
 export function stageSlotOf(stageIndex: number): number {
   const n = Math.trunc(stageIndex) % 9;
-  return (n < 0 ? n + 9 : n) + 1;
+  return n <= 0 ? n + 9 : n;
 }
 
 /** 取「实心块」Tailwind 类名（禁止调用点自行拼接） */

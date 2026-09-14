@@ -3,7 +3,7 @@
 // 高 30，横向 padding 14，圆角 9999，文字 12/500。
 // 未选：paper 底 + line 描边；选中：pine-soft 底 + pine 字。
 // stageIndex 存在时：选中用该阶段 lightBar 底 + lightText 字
-//   （bg-stage-band-sN + text-stage-ink-sN，N = (stageIndex%9)+1，循环取模 1–9）。
+//   （bg-stage-band-sN + text-stage-ink-sN，N = stageIndex 取模折回 1–9，入参 1-based）。
 // 输出 <button aria-pressed={active}>。
 
 import { forwardRef, type ReactNode } from 'react';
@@ -12,7 +12,7 @@ import { stageBandClass } from '../timeline/stageColors';
 
 export interface ChipProps {
   active?: boolean;
-  /** 阶段序号（0-based）。存在时选中态改用该阶段 lightBar / lightText。 */
+  /** 阶段序号（**1-based**，与 `stage.orderIndex` 同口径）。存在时选中态改用该阶段 lightBar / lightText。 */
   stageIndex?: number;
   onClick?: () => void;
   children: ReactNode;

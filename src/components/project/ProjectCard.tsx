@@ -324,7 +324,13 @@ export function ProjectCard({
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-[11px] text-mist">{dueText}</span>
           {cur && (
-            <Tag stageIndex={cur.orderIndex - 1}>{stageLabel}</Tag>
+            /* ⚠️ `stageSlotOf` 的入参口径是 **1-based**（`orderIndex` / `colorIndex` /
+               `resolveStageColorIndex()` 三者同源），故这里直接传 `orderIndex`。
+               历史上这里传过 `orderIndex - 1`（0-based）：那是在 `stageSlotOf` 还多做一次
+               `+1` 的时候，两者**互相抵消**才碰巧正确；`stageSlotOf` 去掉多余的 +1 之后
+               （见 stageColors.ts 的说明），这里必须同步去掉 `- 1`，否则本卡片的阶段色签
+               会整体错位一格。净视觉：1..9 全部逐字节不变（旧 `slot(orderIndex-1)` = 新 `slot(orderIndex)`）。 */
+            <Tag stageIndex={cur.orderIndex}>{stageLabel}</Tag>
           )}
         </div>
         <AvatarStack

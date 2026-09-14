@@ -16,7 +16,13 @@ export type TagTone = 'doing' | 'due' | 'overdue' | 'done' | 'neutral' | 'pine';
 
 export interface TagProps {
   tone?: TagTone;
-  /** 阶段序号（0-based）。存在时覆盖 tone，底色/字色取该阶段 lightBar / lightText，循环取模 1–9。 */
+  /**
+   * 阶段序号（**1-based**，与 `stage.orderIndex` 同口径）。
+   * 存在时覆盖 tone，底色/字色取该阶段 lightBar / lightText，越界取模 1–9。
+   *
+   * ⚠️ 这里曾是 0-based（调用方传 `orderIndex - 1`）：那是在 `stageSlotOf` 还多做一次
+   *    `+1` 的年代两者互相抵消才正确。`stageSlotOf` 已改为 1-based 恒等，本参数同步改口径。
+   */
   stageIndex?: number;
   children: ReactNode;
   className?: string;
