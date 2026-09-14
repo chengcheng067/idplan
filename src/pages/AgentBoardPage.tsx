@@ -675,7 +675,7 @@ export function AgentBoardPage(): JSX.Element {
                   它读成人类项目选择器。
             */}
             <select
-              value={currentProjectId ?? ''}
+              value={scopedProjectId ?? ''}
               onChange={(e) => setCurrentProject(e.target.value || null)}
               aria-label="选择 Agent 看板"
               className="h-[38px] min-w-0 max-w-[240px] rounded-2xl border border-line bg-paper px-3.5 text-sm text-ink outline-none focus:border-pine"
@@ -737,10 +737,17 @@ export function AgentBoardPage(): JSX.Element {
               <ClipboardPaste size={14} aria-hidden />
               {termFor('applyPayload', agentBoardMode)}
             </button>
+            {/*
+              ★ 这里用 `scopedProjectId` 而非 `currentProjectId`（本节开头的说明同理）：
+                `currentProjectId` 可能是**人类项目 id**（历史遗留 / 深链），此时
+                交接包弹窗被下面的 `project` 守卫挡住 ⇒ 按钮**亮了也点不开**，
+                是个「点了没反应」的**死入口**（与详情页那处同类）。
+                换用已确认的 id 后：没有 Agent 看板 ⇒ 灰；有 ⇒ 可点且一定打得开。
+            */}
             <button
               type="button"
               onClick={() => setHandoffOpen(true)}
-              disabled={!currentProjectId}
+              disabled={!scopedProjectId}
               className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl bg-pine px-4 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-40"
             >
               <FileOutput size={14} aria-hidden />
@@ -1106,33 +1113,53 @@ export function AgentBoardPage(): JSX.Element {
         </Modal>
       )}
 
-      {/* Apply payload 面板（Modal 底座；失败保留输入由面板内部负责） */}
-      {applyOpen && currentProjectId && (
+      {/*
+        Apply payload 面板（Modal 底座；失败保留输入由面板内部负责）。
+
+        ★ 写入路径守卫：这里**必须**用 `scopedProjectId`，且必须与下方的 `project`
+          守卫**对齐**。原因不是显示，是**写入目标** —— `ApplyPayloadPanel` 会把
+          `projectId` 当作落库目标；若喂进人类项目 id，用户粘贴的 payload 会落到
+          **人类项目**上（Agent 侧的反向写入泄漏）。
+
+          可达窗口（不是理论上才有）：`:520 if (!loaded) return;` 会让上面的清理
+          effect 在 `loadAll` 完成前**直接早退**（不清 id），这段时间 `currentProjectId`
+          仍是人类 id；而「导入任务」按钮**刻意不加 `disabled`**（通道配置是项目无关的
+          全局设置，见上方注释）⇒ 它在 `loaded=false` 时**可点**。NAS 上 `loadAll` 慢时
+          这个窗口是秒级的。
+
+          为什么之前漏了：handoff 面板有 `project` 守卫挡着（旧写法 `currentProjectId &&
+          project`，靠 `project` 兜住了），apply 面板**没有** —— 两者不对称，漏的正是
+          没被兜住的那个。现在统一用 `scopedProjectId`：`project` 为 undefined ⇒
+          `scopedProjectId` 为 null ⇒ 面板压根不渲染；同时 `:1117` 的 `projectId` 也
+          拿不到人类 id。
+      */}
+      {applyOpen && scopedProjectId && (
         <Modal
           open
           onClose={() => setApplyOpen(false)}
           ariaLabel={termFor('applyPayload', agentBoardMode)}
         >
           <ApplyPayloadPanel
-            projectId={currentProjectId}
+            projectId={scopedProjectId}
             onClose={() => setApplyOpen(false)}
             onCommitted={() => {
               setApplyOpen(false);
-              if (currentProjectId) void loadProject(repos, currentProjectId);
+              // 保留 `if (…)` 写法：闭包内 TS 不保留收窄，写成裸参数会被判可能为 null
+              if (scopedProjectId) void loadProject(repos, scopedProjectId);
             }}
           />
         </Modal>
       )}
 
       {/* handoff bundle 面板 */}
-      {handoffOpen && currentProjectId && project && (
+      {handoffOpen && scopedProjectId && project && (
         <Modal
           open
           onClose={() => setHandoffOpen(false)}
           ariaLabel={termFor('handoff', agentBoardMode)}
         >
           <HandoffPanel
-            projectId={currentProjectId}
+            projectId={scopedProjectId}
             projectName={project.name}
             stages={projectStages.map((s: Stage) => ({ id: s.id, name: s.name }))}
             tasks={projectTasks}
