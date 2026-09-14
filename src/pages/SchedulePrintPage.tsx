@@ -86,9 +86,51 @@ export function SchedulePrintPage(): JSX.Element {
   const pages = useMemo(() => paginateSections(sections), [sections]);
   const nowIso = new Date().toISOString();
 
-  // 时间轴甘特视图范围 = 项目计划基线（首帧即建，稳定）
-  const viewStart = project ? project.plannedStartAt.slice(0, 10) : '';
-  const viewEnd = project ? project.plannedEndAt.slice(0, 10) : '';
+  /**
+   * 时间轴甘特视图窗口 = **计划窗口 ∪ 阶段实际起止**。
+   *
+   * ⚠️ 这里曾是「只用计划窗口」（`viewStart/viewEnd = plannedStart/plannedEnd`），
+   *    于是 `left + width = totalDaysInclusive(viewStart, endAt) / viewDays * 100`：
+   *      · 阶段 `endAt > plannedEndAt` → **> 100%**；
+   *      · 阶段 `startAt < plannedStartAt` → **left < 0**。
+   *    色条是 `absolute`、轨道是 `relative`（无 `overflow-hidden`），越界部分就压到
+   *    右侧「起止日期」文字上（用户实测截图里 9 个阶段中后 3 个全越界）。
+   *    这是**脏数据的常规形态**（阶段改期超出合同工期），不是异常输入。
+   *
+   * 为什么取 union，而不是照抄 `TimelineView.baseRange` 的「只用阶段跨度」：
+   *    打印稿头部 `:177-179` 会打出「周期：X – Y（共 N 天）」这句**合同工期**声明，
+   *    轴若只按阶段跨度画，轴与这句声明会不一致；保留计划基线是有意义的信息。
+   *    union 下所有阶段都落在区间内 ⇒ 不变式 `0 ≤ left` 且 `left + width ≤ 100` 恒成立。
+   *
+   * 参照：同一个越界 bug 详情页 `TimelineView.tsx:114-125` 早已修过（改为按阶段实际起止），
+   *      月历打印页 `CalendarPrintPage.tsx:165-166` 也是「阶段跨度 ∪ 计划窗口」同款口径——
+   *      本页是**第三处独立实现**，此前两处都收了，它没收，所以这个 bug 才复发。
+   *
+   * ⚠️ 不要在 `bandGeom` 里加 `Math.min(…, 100 - left)` 之类**钳制兜底**：那会把将来的
+   *    回归静默吃掉（色条被截断但没人知道），越界重新变得不可观测。窗口扩展后已不可能越界，
+   *    真越界就应该被 `tests/schedule-print-band-bounds.spec.tsx` 抓住变红。
+   *
+   * 注：`viewStart/viewEnd` 依赖 `sections`，而 `monthsList` 的 `useMemo` 依赖
+   *     `[project, viewStart, viewEnd]`——两者都是**字符串原始值**，按值比较即会随
+   *     `sections` 变化而失效重算，不存在陈旧值问题（无需把 `sections` 塞进该依赖数组）。
+   *
+   * ⚠️ 取 min/max 前先滤掉**空日期**：`Stage.startAt/endAt` 在类型上是必填，但备份/老数据
+   *    仍可能落地 `''`。空串在字符串比较里**最小**（`'' < '2026-01-01'`），一条脏行就会把
+   *    `viewStart` 拉成 `''` → `viewDays = NaN` → **整轴所有色条一起 NaN**。旧实现（只用
+   *    计划窗口）没有这个放大效应，所以这行过滤是本次改动**自带的防回归**：让脏行只坏它
+   *    自己那一行（旧行为），不污染其它行。见 `tests/schedule-print-band-bounds.spec.tsx`
+   *    的「单条脏行不得污染整轴」用例。
+   */
+  const plannedStart = project ? project.plannedStartAt.slice(0, 10) : '';
+  const plannedEnd = project ? project.plannedEndAt.slice(0, 10) : '';
+  const sectionStarts = sections.map((s) => s.startAt.slice(0, 10)).filter((d) => d !== '');
+  const sectionEnds = sections.map((s) => s.endAt.slice(0, 10)).filter((d) => d !== '');
+  const viewStart = sectionStarts.length
+    ? [plannedStart, ...sectionStarts].reduce((a, b) => (a < b ? a : b))
+    : plannedStart;
+  const viewEnd = sectionEnds.length
+    ? [plannedEnd, ...sectionEnds].reduce((a, b) => (a > b ? a : b))
+    : plannedEnd;
   const viewDays = Math.max(totalDaysInclusive(viewStart, viewEnd), 1);
   const offsetDays = (iso: string): number => totalDaysInclusive(viewStart, iso) - 1;
   const bandGeom = (startAt: string, endAt: string): { left: number; width: number } => {
