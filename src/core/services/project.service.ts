@@ -5,13 +5,26 @@
 
 import { createId } from '../../lib/id';
 import { toIsoDate } from '../../lib/date';
-import { MAX_STAGE_COUNT, MIN_STAGE_COUNT, previewSplit } from '../template/split';
-import { findStageLibraryItem, getStageLibraryVersion } from '../template/stage-library';
+import {
+  MAX_STAGE_COUNT,
+  MIN_STAGE_COUNT,
+  previewSplit,
+  stageColorIndex,
+} from '../template/split';
+import {
+  findStageLibraryItem,
+  getPreset,
+  getPresetItems,
+  getStageLibraryItems,
+  getStageLibraryVersion,
+  getUsableDomains,
+} from '../template/stage-library';
 import {
   CUSTOM_STAGE_PRESET_KEY,
+  DEFAULT_PROJECT_DOMAIN,
   INTERIOR_FULL_PRESET_KEY,
 } from '../template/stage-fallback';
-import type { StageDraft } from '../types/dto';
+import type { StageDraft, StageSelectionItem, StageTemplateItem, StageTemplateDomain } from '../types/dto';
 import type {
   ConfirmedContractPayload,
   CreateProjectCmd,
@@ -277,6 +290,188 @@ export class ProjectService {
       );
     }
   }
+
+  /* ══════════════════════ v0.8 · Agent 看板建板（设计 §6.1 / §7.6；T04-B） ══════════════════════
+   *
+   * ── 这个方法只做一件事：在 **Agent 工作区**里建一块看板（项目主体 ＋ 阶段骨架）──
+   *
+   * 它与 `createProjectFromContract` / `createManualProject` 是**并列**的第 3 条建档路径，
+   * 但归属侧不同：本方法恒落 `kind = 'agent'`（人类两条路径不传 kind，由 repo 落默认 human）。
+   * 于是"人类项目里一字不改"这条铁律在**类型层**就成立——本方法根本没有参数能改人类项目。
+   *
+   * ── 三处**绝不猜测**（PRD B9 / TS-08）──
+   *   ① `name` / `plannedStartAt` / `plannedEndAt` 三者**全必填**，缺任一即抛 Validation。
+   *      **不提供默认日期**——"猜一个起止日期"会让 Agent 拿到的排期与真实意图不符，
+   *      而错误的日期会一路传染到阶段切分、甘特、打印稿，且**不报错**。
+   *   ② `presetKey` 与 `stageNames` **至少一个非空**——空集合会让阶段数 = 0，
+   *      而 0 段的项目在完成度/当前阶段/时间轴上全部无定义（split.ts 的 MIN_STAGE_COUNT 同因）。
+   *   ③ 阶段骨架**只用 `stage-library.ts` 这一份库**：套餐项经 `getPresetItems`，
+   *      声明名按**库里的 name** 反查。库里没有的名字 ⇒ 建为自定义阶段（`templateKey=null`）。
+   *      ★ 这里**绝不**再抄一份骨架/字段口径 —— 本仓已有过教训：
+   *        "抄一份映射就是第二份字段口径，漏一个 `?? null` 即静默 undefined 泄漏"。
+   *
+   * ── 边界铁律（PRD B10）──
+   *   本方法**只在建板这一次**建阶段；后续 payload 导入的落点不在声明集合内时**不建**、
+   *   按既有规则回落（那条路径在 `payload.apply.ts`，与本方法无关）。
+   *   本方法也**不放宽任何既有通道**——人类项目走的仍是原来的校验链。
+   *
+   * ── 为什么不建"默认职责清单"（与合同建档的差别）──
+   *   设计 §6.1 的时序图里，建板只有 `insert` ＋ `stages.bulkInsert` 两步，**没有任务生成**。
+   *   Agent 看板的任务来自 WorkBuddy 的 payload 导入（另一条通道）。
+   *   多建一批"库里的默认任务"会让 Agent 侧出现**用户没要求过**的任务，
+   *   且它们没有 externalId ⇒ 无法被后续导入幂等更新/回收。故不建（有意）。
+   *
+   * @returns 新看板的 project id
+   */
+  public async createAgentBoard(cmd: CreateAgentBoardCmd): Promise<string> {
+    const name = typeof cmd.name === 'string' ? cmd.name.trim() : '';
+    if (!name) {
+      throw new ChangxiaError(ChangxiaErrorCode.Validation, '请填写看板名称。');
+    }
+    // 必填且**不给默认值**：缺日期就说缺日期（TS-08 保持"必须显式给"）
+    const plannedStartAt = typeof cmd.plannedStartAt === 'string' ? cmd.plannedStartAt.trim() : '';
+    const plannedEndAt = typeof cmd.plannedEndAt === 'string' ? cmd.plannedEndAt.trim() : '';
+    if (!plannedStartAt || !plannedEndAt) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        '请提供看板的开始日期与结束日期（不会自动填充默认日期）。',
+      );
+    }
+    const presetKey = typeof cmd.presetKey === 'string' && cmd.presetKey.trim() !== ''
+      ? cmd.presetKey.trim()
+      : null;
+    // 同一次请求内**按名去重**（保序、trim、丢空串）：重名会让 orderIndex 语义歧义
+    const declaredNames = dedupeAgentStageNames(cmd.stageNames ?? []);
+    if (!presetKey && declaredNames.length === 0) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        '请至少指定一个阶段套餐，或显式声明阶段名。',
+      );
+    }
+
+    const stageItems = resolveAgentStageItems(presetKey, declaredNames);
+    // 切分复用**唯一一份**实现（previewSplit）：不自己写日期分配，
+    // 否则"子集内占比归一化 + 残差吸收 + 工作日口径"会立刻出现第二份口径。
+    const drafts = previewSplit({
+      startAt: plannedStartAt,
+      endAt: plannedEndAt,
+      stageItems,
+      scheduleBasis: DEFAULT_SCHEDULE_BASIS,
+    });
+    // 复用同类的落库前闸门：上限 20 ＋ orderIndex 连续 ＋ 阶段名不重复（A9/A10）
+    this.assertDraftsValid(drafts);
+
+    const projectCmd: CreateProjectCmd = {
+      name,
+      // 归属侧恒为 agent（本方法**没有**参数能改它——这正是"人类项目一字不改"的保证）
+      kind: 'agent',
+      // 商务细分在 Agent 侧无来源可填 ⇒ 取既有枚举里唯一的"其他"（`ProjectType.Other`）。
+      // 不猜具体行业：Agent 建板请求里没有这个字段（PRD B9 只要求名称/日期/阶段集合）。
+      type: ProjectType.Other,
+      address: '',
+      clientName: '',
+      contractAmount: null,
+      signedAt: null,
+      plannedStartAt,
+      plannedEndAt,
+      coverColor: null,
+      stagePresetKey: declaredNames.length > 0 ? CUSTOM_STAGE_PRESET_KEY : presetKey,
+      stageTemplateVersion: getStageLibraryVersion(),
+      scheduleBasis: DEFAULT_SCHEDULE_BASIS,
+      // 主板块：**有套餐才推导**（套餐自带 domain）；纯 stageNames 建板 ⇒ null（不猜板块，
+      // 读时回落链照旧兜住）。与"绝不猜测"一致：声明里没有的信息，导出成 null 而不是编一个。
+      domain: presetKey ? (getPreset(presetKey)?.domain ?? null) : null,
+    };
+
+    const exec = async (): Promise<string> => {
+      const project = await this.deps.projects.insert(projectCmd);
+
+      // 键序铁律：与 createProjectFromContract 的 stageRows 字面量**逐字段同序**
+      // （entities.Stage / backup stageSchema / 本文件另一处 / stage-fallback 四处同步）。
+      const stageRows: Stage[] = drafts.map((d) => ({
+        id: createId('stg'),
+        projectId: project.id,
+        orderIndex: d.orderIndex,
+        templateKey: normalizeDraftTemplateKey(d.templateKey),
+        colorIndex: d.colorIndex,
+        customColor: d.customColor,
+        name: d.name,
+        ratioPercent: d.ratioPercent,
+        startAt: d.startAt,
+        endAt: d.endAt,
+        status: StageStatus.NotStarted,
+        ownerId: d.ownerId,
+        visible: d.visible,
+        resourcePath: d.resourcePath,
+        revision: 1,
+        updatedAt: new Date().toISOString(),
+      }));
+      await this.deps.bundle.stages.bulkInsert(stageRows);
+
+      // 阶段流水（与合同建档同款）：让每条阶段都有"创建"这一点历史，
+      // 否则 Agent 看板的阶段在流水视图里凭空出现、无从追溯。
+      for (const s of stageRows) {
+        await this.deps.bundle.logs.appendStageLog({
+          stageId: s.id,
+          projectId: project.id,
+          type: StageLogType.Created,
+          fromStatus: null,
+          toStatus: StageStatus.NotStarted,
+          oldStartAt: null,
+          newStartAt: s.startAt,
+          oldEndAt: null,
+          newEndAt: s.endAt,
+          reason: null,
+          operatorName: 'system',
+        });
+      }
+
+      return project.id;
+    };
+
+    return this.deps.tx ? this.deps.tx.run(exec) : exec();
+  }
+
+  /* ═════════════════ v0.8 · TBD-10：存量 custom 项目的「板块」确认（设计 §3.2.1） ═════════════════
+   *
+   * ── 这个方法解决什么 ──
+   * `stagePresetKey === 'custom'` 的**存量**项目（v0.8 之前建的），`getPreset('custom')` 返回
+   * `null` ⇒ 回落链最终落到 `'indoor'` ⇒ 用户看到它们被塞进首页「室内」列。用户看到的是
+   * **错的板块**，但我们**不能猜**（无依据）。裁决是「只提示、不自动写」，提示由
+   * `visibility.ts::needsDomainConfirm(p)` 判定，用户点「确认」后**只走这一条写路径**。
+   *
+   * ── 为什么必须是"只写 domain 一个字段"（本方法存在的全部理由）──
+   * `repo.update` 走的是 `pickDefined(cmd)` **浅合并**（`local.projects.repo.ts`）：
+   * 只要入参字面量里只有 `{ domain }`，落库 diff 就只有 `domain` 一行（＋仓储自动 bump 的
+   * `revision` / `updatedAt`）。**任何"顺手多带一个字段"都会静默改写用户数据** ——
+   * 而验收 9 正是拿 backup diff 当断言（"只有 `domain` 一个字段变化"）。
+   * 所以这里刻意不接收 `cmd` 对象、不拼第二个键：入参就是裸的 `domain`。
+   *
+   * ── 为什么校验要用 `getUsableDomains()` 而不是 `Object.values(StageTemplateDomain)` ──
+   * `exhibition`（展陈）在模板库里**没有阶段项**，`getUsableDomains()` 已经把它排除
+   * （设计 §2.3 的"空域"）。若放它进来，用户"确认"成展陈 ⇒ 该项目的阶段池为空、
+   * 看板列退化成兜底列 —— 一个**看起来成功、实际把项目改坏**的写入。
+   * 白名单只有一处（本行的调用），将来 JSON 新增板块时自动跟随，不会漂移。
+   *
+   * ── 这个方法**不**做的事（刻意，别补）──
+   *   · 不碰阶段：`domain` 是**分类**，与"这个项目有哪些阶段"无关。重排/补阶段是另一条路径。
+   *   · 不刷新 store：store 是 React 层的关切，由页面 action（`createProjectActions`）负责，
+   *     此处只做"领域规则 ＋ 落库"，与 `createProjectFromContract` 同一分层纪律。
+   */
+  public async confirmProjectDomain(
+    id: string,
+    domain: StageTemplateDomain,
+  ): Promise<Project> {
+    const usable = getUsableDomains();
+    if (!usable.includes(domain)) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `「${String(domain)}」不是可用的主板块。`,
+      );
+    }
+    // ★ 唯一写点：入参字面量**只有** domain（见方法头注释，验收 9 拿它当断言）
+    return this.deps.projects.update(id, { domain });
+  }
 }
 
 /**
@@ -322,4 +517,137 @@ export function digestOf(text: string): string {
     }
   }
   return h1.toString(16).padStart(8, '0') + text.length.toString(16).padStart(8, '0');
+}
+
+/* ══════════════════════════════ Agent 建板：命令与阶段解析（T04-B） ══════════════════════════════
+ *
+ * 下面这些都是 `ProjectService.createAgentBoard` 的**输入契约**与**纯函数**。
+ * 拆成纯函数是为了让"套餐 → 阶段项 → 自定义阶段"这条映射可以**不经仓储**直接单测
+ * （建板这条链上的错误全部是静默的：少一段、多一段、key 伪造，都不会抛错）。
+ */
+
+/**
+ * Agent 看板建板命令（设计 §6.1 的 `cmd`；PRD B7–B10 / TS-08）。
+ *
+ * 三个必填字段是**接口层**就写死的"不猜"：调用方没有"省略日期"的写法，
+ * 缺字段只能传 `undefined`/空串 → 由 `createAgentBoard` 明确拒绝。
+ */
+export interface CreateAgentBoardCmd {
+  /** 看板名称（必填，trim 后不可为空） */
+  name: string;
+  /** 计划开始日（必填，`YYYY-MM-DD`；**不提供默认值**） */
+  plannedStartAt: string;
+  /** 计划结束日（必填，同上） */
+  plannedEndAt: string;
+  /**
+   * 阶段套餐 key（如 `indoor_full`）。与 `stageNames` **至少一个非空**。
+   * 给出时：套餐的阶段项就是骨架的全部内容（例：`indoor_full` ⇒ 9 段）。
+   */
+  presetKey?: string;
+  /**
+   * 显式声明的阶段名（例：`['提案','消防报审']` ⇒ 2 段）。
+   * 名字在库里 ⇒ 用库项的占比/色号/默认任务；不在库 ⇒ 建为自定义阶段（`templateKey = null`）。
+   */
+  stageNames?: string[];
+}
+
+/**
+ * 声明阶段名的归一：trim → 丢空串 → **按名去重（保序）**。
+ *
+ * 为什么去重放在这里而不是让调用方保证：重名阶段会让"按名选点"（Stage.name 的落点语义）
+ * 变成歧义，而**后一段会被静默忽略或重复落库**——两种结果都不报错。
+ */
+export function dedupeAgentStageNames(names: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const raw of names) {
+    const name = typeof raw === 'string' ? raw.trim() : '';
+    if (name === '' || out.includes(name)) continue;
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * 按**库里的 name** 反查阶段项。
+ *
+ * 阶段库没有"按名索引"（访问器只有 key 版），故这里经**唯一出口** `getStageLibraryItems()`
+ * 线性查找，而不是另接一份 JSON——**不新建第二份阶段口径**。
+ * 同名（不同行业可以有同名阶段）时取 JSON 声明顺序里的第一个：顺序口径与 `getStageLibraryItems` 一致。
+ */
+function findLibraryStageItemByName(name: string): StageTemplateItem | null {
+  return getStageLibraryItems().find((item) => item.name === name) ?? null;
+}
+
+/**
+ * 自定义阶段的**临时 key 前缀**（`cst.agent.<序号>`）。
+ *
+ * 刻意与 `custom-stage.service` 的 `cst.<id>` 同族但**不同命名空间**：它是"这次请求里
+ * 不是库项的那一段"的占位，会经 `normalizeDraftTemplateKey` 落库为 `null`
+ * ⇒ **不可能**伪造出一个库 key（N4：`getStageLibraryItem(未知key)` 会抛错）。
+ */
+const AGENT_CUSTOM_STAGE_KEY_PREFIX = 'cst.agent.';
+
+/**
+ * 造一个"库里没有"的阶段项。
+ *
+ * 字段只填**切分真正会读**的那几个（name/ratioPercent/colorIndex + 空的 defaultTasks）：
+ *   · `domain` —— 只为满足类型；`Stage` 实体不存 domain（板块归属在项目上）⇒ 不参与落库；
+ *   · `kanbanColumn` —— 只服务人类首页的看板分列，且读时经 `templateKey` 反查
+ *     （自定义阶段 templateKey=null ⇒ 落到"按 orderIndex 均分"那条既有路径）。
+ *     给空串 = 明确"无列归属"，**不编造列名**；
+ *   · `defaultResponsibility` / `defaultTasks` —— `Stage` 实体没有这两个字段；
+ *     建板也不生成任务（见 `createAgentBoard` 注释）⇒ 恒空。
+ */
+function makeCustomAgentStageItem(
+  name: string,
+  orderIndex: number,
+  domain: StageTemplateDomain,
+  ratioPercent: number,
+): StageSelectionItem {
+  return {
+    key: `${AGENT_CUSTOM_STAGE_KEY_PREFIX}${orderIndex}`,
+    name,
+    domain,
+    ratioPercent,
+    // 色号复用 split.ts 的唯一口径（clamp(orderIndex, 1, 9)），不另写一套取色规则
+    colorIndex: stageColorIndex(orderIndex),
+    kanbanColumn: '',
+    defaultResponsibility: '',
+    defaultTasks: [],
+  };
+}
+
+/**
+ * 套餐 ＋ 显式声明名 → 阶段项列表（**建板骨架的唯一解析处**）。
+ *
+ * 顺序即落库的 `orderIndex` 1..N：先套餐项（保持套餐声明顺序），再声明名中**未被套餐覆盖**的。
+ * 覆盖判定按 `name`：套餐里已有同名阶段时不重复添加（PRD B8 的"同一次请求内阶段名去重"）。
+ *
+ * 自定义阶段的占比取**等分**（`100 / 本请求阶段总数`）：库项自带占比不受影响，
+ * 两者混排后由 `previewSplit` 在子集内归一化——这里**不做第二份归一化**。
+ */
+export function resolveAgentStageItems(
+  presetKey: string | null,
+  declaredNames: readonly string[],
+): StageSelectionItem[] {
+  const items: StageSelectionItem[] = [];
+  if (presetKey) items.push(...getPresetItems(presetKey));
+  if (declaredNames.length === 0) return items;
+
+  const fallbackDomain: StageTemplateDomain =
+    (presetKey ? getPreset(presetKey)?.domain : null) ?? DEFAULT_PROJECT_DOMAIN;
+  const each = 100 / (items.length + declaredNames.length);
+
+  for (const name of declaredNames) {
+    if (items.some((it) => it.name === name)) continue;
+    const libraryItem = findLibraryStageItemByName(name);
+    // 库里有的名字 → 原样用库项（占比/色号/默认任务都来自库，不另填）
+    if (libraryItem) {
+      items.push(libraryItem);
+      continue;
+    }
+    // 库里没有 → 自定义阶段（落库时 templateKey 会被归一为 null）
+    items.push(makeCustomAgentStageItem(name, items.length + 1, fallbackDomain, each));
+  }
+  return items;
 }
