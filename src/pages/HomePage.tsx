@@ -38,10 +38,14 @@ import { cn } from '../lib/cn';
  *   本页页头**不再**渲染「新建项目」按钮。全站建档入口收敛为三处，全部带
  *   `isAdmin && onProjectPage` 门槛：侧栏底部展开态（Sidebar.tsx）、侧栏底部收起态、
  *   手机档 ⋮ 更多菜单（MobileMoreMenu.tsx）。
- *   ⚠️ 本页仍有两条**无身份门槛**的建档触发点：空态的「直接手动建档」（EmptyState）
- *      与月历视图的 `onManual`。二者是「还没有项目时先把第一个建出来」的引导路径，
- *      成员被 HomeRouteGuard 重定向出首页后到不了，实际可达者是未进入身份的首启用户。
- *      是否收紧由主理人决策，本轮未动。
+ *
+ *   ⚠️⚠️ 本页仍有两条**无身份门槛**的建档触发点，这是**有意保留**，不是漏洞，勿「修」：
+ *     ① 空态的「直接手动建档」（EmptyState）
+ *     ② 月历视图的 `onManual`（MonthlyCalendarView）
+ *   决策口径（team-lead 已拍板）：**未进入身份可走引导，member 不可建档**。
+ *   能到达这两处的用户恰好是「首启、还没进入身份」的人 —— 那就是「第一个项目怎么建」
+ *   的唯一引导路径；给它们加 `isAdmin` 门会把首次使用彻底堵死。
+ *   成员到不了：`HomeRouteGuard` 判 `isMember` 后整页重定向到 `/member-board`。
  */
 export function HomePage(): JSX.Element {
   const navigate = useNavigate();
@@ -103,16 +107,38 @@ export function HomePage(): JSX.Element {
   return (
     <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
       {/*
-        1. 页面标题行 —— 右端**刻意留空**（v0.7 增量 · 用户要求去重）。
-        画板 02 此行的右端原本画着「+ 新建项目」按钮，本页**已删除**：
+        1. 页面标题行 —— 画板 02「页面标题行」`[row gap=16 pad=0]`，
+        内含「标题文字列」`[col gap=4 pad=0]` = 页面主标题（24/Bold）+ 页面副标题（13/Regular mist，`#6B7280` = mist）。
+        本行结构（col gap-1 = 4px）即按该画板落位。
+
+        右端**刻意留空**（v0.7 增量 · 用户要求去重）：画板此处原本画着「+ 新建项目」按钮，本页已删除 ——
           · 同一动作在侧栏底部（展开态 / 收起态各一处）与手机档 ⋮ 菜单里都已存在，
             三处都带 `isAdmin && onProjectPage` 门槛，用户读作「重复入口」；
           · 而这个页头按钮**没有任何身份门槛**——非管理员也能点。
             删掉它同时收敛了「非管理员可建档」这个权限漏口（见 commit message）。
-        故本行现在只承载标题（副标题若日后补，落在这里，不要再放建档按钮）。
+        外层行保留（不删容器），因为副标题就落在这里；行内已无残留空容器。
+
+        ── 副标题的数值口径（与画板原文案有一处**刻意的、已备案的**偏差）──
+        画板 02 副标题原文：「12 个进行中 · 3 个临期 · 1 个逾期」。
+        本实现的三个数字**全部复用本页已有的既有派生值**，不新造第二套口径：
+          · 进行中   = `active.length`        —— 与下方「进行中项目」统计卡**同一个表达式**
+          · 本周到期 = `dueThisWeek`          —— 与下方「本周到期任务」统计卡**同一个表达式**
+          · 逾期     = `overdueCount`         —— 与下方「逾期风险」统计卡**同一个表达式**
+        ⚠️ 中间一项文案是「本周到期」而**不是**画板写的「临期」：本页**没有**「临期」口径。
+        （「临期」目前只以「项目级：进行中且距 plannedEndAt ≤ 7 天」的形态**内联**在
+        `Sidebar.tsx` 的 `projectStatusDotClass` 里，未抽成可复用的唯一出处。）
+        为了句面上对齐画板而把「本周到期」的数字标成「临期」，等于把两个不同粒度的量
+        （stage 级 vs project 级）混为一谈 —— 宁可改文案，不改数字的含义。
+        若日后要严格对齐画板文案：需先把「临期」口径从 Sidebar 抽到 `src/lib/` 作唯一出处，
+        再由本页引用（属独立小任务，本轮未做）。
       */}
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-[24px] font-bold text-ink">我的项目</h1>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-[24px] font-bold text-ink">我的项目</h1>
+          <p data-home-subtitle="" className="text-[13px] text-mist">
+            {active.length} 个进行中 · {dueThisWeek} 个本周到期 · {overdueCount} 个逾期
+          </p>
+        </div>
       </div>
 
       {/* 2. 统计卡行（响应式：桌面 4 列 / 平板 2×2 / 手机单列） */}
