@@ -29,11 +29,70 @@
  *
  * ⚠️ 索引约定：1..9 与阶段 colorIndex 一致（见 core/types/dto.ts），
  *    越界取色由 resolveStageColorIndex() 兜底，调用方的 ?? 回落只在「连 9 号都没有」时生效。
+ *
+ * ══════════════ v0.8 · 通路 B：用户自定义色（与通路 A 并列，互不影响）══════════════
+ *
+ * 阶段色现在有**两条通路**，调用点必须显式选择（不要靠"猜"）：
+ *
+ *   通路 A  内置 9 槽（`stage.customColor == null`）—— **完全不变**：
+ *           `var(--stage-sN)`（本文件三个取色常量）+ Tailwind 静态类镜像
+ *           （STAGE_SOLID_CLASS / STAGE_BAND_CLASS）⇒ 存量项目零回归。
+ *
+ *   通路 B  用户色（`stage.customColor != null`）—— 新增：
+ *           ① 元素挂 `data-stage-key="sc-…"`（见 ./stageColorKey.ts 的 `stageColorAttrs`）；
+ *           ② 三层取色走本文件三个函数的 **`customColor` 形参**，返回
+ *              `var(--stage-local-solid / -band / -ink)`；
+ *           ③ 这些变量的值由 `core/color/custom-color-registry.ts` 在运行时按主色派生并
+ *              **注入同结构的两条规则**（`:root, .print-root` 亮 / `:root[data-theme='dark']` 暗）。
+ *
+ * 为什么通路 B 不破坏「代码零 hex」「单一变量源」两条铁律：
+ *   · 本文件仍然**一个 hex 都没有**，只有 `var()` 引用；
+ *   · 注入表不是"手写的第二份色值"，而是唯一纯函数 `deriveStageColors()` 的产物。
+ *
+ * 为什么不会重演 BUG-05：通路 B **完全不经过 Tailwind**（`data-*` + 自定义属性），
+ *   规则由运行时 CSSOM 插入；新增的属性名/变量名全是字面量，不存在动态拼类名。
+ *   但注意 —— BUG-05 的教训是「tsc 与 jsdom 都发现不了这类丢失」，所以通路 B 由
+ *   `tests/isolation-browser.spec.ts` 在**真 Chromium** 里读 `getComputedStyle` 验收。
+ *
+ * ⚠️ 若调用点忘了传 `customColor`（或忘了挂 `data-stage-key`），`var()` 会解析成空 ⇒
+ *    色带变透明。三个取色函数因此在自定义分支里**顺手注册**该主色（幂等、记忆化），
+ *    把「忘挂属性」与「忘注册」两种失败各去掉一半；剩下的一半由真浏览器 spec 守住。
  */
 
+import { STAGE_LOCAL_VAR, registerStageColor } from '../../core/color/custom-color-registry';
+import { normalizeHex } from '../../core/color/contrast';
 import { resolveStageColorIndex } from '../../core/template/stage-fallback';
 
-/** 实心块取色：亮 = main / 暗 = lightBar */
+/** 取色所需的最小阶段形状（组件可直接把整个 `Stage` 传进来） */
+export interface StageColorInput {
+  customColor?: string | null;
+}
+
+/** 自定义色（通路 B）的三层取色：值由运行时注入表提供，此处只持 `var()`，**零 hex** */
+export const STAGE_LOCAL_SOLID_COLOR = `var(${STAGE_LOCAL_VAR.solid})`;
+export const STAGE_LOCAL_BAND_COLOR = `var(${STAGE_LOCAL_VAR.band})`;
+export const STAGE_LOCAL_INK_COLOR = `var(${STAGE_LOCAL_VAR.ink})`;
+
+/**
+ * 是否走通路 B。非法 `customColor`（脏值）**不抛异常**，静默回落通路 A ——
+ * 与 core/color 的 `deriveStageColors()` 同一口径（边界色不崩）。
+ */
+function isCustom(customColor?: string | null): boolean {
+  if (customColor === undefined || customColor === null || customColor === '') return false;
+  const hex = normalizeHex(customColor);
+  if (hex === null) return false;
+  registerStageColor(hex); // 幂等：保证注入表里有这个 key（否则 var() 解析为空 ⇒ 透明）
+  return true;
+}
+
+/** 通路 B 的 `data-stage-key` 属性（供不需要走 stageColorKey.ts 的调用点直接取用） */
+export function customStageColorAttr(customColor?: string | null): string | null {
+  if (customColor === undefined || customColor === null || customColor === '') return null;
+  const hex = normalizeHex(customColor);
+  return hex === null ? null : registerStageColor(hex);
+}
+
+/** 实心块取色：亮 = main / 暗 = lightBar —— 内置 9 槽 */
 export const STAGE_BAR_COLORS: Readonly<Record<number, string>> = {
   1: 'var(--stage-s1)',
   2: 'var(--stage-s2)',
@@ -87,22 +146,45 @@ export const STAGE_COLOR_NAMES: Readonly<Record<number, string>> = {
 
 /**
  * 按阶段取「实心块」色（侧栏彩条 / 图例点 / 阶段点一类）。
- * 与旧签名完全一致，调用点零改动。
+ *
+ * 前两个形参与旧签名完全一致 ⇒ **既有调用点零改动**；第三个形参是 v0.8 通路 B 的入口：
+ * 传了 `customColor`（且合法）即返回 `var(--stage-local-solid)`，否则与改造前逐字节同值。
+ *
+ * ⚠️ 传了 `customColor` 的元素**必须**同时挂 `data-stage-key`（用 `stageColorAttrs(stage)`），
+ *    否则 `var()` 解析为空、色块会变透明（见本文件顶部通路 B 说明）。
  */
-export function stageSolidColor(orderIndex: number, colorIndex?: number | null): string {
+export function stageSolidColor(
+  orderIndex: number,
+  colorIndex?: number | null,
+  customColor?: string | null,
+): string {
+  if (isCustom(customColor)) return STAGE_LOCAL_SOLID_COLOR;
   return STAGE_BAR_COLORS[resolveStageColorIndex(orderIndex, colorIndex)] ?? STAGE_BAR_COLORS[9];
 }
 
 /**
  * 按阶段取「宽面」色（时间轴跨度色带 / 月历色带 / 大横条 / 阶段条）。
- * SVG 的 rect fill 与 DOM 的 backgroundColor 都可直接用。
+ * SVG 的 rect fill 与 DOM 的 backgroundColor 都可直接用（含 `var()` 形态）。
  */
-export function stageBandColor(orderIndex: number, colorIndex?: number | null): string {
+export function stageBandColor(
+  orderIndex: number,
+  colorIndex?: number | null,
+  customColor?: string | null,
+): string {
+  if (isCustom(customColor)) return STAGE_LOCAL_BAND_COLOR;
   return STAGE_BAND_COLORS[resolveStageColorIndex(orderIndex, colorIndex)] ?? STAGE_BAND_COLORS[9];
 }
 
-/** 取该阶段色带上的文字色（与 stageBandColor 配对使用） */
-export function stageBandInkColor(orderIndex: number, colorIndex?: number | null): string {
+/**
+ * 取该阶段色带上的文字色（与 stageBandColor 配对使用）。
+ * 铁律：压阶段色的文字**只允许**从这一出口取（禁止组件自算黑白）。
+ */
+export function stageBandInkColor(
+  orderIndex: number,
+  colorIndex?: number | null,
+  customColor?: string | null,
+): string {
+  if (isCustom(customColor)) return STAGE_LOCAL_INK_COLOR;
   return (
     STAGE_BAND_INK_COLORS[resolveStageColorIndex(orderIndex, colorIndex)] ??
     STAGE_BAND_INK_COLORS[9]
@@ -233,8 +315,24 @@ export interface BandOutline {
  * DOM 侧走 `--stage-ink-sN-rgb` 三元组（global.css 已为九色各备一份），
  * 这样 alpha 才能在 CSS 里注入；SVG 侧直接引用 `--stage-ink-sN` 实体色 + strokeOpacity。
  * 两者解析结果完全一致，且都随 <html data-theme> 自动换肤。
+ *
+ * v0.8 通路 B：传了 `customColor` 即改走 `--stage-local-ink` / `--stage-local-ink-rgb`。
+ * ⚠️ 这正是"注入表必须带 `-rgb` 三元组"的原因（§2.4.3 标红的那一处）：漏掉它，
+ *    自定义色的描边会在新通路上**静默消失**，而单测与 tsc 都看不见。
  */
-export function stageBandOutline(orderIndex: number, colorIndex?: number | null): BandOutline {
+export function stageBandOutline(
+  orderIndex: number,
+  colorIndex?: number | null,
+  customColor?: string | null,
+): BandOutline {
+  if (isCustom(customColor)) {
+    return {
+      boxShadow: `inset 0 0 0 ${BAND_OUTLINE_WIDTH}px rgb(var(${STAGE_LOCAL_VAR.inkRgb}) / ${BAND_OUTLINE_ALPHA})`,
+      stroke: STAGE_LOCAL_INK_COLOR,
+      strokeOpacity: BAND_OUTLINE_ALPHA,
+      strokeWidth: BAND_OUTLINE_WIDTH,
+    };
+  }
   const idx = resolveStageColorIndex(orderIndex, colorIndex);
   return {
     boxShadow: `inset 0 0 0 ${BAND_OUTLINE_WIDTH}px rgb(var(--stage-ink-s${idx}-rgb) / ${BAND_OUTLINE_ALPHA})`,
