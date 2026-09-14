@@ -8,7 +8,7 @@ import { MobileMoreMenu } from './MobileMoreMenu';
 import { ImeInput } from '../common/ImeInput';
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore } from '../../store/useLayoutStore';
-import { useProjectsStore } from '../../store/useProjectsStore';
+import { useHumanProjects } from '../../core/project/visibility';
 import { isDesktop } from '../../lib/desktopBridge';
 import { cn } from '../../lib/cn';
 
@@ -131,7 +131,28 @@ function SearchField({
 function Breadcrumbs(): JSX.Element | null {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const projects = useProjectsStore((s) => s.projects);
+  /*
+    ★ v0.8 T04-A · §7.2 #13 接线 ＋ §7.3 #27 的一条明文纪律。
+
+    面包屑只在 `/project/:id`（含两个打印页）这一支里用到 project 名。它的正确口径是
+    **`'human'`**，这一点是本清单里最容易"顺手写错"的地方，理由有两层：
+
+      ① §7.3 #27 原文：详情页虽是人类侧**唯一允许穿越**的通道，但
+         「详情页内任何"相关项目/兄弟项目"推荐、**面包屑回跳**、侧栏高亮**都必须走 P 出口**」。
+         ⇒ 面包屑属于**人类侧 chrome**：它渲染的是"项目 / {项目名}"这条导航链，
+           而不是详情页正文。正文可以渲染 Agent 看板（那是穿越），
+           但导航链是**人类工作区的地标**，不该替 Agent 看板做宣传。
+      ② 若这里用 `useProjectById(id)`（按 id 不分 kind），打开 Agent 看板详情时
+         面包屑会显示该 Agent 看板名 —— 于是**人类侧 DOM 里出现了 Agent 看板的名字**，
+         直接打穿 L4 真浏览器断言的「人类面 Agent 名出现 0 次」。这不是理论风险：
+         面包屑在 ≥768 常驻渲染。
+
+     代价（有意接受）：Agent 看板详情页的面包屑会回落成 `'项目详情'` 占位文案
+     （下一行的 `?? '项目详情'` 本来就兜着），而不是显示它的真名。这是**正确**的取舍：
+     用户此时看到的"我是从哪儿来的"应当是"项目详情"这个通用层级，
+     而"这是一块 AI 工作区"由正文顶部的 `ProjectSourceBadge` 显式告知。
+  */
+  const projects = useHumanProjects();
 
   // 项目详情 / 打印页：/project/:id 或 /project/:id/(schedule|calendar)-print
   const projMatch = /^\/project\/([^/]+)(?:\/(schedule|calendar)-print)?$/.exec(pathname);

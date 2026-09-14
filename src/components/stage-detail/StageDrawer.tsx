@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import type { Member, Stage, Task } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
 import { useProjectsStore, createProjectActions } from '../../store/useProjectsStore';
+import { useProjectById, useProjectStages, useProjectTasks } from '../../core/project/visibility';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -33,15 +34,38 @@ export function StageDrawer({
   const stageId = useUiStore((s) => s.stageDrawerStageId);
   const close = useUiStore((s) => s.closeStageDrawer);
 
-  const stage = useProjectsStore((s) => s.stages.find((x) => x.id === stageId));
-  const tasks = useProjectsStore((s) =>
-    s.tasks.filter((t) => t.stageId === stageId).sort((a, b) => a.orderIndex - b.orderIndex),
-  );
+  /*
+    ★ v0.8 T04-A · 阶段抽屉的读点收口。
+
+    抽屉是 `ProjectDetailPage` 的**子视图**，所以它天然属于 §7.3 #27「单项目直达」
+    那一族：收窄口径必须是「**这个 projectId 名下**」而不是「人类侧」——
+    若这里用 `useHumanStages()`，Agent 看板的阶段抽屉会变成"该阶段不存在"
+    （用户点了甘特彩条却弹出一个空抽屉，比不弹更糟）。
+
+    变化（相对改造前）：
+      · `stage`   ：原先按 `stageId` **全库**找，现在先按 `projectId` 收窄再 find。
+        语义更紧：抽屉本来就只服务于"当前这个项目里的阶段"，全库 find 会让一个
+        不属于本项目的 stageId（理论上不该发生）也能渲染出来。
+      · `tasks`   ：同上，先按 `projectId` 收窄再按 `stageId` 筛。
+      · `project` ：`useProjectById(projectId)`（不分 kind，理由同详情页）。
+      · `logs`    ：**保持原样**（`s.stageLogs[stageId]`）。它不是"列表"而是按
+        stageId 单取的缓存字典，既不属于 §7.2 的 27 项、也不构成跨看板枚举；
+        隔离守卫只盯 `projects` / `stages` / `tasks` 三份**数据切片**。
+
+    ⚠️ 下方既有注释（hook 必须无条件执行）在改造后**依然成立且更需注意**：
+       `useProjectStages` / `useProjectTasks` 都是真 hook，绝不能被挪到
+       `if (!stageId) return null` 之后 —— 那会重演 BUG-1 的 React error #310 白屏
+       （stageId 由 null 变非空时 hook 数量不一致）。本文件有专门的回归 spec 守着。
+  */
+  const stage = useProjectStages(projectId).find((x) => x.id === stageId);
+  const tasks = useProjectTasks(projectId)
+    .filter((t) => t.stageId === stageId)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
   const logs = useProjectsStore((s) => (stageId ? s.stageLogs[stageId] : undefined));
   // 注意：该 hook 必须与其余 hook 同段、无条件执行。
   // 若放到下方 `if (!stageId) return null` 之后，点击甘特图彩条（stageId 由 null 变非空）
   // 会多执行 1 个 hook，触发 React error #310（Rendered more hooks than during the previous render）白屏。
-  const project = useProjectsStore((s) => s.projects.find((p) => p.id === projectId));
+  const project = useProjectById(projectId);
   const repos = useRepos();
   const { isAdmin } = useRoleGuard();
 

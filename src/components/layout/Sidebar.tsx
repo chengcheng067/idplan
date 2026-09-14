@@ -8,7 +8,7 @@ import { useBackupIo } from './useBackupIo';
 import { SidebarCollapseToggle } from './SidebarCollapseToggle';
 import { navItemClass, SidebarNav } from './SidebarNav';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
-import { useProjectsStore } from '../../store/useProjectsStore';
+import { useHumanProjects, useHumanStages } from '../../core/project/visibility';
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore, isXlViewport } from '../../store/useLayoutStore';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
@@ -99,8 +99,24 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   const closeDrawer = useLayoutStore((s) => s.closeSidebarDrawer);
   const setSidebarExpanded = useLayoutStore((s) => s.setSidebarExpanded);
 
-  const projects = useProjectsStore((s) => s.projects);
-  const stages = useProjectsStore((s) => s.stages);
+  /*
+    ★ v0.8 T04-A · §7.2 #11 接线（**P** 接法）。
+
+    侧栏的 `projects` 有**三个**消费点，全部派生自同一份数据，所以一处收口三处同净：
+      · 展开态项目列表（`projects.slice(0, visibleProjectCount(...))`）；
+      · 截断提示「还有 N 个项目」的 N（`projects.length`）；
+      · 收起态顶部 3 枚项目方块（`projects.slice(0, 3)`）。
+    若这里不过滤，Agent 看板会**同时**出现在这三处 —— 尤其收起态那 3 枚方块是
+    "最显眼的位置"，用户一眼就会觉得两个工作区混在一起了。
+
+    ⚠️ 为什么连 `stages` 也要经漏斗（本行看起来"只是拿来算色号"）：
+    `projectStageOrder(p.id)` 从 `stages` 里取该项目当前阶段的 `orderIndex` 来算色条。
+    Agent 看板的阶段若混进来，虽然只影响取色、不泄漏名称，但**守卫纪律是
+    "页面/组件禁止直接读 store"**（设计 §7.1 纪律 1）—— 而且这里正是最容易被
+    复制粘贴出去当"坏样例"的地方（§7.5 的教训）。走漏斗是免费的。
+  */
+  const projects = useHumanProjects();
+  const stages = useHumanStages();
 
   const { save, pick, fileInput, confirmDialog } = useBackupIo();
   const { status } = useUpdateCheck();

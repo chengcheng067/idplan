@@ -4,12 +4,20 @@ import { Link, useParams } from 'react-router-dom';
 
 import { ArrowLeft, Archive, Bot, CalendarRange } from 'lucide-react';
 
-import { useProjectsStore } from '../store/useProjectsStore';
 import { useAgentStore } from '../store/useAgentStore';
 import { createProjectActions } from '../store/useProjectsStore';
 import { useUiStore } from '../store/useUiStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useRepos } from '../hooks/useRepos';
+import {
+  needsDomainConfirm,
+  projectKindOf,
+  useProjectById,
+  useProjectStages,
+  useProjectTasks,
+} from '../core/project/visibility';
+import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
+import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
 import { TimelineView, pickActiveStage } from '../components/timeline/TimelineView';
 import { MobileStageList } from '../components/timeline/MobileStageList';
@@ -50,11 +58,32 @@ function useIsNarrowViewport(): boolean {
 export function ProjectDetailPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
   const repos = useRepos();
-  const project = useProjectsStore((s) => s.projects.find((p) => p.id === id));
-  const stages = useProjectsStore((s) =>
-    s.stages.filter((st) => st.projectId === id).sort((a, b) => a.orderIndex - b.orderIndex),
-  );
-  const tasks = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
+  /*
+    ★ v0.8 T04-A · §7.3 #27「单项目直达」特判（**唯一允许穿越的通道**）。
+
+    这一处**故意不按 kind 收窄**，是把 §7.3 的裁决落到实处：
+      · `useProjectById(id)`  —— 不分 kind 地取该项目。若改成从 `useHumanProjects()`
+        里 find，Agent 看板的详情页会**永远打不开**（"未找到该项目"）；
+        而设计明示详情页是**唯一允许穿越**的通道，PRD 也说 Agent 看板必须能点开看。
+      · `useProjectStages/Tasks(id)` —— 同理，按 `projectId` 收窄而**不**按 kind。
+        注意这三者与 `useHumanProjects/Stages/Tasks` 的分工：前者回答
+        「**看的是哪一个**」，后者回答「**给谁看**」。
+
+    ── 那么"不按 kind"为什么不是漏洞？靠三道结构性防线，而不是靠本页自觉 ──
+      ① **入口侧**：人类项目列表（首页 #1 / 侧栏 #11）经 P 收口后**根本不会出现**
+         Agent 看板 ⇒ 用户没有"从列表误入"的路径（PRD B19 要求的正是这条）。
+      ② **来源可见**：真有深链/收藏夹直达时，正文顶部渲染 `ProjectSourceBadge`
+         （下方 `ProjectSourceBadge`）——用户**知道**自己在一块 AI 看板上。
+      ③ **人类 chrome 仍走 P**：面包屑用 `useHumanProjects()`（见 TopBar 注释）、
+         侧栏高亮用 `useHumanProjects()` ⇒ 即使正文在 Agent 看板，导航链也不会
+         把 Agent 看板名带进人类侧的 DOM。
+
+    ⚠️ 本页内任何"相关项目/兄弟项目"推荐、面包屑回跳、侧栏高亮，将来都必须走 P 出口
+       —— 这是 §7.3 #27 点名的「最容易在详情页里顺手带出来的地方」。
+  */
+  const project = useProjectById(id);
+  const stages = useProjectStages(id);
+  const tasks = useProjectTasks(id);
   const members = useMembersStore((s) => s.members);
   const { role, currentMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
@@ -159,7 +188,22 @@ export function ProjectDetailPage(): JSX.Element {
               条件是 `role !== null`（不是 `!isAdmin`、更不是 `!memberView`）：
               未进入身份（role=null）**不**渲染此入口——该档在页首已走受限空态（无可见范围），
               此处是双保险，避免「未进入」被误并进允许档。 */}
-          {role !== null && (
+          {/*
+            ★ §7.3 #17/#18 的**入口侧**收口：「**不给 Agent 看板任何打印入口**（UI 层隐藏），
+            但路由本身仍可打开」（删路由会破坏既有深链）。
+
+            为什么入口侧要单独收这一道（正文的 `ProjectSourceBadge` 不是已经够了？）：
+            不够。两者解决的是**不同**问题 ——
+              · 隐藏入口 = **主动阻断**"无意中把 Agent 看板做成客户稿"这条误操作路径；
+              · 来源标识   = 深链直达（收藏夹/历史/别人发来的链接）时的**事后告知**。
+            只做后者，用户会在不知情的情况下把 Agent 看板印出来（打印稿本身没有
+            来源徽章，那是给屏幕看的）；只做前者，深链仍然直达。两条都要。
+
+            条件与上方 `role !== null` **叠加**（不是替换）：`role !== null` 管"谁"，
+            `projectKindOf(project) !== 'agent'` 管"哪一个"。用 `projectKindOf` 而不是
+            裸 `project.kind === 'agent'`：读时回落只允许有一个出处（老库无该列）。
+          */}
+          {role !== null && projectKindOf(project) !== 'agent' && (
             <button
               type="button"
               onClick={() => window.open(`/project/${project.id}/schedule-print`, '_blank')}
@@ -198,10 +242,38 @@ export function ProjectDetailPage(): JSX.Element {
         </div>
       </div>
 
+      {/*
+        ★ v0.8 T04-A · TBD-10 板块确认入口（设计 §3.2.1 第 3 处落点：「详情页」）。
+
+        传 `[project]`（单元素）而不是项目列表：本页语境就是**这一个**项目，
+        提示条在这里必须自解释（"此项目板块待确认"），而不是变成第二个看板。
+        `needsDomainConfirm(project)` 为假时组件自己返回 null，所以这行的显隐
+        完全由**读时派生**决定，不引入任何额外的 state / 落库字段。
+
+        与首页提示条的**唯一差别**是受众：首页只有 admin 能到（成员被
+        `HomeRouteGuard` 重定向到 `/member-board`），而本页成员可达 ⇒
+        提示条对成员**只显示文字、不显示按钮**（组件内按 `isAdmin` 门控，
+        与归档/改期同档：`domain` 是项目级写入）。成员看到的是事实陈述，
+        不是可点的操作 —— 既没有越权路径，也不会让成员困惑"为什么我点不动"。
+      */}
+      <DomainConfirmPrompt
+        projects={needsDomainConfirm(project) ? [project] : []}
+        className="mb-3"
+      />
+
       {/* 顶条信息环（v0.3 玻璃化；非管理员视角隐藏 clientName/address 等敏感字段） */}
       <div className="glass-medium mb-5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-line p-4 shadow-soft sm:gap-x-8 sm:p-5">
         <div>
-          <h1 className="font-display text-display-lg">{project.name}</h1>
+          {/*
+            ★ §7.3 #27 的「来源标识」：当且仅当 `projectKindOf(project) === 'agent'` 时
+            渲染（组件内部判，人类侧**零渲染** —— 验收 8 要求 kind 在人类侧不产生
+            任何新的视觉痕迹）。放标题行右侧而不是页脚：来深链的用户第一眼就该知道
+            自己打开的是哪个工作区的东西，而不是滚到底才发现。
+          */}
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-display-lg">{project.name}</h1>
+            <ProjectSourceBadge project={project} />
+          </div>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-mist">
             <Badge tone="pine">{PROJECT_TYPE_LABELS[project.type as ProjectType] ?? '未分类'}</Badge>
             {!memberView && project.clientName && <span>客户：{project.clientName}</span>}

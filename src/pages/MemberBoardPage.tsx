@@ -6,11 +6,15 @@ import { ProjectCard } from '../components/project/ProjectCard';
 import { StatCard } from '../components/project/StatCard';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
-import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUiStore } from '../store/useUiStore';
 import type { MemberBoardView } from '../store/useUiStore';
+import {
+  useHumanProjects,
+  useHumanStages,
+  useHumanTasks,
+} from '../core/project/visibility';
 import { computeProjectStatus } from '../lib/progress';
 import { groupByColumn } from './HomePage';
 import type { ColumnKey } from './HomePage';
@@ -56,9 +60,28 @@ import { StageStatus } from '../core/types/enums';
  */
 export function MemberBoardPage(): JSX.Element {
   const navigate = useNavigate();
-  const projects = useProjectsStore((s) => s.projects);
-  const stages = useProjectsStore((s) => s.stages);
-  const tasks = useProjectsStore((s) => s.tasks);
+  /*
+    ★★ v0.8 T04-A · §7.2 #15 接线（**Pid** 接法）—— 设计文档把这个点标为
+    「**关键漏点**」，是全表 27 项里风险最高的一处。原因值得写下来：
+
+    本页的"只看到自己参与的项目"判定，数据源是 **`stages.ownerId`** 与
+    **`tasks.assigneeIds`**，然后才去 `projects` 里按 id 反查。也就是说：
+      ① 若 `projects` 不过滤 ⇒ Agent 看板会进候选（但还有 ② 的下游过滤兜着）；
+      ② 若 `stages` / `tasks` **不过滤** ⇒ **AI 把任务 `assigneeHuman` 指给某个成员时，
+         该 Agent 看板会被判定为"与我相关"**，于是**整个 Agent 看板出现在成员看板里**
+         —— 而且它看起来完全正常（成员确实被指派了那个任务），**不报错、无异常**。
+         这就是"★关键漏点"的确切含义：过滤漏在最上游的两个数据源上。
+
+    所以三行**必须全部**改：只改 `projects` 是**不够的**（② 会漏），
+    只改 `stages`/`tasks` 也不够（① 会在统计卡 `active.length` 上漏）。
+
+    ⚠️ 本页对 `MonthlyCalendarView` **只传 `onManual`**（下方既有注释的三条纪律之二：
+    绝不向它传任何项目/阶段/任务数据）。本页改成漏斗后，月历内部那份过滤**照旧**
+    走它自己的 `useHuman*` —— 两处口径同源（都来自 `visibility.ts`），不会打架。
+  */
+  const projects = useHumanProjects();
+  const stages = useHumanStages();
+  const tasks = useHumanTasks();
   const members = useMembersStore((s) => s.members);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const selectedProjectId = useUiStore((s) => s.selectedProjectId);

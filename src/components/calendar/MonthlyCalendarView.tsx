@@ -5,7 +5,11 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { Project, Stage, Task } from '../../core/types/entities';
 import { useUiStore } from '../../store/useUiStore';
-import { useProjectsStore } from '../../store/useProjectsStore';
+import {
+  useHumanProjects,
+  useHumanStages,
+  useHumanTasks,
+} from '../../core/project/visibility';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useTheme } from '../../hooks/useTheme';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../../hooks/useRoleGuard';
@@ -122,9 +126,28 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   const toggleStage = useUiStore((s) => s.toggleCalendarStageFilter);
   const clearFilters = useUiStore((s) => s.clearCalendarFilters);
 
-  const projects = useProjectsStore((s) => s.projects);
-  const stages = useProjectsStore((s) => s.stages);
-  const tasks = useProjectsStore((s) => s.tasks);
+  /*
+    ★ v0.8 T04-A · §7.2 #7 接线（**P / Pid** 接法；用户决策 2 明文要求）。
+
+    本组件在**两处入口**被复用 —— 管理员首页的「月历」档、以及成员看板的「月历」档。
+    两条入口共用同一个过滤，所以这一处收口同时修好两个页面。
+
+    三行各自为什么必须过滤：
+      · `projects` → `active` memo（下一行）派生"本月有哪些项目" ⇒ **P**；漏了的话
+        Agent 看板会在人类月历上画出色带（用户决策 2 明示这是不可接受的）。
+      · `stages`  → `stageSpan(stagesOf(p))` 决定该项目的实际起止覆盖哪些月份 ⇒ **Pid**；
+        漏了的话 Agent 看板的阶段会把它的月份范围**撑大**，人类项目跟着多画一段。
+      · `tasks`   → 成员视图的 `computeRelatedStageIds` 判定之一（"该阶段下有我参与的任务"）
+        ⇒ **Pid**；漏了的话与 #15 成员看板同一个病：AI 把任务指派给成员 ⇒
+        该 Agent 看板被判定为"与我相关"，于是**漏进成员的月历**。
+
+    ⚠️ 本组件内部**自己**做完成员过滤（`isRestrictedView` + `computeRelatedStageIds`），
+       调用方**不得**再传一份数据进来（`MemberBoardPage` 的既有注释已把这条列为纪律）。
+       本行的过滤是"kind 维"，与"成员维"正交，两层叠加而不是替换。
+  */
+  const projects = useHumanProjects();
+  const stages = useHumanStages();
+  const tasks = useHumanTasks();
   const restPolicy = useSettingsStore((s) => s.restPolicy);
 
   const { role, currentMember } = useRoleGuard();

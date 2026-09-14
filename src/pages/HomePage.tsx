@@ -9,17 +9,22 @@ import { StatCard } from '../components/project/StatCard';
 import { ArchiveListRow } from '../components/project/ArchiveListRow';
 import { MembersPageSection } from '../components/member/MembersPageSection';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
-import { useProjectsStore } from '../store/useProjectsStore';
+import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { useMembersStore } from '../store/useMembersStore';
 import { useUiStore, type HomeViewMode } from '../store/useUiStore';
 import { useRoleGuard } from '../hooks/useRoleGuard';
+import {
+  effectiveDomainOf,
+  useHumanProjects,
+  useHumanStages,
+  useHumanTasks,
+} from '../core/project/visibility';
 import { computeProjectStatus, currentStageOf } from '../lib/progress';
 import { StageStatus } from '../core/types/enums';
 import {
   getDomainColumns,
   getDomains,
   getItemKanbanColumn,
-  getPreset,
 } from '../core/template/stage-library';
 import type { Project, Stage, Task } from '../core/types/entities';
 import { cn } from '../lib/cn';
@@ -49,9 +54,23 @@ import { cn } from '../lib/cn';
  */
 export function HomePage(): JSX.Element {
   const navigate = useNavigate();
-  const projects = useProjectsStore((s) => s.projects);
-  const stages = useProjectsStore((s) => s.stages);
-  const tasks = useProjectsStore((s) => s.tasks);
+  /*
+    ★ v0.8 T04-A · §7.2 接线（#1/#2/#3/#5/#7/#9/#10/#16）
+    ⚠️ 本页**禁止**直接读 store（设计 §7.1 纪律 1）。三行全部改为经
+       `src/core/project/visibility.ts` 这个**唯一漏斗** —— 于是「Agent 看板漏进人类首页」
+       这件事在**本页根本不可能发生**，而不是"记得过滤就没事"。
+
+    为什么三行分别是 P / Pid / Pid：
+      · `projects` → **P**：`visibleProjectsFor('human')`，供项目网格（#1）/归档区（#2）/
+        统计卡「进行中项目」（#3）/「逾期风险」（#5）/搜索（#9）/空态（#10）共用；
+      · `stages`   → **Pid**：数据源是 `stages` 而非 projects，先取 `visibleProjectIds('human')`
+        再按 `projectId` 收窄。这是 PRD 自标「★最容易漏」的 #4「本周到期」与 #6「本月完工」——
+        只做一个 `visibleProjectsFor()` 一定会漏掉它们（设计 §5.1）。
+      · `tasks`    → **Pid**：同理（本页 tasks 只用于 `ProjectCard` 的完成度，同样必须收窄）。
+  */
+  const projects = useHumanProjects();
+  const stages = useHumanStages();
+  const tasks = useHumanTasks();
   const members = useMembersStore((s) => s.members);
   const { isAdmin } = useRoleGuard();
   const homeViewMode = useUiStore((s) => s.homeViewMode);
@@ -171,6 +190,26 @@ export function HomePage(): JSX.Element {
         <MonthlyCalendarView onManual={openManual} />
       ) : (
         <>
+          {/*
+            ★ v0.8 T04-A · TBD-10 板块确认入口（设计 §3.2.1 第 2 处落点）。
+
+            位置与理由（为什么不放在别处）：
+              · 放在**看板档的项目网格之上**，而不是月历档：月历没有"列"的概念，
+                "板块待确认"提示在月历语境里没有可归位的目标；而且月历档的
+                `MonthlyCalendarView` 自己是一棵完整子树，插进去会打乱它的空状态判定。
+              · 传 `active`（**已经经过 `useHumanProjects()` 收窄**）而不是全量 projects：
+                提示条只该关心人类侧 —— Agent 看板没有"主板块确认"这回事（它的 domain
+                由 Agent 通道建板时给定），把 Agent 看板列进来会给出一个**无意义的
+                「确认」按钮**，点了还会真的去改它的 domain。
+              · 未确认的项目**不换列**（仍落室内列），这是刻意的零回归（见组件头注释）。
+                所以提示条只加一行，正文网格与今天**逐字一致**。
+
+            顺序纪律提醒：本行的存在**依赖**上方 `deriveColumns` 已经改读
+            `effectiveDomainOf(p)`。若谁把那次修复回滚了，这里的提示条会开始替那个
+            bug 背锅（"看起来在待确认"），两处必须同进同退。
+          */}
+          <DomainConfirmPrompt projects={active} />
+
           {active.length === 0 ? (
             <EmptyState onManual={openManual} />
           ) : filtered.length === 0 ? (
@@ -315,12 +354,35 @@ function toneOf(tone: string): { dot: string; chip: string } {
 /**
  * 按当前项目集合派生看板列：
  *   todo 固定在最前，其后是这些项目所属行业在模板里声明的列（去重、按模板声明顺序）。
+ *
+ * ── ★ v0.8 T04-A：这里改读 `effectiveDomainOf(p)`（设计 §7.2 #8 ＋ 纠错③）──
+ *
+ * **老代码（已修掉）**：
+ *   `const preset = p.stagePresetKey ? getPreset(p.stagePresetKey) : null;`
+ *   `if (preset) used.add(preset.domain);`
+ *
+ * 它在 `stagePresetKey === 'custom'` 的项目上**整体失效**：`getPreset('custom')` 返回
+ * `null`（`stage-library.ts`），于是 `if (preset)` 里的 `used.add` **一次都不执行** ——
+ * 这类项目（v0.8 之前建的「自定义阶段」项目，以及 Agent 通道建的声明名看板）
+ * 对**列集合**毫无贡献。表现是首页看板**凭空少列或多列**：
+ *   · 库里只有 custom 项目 ⇒ `used.size === 0` ⇒ 退化成只按 `indoor` 兜底出列；
+ *   · 库里同时有 indoor 与 custom 项目 ⇒ custom 那份被塞进 indoor 列（因为列集合里
+ *     没有它的板块），于是"落错列"且**不报错、不崩、tsc 不管**。
+ *
+ * **新读法**：`effectiveDomainOf(p)` = 「项目**实际展示**在哪个板块」——
+ * `domain` 有值就用它（用户建档时选的 / TBD-10 确认过的），否则按 `stagePresetKey`
+ * 反查套餐 domain，反查不到退 `indoor`。它是**消费侧主板块的唯一出口**
+ * （`visibility.ts`），阶段抽屉、打印页、成员看板列都走它 —— 一处漂移就会让
+ * "同一个项目在不同页面被算进不同板块"。
+ *
+ * ⚠️ 顺序纪律（设计 §8 T04「已知坑」）：**必须先修本函数，再加 TBD-10 提示条**。
+ *    反过来的话，`custom` 项目的"落错列"会被提示条**掩盖**成"正在待确认"，
+ *    其中一部分项目永远不会被修正。本文件的两次改动按此顺序落盘。
  */
 export function deriveColumns(projects: Project[]): KanbanColumn[] {
   const used = new Set<string>();
   for (const p of projects) {
-    const preset = p.stagePresetKey ? getPreset(p.stagePresetKey) : null;
-    if (preset) used.add(preset.domain);
+    used.add(effectiveDomainOf(p));
   }
   if (used.size === 0) used.add('indoor');
 
@@ -376,7 +438,9 @@ export function groupByColumn(
     const st = stagesOf(p);
     const status = computeProjectStatus(p, st, todayIso);
     const cur = currentStageOf(st, todayIso) ?? null;
-    const domainKey = (p.stagePresetKey ? getPreset(p.stagePresetKey) : null)?.domain ?? null;
+    // 落列用的板块口径与 `deriveColumns` **必须同源**（同一个 `effectiveDomainOf`）——
+    // 否则会出现"派生了一列，但没有项目能落进去"或"项目落进了不存在的列（走兜底）"。
+    const domainKey = effectiveDomainOf(p);
     const key = columnOf(status, cur, domainKey);
     if (key in buckets) buckets[key].push(p);
     else buckets[columns[columns.length - 1].key].push(p);

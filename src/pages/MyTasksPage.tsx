@@ -4,11 +4,15 @@ import { Link } from 'react-router-dom';
 
 import { Check } from 'lucide-react';
 
-import { useProjectsStore } from '../store/useProjectsStore';
 import { createTaskActions } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useRepos } from '../hooks/useRepos';
+import {
+  useHumanProjects,
+  useHumanStages,
+  useHumanTasks,
+} from '../core/project/visibility';
 import { taskAssigneeIds } from '../hooks/useRoleGuard';
 import { cn } from '../lib/cn';
 import { remainingDays } from '../lib/date';
@@ -31,9 +35,27 @@ export function MyTasksPage(): JSX.Element {
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
-  const projects = useProjectsStore((s) => s.projects);
-  const stages = useProjectsStore((s) => s.stages);
-  const allTasks = useProjectsStore((s) => s.tasks);
+  /*
+    ★ v0.8 T04-A · §7.2 #14 接线（**Pid** 接法）。
+
+    数据源是 **`tasks`**，不是 `projects` ⇒ 只过滤项目列表是**不够的**：
+    必须先拿到人类侧的 projectId 集合，再按 `projectId` 收窄任务。这正是
+    `useHumanTasks()` 做的事（`visibility.ts` 的漏斗核心就是 id 集合，见其头注释）。
+
+    ⚠️ 用户决策 2 的边界（PRD 明文）：**AI 指派给人类成员的任务也不出现**在本页。
+       注意这一句容易被误读成"AI 建的任务不能分派给人" —— 恰恰相反，Agent 侧
+       `assigneeHuman` 指向成员是**允许且常见**的；本页不显示它的理由不是"不该分派"，
+       而是**工作区隔离**：本页是**人类工作区**的待办清单，Agent 看板的任务属于
+       另一个工作区，只能在 `/agent` 里看。若这里改成 `useProjectsStore(s => s.tasks)`，
+       就会出现"我的任务里混进 AI 看板的任务"——这正是设计要堵的漏点。
+
+    `stages` 用 `useHumanStages()`（同样 Pid）：它只服务于 `stageOf(t)` 的**展示**
+    （阶段序号 + 名称）。任务已收窄，理论上按 id 查阶段不会跨区；但守卫纪律是
+    "页面禁止直接读 store"（一律走漏斗），且"理论上不会"不是边界 —— 走漏斗是免费的。
+  */
+  const projects = useHumanProjects();
+  const stages = useHumanStages();
+  const allTasks = useHumanTasks();
 
   const [filter, setFilter] = useState<FilterMode>('by-project');
   const [showDone, setShowDone] = useState(false);

@@ -5,6 +5,8 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, Download, FileText, Printer } from 'lucide-react';
 
 import { useProjectsStore } from '../store/useProjectsStore';
+import { useProjectById, useProjectStages, useProjectTasks } from '../core/project/visibility';
+import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { useMembersStore } from '../store/useMembersStore';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
 import { StageStatus, ScheduleBasis, SCHEDULE_BASIS_LABELS } from '../core/types/enums';
@@ -39,9 +41,30 @@ import { dayjs, totalDaysInclusive } from '../lib/date';
  */
 export function SchedulePrintPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
-  const project = useProjectsStore((s) => s.projects.find((p) => p.id === id));
-  const stages = useProjectsStore((s) => s.stages.filter((st) => st.projectId === id));
-  const tasks = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
+  /*
+   * ── ★ v0.8 T04-A：本页三行原始读改走漏斗的 id 收窄出口（设计 §7.2 #17 特判 / §7.5）──
+   *
+   * 旧读法是三条**全量订阅 ＋ 就地 filter**：
+   *     const project = useProjectsStore((s) => s.projects.find((p) => p.id === id));
+   *     const stages  = useProjectsStore((s) => s.stages.filter((st) => st.projectId === id));
+   *     const tasks   = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
+   * 它是「页面直读 store.projects」这一坏样例（纪律 ①）在打印页的第三处复制品。
+   *
+   * 现在：`project` 走 `useProjectById`（`visibility.ts` 内唯一的 `s.projects.find`），
+   * stages / tasks 走按 projectId 收窄的 `useProjectStages` / `useProjectTasks`。
+   *
+   * ⚠️ **本页不做 kind 排除**（与 `/project/:id` 详情页同一条口径，设计 §7.3 #17/#18）：
+   *   打印路由按 `:id` 直达、没有"列表"可过滤；且删路由会破坏既有深链。
+   *   本轮的处置是「人类侧不给 Agent 看板任何打印入口（`ProjectDetailPage` 隐藏按钮）
+   *   ＋ 本页渲染 `ProjectSourceBadge` 来源标识」，**不是**在本页 return null。
+   *   所以这里传 id、不传 kind —— 与 CalendarPrintPage 的写法逐字一致。
+   *
+   * 另注：`ProjectSourceBadge` 只吃 `kind`（`Pick<Project,'kind'>`），因此即便项目
+   * 尚未装载（`project === undefined`）也只是不渲染徽章，不会抛错。
+   */
+  const project = useProjectById(id);
+  const stages = useProjectStages(id);
+  const tasks = useProjectTasks(id);
   const members = useMembersStore((s) => s.members);
   // v0.7-D：页首守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**，
   // 不可混同）；`memberView` 的口径与 ProjectDetailPage / MonthlyCalendarView **逐字一致**，
@@ -277,6 +300,11 @@ export function SchedulePrintPage(): JSX.Element {
         >
           <ArrowLeft size={14} /> 返回项目
         </Link>
+        {/* ★ §7.3 #17 的「来源标识」：放在 `no-print` 操作栏内 ⇒
+            只对**屏幕前的人**可见，不会印进客户稿（打印稿是给客户看的，
+            一行「AI 工作区」出现在客户稿上没有任何意义，反而像是排版事故）。
+            位置紧挨「返回项目」：用户点进来第一眼就在这一行。 */}
+        <ProjectSourceBadge project={project} />
         <span className="ml-auto" />
         <span className="text-xs text-mist">共 {pages.length} 页 · A4</span>
         <button

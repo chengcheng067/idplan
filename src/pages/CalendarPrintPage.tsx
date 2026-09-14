@@ -5,6 +5,8 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download, FileText, Printer } from 'lucide-react';
 
 import { useProjectsStore } from '../store/useProjectsStore';
+import { useProjectById, useProjectStages, useProjectTasks } from '../core/project/visibility';
+import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
 import {
@@ -101,12 +103,25 @@ function monthsBetween(startAt: string, endAt: string): string[] {
  */
 export function CalendarPrintPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
-  const project = useProjectsStore((s) => s.projects.find((p) => p.id === id));
-  const stages = useProjectsStore((s) => s.stages.filter((st) => st.projectId === id));
+  /*
+    ★ v0.8 T04-A · §7.3 #18「单项目直达」特判（与 #17 同类，理由逐字同构，
+    见 `SchedulePrintPage.tsx` 的对应注释）。三点不同之处：
+
+      ① 本页原先**没有**订阅 tasks，是 v0.7-D 补漏时加的（下方既有注释保留）——
+         这个补漏**在隔离口径下仍然成立且更需要**：成员可见范围要用
+         `computeRelatedStageIds`（判定之一是"该阶段下有我参与的任务"），
+         而 `useProjectTasks(id)` 同样必须**按 kind 收窄**吗？—— **不必**，因为它
+         按 `projectId` 收窄：本页是"这**一个**项目"的打印稿，不存在"另一个项目"的
+         数据混入。真正需要 kind 收窄的是**列表型**消费点（#14/#15 那种跨项目聚合）。
+      ② 本页 `pushToast` 走 `useProjectsStore.getState()`（action，非数据读）。
+      ③ 与日程表打印页共用同一个「来源标识」位置约定（`no-print` 操作栏内）。
+  */
+  const project = useProjectById(id);
+  const stages = useProjectStages(id);
   // ⚠️ v0.7-D 补漏新增：本页原先**没有**订阅 tasks，而收窄阶段要用
   //    `computeRelatedStageIds`（其判定之一是「该阶段下有我参与的任务」）。
   //    缺这一行 → 成员会漏掉「任务分派给我、但阶段负责人不是我」的那些阶段。
-  const tasks = useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id));
+  const tasks = useProjectTasks(id);
   // ⚠️ 本页**不直接**订阅成员列表：角色派生一律经 `useRoleGuard()` 收口
   //    （`useRoleGuard.ts`「禁止组件直接读 members」）。历史上这里曾多一行
   //    `const members = useMembersStore((s) => s.members);`——**整页从未读过它**，
@@ -260,6 +275,9 @@ export function CalendarPrintPage(): JSX.Element {
         >
           <ArrowLeft size={14} /> 返回项目
         </Link>
+        {/* ★ §7.3 #18 的「来源标识」：同日程表打印页 —— 放 `no-print` 操作栏内，
+            只给屏幕看，不印进客户稿。 */}
+        <ProjectSourceBadge project={project} />
         <span className="ml-auto" />
         <span className="text-xs text-mist">共 {entries.length} 页 · A4</span>
         <button

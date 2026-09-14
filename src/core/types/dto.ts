@@ -81,6 +81,26 @@ export interface UpdateProjectCmd {
    *   - undefined → 不变（缺省）。
    */
   shortLabel?: string | null;
+  /**
+   * 主板块（v0.8 T04 · TBD-10 追加，**可选**）。
+   *
+   * 为什么必须在这里开一个口子：`confirmProjectDomain(id, domain)` 的唯一落库动作是
+   * `repo.update(id, { domain })`（设计 §3.2.1 钉死的唯一写点）。而 `update` 的入参类型
+   * 就是本接口 —— 不补这一行，`domain` 过不了 tsc，实施方会退化成「顺手多写几个字段」
+   * 或「绕过仓储直写 Dexie」，两者都破坏「只写 domain 一个字段」的纪律。
+   *
+   * 语义与既有可选字段一致（`pickDefined` 只跳过 `undefined`）：
+   *   · `'landscape'` 等 → 设为该板块；
+   *   · `null`         → 清除（回到读时回落 `resolveProjectDomain`）；
+   *   · `undefined`    → 不改（缺省）。**注意 `null` 与 `undefined` 语义不同**，别混用。
+   *
+   * 为什么加在这里不带任何风险：本接口是**命令 DTO**，不是行实体 ——
+   * 它不参与 §3.3 的「2 条链 8 处」键序（那 8 处管的是 `Project` / `Stage` 行与备份
+   * schema 的**字段顺序**）。本行只影响类型检查面，备份 JSON 与 Dexie 行形状一字不改。
+   * 服务端 `PATCH /api/projects/:id` 早已把 `domain` 放进白名单
+   * （`server/routes/projects.routes.ts` 的 merged 字面量），故 remote 通路无需改动。
+   */
+  domain?: StageTemplateDomain | null;
   status?: ProjectStatus;
 }
 
