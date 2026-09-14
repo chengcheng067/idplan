@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * L2 · Agent 隔离**派生函数穷举** ＋ L3 · **反向断言**（v0.8 · 设计 §7.7 的 L2/L3 行）。
  *
@@ -38,9 +39,14 @@
  *      「AI 把任务 `assigneeHuman` 指给成员」。夹具按**实际字段名** `assigneeIds` 构造，
  *      语义与设计文本逐字一致（Agent 看板的任务挂在人类成员名下）。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import React from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react-dom/test-utils';
+import { MemoryRouter } from 'react-router-dom';
 
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 import {
@@ -64,6 +70,12 @@ import {
 } from '../src/core/project/visibility';
 import { deriveColumns } from '../src/pages/HomePage';
 import { computeProjectStatus } from '../src/lib/progress';
+import { AgentBoardPage } from '../src/pages/AgentBoardPage';
+import { useAgentStore } from '../src/store/useAgentStore';
+import { useLayoutStore } from '../src/store/useLayoutStore';
+import { useMembersStore } from '../src/store/useMembersStore';
+import { useProjectsStore } from '../src/store/useProjectsStore';
+import { useSettingsStore } from '../src/store/useSettingsStore';
 
 const ROOT = join(__dirname, '..');
 
@@ -1049,5 +1061,289 @@ describe('源码锚点（接线真的接上了，而不只是派生写对了）'
     const backup = read('src/core/services/backup.service.ts');
     // projectSchema 必须声明 kind —— 否则导出会把它丢掉，导入后 Agent 看板会"变成人类项目"
     expect(backup).toMatch(/kind:\s*z\.[^\n]*/);
+  });
+});
+
+/* ══════════════════════ L3 反向泄漏 · **组件级**行为断言（真页面 ＋ 真 store） ══════════════════════
+ *
+ * ★ 为什么这一条必须挂在**组件**上，而不能继续留在上面的纯派生表里
+ *   上表每行测的是"**派生函数**收窄对了"。其中 #20/#21 只断言 Agent 侧**该看到的**
+ *   （expect 1）。但 Agent 页还有一条**反向**泄漏路径，纯派生表**结构上看不见**：
+ *
+ *     页面的 `projectTasks` / `projectStages` 是按 `currentProjectId` **直接过滤**
+ *     store 里的 tasks / stages（`AgentBoardPage` 的派生区），而 `currentProjectId`
+ *     可能是一个**人类项目 id** —— 来源有三条且都不罕见：
+ *       ① 历史遗留（v0.7 时人类项目就是 Agent Board 的宿主，store 里存着旧选择）；
+ *       ② 深链 / 刷新（selected 值从别处带进来）；
+ *       ③ 用户从人类项目详情页点过 v0.6 的「Agent Board」按钮（T04-A 已在入口侧封掉，
+ *          但**深链与旧选择仍然进得来** —— 入口收口不能替代派生收口）。
+ *     此刻 `project` 已按漏斗收窄成 `undefined`，而 `projectTasks` 仍装满了人类任务：
+ *     两条派生**自相矛盾**，屏幕上表现为「Agent 工作区里列着人类项目的任务」——
+ *     正是 §7.2 #20/#21 要堵的反向泄漏（人类数据出现在 Agent 侧）。
+ *
+ *   ⇒ 只有把**真页面**挂起来、并把 store 预置成"人类 id 被选中"，才能观测到它。
+ *
+ * ⚠️ 诚实标注两件事（避免把这条读成"已经全覆盖了"）
+ *
+ *   ① **观测时机 = 首帧**（`settle:false`，同步 `act`，不冲微任务）。
+ *      页面里有一个效应会在 `loaded` 变 true 后把陈旧的人类 id 清掉、改选第一块
+ *      Agent 看板，所以泄漏窗口是"**装载完成前的那一帧**"。它是真实存在的
+ *      （效应在 paint 之后才跑，那一帧会真的画到屏幕上），但它是**短暂**的 ——
+ *      本用例钉住的正是"这一帧不许有人类数据"。下方另有一条 `settle:true` 的
+ *      **对照组**说明装载完成后确实是干净的，两条一起读才是完整事实。
+ *   ② **判别力**：`h任务` / `a任务` 出自同一个 `makeTasks` 工厂、经同一个
+ *      `AgentTaskCard` 渲染，故"人类任务本来就能被这个组件画出来"由
+ *      「`a任务` 确实出现」这条对照组共同担保 —— 否则「出现 0 次」可能是
+ *      标题通道根本不工作的**空过**（恒真断言）。
+ */
+
+/* ------------------------------ 真仓储的**最小替身** ------------------------------
+ * 只顶掉 DI 入口 `useRepos()`：本用例要观测的是"页面拿 store 怎么派生"，
+ * 不需要真 Dexie（真库版本见 `tests/agent-board-create.spec.tsx` 的整车装配）。
+ * `vi.mock` 工厂会被提升到 import 之前，故共享夹具只能经 `vi.hoisted` 传递。 */
+const H = vi.hoisted(() => ({
+  projects: [] as unknown[],
+  members: [] as unknown[],
+  stages: [] as unknown[],
+  tasks: [] as unknown[],
+}));
+
+vi.mock('../src/hooks/useRepos', () => {
+  const ok = async (): Promise<void> => undefined;
+  const bundle = {
+    projects: {
+      list: async () => H.projects,
+      get: async () => null,
+      insert: ok,
+      update: ok,
+      archive: ok,
+      remove: ok,
+    },
+    stages: {
+      listByProject: async () => H.stages,
+      get: async () => null,
+      bulkInsert: ok,
+      update: ok,
+      reschedule: ok,
+    },
+    tasks: {
+      list: async () => H.tasks,
+      listByProject: async () => H.tasks,
+      listByAssignee: async () => [],
+      get: async () => null,
+      bulkInsert: ok,
+      insert: ok,
+      update: ok,
+      remove: ok,
+      upsertByExternalId: async () => ({ created: 0, updated: 0 }),
+      claim: ok,
+    },
+    members: {
+      list: async () => H.members,
+      get: async () => null,
+      insert: ok,
+      update: ok,
+      verifyCredentials: async () => false,
+    },
+    logs: {
+      appendStageLog: ok,
+      listStageLogsByStage: async () => [],
+      listStageLogsByProject: async () => [],
+      appendAssignment: ok,
+      listAssignmentsByTask: async () => [],
+    },
+    contracts: {
+      insert: ok,
+      get: async () => null,
+      linkProject: ok,
+      saveConfirmedPayload: ok,
+      list: async () => [],
+    },
+    settings: {
+      get: async () => null,
+      set: ok,
+      all: async () => [],
+      replaceAll: ok,
+    },
+  };
+  /* ★ 必须是**同一个对象引用**：页面的装载效应依赖里有 `repos`，
+   *   每次渲染返回新对象会让它无限重跑（同 `v07-t03b-ingress-wired` 的注记）。 */
+  return { useRepos: (): unknown => bundle };
+});
+
+/**
+ * 人类数据的**文本标志物**。
+ *
+ * `MAIN` 夹具的人类项目阶段前缀是 `h`（`h阶段1..3`）、任务前缀也是 `h`（`h任务0..4`）；
+ * Agent 看板是 `a`。用**前缀**而不是某个完整名字：整类都不许出现，
+ * 漏出一个和漏出五个是同一个 bug。
+ */
+const HUMAN_TASK_MARK = 'h任务';
+const AGENT_TASK_MARK = 'a任务';
+const HUMAN_STAGE_MARK = 'h阶段';
+const AGENT_STAGE_MARK = 'a阶段';
+
+/** 抽屉向量用的任务 id（`makeTasks` 的编号口径：`tsk_<前缀>_<i>`） */
+const HUMAN_DRAWER_TASK = 'tsk_h_0';
+const AGENT_DRAWER_TASK = 'tsk_a_0';
+
+let leakRoot: Root | null = null;
+let leakHost: HTMLDivElement | null = null;
+
+/** 压平空白后的可见文本（跨元素拼接会引入换行/缩进，直接 `toContain` 会假阴性） */
+function flatText(el: HTMLElement): string {
+  return (el.textContent ?? '').replace(/\s+/g, ' ');
+}
+
+/**
+ * 读来源指标卡里 `human <N>` 的 N。
+ *
+ * 匹配式锚在卡片自己的结构上（`human N agent M` 是 `SourceStatCard` 的固定顺序），
+ * 而**不能**用 `\bhuman\b` —— 那是本文件踩过的坑：该卡片前一个兄弟元素的文本是
+ * `…handoff bundle`，`textContent` 拼接后正好是 `bundlehuman 5agent 0`，
+ * 于是 `\bhuman` 处在前一字符 `e` 与本字符 `h` 都是单词字符的位置，
+ * **没有词边界**，正则恒不匹配 ⇒ 断言静默退化成 `null`（空过）。
+ * 同理数字与 `agent` 之间也没有空格（JSX 跨行空白被折叠），故两侧都用 `\s*`。
+ *
+ * 找不到就返回 `null` —— 让"卡根本没渲染"与"计数是 0"在断言里**区分开**，
+ * 而不是双双落成 `undefined === 0` 的假绿。
+ */
+function humanStatCount(el: HTMLElement): number | null {
+  const m = flatText(el).match(/human\s*(\d+)\s*agent\s*\d+/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * 挂载真 `AgentBoardPage`。
+ *
+ * @param selectedProjectId  预置进 `useAgentStore.currentProjectId` 的值
+ *                           （本用例的关键自变量：喂人类 id vs 喂 Agent id）
+ * @param settle             `true` ＝ 等装载完成（含那条"清掉陈旧选择"的效应）；
+ *                           `false` ＝ 停在**首帧**（同步 act，不冲微任务）
+ * @param drawerTaskId       预置进 `useAgentStore.drawerTaskId` 的任务 id。传一个**人类**
+ *                           任务的 id 就能把 `projectStages`（阶段名）这条向量也点亮 ——
+ *                          阶段名**只在任务抽屉里**渲染（`TaskDrawer` 的 `stageName`），
+ *                          不打开抽屉时的"阶段名 0 次"是**空过**，不能当证据。
+ */
+async function mountAgentPage(
+  selectedProjectId: string | null,
+  settle: boolean,
+  drawerTaskId: string | null = null,
+): Promise<void> {
+  H.projects = [...MAIN.projects];
+  H.members = [...MAIN.members];
+  H.stages = [...MAIN.stages];
+  H.tasks = [...MAIN.tasks];
+
+  useProjectsStore.setState({
+    projects: [...MAIN.projects],
+    stages: [...MAIN.stages],
+    tasks: [...MAIN.tasks],
+    // 真 pushToast 挂 2s 定时器，会在用例结束后于 act 之外 setState（无关噪声）
+    pushToast: () => 0,
+  });
+  useMembersStore.getState().setAll(MAIN.members);
+  useSettingsStore.setState({ currentMemberId: 'mem_human', hydrated: true });
+  useAgentStore.setState({ currentProjectId: selectedProjectId, drawerTaskId });
+  /* ★ 必须技术模式：`SourceStatCard` 按纪律**只在**技术模式渲染
+   *   （人话模式看不到 human/agent 字样 —— 见 AgentBoardPage 头注释 §S3）。 */
+  useLayoutStore.setState({ agentBoardMode: 'tech' });
+
+  leakHost = document.createElement('div');
+  document.body.appendChild(leakHost);
+  leakRoot = createRoot(leakHost);
+
+  const tree = React.createElement(
+    MemoryRouter,
+    { initialEntries: ['/agent'] },
+    React.createElement(AgentBoardPage),
+  );
+
+  if (settle) {
+    await act(async () => {
+      leakRoot!.render(tree);
+    });
+    for (let i = 0; i < 4; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+  } else {
+    // 同步 act：`useEffect` 会被冲掉，但 `await Promise.all(...)` 的微任务**不会**
+    act(() => {
+      leakRoot!.render(tree);
+    });
+  }
+}
+
+afterEach(() => {
+  if (leakRoot) {
+    const r = leakRoot;
+    act(() => {
+      r.unmount();
+    });
+  }
+  leakHost?.remove();
+  leakRoot = null;
+  leakHost = null;
+
+  // store 复位同样触发 React 更新 ⇒ 放进 act
+  act(() => {
+    useMembersStore.setState({ members: [] });
+    useSettingsStore.setState({ currentMemberId: null, hydrated: false });
+    useProjectsStore.setState({ projects: [], stages: [], tasks: [] });
+    useAgentStore.setState({ currentProjectId: null, drawerTaskId: null });
+  });
+});
+
+describe('L3 反向泄漏 · Agent 页被喂「人类项目 id」时不得渲染人类数据（组件级）', () => {
+  it('★ 首帧：`currentProjectId` 是人类项目 id ⇒ 人类项目的**任务标题**出现 0 次', async () => {
+    await mountAgentPage(HUMAN_ID, false);
+
+    expect(flatText(leakHost!)).not.toContain(HUMAN_TASK_MARK);
+  });
+
+  it('★ 首帧：来源指标卡的 `human` 计数必须是 0（泄漏时会读到人类项目的 5 条任务）', async () => {
+    await mountAgentPage(HUMAN_ID, false);
+
+    // 先证明卡片真的渲染了（否则下面的 toBe(0) 是空过）
+    expect(humanStatCount(leakHost!), '未找到来源指标卡的 human 计数 —— 断言会退化成空过').not.toBeNull();
+    expect(humanStatCount(leakHost!)).toBe(0);
+  });
+
+  it('★ 首帧：`projectStages` 向量 —— 抽屉不得把人类项目的**阶段名**显示出来', async () => {
+    await mountAgentPage(HUMAN_ID, false, HUMAN_DRAWER_TASK);
+
+    // 阶段名只在任务抽屉里渲染 ⇒ 这条证明的是 `projectStages` 那条派生（不只是 tasks）
+    expect(flatText(document.body)).not.toContain(HUMAN_STAGE_MARK);
+  });
+
+  /* ─────────────────── 对照组（判别力）：同组件、同夹具，只换自变量 ─────────────────── */
+
+  it('★ 判别力对断 · 换成 Agent 看板 id ⇒ 该看板的任务**确实出现**（0 不是恒真）', async () => {
+    await mountAgentPage(AGENT_ID, true);
+
+    const flat = flatText(leakHost!);
+    expect(flat).toContain(AGENT_TASK_MARK);
+    // 反向：即便装载完成、选中被纠正成 Agent 看板，人类数据也不许混进来
+    expect(flat).not.toContain(HUMAN_TASK_MARK);
+  });
+
+  it('★ 判别力对断② · 抽屉是**能**显示阶段名的（喂对 id 时 `a阶段` 出现，故上面的 0 不是空过）', async () => {
+    await mountAgentPage(AGENT_ID, false, AGENT_DRAWER_TASK);
+
+    const flat = flatText(document.body);
+    // 探针有效性：抽屉 ＋ stageName 通道确实工作（否则"人类阶段名 0 次"毫无信息量）
+    expect(flat).toContain(AGENT_STAGE_MARK);
+    expect(flat).not.toContain(HUMAN_STAGE_MARK);
+  });
+
+  it('对照组③ · 装载完成后（settle）人类数据同样为 0（说明泄漏窗口限于首帧，不是持续泄漏）', async () => {
+    await mountAgentPage(HUMAN_ID, true);
+
+    const flat = flatText(leakHost!);
+    expect(flat).not.toContain(HUMAN_TASK_MARK);
+    expect(humanStatCount(leakHost!)).toBe(0);
   });
 });
