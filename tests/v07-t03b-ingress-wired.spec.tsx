@@ -196,6 +196,19 @@ const PROJECT: Project = {
   stagePresetKey: null,
   stageTemplateVersion: 0,
   scheduleBasis: ScheduleBasis.Calendar,
+  /*
+   * ★ v0.8（T04-B）：夹具必须声明 `kind: 'agent'`。
+   *
+   * 本 spec 把 `PROJECT` 挂在 **`/agent`（AgentBoardPage）** 上，而 v0.8 的隔离
+   * 让 `visibility.ts::projectKindOf` 对**缺列**的项目回落 `'human'`（老库兼容口径）。
+   * 于是旧夹具（无 `kind`）在 Agent 页会被**正确地**过滤掉 → `currentProjectId` 被清空
+   * → `applyOpen && currentProjectId` 不成立 → 「手动粘贴」面板永不渲染，本用例假红。
+   *
+   * 这不是行为回归，而是**夹具语义随 v0.8 更新**：一块要被 Agent 页展示的看板，
+   * 其 `kind` 就该是 `'agent'`。改夹具比放宽页面的过滤条件正确得多——
+   * 后者会把 v0.8 要修的那条（Agent 页列出人类项目）重新放回来。
+   */
+  kind: 'agent',
   status: ProjectStatus.Active,
   revision: 1,
   updatedAt: '2026-01-01T00:00:00Z',

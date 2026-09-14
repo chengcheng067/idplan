@@ -624,7 +624,16 @@ describe.skipIf(!CAN_RUN_FRESH)(
      * 验收 ①-b · 删掉平板档渲染后的**功能等价性**（不允许「删了就没入口」）
      * =================================================================================== */
     it('①-b · 平板档删 ⋮ 后，⋮ 菜单的全部入口在侧栏抽屉仍可达（member 与 admin 两种身份）', async () => {
-      // ① member 身份：抽屉里必须有 看板 / 我的任务 / Agent / 设置
+      /*
+       * ① member 身份：抽屉里必须有 看板 / 我的任务 / 工作区 / 设置
+       *
+       * ★ v0.8 改动（T04-B）：`Agent` → `工作区`。设计 §4.1 文件清单 ⑦ 明定
+       *   「导航文案『工作区』/『Agent 看板』」——`SidebarNav.tsx` 的一级项
+       *   已由 `Agent` 收口为 `工作区`（`AgentBoardPage` 的 h1 仍是「Agent 看板」，
+       *   构成「工作区 → 里面的看板」两级语义，见 TBD-7）。
+       *   本断言跟的是**同一个 UI 事实**（⋮ 的等价入口仍在抽屉里），只是文案随设计更新，
+       *   覆盖强度不变：入口是否可达仍被逐项 `toContain` 钉死。
+       */
       {
         const { ctx, page } = await openShell(1024);
         try {
@@ -632,7 +641,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
           const drawer = page.locator('[role="dialog"][aria-label="导航菜单"]');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
-          for (const label of ['看板', '我的任务', 'Agent', '设置']) {
+          for (const label of ['看板', '我的任务', '工作区', '设置']) {
             expect(text, `member：⋮ 的等价入口「${label}」必须仍在侧栏抽屉里`).toContain(label);
           }
           // ⋮ 菜单在平板档**不可见**，但仍不可少任何入口 —— 这条与 ①-a 一起构成完整语义
@@ -654,7 +663,8 @@ describe.skipIf(!CAN_RUN_FRESH)(
           const drawer = page.locator('[role="dialog"][aria-label="导航菜单"]');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
-          for (const label of ['项目', '我的任务', 'Agent', '设置', '保存备份', '加载备份', '新建项目']) {
+          // v0.8（T04-B）：同 ①，`Agent` → `工作区`（设计 §4.1 ⑦ 导航文案）
+          for (const label of ['项目', '我的任务', '工作区', '设置', '保存备份', '加载备份', '新建项目']) {
             expect(text, `admin：⋮ 的等价入口「${label}」必须仍在侧栏抽屉里`).toContain(label);
           }
           // 设置项在抽屉里恰有一个（防止「⋮ 与侧栏两份设置」在平板档同时出现）
