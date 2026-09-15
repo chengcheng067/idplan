@@ -24,6 +24,7 @@ import {
   normalizeStageRow,
   resolveStageColorIndex,
   resolveStageTemplateKey,
+  resolveImportedTemplateKey,
 } from '../src/core/template/stage-fallback';
 import type { StageTemplateItem } from '../src/core/types/dto';
 import type { Stage } from '../src/core/types/entities';
@@ -529,5 +530,68 @@ describe('stage-subset：老数据（无 templateKey / colorIndex）读时回落
       'revision',
       'updatedAt',
     ]);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * v0.8.1：「Agent / 自定义阶段备份往返后被安上 indoor 模板 ⇒ 换列」的修复
+ *
+ * 上面那组 `resolveStageTemplateKey(1, null) === 'indoor.proposal'`（:481）是**读时**
+ * 契约，保持不动 —— 它面向「消费侧拿一个可能为 null 的 templateKey 去问模板」。
+ * 本组锁的是**写时**归一的相反语义：显式 null = 明确无模板，不得被改写。
+ * 两条契约不冲突，因为调用点不同。
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+describe('导入归一：只有「键缺失」才反查，显式 null 必须原样保留', () => {
+  it('resolveImportedTemplateKey：缺失 → 反查 indoor；显式 null / 真 key → 原样', () => {
+    // ① 老备份压根没这个键 ⇒ 反查（存量数据观感零变化）
+    expect(resolveImportedTemplateKey(1, undefined)).toBe('indoor.proposal');
+    expect(resolveImportedTemplateKey(4, undefined)).toBe('indoor.su_model');
+    expect(resolveImportedTemplateKey(9, undefined)).toBe('indoor.photography');
+
+    // ② 显式 null = 明确无模板（Agent 建的阶段 / 用户自定义阶段）⇒ **不得**改写
+    expect(resolveImportedTemplateKey(1, null)).toBeNull();
+    expect(resolveImportedTemplateKey(4, null)).toBeNull();
+    expect(
+      resolveImportedTemplateKey(1, null),
+      '★ 若这里返回 indoor.proposal，Agent 阶段一次备份往返就会换列',
+    ).not.toBe('indoor.proposal');
+
+    // ③ 真 key 原样透传（越界序号也不该把真 key 冲掉）
+    expect(resolveImportedTemplateKey(1, 'landscape.survey')).toBe('landscape.survey');
+    expect(resolveImportedTemplateKey(99, 'landscape.survey')).toBe('landscape.survey');
+  });
+
+  it('normalizeStageRow：orderIndex ≤ 9 且 templateKey=null 时不得被反查改写', () => {
+    const agentStage = {
+      id: 'stg_agent_created',
+      projectId: 'proj_agent',
+      orderIndex: 3, // ← 关键：落在 1..9 才踩得到这个坑
+      templateKey: null,
+      colorIndex: 3,
+      name: '概念生成',
+      ratioPercent: 50,
+      startAt: '2026-08-01',
+      endAt: '2026-08-15',
+      status: 'not_started',
+      ownerId: null,
+      visible: true,
+      resourcePath: null,
+      revision: 1,
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    } as unknown as Parameters<typeof normalizeStageRow>[0];
+
+    expect(normalizeStageRow(agentStage).templateKey).toBeNull();
+
+    // 反向锁：同一段代码对「键缺失」仍必须反查（存量老数据观感零变化）
+    // （orderIndex 3 ⇒ indoor_full 套餐第 3 项 = indoor.concept_plan；
+    //   期望值写死字面量而非调 legacyTemplateKeyOf —— 否则退化成同义反复）
+    const legacyStage = { ...agentStage, id: 'stg_legacy_2' } as Record<string, unknown>;
+    delete legacyStage.templateKey;
+    expect(legacyStage).not.toHaveProperty('templateKey');
+    expect(
+      normalizeStageRow(legacyStage as Parameters<typeof normalizeStageRow>[0]).templateKey,
+      '老备份缺 templateKey 时仍必须反查到 indoor.*（存量观感不变）',
+    ).toBe('indoor.concept_plan');
   });
 });

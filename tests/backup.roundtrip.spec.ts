@@ -14,6 +14,7 @@ import type { BackupPackage } from '../src/core/types/dto';
 import { previewSplit } from '../src/core/template/split';
 import { ProjectService } from '../src/core/services/project.service';
 import { resolveProjectDomain } from '../src/core/template/stage-fallback';
+import { getItemKanbanColumn } from '../src/core/template/stage-library';
 import { StageStatus } from '../src/core/types/enums';
 import type { Project, Stage } from '../src/core/types/entities';
 
@@ -233,17 +234,13 @@ describe('backup：v0.8 增量往返（domain / kind / customColor）', () => {
 
     // ② 带用户自定义主色的阶段（#RRGGBB；null 与有值两种都覆盖，验证 null 不被归一篡改）
     //
-    // ⚠️ `orderIndex` 取 10/11 而非 1/2，是**刻意的**——这里踩到一个 T01 之外的既有边界：
-    //   `normalizeStageRow` 走 `resolveStageTemplateKey(orderIndex, templateKey)`，
-    //   而 `templateKey` 为 null 且 `orderIndex ≤ 9` 时会被**反查 indoor_full 套餐改写成
-    //   `indoor.*`**（老数据语义，`tests/stage-subset-split.spec.ts:470` 已锁死该契约）。
-    //   后果：Agent 自动建出的「无模板」阶段（`buildCreatedStage` 恒 `templateKey: null`）
-    //   若落在 orderIndex ≤ 9，一次备份往返后会被安上室内模板归属 → `getItemKanbanColumn`
-    //   从「按 orderIndex 均分落列」变成「落 design 列」，即阶段卡换列。
-    //   这是**v0.7 就存在、v0.8 因自定义阶段而放大**的缺陷，不属于 T01 的字段增量范围，
-    //   且修它要改一条已被测试锁定的契约（需先决定「显式 null = 明确无模板」还是
-    //   「null 与缺失同义」），故 T01 不动它，改由本用例把边界钉住：orderIndex ≥ 10 时
-    //   `templateKey: null` 往返稳定。→ 已作为待决项上报（见 T03/T04 交接说明）。
+    // ℹ️ `orderIndex` 取 10/11 而非 1/2，是 T01 当时的**绕行**：当时 `normalizeStageRow`
+    //   走 `resolveStageTemplateKey`（读时回落，显式 null 也回落），`templateKey: null`
+    //   且 `orderIndex ≤ 9` 会被反查成 `indoor.*` ⇒ Agent 建的阶段往返后换列。
+    //   **该缺陷已在 v0.8.1 修复**：`normalizeStageRow` 改用 `resolveImportedTemplateKey`
+    //   —— 只有「键缺失」（老备份）才反查，显式 null 原样保留。
+    //   `orderIndex` 仍保持 10/11（不动夹具），但**踩坑区间 1..9 已由下方
+    //   「Agent 无模板阶段往返不换列」一组专门钉死**，勿再退回旧写法。
     const stageRows: Stage[] = [
       {
         id: 'stg_agent_1',
@@ -397,6 +394,162 @@ describe('backup：v0.8 增量往返（domain / kind / customColor）', () => {
     expect(row?.domain).toBeNull();
     expect(resolveProjectDomain(row?.stagePresetKey, row?.domain)).toBe('indoor');
     expect((await bundle.stages.get('stg_legacy'))?.customColor).toBeNull();
+  });
+});
+
+/* ------------------ v0.8.1：Agent 无模板阶段往返不得换列 ------------------ */
+
+describe('backup：Agent 无模板阶段（templateKey=null 且 orderIndex ≤ 9）往返不换列', () => {
+  /**
+   * 清的是这条红色欠账：Agent 自动建出的阶段（`buildCreatedStage` 恒 `templateKey: null`）
+   * 若落在 orderIndex 1..9，旧的 `normalizeStageRow` 会在**导入归一**时把它反查成
+   * `indoor.*`（`resolveStageTemplateKey` 是读时回落，显式 null 也回落）⇒ 落库即换列，
+   * 且破坏 roundtrip 幂等。修复后：显式 null 原样保留，只有「键缺失」才反查。
+   *
+   * 注意：上方 v0.8 增量那条用例的 `stg_agent_1/2` 刻意取 orderIndex 10/11 来绕开这个坑；
+   * 本组专门取 **1..3**（踩坑区间）来钉死它。
+   */
+  it('往返后 templateKey 仍是 null、落列回到「按 orderIndex 均分」，逐表 diff 为空', async () => {
+    const agentProject = await bundle.projects.insert({
+      name: 'AI 工作区·往返不换列',
+      type: 'interior_design' as never,
+      address: '',
+      clientName: '',
+      contractAmount: null,
+      signedAt: null,
+      plannedStartAt: '2026-08-01',
+      plannedEndAt: '2026-08-31',
+      coverColor: null,
+      domain: 'software',
+      kind: 'agent',
+    });
+
+    await bundle.stages.bulkInsert([
+      {
+        id: 'stg_rt_a',
+        projectId: agentProject.id,
+        orderIndex: 1,
+        templateKey: null,
+        colorIndex: 1,
+        customColor: null,
+        name: '概念生成',
+        ratioPercent: 34,
+        startAt: '2026-08-01',
+        endAt: '2026-08-10',
+        status: StageStatus.NotStarted,
+        ownerId: null,
+        visible: true,
+        resourcePath: null,
+        revision: 1,
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      },
+      {
+        id: 'stg_rt_b',
+        projectId: agentProject.id,
+        orderIndex: 4,
+        templateKey: null,
+        colorIndex: 4,
+        customColor: null,
+        name: 'SU 建模',
+        ratioPercent: 33,
+        startAt: '2026-08-11',
+        endAt: '2026-08-20',
+        status: StageStatus.NotStarted,
+        ownerId: null,
+        visible: true,
+        resourcePath: null,
+        revision: 1,
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      },
+    ]);
+
+    const svc = new BackupService(bundle);
+    const exported1 = await svc.exportAll();
+
+    // ① 导出侧自证：包里确实是 null（否则下面的往返断言恒真）
+    expect(exported1.data.stages.find((s) => s.id === 'stg_rt_a')?.templateKey).toBeNull();
+    expect(exported1.data.stages.find((s) => s.id === 'stg_rt_b')?.templateKey).toBeNull();
+
+    await svc.importAndReplace(exported1);
+    const exported2 = await svc.exportAll();
+
+    // ② roundtrip 幂等：逐表逐字节相等（键序 + 值）
+    expect(normalize(exported2)).toBe(normalize(exported1));
+
+    // ③ 直接读 DB 行（不经序列化）：不得被安上 indoor 模板
+    const after = await bundle.stages.listByProject(agentProject.id);
+    expect(after).toHaveLength(2);
+    for (const s of after) {
+      expect(s.templateKey, `阶段 ${s.id} 往返后不得被改写成 indoor.*`).toBeNull();
+      // ④ 落列仍回到「按 orderIndex 均分」那条既有路径（= 不换列的判据）
+      expect(
+        getItemKanbanColumn(s.templateKey),
+        `阶段 ${s.id} 落列不得被模板声明劫持（应为 null ⇒ 按 orderIndex 均分）`,
+      ).toBeNull();
+    }
+  });
+
+  it('反向锁：老备份缺 templateKey ⇒ 仍反查 indoor.*（存量观感零变化）', async () => {
+    const legacyPkg = {
+      meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-01-01T00:00:00.000Z' },
+      data: {
+        projects: [
+          {
+            id: 'proj_legacy_tk',
+            name: 'v0.7 老项目',
+            type: 'dining',
+            address: '',
+            clientName: '',
+            contractAmount: null,
+            signedAt: null,
+            plannedStartAt: '2026-01-01',
+            plannedEndAt: '2026-06-30',
+            coverColor: null,
+            shortLabel: null,
+            stagePresetKey: 'indoor_full',
+            stageTemplateVersion: 2,
+            scheduleBasis: 'calendar',
+            status: 'active',
+            revision: 1,
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        // ★ 刻意**不带** templateKey 键 —— 这就是 v1/v2 老备份的形状
+        stages: [
+          {
+            id: 'stg_legacy_tk',
+            projectId: 'proj_legacy_tk',
+            orderIndex: 4,
+            colorIndex: 4,
+            name: 'SU 建模',
+            ratioPercent: 100,
+            startAt: '2026-01-01',
+            endAt: '2026-06-30',
+            status: 'not_started',
+            ownerId: null,
+            visible: true,
+            resourcePath: null,
+            revision: 1,
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        tasks: [],
+        members: [],
+        assignments: [],
+        logs: [],
+        contracts: [],
+        settings: [],
+      },
+    };
+
+    const svc = new BackupService(bundle);
+    await svc.importAndReplace(legacyPkg as never);
+
+    const row = await bundle.stages.get('stg_legacy_tk');
+    expect(row?.templateKey, '老数据仍必须反查到 indoor 系列（存量项目不得换列）').toBe(
+      'indoor.su_model',
+    );
+    expect(getItemKanbanColumn(row?.templateKey)).not.toBeNull();
   });
 });
 

@@ -93,6 +93,33 @@ export function resolveStageTemplateKey(orderIndex: number, templateKey?: string
   return templateKey ?? legacyTemplateKeyOf(orderIndex);
 }
 
+/**
+ * **导入归一**专用的 `templateKey` 回落（v0.8.1 修「Agent 阶段备份往返后换列」）。
+ *
+ * ── 为什么不能直接用 `resolveStageTemplateKey()` ──
+ * 那是**读时**回落（显式 null 也回落），是给消费侧用的。拿它做**写时**归一，会把
+ * 「显式声明无模板」的阶段**改写成 `indoor.*` 并落库**，而 v0.7 起就有两类阶段
+ * 是靠「templateKey = null」表达「我没有模板」的：
+ *   · Agent 自动建出的阶段（`stage-resolve.buildCreatedStage` 恒写 `templateKey: null`）；
+ *   · 用户自定义阶段（`custom-stage.service` 明文落库 `templateKey = null`）。
+ * 后果（用户可见）：一次备份往返后 `getItemKanbanColumn(templateKey)` 从
+ * 「按 orderIndex 均分落列」变成「落 indoor 模板声明的那一列」⇒ 阶段卡**换列**；
+ * 同时破坏 roundtrip 幂等（导出→导入→再导出，`templateKey` 由 null 变成 `indoor.*`，
+ * 逐表 diff 非空）。
+ *
+ * ── 本函数的判据 ──
+ * 只给「**键缺失**」回落 —— 那才是老备份（v1/v2，压根没有这个字段）的语义；
+ * 显式 `null` 是「明确无模板」的声明，必须原样保留。
+ * 纪律与 `normalizeProjectRow` 对 `domain` 的处理同构（只 `?? null`、不反查，
+ * 反查留给消费侧的 `resolveProjectDomain`）—— 详见 `DEFAULT_PROJECT_DOMAIN` 的注释。
+ */
+export function resolveImportedTemplateKey(
+  orderIndex: number,
+  templateKey?: string | null,
+): string | null {
+  return templateKey === undefined ? legacyTemplateKeyOf(orderIndex) : templateKey;
+}
+
 /** 读时回落：colorIndex 缺失/越界时按 orderIndex 夹取 */
 export function resolveStageColorIndex(orderIndex: number, colorIndex?: number | null): number {
   if (typeof colorIndex === 'number' && Number.isFinite(colorIndex)) {
@@ -183,7 +210,13 @@ export function normalizeStageRow(row: StageRowInput): Stage {
     id: row.id,
     projectId: row.projectId,
     orderIndex: row.orderIndex,
-    templateKey: resolveStageTemplateKey(row.orderIndex, row.templateKey),
+    /*
+      ⚠️ 这里**必须**用 `resolveImportedTemplateKey`，不能用 `resolveStageTemplateKey`：
+      后者是读时回落（显式 null 也回落），在写时归一条 `templateKey: null` 的阶段会把它
+      永久改写成 `indoor.*` ⇒ 备份往返后换列 + roundtrip 逐表 diff 非空。
+      详见 `resolveImportedTemplateKey` 的注释。
+    */
+    templateKey: resolveImportedTemplateKey(row.orderIndex, row.templateKey),
     colorIndex: resolveStageColorIndex(row.orderIndex, row.colorIndex),
     customColor: row.customColor ?? null,
     name: row.name,
