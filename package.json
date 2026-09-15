@@ -1,7 +1,7 @@
 {
   "name": "id-plan",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "description": "《ID Plan》— 室内设计项目节点管理系统（离线优先 Web 应用）",
   "author": "杨雯丞",
