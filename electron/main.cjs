@@ -18,6 +18,7 @@ const {
   stopLoopbackServer,
   setLoopbackToken,
   resolveLoopbackResult,
+  resolveLoopbackPong,
 } = require('./loopback.cjs');
 
 // 单一真相源：版本号只写在仓库根 version.json（与 GitHub Release tag 严格对应，四段 x.y.z.build）。
@@ -205,6 +206,13 @@ ipcMain.on('agent:token:set', (_event, token) => {
 ipcMain.on('agent:import-result', (_event, payload) => {
   if (payload && typeof payload.requestId === 'string') {
     resolveLoopbackResult(payload.requestId, payload);
+  }
+});
+
+// 渲染进程回 ping（health 的 dataLayer 真实判定；只证明监听器活着，不碰数据库）
+ipcMain.on('agent:pong', (_event, payload) => {
+  if (payload && typeof payload.requestId === 'string') {
+    resolveLoopbackPong(payload.requestId);
   }
 });
 

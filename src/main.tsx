@@ -8,6 +8,10 @@ import {
 } from 'react-router-dom';
 
 import { RepoProvider } from './di/repository.provider';
+// 组合根接线（副作用导入）：Electron 桥存在时把本机 loopback 通道注册进注册表。
+// ★ 必须在**应用启动**时就注册，不能等用户打开 Agent 看板页 —— 否则「用户在首页时
+//   外部写入」会走不到 loopback 通道。
+import './di/agent-loopback';
 import { initTheme } from './hooks/useTheme';
 import { initSidebarCollapsed } from './store/useLayoutStore';
 import { installGlobalLogCatchers, logInfo } from './core/services/log.service';

@@ -34,12 +34,16 @@ const LOOPBACK_HOST = '127.0.0.1';
 const LOOPBACK_PORT = 17788;
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2MB
 const REQUEST_TIMEOUT_MS = 10000;
+/** 探活超时：远短于写入超时，health 不该让调用方等 10s */
+const PING_TIMEOUT_MS = 1500;
 const APP_VERSION = require('../version.json').version;
 
 /** token 只存比对，绝不回传原文 */
 let configuredToken = null;
 /** 挂起的转发请求：requestId → { resolve, reject, timer } */
 const pending = new Map();
+/** 探活在途表（与落库在途表分开，见 resolveLoopbackPong） */
+const pendingPings = new Map();
 
 let server = null;
 
@@ -64,6 +68,53 @@ function resolveLoopbackResult(requestId, payload) {
   clearTimeout(entry.timer);
   pending.delete(requestId);
   entry.resolve(payload);
+}
+
+/**
+ * 渲染进程回 ping（探活专用）。
+ *
+ * ★ 与落库回传**分开一张表**：ping 的语义只是「监听器活着吗」，不携带 ApplyResult。
+ *   混用会让一次 ping 把一个空 result 当成导入结果 resolve 掉。
+ */
+function resolveLoopbackPong(requestId) {
+  if (!requestId) return;
+  const entry = pendingPings.get(requestId);
+  if (!entry) return; // 已超时：忽略
+  clearTimeout(entry.timer);
+  pendingPings.delete(requestId);
+  entry.resolve(true);
+}
+
+/**
+ * 探活：主进程发 `agent:ping`，渲染侧 `useAgentLoopbackReceiver` **立即回 pong、不碰数据库**。
+ *
+ * ── 为什么 health 不能只看「窗口在不在」 ──
+ * 旧写法 `win ? 'ready' : 'unavailable'` 只看 BrowserWindow 存在与否。落库监听器上提为
+ * 常驻之前，监听器挂在 Agent 看板页：用户在首页时窗口在、监听器不在 ⇒ 面板显示
+ * 「可连通 · 数据层就绪」，外部 POST 却要等满 10s 才 503 —— 正是本项目反复禁止的假阳性。
+ * 故改为**真实探测**：1.5s 内收到 pong 才算 ready。
+ */
+function pingRenderer() {
+  return new Promise((resolve) => {
+    const win = getMainWindow();
+    if (!win) {
+      resolve(false);
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      pendingPings.delete(requestId);
+      resolve(false);
+    }, PING_TIMEOUT_MS);
+    pendingPings.set(requestId, { resolve, timer });
+    try {
+      win.webContents.send('agent:ping', { requestId, kind: 'ping' });
+    } catch {
+      clearTimeout(timer);
+      pendingPings.delete(requestId);
+      resolve(false);
+    }
+  });
 }
 
 function sendJson(res, status, obj) {
@@ -137,10 +188,15 @@ function forwardToRenderer(request) {
   });
 }
 
-function handleHealth(_req, res) {
-  const win = getMainWindow();
-  const dataLayer = win ? 'ready' : 'unavailable';
-  sendJson(res, 200, { ok: true, version: APP_VERSION, dataLayer });
+async function handleHealth(_req, res) {
+  // ★ 真实判定：发 ping 等 pong（1.5s）。窗口在但监听器没挂 ⇒ unavailable，
+  //   绝不给「可连通」的假阳性（面板据此显示「数据层不可用」并提示打开应用）。
+  const reachable = await pingRenderer();
+  sendJson(res, 200, {
+    ok: true,
+    version: APP_VERSION,
+    dataLayer: reachable ? 'ready' : 'unavailable',
+  });
 }
 
 async function handleImport(req, res, url) {
@@ -274,6 +330,10 @@ function stopLoopbackServer() {
     entry.reject(makeError(503, 'server_stopping', 'loopback server 正在关闭。'));
   }
   pending.clear();
+  for (const entry of pendingPings.values()) {
+    clearTimeout(entry.timer);
+  }
+  pendingPings.clear();
   return new Promise((resolve) => {
     const s = server;
     server = null;
@@ -286,6 +346,7 @@ module.exports = {
   LOOPBACK_PORT,
   setLoopbackToken,
   resolveLoopbackResult,
+  resolveLoopbackPong,
   startLoopbackServer,
   stopLoopbackServer,
 };

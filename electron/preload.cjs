@@ -63,6 +63,19 @@ contextBridge.exposeInMainWorld('idplan', {
   /** 把落库结果 / 错误回传给主进程（经 IPC），与 `onAgentImport` 配对 */
   sendAgentImportResult: (payload) => ipcRenderer.send('agent:import-result', payload),
   /**
+   * 订阅主进程 `health` 探活的 ping（`dataLayer` 真实判定的渲染侧一半）。
+   *
+   * ★ 收到 ping **只回 pong，不碰数据库** —— 探活每天会被打很多次，若让它走落库
+   *   会污染数据。渲染侧的短路实现见 `useAgentLoopbackReceiver.handleAgentLoopbackMessage`。
+   */
+  onAgentPing: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on('agent:ping', handler);
+    return () => ipcRenderer.removeListener('agent:ping', handler);
+  },
+  /** 回复 ping（经 IPC），与 `onAgentPing` 配对 */
+  sendAgentPong: (payload) => ipcRenderer.send('agent:pong', payload),
+  /**
    * 把 token 告知主进程（主进程只留着比对，绝不回传原文）。渲染进程是 token 的
    * 持久化唯一出处（localStorage 的 `idplan.agentToken`），主进程仅内存持有。
    */

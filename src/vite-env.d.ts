@@ -88,6 +88,13 @@ interface IdPlanBridge {
   onAgentImport?: (cb: (payload: AgentImportRequest) => void) => () => void;
   /** 把落库结果 / 错误回传给主进程（与 onAgentImport 配对） */
   sendAgentImportResult?: (payload: AgentImportResult) => void;
+  /**
+   * 订阅主进程 `health` 探活用的 ping（`dataLayer` 真实判定的一半）。
+   * 收到即回 pong，**不碰数据库**；老版本 preload 未暴露时可选。
+   */
+  onAgentPing?: (cb: (payload: { requestId: string; kind: 'ping' }) => void) => () => void;
+  /** 回复 ping（与 onAgentPing 配对） */
+  sendAgentPong?: (payload: { requestId: string }) => void;
   /** 把 token 告知主进程（主进程只比对，绝不回传原文） */
   setAgentToken?: (token: string) => void;
 }

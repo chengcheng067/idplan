@@ -6,6 +6,7 @@ import { IdentityDialog } from './IdentityDialog';
 import { ManualFallbackForm } from '../contract-wizard/ManualFallbackForm';
 import { useProjectsBootstrap } from '../../hooks/useProjectsBootstrap';
 import { useFirstRunGate } from '../../hooks/useFirstRunGate';
+import { useAgentLoopbackReceiver } from '../../hooks/useAgentLoopbackReceiver';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useUiStore } from '../../store/useUiStore';
 
@@ -37,6 +38,12 @@ import { useUiStore } from '../../store/useUiStore';
 export function AppShell(): JSX.Element {
   useProjectsBootstrap();
   useFirstRunGate();
+  /*
+   * 本机 Agent loopback 的**渲染侧落库接收器**：常驻监听主进程转来的导入 / ping。
+   * 必须挂在这里（而不是某个页面）—— 见 `useAgentLoopbackReceiver` 文件头：
+   * 挂在页面会导致用户不在该页时面板显示「可连通」但写入要等满 10s 超时。
+   */
+  useAgentLoopbackReceiver();
   const toasts = useProjectsStore((s) => s.toasts);
   const dismissToast = useProjectsStore((s) => s.dismissToast);
   const manualFormOpen = useUiStore((s) => s.manualFormOpen);
