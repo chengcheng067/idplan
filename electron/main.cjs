@@ -12,6 +12,14 @@ const path = require('node:path');
 const fs = require('node:fs');
 const https = require('node:https');
 
+// 本机 Agent loopback（v1.0 · 外部写入方经 127.0.0.1:17788 直写运行中的 ID Plan）
+const {
+  startLoopbackServer,
+  stopLoopbackServer,
+  setLoopbackToken,
+  resolveLoopbackResult,
+} = require('./loopback.cjs');
+
 // 单一真相源：版本号只写在仓库根 version.json（与 GitHub Release tag 严格对应，四段 x.y.z.build）。
 // package.json 的 version 是合法 semver（0.3.0）供 electron-builder 用，不能写四段。
 // 桌面端更新检测也以 APP_VERSION 为基准，避免与 semver 版本混淆。
@@ -187,6 +195,19 @@ ipcMain.on('theme:set', (event, payload) => {
   }
 });
 
+// ── 本机 Agent loopback 接线（v1.0 · P0） ──
+// 渲染进程把 token 告知主进程（仅比对，绝不回传原文）
+ipcMain.on('agent:token:set', (_event, token) => {
+  setLoopbackToken(token);
+});
+
+// 渲染进程把「落库结果 / 错误」回传给挂起的 HTTP 请求
+ipcMain.on('agent:import-result', (_event, payload) => {
+  if (payload && typeof payload.requestId === 'string') {
+    resolveLoopbackResult(payload.requestId, payload);
+  }
+});
+
 // 开发模式判定：默认加载 dist（electron:dev 需要先 npm run build）。
 // 若想用 vite dev server 热更新，传 --dev-server 参数。
 const useDevServer = process.argv.includes('--dev-server');
@@ -344,6 +365,15 @@ if (!gotLock) {
     const win = createWindow();
     scheduleAutoUpdateCheck(win);
 
+    // 启动本机 Agent loopback；端口被占用时优雅失败（不阻断应用启动）
+    void startLoopbackServer().then((ok) => {
+      if (!ok) {
+        // 端口占用：仅记录，不影响应用其余功能
+        // eslint-disable-next-line no-console
+        console.warn('[loopback] 127.0.0.1:17788 启动失败（端口可能被占用），外部写入方通道不可用。');
+      }
+    });
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -352,5 +382,13 @@ if (!gotLock) {
   app.on('window-all-closed', () => {
     // 非 macOS：关闭即退出
     if (process.platform !== 'darwin') app.quit();
+  });
+
+  // 退出前停掉 loopback，释放端口
+  app.on('before-quit', () => {
+    void stopLoopbackServer();
+  });
+  app.on('will-quit', () => {
+    void stopLoopbackServer();
   });
 }

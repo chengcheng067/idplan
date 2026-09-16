@@ -71,6 +71,15 @@ import { ALL_TASK_STATUSES, TASK_STATUS_TRANSITIONS, TaskStatus } from '../core/
 import { computeReadyTasks } from '../core/agent/dag';
 import { probe } from '../core/agent/transport.http';
 import {
+  applyAgentPayload,
+  previewAgentPayload,
+} from '../core/agent/payload.apply';
+import { validateAgentPayload } from '../core/types/agent-payload';
+import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
+import { getAgentImportChannel } from '../core/agent/transport.contract';
+// 组合根接线（副作用导入）：Electron 桥存在时把本机 loopback 通道注册进注册表
+import '../di/agent-loopback';
+import {
   HUMAN_BOARD_GROUP_ORDER,
   groupTasksForHuman,
   type HumanBoardGroup,
@@ -353,6 +362,11 @@ export function AgentBoardPage(): JSX.Element {
    */
   const [tokenConfigured, setTokenConfigured] = useState<boolean>(() => hasStoredAgentToken());
   const [probeResult, setProbeResult] = useState<IngressProbeView | null>(null);
+  /**
+   * 最近同步记录（本机 loopback 档位下由通道的 `status()` 提供；当前通道不自行维护
+   * 同步记录，故恒为 null → 面板显示「还没有同步记录」）。非本机档位不取。
+   */
+  const [ingressStatus, setIngressStatus] = useState<IngressSyncView | null>(null);
 
   /**
    * 真正要探测的地址：本机档位是主进程写死的事实（**不看** `ingressAddress`），
@@ -373,15 +387,52 @@ export function AgentBoardPage(): JSX.Element {
     writeStoredAgentBaseUrl(next); // 持久化，下次打开不必重输
   }, []);
 
+  /**
+   * 加载最近同步记录（本机 loopback 档位）。从已注册的 loopback 通道 `status()` 读取
+   * `lastSyncAt` / `lastSyncSummary`；当前通道不维护同步记录，故如实为 null。
+   * 非本机档位（NAS）本通道无对应数据源 → 不取（仍显示「还没有同步记录」）。
+   */
+  const onIngressLoadStatus = useCallback((): void => {
+    if (ingressMode !== 'local') {
+      setIngressStatus(null);
+      return;
+    }
+    const ch = getAgentImportChannel();
+    if (!ch) {
+      setIngressStatus(null);
+      return;
+    }
+    void ch
+      .status()
+      .then((s) => {
+        if (s.kind !== 'desktop-loopback') {
+          setIngressStatus(null);
+          return;
+        }
+        setIngressStatus(
+          s.lastSyncAt || s.lastSyncSummary
+            ? { lastSyncAt: s.lastSyncAt, lastSyncSummary: s.lastSyncSummary }
+            : null,
+        );
+      })
+      .catch(() => setIngressStatus(null));
+  }, [ingressMode]);
+
   const onIngressProbe = useCallback((): void => {
     // probe() 契约是**永不抛**（见 transport.http.ts 文件头），故无需 try/catch
-    void probe(ingressBaseUrl, readStoredAgentToken()).then(setProbeResult);
-  }, [ingressBaseUrl]);
+    void probe(ingressBaseUrl, readStoredAgentToken()).then((r) => {
+      setProbeResult(r);
+      // 本机档位：连同同步记录一并刷新（通道 status()）
+      if (ingressMode === 'local') onIngressLoadStatus();
+    });
+  }, [ingressBaseUrl, ingressMode, onIngressLoadStatus]);
 
   const onIngressSaveToken = useCallback(
     (token: string): void => {
       writeStoredAgentToken(token); // 原文只落 localStorage，**不进 state**
       setTokenConfigured(true);
+      // 把 token 告知主进程（主进程只比对，绝不回传原文）；非 Electron 端静默跳过
+      if (window.idplan?.setAgentToken) window.idplan.setAgentToken(token);
       pushToast('success', '访问令牌已保存到本机。');
     },
     [pushToast],
@@ -413,6 +464,57 @@ export function AgentBoardPage(): JSX.Element {
     setIngressOpen(false);
     setApplyOpen(true);
   }, []);
+
+  /* ------------------------------ 主进程转来的导入请求 → 落库 → 回传（v1.0 · P0 接线点） ------------------------------
+   *
+   * 外部写入方（WorkBuddy）→ 主进程 loopback server（127.0.0.1:17788）→ IPC
+   * `agent:import-request` 转发到**此处**。本处理器用页面注入的 `repos` 调既有
+   * `previewAgentPayload` / `applyAgentPayload`（payload.apply.ts，**禁止修改**），
+   * 把结果 / 错误经 `window.idplan.sendAgentImportResult` 回传主进程，主进程再转成 HTTP 响应。
+   *
+   * 这是「三段式」里渲染侧的落库点——Dexie 只在渲染进程，主进程写不到，必须由这里落。
+   * 依赖 `repos`（通过 `useRepos()` 注入），故处理器闭包随 `repos` 变化重新订阅。
+   */
+  const handleAgentImportRequest = useCallback(
+    (req: { requestId: string; dryRun: boolean; projectId?: string; stageName?: string; payload: unknown }): void => {
+      void (async () => {
+        const reply = (payload: {
+          requestId: string;
+          result?: import('../core/types/agent-payload').ApplyResult;
+          error?: { code: string; httpStatus?: number; userMessage: string };
+        }): void => {
+          if (window.idplan?.sendAgentImportResult) window.idplan.sendAgentImportResult(payload);
+        };
+        try {
+          const validated = validateAgentPayload(req.payload);
+          const applyOpts = { projectId: req.projectId, stageName: req.stageName ?? null };
+          const result = req.dryRun
+            ? await previewAgentPayload(repos, validated, applyOpts)
+            : await applyAgentPayload(repos, validated, applyOpts);
+          reply({ requestId: req.requestId, result });
+        } catch (err) {
+          const message = err instanceof ChangxiaError ? err.userMessage : '写入失败。';
+          const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
+          const httpStatus =
+            err instanceof ChangxiaError && err.code === ChangxiaErrorCode.NotFound ? 404 : 400;
+          reply({ requestId: req.requestId, error: { code, httpStatus, userMessage: message } });
+        }
+      })();
+    },
+    [repos],
+  );
+
+  /**
+   * 订阅主进程转来的导入请求。仅 Electron 桥存在时订阅；卸载 / 桥缺失时取消，不留泄漏。
+   * 注册时机跟随页面（Agent 看板打开即就绪），与「外部写入方在用户用着 ID Plan 时写入」
+   * 的场景一致。
+   */
+  useEffect(() => {
+    const bridgeOn = window.idplan?.onAgentImport;
+    if (!bridgeOn) return;
+    const off = bridgeOn(handleAgentImportRequest);
+    return off;
+  }, [handleAgentImportRequest]);
 
   /* ------------------------------ 深链（URL 是镜像，不是真相源） ------------------------------ */
   useEffect(() => {
@@ -1106,7 +1208,7 @@ export function AgentBoardPage(): JSX.Element {
              * 见 transport.contract.ts 的 local-dexie 通道）。故如实传 null，
              * 面板会显示「还没有同步记录」。**绝不编造一条同步记录**来把面板填满。
              */
-            status={null}
+            status={ingressStatus}
             onOpenManual={onIngressOpenManual}
             onClose={() => setIngressOpen(false)}
           />

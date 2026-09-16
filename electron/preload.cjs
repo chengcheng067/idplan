@@ -45,4 +45,26 @@ contextBridge.exposeInMainWorld('idplan', {
       symbolColor: theme?.symbolColor,
       height: theme?.height,
     }),
+
+  /**
+   * 本机 Agent loopback（v1.0 · P0）：订阅主进程转来的导入请求。
+   *
+   * 外部写入方 → 主进程 HTTP server（127.0.0.1:17788）→ IPC 转发到渲染进程；
+   * 渲染进程用 `payload.apply` + 自己的 repos 落库，再把结果经 `sendAgentImportResult`
+   * 回传。返回**取消订阅函数**（页面卸载时调用），与 `onUpdateAvailable` 同款最小暴露。
+   * 绝不经此桥暴露 ipcRenderer 本体。回调收到的负载形状见 src/vite-env.d.ts 的
+   * `AgentImportRequest`。`onAgentImport` 不存在 = 老 preload，调用方须做存在性判断。
+   */
+  onAgentImport: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on('agent:import-request', handler);
+    return () => ipcRenderer.removeListener('agent:import-request', handler);
+  },
+  /** 把落库结果 / 错误回传给主进程（经 IPC），与 `onAgentImport` 配对 */
+  sendAgentImportResult: (payload) => ipcRenderer.send('agent:import-result', payload),
+  /**
+   * 把 token 告知主进程（主进程只留着比对，绝不回传原文）。渲染进程是 token 的
+   * 持久化唯一出处（localStorage 的 `idplan.agentToken`），主进程仅内存持有。
+   */
+  setAgentToken: (token) => ipcRenderer.send('agent:token:set', token),
 });
