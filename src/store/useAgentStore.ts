@@ -28,6 +28,8 @@ import {
 } from '../core/agent/payload.apply';
 import { computeReadyTasks } from '../core/agent/dag';
 import { buildHandoffBundle } from '../core/agent/handoff';
+import { getAgentImportChannel } from '../core/agent/transport.contract';
+import type { AgentChannelKind } from '../core/agent/transport.contract';
 import { useProjectsStore } from './useProjectsStore';
 
 /** 看板列过滤：'all' 或单个任务状态 */
@@ -50,12 +52,14 @@ export interface AgentState {
     repos: IRepositoryBundle,
     payloadJson: unknown,
     projectId?: string,
+    stageName?: string,
   ): Promise<ApplyResult | null>;
   /** 确认写入（两段式幂等 upsert）→ 刷新 tasks 镜像 → toast 摘要 */
   commitPayload(
     repos: IRepositoryBundle,
     payloadJson: unknown,
     projectId?: string,
+    stageName?: string,
   ): Promise<ApplyResult | null>;
   /** 生成 handoff bundle（Markdown 文本），同时写入 handoffText */
   buildHandoff(repos: IRepositoryBundle, projectId: string): Promise<string>;
@@ -76,12 +80,17 @@ export const useAgentStore = create<AgentState>((set) => ({
   setColumnFilter: (filter) => set({ columnFilter: filter }),
   openDrawer: (taskId) => set({ drawerTaskId: taskId }),
 
-  previewPayload: async (repos, payloadJson, projectId) => {
+  previewPayload: async (repos, payloadJson, projectId, stageName) => {
     const projectsStore = useProjectsStore.getState();
     try {
       const validated = validateOrToast(payloadJson, projectsStore.pushToast);
       if (!validated) return null;
-      const result = await previewAgentPayload(repos, validated, { projectId });
+      const result =
+        (await routeViaChannel(validated, { dryRun: true, projectId, stageName })) ??
+        (await previewAgentPayload(repos, validated, {
+          projectId,
+          stageName: stageName ?? null,
+        }));
       set({ previewResult: result });
       return result;
     } catch (err) {
@@ -93,12 +102,17 @@ export const useAgentStore = create<AgentState>((set) => ({
     }
   },
 
-  commitPayload: async (repos, payloadJson, projectId) => {
+  commitPayload: async (repos, payloadJson, projectId, stageName) => {
     const projectsStore = useProjectsStore.getState();
     try {
       const validated = validateOrToast(payloadJson, projectsStore.pushToast);
       if (!validated) return null;
-      const result = await applyAgentPayload(repos, validated, { projectId });
+      const result =
+        (await routeViaChannel(validated, { dryRun: false, projectId, stageName })) ??
+        (await applyAgentPayload(repos, validated, {
+          projectId,
+          stageName: stageName ?? null,
+        }));
       set({ previewResult: result });
       // 刷新该项目 tasks 镜像（与 createFromContract 同款项目级替换）
       const pid = validated.projectId ?? projectId;
@@ -190,6 +204,49 @@ export const useAgentStore = create<AgentState>((set) => ({
     }
   },
 }));
+
+/* ==========================================================================================
+ * 通道路由（v1.0 · Agent 导入通道注册表接线）
+ *
+ * ── 为什么生产侧现在要读注册表 ──
+ * `transport.contract.ts` 有 `registerAgentImportChannel` / `getAgentImportChannel`，
+ * 但 v0.7 落地后 `src/` 内**零生产消费者**——页面与 store 一律直调 `payload.apply`。
+ * 于是「换通道」这件事没有统一落点：loopback / NAS 形态接进来后，每处调用点都要
+ * 各自记得改一遍，必然漂移。这里就是那个统一落点。
+ *
+ * ── ★ 优先级规则（判据，勿改）──
+ *   **注入的 `repos` 对 `local-dexie` 保持权威；只有当注册通道的 kind 不是
+ *   `local-dexie`（即 `desktop-loopback` / `nas-http` 这类需要真实传输的通道）时，
+ *   才把写入委托给通道。**
+ *
+ *   为什么不是「一律走注册表」：
+ *     `repos` 是本 store 的既有 DI 契约（见文件头），所有单测都靠注入假 repos 跑。
+ *     若一律走注册表，注册表的 `local-dexie` 通道会去开真 Dexie —— 那等于
+ *     把「可脱离 React / 可注入假仓储」的测试基线整条推翻，属于对稳定内核的重写。
+ *   为什么 `local-dexie` 通道仍要保留在注册表里：
+ *     它是**无注入场景**（组合根）下的默认实现，语义与本地分支逐字一致。
+ *
+ * ── 降级 ──
+ * 通道 `status()` 探测失败（网络/未启动）时**降级回本地分支**，不把写入吞掉：
+ *   「探测挂了」与「通道不可用」是两件事，但两者都不该让用户的导入静默失败。
+ * ======================================================================================== */
+async function routeViaChannel(
+  validated: AgentPayloadV1,
+  opts: { dryRun: boolean; projectId?: string; stageName?: string },
+): Promise<ApplyResult | null> {
+  const channel = getAgentImportChannel();
+  if (!channel) return null;
+
+  let kind: AgentChannelKind;
+  try {
+    kind = (await channel.status()).kind;
+  } catch {
+    return null; // 探测失败 → 降级本地分支
+  }
+  if (kind === 'local-dexie') return null; // 注入的 repos 更具体，见上方判据
+
+  return channel.import(validated, opts);
+}
 
 /** 结构校验辅助：失败 → 逐条 toast（最多 3 条）+ 返回 null；成功返回归一后的 payload */
 function validateOrToast(
