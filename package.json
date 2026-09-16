@@ -69,11 +69,10 @@
       "output": "release"
     },
     "files": [
-      "build-dist/**/*",
-      "electron/main.cjs",
-      "electron/preload.cjs",
-      "version.json",
-      "package.json"
+    "build-dist/**/*",
+    "electron/**/*",
+    "version.json",
+    "package.json"
     ],
     "win": {
       "target": [
