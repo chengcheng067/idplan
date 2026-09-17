@@ -28,7 +28,7 @@ import {
   A4_HEIGHT_PX,
   type ScheduleSection,
 } from '../lib/schedule-print';
-import { dayjs, totalDaysInclusive } from '../lib/date';
+import { buildMonthTicks, totalDaysInclusive } from '../lib/date';
 
 /**
  * 打印页 · 排期客户稿（A4 · 强制浅色 · 画板 09）：
@@ -136,8 +136,8 @@ export function SchedulePrintPage(): JSX.Element {
    *    回归静默吃掉（色条被截断但没人知道），越界重新变得不可观测。窗口扩展后已不可能越界，
    *    真越界就应该被 `tests/schedule-print-band-bounds.spec.tsx` 抓住变红。
    *
-   * 注：`viewStart/viewEnd` 依赖 `sections`，而 `monthsList` 的 `useMemo` 依赖
-   *     `[project, viewStart, viewEnd]`——两者都是**字符串原始值**，按值比较即会随
+   * 注：`viewStart/viewEnd` 依赖 `sections`，而下面的 `monthTicks` 用 `useMemo` 依赖
+   *     `[project, viewStart, viewEnd, viewDays]`——前三个都是**字符串原始值**，按值比较即会随
    *     `sections` 变化而失效重算，不存在陈旧值问题（无需把 `sections` 塞进该依赖数组）。
    *
    * ⚠️ 取 min/max 前先滤掉**空日期**：`Stage.startAt/endAt` 在类型上是必填，但备份/老数据
@@ -166,19 +166,48 @@ export function SchedulePrintPage(): JSX.Element {
     const width = Math.max(((hi - lo + 1) / viewDays) * 100, 2.5);
     return { left, width };
   };
-  const monthsList = useMemo<string[]>(() => {
-    if (!project) return [];
-    const labels: string[] = [];
-    let cur = dayjs(viewStart);
-    const endYm = viewEnd.slice(0, 7);
-    let guard = 0;
-    while (cur.format('YYYY-MM') <= endYm && guard < 48) {
-      labels.push(cur.format('YYYY年M月'));
-      cur = cur.add(1, 'month');
-      guard += 1;
+  /**
+   * 月份刻度 —— **必须与色条共用同一坐标系**（`offsetDays` / `viewDays`）。
+   *
+   * ── 旧实现错在哪（用户反馈原话：「打印时间轴和甘特图好像不是对应关系，
+   *    时间和甘特图的图标是对应不上的」；**别改回去**）──
+   * 旧刻度行是一个整宽 `flex justify-between` 的月份数组，按**月份索引等分**铺满
+   * **整幅宽度**；而色条是 `left = offsetDays/viewDays*100`（按**真实天数比例**）画在
+   * **轨道内**，轨道还被左侧 160px 名称列往右挤。两者叠在同一张纸上：
+   *   · **时间基数不同**：刻度按月索引等分（忽略大小月与首月裁剪），色条按真实天数；
+   *   · **坐标系原点不同**：刻度从纸张左缘起算，色条从轨道左缘起算。
+   * 表现为「刻度指着 4 月、色条却落在 5 月附近」——**色条本身没算错**
+   * （`bandGeom` 与打印分页共用同一份 offset），错的是刻度。
+   *
+   * ── 现在怎么做 ──
+   * · 时间窗口复用**同一份** `viewStart/viewEnd`（交给 `buildMonthTicks`，与屏幕端
+   *   `TimelineView` 同一个已测函数，见 `src/lib/date.ts:115`）；
+   * · 位置用**与 `bandGeom` 逐字相同**的 `(offsetDays(月首日)/viewDays)*100`；
+   * · DOM 上复刻轨道行的两栏结构（`w-40 shrink-0` 占位 + `gap-3` + `flex-1` 轨道），
+   *   让两个坐标系的原点与宽度逐像素一致。**这三点缺一即退回错位。**
+   *
+   * ── 关于 `MIN_LABEL_GAP_PCT` ──
+   * 刻度改为真实定位后，跨度大的项目（如数年）会出现月标签**挤压重叠**——旧的等分写法
+   * 不会重叠，但那正是错的来源。故加一道**保守抽稀**：相邻标签间距不足阈值就跳过，
+   * 只保留放得下的（首个月永远保留）。阈值为**启发式**：A4 时间轴轨道约 520px，
+   * 11px 字号下「2026年3月」约 62px ≈ 12%。取小了会重叠、取大了会丢月份，
+   * 故按「宁少勿糊」取 12%。若将来轨道宽度变化（版式调整），此值需一并复核。
+   */
+  const MIN_LABEL_GAP_PCT = 12;
+
+  const monthTicks = useMemo<{ label: string; leftPercent: number }[]>(() => {
+    if (!project || !Number.isFinite(viewDays) || viewDays <= 0) return [];
+    const kept: { label: string; leftPercent: number }[] = [];
+    for (const t of buildMonthTicks(viewStart, viewEnd)) {
+      // 首个月的月首日可能早于 viewStart（窗口从月中开始）→ 钳到 0，不越出轨道左缘
+      const leftPercent = Math.max((offsetDays(t.start) / viewDays) * 100, 0);
+      const prev = kept[kept.length - 1];
+      if (prev && leftPercent - prev.leftPercent < MIN_LABEL_GAP_PCT) continue;
+      kept.push({ label: t.label, leftPercent });
     }
-    return labels;
-  }, [project, viewStart, viewEnd]);
+    return kept;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- offsetDays 由 viewStart 派生，viewStart 已在依赖里
+  }, [project, viewStart, viewEnd, viewDays]);
 
   // bootstrap 完成前先展示加载态（首帧 members 未装载时 role 恒 null，避免误判重定向）
   if (!hydrated) {
@@ -387,10 +416,28 @@ export function SchedulePrintPage(): JSX.Element {
               {/* 打印时间轴（画板 09：刻度行 + 每条阶段 阶段点 + 名称 + 日期区间 + 跨度色带） */}
               <section className="mt-6">
                 <h2 className="mb-2 text-[15px] font-semibold text-ink">打印时间轴</h2>
-                <div className="mb-1.5 flex justify-between text-[11px] text-mist">
-                  {monthsList.map((m) => (
-                    <span key={m}>{m}</span>
-                  ))}
+                {/*
+                  刻度行：**与色条同一坐标系**（`monthTicks` 注释有完整判据，别改回去）。
+                  ⚠️ 两栏结构必须与下面轨道行**逐项对齐**（`w-40` / `gap-3` / `flex-1`）：
+                    少一个 gap-3 或把 w-40 写成别的宽度，刻度就会重新与色条错位
+                    —— 这正是本次修复的核心判据，不是排版偏好。
+                */}
+                <div className="mb-1.5 flex gap-3 text-[11px] text-mist">
+                  {/* 与轨道行的阶段名列同宽：占位，让右侧轨道起点与色条轨道起点一致 */}
+                  <div className="w-40 shrink-0" aria-hidden />
+                  <div className="relative h-4 flex-1">
+                    {monthTicks.map((t) => (
+                      <span
+                        key={t.label}
+                        data-print-month-tick=""
+                        data-tick-left={t.leftPercent.toFixed(2)}
+                        className="absolute top-0 whitespace-nowrap tabular-nums"
+                        style={{ left: `${t.leftPercent}%` }}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   {sections.map((s) => {

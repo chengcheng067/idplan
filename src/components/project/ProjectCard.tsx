@@ -212,6 +212,19 @@ export function ProjectCard({
         'xl:w-auto xl:flex-[1_1_340px] xl:h-[185px] xl:rounded-3xl xl:p-6 xl:gap-3',
         'transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/50',
+        /*
+         * ⋮ 菜单展开时，**宿主卡片必须整体压过同级卡片**（用户报的「菜单被下方板块盖住」）。
+         *
+         * 为什么提升要挂在**卡片根**、而不是把菜单的 z-50 调更大：
+         *   菜单的 `z-50` 只在**本卡片所在的层叠上下文内**排序。只要宿主卡片本身没有被提升，
+         *   同级卡片一旦进入更高一级的绘制阶段，整张卡片（连同其中的菜单）就会被盖住 ——
+         *   在菜单内部把 50 调到 500 也无济于事。所以提升点只能是卡片根。
+         *
+         * 判据（不变式）：`menuOpen ⟺ 卡片根带 relative + 正 z-index`；
+         *   `relative` 是必需的 —— 否则 z-index 对 `position: static` 不生效。
+         * 关闭菜单即撤除，避免整页长期堆着一批高 z-index 卡片（会反向盖住别的浮层）。
+         */
+        menuOpen && 'relative z-30',
         selected && 'ring-2 ring-pine/50',
       )}
     >
