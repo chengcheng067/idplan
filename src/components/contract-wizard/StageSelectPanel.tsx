@@ -411,7 +411,9 @@ export function StageSelectPanel({
                   data-testid={`selected-row-${index + 1}`}
                 >
                   {/* 序号 */}
-                  <span className="text-center text-xs tabular-nums text-mist">{index + 1}</span>
+                  <span className="flex h-6 w-6 items-center justify-center text-xs tabular-nums text-mist leading-none">
+                    {index + 1}
+                  </span>
                   {/* 色点（自定义色走注入表令牌；零动态类名 —— 一律内联 style） */}
                   <span
                     aria-hidden
@@ -420,10 +422,12 @@ export function StageSelectPanel({
                     style={paint.style}
                   />
                   {/* 名称（可收缩截断） */}
-                  <span className="truncate text-ink">{item.name}</span>
+                  <span className="flex h-6 min-w-0 items-center truncate leading-none text-ink">
+                    {item.name}
+                  </span>
                   {/* 时长（可选） */}
                   {durations !== undefined && onDurationChange !== undefined && (
-                    <span className="flex items-center gap-1 rounded-md border border-line bg-cream px-1.5 py-0.5">
+                    <span className="flex h-6 items-center gap-1 rounded-md border border-line bg-cream px-1.5">
                       <input
                         type="number"
                         min={1}
@@ -431,23 +435,23 @@ export function StageSelectPanel({
                         onChange={(e) => onDurationChange(item.key, e.target.value)}
                         placeholder="天数"
                         aria-label={`${item.name} 时长（天）`}
-                        className="w-10 bg-transparent text-right text-xs tabular-nums text-ink outline-none placeholder:text-mist"
+                        className="h-6 w-10 bg-transparent text-right text-xs tabular-nums text-ink outline-none placeholder:text-mist leading-none"
                       />
-                      <span className="text-[10px] text-mist">天</span>
+                      <span className="text-[10px] leading-none text-mist">天</span>
                     </span>
                   )}
                   {/* 占比 */}
-                  <span className="text-right text-xs tabular-nums text-mist">
+                  <span className="flex h-6 w-12 items-center justify-end text-right text-xs tabular-nums text-mist leading-none">
                     {item.ratioPercent}%
                   </span>
                   {/* 排序控制（固定三钮，左右各留 0.5 间隙） */}
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex h-6 items-center gap-0.5">
                     <button
                       type="button"
                       aria-label={`上移 ${item.name}`}
                       disabled={index === 0}
                       onClick={() => move(index, -1)}
-                      className="rounded p-0.5 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
+                      className="h-6 w-6 rounded p-0 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <ArrowUp size={14} />
                     </button>
@@ -456,7 +460,7 @@ export function StageSelectPanel({
                       aria-label={`下移 ${item.name}`}
                       disabled={index === selected.length - 1}
                       onClick={() => move(index, 1)}
-                      className="rounded p-0.5 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
+                      className="h-6 w-6 rounded p-0 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <ArrowDown size={14} />
                     </button>
@@ -464,7 +468,7 @@ export function StageSelectPanel({
                       type="button"
                       aria-label={`移除 ${item.name}`}
                       onClick={() => removeAt(index)}
-                      className="rounded p-0.5 text-mist hover:bg-sand hover:text-clay"
+                      className="h-6 w-6 rounded p-0 text-mist hover:bg-sand hover:text-clay"
                     >
                       <X size={14} />
                     </button>
