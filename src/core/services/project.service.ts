@@ -73,7 +73,6 @@ export class ProjectService {
 
     const projectCmd: CreateProjectCmd = {
       name: confirmed.projectName,
-      type: confirmed.projectType,
       address: confirmed.address,
       clientName: confirmed.clientName,
       contractAmount: confirmed.contractAmount,
@@ -228,7 +227,6 @@ export class ProjectService {
     });
     const payload: ConfirmedContractPayload = {
       projectName: cmd.name,
-      projectType: cmd.type ?? ProjectType.Dining,
       address: cmd.address,
       clientName: cmd.clientName,
       contractAmount: cmd.contractAmount,
@@ -365,9 +363,6 @@ export class ProjectService {
       name,
       // 归属侧恒为 agent（本方法**没有**参数能改它——这正是"人类项目一字不改"的保证）
       kind: 'agent',
-      // 商务细分在 Agent 侧无来源可填 ⇒ 取既有枚举里唯一的"其他"（`ProjectType.Other`）。
-      // 不猜具体行业：Agent 建板请求里没有这个字段（PRD B9 只要求名称/日期/阶段集合）。
-      type: ProjectType.Other,
       address: '',
       clientName: '',
       contractAmount: null,

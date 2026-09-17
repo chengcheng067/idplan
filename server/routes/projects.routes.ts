@@ -190,6 +190,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     ).run(
       id,
       name,
+      // v0.8 类型字段（type）下线：客户端不再传 type，这里写常量占位以满足 DDL NOT NULL。
+      // 该列已无业务语义（读写都在前端 Project 实体之外）。
       String(body.type ?? 'dining'),
       String(body.address ?? ''),
       String(body.clientName ?? ''),
@@ -275,7 +277,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     const merged: ProjectRow = {
       ...existing,
       name: b.name !== undefined ? String(b.name) : existing.name,
-      type: b.type !== undefined ? String(b.type) : existing.type,
+      // v0.8 类型字段（type）下线：PATCH 不再接受 body.type，仅回写既有值（列保留、已无读写）。
+      type: existing.type,
       address: b.address !== undefined ? String(b.address) : existing.address,
       client_name: b.clientName !== undefined ? String(b.clientName) : existing.client_name,
       contract_amount:

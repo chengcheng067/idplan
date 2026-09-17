@@ -24,7 +24,6 @@ import type { Member, Project, Stage, Task, TaskArtifact } from './entities';
 /** 手动建档命令（先建空项目后补录合同的微调诉求） */
 export interface CreateProjectCmd {
   name: string;
-  type: ProjectType;
   address: string;
   clientName: string;
   contractAmount: number | null;
@@ -68,7 +67,6 @@ export interface CreateProjectCmd {
 /** 项目信息编辑命令（不含状态与日期切分，改期走 stage.service） */
 export interface UpdateProjectCmd {
   name?: string;
-  type?: ProjectType;
   address?: string;
   clientName?: string;
   contractAmount?: number | null;
@@ -107,7 +105,6 @@ export interface UpdateProjectCmd {
 /** 合同建档的确认载荷（向导第三步「确认」后交给 ProjectService 的完整意图） */
 export interface ConfirmedContractPayload {
   projectName: string;
-  projectType: ProjectType;
   address: string;
   clientName: string;
   contractAmount: number | null;

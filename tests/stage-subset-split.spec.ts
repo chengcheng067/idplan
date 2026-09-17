@@ -352,7 +352,6 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
     expect(Object.keys(project)).toEqual([
       'id',
       'name',
-      'type',
       'address',
       'clientName',
       'contractAmount',

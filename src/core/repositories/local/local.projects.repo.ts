@@ -53,7 +53,6 @@ export class LocalProjectsRepository implements IProjectsRepository {
     const row: Project = {
       id: cmd.id ?? crypto.randomUUID(),
       name: cmd.name.trim(),
-      type: cmd.type,
       address: cmd.address ?? '',
       clientName: cmd.clientName ?? '',
       contractAmount: cmd.contractAmount ?? null,

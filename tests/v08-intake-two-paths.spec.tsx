@@ -204,21 +204,28 @@ describe('路径甲（快速档）· 不展开折叠区直接提交 —— 改�
     expect(project.stagePresetKey).toBe('indoor_full');
   });
 
-  it('验收 9 · 标签留空也能提交（落 ProjectType.Other，不阻塞）', async () => {
+  /*
+   * 原用例名：「验收 9 · 标签留空也能提交（落 ProjectType.Other，不阻塞）」。
+   *
+   * 「类型」字段已按决策整条删除（它把业态与设计专业混在一个原生 select 里，
+   * 且默认 Dining 与三层级联的默认 indoor 各自独立、互不相干）。
+   * 故**不能删掉这个用例了事** —— 改写为对「删除」本身的正面断言，并保留原来的
+   * 「不阻塞提交」这半条语义。若将来有人把旧字段加回来，第一条断言会立刻变红。
+   */
+  it('验收 9 · 原「类型」字段已删除（不再有该下拉），且不展开折叠区仍可直接提交', async () => {
     await renderForm();
-    const typeSelect = document.querySelector('select[aria-label="项目类型"]') as HTMLSelectElement;
-    expect(typeSelect.value).toBe(ProjectType.Dining); // 默认值
-    await act(async () => {
-      typeSelect.value = '';
-      typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    });
 
-    await fillRequired('标签留空项目', '2026-12-31');
+    // ① 正面断言：旧字段确实不存在了
+    expect(document.querySelector('select[aria-label="项目类型"]')).toBeNull();
+
+    // ② 等价语义：不展开折叠区也能提交，不被阻塞（与改造前一致）
+    await fillRequired('无类型字段项目', '2026-12-31');
     await submitAndWait();
 
     const project = await onlyProject();
-    expect(project.type).toBe(ProjectType.Other);
-    // 且没有因为标签空而报错
+    // 「类型」原本唯一的真实职能（决定初始阶段池）已迁到主板块 domain
+    expect(project.domain).toBe('indoor');
+    // 且没有冒出新校验错误
     expect(document.body.textContent).not.toContain('请填写');
   });
 

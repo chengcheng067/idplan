@@ -8,7 +8,7 @@ import {
   type ConfirmedContractPayload,
   type StageSelectionItem,
 } from '../../core/types/dto';
-import { ProjectType, PROJECT_TYPE_LABELS, type ScheduleBasis } from '../../core/types/enums';
+import type { ScheduleBasis } from '../../core/types/enums';
 import { DEFAULT_SCHEDULE_BASIS } from '../../core/types/entities';
 import { getPresetItems } from '../../core/template/stage-library';
 import { DEFAULT_PROJECT_DOMAIN } from '../../core/template/stage-fallback';
@@ -24,7 +24,7 @@ import { toIsoDate } from '../../lib/date';
 import { DEFAULT_REST_POLICY } from '../../core/types/entities';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import {
-  defaultPresetKeyFor,
+  defaultPresetKeyForDomain,
   duplicateStageNames,
   presetKeyOfItems,
   StageSelectPanel,
@@ -54,10 +54,6 @@ export function ManualFallbackForm({
   const navigate = useNavigate();
   const restPolicy = useSettingsStore((s) => s.restPolicy);
   const [name, setName] = useState('');
-  /** v0.8：标签可为空（A7）。空标签在建档时落 `ProjectType.Other`（数据模型要求非空），
-   *  且**绝不阻塞提交** —— 标签只是分类标签，不是必填项。 */
-  const [type, setType] = useState<ProjectType | ''>(ProjectType.Dining);
-  const effectiveType: ProjectType = type === '' ? ProjectType.Other : type;
   const [address, setAddress] = useState('');
   const [clientName, setClientName] = useState('');
   const [startAt, setStartAt] = useState(new Date().toISOString().slice(0, 10));
@@ -70,9 +66,11 @@ export function ManualFallbackForm({
   /** v0.8 建档时新增的自定义阶段（内存态；跨项目复用池另存 settings KV） */
   const [customStages, setCustomStages] = useState<StageSelectionItem[]>([]);
 
-  /** 阶段选择：默认预选「项目类型对应套餐」（Dining → indoor_full 九段） */
+  /** 阶段选择：默认预选「**主板块**对应套餐」（默认级联 indoor → indoor_full 九段）。
+   *  ★ 此前这里按已删除的 `Project.type` 预选（默认 Dining），与用户实际选的主板块脱节 ——
+   *    改按 domain 取，弹窗初始阶段池才与「行业/主板块」一致。 */
   const [stageItems, setStageItems] = useState<StageSelectionItem[]>(() =>
-    getPresetItems(defaultPresetKeyFor(ProjectType.Dining)),
+    getPresetItems(defaultPresetKeyForDomain(DEFAULT_DOMAIN_CASCADE.domain)),
   );
   const [scheduleBasis, setScheduleBasis] = useState<ScheduleBasis>(DEFAULT_SCHEDULE_BASIS);
   const [stagePanelOpen, setStagePanelOpen] = useState(false);
@@ -180,7 +178,6 @@ export function ManualFallbackForm({
       });
       const project = await actions.createManual({
         name: name.trim(),
-        type: effectiveType,
         address: address.trim(),
         clientName: clientName.trim(),
         contractAmount: null, // 合同额字段已从建档 UI 移除（数据模型保留，兼容老数据）；此处恒传 null
@@ -230,25 +227,6 @@ export function ManualFallbackForm({
               placeholder="如「XX餐饮·室内设计」"
               className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">类型</span>
-            <select
-              value={type}
-              aria-label="项目类型"
-              onChange={(e) => setType(e.target.value as ProjectType | '')}
-              className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
-            >
-              {/* A7：商务细分已降级为「标签」——可选、可空，留空不阻塞建档 */}
-              <option value="" className="bg-cream text-ink">
-                （不填标签）
-              </option>
-              {Object.entries(PROJECT_TYPE_LABELS).map(([k, label]) => (
-                <option key={k} value={k} className="bg-cream text-ink">
-                  {label}
-                </option>
-              ))}
-            </select>
           </label>
           <label className="block text-sm">
             <span className="mb-1 block font-medium">地址</span>
@@ -315,7 +293,6 @@ export function ManualFallbackForm({
               <StageSelectPanel
                 selected={stageItems}
                 onChange={setStageItems}
-                projectType={effectiveType}
                 scheduleBasis={scheduleBasis}
                 onScheduleBasisChange={setScheduleBasis}
                 durations={durations}

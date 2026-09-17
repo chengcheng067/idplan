@@ -24,38 +24,37 @@ import {
 } from '../src/core/template/stage-library';
 import { MAX_STAGE_COUNT, MIN_STAGE_COUNT } from '../src/core/template/split';
 import {
-  defaultPresetKeyFor,
+  defaultPresetKeyForDomain,
   presetKeyOfItems,
   StageSelectPanel,
 } from '../src/components/contract-wizard/StageSelectPanel';
-import { ProjectType, ScheduleBasis } from '../src/core/types/enums';
-import type { StageTemplateItem } from '../src/core/types/dto';
+import { ScheduleBasis } from '../src/core/types/enums';
+import type { StageTemplateDomain, StageTemplateItem } from '../src/core/types/dto';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 
 /* ------------------------------ 纯函数契约 ------------------------------ */
 
-describe('defaultPresetKeyFor：项目类型 → 默认套餐（PRD §3.4）', () => {
-  it('室内类（餐饮/住宅/办公/茶空间/书店/民宿/零售/室内设计/综合/其他）→ indoor_full', () => {
-    const indoorTypes = [
-      ProjectType.Dining,
-      ProjectType.TeaSpace,
-      ProjectType.Bookstore,
-      ProjectType.Homestay,
-      ProjectType.Retail,
-      ProjectType.InteriorDesign,
-      ProjectType.Residential,
-      ProjectType.Office,
-      ProjectType.MixedUse,
-      ProjectType.Other,
+describe('defaultPresetKeyForDomain：主板块 → 默认套餐（迁移「类型」职能，PRD §3.4）', () => {
+  it('室内 / 展陈 / 未指定 → indoor_full', () => {
+    const indoorLike: Array<StageTemplateDomain | null | undefined> = [
+      'indoor',
+      'exhibition',
+      null,
+      undefined,
     ];
-    for (const t of indoorTypes) {
-      expect(defaultPresetKeyFor(t)).toBe('indoor_full');
+    for (const d of indoorLike) {
+      expect(defaultPresetKeyForDomain(d)).toBe('indoor_full');
     }
   });
 
-  it('景观设计 → landscape_full；建筑设计 → architecture_full', () => {
-    expect(defaultPresetKeyFor(ProjectType.LandscapeDesign)).toBe('landscape_full');
-    expect(defaultPresetKeyFor(ProjectType.ArchitectureDesign)).toBe('architecture_full');
+  it('景观 → landscape_full；建筑 → architecture_full；软件 → software_full；活动 → marketing_full；影视 → film_full；婚礼 → wedding_full；咨询 → consulting_full', () => {
+    expect(defaultPresetKeyForDomain('landscape')).toBe('landscape_full');
+    expect(defaultPresetKeyForDomain('architecture')).toBe('architecture_full');
+    expect(defaultPresetKeyForDomain('software')).toBe('software_full');
+    expect(defaultPresetKeyForDomain('marketing')).toBe('marketing_full');
+    expect(defaultPresetKeyForDomain('film')).toBe('film_full');
+    expect(defaultPresetKeyForDomain('wedding')).toBe('wedding_full');
+    expect(defaultPresetKeyForDomain('consulting')).toBe('consulting_full');
   });
 
   it('indoor_full 套餐恰为 9 项（默认行为 = 九段回归锚点）', () => {
@@ -96,7 +95,7 @@ describe('presetKeyOfItems：套餐归属推导（AC-09）', () => {
  */
 class Harness extends React.Component<{
   initialSelected: StageTemplateItem[];
-  projectType?: ProjectType;
+  domain?: StageTemplateDomain | null;
   scheduleBasis?: ScheduleBasis;
   onLatest?(next: StageTemplateItem[]): void;
   onBasisChange?(next: ScheduleBasis): void;
@@ -115,7 +114,7 @@ class Harness extends React.Component<{
         this.setState({ selected: next });
         this.props.onLatest?.(next);
       },
-      projectType: this.props.projectType,
+      domain: this.props.domain,
       scheduleBasis: this.state.basis,
       onScheduleBasisChange: this.props.onBasisChange
         ? (b: ScheduleBasis) => {
@@ -148,7 +147,7 @@ afterEach(() => {
 
 async function mountHarness(props: {
   initialSelected: StageTemplateItem[];
-  projectType?: ProjectType;
+  domain?: StageTemplateDomain | null;
   scheduleBasis?: ScheduleBasis;
   onBasisChange?: (next: ScheduleBasis) => void;
 }): Promise<void> {
@@ -156,7 +155,7 @@ async function mountHarness(props: {
     root.render(
       React.createElement(Harness, {
         initialSelected: props.initialSelected,
-        projectType: props.projectType,
+        domain: props.domain,
         scheduleBasis: props.scheduleBasis,
         onLatest: (n) => (latest = n),
         onBasisChange: props.onBasisChange,
@@ -277,36 +276,59 @@ describe(`StageSelectPanel：边界（下限 1 / 上限 ${MAX_STAGE_COUNT}）`, 
   });
 });
 
-describe('StageSelectPanel：项目类型自动预选（PRD §3.2.2）', () => {
-  it('projectType 变化且未手动改过 → 自动预选对应套餐', async () => {
+/**
+ * ★ 本组锁的是「**切换主板块绝不覆盖已选阶段**」（验收 A5）。
+ *
+ * ── 为什么这条必须由测试钉住 ──
+ * v0.8 的「自动预选套餐」是按**已删除的 `Project.type`** 触发的 —— 类型是弹窗外的独立字段，
+ * 用户改它本来就是要重选阶段，覆盖合理。但「类型」删除后若把触发字段换成 `domain`，
+ * 就会踩中真实伤害：**主板块是用户在本表单里反复改的字段**，改成「婚礼」的瞬间，
+ * 已选的九段室内阶段被静默换成两段婚礼阶段，用户前面挑的东西凭空消失。
+ * 这与 `tests/v08-stage-wizard.spec.tsx:407`「切换主板块后已选阶段不丢」直接冲突
+ * —— 两条不可能同时成立，以既有 A5 为准。
+ *
+ * 现在的正路：预选只发生在
+ *   ① 打开表单的**初始值**（调用方按主板块给，见 `ManualFallbackForm` 的 `useState` 初值）；
+ *   ② 用户**显式点击**按主板块过滤出的套餐胶囊。
+ * 即**永不发生在「用户改主板块」的那一刻**。
+ */
+describe('StageSelectPanel：切换主板块不覆盖已选（验收 A5）', () => {
+  it('domain 变化且**未**手动改过 → 已选阶段原样保留（不得自动预选）', async () => {
     const full = getPresetItems('indoor_full');
-    await mountHarness({ initialSelected: full, projectType: ProjectType.Dining });
+    await mountHarness({ initialSelected: full, domain: 'indoor' });
+    // 首帧不触发 onChange，故 latest 为空 —— 这本身就是「未覆盖」的基线
+    expect(latest).toHaveLength(0);
+
     await act(async () => {
       root.render(
         React.createElement(Harness, {
-          initialSelected: latest.length ? latest : full,
-          projectType: ProjectType.LandscapeDesign,
+          initialSelected: full,
+          domain: 'landscape',
           onLatest: (n) => (latest = n),
         }),
       );
     });
-    expect(latest.map((i) => i.key)).toEqual(
+
+    // ① 切换主板块**不得**触发 onChange（触发即意味着要替换已选）
+    expect(latest).toHaveLength(0);
+    // ② 且绝不能被换成 landscape_full
+    expect(latest.map((i) => i.key)).not.toEqual(
       getPresetItems('landscape_full').map((i) => i.key),
     );
   });
 
-  it('用户手动改过阶段选择后 projectType 变化 → 不再自动覆盖', async () => {
+  it('用户手动改过阶段选择后 domain 变化 → 同样保留（不自作主张补回）', async () => {
     const full = getPresetItems('indoor_full');
-    await mountHarness({ initialSelected: full, projectType: ProjectType.Dining });
-    // 手动取消一项 → dirty
+    await mountHarness({ initialSelected: full, domain: 'indoor' });
+    // 手动取消一项
     await click(btn('取消选择阶段 提案'));
     expect(latest).toHaveLength(8);
-    // 类型变化不再自动覆盖
+    // 主板块变化不得覆盖
     await act(async () => {
       root.render(
         React.createElement(Harness, {
           initialSelected: latest,
-          projectType: ProjectType.LandscapeDesign,
+          domain: 'landscape',
           onLatest: (n) => (latest = n),
         }),
       );
@@ -355,7 +377,6 @@ describe('建档路径：所选阶段数决定落库阶段数', () => {
     const items = getPresetItems('indoor_concept').slice(0, 3);
     const project = await svc.createManualProject({
       name: '三阶段项目',
-      type: ProjectType.Dining,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -378,7 +399,6 @@ describe('建档路径：所选阶段数决定落库阶段数', () => {
     const items = [getStageLibraryItems()[0]!];
     const project = await svc.createManualProject({
       name: '单阶段项目',
-      type: ProjectType.Residential,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -402,9 +422,8 @@ describe('建档路径：所选阶段数决定落库阶段数', () => {
     const tooMany = Array.from({ length: MAX_STAGE_COUNT + 1 }, (_, i) => pool[i % pool.length]!);
     await expect(
       svc.createManualProject({
-        name: '超限段项目',
-        type: ProjectType.Dining,
-        address: '',
+      name: '超限段项目',
+      address: '',
         clientName: '',
         contractAmount: null,
         signedAt: null,
@@ -422,7 +441,6 @@ describe('建档路径：所选阶段数决定落库阶段数', () => {
     await expect(
       svc.createManualProject({
         name: '空阶段项目',
-        type: ProjectType.Dining,
         address: '',
         clientName: '',
         contractAmount: null,
@@ -440,7 +458,6 @@ describe('建档路径：所选阶段数决定落库阶段数', () => {
     const svc = new ProjectService({ projects: bundle.projects, bundle });
     const project = await svc.createManualProject({
       name: '默认九段项目',
-      type: ProjectType.Dining,
       address: '',
       clientName: '',
       contractAmount: null,

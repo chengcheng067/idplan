@@ -12,10 +12,12 @@ import { useRepos } from '../hooks/useRepos';
 import {
   needsDomainConfirm,
   projectKindOf,
+  effectiveDomainOf,
   useProjectById,
   useProjectStages,
   useProjectTasks,
 } from '../core/project/visibility';
+import { domainLabel } from '../components/contract-wizard/DomainCascade';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
@@ -25,7 +27,6 @@ import { StageDrawer } from '../components/stage-detail/StageDrawer';
 import { CompletionRing } from '../components/common/CompletionRing';
 import { CountdownNumber } from '../components/common/CountdownNumber';
 import { Badge } from '../components/common/Badge';
-import { PROJECT_TYPE_LABELS, ProjectType } from '../core/types/enums';
 import type { Stage } from '../core/types/entities';
 import { totalDaysInclusive } from '../lib/date';
 
@@ -311,7 +312,7 @@ export function ProjectDetailPage(): JSX.Element {
             <ProjectSourceBadge project={project} />
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-mist">
-            <Badge tone="pine">{PROJECT_TYPE_LABELS[project.type as ProjectType] ?? '未分类'}</Badge>
+            <Badge tone="pine">{domainLabel(effectiveDomainOf(project))}</Badge>
             {!memberView && project.clientName && <span>客户：{project.clientName}</span>}
             {!memberView && project.address && <span>· {project.address}</span>}
             <span>

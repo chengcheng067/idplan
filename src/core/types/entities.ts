@@ -9,7 +9,6 @@ import {
   MemberRoleKind,
   ProjectKind,
   ProjectStatus,
-  ProjectType,
   RestPolicyKind,
   ScheduleBasis,
   StageLogType,
@@ -212,7 +211,6 @@ export function normalizeClaimedAt(
 export interface Project {
   id: string; // proj_xxx
   name: string;
-  type: ProjectType;
   address: string;
   clientName: string;
   /** 元为单位整数金额，可空（后补录合同） */

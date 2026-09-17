@@ -48,7 +48,10 @@ const projectSchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    type: z.string(),
+    // 老备份（v0.7 及更早）仍带 `type` 字段（商务细分）→ 用 `.nullable().optional()` 宽收，
+    // 导入后由 normalizeProjectRow 显式剥离（Project 实体自 v0.8 起已无 type 字段）。
+    // 与下方 domain/kind 同一兜底手法：枚举字段一律 `z.string()` 宽收，保证旧客户端不被拒绝。
+    type: z.string().nullable().optional(),
     address: z.string(),
     clientName: z.string(),
     contractAmount: z.number().nullable(),

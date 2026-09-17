@@ -21,7 +21,6 @@ import {
   AssignmentAction,
   ChangxiaError,
   ChangxiaErrorCode,
-  ProjectType,
   StageStatus,
   TaskStatus,
 } from '../core/types/enums';
@@ -550,4 +549,4 @@ export function splitPreview(startAt: string, endAt: string): StageDraft[] {
 /** 导出副作用零依赖的纯函数（测试友好；纯函数无 IO） */
 export { digestOf };
 
-export type { AssignmentLog, StageLog, ProjectType };
+export type { AssignmentLog, StageLog };

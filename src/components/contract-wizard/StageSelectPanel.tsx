@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 
@@ -17,7 +17,6 @@ import {
 } from '../../core/services/custom-stage.service';
 import {
   ALL_SCHEDULE_BASIS,
-  ProjectType,
   SCHEDULE_BASIS_LABELS,
   type ScheduleBasis,
 } from '../../core/types/enums';
@@ -44,7 +43,6 @@ import { stageColorPaint } from './stage-color-bridge';
 export function StageSelectPanel({
   selected,
   onChange,
-  projectType,
   scheduleBasis,
   onScheduleBasisChange,
   durations,
@@ -56,8 +54,6 @@ export function StageSelectPanel({
 }: {
   selected: StageSelectionItem[];
   onChange(next: StageSelectionItem[]): void;
-  /** 项目类型：变化且用户未手动改过阶段选择时，自动预选对应套餐（PRD §3.2.2） */
-  projectType?: ProjectType;
   /** 排期基准（受控）：传了才渲染切换区（自然日 / 工作日） */
   scheduleBasis?: ScheduleBasis;
   onScheduleBasisChange?(next: ScheduleBasis): void;
@@ -81,17 +77,21 @@ export function StageSelectPanel({
   /** v0.8：传了才渲染「＋ 自定义阶段」入口（即**仅建档路径**，TBD-1） */
   onCustomStageSubmit?(draft: CustomStageDraft): void;
 }): JSX.Element {
-  /** 用户是否已手动改过阶段选择（点套餐 / 池子勾选 / 调序 / 移除都算）。true 后不再跟随项目类型自动切换 */
-  const dirtyRef = useRef(false);
-  const prevTypeRef = useRef<ProjectType | undefined>(projectType);
-
-  useEffect(() => {
-    if (projectType === undefined || projectType === prevTypeRef.current) return;
-    prevTypeRef.current = projectType;
-    if (!dirtyRef.current) {
-      onChange(getPresetItems(defaultPresetKeyFor(projectType)));
-    }
-  }, [projectType, onChange]);
+  /*
+   * ⚠️ 这里**刻意没有**「主板块一变就自动重选套餐」的 effect（2026-09-17 删，勿加回）。
+   *
+   * 旧实现按**已删除的 `Project.type`** 触发自动预选（`类型` 是弹窗外独立字段，用户改它
+   * 本来就要重选阶段）。`类型` 删除后，若把触发字段换成 `domain`，就会踩中一个真实伤害：
+   * **`domain`（主板块）是用户在本表单里会反复改的字段** —— 改成「婚礼」的瞬间，
+   * 已选的九段室内阶段会被静默替换成婚礼的两段，用户前面挑的东西凭空消失。
+   * 这正是验收 A5「**切换主板块后已选阶段不丢**」（`tests/v08-stage-wizard.spec.tsx:407`）
+   * 锁住的行为，改按 domain 触发后该用例立刻变红。
+   *
+   * 取而代之的两条正路（都不丢用户已选）：
+   *   ① **初始值**由调用方按主板块给（见 `ManualFallbackForm` 的 `useState` 初值）；
+   *   ② 用户想换套餐时**显式点**下方按主板块过滤出的套餐胶囊（`presets`）。
+   * 即「预选」发生在打开表单那一刻与用户主动点击时，**绝不发生在用户改主板块的瞬间**。
+   */
 
   const presets = useMemo(
     () => (domain ? getPresetsByDomain(domain) : getPresets()),
@@ -160,14 +160,9 @@ export function StageSelectPanel({
     return Math.max(1, Math.round(sum / selected.length));
   }, [selected]);
 
-  const markDirty = (): void => {
-    dirtyRef.current = true;
-  };
-
   /** 勾选/取消池子里的阶段项；新勾选项追加到末尾 */
   const toggleItem = (item: StageTemplateItem): void => {
     if (selectedKeys.has(item.key)) {
-      markDirty();
       onChange(selected.filter((s) => s.key !== item.key));
       return;
     }
@@ -177,7 +172,6 @@ export function StageSelectPanel({
         .pushToast('error', `单次项目最多 ${MAX_STAGE_COUNT} 个阶段`);
       return;
     }
-    markDirty();
     onChange([...selected, item]);
   };
 
@@ -185,7 +179,6 @@ export function StageSelectPanel({
   const move = (index: number, dir: -1 | 1): void => {
     const target = index + dir;
     if (target < 0 || target >= selected.length) return;
-    markDirty();
     const next = [...selected];
     const tmp = next[index]!;
     next[index] = next[target]!;
@@ -195,20 +188,17 @@ export function StageSelectPanel({
 
   /** 已选列表 ✕ 移除 */
   const removeAt = (index: number): void => {
-    markDirty();
     onChange(selected.filter((_, i) => i !== index));
   };
 
   /** 快捷套餐：整体替换为套餐集合（显式操作，同样视为用户已手动选择） */
   const applyPreset = (presetKey: string): void => {
-    markDirty();
     onChange(getPresetItems(presetKey));
   };
 
   /** 自定义阶段新增：追加到已选末尾（父组件负责记入复用库 —— 本组件不碰仓储） */
   const handleCustomStageSubmit = (draft: CustomStageDraft): void => {
     if (!onCustomStageSubmit) return;
-    markDirty();
     onCustomStageSubmit(draft);
   };
 
@@ -554,13 +544,34 @@ export function duplicateStageNames(items: ReadonlyArray<{ name: string }>): str
 /** ≥ 该段数给「阶段较多」非阻塞提示（A10 ③） */
 export const LONG_STAGE_LIST_HINT_FROM = 13;
 
-/** 项目类型 → 默认预选套餐 key（PRD §3.4：室内类 → indoor_full 九段；景观 → landscape_full；建筑 → architecture_full） */
-export function defaultPresetKeyFor(type: ProjectType): string {
-  switch (type) {
-    case ProjectType.LandscapeDesign:
+/**
+ * 主板块 → 默认预选套餐 key（迁移「类型」的唯一真实职能：主板块决定初始阶段池）。
+ * 与 PRD §3.4 同口径：indoor→indoor_full、landscape→landscape_full、architecture→architecture_full、
+ * software→software_full、marketing→marketing_full、film→film_full、wedding→wedding_full、
+ * consulting→consulting_full；exhibition 暂无预设（P1 预留）→ 回落 indoor_full；
+ * null/undefined 同样回落 indoor_full（与改造前「默认室内」一致）。
+ * 确切的 preset key 以 templates/stage-library.json 的 presets[] 为准（禁止臆造）。
+ */
+export function defaultPresetKeyForDomain(domain: StageTemplateDomain | null | undefined): string {
+  switch (domain) {
+    case 'landscape':
       return 'landscape_full';
-    case ProjectType.ArchitectureDesign:
+    case 'architecture':
       return 'architecture_full';
+    case 'software':
+      return 'software_full';
+    case 'marketing':
+      return 'marketing_full';
+    case 'film':
+      return 'film_full';
+    case 'wedding':
+      return 'wedding_full';
+    case 'consulting':
+      return 'consulting_full';
+    case 'indoor':
+    case 'exhibition':
+    case null:
+    case undefined:
     default:
       return INTERIOR_FULL_PRESET_KEY;
   }

@@ -165,7 +165,6 @@ export type ProjectRowInput = Omit<
   | 'domain'
   | 'kind'
 > & {
-  type: string;
   status: string;
   /**
    * v0.7 侧栏方块简称：必须与 Project 一样 Omit 后重声明为**可选**——
@@ -241,7 +240,6 @@ export function normalizeProjectRow(row: ProjectRowInput): Project {
   return {
     id: row.id,
     name: row.name,
-    type: row.type as Project['type'],
     address: row.address,
     clientName: row.clientName,
     contractAmount: row.contractAmount,

@@ -131,7 +131,6 @@ describe('项目行归一 · shortLabel 的键位（四处同步铁律 · 第二
     const expected: Array<keyof Project> = [
       'id',
       'name',
-      'type',
       'address',
       'clientName',
       'contractAmount',

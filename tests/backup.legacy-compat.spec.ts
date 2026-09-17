@@ -296,6 +296,84 @@ describe('backup：下载文件名（改名 ID Plan 后）', () => {
   });
 });
 
+/**
+ * 「类型」字段（`Project.type`）删除后的**老备份兼容**。
+ *
+ * ── 为什么这组必须有 ──
+ * `Project.type` 已按用户决策整条删除（它把业态与设计专业混在一个原生 select 里，
+ * 且默认 Dining 与三层级联的默认 indoor 各自独立、互不相干）。
+ * 但**老备份（v0.7 及更早）里每一行 project 都带这个键**。
+ * 若备份 schema 把它写成必填，老用户一导入就是**整包被拒**——那不是少一个标签，
+ * 是**数据全丢**。所以「删字段」这件事唯一可能造成数据丢失的入口就在这里，必须由测试钉住。
+ *
+ * 判据三条：① 校验不得拒；② 落库后实体**不再有** type 键（显式剥离，不留半拉子）；
+ * ③ 导出→导入→导出往返保真，且导出产物里也不再有 type。
+ */
+describe('backup：删除「类型」字段后仍兼容含 type 的老备份', () => {
+  /** 老备份（v0.7 及更早）的 project 行 —— ★ **带 `type` 键**，这正是本组要考的东西 */
+  function legacyProjectRow(): Record<string, unknown> {
+    return {
+      id: 'proj_legacy_type',
+      name: '含类型字段的老项目',
+      type: 'dining',
+      address: '成都',
+      clientName: '林女士',
+      contractAmount: null,
+      signedAt: null,
+      plannedStartAt: '2026-03-01',
+      plannedEndAt: '2026-03-31',
+      coverColor: null,
+      status: 'active',
+      revision: 1,
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    };
+  }
+
+  function pkgWithLegacyProject(): Record<string, unknown> {
+    const base = legacyPackage();
+    return {
+      ...base,
+      data: {
+        ...(base.data as Record<string, unknown>),
+        projects: [legacyProjectRow()],
+      },
+    };
+  }
+
+  it('校验必须通过（含 type 的老备份不得被拒）', () => {
+    expect(() => validateBackupJson(pkgWithLegacyProject())).not.toThrow();
+  });
+
+  it('导入成功，且落库后的 Project 行**不再有** type 键', async () => {
+    const svc = new BackupService(bundle);
+    await svc.importAndReplace(pkgWithLegacyProject() as unknown as BackupPackage);
+
+    const p = await bundle.projects.get('proj_legacy_type');
+    expect(p).toBeTruthy();
+    // 显式剥离：实体上不得残留已被删除的字段（否则「四处键序一致」立刻被打破）
+    expect(Object.keys(p as object)).not.toContain('type');
+  });
+
+  it('导出→导入→导出 roundtrip 保真（导出也不再带 type，往返不抖）', async () => {
+    const svc = new BackupService(bundle);
+    await svc.importAndReplace(pkgWithLegacyProject() as unknown as BackupPackage);
+
+    const exported1 = await svc.exportAll();
+    expect(exported1.data.projects).toHaveLength(1);
+    expect(Object.keys(exported1.data.projects[0] as object)).not.toContain('type');
+
+    await svc.importAndReplace(exported1);
+    const exported2 = await svc.exportAll();
+    const strip = (p: BackupPackage): string =>
+      JSON.stringify(
+        JSON.parse(
+          JSON.stringify(p.data.projects, (k, v) => (k === 'exportedAt' ? undefined : v)),
+        ),
+      );
+    expect(strip(exported2)).toBe(strip(exported1));
+  });
+});
+
 /** 键序 diff：只比较 tasks 表（含 assigneeIds），剔除 exportedAt 与数组顺序 */
 function normalizeTasks(pkg: BackupPackage): string {
   const p = JSON.parse(

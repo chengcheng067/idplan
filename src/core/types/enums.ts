@@ -192,7 +192,7 @@ export enum StageLogType {
  *   - human：人工在 App 内建立的任务（存量数据全部归此类）；
  *   - agent：由 Agent payload 导入产出的任务。
  * 用开放的字符串联合而非新增实体：Agent 本身就是一种 Member（PRD §0.4-1），
- * 不新增顶层实体、不改 ProjectType（守全行业原则）。
+ * 不新增顶层实体（守全行业原则）。
  */
 export type TaskSource = 'human' | 'agent';
 

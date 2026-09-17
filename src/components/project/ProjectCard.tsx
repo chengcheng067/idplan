@@ -4,7 +4,9 @@ import { CalendarRange, MoreHorizontal, Archive, Palette, Trash2 } from 'lucide-
 
 import type { Member, Project, Stage, Task } from '../../core/types/entities';
 import { taskIsDone } from '../../core/types/entities';
-import { PROJECT_TYPE_LABELS, ProjectType } from '../../core/types/enums';
+import { effectiveDomainOf } from '../../core/project/visibility';
+import { domainLabel } from '../contract-wizard/DomainCascade';
+import { DOMAIN_LABELS } from '../contract-wizard/DomainCascade';
 import { useRoleGuard, isRestrictedView, taskAssigneeIds } from '../../hooks/useRoleGuard';
 import { currentStageOf, computeProjectPercent, computeProjectStatus } from '../../lib/progress';
 import { useRepos } from '../../hooks/useRepos';
@@ -107,10 +109,17 @@ export function ProjectCard({
     (m) => activeMemberIds.has(m.id) || (cur?.ownerId && m.id === cur.ownerId),
   );
 
-  const typeLabel = PROJECT_TYPE_LABELS[project.type as ProjectType] ?? '未分类';
+  /*
+   * 原来这里显示「类型」（`Project.type`）—— 那是「业态（餐饮/民宿…）+ 设计专业（室内/景观…）」
+   * 混在一个字段里的旧模型，已按用户决策删除（统一到三层分类：行业大类 → 主板块 → 关联板块）。
+   * 改为显示**主板块名**：`effectiveDomainOf` 是 domain 的唯一出口（见 `core/project/visibility.ts`），
+   * 中文化走 `domainLabel`（`DOMAIN_LABELS` 的唯一出处，未覆盖的将来领域原样显示不崩）。
+   * ★ 刻意**不是**直接删掉标签：删了会让卡片少一个信息位，用户就再也看不出这个项目属哪个板块。
+   */
+  const domainText = domainLabel(effectiveDomainOf(project));
   const clientText = !memberView && project.clientName
-    ? `${typeLabel} · ${project.clientName}`
-    : typeLabel;
+    ? `${domainText} · ${project.clientName}`
+    : domainText;
 
   const stageLabel = cur ? `${CIRCLED[cur.orderIndex - 1] ?? cur.orderIndex} ${cur.name}` : '全部完成';
   const dueIso = cur?.endAt.slice(0, 10) ?? project.plannedEndAt;
