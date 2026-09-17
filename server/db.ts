@@ -160,6 +160,14 @@ const V8_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
  * ⚠️ 注意 SQLite 的 ALTER TABLE ADD COLUMN 对 `NOT NULL` 列的约束：
  *   带非常量 DEFAULT 才不允许；这里 `'human'` 是字面量常量，合法。
  */
+const V09_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: string }> = [
+  {
+    table: 'tasks',
+    column: 'itinerary_date',
+    ddl: 'ALTER TABLE tasks ADD COLUMN itinerary_date TEXT',
+  },
+];
+
 const V08_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: string }> = [
   {
     table: 'projects',
@@ -280,6 +288,7 @@ export function createDb(db: ChangxiaServerDb): void {
     ...V3_COLUMN_MIGRATIONS,
     ...V7_COLUMN_MIGRATIONS,
     ...V8_COLUMN_MIGRATIONS,
+    ...V09_COLUMN_MIGRATIONS,
     ...V08_COLUMN_MIGRATIONS,
   ]);
   // ③ 一次性数据迁移（done=1 → status='done'，user_version 打标为 3）

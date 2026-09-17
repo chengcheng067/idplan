@@ -15,11 +15,14 @@ import type {
   IContractsRepository,
   ISettingsRepository,
   IAdminRepository,
+  IItinerariesRepository,
 } from '../interfaces';
 import type {
+  CreateItineraryDayCmd,
   CreateMemberCmd,
   CreateProjectCmd,
   CreateTaskCmd,
+  UpdateItineraryDayCmd,
   UpdateMemberCmd,
   UpdateProjectCmd,
   UpdateStageCmd,
@@ -35,6 +38,7 @@ import type {
   Stage,
   StageLog,
   Task,
+  ItineraryDay,
 } from '../../types/entities';
 import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../../types/enums';
 import type { ProjectQuery, TaskQuery, TaskUpsertRow } from '../interfaces';
@@ -231,6 +235,31 @@ export class RemoteTasksRepository implements ITasksRepository {
   }
 }
 
+export class RemoteItinerariesRepository implements IItinerariesRepository {
+  public constructor(private readonly api: RestClient) {}
+
+  async listByProject(projectId: string): Promise<ItineraryDay[]> {
+    const rows = await this.api.get<ItineraryDay[]>(`/projects/${projectId}/itineraries`);
+    return rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  }
+
+  ensureProjectDays(projectId: string, startDate: string, endDate: string): Promise<ItineraryDay[]> {
+    return this.api.post(`/projects/${projectId}/itineraries/ensure`, { startDate, endDate });
+  }
+
+  insert(cmd: CreateItineraryDayCmd): Promise<ItineraryDay> {
+    return this.api.post(`/projects/${cmd.projectId}/itineraries`, cmd);
+  }
+
+  update(id: string, cmd: UpdateItineraryDayCmd): Promise<ItineraryDay> {
+    return this.api.patch(`/itineraries/${id}`, cmd);
+  }
+
+  remove(id: string): Promise<void> {
+    return this.api.delete(`/itineraries/${id}`);
+  }
+}
+
 export class RemoteMembersRepository implements IMembersRepository {
   public constructor(private readonly api: RestClient) {}
 
@@ -361,6 +390,7 @@ export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle 
     projects: new RemoteProjectsRepository(api),
     stages: new RemoteStagesRepository(api),
     tasks: new RemoteTasksRepository(api),
+    itineraries: new RemoteItinerariesRepository(api),
     members: new RemoteMembersRepository(api),
     logs: new RemoteLogsRepository(api),
     contracts: new RemoteContractsRepository(api),

@@ -29,6 +29,7 @@ import {
   DEXIE_V1_STORES,
   DEXIE_V2_STORES,
   DEXIE_V3_STORES,
+  DEXIE_V4_STORES,
   SCHEMA_VERSION,
 } from '../src/core/schema/current';
 import {
@@ -155,17 +156,17 @@ describe('DEXIE_STORES 声明守卫（防 stores() 整体替换丢索引）', ()
   });
 
   it('SCHEMA_VERSION 与声明版本号一致（防只改 stores 忘了 bump / 反之）', () => {
-    expect(SCHEMA_VERSION).toBe(3);
-    // bump 到几，就必须存在对应版本的增量声明（防「改了版本号却没写声明」）
-    expect(DEXIE_V3_STORES).toBeDefined();
+    expect(SCHEMA_VERSION).toBe(4);
+    // v4 新增 itineraries 表，必须有独立增量声明，不能重声明既有表。
+    expect(DEXIE_V4_STORES).toEqual({
+      itineraries: 'id, projectId, date, &[projectId+date], updatedAt',
+    });
   });
 
-  it('★ v0.7 taskNo 铁律：既有 SCHEMA_VERSION=3 不 bump，且 taskNo 刻意不建索引', () => {
-    // 为什么不 bump：taskNo 是**非索引**字段，Dexie 不会因它开升级事务。
-    // 一旦为「看起来正式」而 bump 到 4，就会给用户数据强开一次升级事务——
-    // 升级失败即「用户数据不可达」这一最高风险事件，代价远大于收益。
-    expect(SCHEMA_VERSION).toBe(3);
-    expect(new ChangxiaDatabase('guard-taskno-probe').verno).toBe(3);
+  it('★ v0.7 taskNo 铁律：taskNo 不建索引；v4 bump 仅因新增 itineraries 表', () => {
+    // taskNo 是非索引字段，不应单独触发升级；v4 的唯一原因是新增每日行程表。
+    expect(SCHEMA_VERSION).toBe(4);
+    expect(new ChangxiaDatabase('guard-taskno-probe').verno).toBe(4);
 
     // taskNo 只服务「展示」与「全量归约求 max」，不参与任何 .where() 查询，
     // 建索引只有写放大（且会引入「索引 DDL 早于补列」的顺序风险）。
@@ -433,7 +434,7 @@ describe('真·升级链路（fake-indexeddb）', () => {
     await seedV2Db();
     const db = new ChangxiaDatabase(DB);
     await db.open();
-    expect(db.verno).toBe(3);
+    expect(db.verno).toBe(4);
 
     // ── ① 数据零丢失：v3 无逐行迁移，三行必须原样健在 ──
     const rows = await db.tasks.toArray();

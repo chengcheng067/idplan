@@ -157,6 +157,7 @@ export class LocalTasksRepository implements ITasksRepository {
         assigneeId: cmd.assigneeId ?? null,
         assigneeIds: cmd.assigneeIds ?? (cmd.assigneeId ? [cmd.assigneeId] : []),
         dueDate: cmd.dueDate ?? null,
+        itineraryDate: cmd.itineraryDate ?? null,
         source: cmd.source ?? 'human',
         externalId: cmd.externalId,
         agentId: cmd.agentId ?? null,

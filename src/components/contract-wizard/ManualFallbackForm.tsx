@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -7,6 +7,7 @@ import { Check, ChevronDown, ChevronUp, X } from 'lucide-react';
 import {
   type ConfirmedContractPayload,
   type StageSelectionItem,
+  type StageTemplateDomain,
 } from '../../core/types/dto';
 import type { ScheduleBasis } from '../../core/types/enums';
 import { DEFAULT_SCHEDULE_BASIS } from '../../core/types/entities';
@@ -16,6 +17,7 @@ import { MAX_STAGE_COUNT, MIN_STAGE_COUNT, computeEndAtByDurations } from '../..
 import {
   createCustomStageDef,
   customStageToSelectionItem,
+  isCustomStageKey,
   rememberCustomStage,
 } from '../../core/services/custom-stage.service';
 import { createProjectActions, useProjectsStore } from '../../store/useProjectsStore';
@@ -29,7 +31,13 @@ import {
   presetKeyOfItems,
   StageSelectPanel,
 } from './StageSelectPanel';
-import { DEFAULT_DOMAIN_CASCADE, DomainCascade, visibleDomainsOf, type DomainCascadeValue } from './DomainCascade';
+import {
+  domainLabel,
+  EMPTY_DOMAIN_CASCADE,
+  DomainCascade,
+  visibleDomainsOf,
+  type DomainCascadeValue,
+} from './DomainCascade';
 import type { CustomStageDraft } from './CustomStageDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
@@ -61,17 +69,50 @@ export function ManualFallbackForm({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  /** v0.8 三层级联（第 1 层行业大类 / 第 2 层主板块 / 第 3 层关联板块） */
-  const [cascade, setCascade] = useState<DomainCascadeValue>(DEFAULT_DOMAIN_CASCADE);
+  /**
+   * v0.8 三层级联（第 1 层行业大类 / 第 2 层主板块 / 第 3 层关联板块）。
+   *
+   * ★ 反馈 #5：手动建档首次打开**不预选任何行业与主板块**。
+   *   旧实现默认 `DEFAULT_DOMAIN_CASCADE`（建筑设计行业 / 室内），于是弹出来就是
+   *   「室内·全流程九段」—— 与用户实际要服务的客户不匹配，等于替用户做了决定。
+   *   现在从 `EMPTY_DOMAIN_CASCADE` 起步：先选行业/主板块，再出对应套餐。
+   */
+  const [cascade, setCascade] = useState<DomainCascadeValue>(EMPTY_DOMAIN_CASCADE);
   /** v0.8 建档时新增的自定义阶段（内存态；跨项目复用池另存 settings KV） */
   const [customStages, setCustomStages] = useState<StageSelectionItem[]>([]);
 
-  /** 阶段选择：默认预选「**主板块**对应套餐」（默认级联 indoor → indoor_full 九段）。
-   *  ★ 此前这里按已删除的 `Project.type` 预选（默认 Dining），与用户实际选的主板块脱节 ——
-   *    改按 domain 取，弹窗初始阶段池才与「行业/主板块」一致。 */
-  const [stageItems, setStageItems] = useState<StageSelectionItem[]>(() =>
-    getPresetItems(defaultPresetKeyForDomain(DEFAULT_DOMAIN_CASCADE.domain)),
-  );
+  /**
+   * 阶段选择：**初始为空**（反馈 #5）。
+   *
+   * 只由用户在 `DomainCascade` 里显式选定主板块后的 effect 预选该板块的默认套餐；
+   * 不再在挂载时兜底成室内九段 —— 那会让「没选板块」和「选了室内」在数据上无法区分。
+   */
+  const [stageItems, setStageItems] = useState<StageSelectionItem[]>([]);
+
+  /**
+   * 主板块 → 套餐联动（反馈 #5 的另一半）。
+   *
+   * 空起始态只有「不预选」不够：提交按钮在 `stageItems < MIN_STAGE_COUNT` 时禁用，
+   * 没有这条联动，用户选完板块也没有任何阶段可选可提交 —— 表单一进来就走不通。
+   * 所以显式选定主板块时，自动带出**该板块的默认套餐**（`defaultPresetKeyForDomain`，
+   * 与看板列同源），未选（null）时保持空池并把提示语交给 UI。
+   *
+   * 自定义阶段（`templateKey === null`）不因切板块被丢掉：它们是用户刚加的，
+   * 只换预设部分、保留自选项并追加到末尾，避免「换了个板块我加的段没了」。
+   */
+  const presetDomainRef = useRef<StageTemplateDomain | null>(null);
+  useEffect(() => {
+    if (presetDomainRef.current === cascade.domain) return;
+    presetDomainRef.current = cascade.domain;
+    if (!cascade.domain) {
+      setStageItems([]);
+      return;
+    }
+    setStageItems((prev) => [
+      ...getPresetItems(defaultPresetKeyForDomain(cascade.domain)),
+      ...prev.filter((it) => isCustomStageKey(it.key)),
+    ]);
+  }, [cascade.domain]);
   const [scheduleBasis, setScheduleBasis] = useState<ScheduleBasis>(DEFAULT_SCHEDULE_BASIS);
   const [stagePanelOpen, setStagePanelOpen] = useState(false);
 
@@ -284,12 +325,29 @@ export function ManualFallbackForm({
           >
             <span>
               本次服务阶段 · 已选 {stageItems.length} 项
-              <span className="ml-2 text-xs text-mist">默认：室内·全流程 9 段</span>
+              {/*
+                ★ 反馈 #5：不再写「默认：室内·全流程 9 段」——那是旧默认值留下的误导。
+                未选主板块时不预置任何阶段，这里改为提示下一步该做什么。
+              */}
+              <span className="ml-2 text-xs text-mist">
+                {cascade.domain
+                  ? `套餐按「${domainLabel(cascade.domain)}」筛选，点开选择`
+                  : '请先在上方选择行业与主板块'}
+              </span>
             </span>
             {stagePanelOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </button>
           {stagePanelOpen && (
             <div className="mt-2 rounded-md border border-line bg-paper p-3">
+              {/* 未选主板块时不展示空池：先让用户明白缺哪一步（反馈 #5） */}
+              {!cascade.domain && (
+                <p
+                  data-manual-stage-hint=""
+                  className="mb-2 rounded-md bg-sunken px-3 py-2 text-xs text-mist"
+                >
+                  请先在上方「行业大类 → 主板块」里选定主板块，阶段池与套餐会按该板块列出。
+                </p>
+              )}
               <StageSelectPanel
                 selected={stageItems}
                 onChange={setStageItems}

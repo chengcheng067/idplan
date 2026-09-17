@@ -142,6 +142,7 @@ export interface TaskRowInput {
   assigneeId: string | null;
   assigneeIds: string[];
   dueDate: string | null;
+  itineraryDate: string | null;
   source: TaskSource;
   externalId: string | null;
   agentId: string | null;
@@ -194,6 +195,8 @@ const taskSchema = z
     // 键序铁律：插在 assigneeId 之后、dueDate 之前（与 repo insert / project.service 默认字面量三处同步）。
     assigneeIds: z.array(z.string()).default([]),
     dueDate: z.string().nullable(),
+    // 旅游二期新增：老备份缺失时归一为显式 null，保持任务键序与导出稳定。
+    itineraryDate: z.string().nullable().default(null),
     // ↓↓↓ v0.6 Agent 新增（键序与 entities.Task 逐字对齐）↓↓↓
     source: z.enum(['human', 'agent']).default('human'),
     externalId: z.string().nullable().default(null),
@@ -229,6 +232,7 @@ export function normalizeTaskRow(t: TaskRowInput): import('../types/entities').T
     assigneeId: t.assigneeId,
     assigneeIds: t.assigneeIds,
     dueDate: t.dueDate,
+    itineraryDate: t.itineraryDate,
     source: t.source,
     externalId: t.externalId,
     agentId: t.agentId,
@@ -253,6 +257,18 @@ export function normalizeTaskRow(t: TaskRowInput): import('../types/entities').T
  * local 模式为 Web Crypto PBKDF2 hex，remote 模式为服务端 scrypt hex。绝不回传明文。
  * 老备份无该字段 → .nullable().default(null) 归一为 null，导入后行为与现状一致。
  */
+const itineraryDaySchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  date: z.string(),
+  transport: z.string().nullable().default(null),
+  accommodation: z.string().nullable().default(null),
+  budgetAmount: z.number().nullable().default(null),
+  actualAmount: z.number().nullable().default(null),
+  revision: z.number().int().nonnegative(),
+  updatedAt: isoString,
+});
+
 const memberSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -330,6 +346,7 @@ const backupSchema = z.object({
     projects: z.array(projectSchema),
     stages: z.array(stageSchema),
     tasks: z.array(taskSchema),
+    itineraries: z.array(itineraryDaySchema).default([]),
     members: z.array(memberSchema),
     assignments: z.array(assignmentSchema),
     logs: z.array(stageLogSchema),
@@ -364,10 +381,11 @@ export class BackupService {
     }
     // 无 admin 通道时的降级路径：主表可导出，流水表置空并告警
     const b = this.bundle;
-    const [projects, stages, tasks, members, contracts, settings] = await Promise.all([
+    const [projects, stages, tasks, itineraries, members, contracts, settings] = await Promise.all([
       b.projects.list({ status: 'all' }),
       this.listAllStages(),
       this.listAllTasks(),
+      this.listAllItineraries(),
       b.members.list(true),
       b.contracts.list(),
       b.settings.all(),
@@ -378,7 +396,7 @@ export class BackupService {
         schemaVersion: BACKUP_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
       },
-      data: { projects, stages, tasks, members, assignments: [], logs: [], contracts, settings },
+      data: { projects, stages, tasks, itineraries, members, assignments: [], logs: [], contracts, settings },
     };
   }
 
@@ -406,6 +424,7 @@ export class BackupService {
       stages: normalized.data.stages,
       members: normalized.data.members,
       tasks: normalized.data.tasks,
+      itineraries: normalized.data.itineraries,
     };
     await this.bundle.admin.replaceAllImport({ ...pkg, data });
   }
@@ -424,6 +443,14 @@ export class BackupService {
     const projects = await this.bundle.projects.list({ status: 'all' });
     const chunks = await Promise.all(
       projects.map((p) => this.bundle.tasks.listByProject(p.id)),
+    );
+    return chunks.flat();
+  }
+
+  private async listAllItineraries() {
+    const projects = await this.bundle.projects.list({ status: 'all' });
+    const chunks = await Promise.all(
+      projects.map((p) => this.bundle.itineraries.listByProject(p.id)),
     );
     return chunks.flat();
   }

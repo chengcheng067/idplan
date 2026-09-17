@@ -53,13 +53,14 @@ function storesUpTo(verno: 1 | 2 | 3): Record<string, string> {
 }
 
 /** 造一个处于指定 verno 的库（含一行可辨识数据），返回库名 */
-async function seedLibraryAt(verno: 1 | 2 | 3): Promise<string> {
+async function seedLibraryAt(verno: 1 | 2 | 3 | 4): Promise<string> {
   const name = `gate-lib-v${verno}`;
   await Dexie.delete(name);
   const db = new Dexie(name);
   db.version(1).stores(DEXIE_V1_STORES);
   if (verno >= 2) db.version(2).stores(DEXIE_V2_STORES);
   if (verno >= 3) db.version(3).stores({ tasks: DEXIE_STORES.tasks });
+  if (verno >= 4) db.version(4).stores({ itineraries: DEXIE_STORES.itineraries });
   await db.open();
   await db.table('projects').add({
     id: `p-v${verno}`,
@@ -192,10 +193,11 @@ describe('闸门判据 needsPreMigrationBackup（唯一出处，测试不另抄�
       [null, false],
       [1, true],
       [2, true],
-      [3, false],
+      [3, true],
+      [4, false],
       // 比当前更高的版本号（理论上不该出现，但降级安装会）：不弹，
       // 由 Dexie 自己去抛 VersionError，而不是在这里假装要升级。
-      [4, false],
+      [5, false],
     ];
     for (const [verno, expected] of cases) {
       expect(needsPreMigrationBackup(verno), `verno=${String(verno)}`).toBe(expected);

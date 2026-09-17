@@ -157,6 +157,8 @@ const CANONICAL_TASK_KEYS = [
   'assigneeId',
   'assigneeIds',
   'dueDate',
+  // v0.9 旅游二期：itineraryDate 插在 dueDate 之后、source 之前（与 entities.Task 同步）
+  'itineraryDate',
   'source',
   'externalId',
   'agentId',

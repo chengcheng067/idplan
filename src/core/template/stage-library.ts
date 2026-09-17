@@ -138,7 +138,7 @@ export function getDomainsOfGroups(groupKeys: string[]): StageTemplateDomain[] {
  *   · `exhibition` 不在任何大类里（`dto.ts:323` 明文：P1 预留、当前无数据）⇒ 天然被排除；
  *   · 「有 items」这一条是**数据侧保险**——将来某个大类挂了空领域也不会在 UI 里
  *     留下一个选了没东西可挑的选项。
- * 结果恒为 8 个（见 §2.3），顺序＝大类声明顺序。
+ * 结果恒为 9 个（见 §2.3），顺序＝大类声明顺序。
  */
 export function getUsableDomains(): StageTemplateDomain[] {
   const withItems = new Set(library.items.map((item) => item.domain));

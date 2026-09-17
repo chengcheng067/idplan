@@ -175,6 +175,7 @@ export class ProjectService {
             // 漏补此字段 → 首次导出键序 ≠ 导入归一后键序 → backup.roundtrip 直接失败
             assigneeIds: [],
             dueDate: stageRow.endAt.slice(0, 10),
+            itineraryDate: null,
             // v0.6 Agent 字段（键序铁律第 4 处）：按 §3.1 序 9–17 插在 dueDate 后、
             // orderIndex 前，与 entities.Task / backup.taskSchema / repo insert 四处同序。
             // 建档任务恒为人工来源；externalId 不写键（undefined）——人工任务无幂等键。
@@ -199,7 +200,16 @@ export class ProjectService {
         await this.deps.bundle.tasks.bulkInsert(taskRows);
       }
 
-      // 5. 回链合同存证
+      // 5. 旅游项目按计划日期补齐每日行程。仅补缺失行，后续项目改期也绝不自动删除旧行。
+      if (project.domain === 'travel') {
+        await this.deps.bundle.itineraries.ensureProjectDays(
+          project.id,
+          project.plannedStartAt.slice(0, 10),
+          project.plannedEndAt.slice(0, 10),
+        );
+      }
+
+      // 6. 回链合同存证
       if (contractId) {
         await this.deps.bundle.contracts.linkProject(contractId, project.id);
       }

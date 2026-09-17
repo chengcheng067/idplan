@@ -13,6 +13,7 @@ import { createDb, openDb } from './db';
 import { registerProjectRoutes } from './routes/projects.routes';
 import { registerStageRoutes } from './routes/stages.routes';
 import { registerTaskRoutes } from './routes/tasks.routes';
+import { registerItineraryRoutes } from './routes/itineraries.routes';
 import { registerMemberRoutes } from './routes/members.routes';
 import { registerMetaRoutes } from './routes/meta.routes';
 // v0.7（T02）：Agent 导入通道（独立 token `IDPLAN_AGENT_API_TOKEN`，与备份通道分离）
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
   registerProjectRoutes(app, db);
   registerStageRoutes(app, db);
   registerTaskRoutes(app, db);
+  registerItineraryRoutes(app, db);
   registerMemberRoutes(app, db);
   registerMetaRoutes(app, db);
   // ★ v0.7（T02）：**必须排在既有路由之后**——Agent 通道的服务端 bundle

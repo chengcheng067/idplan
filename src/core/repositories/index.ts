@@ -4,6 +4,7 @@ import { ChangxiaDatabase, openDatabase } from './local/dexie.database';
 import { LocalProjectsRepository } from './local/local.projects.repo';
 import { LocalStagesRepository } from './local/local.stages.repo';
 import { LocalTasksRepository } from './local/local.tasks.repo';
+import { LocalItinerariesRepository } from './local/local.itineraries.repo';
 import { LocalMembersRepository } from './local/local.members.repo';
 import { LocalLogsRepository } from './local/local.logs.repo';
 import { LocalContractsRepository } from './local/local.contracts.repo';
@@ -28,6 +29,7 @@ export async function createRepositories(
       projects: new LocalProjectsRepository(db),
       stages: new LocalStagesRepository(db),
       tasks: new LocalTasksRepository(db),
+      itineraries: new LocalItinerariesRepository(db),
       members: new LocalMembersRepository(db),
       logs: new LocalLogsRepository(db),
       contracts: new LocalContractsRepository(db),

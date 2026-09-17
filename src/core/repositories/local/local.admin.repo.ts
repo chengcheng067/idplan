@@ -2,6 +2,7 @@ import type { BackupPackage } from '../../types/dto';
 import type {
   AssignmentLog,
   ContractRecord,
+  ItineraryDay,
   Member,
   Project,
   Setting,
@@ -31,11 +32,12 @@ export class LocalAdminRepository implements IAdminRepository {
 
   public async fullExport(): Promise<BackupPackage> {
     try {
-      const [projects, stages, tasks, members, assignments, logs, contracts, settings] =
+      const [projects, stages, tasks, itineraries, members, assignments, logs, contracts, settings] =
         await Promise.all([
           this.db.projects.toArray() as Promise<Project[]>,
           this.db.stages.toArray() as Promise<Stage[]>,
           this.db.tasks.toArray() as Promise<Task[]>,
+          this.db.itineraries.toArray() as Promise<ItineraryDay[]>,
           this.db.members.toArray() as Promise<Member[]>,
           this.db.assignments.toArray() as Promise<AssignmentLog[]>,
           this.db.stageLogs.toArray() as Promise<StageLog[]>,
@@ -48,7 +50,7 @@ export class LocalAdminRepository implements IAdminRepository {
           schemaVersion: BACKUP_SCHEMA_VERSION,
           exportedAt: new Date().toISOString(),
         },
-        data: { projects, stages, tasks, members, assignments, logs, contracts, settings },
+        data: { projects, stages, tasks, itineraries, members, assignments, logs, contracts, settings },
       };
     } catch (err) {
       throw new ChangxiaError(ChangxiaErrorCode.Storage, '全量导出失败。', err);
@@ -81,6 +83,10 @@ export class LocalAdminRepository implements IAdminRepository {
           return pkg.data.stages;
         case 'tasks':
           return pkg.data.tasks;
+        case 'itineraries':
+          // 兼容仍按旧 BackupPackage 形状直接调用 admin 的存量路径：
+          // validateBackupJson 会补 []，但 admin 本身也必须安全处理缺失字段。
+          return pkg.data.itineraries ?? [];
         case 'members':
           return pkg.data.members;
         case 'assignments':

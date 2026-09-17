@@ -12,6 +12,7 @@ import type { TaskSource, TaskStatus } from '../types/enums';
 import type {
   AssignmentLog,
   ContractRecord,
+  ItineraryDay,
   Member,
   Project,
   Setting,
@@ -20,9 +21,11 @@ import type {
   Task,
 } from '../types/entities';
 import type {
+  CreateItineraryDayCmd,
   CreateMemberCmd,
   CreateProjectCmd,
   CreateTaskCmd,
+  UpdateItineraryDayCmd,
   UpdateMemberCmd,
   UpdateProjectCmd,
   UpdateStageCmd,
@@ -129,6 +132,16 @@ export interface ITasksRepository {
   claim(taskId: string, actorMemberId: string): Promise<Task>;
 }
 
+/** 旅游每日行程仓储。日期在单项目内唯一，确保按日卡永远只有一张。 */
+export interface IItinerariesRepository {
+  listByProject(projectId: string): Promise<ItineraryDay[]>;
+  /** 在 [startDate, endDate] 内补齐缺失日期；绝不删除已有行（改期安全）。 */
+  ensureProjectDays(projectId: string, startDate: string, endDate: string): Promise<ItineraryDay[]>;
+  insert(cmd: CreateItineraryDayCmd): Promise<ItineraryDay>;
+  update(id: string, cmd: UpdateItineraryDayCmd): Promise<ItineraryDay>;
+  remove(id: string): Promise<void>;
+}
+
 export interface IMembersRepository {
   list(includeInactive?: boolean): Promise<Member[]>;
   get(id: string): Promise<Member | null>;
@@ -192,6 +205,7 @@ export interface IRepositoryBundle {
   projects: IProjectsRepository;
   stages: IStagesRepository;
   tasks: ITasksRepository;
+  itineraries: IItinerariesRepository;
   members: IMembersRepository;
   logs: ILogsRepository;
   contracts: IContractsRepository;

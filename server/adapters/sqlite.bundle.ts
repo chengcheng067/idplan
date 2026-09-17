@@ -65,11 +65,12 @@ import type {
   ISettingsRepository,
   IStagesRepository,
   ITasksRepository,
+  IItinerariesRepository,
   ProjectQuery,
   TaskQuery,
   TaskUpsertRow,
 } from '../../src/core/repositories/interfaces';
-import type { Member, Project, Stage, Task } from '../../src/core/types/entities';
+import type { ItineraryDay, Member, Project, Stage, Task } from '../../src/core/types/entities';
 // ★ 策略 A：复用既有路由**已导出**的两个映射函数（单一字段口径）
 import { rowToProject } from '../routes/projects.routes';
 import { rowToStage } from '../routes/stages.routes';
@@ -286,6 +287,15 @@ export function createSqliteBundle(
     claim: () => notImplemented('tasks.claim'),
   };
 
+  // Agent payload 当前不操作行程卡；显式抛错而非空实现，防止未来通道静默跳过行程数据。
+  const itineraries: IItinerariesRepository = {
+    listByProject: () => notImplemented('itineraries.listByProject'),
+    ensureProjectDays: () => notImplemented('itineraries.ensureProjectDays'),
+    insert: () => notImplemented('itineraries.insert'),
+    update: () => notImplemented('itineraries.update'),
+    remove: () => notImplemented('itineraries.remove'),
+  };
+
   const members: IMembersRepository = {
     /** 策略 B：`rowToMember` 未导出，委托既有端点（含「只下发 hasPassword、不下发哈希」的纪律） */
     async list(includeInactive?: boolean): Promise<Member[]> {
@@ -345,5 +355,5 @@ export function createSqliteBundle(
 
   // 逐方法装配（不做整体断言）：少写一个方法 = 编译期报错，而不是运行期崩在导入路径上。
   // `admin` 为可选字段，本适配器**刻意不提供**（备份通道走既有 /api/backup*，不经这里）。
-  return { projects, stages, tasks, members, logs, contracts, settings };
+  return { projects, stages, tasks, itineraries, members, logs, contracts, settings };
 }

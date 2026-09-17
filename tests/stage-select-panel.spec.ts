@@ -18,8 +18,10 @@ import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { ProjectService } from '../src/core/services/project.service';
 import {
+  getDomainColumns,
   getPresetItems,
   getPresets,
+  getPresetsByDomain,
   getStageLibraryItems,
 } from '../src/core/template/stage-library';
 import { MAX_STAGE_COUNT, MIN_STAGE_COUNT } from '../src/core/template/split';
@@ -55,10 +57,29 @@ describe('defaultPresetKeyForDomain：主板块 → 默认套餐（迁移「类�
     expect(defaultPresetKeyForDomain('film')).toBe('film_full');
     expect(defaultPresetKeyForDomain('wedding')).toBe('wedding_full');
     expect(defaultPresetKeyForDomain('consulting')).toBe('consulting_full');
+    expect(defaultPresetKeyForDomain('travel')).toBe('travel_fit');
   });
 
   it('indoor_full 套餐恰为 9 项（默认行为 = 九段回归锚点）', () => {
     expect(getPresetItems('indoor_full')).toHaveLength(9);
+  });
+
+  it('旅游模板固定为 4 列、7 阶段、3 套套餐，且引用与列归属均有效', () => {
+    const columns = getDomainColumns('travel');
+    const columnKeys = new Set(columns.map((column) => column.key));
+    const items = getStageLibraryItems().filter((item) => item.domain === 'travel');
+    const itemKeys = new Set(items.map((item) => item.key));
+    const presets = getPresetsByDomain('travel');
+
+    expect(columns).toHaveLength(4);
+    expect(items).toHaveLength(7);
+    expect(presets.map((preset) => preset.key)).toEqual([
+      'travel_fit',
+      'travel_group',
+      'travel_business',
+    ]);
+    expect(items.every((item) => columnKeys.has(item.kanbanColumn))).toBe(true);
+    expect(presets.every((preset) => preset.itemKeys.every((key) => itemKeys.has(key)))).toBe(true);
   });
 });
 

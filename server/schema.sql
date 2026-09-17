@@ -86,6 +86,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- 读取时反序列化为 string[]；写入前序列化。缺失/空 → '[]'。
   assignee_ids TEXT NOT NULL DEFAULT '[]',
   due_date TEXT,
+  -- v0.9 旅游行程归属日；与 due_date 分工，NULL = 非旅游或未排入每日行程。
+  itinerary_date TEXT,
   -- v0.6 Agent 字段（键序与 entities.Task 一致：due_date 之后、order_index 之前）。
   -- depends_on / artifacts 为 JSON 文本列；artifacts 是对象数组，
   -- 序列化必须走 server/lib/json-columns.ts 的 serializeJson（绝不可 filter(string)）。
@@ -101,6 +103,19 @@ CREATE TABLE IF NOT EXISTS tasks (
   order_index INTEGER NOT NULL DEFAULT 1,
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS itineraries (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  date TEXT NOT NULL,
+  transport TEXT,
+  accommodation TEXT,
+  budget_amount REAL,
+  actual_amount REAL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  UNIQUE(project_id, date)
 );
 
 CREATE TABLE IF NOT EXISTS members (

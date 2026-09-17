@@ -2,6 +2,12 @@
 /**
  * v0.8 · T03 验收（三）：**两条建档路径都走一遍** ＋ 验收 9（标签可空）。
  *
+ * ⚠️ v0.9 口径变更（用户反馈 #5）：手动建档**首次打开不再预选行业/主板块**。
+ *    原先「路径甲」= 直接提交用默认室内九段，等于替用户决定了服务专业；
+ *    现在「路径甲」= **只选一次主板块、不展开阶段池**就提交，套餐自动按该板块带出。
+ *    因此本文件所有「默认就是 9 段」的断言都改为「先选定主板块 → 才 9 段」，
+ *    并新增两条**否定断言**（未选时 0 段、提交按钮禁用）把新口径钉住。
+ *
  * 设计 §8 T03 的注意项原文：
  *   「`StageSelectPanel.tsx` 是**向导与手动兜底两条路径共用**（PRD §5.3 #2）
  *     ⇒ 改它等于同时改两处，验收须**两条路径都走一遍**。」
@@ -123,9 +129,29 @@ function btnByText(fragment: string): HTMLButtonElement {
   return el as HTMLButtonElement;
 }
 
-/** 折叠区开关（文案里带已选数量 —— 一并锁住"A 路径默认 9 段"这个事实） */
+/** 折叠区开关（文案里带已选数量 —— 折起来也看得见用户实际选了几段） */
 function foldToggle(): HTMLButtonElement {
   return btnByText('本次服务阶段');
+}
+
+/** 提交按钮（先选主板块才会从 disabled 放开 —— 新口径下它是「能不能提交」的判据） */
+function submitButton(): HTMLButtonElement {
+  return btnByText('建档（按所选');
+}
+
+/** 第 2 层「主板块」下拉（未选行业时也渲染 —— 反馈 #5 改了起始态，A2 的直达路径必须仍在） */
+async function pickDomain(domain: string): Promise<void> {
+  const sel = document.querySelector('select[aria-label="主板块"]') as HTMLSelectElement | null;
+  expect(sel).toBeTruthy();
+  await act(async () => {
+    sel!.value = domain;
+    sel!.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+/** 第 1 层「行业」按钮（按 aria-label 定位，顺带锁住行业名） */
+async function pickIndustry(label: string): Promise<void> {
+  await click(btn(`行业 ${label}`));
 }
 
 async function renderForm(): Promise<void> {
@@ -154,7 +180,7 @@ async function fillRequired(name: string, endAt: string): Promise<void> {
 /** 点提交 + 把异步链路（action → service → Dexie）泵完 */
 async function submitAndWait(): Promise<void> {
   await act(async () => {
-    btnByText('建档（按所选').click();
+    submitButton().click();
   });
   for (let i = 0; i < 40; i += 1) {
     const projects = await bundle.projects.list({ status: 'all' });
@@ -178,14 +204,23 @@ async function onlyProject() {
   return projects[0]!;
 }
 
-/* --------------------- 路径甲：不展开 → 默认 9 段 --------------------- */
+/* --------------------- 路径甲：选一次板块 → 直接提交 --------------------- */
 
-describe('路径甲（快速档）· 不展开折叠区直接提交 —— 改造前行为零回归', () => {
-  it('默认预选「室内·全流程 9 段」，提交后落库 9 段且全部带真模板 key', async () => {
+describe('路径甲（快速档）· 不展开折叠区直接提交 —— 反馈 #5 新口径', () => {
+  it('首开不预选（0 段且提交禁用）；选定主板块后自动带出该板块套餐，落库 9 段且全带真模板 key', async () => {
     await renderForm();
-    // 折叠区**未展开**时就已经是 9 段（预选，不是"展开才有"）
+
+    // ① 否定断言：首次打开**没有**任何阶段，也没有替用户选好行业/主板块
+    expect(foldToggle().textContent).toContain('已选 0 项');
+    expect(foldToggle().textContent).toContain('请先在上方选择行业与主板块');
+    expect(submitButton().disabled).toBe(true); // 0 段 ⇒ 不允许提交（不写半成品项目）
+    // 旧默认值留下的误导文案必须消失
+    expect(document.body.textContent).not.toContain('默认：室内·全流程 9 段');
+
+    // ② 只选一次主板块（不展开折叠区）→ 套餐按该板块自动带出
+    await pickDomain('indoor');
     expect(foldToggle().textContent).toContain('已选 9 项');
-    expect(document.body.textContent).toContain('默认：室内·全流程 9 段');
+    expect(submitButton().disabled).toBe(false);
     // 未展开 ⇒ 池子没渲染（用户全程不碰阶段选择）
     expect(document.querySelector('[data-testid^="pool-group-"]')).toBeNull();
 
@@ -202,6 +237,7 @@ describe('路径甲（快速档）· 不展开折叠区直接提交 —— 改�
       expect(s.customColor).toBeNull();
     }
     expect(project.stagePresetKey).toBe('indoor_full');
+    expect(project.domain).toBe('indoor');
   });
 
   /*
@@ -210,15 +246,17 @@ describe('路径甲（快速档）· 不展开折叠区直接提交 —— 改�
    * 「类型」字段已按决策整条删除（它把业态与设计专业混在一个原生 select 里，
    * 且默认 Dining 与三层级联的默认 indoor 各自独立、互不相干）。
    * 故**不能删掉这个用例了事** —— 改写为对「删除」本身的正面断言，并保留原来的
-   * 「不阻塞提交」这半条语义。若将来有人把旧字段加回来，第一条断言会立刻变红。
+   * 「可提交」这半条语义（现在需要显式选一次主板块 —— 这正是反馈 #5 要的用户主动选择）。
+   * 若将来有人把旧字段加回来，第一条断言会立刻变红。
    */
-  it('验收 9 · 原「类型」字段已删除（不再有该下拉），且不展开折叠区仍可直接提交', async () => {
+  it('验收 9 · 原「类型」字段已删除（不再有该下拉），选定板块后不展开折叠区也能直接提交', async () => {
     await renderForm();
 
     // ① 正面断言：旧字段确实不存在了
     expect(document.querySelector('select[aria-label="项目类型"]')).toBeNull();
 
-    // ② 等价语义：不展开折叠区也能提交，不被阻塞（与改造前一致）
+    // ② 等价语义：不展开折叠区也能提交，不被阻塞
+    await pickDomain('indoor');
     await fillRequired('无类型字段项目', '2026-12-31');
     await submitAndWait();
 
@@ -229,12 +267,42 @@ describe('路径甲（快速档）· 不展开折叠区直接提交 —— 改�
     expect(document.body.textContent).not.toContain('请填写');
   });
 
-  it('主板块默认落 indoor（未动级联时行为与改造前一致）', async () => {
+  it('主板块未选时落 null（不再替他默认室内）；选了才落值 —— 读时回落锚点仍是 indoor', async () => {
     await renderForm();
+    // 读时兜底的锚点没变（老项目 domain 为 null 时仍按室内渲染，零回归）
     expect(DEFAULT_PROJECT_DOMAIN).toBe('indoor');
+
+    // 未选主板块 ⇒ 0 段 + 提交禁用 ⇒ 不可能建出「无板块无阶段」的空项目
+    expect(foldToggle().textContent).toContain('已选 0 项');
+    expect(submitButton().disabled).toBe(true);
+
+    await pickDomain('indoor');
     await fillRequired('默认板块项目', '2026-12-31');
     await submitAndWait();
     expect((await onlyProject()).domain).toBe('indoor');
+  });
+
+  /*
+   * 旅游板块（v0.9 旅游二期）也走同一条快速档：
+   * 「旅游出行」是**一级平铺大类**（第 1 层即主板块），点一下就该带出自由行套餐，
+   * 而不是被兜底成室内九段 —— 这既是 A1 也是反馈 #5 在半路上的回归锚点。
+   */
+  it('旅游板块：点「行业 旅游出行」直接带出自由行套餐 6 段，落 domain=travel', async () => {
+    await renderForm();
+    await pickIndustry('旅游出行');
+
+    // travel_fit 套餐 = 6 段（规划/行程/预订/确认/执行/结算，与模板库 presets[] 同源）
+    expect(foldToggle().textContent).toContain('已选 6 项');
+    await fillRequired('旅游快速档项目', '2026-12-31');
+    await submitAndWait();
+
+    const project = await onlyProject();
+    expect(project.domain).toBe('travel');
+    const stages = await bundle.stages.listByProject(project.id);
+    expect(stages).toHaveLength(6);
+    expect(project.stagePresetKey).toBe('travel_fit');
+    // 落的是旅游自己的阶段，不是被兜底成室内九段
+    for (const st of stages) expect(st.templateKey).toMatch(/^travel\./);
   });
 });
 
@@ -244,16 +312,14 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
   it('展开后池子按主板块过滤渲染；改主板块（无第 1 层点击）也能生效并落 Project.domain', async () => {
     await renderForm();
     await click(foldToggle());
-    // 默认级联 = 建筑设计行业/室内 ⇒ 可见分组恰 3（建筑/景观/室内）
-    expect(document.querySelectorAll('[data-testid^="pool-group-"]')).toHaveLength(3);
 
-    // 第 2 层直达：不点第 1 层也改得动（A2）
-    const domainSelect = document.querySelector('select[aria-label="主板块"]') as HTMLSelectElement;
-    expect(domainSelect).toBeTruthy();
-    await act(async () => {
-      domainSelect.value = 'landscape';
-      domainSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    // 未选板块 ⇒ 池子里的分组一个都不许有引导性预选（只给一条「先选板块」的提示）
+    expect(document.querySelector('[data-manual-stage-hint]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-testid^="pool-group-"]')).toHaveLength(0);
+
+    // 第 2 层直达：不点第 1 层也改得动（A2）—— 选「景观」会自动带回它所属大类（建筑行业）
+    await pickDomain('landscape');
+    expect(document.querySelectorAll('[data-testid^="pool-group-"]')).toHaveLength(3);
 
     await fillRequired('路径乙板块项目', '2026-12-31');
     await submitAndWait();
@@ -265,6 +331,8 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
   it('新增「消防报审」→ 已选从 9 变 10；提交后该段落 templateKey=null ＋ customColor 落值', async () => {
     await renderForm();
     await click(foldToggle());
+    // 先按新口径选定主板块（室内 ⇒ 9 段），再加自定义阶段
+    await pickDomain('indoor');
     expect(foldToggle().textContent).toContain('已选 9 项');
 
     // 自定义阶段入口只在**建档路径**挂载（本表单就是建档路径）
@@ -283,6 +351,9 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     await click(btn('确认新增自定义阶段'));
     // 追加到已选末尾（A8）—— 折叠区开关的计数就是用户的即时反馈
     expect(foldToggle().textContent).toContain('已选 10 项');
+
+    // 选定板块后，池子里那条「请先选主板块」的提示必须消失（否则用户会以为还缺一步）
+    expect(document.querySelector('[data-manual-stage-hint]')).toBeNull();
 
     await fillRequired('路径乙自定义阶段项目', '2026-12-31');
     await submitAndWait();
@@ -303,6 +374,7 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
   it('自定义阶段落进**复用库**（建档即记，TS-07 开关默认开）', async () => {
     await renderForm();
     await click(foldToggle());
+    await pickDomain('indoor');
     await click(btn('新增自定义阶段'));
     await setInputValue(
       document.querySelector('input[aria-label="自定义阶段名称"]') as HTMLInputElement,
@@ -320,6 +392,7 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
   it('A9 · 弹窗内重名即刻拦截（行内提示 ＋ 阻止提交），且**没有被写进已选**', async () => {
     await renderForm();
     await click(foldToggle());
+    await pickDomain('indoor'); // 先有 9 段模板阶段，「重名」才有可比对象
     const firstStageName = getFirstPresetStageName();
 
     // 用与已选第 1 段同名的名字新增 —— 弹窗必须即刻拦住

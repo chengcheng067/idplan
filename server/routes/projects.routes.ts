@@ -8,6 +8,8 @@ import type Database from 'better-sqlite3';
 // 共享内核（单份实现）：归属侧的**类型**出处。相对路径而非 `@core/*` alias ——
 // 服务端由 `tsx` 直跑，`tsx` 不读 tsconfig 的 `paths`（见 server/tsconfig.json 文件头）。
 import type { ProjectKind } from '../../src/core/types/enums';
+import { dayjs, isIsoDate } from '../../src/lib/date';
+import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../../src/core/template/stage-fallback';
 
 interface ProjectRow {
   id: string;
@@ -277,6 +279,11 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     const merged: ProjectRow = {
       ...existing,
       name: b.name !== undefined ? String(b.name) : existing.name,
+      // v0.9 旅游二期：计划起止日允许字段级更新（travel 项目改期由前端联动补行程卡）
+      planned_start_at:
+        b.plannedStartAt !== undefined ? String(b.plannedStartAt) : existing.planned_start_at,
+      planned_end_at:
+        b.plannedEndAt !== undefined ? String(b.plannedEndAt) : existing.planned_end_at,
       // v0.8 类型字段（type）下线：PATCH 不再接受 body.type，仅回写既有值（列保留、已无读写）。
       type: existing.type,
       address: b.address !== undefined ? String(b.address) : existing.address,
@@ -307,29 +314,63 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       revision: existing.revision + 1,
       updated_at: nowIso(),
     };
-    db.prepare(
-      `UPDATE projects SET name=?, type=?, address=?, client_name=?, contract_amount=?,
-        signed_at=?, cover_color=?, short_label=?, stage_preset_key=?, stage_template_version=?,
+    if (
+      !isIsoDate(merged.planned_start_at.slice(0, 10)) ||
+      !isIsoDate(merged.planned_end_at.slice(0, 10)) ||
+      merged.planned_start_at.slice(0, 10) > merged.planned_end_at.slice(0, 10)
+    ) {
+      void reply.status(400);
+      return invalidField('项目计划开始日期不能晚于结束日期。');
+    }
+
+    const datesChanged =
+      merged.planned_start_at !== existing.planned_start_at || merged.planned_end_at !== existing.planned_end_at;
+    const effectiveDomain =
+      resolveProjectDomain(merged.stage_preset_key, merged.domain as Parameters<typeof resolveProjectDomain>[1]) ??
+      DEFAULT_PROJECT_DOMAIN;
+    const updateProject = db.prepare(
+      `UPDATE projects SET name=?, type=?, address=?, client_name=?, planned_start_at=?, planned_end_at=?,
+        contract_amount=?, signed_at=?, cover_color=?, short_label=?, stage_preset_key=?, stage_template_version=?,
         schedule_basis=?, domain=?, kind=?, status=?, revision=?, updated_at=? WHERE id=?`,
-    ).run(
-      merged.name,
-      merged.type,
-      merged.address,
-      merged.client_name,
-      merged.contract_amount,
-      merged.signed_at,
-      merged.cover_color,
-      merged.short_label,
-      merged.stage_preset_key,
-      merged.stage_template_version,
-      merged.schedule_basis,
-      merged.domain,
-      merged.kind,
-      merged.status,
-      merged.revision,
-      merged.updated_at,
-      id,
     );
+    const ensureItinerary = db.prepare(
+      `INSERT OR IGNORE INTO itineraries
+       (id, project_id, date, transport, accommodation, budget_amount, actual_amount, revision, updated_at)
+       VALUES (?, ?, ?, NULL, NULL, NULL, NULL, 1, ?)`,
+    );
+    const tx = db.transaction(() => {
+      updateProject.run(
+        merged.name,
+        merged.type,
+        merged.address,
+        merged.client_name,
+        merged.planned_start_at,
+        merged.planned_end_at,
+        merged.contract_amount,
+        merged.signed_at,
+        merged.cover_color,
+        merged.short_label,
+        merged.stage_preset_key,
+        merged.stage_template_version,
+        merged.schedule_basis,
+        merged.domain,
+        merged.kind,
+        merged.status,
+        merged.revision,
+        merged.updated_at,
+        id,
+      );
+      if (datesChanged && effectiveDomain === 'travel') {
+        for (
+          let cursor = dayjs(merged.planned_start_at.slice(0, 10));
+          !cursor.isAfter(dayjs(merged.planned_end_at.slice(0, 10)), 'day');
+          cursor = cursor.add(1, 'day')
+        ) {
+          ensureItinerary.run(crypto.randomUUID(), id, cursor.format('YYYY-MM-DD'), merged.updated_at);
+        }
+      }
+    });
+    tx.immediate();
     return rowToProject(merged);
   });
 
@@ -370,6 +411,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       if (stageIds.length > 0) {
         db.prepare(`DELETE FROM stages WHERE id IN (${stageIds.map(() => '?').join(',')})`).run(...stageIds);
       }
+      db.prepare('DELETE FROM itineraries WHERE project_id = ?').run(id);
       db.prepare('DELETE FROM projects WHERE id = ?').run(id);
     });
     tx();

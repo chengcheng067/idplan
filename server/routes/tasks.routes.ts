@@ -46,6 +46,7 @@ interface TaskRow {
   /** v0.3 参与人全集，JSON 数组串（SQLite 无数组类型） */
   assignee_ids: string;
   due_date: string | null;
+  itinerary_date: string | null;
   /** v0.6 Agent 字段（external_id / agent_id / description / start_at / claimed_at 可空） */
   source: string;
   external_id: string | null;
@@ -120,6 +121,7 @@ function rowToTask(r: TaskRow): Record<string, unknown> {
     assigneeId: r.assignee_id,
     assigneeIds: parseJsonArray<string>(r.assignee_ids),
     dueDate: r.due_date,
+    itineraryDate: r.itinerary_date ?? null,
     source: r.source,
     externalId: r.external_id,
     agentId: r.agent_id,
@@ -144,10 +146,10 @@ function rowToTask(r: TaskRow): Record<string, unknown> {
  *   「N values for M columns」—— 那时可能已经写坏了一半数据，故改动此处务必同改两处。
  */
 const TASK_INSERT_COLUMNS = `(
-  id, task_no, project_id, stage_id, title, done, assignee_id, assignee_ids, due_date,
+  id, task_no, project_id, stage_id, title, done, assignee_id, assignee_ids, due_date, itinerary_date,
   source, external_id, agent_id, status, description, depends_on, artifacts,
   start_at, claimed_at, order_index, revision, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 interface TaskInsertValues {
   id: string;
@@ -159,6 +161,7 @@ interface TaskInsertValues {
   assigneeId: string | null;
   assigneeIds: unknown;
   dueDate: string | null;
+  itineraryDate: string | null;
   source: string;
   externalId: string | null;
   agentId: string | null;
@@ -196,6 +199,7 @@ function insertValues(v: TaskInsertValues): unknown[] {
     v.assigneeId,
     serializeAssigneeIds(v.assigneeIds),
     v.dueDate,
+    v.itineraryDate,
     v.source,
     v.externalId,
     v.agentId,
@@ -340,6 +344,7 @@ export function runTaskUpsert(
             assigneeId: (t.assigneeId as string | null) ?? null,
             assigneeIds: t.assigneeIds ?? [],
             dueDate: (t.dueDate as string | null) ?? null,
+            itineraryDate: (t.itineraryDate as string | null) ?? null,
             source: String(t.source ?? 'agent'),
             externalId,
             agentId: (t.agentId as string | null) ?? null,
@@ -440,6 +445,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
             assigneeId: (t.assigneeId as string | null) ?? idsArr[0] ?? null,
             assigneeIds: t.assigneeIds,
             dueDate: (t.dueDate as string | null) ?? null,
+            itineraryDate: (t.itineraryDate as string | null) ?? null,
             source: String(t.source ?? 'human'),
             externalId: (t.externalId as string | null) ?? null,
             agentId: (t.agentId as string | null) ?? null,
@@ -496,6 +502,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
           assigneeId: (b.assigneeId as string | null) ?? parseJsonArray<string>(serializeAssigneeIds(b.assigneeIds))[0] ?? null,
           assigneeIds: b.assigneeIds,
           dueDate: (b.dueDate as string | null) ?? null,
+          itineraryDate: (b.itineraryDate as string | null) ?? null,
           source: String(b.source ?? 'human'),
           externalId: (b.externalId as string | null) ?? null,
           agentId: (b.agentId as string | null) ?? null,
@@ -601,6 +608,8 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
       assignee_id: nextAssigneeId,
       assignee_ids: nextIds,
       due_date: b.dueDate !== undefined ? (b.dueDate as string | null) : existing.due_date,
+      itinerary_date:
+        b.itineraryDate !== undefined ? (b.itineraryDate as string | null) : existing.itinerary_date,
       source: b.source !== undefined ? String(b.source) : existing.source,
       external_id: b.externalId !== undefined ? (b.externalId as string | null) : existing.external_id,
       agent_id: b.agentId !== undefined ? (b.agentId as string | null) : existing.agent_id,
@@ -620,7 +629,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
       updated_at: nowIso(),
     };
     db.prepare(
-      `UPDATE tasks SET title=?, status=?, done=?, assignee_id=?, assignee_ids=?, due_date=?,
+      `UPDATE tasks SET title=?, status=?, done=?, assignee_id=?, assignee_ids=?, due_date=?, itinerary_date=?,
          source=?, external_id=?, agent_id=?, description=?, depends_on=?, artifacts=?,
          start_at=?, claimed_at=?, order_index=?, revision=?, updated_at=? WHERE id=?`,
     ).run(
@@ -630,6 +639,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
       merged.assignee_id,
       merged.assignee_ids,
       merged.due_date,
+      merged.itinerary_date,
       merged.source,
       merged.external_id,
       merged.agent_id,

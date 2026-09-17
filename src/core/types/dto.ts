@@ -66,6 +66,9 @@ export interface CreateProjectCmd {
 /** 项目信息编辑命令（不含状态与日期切分，改期走 stage.service） */
 export interface UpdateProjectCmd {
   name?: string;
+  /** 旅游等按项目日期派生数据的项目可在此调整计划起止日。 */
+  plannedStartAt?: string;
+  plannedEndAt?: string;
   address?: string;
   clientName?: string;
   contractAmount?: number | null;
@@ -228,6 +231,8 @@ export interface CreateTaskCmd {
   /** 参与人全集（可选；未传时 repo.insert 回落 [assigneeId]） */
   assigneeIds?: string[];
   dueDate: string | null;
+  /** 旅游行程归属日（YYYY-MM-DD）；null/省略 = 不挂每日行程卡。 */
+  itineraryDate?: string | null;
   /** 任务来源；缺省由 repo 落 'human' */
   source?: TaskSource;
   /** 幂等键（Agent 导入路径必填，人工路径不传） */
@@ -253,6 +258,24 @@ export interface CreateTaskCmd {
  *   传 `done` 会被仓储做双向双写（done=true ⇔ status='done'）以兼容存量调用；
  *   新代码一律传 `status` 并经 `withStatus()` 构造。**绝不允许出现两者矛盾的写入。**
  */
+/** 每日行程卡创建命令。通常由 ensureProjectDays 自动生成，UI 也可显式补一天。 */
+export interface CreateItineraryDayCmd {
+  projectId: string;
+  date: string;
+  transport?: string | null;
+  accommodation?: string | null;
+  budgetAmount?: number | null;
+  actualAmount?: number | null;
+}
+
+/** 每日行程卡字段级更新命令。 */
+export interface UpdateItineraryDayCmd {
+  transport?: string | null;
+  accommodation?: string | null;
+  budgetAmount?: number | null;
+  actualAmount?: number | null;
+}
+
 export interface UpdateTaskCmd {
   title?: string;
   done?: boolean;
@@ -260,6 +283,8 @@ export interface UpdateTaskCmd {
   /** 参与人全集（可选；集合变化时 store 层写集合级 Change 流水） */
   assigneeIds?: string[];
   dueDate?: string | null;
+  /** 旅游行程归属日；null = 从每日行程卡移除，undefined = 保持原值。 */
+  itineraryDate?: string | null;
   orderIndex?: number;
   /** 目标状态（v0.6 起 UI 手动流转必须走 task.service 的严格通道） */
   status?: TaskStatus;
@@ -349,6 +374,8 @@ export interface BackupPackage {
     projects: Project[];
     stages: Stage[];
     tasks: Task[];
+    /** v0.9 旅游每日行程；旧备份缺失时导入归一为空数组。 */
+    itineraries: import('./entities').ItineraryDay[];
     members: Member[];
     assignments: import('./entities').AssignmentLog[];
     logs: import('./entities').StageLog[];
@@ -400,7 +427,8 @@ export type StageTemplateDomain =
   | 'marketing'
   | 'film'
   | 'wedding'
-  | 'consulting';
+  | 'consulting'
+  | 'travel';
 
 /**
  * 看板分桶列。

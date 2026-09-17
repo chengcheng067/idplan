@@ -19,17 +19,19 @@ export const DB_NAME = 'changxia';
  * v1 → v2：Task 增 9 字段索引（&externalId / status / agentId / source）+ Member 增 actorKind。
  * v2 → v3（v0.7 §6.1 / O1）：Task 的唯一索引换轨 `&externalId` → `&[projectId+externalId]`，
  *   使幂等键的作用域从「全局」收窄为「项目内」。
+ * v3 → v4（v0.9 旅游二期）：新增 itineraries 表，按 `[projectId+date]` 唯一。
  *
  * ⚠️ 本常量与备份包的 `BACKUP_SCHEMA_VERSION`（恒为 3）是**两个独立维度**：
  *   前者是 IndexedDB 库版本，后者是备份文件格式版本。本版只动前者。
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** 全部表名（与 dexie.database.ts 的 Table 声明一一对应，备份整库替换遍历用） */
 export const ALL_STORE_NAMES = [
   'projects',
   'stages',
   'tasks',
+  'itineraries',
   'members',
   'assignments',
   'stageLogs',
@@ -44,7 +46,7 @@ export type StoreName = (typeof ALL_STORE_NAMES)[number];
  * 说明：tasks 里的 `done` / `[stageId+done]` 是死索引（布尔不是合法 IDB key），
  * 但保留它们是刻意的——删除会让 v2 与 v1 差异变大、增加迁移风险，且无害。
  */
-export const DEXIE_V1_STORES: Readonly<Record<StoreName, string>> = {
+export const DEXIE_V1_STORES: Readonly<Record<Exclude<StoreName, 'itineraries'>, string>> = {
   projects: 'id, status, name, updatedAt',
   stages: 'id, projectId, [projectId+orderIndex], updatedAt',
   tasks: 'id, projectId, stageId, assigneeId, done, [stageId+done], dueDate',
@@ -90,6 +92,11 @@ export const DEXIE_V3_STORES: Readonly<Partial<Record<StoreName, string>>> = {
     '&[projectId+externalId], status, agentId, source', // ← 仅此一处：&externalId → &[projectId+externalId]
 };
 
+/** v4 新增旅游每日行程表；项目内日期唯一，避免改期/重复补卡造出两张同日卡。 */
+export const DEXIE_V4_STORES: Readonly<Partial<Record<StoreName, string>>> = {
+  itineraries: 'id, projectId, date, &[projectId+date], updatedAt',
+};
+
 /**
  * 当前版本（SCHEMA_VERSION）的全量索引声明 = v1 ∪ v2 ∪ v3。
  * 守卫测试用它断言：① 表集合完整（8 张，一张不少）；
@@ -101,4 +108,5 @@ export const DEXIE_STORES: Readonly<Record<StoreName, string>> = {
   ...DEXIE_V1_STORES,
   ...DEXIE_V2_STORES,
   ...DEXIE_V3_STORES,
+  itineraries: DEXIE_V4_STORES.itineraries as string,
 };

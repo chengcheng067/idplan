@@ -216,6 +216,31 @@
           "tone": "stage-s5"
         }
       ]
+    },
+    "travel": {
+      "name": "旅游出行",
+      "columns": [
+        {
+          "key": "planning",
+          "label": "规划中",
+          "tone": "stage-s1"
+        },
+        {
+          "key": "booking",
+          "label": "预订中",
+          "tone": "stage-s2"
+        },
+        {
+          "key": "ongoing",
+          "label": "行程中",
+          "tone": "stage-s3"
+        },
+        {
+          "key": "settle",
+          "label": "结算复盘",
+          "tone": "stage-s4"
+        }
+      ]
     }
   },
   "industryGroups": [
@@ -261,6 +286,13 @@
       "name": "咨询交付",
       "domains": [
         "consulting"
+      ]
+    },
+    {
+      "key": "travel",
+      "name": "旅游出行",
+      "domains": [
+        "travel"
       ]
     }
   ],
@@ -1125,6 +1157,106 @@
         "知识沉淀归档",
         "结项"
       ]
+    },
+    {
+      "key": "travel.plan",
+      "name": "需求规划",
+      "domain": "travel",
+      "ratioPercent": 5,
+      "colorIndex": 1,
+      "kanbanColumn": "planning",
+      "defaultResponsibility": "明确出行人与预算区间；确认出行日期与天数偏好；输出需求概要并双方确认",
+      "defaultTasks": [
+        "明确出行人与预算区间",
+        "确认出行日期与天数偏好",
+        "输出需求概要并双方确认"
+      ]
+    },
+    {
+      "key": "travel.itinerary",
+      "name": "行程设计",
+      "domain": "travel",
+      "ratioPercent": 25,
+      "colorIndex": 2,
+      "kanbanColumn": "planning",
+      "defaultResponsibility": "按日草拟行程动线；筛选拟定景点/餐厅/体验；每日交通与住宿方案预估；输出完整行程表并确认",
+      "defaultTasks": [
+        "按日草拟行程动线",
+        "筛选拟定景点/餐厅/体验",
+        "每日交通与住宿方案预估",
+        "输出完整行程表并确认"
+      ]
+    },
+    {
+      "key": "travel.booking",
+      "name": "资源预订",
+      "domain": "travel",
+      "ratioPercent": 20,
+      "colorIndex": 3,
+      "kanbanColumn": "booking",
+      "defaultResponsibility": "预订大交通（机票/火车）；预订酒店/民宿并核对房型；预订门票/餐厅/体验；汇总订单号与取消政策",
+      "defaultTasks": [
+        "预订大交通（机票/火车）",
+        "预订酒店/民宿并核对房型",
+        "预订门票/餐厅/体验",
+        "汇总订单号与取消政策"
+      ]
+    },
+    {
+      "key": "travel.confirm",
+      "name": "行前确认",
+      "domain": "travel",
+      "ratioPercent": 10,
+      "colorIndex": 4,
+      "kanbanColumn": "booking",
+      "defaultResponsibility": "核对证件/签证要求；确认接驳与集合时间；交付行前清单与注意事项",
+      "defaultTasks": [
+        "核对证件/签证要求",
+        "确认接驳与集合时间",
+        "交付行前清单与注意事项"
+      ]
+    },
+    {
+      "key": "travel.execution",
+      "name": "行程执行",
+      "domain": "travel",
+      "ratioPercent": 25,
+      "colorIndex": 5,
+      "kanbanColumn": "ongoing",
+      "defaultResponsibility": "每日执行跟进与突发调整；改签/变更实时同步每日卡；记录每日实际费用",
+      "defaultTasks": [
+        "每日执行跟进与突发调整",
+        "改签/变更实时同步每日卡",
+        "记录每日实际费用"
+      ]
+    },
+    {
+      "key": "travel.settle",
+      "name": "费用结算",
+      "domain": "travel",
+      "ratioPercent": 10,
+      "colorIndex": 6,
+      "kanbanColumn": "settle",
+      "defaultResponsibility": "汇总实际支出与差额；核对退款与尾款；出具费用结算单",
+      "defaultTasks": [
+        "汇总实际支出与差额",
+        "核对退款与尾款",
+        "出具费用结算单"
+      ]
+    },
+    {
+      "key": "travel.review",
+      "name": "复盘归档",
+      "domain": "travel",
+      "ratioPercent": 5,
+      "colorIndex": 7,
+      "kanbanColumn": "settle",
+      "defaultResponsibility": "收集满意度与改进点；沉淀供应商评价；归档行程资料",
+      "defaultTasks": [
+        "收集满意度与改进点",
+        "沉淀供应商评价",
+        "归档行程资料"
+      ]
     }
   ],
   "presets": [
@@ -1360,6 +1492,48 @@
         "consulting.research"
       ],
       "description": "只做现状调研与诊断的咨询项目，交付物为诊断报告"
+    },
+    {
+      "key": "travel_fit",
+      "name": "旅游·自由行",
+      "domain": "travel",
+      "itemKeys": [
+        "travel.plan",
+        "travel.itinerary",
+        "travel.booking",
+        "travel.confirm",
+        "travel.execution",
+        "travel.settle"
+      ],
+      "description": "个人/家庭定制自由行：需求规划→按日行程设计→资源预订→行前确认→执行与结算"
+    },
+    {
+      "key": "travel_group",
+      "name": "旅游·跟团",
+      "domain": "travel",
+      "itemKeys": [
+        "travel.plan",
+        "travel.itinerary",
+        "travel.booking",
+        "travel.execution",
+        "travel.settle",
+        "travel.review"
+      ],
+      "description": "团队旅游：规划与行程设计后直接锁定资源，含执行、结算与复盘归档"
+    },
+    {
+      "key": "travel_business",
+      "name": "旅游·商务考察",
+      "domain": "travel",
+      "itemKeys": [
+        "travel.plan",
+        "travel.itinerary",
+        "travel.booking",
+        "travel.confirm",
+        "travel.execution",
+        "travel.review"
+      ],
+      "description": "商务考察/会务出行：重行程设计与行前确认，结束后直接复盘归档（结算并入项目报销）"
     }
   ]
 }

@@ -89,6 +89,11 @@ export interface Task {
   assigneeIds: string[];
   /** 自然日截止日，YYYY-MM-DD 或 ISO datetime 均以 string 存库，可空 */
   dueDate: string | null;
+  /**
+   * 旅游行程归属日（YYYY-MM-DD）。仅 travel 项目使用；null = 普通任务或尚未排入某日。
+   * 与 dueDate 分工严格区分：itineraryDate 决定“行程第几天”，dueDate 仍是任务截止日。
+   */
+  itineraryDate?: string | null;
   /* ------------------------- v0.6 Agent 新增块（序 9–17） ------------------------- */
   /**
    * 任务来源。键序铁律：下面 9 个字段在 entities / backup taskSchema /
@@ -205,6 +210,21 @@ export function normalizeClaimedAt(
   claimedAt: string | null,
 ): string | null {
   return status === TaskStatus.Ready ? null : claimedAt;
+}
+
+/** 旅游项目的每日行程卡：日期是唯一事实源，交通/住宿/费用均归属到整日而非某条任务。 */
+export interface ItineraryDay {
+  id: string; // itd_xxx
+  projectId: string;
+  /** YYYY-MM-DD，项目内唯一；由项目日期自动生成，既有行永不因改期自动删除。 */
+  date: string;
+  transport: string | null;
+  accommodation: string | null;
+  /** 元，null = 未填写；预算/实际刻意分列以支持差额汇总。 */
+  budgetAmount: number | null;
+  actualAmount: number | null;
+  revision: number;
+  updatedAt: string;
 }
 
 /** 项目 */

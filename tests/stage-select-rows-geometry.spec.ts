@@ -259,6 +259,18 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.8 · 已选顺序行内控件真几何（真
     }
     await page.waitForTimeout(600);
 
+    /*
+      ★ 反馈 #5 之后的口径变化（本 spec 必须跟着改，否则必然超时）：
+        · 手动建档**首开不预选任何行业/主板块**，阶段池因此为空（已选 0 项）；
+        · 「已选顺序」是「已选项」的列表 ⇒ 0 项时 `li[data-testid="selected-row-N"]`
+          一个都不渲染，直接等它只会等到超时。
+      这里显式选定主板块「室内」——选中即触发 `ManualFallbackForm` 的
+      「主板块 → 套餐」联动（自动带出该板块默认套餐），行才会渲染出来。
+      这也是用户真实操作路径：先点行业/板块，再展开阶段折叠区挑阶段。
+    */
+    await page.selectOption('select[aria-label="主板块"]', 'indoor');
+    await page.waitForTimeout(300);
+
     // 展开「本次服务阶段」折叠区 → StageSelectPanel 可见
     const fold = page.locator('button', { hasText: '本次服务阶段' });
     await fold.first().click();

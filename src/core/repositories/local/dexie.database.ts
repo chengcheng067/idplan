@@ -4,6 +4,7 @@ import type { BackupPackage } from '../../types/dto';
 import type {
   AssignmentLog,
   ContractRecord,
+  ItineraryDay,
   Member,
   Project,
   Setting,
@@ -18,6 +19,7 @@ import {
   DEXIE_V1_STORES,
   DEXIE_V2_STORES,
   DEXIE_V3_STORES,
+  DEXIE_V4_STORES,
   SCHEMA_VERSION,
 } from '../../schema/current';
 
@@ -40,6 +42,7 @@ export class ChangxiaDatabase extends Dexie {
   public projects!: Table<Project, string>;
   public stages!: Table<Stage, string>;
   public tasks!: Table<Task, string>;
+  public itineraries!: Table<ItineraryDay, string>;
   public members!: Table<Member, string>;
   public assignments!: Table<AssignmentLog, string>;
   public stageLogs!: Table<StageLog, string>;
@@ -88,6 +91,9 @@ export class ChangxiaDatabase extends Dexie {
     //     重复而抛 ConstraintError。
     // 升级事务抛异常 → Dexie 整体回滚，库保持 v2（三级回滚的 L0）。
     this.version(3).stores(DEXIE_V3_STORES);
+
+    // v4（v0.9 旅游二期）：新增独立 daily itinerary 表；不修改既有行，旧项目零迁移。
+    this.version(4).stores(DEXIE_V4_STORES);
   }
 }
 
@@ -299,7 +305,7 @@ export async function dumpLegacyTables(dbName: string = DB_NAME): Promise<Backup
         schemaVersion: 2,
         exportedAt: new Date().toISOString(),
       },
-      data: { projects, stages, tasks, members, assignments, logs, contracts, settings },
+      data: { projects, stages, tasks, itineraries: [], members, assignments, logs, contracts, settings },
     };
   } catch (err) {
     throw new ChangxiaError(ChangxiaErrorCode.Storage, '迁移前备份读取失败。', err);

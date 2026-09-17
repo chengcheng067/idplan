@@ -114,13 +114,14 @@ export class LocalProjectsRepository implements IProjectsRepository {
     try {
       const stageIds = (await this.db.stages.where('projectId').equals(id).primaryKeys()) as string[];
       const taskIds = (await this.db.tasks.where('projectId').equals(id).primaryKeys()) as string[];
-      await this.db.transaction('rw', this.db.tasks, this.db.stages, this.db.stageLogs, this.db.assignments, this.db.projects, async () => {
+      await this.db.transaction('rw', [this.db.tasks, this.db.itineraries, this.db.stages, this.db.stageLogs, this.db.assignments, this.db.projects], async () => {
         if (stageIds.length > 0) await this.db.stageLogs.where('stageId').anyOf(stageIds).delete();
         if (taskIds.length > 0) {
           await this.db.assignments.where('taskId').anyOf(taskIds).delete();
           await this.db.tasks.bulkDelete(taskIds);
         }
         if (stageIds.length > 0) await this.db.stages.bulkDelete(stageIds);
+        await this.db.itineraries.where('projectId').equals(id).delete();
         await this.db.projects.delete(id);
       });
     } catch (err) {

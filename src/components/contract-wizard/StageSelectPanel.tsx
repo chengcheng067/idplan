@@ -568,6 +568,9 @@ export function defaultPresetKeyForDomain(domain: StageTemplateDomain | null | u
       return 'wedding_full';
     case 'consulting':
       return 'consulting_full';
+    // v0.9 旅游二期：主板块选「旅游」→ 默认自由行套餐
+    case 'travel':
+      return 'travel_fit';
     case 'indoor':
     case 'exhibition':
     case null:

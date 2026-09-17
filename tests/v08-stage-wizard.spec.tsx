@@ -144,10 +144,10 @@ function CascadeHarness({ initial }: { initial?: DomainCascadeValue }): JSX.Elem
 }
 
 describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
-  it('第 1 层恰 6 项：1 个伞形大类「建筑设计行业」＋ 5 个一级平铺板块', async () => {
+  it('第 1 层恰 7 项：1 个伞形大类「建筑设计行业」＋ 6 个一级平铺板块（v0.9 增旅游）', async () => {
     await act(async () => root.render(<CascadeHarness />));
     const layer1 = [...container.querySelectorAll('button[aria-label^="行业 "]')];
-    expect(layer1).toHaveLength(6);
+    expect(layer1).toHaveLength(7);
     expect(layer1.map((b) => b.getAttribute('aria-label'))).toEqual([
       '行业 建筑设计行业',
       '行业 软件开发',
@@ -155,6 +155,7 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
       '行业 影视制作',
       '行业 婚礼策划',
       '行业 咨询交付',
+      '行业 旅游出行',
     ]);
   });
 
@@ -187,17 +188,17 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
     expect(container.querySelector('[data-testid="domain-cascade-layer2"]')).not.toBeNull();
   });
 
-  it('A2：不点第 1 层也能在第 2 层直接选到「室内」（下拉恒列全部 8 个板块，按大类 optgroup 分组）', async () => {
+  it('A2：不点第 1 层也能在第 2 层直接选到「室内」（下拉恒列全部 9 个板块，按大类 optgroup 分组）', async () => {
     // 未点任何第 1 层：级联值为空，第 2 层仍需可达 → 用「已选大类但未选主板块」的真实入口验证
     await act(async () => root.render(<CascadeHarness initial={{ groupKey: 'space', domain: null, relatedDomains: [] }} />));
     const select = container.querySelector('select[aria-label="主板块"]') as HTMLSelectElement;
     expect(select).not.toBeNull();
     const options = [...select.querySelectorAll('option')].map((o) => o.getAttribute('value'));
-    // 空值项（不指定板块）+ 全部 8 个可用板块
+    // 空值项（不指定板块）+ 全部 9 个可用板块
     expect(options).toEqual(['', ...getUsableDomains()]);
-    // optgroup：6 个大类分组（每个大类只挂自己的板块）
+    // optgroup：7 个大类分组（每个大类只挂自己的板块）
     const groups = [...select.querySelectorAll('optgroup')].map((g) => g.getAttribute('label'));
-    expect(groups).toEqual(['建筑设计行业', '软件开发', '市场活动', '影视制作', '婚礼策划', '咨询交付']);
+    expect(groups).toEqual(['建筑设计行业', '软件开发', '市场活动', '影视制作', '婚礼策划', '咨询交付', '旅游出行']);
 
     // 直接选「室内」→ 生效（不依赖第 1 层先点过）
     await act(async () => {
@@ -325,15 +326,15 @@ describe('StageSelectPanel：可见分组（A1/A6）', () => {
     expect(poolGroups()).toEqual(['wedding']);
   });
 
-  it('展开「其他行业阶段」→ 恰 8 个分组（= 全部可用板块）', async () => {
+  it('展开「其他行业阶段」→ 恰 9 个分组（= 全部可用板块，v0.9 增旅游）', async () => {
     await act(async () =>
       root.render(<PanelHarness initialSelected={[]} visibleDomains={SPACE_DOMAINS} domain="indoor" />),
     );
     expect(poolGroupCount()).toBe(3);
     // 折叠区的无障碍名与可见文案一致（含板块清单；标签用 domainLabel 短名，
     // 与分组标题、第 3 层「关联板块 X」同一套口径）
-    await click(btn('显示其他行业阶段（软件 / 活动 / 影视 / 婚礼 / 咨询）'));
-    expect(poolGroupCount()).toBe(8);
+    await click(btn('显示其他行业阶段（软件 / 活动 / 影视 / 婚礼 / 咨询 / 旅游）'));
+    expect(poolGroupCount()).toBe(9);
     expect(poolGroups()).toEqual(getUsableDomains());
     // 收起 → 回到 3
     await click(btn('收起其他行业阶段'));
@@ -503,7 +504,7 @@ describe('StageSelectPanel：上限 20 与可达性（验收 5 / 设计 §1.3）
     expect(poolGroupCount()).toBe(1);
 
     // 展开其他行业后仍可继续勾（折叠只是**视觉**，不是硬边界；第 1 层只决定可见范围）
-    await click(btn('显示其他行业阶段（建筑 / 景观 / 软件 / 活动 / 影视 / 婚礼 / 咨询）'));
+    await click(btn('显示其他行业阶段（建筑 / 景观 / 软件 / 活动 / 影视 / 婚礼 / 咨询 / 旅游）'));
     const outsider = getItemsByDomains(['wedding'])[0]!;
     await click(btn(`选择阶段 ${outsider.name}`));
     expect(latest).toHaveLength(indoorItems.length + 1);
