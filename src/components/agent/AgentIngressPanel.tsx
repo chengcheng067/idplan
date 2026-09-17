@@ -199,9 +199,9 @@ export function AgentIngressPanel({
       <div className="mb-3 flex items-start gap-2 rounded-md bg-sunken px-3.5 py-2.5 text-xs text-mist">
         <Info size={13} className="mt-0.5 shrink-0 text-pine" aria-hidden />
         <span>
-          此处填写<strong className="text-ink">外部写入方</strong>（如 WorkBuddy）的服务地址与访问令牌，
-          令牌只保存在本机、保存后不再回显。下方<strong className="text-ink">服务状态</strong>与
-          <strong className="text-ink">最近同步记录</strong>显示连通检测结果。
+          在 Windows 桌面版的<strong className="text-ink">本机模式</strong>下，应用已可接收自动导入；
+          在这里设置访问令牌后点击“复制”，再将令牌与下方的导入格式提供给 WorkBuddy 或其他写入方。
+          <strong className="text-ink">NAS 模式当前只支持连通探测，远程自动写入尚未启用。</strong>
         </span>
       </div>
 
@@ -256,8 +256,8 @@ export function AgentIngressPanel({
 
         <p className="mt-1.5 text-[11px] text-mist">
           {isLocal
-            ? '本机模式仅监听 127.0.0.1，不对外暴露；地址由应用固定。'
-            : 'NAS 模式需在服务端配置访问令牌，且令牌与备份通道相互独立、可单独吊销。'}
+            ? '本机模式仅监听 127.0.0.1，不对外暴露；配置令牌后可接收自动导入。'
+            : 'NAS 模式当前仅支持地址与令牌的连通探测；远程自动写入尚未启用。'}
         </p>
       </section>
 
@@ -410,7 +410,7 @@ export function AgentIngressPanel({
           </dl>
         ) : (
           <p data-ingress-sync-empty="" className="text-[11px] text-mist">
-            还没有同步记录。
+            {isLocal ? '尚未收到本机自动写入。' : 'NAS 远程自动写入尚未启用，因此没有同步记录。'}
           </p>
         )}
       </section>

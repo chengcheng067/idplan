@@ -23,6 +23,7 @@ import { MemberBoardPage } from './pages/MemberBoardPage';
 import { AgentBoardPage } from './pages/AgentBoardPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { SchedulePrintPage } from './pages/SchedulePrintPage';
+import { ItineraryPrintPage } from './pages/ItineraryPrintPage';
 import { CalendarPrintPage } from './pages/CalendarPrintPage';
 
 /**
@@ -48,6 +49,8 @@ export const router = createBrowserRouter(
         { path: 'member-board', element: <MemberBoardPage /> },
         { path: 'project/:id', element: <ProjectDetailPage /> },
         { path: 'project/:id/schedule-print', element: <SchedulePrintPage /> },
+        // 旅游客户行程单（反馈 #6）：只读打印页，与日程表打印同款「新窗口打开」
+        { path: 'project/:id/itinerary-print', element: <ItineraryPrintPage /> },
         { path: 'project/:id/calendar-print', element: <CalendarPrintPage /> },
         { path: 'my-tasks', element: <MyTasksPage /> },
         // Agent Board：放在 my-tasks 之后、* 通配之前（设计文档 T10 要点 7）

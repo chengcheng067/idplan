@@ -459,6 +459,7 @@ async function resolve(
       assigneeId,
       assigneeIds: assigneeId ? [assigneeId] : [],
       dueDate: t.dueDate,
+      itineraryDate: null,
       source: 'agent',
       externalId: t.externalId,
       agentId: null, // apply 阶段由 ensureAgentMember 补齐

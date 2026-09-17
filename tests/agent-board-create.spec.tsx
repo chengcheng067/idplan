@@ -607,11 +607,22 @@ describe('§7.4 权限：建板路径上**没有**角色闸门', () => {
 
   it('★ 页面接线（§6.1 第 1 步）：`AgentBoardPage` 把 onCreate 接到列表 ＋ 渲染对话框', () => {
     const pageSrc = readSrc('src/pages/AgentBoardPage.tsx');
-    // ① 列表的空态/工具条有入口
+    // ① 空态里仍有入口（0 块看板时必须留活路，否则页面是死胡同）
     expect(pageSrc).toContain('onCreate={() => setCreateOpen(true)}');
-    expect(pageSrc).toContain('data-agent-create-open');
     // ② 对话框被渲染，且成功后选中新看板（用页面已有的选中机制，无新路由态）
     expect(pageSrc).toContain('<CreateAgentBoardDialog');
     expect(pageSrc).toContain('onCreated={(id) => setCurrentProject(id)}');
+  });
+
+  it('★ 反馈 #8 收口：工具条**不再**常驻「新建 Agent 看板」按钮，改为现状说明', () => {
+    const pageSrc = readSrc('src/pages/AgentBoardPage.tsx');
+    // 常驻入口撤掉（能力还没准备好，留着就是误导）
+    expect(pageSrc).not.toContain('data-agent-create-open');
+    // 换成一段把现状讲明白的说明（不能只是「删了按钮」了事）
+    expect(pageSrc).toContain('data-agent-stance');
+    expect(pageSrc).toContain('本机自动导入');
+    // 底层能力与对话框**没有被删**（收口的是入口，不是功能）
+    expect(pageSrc).toContain('createAgentBoard');
+    expect(pageSrc).toContain('<CreateAgentBoardDialog');
   });
 });

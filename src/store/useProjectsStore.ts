@@ -25,6 +25,7 @@ import {
   TaskStatus,
 } from '../core/types/enums';
 import { taskIsDone, withStatus } from '../core/types/entities';
+import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../core/template/stage-fallback';
 import type { TaskQuery } from '../core/repositories/interfaces';
 import { previewSplit } from '../core/template/split';
 import {
@@ -216,6 +217,15 @@ export function createProjectActions(repos: import('../core/repositories/interfa
     async updateProject(id: string, cmd: UpdateProjectCmd): Promise<void> {
       try {
         const updated = await repos.projects.update(id, cmd);
+        // 旅游项目改期只补新增日期卡，绝不自动删除范围外已有行程或其任务。
+        const effectiveDomain = resolveProjectDomain(updated.stagePresetKey, updated.domain) ?? DEFAULT_PROJECT_DOMAIN;
+        if (effectiveDomain === 'travel' && (cmd.plannedStartAt !== undefined || cmd.plannedEndAt !== undefined)) {
+          await repos.itineraries.ensureProjectDays(
+            updated.id,
+            updated.plannedStartAt.slice(0, 10),
+            updated.plannedEndAt.slice(0, 10),
+          );
+        }
         store.putProject(updated);
         store.pushToast('success', '项目信息已更新');
       } catch (err) {

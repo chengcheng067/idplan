@@ -12,9 +12,9 @@
  * .md / 非 JSON 起始 → markdown-ingest.parseMarkdownTasks；否则 JSON.parse + validate。
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { Info, Upload, X } from 'lucide-react';
+import { Check, Copy, Info, Sparkles, Upload, X } from 'lucide-react';
 
 import { useRepos } from '../../hooks/useRepos';
 import { useAgentStore } from '../../store/useAgentStore';
@@ -33,6 +33,57 @@ type PanelState =
   | { phase: 'input' }
   | { phase: 'invalid'; issues: Array<{ path: string; message: string }> }
   | { phase: 'preview'; payload: AgentPayloadV1; result: ApplyResult };
+
+/**
+ * 喂给外部 Agent（WorkBuddy / Codex / DeepSeek…）的**提示词模板**（反馈 #9）。
+ *
+ * ── 为什么内置在软件里 ──
+ *   用户的真实困惑是「我不知道该让 WorkBuddy 输出什么，也不知道令牌在哪」。
+ *   让他自己去读契约再手写提示词，等于把集成成本全丢给用户。
+ *   这里给一段**可直接复制**的提示词 + 一份**与契约同源**的 JSON 骨架，
+ *   外部 Agent 照着输出，用户复制粘贴回来即可（手动通道，也是 V1 的兜底通道）。
+ *
+ * ── 为什么**不含令牌** ──
+ *   本提示词是「让 Agent 生成排期内容」，与写入通道的访问令牌无关；
+ *   令牌是给**自动导入通道**用的（在「导入任务 → 接入配置」里设置与复制）。
+ *   把令牌写进要贴到聊天窗口的提示词里 = 主动泄漏，故这里刻意只留说明、不留值。
+ */
+export const PROMPT_TEMPLATE = `你是一名排期助手。请把我的需求整理成「ID Plan」可以直接导入的 JSON，**只输出 JSON 本体**（不要解释文字、不要 Markdown 代码围栏）。
+
+硬性要求：
+1. 顶层 schema 必须恰好是字符串 "idplan-agent-payload/v1"；projectId / stageId 填 null（导入时我自己选落点）。
+2. producedBy 必填四项：actorKind 填 "agent"；agentKind 填你的名字（如 "workbuddy"）；agentName 填展示名；runId 填本次运行的独立标识。
+3. tasks[] 每项都写全这些字段，没有的填 null 或空数组，**不要省略字段**：
+   externalId（项目内唯一、稳定、**不要包含 runId**）、title、description、status、
+   assigneeAgentKind、assigneeHuman、dependsOnExternal、startAt、dueDate、artifacts。
+4. status 只能取：draft / ready / claimed / in_progress / blocked / review / done（默认 draft）。
+5. 日期一律 "YYYY-MM-DD"；不确定就写 null，不要写「下周」「月底」这类相对时间。
+6. 任务有先后依赖时，用 dependsOnExternal 引用另一条任务的 externalId（只引用本批次或历史批次里出现过的 externalId）。
+
+参考骨架：
+{
+  "schema": "idplan-agent-payload/v1",
+  "projectId": null,
+  "stageId": null,
+  "producedBy": { "actorKind": "agent", "agentKind": "workbuddy", "agentName": "WorkBuddy", "runId": "run-20260917-01" },
+  "tasks": [
+    {
+      "externalId": "workbuddy:concept-01",
+      "title": "概念方案初稿",
+      "description": null,
+      "status": "draft",
+      "assigneeAgentKind": null,
+      "assigneeHuman": null,
+      "dependsOnExternal": [],
+      "startAt": "2026-10-01",
+      "dueDate": "2026-10-08",
+      "artifacts": []
+    }
+  ]
+}
+
+我的需求如下：
+<在这里粘贴你的需求、聊天记录或资料>`;
 
 /** 判定输入是否「非 JSON 起始」→ 走 Markdown 清单通道 */
 function looksLikeJson(text: string): boolean {
@@ -72,6 +123,8 @@ export function ApplyPayloadPanel({
   const [state, setState] = useState<PanelState>({ phase: 'input' });
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** 提示词是否已复制（按钮文案反馈；复制失败保持 false，不假装成功） */
+  const [promptCopied, setPromptCopied] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   /** 统一入口：解析文本 → 校验/预览（自动触发，无需点「校验」） */
@@ -176,23 +229,59 @@ export function ApplyPayloadPanel({
         </button>
       </div>
 
-      {/*
-        自动导入通道的**占位说明**（画板 06/07 的「导入任务」按钮落点 · PRD §4.8 P0-9）。
-
-        本轮只做「按钮 + 交互占位」：与外部写入方（WorkBuddy）的 HTTP 自动导入通道
-        （端点 / token / dryRun 预览 / 最近同步记录）尚未接入，故此处**明确写清**
-        「现在能做什么、以后会多什么」，绝不给出已连通的假象——那会让用户以为
-        「我配好了」，然后在下一个版本发现任务根本没进来。
-        手动粘贴 / 拖入是 V1 的兜底通道，与自动通道共用同一份 payload schema（PRD §3.3）。
-      */}
       <div className="mb-3 flex items-start gap-2 rounded-[12px] bg-sunken px-3.5 py-2.5 text-xs text-mist">
         <Info size={13} className="mt-0.5 shrink-0 text-pine" aria-hidden />
         <span>
           现在可<strong className="text-ink">手动粘贴或拖入</strong>排期文件（下方输入区即用）。
-          与外部写入方（如 WorkBuddy）的<strong className="text-ink">自动导入</strong>
-          通道将在后续版本接入，届时此处会显示服务地址、连通状态与最近同步记录。
+          Windows 桌面版本还支持经“导入任务”配置的<strong className="text-ink">本机自动导入</strong>；
+          NAS 远程自动写入目前尚未启用，请勿将连通探测视为可导入状态。
         </span>
       </div>
+
+      {/* ---------------- 提示词模板（反馈 #9：不知道该让 Agent 输出什么） ---------------- */}
+      <details
+        data-apply-prompt=""
+        className="mb-3 rounded-[12px] border border-line bg-cream/50 px-3.5 py-2.5 text-xs text-mist"
+      >
+        <summary className="cursor-pointer select-none text-ink">
+          <Sparkles size={12} className="mr-1 inline align-[-1px] text-pine" aria-hidden />
+          不知道让 WorkBuddy / Codex 输出什么？复制这段提示词给它
+        </summary>
+
+        <p className="mt-2 leading-relaxed">
+          把它连同你的需求一起发给外部 Agent，它会照 ID Plan 的导入格式产出 JSON；
+          你拿到 JSON 后粘贴到下面的输入区即可（粘贴即预览，不需额外点「校验」）。
+        </p>
+
+        <pre
+          data-apply-prompt-body=""
+          className="mt-2 max-h-64 overflow-auto rounded-[10px] border border-line bg-paper p-2.5 font-mono text-[11px] leading-5 text-ink"
+        >
+          {PROMPT_TEMPLATE}
+        </pre>
+
+        <button
+          type="button"
+          data-apply-prompt-copy=""
+          onClick={() => {
+            void navigator.clipboard?.writeText(PROMPT_TEMPLATE).then(
+              () => setPromptCopied(true),
+              // 剪贴板被拒时**不假装成功**：提示用户手动全选复制
+              () => setPromptCopied(false),
+            );
+          }}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-[10px] border border-line bg-paper px-3 py-1.5 text-xs text-ink transition-colors hover:bg-sunken"
+        >
+          {promptCopied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
+          {promptCopied ? '已复制提示词' : '复制提示词'}
+        </button>
+
+        {/* 令牌是**另一个通道**的事：这里说清它不在提示词里，避免用户把令牌贴进聊天窗口 */}
+        <p className="mt-2 leading-relaxed">
+          提示词里<strong className="text-ink">不含访问令牌</strong>：令牌只用于「导入任务 → 接入配置」的
+          <strong className="text-ink">自动写入</strong>通道（在那一栏里设置并复制），不要贴进给 Agent 的聊天窗口。
+        </p>
+      </details>
 
       {/* 输入区：粘贴 textarea + 拖拽区一体（AF-01：粘贴即预览） */}
       <div

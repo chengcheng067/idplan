@@ -62,7 +62,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AlertTriangle, ClipboardPaste, FileOutput, Plug, Plus } from 'lucide-react';
+import { AlertTriangle, ClipboardPaste, FileOutput, Info, Plug } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
@@ -738,32 +738,30 @@ export function AgentBoardPage(): JSX.Element {
               ))}
             </select>
             {/*
-              「新建 Agent 看板」（§6.1 时序图第 1 步）。
+              ★ 反馈 #8 收口：工具条**不再常驻**「新建 Agent 看板」。
 
-              ── 为什么这里**也要**一个入口，而空态里已经有一个 ──
-                空态（`AgentBoardList`）只在 `agentBoards.length === 0` 时渲染。用户建了
-                第一块之后空态就消失，若不在这里留入口，「再建一块」就**没有**任何可达路径
-                ——`createAgentBoard` 会变成只能建第一块的服务（可测性上完全看不出来，
-                因为单测/验收都从空库开始）。
+              ── 为什么撤掉 ──
+                用户原话：「我不能理解它目前配合 Agent 来用时，到底能在看板里排什么」。
+                常驻入口 = 持续承诺「这块已经能用了」，而真实能力（外部写入方自动导入）
+                尚在打通、NAS 侧只有连通探测 —— 入口留在那儿本身就是误导。
+                产品决定：Agent 能力暂停扩展，先把「现在能做什么」讲清楚。
 
-              ── 为什么不用 `disabled={…}` 按角色关掉 ──
-                §7.4 权限表：创建 Agent 看板对 member 与 admin 都是 ✅（`createAgentBoard`
-                不做 admin 校验）。真正受限的是接管（在 `TransferDialog` 里判）。见 `createOpen`
-                声明处的注释。
-
-              ── 视觉分档 ──
-                白底描边=次要操作（与「导入任务」同档）。它不抢「生成交接包」（主操作，pine 实底）
-                的注意力：建板是低频的一次性动作，交接包是高频的日常动作。
+              ── 还能不能建板 ──
+                能。入口收进**空态**（`AgentBoardList` 的 `onCreate`，只在 0 块看板时出现）：
+                一块都没有时必须留一条活路，否则页面成死胡同；已有看板后不再诱导继续建。
+                底层能力（`createAgentBoard` / `CreateAgentBoardDialog`）与既有测试**全部保留**
+                —— 这不是删功能，是收回「还没准备好」的入口。
             */}
-            <button
-              type="button"
-              data-agent-create-open=""
-              onClick={() => setCreateOpen(true)}
-              className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl border border-line bg-paper px-4 text-sm text-ink transition-colors hover:bg-sunken"
+            <div
+              data-agent-stance=""
+              className="flex items-center gap-1.5 rounded-2xl bg-sunken px-3 py-2 text-xs text-mist"
             >
-              <Plus size={14} aria-hidden />
-              新建 Agent 看板
-            </button>
+              <Info size={12} className="shrink-0 text-pine" aria-hidden />
+              <span>
+                Agent 看板目前<strong className="text-ink">只承接外部写入方的排期</strong>
+                （本机自动导入可用，NAS 远程写入尚未启用），这一块正按反馈重新定义。
+              </span>
+            </div>
             {/*
               「导入任务」= WorkBuddy 排期入口（画板 06/07 的第二位按钮，白底描边=次要操作）。
 

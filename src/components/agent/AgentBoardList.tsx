@@ -77,6 +77,20 @@ export function AgentBoardList({
             把外部写入方接上后，它会直接在这里建板并写入任务。
           </p>
         )}
+
+        {/*
+          ★ 反馈 #8：把「这块现在处于什么阶段」直接写在空态里。
+            用户的困惑不是「按钮在哪」，而是「建了它能排出什么」。与其让他建完再失望，
+            不如在**点之前**讲明：能力仍在打通、这一块会按反馈重新定义。
+            刻意不写「即将上线」这类没有承诺主体的时间表。
+        */}
+        <p
+          data-agent-board-stance=""
+          className="max-w-[52ch] text-xs leading-relaxed text-mist"
+        >
+          现状：本机自动导入（Windows 桌面版）可用，NAS 远程写入尚未启用。
+          这一块的定位正在按你的反馈重新讨论，可能还会有较大调整。
+        </p>
         {onCreate && (
           <button
             type="button"

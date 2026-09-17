@@ -18,6 +18,7 @@ import {
   useProjectTasks,
 } from '../core/project/visibility';
 import { domainLabel } from '../components/contract-wizard/DomainCascade';
+import { TravelItineraryPanel } from '../components/travel/TravelItineraryPanel';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
@@ -334,6 +335,31 @@ export function ProjectDetailPage(): JSX.Element {
           </div>
         </div>
       </div>
+
+      {/* 旅游项目：每日行程面板（v0.9 旅游二期）—— 挂在时间轴之上，非旅游项目零渲染 */}
+      {effectiveDomainOf(project) === 'travel' && (
+        <div className="mb-5">
+          {/*
+            ★ 反馈 #6：客户行程单入口（只读打印页，新窗口打开）。
+            与「日程表」入口同款行为；只对 travel 项目渲染 —— 非旅游项目没有行程单可打。
+          */}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-xs text-mist">
+              客户行程单按天列出交通、住宿、安排与费用，可直接发给客户或打印。
+            </span>
+            <button
+              type="button"
+              data-itinerary-print-open=""
+              onClick={() => window.open(`/project/${project.id}/itinerary-print`, '_blank')}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist hover:bg-sand"
+              title="打开客户行程单（新窗口，只读导出）"
+            >
+              <CalendarRange size={14} aria-hidden /> 客户行程单
+            </button>
+          </div>
+          <TravelItineraryPanel project={project} />
+        </div>
+      )}
 
       {/* 时间轴：平板横屏/桌面(≥lg)用横向时间轴；手机/平板竖屏(<lg)用纵向阶段卡片流（阶段 C） */}
       {isNarrow ? (

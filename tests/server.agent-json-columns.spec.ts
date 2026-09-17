@@ -350,8 +350,28 @@ describe('R1 顺序修复：老库 createDb 不崩（表 → 补列 → 索引�
     const db = openDb(tmp);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     db.close();
-    rmSync(tmp, { force: true });
-    rmSync(`${tmp}-wal`, { force: true });
-    rmSync(`${tmp}-shm`, { force: true });
+    /*
+      ── 为什么这里的删除要"挑着容忍" ──
+      本机 CLI 给 `fs.rmSync` 注入了一枚**批量删除守卫**（safe-delete shim）：
+      它在**同一个 agent turn 内累计**被删条目数，超过阈值（500）后拒绝一切删除，
+      报 `[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]`。
+      全量 `npm test` 跑到本文件时累计数已 2 万+（本次实测 20164），
+      于是上面这三行清理**必然被拒**，把「WAL 是否生效」这条真断言染红成假红。
+      （单独跑本文件时累计数未达阈值，所以表现为"时红时绿"。）
+
+      ⚠️ 只容忍守卫那一类错误：`EBUSY` / `EPERM` 等**必须继续抛出** ——
+        它们意味着 `db.close()` 没真正释放文件句柄，那是真缺陷，不能被吞掉。
+      代价：极端情况下 `tmp/` 里会残留一个几十 KB 的空库文件，属可接受的噪音。
+    */
+    try {
+      rmSync(tmp, { force: true });
+      rmSync(`${tmp}-wal`, { force: true });
+      rmSync(`${tmp}-shm`, { force: true });
+    } catch (err) {
+      const message = String((err as Error)?.message ?? '');
+      if (!message.includes('SAFE_DELETE_BULK_CONFIRM_REQUIRED')) throw err;
+      // eslint-disable-next-line no-console
+      console.warn(`[server.agent-json-columns] 清理被本机批量删除守卫拒绝（非缺陷）：${tmp}`);
+    }
   });
 });
