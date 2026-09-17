@@ -15,7 +15,7 @@
  *   · **路径乙（完整档）**：展开折叠区 → 三层级联改主板块 ＋ 阶段池勾选 ＋ 新增自定义阶段
  *     → 提交。主板块落 `Project.domain`，自定义阶段落 `templateKey = null`。
  *
- * 验收 9：标签（原「类型」）**可空**，留空落 `ProjectType.Other`，绝不阻塞建档。
+ * 验收 9（已随字段删除改写）：原「类型」字段不存在，且不展开折叠区仍可直接提交。
  *
  * ── 为什么这里敢用"真"链路 ──
  * 只顶掉 `useRepos()` 这一处 DI 入口（组件树外的东西），其余全是真的：
@@ -35,7 +35,7 @@ import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import type { BackupPackage } from '../src/core/types/dto';
 import { ManualFallbackForm } from '../src/components/contract-wizard/ManualFallbackForm';
 import { DEFAULT_PROJECT_DOMAIN } from '../src/core/template/stage-fallback';
-import { ProjectType } from '../src/core/types/enums';
+
 
 let bundle: IRepositoryBundle;
 

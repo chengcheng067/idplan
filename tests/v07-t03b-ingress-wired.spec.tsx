@@ -164,7 +164,6 @@ import {
   MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
-  ProjectType,
   ScheduleBasis,
 } from '../src/core/types/enums';
 import type { Member, Project } from '../src/core/types/entities';
@@ -185,7 +184,6 @@ const MEMBER_ID = 'm-t03b-member';
 const PROJECT: Project = {
   id: PROJECT_ID,
   name: '某茶空间',
-  type: ProjectType.TeaSpace,
   address: '城区某路 1 号',
   clientName: '客户甲',
   contractAmount: null,

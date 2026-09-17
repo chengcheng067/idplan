@@ -9,7 +9,6 @@ import {
   MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
-  ProjectType,
   ScheduleBasis,
   StageLogType,
   StageStatus,

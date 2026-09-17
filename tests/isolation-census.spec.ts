@@ -53,7 +53,6 @@ import {
   MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
-  ProjectType,
   ScheduleBasis,
   StageStatus,
   TaskStatus,
@@ -118,7 +117,6 @@ function makeProject(
   over: Partial<Project> & Pick<Project, 'id' | 'name' | 'kind'>,
 ): Project {
   return {
-    type: ProjectType.Dining,
     address: '示例地址',
     clientName: '示例客户',
     contractAmount: null,

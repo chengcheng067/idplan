@@ -38,7 +38,6 @@ import {
   MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
-  ProjectType,
   ScheduleBasis,
   StageStatus,
 } from '../src/core/types/enums';
@@ -75,7 +74,6 @@ const ADMIN = makeMember(ADMIN_ID, '负责人甲', MemberRoleKind.Admin);
 const PROJECT: Project = {
   id: PROJECT_ID,
   name: '某茶空间',
-  type: ProjectType.TeaSpace,
   address: null,
   clientName: '客户甲',
   contractAmount: null,

@@ -55,42 +55,25 @@ export enum Confidence {
   Low = 'low',
 }
 
-/** 项目类型（PRD F2 五类 → v0.5 扩展为建筑设计全行业） */
-export enum ProjectType {
-  // 商业空间
-  Dining = 'dining',
-  TeaSpace = 'tea_space',
-  Bookstore = 'bookstore',
-  Homestay = 'homestay',
-  Retail = 'retail',
-  // 设计专业
-  InteriorDesign = 'interior_design',
-  LandscapeDesign = 'landscape_design',
-  ArchitectureDesign = 'architecture_design',
-  ExhibitionDesign = 'exhibition_design',
-  // 住宅/办公/其他
-  Residential = 'residential',
-  Office = 'office',
-  MixedUse = 'mixed_use',
-  Other = 'other',
-}
-
-/** 项目类型展示名映射（唯一 UI 文案源） */
-export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
-  [ProjectType.Dining]: '餐饮',
-  [ProjectType.TeaSpace]: '茶空间',
-  [ProjectType.Bookstore]: '书店',
-  [ProjectType.Homestay]: '民宿',
-  [ProjectType.Retail]: '零售',
-  [ProjectType.InteriorDesign]: '室内设计',
-  [ProjectType.LandscapeDesign]: '景观设计',
-  [ProjectType.ArchitectureDesign]: '建筑设计',
-  [ProjectType.ExhibitionDesign]: '展陈设计',
-  [ProjectType.Residential]: '住宅',
-  [ProjectType.Office]: '办公',
-  [ProjectType.MixedUse]: '商业综合体',
-  [ProjectType.Other]: '其他',
-};
+/**
+ * ⛔ 这里曾有 `ProjectType` 枚举与 `PROJECT_TYPE_LABELS`（餐饮/茶空间/书店/民宿/零售 +
+ * 室内设计/景观设计/建筑设计/展陈设计 …），2026-09-17 **整块删除**，不要加回来。
+ *
+ * ── 为什么删 ──
+ * 它把**两套互不相干的分类法混在一个字段里**：前半是业态（餐饮/民宿…），后半是设计专业
+ * （室内/景观…）。用户在真机上看到的就是它的直接后果 —— 建档弹窗里「行业」已经选了
+ * 「建筑设计行业 / 室内」，而「类型」下拉却默认停在「餐饮」（`ManualFallbackForm` 默认
+ * `Dining`，与三层级联的默认 `indoor` 各自独立、互不相干）。
+ *
+ * 它的分类职责已由 v0.8 的**三层分类**（行业大类 → 主板块 → 关联板块，见
+ * `core/template/stage-library.ts` 与 `Project.domain`）完全取代；
+ * 它唯一还活着的职能「决定弹窗初始阶段池」已迁到**主板块**：
+ * 见 `StageSelectPanel.defaultPresetKeyForDomain`。
+ *
+ * 现在投影/详情页显示的是**主板块名**（`domainLabel(effectiveDomainOf(project))`）。
+ * 删字段的兼容处理见 `backup.service.ts` 的项目 schema（宽收 + 显式剥离）
+ * 与 `tests/backup.legacy-compat.spec.ts` 的「含 type 的老备份仍可导入」三条用例。
+ */
 
 /**
  * 项目归属侧（v0.8 新增）：人类工作区 / Agent 工作区。

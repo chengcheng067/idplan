@@ -97,7 +97,7 @@ import { StageDrawer } from '../src/components/stage-detail/StageDrawer';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useUiStore } from '../src/store/useUiStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
-import { ProjectStatus, ProjectType, ScheduleBasis, StageStatus } from '../src/core/types/enums';
+import { ProjectStatus, ScheduleBasis, StageStatus } from '../src/core/types/enums';
 import type { Project, Stage } from '../src/core/types/entities';
 
 const PROJECT_ID = 'proj_1';
@@ -106,7 +106,6 @@ const STAGE_ID = 'stg_1';
 const PROJECT: Project = {
   id: PROJECT_ID,
   name: '某茶空间',
-  type: ProjectType.TeaSpace,
   address: '城区某路 1 号',
   clientName: '客户甲',
   contractAmount: null,

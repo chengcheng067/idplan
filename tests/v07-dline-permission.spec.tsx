@@ -115,7 +115,6 @@ import {
   MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
-  ProjectType,
   ScheduleBasis,
   StageStatus,
 } from '../src/core/types/enums';
@@ -214,7 +213,6 @@ const MEMBER_ID = 'm-member-d1';
 const PROJECT: Project = {
   id: PROJECT_ID,
   name: '某茶空间',
-  type: ProjectType.TeaSpace,
   address: '城区某路 1 号',
   clientName: '客户甲',
   contractAmount: null,

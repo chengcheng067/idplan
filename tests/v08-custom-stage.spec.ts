@@ -34,7 +34,7 @@ import {
   rememberCustomStage,
 } from '../src/core/services/custom-stage.service';
 import { getDomainColumns, getItemKanbanColumn, getPresetItems, getStageLibraryItem } from '../src/core/template/stage-library';
-import { ProjectType, StageStatus } from '../src/core/types/enums';
+import { StageStatus } from '../src/core/types/enums';
 import type { ConfirmedContractPayload, StageDraft, StageSelectionItem } from '../src/core/types/dto';
 import type { BackupPackage } from '../src/core/types/dto';
 
@@ -101,7 +101,6 @@ function draftOf(
 function payload(domain: string | null): ConfirmedContractPayload {
   return {
     projectName: 'T03 验收项目',
-    projectType: ProjectType.InteriorDesign,
     address: '成都市高新区',
     clientName: '验收委托方',
     contractAmount: null,

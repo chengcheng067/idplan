@@ -113,7 +113,6 @@ import {
   MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
-  ProjectType,
   ScheduleBasis,
   StageStatus,
   TaskStatus,
@@ -180,7 +179,6 @@ function makeProject(over: Partial<Project> = {}): Project {
   return {
     id: PROJECT_ID,
     name: '某茶空间',
-    type: ProjectType.TeaSpace,
     address: '',
     clientName: '客户甲',
     contractAmount: null,

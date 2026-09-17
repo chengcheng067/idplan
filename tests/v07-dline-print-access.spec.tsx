@@ -121,7 +121,6 @@ import {
   MemberActorKind,
   MemberRoleKind,
   ProjectStatus,
-  ProjectType,
   ScheduleBasis,
   StageStatus,
   TaskStatus,
@@ -150,7 +149,6 @@ const TASK_ONLY_STAGE_NAME = '灯光专项深化';
 const PROJECT: Project = {
   id: PROJECT_ID,
   name: '某茶空间',
-  type: ProjectType.TeaSpace,
   address: '城区某路 1 号',
   clientName: '客户甲',
   contractAmount: null,

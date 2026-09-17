@@ -29,7 +29,7 @@ import type {
   ConfirmedContractPayload,
   CreateProjectCmd,
 } from '../types/dto';
-import { ChangxiaError, ChangxiaErrorCode, ProjectType, StageLogType, StageStatus, TaskStatus } from '../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, StageLogType, StageStatus, TaskStatus } from '../types/enums';
 import {
   DEFAULT_REST_POLICY,
   DEFAULT_SCHEDULE_BASIS,
