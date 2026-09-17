@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarRange, MoreHorizontal, Archive, Palette, Trash2 } from 'lucide-react';
 
 import type { Member, Project, Stage, Task } from '../../core/types/entities';
@@ -76,6 +77,8 @@ export function ProjectCard({
   const navigate = useNavigate();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  /** 菜单的视口坐标（portal 到 body 后必须自己算位置；null = 尚未定位，先不渲染） */
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(project.name);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -83,6 +86,8 @@ export function ProjectCard({
   /** v0.7 B1：侧栏方块外观（简称 + 自定义色）编辑弹窗 */
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  /** portal 出去的菜单面板本体：外点判定必须**同时**看触发包裹与面板，否则点菜单项会自杀式关闭 */
+  const menuPanelRef = useRef<HTMLDivElement>(null);
 
   const actions = createProjectActions(repos);
 
@@ -158,7 +163,13 @@ export function ProjectCard({
   useEffect(() => {
     if (!menuOpen) return;
     const onDocClick = (e: MouseEvent): void => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      const t = e.target as Node;
+      // ⚠️ 菜单现在是 portal 到 body 的，**不在 `menuRef` 内部**：
+      //    只判 `menuRef` 会把「点菜单项」当成外点 → 菜单一闪即关（自杀式关闭）。
+      //    故触发包裹与面板本体的命中都要算「内部」。
+      const insideTrigger = !!menuRef.current?.contains(t);
+      const insidePanel = !!menuPanelRef.current?.contains(t);
+      if (!insideTrigger && !insidePanel) setMenuOpen(false);
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
@@ -173,6 +184,13 @@ export function ProjectCard({
 
   const openMenu = (e: React.MouseEvent): void => {
     e.stopPropagation();
+    /*
+     * portal 出去的菜单没有可继承的定位祖先，必须在**打开时**自己量一次视口坐标。
+     * 用「触发按钮的 bottom」定位上沿、「视口宽 − 按钮 right」定位右沿（保持原有
+     * 「右对齐到按钮」的观感，与旧 `right-0 top-full` 一致）。
+     */
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenuPos({ top: rect.bottom + 8, right: Math.max(window.innerWidth - rect.right, 8) });
     setMenuOpen((v) => !v);
   };
 
@@ -213,18 +231,16 @@ export function ProjectCard({
         'transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/50',
         /*
-         * ⋮ 菜单展开时，**宿主卡片必须整体压过同级卡片**（用户报的「菜单被下方板块盖住」）。
+         * 菜单已改为 `createPortal` 送到 `document.body`（见 `renderMenu`），
+         * 故**卡片本身不需要再提升层级** —— 这里刻意不加 `relative z-30`。
          *
-         * 为什么提升要挂在**卡片根**、而不是把菜单的 z-50 调更大：
-         *   菜单的 `z-50` 只在**本卡片所在的层叠上下文内**排序。只要宿主卡片本身没有被提升，
-         *   同级卡片一旦进入更高一级的绘制阶段，整张卡片（连同其中的菜单）就会被盖住 ——
-         *   在菜单内部把 50 调到 500 也无济于事。所以提升点只能是卡片根。
-         *
-         * 判据（不变式）：`menuOpen ⟺ 卡片根带 relative + 正 z-index`；
-         *   `relative` 是必需的 —— 否则 z-index 对 `position: static` 不生效。
-         * 关闭菜单即撤除，避免整页长期堆着一批高 z-index 卡片（会反向盖住别的浮层）。
+         * 为什么不能用「给卡片加 z-index」这种就地提升：
+         *   ① 它只解决「同级卡片」这一个场景，卡片外还有 Sidebar(z-30)/TopBar(z-40)/Toast(z-50)
+         *      等一堆浮层，正整数 z-index 一旦叠上去就要和它们排队，属于换个地方埋雷；
+         *   ② 菜单离开卡片子树后，**祖先的任何层叠上下文都管不到它**，才是根治。
+         * 判据（不变式）：菜单 DOM 必须挂在 `document.body` 下，且 z-index 落在
+         *   「浮层专用档位」内（本仓约定：Modal center=70 / 指派浮层=65 / 抽屉=60，见 Modal.tsx）。
          */
-        menuOpen && 'relative z-30',
         selected && 'ring-2 ring-pine/50',
       )}
     >
@@ -262,11 +278,23 @@ export function ProjectCard({
               <MoreHorizontal size={16} aria-hidden />
             </button>
 
-            {menuOpen && (
-              <div
-                role="menu"
-                className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-2xl border border-line py-1.5 shadow-overlay"
-              >
+            {menuOpen &&
+              menuPos &&
+              createPortal(
+                <div
+                  ref={menuPanelRef}
+                  role="menu"
+                  /*
+                   * ★ portal 到 body + fixed 定位（本仓既有范式：`Modal.tsx:107`、
+                   *   `TaskChecklist.tsx:202` 的指派浮层）。这样菜单**脱离卡片子树**，
+                   *   相邻卡片 hover 时新建的层叠上下文再也盖不到它（用户反馈 #1）。
+                   * z-[65] = 浮层专用档位（Modal center 70 / 指派浮层 65 / 抽屉 60），
+                   *   刻意低于居中弹窗 70，避免菜单压在确认框之上。
+                   * `print:hidden`：打印路由绝不出现浮层。
+                   */
+                  className="glass-medium menuFadeIn print:hidden fixed z-[65] w-44 overflow-hidden rounded-2xl border border-line py-1.5 shadow-overlay"
+                  style={{ top: menuPos.top, right: menuPos.right }}
+                >
                 <button
                   type="button"
                   role="menuitem"
@@ -329,8 +357,9 @@ export function ProjectCard({
                   <Trash2 size={14} aria-hidden />
                   删除项目
                 </button>
-              </div>
-            )}
+                </div>,
+                document.body,
+              )}
           </div>
         )}
       </div>
