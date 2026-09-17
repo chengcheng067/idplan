@@ -346,6 +346,62 @@ if (sameMissing.length) console.log('   !! 预期同值却不同:', sameMissing.
 console.log('   抽样 --stage-band-s1-rgb  亮:', readVar(lightBlock, '--stage-band-s1-rgb'), ' 暗:', readVar(darkBlock, '--stage-band-s1-rgb'));
 console.log('   抽样 --stage-ink-s5-rgb   亮:', readVar(lightBlock, '--stage-ink-s5-rgb'), ' 暗:', readVar(darkBlock, '--stage-ink-s5-rgb'));
 
+console.log('\n=== 2b) 桌面主进程层与离线授权公钥（反馈 #11）===');
+/*
+ * 反馈 #11：「增加机器码授权，同时防止别人用 agent 逆向开发我们的软件」。
+ *
+ * 授权能成立的前提是**验签代码与公钥真的在安装包里**；防逆向的第一步是
+ * 让「打包产物里有什么」可被机器核对，而不是靠肉眼翻 asar。
+ * 两项断言：
+ *   ① 主进程四件套（main / preload / loopback / license）与验签公钥必须在包内 ——
+ *      少一个，用户在目标机器上就是「点了导入没反应」；
+ *   ② 包内**不得**出现私钥（文件名或内容任一命中即 FAIL）—— 私钥进包 = 授权归零，
+ *      任何人都能自签一份许可证。
+ */
+const needElectron = [
+  'electron/main.cjs',
+  'electron/preload.cjs',
+  'electron/loopback.cjs',
+  'electron/license.cjs',
+  'electron/licenses/public-key.pem',
+];
+const allNormalized = files.map(sep);
+const missingElectron = needElectron.filter((n) => !allNormalized.includes(n));
+
+/** 文件名像私钥的一律算可疑（.pem/.key 且带 private/secret） */
+const suspiciousKeyFiles = allNormalized.filter(
+  (f) => /\.(pem|key|pfx|p12)$/i.test(f) && /private|secret/i.test(f),
+);
+
+/** 内容级检查：解包目录下 electron/ 内任何文本文件都不该出现私钥 PEM 头 */
+const extractedElectronDir = path.join(EXTRACT_DIR, 'electron');
+function collectFiles(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...collectFiles(abs));
+    else out.push(abs);
+  }
+  return out;
+}
+const contentLeaks = [];
+for (const abs of collectFiles(extractedElectronDir)) {
+  if (!/\.(cjs|js|json|pem|txt|md)$/i.test(abs)) continue;
+  const text = fs.readFileSync(abs, 'utf8');
+  if (text.includes('-----BEGIN PRIVATE KEY-----')) contentLeaks.push(path.relative(EXTRACT_DIR, abs));
+}
+const publicKeyText = (() => {
+  const abs = path.join(extractedElectronDir, 'licenses', 'public-key.pem');
+  return fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
+})();
+const publicKeyLooksEd25519 = publicKeyText.includes('-----BEGIN PUBLIC KEY-----');
+
+console.log('   主进程四件套 + 公钥缺失项:', missingElectron.length ? missingElectron.join(', ') : '（无）');
+console.log('   文件名像私钥的条目:', suspiciousKeyFiles.length ? suspiciousKeyFiles.join(', ') : '（无）');
+console.log('   内容含私钥 PEM 头的文件:', contentLeaks.length ? contentLeaks.join(', ') : '（无）');
+console.log('   验签公钥是 SPKI PEM:', publicKeyLooksEd25519 ? 'YES' : 'NO');
+
 console.log('\n=== 3) dark 变体判定依据（BUG-06 判据）===');
 const mq = cnt(/prefers-color-scheme/g);
 const attr = cnt(/html\[data-theme=["']?dark["']?\]/g);
@@ -358,16 +414,22 @@ console.log('   --stage-band-s5-rgb:', cnt(/--stage-band-s5-rgb/g));
 console.log('   --stage-ink-s5-rgb:', cnt(/--stage-ink-s5-rgb/g));
 
 console.log('\n=== 结论 ===');
+const passElectron =
+  missingElectron.length === 0 &&
+  suspiciousKeyFiles.length === 0 &&
+  contentLeaks.length === 0 &&
+  publicKeyLooksEd25519;
 const passBug05 = bug05 && redefined === 27 && sameUnexpected.length === 0 && sameMissing.length === 0;
 const passBug06 = mq === 0 && attr > 0;
 const passPrint = /:root\s*,\s*\.print-root\s*\{/.test(css);
 console.log('   BUG-05 阶段色类名全量生成     :', bug05 ? 'PASS' : 'FAIL');
 console.log('   BUG-05 暗色换肤 27/27 且同值符合规则:', passBug05 ? 'PASS' : 'FAIL');
 console.log('   BUG-06 dark 绑定应用内开关    :', passBug06 ? 'PASS' : 'FAIL');
+console.log('   主进程层 + 授权公钥齐备且无私钥泄漏:', passElectron ? 'PASS' : 'FAIL');
 console.log('   死产物清理（assets == 引用闭包）:', closureOk ? `PASS (${assetNames.length})` : `FAIL (assets ${assetNames.length} / 闭包 ${closure.size})`);
 console.log('   解包目录无残留（目录 == asar）:', sameNames ? `PASS (${dirAssetNames.length})` : `FAIL (目录 ${dirAssetNames.length} / asar ${asarNamesSorted.length})`);
 console.log('   打印锁浅色 .print-root 与亮色块同一选择器:', passPrint ? 'PASS' : 'FAIL');
 console.log('   本结论对应产物                :', `${ASAR} @ ${stampOf(ASAR_MTIME)}`);
-const allPass = passBug05 && passBug06 && closureOk && sameNames && passPrint;
+const allPass = passElectron && passBug05 && passBug06 && closureOk && sameNames && passPrint;
 console.log('\n   总体:', allPass ? 'ALL PASS' : 'HAS FAILURE');
 process.exitCode = allPass ? 0 : 1;

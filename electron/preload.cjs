@@ -80,4 +80,6 @@ contextBridge.exposeInMainWorld('idplan', {
    * 持久化唯一出处（localStorage 的 `idplan.agentToken`），主进程仅内存持有。
    */
   setAgentToken: (token) => ipcRenderer.send('agent:token:set', token),
+  licenseStatus: () => ipcRenderer.invoke('license:status'),
+  importLicense: (raw) => ipcRenderer.invoke('license:import', raw),
 });
