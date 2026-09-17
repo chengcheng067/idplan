@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarRange, MoreHorizontal, Archive, Palette, Trash2 } from 'lucide-react';
 
@@ -21,6 +21,7 @@ import { stageSolidColor } from '../timeline/stageColors';
 import { customStageColor } from '../timeline/stageColorKey';
 import { ProjectAppearanceDialog } from './ProjectAppearanceDialog';
 import { cn } from '../../lib/cn';
+import { ANCHOR_GAP, resolveAnchoredPosition } from '../../lib/anchoredPosition';
 
 /**
  * 项目卡片（规格 §2.5 项目卡片网格 + 画板 02）：
@@ -42,6 +43,11 @@ import { cn } from '../../lib/cn';
  *   未进入身份（role=null）**不**渲染，与打印页守卫的「未进入不放行」同档。
  */
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨';
+
+/** ⋯ 菜单声明宽度（`w-44` = 176px）。尺寸实测前用它做锚定兜底，保证首帧不越界 */
+const MENU_WIDTH = 176;
+/** 菜单**内容高度**兜底（5 项 × ~36 + padding）。仅用于首帧预判是否翻转，实测后即被替换 */
+const MENU_FALLBACK_HEIGHT = 208;
 
 /** 状态 → 文字语义色（用于进度百分比与逾期日期文字） */
 const STATUS_TONE = {
@@ -79,8 +85,15 @@ export function ProjectCard({
   const navigate = useNavigate();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  /** 菜单的视口坐标（portal 到 body 后必须自己算位置；null = 尚未定位，先不渲染） */
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  /**
+   * 菜单锚点（视口坐标，portal 到 body 后必须自己算位置）。
+   * ★ 反馈 #3：菜单必须出现在**触发点**附近 —— 左键取按钮矩形、右键取本次点击坐标。
+   *   此前右键分支只 `setMenuOpen(true)`，沿用上一次的 `menuPos`（或 null ⇒ 直接不渲染），
+   *   右键在卡片空白处时菜单会跑到别处甚至不出现。
+   */
+  const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
+  /** 菜单实测尺寸：锚定定位需要它才能翻转/夹取 */
+  const [menuSize, setMenuSize] = useState<{ width: number; height: number } | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(project.name);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -168,6 +181,19 @@ export function ProjectCard({
     accentStage?.customColor ?? null,
   );
 
+  // 菜单打开后量一次尺寸（锚定定位需要）；尺寸不变则不 setState，避免重渲染循环
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const el = menuPanelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setMenuSize((prev) =>
+      prev && prev.width === rect.width && prev.height === rect.height
+        ? prev
+        : { width: rect.width, height: rect.height },
+    );
+  }, [menuOpen]);
+
   // 外点关闭菜单
   useEffect(() => {
     if (!menuOpen) return;
@@ -195,11 +221,10 @@ export function ProjectCard({
     e.stopPropagation();
     /*
      * portal 出去的菜单没有可继承的定位祖先，必须在**打开时**自己量一次视口坐标。
-     * 用「触发按钮的 bottom」定位上沿、「视口宽 − 按钮 right」定位右沿（保持原有
-     * 「右对齐到按钮」的观感，与旧 `right-0 top-full` 一致）。
+     * 锚点取触发按钮的左下角（与旧 `right-0 top-full` 观感一致：从按钮下方展开）。
      */
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setMenuPos({ top: rect.bottom + 8, right: Math.max(window.innerWidth - rect.right, 8) });
+    setMenuAnchor({ x: rect.right - MENU_WIDTH, y: rect.bottom + ANCHOR_GAP });
     setMenuOpen((v) => !v);
   };
 
@@ -208,8 +233,27 @@ export function ProjectCard({
     if (!isAdmin) return;
     e.preventDefault();
     e.stopPropagation();
+    // ★ 用**本次**指针坐标当锚点：菜单出现在鼠标处，而不是沿用上一次的位置
+    setMenuAnchor({ x: e.clientX, y: e.clientY });
     setMenuOpen(true);
   };
+
+  /**
+   * 菜单最终位置：以锚点为「希望起始处」，空间不足翻转、越界夹取。
+   * 尺寸未量到之前用菜单的声明宽度兜底（w-44 = 176），保证首帧也在视口内。
+   */
+  const menuPos = useMemo(() => {
+    if (!menuAnchor) return null;
+    const vv = window.visualViewport;
+    return resolveAnchoredPosition({
+      anchor: menuAnchor,
+      panel: menuSize ?? { width: MENU_WIDTH, height: MENU_FALLBACK_HEIGHT },
+      viewport: {
+        width: vv?.width ?? window.innerWidth,
+        height: vv?.height ?? window.innerHeight,
+      },
+    });
+  }, [menuAnchor, menuSize]);
 
   return (
     <div
@@ -302,7 +346,8 @@ export function ProjectCard({
                    * `print:hidden`：打印路由绝不出现浮层。
                    */
                   className="glass-medium menuFadeIn print:hidden fixed z-[65] w-44 overflow-hidden rounded-2xl border border-line py-1.5 shadow-overlay"
-                  style={{ top: menuPos.top, right: menuPos.right }}
+                  // ★ 反馈 #3：改用锚点算出的 left/top（含翻转与夹取），不再用 right 反推
+                  style={{ top: menuPos.top, left: menuPos.left }}
                 >
                 <button
                   type="button"

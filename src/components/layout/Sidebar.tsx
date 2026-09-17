@@ -128,6 +128,12 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   /**
+   * 设置面板的**触发锚点**（反馈 #3）：记录点击位置，让面板在点击处附近展开，
+   * 而不是固定从右侧滑出。点击事件里取 `clientX/clientY`（键盘触发时为 null，
+   * Modal 会退化为右下角，不会跑到 (0,0)）。
+   */
+  const [settingsAnchor, setSettingsAnchor] = useState<{ x: number; y: number } | null>(null);
+  /**
    * 项目列表是否已「展开全部」（v0.7 增量 · 用户反馈「还有 N 个项目…」点不到）。
    * 默认 false：仍按 SIDEBAR_PROJECT_LIMIT 截断（画板 02/04 的截断是**刻意设计**，
    * 不是 bug）；点一下截断提示即展开全量。状态在组件内，换页不重置——
@@ -346,7 +352,10 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         <div className="shrink-0 space-y-1 border-t border-line px-3 py-3">
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            onClick={(e) => {
+              setSettingsAnchor({ x: e.clientX, y: e.clientY });
+              setSettingsOpen(true);
+            }}
             aria-label="设置"
             title="设置（导出日志 / 清空日志）"
             className={cn(navItemClass(false, false, inDrawer), 'relative')}
@@ -545,7 +554,10 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         <div className="flex shrink-0 flex-col items-center gap-1 py-2">
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            onClick={(e) => {
+              setSettingsAnchor({ x: e.clientX, y: e.clientY });
+              setSettingsOpen(true);
+            }}
             aria-label="设置"
             title="设置"
             className="relative flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
@@ -645,7 +657,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
       </Modal>
 
       {/* 设置抽屉（侧栏底部入口） */}
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog open={settingsOpen} anchor={settingsAnchor} onClose={() => setSettingsOpen(false)} />
 
       {/* 备份 IO 的隐藏 file input + 确认对话框（与 useBackupIo 同一份逻辑） */}
       {fileInput}

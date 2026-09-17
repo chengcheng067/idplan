@@ -68,6 +68,7 @@ import {
   readdirSync,
   readFileSync,
   statSync,
+  renameSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
@@ -330,12 +331,31 @@ async function main() {
 
   // ★ userData 隔离：默认用临时目录，绝不碰真实 %APPDATA%\ID Plan。
   //   一旦 --use-real-profile，整库替换（B4）会直接污染真实数据——默认坚决不开。
+  //
+  //   ⚠️ 每一轮都必须从**全新空目录**起步（2026-09-17 实测事故）：
+  //     上一轮留在 `userdata/packed/` 里的库是旧 schema（v3），而当前应用是 v4，
+  //     于是应用启动后**卡在「需要先导出升级前备份」的迁移闸门**上 ——
+  //     窗口起来了、进程活着、`window.idplan` 也在（preload 已注入），
+  //     但**一个 header 都不渲染**。外部表现与「产品白屏」完全一样，
+  //     实测把本脚本误导成 5 条 FAIL + 4 条 WARN（截图 tmp/funcwalk/B12-focus.png 可复核）。
+  //     真实用户不会遇到（他们只会遇到一次升级闸门），这是**夹具陈旧**，不是产品缺陷。
+  //   删不掉时（本机 CLI 有批量删除守卫）降级为改名挪走，保证「干净」由**构造**保证，
+  //   不依赖删除成功 —— 与 verify-package.cjs 同一套降级策略。
   if (!USE_REAL_PROFILE) {
-    mkdirSync(USER_DATA_DIR, { recursive: true });
+    let fresh = USER_DATA_DIR;
+    if (existsSync(fresh)) {
+      try {
+        renameSync(fresh, `${fresh}-stale-${Date.now()}`);
+      } catch (err) {
+        console.warn(`  [提示] 旧隔离目录挪不动（${err?.code || err}），改用新目录`);
+        fresh = `${USER_DATA_DIR}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+      }
+    }
+    mkdirSync(fresh, { recursive: true });
     // Electron 解析 --user-data-dir 作为 Chromium 用户数据目录（IndexedDB 即落此处），
     // 与默认 appData/getName() 彻底隔离。本应用 main.cjs 未调用 setPath('userData')，
     // 故此开关足以把数据重定向到临时目录。
-    args.push(`--user-data-dir=${USER_DATA_DIR}`);
+    args.push(`--user-data-dir=${fresh}`);
   }
 
   // ★ 机器断言前置：拍真实 IndexedDB 的 mtime 指纹（跑完再拍一次对比）。
@@ -350,7 +370,7 @@ async function main() {
   console.log(`exe ：${execPath}`);
   console.log(`mtime：${mtimeOf(execPath)}`);
   console.log(
-    `隔离：${USE_REAL_PROFILE ? '⚠ 已用真实共享 userData（--use-real-profile，危险）' : `临时 userData=${USER_DATA_DIR}`}`,
+    `隔离：${USE_REAL_PROFILE ? '⚠ 已用真实共享 userData（--use-real-profile，危险）' : `临时 userData=${(args.find((a) => a.startsWith('--user-data-dir=')) || '').replace('--user-data-dir=', '')}`}`,
   );
   console.log(`截图：${SHOTS}\n`);
 
@@ -569,6 +589,19 @@ async function main() {
         record('B1a. 打开手动建档表单', opened, opened ? '' : '未出现建档弹窗');
         if (opened) {
           await win.locator('input[placeholder="如「XX餐饮·室内设计」"]').fill('功能走查临时项目');
+          /*
+            ★ 反馈 #5 之后必须**显式选主板块**，否则后面那步点不动：
+              手动建档首开不预设任何行业/主板块 ⇒ 阶段池为空（0 段）⇒
+              「建档」按钮是 `disabled`（ManualFallbackForm 的 stageItems.length < MIN_STAGE_COUNT）。
+              实测报错就是 `locator resolved to <button disabled …>`，
+              而 Playwright 会一直等「enabled」直到 8s 超时 —— 表现成 B1 红，
+              根因却是夹具没跟上 UI 契约（真实用户点一次板块就带出套餐了）。
+          */
+          const domainSelect = win.locator('select[aria-label="主板块"]').first();
+          if ((await domainSelect.count()) > 0) {
+            await domainSelect.selectOption('indoor');
+            await new Promise((r) => setTimeout(r, 400));
+          }
           // 竣工日为必填；开始日已默认今天，竣工填一个晚于今天的日期
           await win.locator('input[type="date"]').nth(1).fill('2026-12-31');
           // 注意：建档弹窗有两个含「建档」的按钮，须用几何真判据挑可点的那个（见 clickButtonByText）

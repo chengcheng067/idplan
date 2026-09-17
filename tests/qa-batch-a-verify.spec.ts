@@ -7,6 +7,8 @@ import { resolve } from 'node:path';
 //   绝不在 `page.evaluate` 里重算 `innerWidth >= 1280 ? 64 : 56`：
 //   那份副本会在口径变更时静默不同步，而它恰是断言另一边的基准 → 直接放进假绿。
 import { titleBarHeightFor } from '../src/lib/titleBarTheme';
+// ★ 锚定浮层的留白口径也取产品同一份常量：写死 8 会在调参后静默放宽断言。
+import { ANCHOR_GAP, VIEWPORT_MARGIN } from '../src/lib/anchoredPosition';
 
 /**
  * QA 独立复核（批次 A）· 真构建产物 + 真 Chromium。
@@ -146,6 +148,20 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
   };
 }
 
+/**
+ * 遮罩期间标题栏的期望色 —— 与 `src/lib/titleBarTheme.ts` 的 `darkenHex` **同口径**（0.55 倍）。
+ *
+ * 为什么不直接引产品常量：该函数是模块内私有实现细节，导出它只为测试会让「改系数」
+ * 变成一次静默的断言同步。写在这里的另一面是——系数一改，本用例立刻变红，
+ * 逼人回来确认「压暗强度」是有意调整还是手滑（这正是我们要的摩擦）。
+ */
+function dimHex(hex: string, factor = 0.55): string {
+  const channels = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+  return `#${channels
+    .map((channel) => Math.min(255, Math.round(channel * factor)).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
 /** 伪装 Windows 桌面端（注入 preload 等价物），用于顶栏叠加层相关断言 */
 const IDPLAN_STUB = `
 window.__tbCalls = [];
@@ -231,6 +247,14 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
     });
     await page.waitForTimeout(500);
     await page.locator('input[placeholder*="XX餐饮"]').fill(name);
+    /*
+      ★ 反馈 #5 之后的新口径：手动建档**首开不预选主板块**，套餐/阶段随主板块带出。
+        不先选板块 ⇒ 「建档」按钮保持 disabled（0 段 < 最少段数）⇒ 建档静默失败、
+        用例后续全部假红（URL 停在首页、找不到彩条）。
+        这里显式选「室内」，与用例名里「9 段室内项目」的前提对齐。
+    */
+    await page.selectOption('select[aria-label="主板块"]', 'indoor');
+    await page.waitForTimeout(200);
     const dates = await page.$$('input[type="date"]');
     if (dates[0]) await dates[0].fill('2026-01-05');
     if (dates[1]) await dates[1].fill('2026-06-30');
@@ -259,6 +283,270 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     });
   }
+
+  /**
+   * 真鼠标点侧栏「设置」——反馈 #3 的锚定入口，返回**真实点击坐标**（= 传给
+   * `SettingsDialog` 的 anchor）。
+   *
+   * ⚠️ 必须用 `page.mouse.click` 而不是 `evaluate(() => btn.click())`：
+   *   合成 click 的 `clientX/clientY` 恒为 0，而侧栏正是把 `e.clientX/Y` 当锚点
+   *   传给 SettingsDialog（`Sidebar.tsx` 的 `setSettingsAnchor({x:e.clientX,y:e.clientY})`）。
+   *   用合成点击 ⇒ 锚点变 (0,0) ⇒ 面板被夹到左上角，测到的是「空锚点降级路径」，
+   *   而不是用户真实遇到的「在我点的地方弹出来」（反馈 #3 的原话）。
+   *
+   * 侧栏展开/收起两态各有一个 `[aria-label="设置"]`，取**可见**那个（收起态是 DOM 里
+   * display:none 的 40×40 图标钮，点到它会落在 (0,0)）。
+   */
+  async function clickSidebarSettings(page: Page): Promise<{ x: number; y: number }> {
+    const point = await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll('[data-app-sidebar] button')).find((x) => {
+        if (x.getAttribute('aria-label') !== '设置') return false;
+        const r = x.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    if (!point) throw new Error('侧栏「设置」入口不可见——无法取得锚点');
+    await page.mouse.click(point.x, point.y);
+    await page.waitForTimeout(700);
+    return point;
+  }
+
+  /** 等锚定定位算完：`floatPos` 未算好前浮动卡是 `visibility:hidden`（防首帧闪在 (0,0)） */
+  async function waitFloatVisible(page: Page): Promise<void> {
+    await page.waitForFunction(
+      () => {
+        const w = document.querySelector('[data-anchored-float]');
+        return !!w && getComputedStyle(w).visibility === 'visible';
+      },
+      undefined,
+      { timeout: 8000 },
+    );
+  }
+
+  /**
+   * 量设置面板的真几何。
+   * ⚠️ DOM 层次：`[role=dialog]` → 点击捕获层 → **`div[data-anchored-float]`（定位壳）**
+   *   → 设置卡片本体（`glass-strong rounded-2xl`）。
+   *   量圆角/高度必须取**卡片本体**；量到定位壳会恒得 `0px` / `p-0`，
+   *   断言就变成了「测一个跟视觉无关的容器」（旧用例踩过这个坑）。
+   */
+  function probeFloatSettings(page: Page) {
+    return page.evaluate(() => {
+      const dlg = document.querySelector('[role="dialog"][aria-label="设置"]');
+      if (!dlg) return null;
+      const wrap = dlg.querySelector('[data-anchored-float]') as HTMLElement | null;
+      const panel = (wrap?.firstElementChild ?? null) as HTMLElement | null;
+      if (!wrap || !panel) return null;
+      const pr = panel.getBoundingClientRect();
+      const cs = getComputedStyle(panel);
+      return {
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+        visibility: getComputedStyle(wrap).visibility,
+        left: pr.left,
+        top: pr.top,
+        right: pr.right,
+        bottom: pr.bottom,
+        width: pr.width,
+        height: pr.height,
+        blRadius: cs.borderBottomLeftRadius,
+        brRadius: cs.borderBottomRightRadius,
+        theme: document.documentElement.getAttribute('data-theme'),
+      };
+    });
+  }
+
+  /**
+   * 走真 UI 建一个项目并回到首页（`createProjectAndFindBar` 会停在详情页，
+   * 本函数建完主动回首页，供需要「首页有多张卡」的用例使用）。
+   *
+   * 入口走的是窄屏的「⋮ 更多 → 新建项目」：本用例刻意把视口压到 <md（单列卡片），
+   * 而侧栏在 <xl 已收成抽屉，`[data-app-sidebar]` 里的新建入口点不到。
+   *
+   * ⚠️ 反馈 #5 之后手动建档首开不预选主板块 ⇒ 不先选板块，建档按钮是 disabled，
+   *   点击静默失败、后面全部假红（找不到卡片）。故这里显式选「室内」。
+   */
+  async function createProjectOnHome(page: Page, name: string): Promise<void> {
+    await page.locator('button[aria-label="更多操作"]').first().click();
+    await page.waitForTimeout(400);
+    await page
+      .locator('[role="menu"] [role="menuitem"]', { hasText: '新建项目' })
+      .first()
+      .click();
+    await page.waitForTimeout(500);
+    await page.locator('input[placeholder*="XX餐饮"]').fill(name);
+    await page.selectOption('select[aria-label="主板块"]', 'indoor');
+    await page.waitForTimeout(200);
+    const dates = await page.$$('input[type="date"]');
+    if (dates[0]) await dates[0].fill('2026-01-05');
+    if (dates[1]) await dates[1].fill('2026-06-30');
+    await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll('button')).find((x) =>
+        (x.textContent ?? '').includes('建档（按所选'),
+      );
+      b?.click();
+    });
+    await page.waitForTimeout(2000);
+    // 建档成功会跳到项目详情页 → 回首页继续
+    await page.goto(DIST_URL);
+    await page.waitForSelector('header', { timeout: 20000 });
+    await page.waitForTimeout(700);
+  }
+
+  /* ============ A0 · 反馈 #1：项目卡「⋮」菜单不得被相邻卡片 hover 盖住 ============ */
+
+  /**
+   * 用户原始现象（截图）：点开某张卡的「⋮」后，把鼠标移到**下面那张卡**上，
+   * 下面那张卡的 hover UI 被激活并置顶，把菜单盖住了。
+   *
+   * 根因（不是"z-index 差一点"，而是层叠上下文）：卡片带 `hover:-translate-y-1` ——
+   * transform 会给被 hover 的卡片**新建一个层叠上下文**，而菜单原本是卡片子树里的
+   * `absolute` 元素：一旦被 hover 的那张卡在 DOM 里排在后面，它的层叠上下文就整体
+   * 盖过前面卡片的菜单，无论菜单 z-index 写多大都无效（z-index 不能跨层叠上下文比较）。
+   *
+   * 修法：菜单 `createPortal` 到 `document.body` + `fixed z-[65]`（脱离卡片子树）。
+   *
+   * ── 这条用例为什么必须真浏览器 ──
+   *   "有没有被盖住"的**唯一**诚实判据是命中测试（`elementFromPoint`）——
+   *   类名里写着 `z-[65]` 完全不能证明它没被盖住（本仓已有 `toContain('rounded-xl')`
+   *   恒真的先例）。所以这里：真鼠标 hover 下面那张卡 → 再对菜单项中心做命中测试。
+   *
+   * ── 用例自身不空转的两个守卫 ──
+   *   ① 菜单必须真的与下一张卡**几何重叠**，否则测的是"两个不相交的东西"；
+   *   ② hover 必须真的生效（卡片 transform 变了），否则测的是"没 hover 的情况"。
+   */
+  it('Q-A0-1 · 项目卡「⋮」菜单在相邻卡片 hover 后仍被命中（真 elementFromPoint）', async () => {
+    /*
+      视口取 <md(768) 且给足高度：
+        · 卡片基础宽度是 `w-full`（≥md 才变 `calc(50%-10px)` 两列）⇒ 单列纵向排布，
+          第一张卡的菜单必然与**下面那张卡**重叠 —— 正是用户截图里的复现条件；
+        · 高度必须够（900 高时 ⋮ 已在 y≈750，菜单放不下会**向上翻转**、就不压下一张卡了），
+          故取 1400 让菜单正常向下展开、真的盖在下一张卡上。
+    */
+    const { ctx, page } = await open(767, 1400);
+    try {
+      await becomeAdmin(page);
+      await createProjectOnHome(page, 'QA遮挡·上卡');
+      await createProjectOnHome(page, 'QA遮挡·下卡');
+
+      const geom = await page.evaluate(() => {
+        const dots = Array.from(document.querySelectorAll('button[aria-label="项目更多操作"]'));
+        const rects = dots.map((d) => {
+          const card = d.closest('[role="button"]') as HTMLElement | null;
+          const dr = d.getBoundingClientRect();
+          const cr = (card ?? d).getBoundingClientRect();
+          return {
+            dot: { x: dr.x + dr.width / 2, y: dr.y + dr.height / 2 },
+            card: { left: cr.left, top: cr.top, right: cr.right, bottom: cr.bottom },
+          };
+        });
+        return rects;
+      });
+      // 前置：必须真有 ≥2 张卡（否则本用例无意义）
+      expect(geom.length).toBeGreaterThanOrEqual(2);
+      const [, second] = geom;
+
+      // 打开**第一张**卡的菜单（真鼠标点击 ⋮）
+      await page.mouse.click(geom[0].dot.x, geom[0].dot.y);
+      await page.waitForSelector('[role="menu"]', { timeout: 5000 });
+      await page.waitForTimeout(300);
+
+      const menuRect = await page.evaluate(() => {
+        const m = document.querySelector('[role="menu"]') as HTMLElement | null;
+        if (!m) return null;
+        const r = m.getBoundingClientRect();
+        const items = Array.from(m.querySelectorAll('[role="menuitem"]')).map((el) => {
+          const ir = (el as HTMLElement).getBoundingClientRect();
+          return { x: ir.x + ir.width / 2, y: ir.y + ir.height / 2 };
+        });
+        return {
+          left: r.left,
+          top: r.top,
+          right: r.right,
+          bottom: r.bottom,
+          parentIsBody: m.parentElement === document.body,
+          items,
+        };
+      });
+      expect(menuRect).not.toBeNull();
+      // eslint-disable-next-line no-console
+      console.log('[Q-A0-1] geom=', JSON.stringify(geom), 'menu=', JSON.stringify(menuRect));
+      // 菜单必须挂到 body 下（脱离卡片子树 = 根治条件本身）
+      expect(menuRect!.parentIsBody).toBe(true);
+
+      // 守卫 ①：菜单与下一张卡几何重叠（不重叠则本用例测不到遮挡）
+      expect(menuRect!.bottom).toBeGreaterThan(second.card.top);
+      expect(menuRect!.left).toBeLessThan(second.card.right);
+      expect(second.card.left).toBeLessThan(menuRect!.right);
+
+      /*
+        取**落在下一张卡地盘上**的那个菜单项作为命中测试点 ——
+        只有打在「菜单与下一张卡重叠区」里的命中测试才能证明遮挡被修好了；
+        打在菜单上半部（悬在自己卡上方）等于什么都没测。
+        最后一个菜单项（删除项目）正好在最下方，取它。
+      */
+      const target = menuRect!.items[menuRect!.items.length - 1];
+      expect(target).toBeDefined();
+      const inSecondCard =
+        target.x >= second.card.left &&
+        target.x <= second.card.right &&
+        target.y >= second.card.top &&
+        target.y <= second.card.bottom;
+      expect(inSecondCard, `命中测试点 (${target.x},${target.y}) 不在下一张卡的范围内`).toBe(true);
+
+      /*
+        hover 下一张卡 —— 必须落在**没被菜单盖住**的那部分，
+        否则指针命中的是菜单、卡片根本不会进入 :hover（那样守卫 ② 会先红，
+        告诉你"这次复现条件不成立"，而不是给出一个假的绿色）。
+      */
+      const hoverPoint = {
+        x: Math.min(second.card.left + 24, menuRect!.left - 12),
+        y: second.card.top + 24,
+      };
+      await page.mouse.move(hoverPoint.x, hoverPoint.y);
+      await page.waitForTimeout(400);
+
+      // 守卫 ②：卡片 hover 真的生效（transform 由 translate 变化 → 层叠上下文已建立）
+      const hovered = await page.evaluate((p) => {
+        const el = document.elementFromPoint(p.x, p.y) as HTMLElement | null;
+        const card = el?.closest('[role="button"]') as HTMLElement | null;
+        const dotBtn = el?.closest('button[aria-label="项目更多操作"]');
+        const host = card ?? (dotBtn?.closest('[role="button"]') as HTMLElement | null);
+        return host ? getComputedStyle(host).transform : 'NO-CARD';
+      }, hoverPoint);
+      expect(hovered).not.toBe('NO-CARD');
+      expect(hovered).not.toBe('none'); // :hover 的 -translate-y-1 已生效
+
+      // ★ 核心判据：重叠区里的菜单项，命中的必须是**菜单自己**
+      const hit = await page.evaluate((p) => {
+        const el = document.elementFromPoint(p.x, p.y) as HTMLElement | null;
+        return {
+          inMenu: !!el?.closest('[role="menu"]'),
+          tag: el ? `${el.tagName}[${el.getAttribute('aria-label') ?? ''}]` : 'NULL',
+        };
+      }, target);
+      expect(hit.inMenu, `菜单项被遮挡：命中的是 ${hit.tag}`).toBe(true);
+
+      /*
+        真点一次该菜单项（删除项目 → 弹二次确认）：若点击被下面那张卡吃掉，
+        结果是**导航到项目详情页**而不是弹确认框 —— 所以两条断言都能抓住它。
+        确认框出现后按 Esc 取消，不产生任何数据变更。
+      */
+      const urlBefore = page.url();
+      await page.mouse.click(target.x, target.y);
+      await page.waitForTimeout(700);
+      expect(page.url()).toBe(urlBefore);
+      expect(await page.locator('[role="dialog"]').count()).toBeGreaterThanOrEqual(1);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+      expect(await page.locator('[role="menu"]').count()).toBe(0); // 菜单已收起
+    } finally {
+      await ctx.close();
+    }
+  }, 90000);
 
   /* ================= Q-CRASH · 点击彩条不得白屏（React #310 回归） ================= */
 
@@ -381,10 +669,33 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       // 切主题必须触发一次下发（不是只改 DOM 不通知主进程）
       expect(dark.count).toBeGreaterThan(before);
       expect(dark.theme).toBe('dark');
-      expect(dark.last.color).toBe(toHex(dark.bg));
-      // 暗色下的实际值必须与 design token 一致（--paper dark = #1F2126）
-      expect(dark.last.color).toBe('#1f2126');
-      expect(dark.last.color).not.toBe(light.last.color);
+      /*
+        ★ 契约变更（反馈 #2）：本步骤是在**设置面板（遮罩）打开中**切主题。
+          遮罩打开期间标题栏必须与遮罩同暗（否则原生三键在灰掉的内容上高亮 —— 用户投诉的正是这个）。
+          故此处不断言「等于顶栏底色」，而断言：
+            ① 等于**按设计压暗后**的顶栏色（0.55 倍，与 src/lib/titleBarTheme.ts 同口径）；
+            ② 且**不等于**顶栏底色（否则等于没压暗，反馈 #2 就是没修）。
+          暗色 --paper = #1F2126 ⇒ 压暗后 #111215。
+      */
+      const darkBaseHex = toHex(dark.bg);
+      expect(darkBaseHex).toBe('#1f2126');
+      expect(dark.last.color).not.toBe(darkBaseHex);
+      expect(dark.last.color).toBe(dimHex(darkBaseHex));
+
+      // 关掉设置面板 → 遮罩计数归零 → 叠加层必须**恢复**成顶栏底色（压暗不能粘住）
+      await page.evaluate(() => {
+        const b = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+          (x) => x.getAttribute('aria-label') === '关闭设置',
+        );
+        b?.click();
+      });
+      await page.waitForTimeout(400);
+      const restored = await page.evaluate(() => {
+        const calls = (window as unknown as { __tbCalls: { color: string }[] }).__tbCalls;
+        return calls[calls.length - 1];
+      });
+      expect(restored.color).toBe(darkBaseHex);
+      expect(light.last.color).not.toBe(dark.last.color);
     } finally {
       await ctx.close();
     }
@@ -475,6 +786,14 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
   it('Q-A1-5 · 跨 xl 断点 resize 必须重发高度（56↔64）；system 模式跟随系统换肤也须重发配色', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
+      /*
+        ★ 先确立身份，消掉首次引导弹窗。
+        本用例断言「叠加层配色 == 顶栏实测底色」，而**遮罩打开期间标题栏按设计一并压暗**
+        （反馈 #2：三键不许在遮罩上高亮）。首次引导弹窗本身就是遮罩型 Modal，
+        不先关掉它，这条断言测到的就是「压暗后的色 vs 未压暗的顶栏色」——
+        测的是一个被产品改掉了的旧契约。管理员身份确立后无遮罩，等式才成立。
+      */
+      await becomeAdmin(page);
       const callsOf = (): Promise<{ height: number; color: string }[]> =>
         page.evaluate(
           () =>
@@ -516,21 +835,36 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
     }
   }, HEAVY);
 
-  /* ================= A2 · 设置弹窗：避让原生三键 + 底部圆角可见 ================= */
+  /* ================= A2 · 设置面板：锚定在点击处 + 完整落视口 + 让开原生三键 ================= */
 
-  it('Q-A2-1 · 管理员打开设置抽屉：面板顶让开原生三键（≥titleBarHeight）、底圆角在视口内、亮暗一致', async () => {
+  /**
+   * ★ 契约变更（反馈 #2 / #3）——本组用例的口径与旧版**完全不同**，不是简单改阈值：
+   *
+   *   旧版：设置是「右侧全高抽屉」，断言「面板顶 ≥ 三键底、上下内边距对称、
+   *         底边贴容器下内边距」。那些断言全部以 `Modal` 的 right-float 容器 padding 为前提。
+   *   新版：设置改为 `placement="float"` —— 面板**在触发点旁边**弹出一张浮动卡，
+   *         纵向位置连 `insetTop` 一起由 `src/lib/anchoredPosition.ts` 算好，
+   *         容器沦为「只负责点击捕获」的 `p-0` 层（不再有 padding 可言）。
+   *
+   *   故旧断言里「容器 padding / 容器下内边距」这两条基准**已经不存在**，
+   *   继续写只会：
+   *     · 量到定位壳（`div[data-anchored-float]`）→ 圆角恒 `0px`、padding 恒 `0px`；
+   *     · 把「恒真/恒假」当成验收 —— 正是本文件开头警告过的假绿来源。
+   *
+   *   新口径守住三件用户能看见的事（不碰任何已消失的容器基准）：
+   *     ① 面板完整落在视口内，且顶边让开 Windows 原生三键（否则三键压住面板头部）；
+   *     ② 面板**锚定在点击处**：横向从点击点展开（不再固定贴右边缘）；
+   *     ③ 底圆角非 0 —— 用户原始投诉「底部圆角被推出视口裁掉」的回归位。
+   */
+
+  it('Q-A2-1 · 管理员打开设置：从点击处展开、整体在视口内、让开原生三键、底圆角可见（亮/暗一致）', async () => {
     for (const theme of ['light', 'dark'] as const) {
       const { ctx, page } = await open(1600, 900);
       try {
         await becomeAdmin(page);
-        await page.evaluate(() => {
-          const b = Array.from(document.querySelectorAll('[data-app-sidebar] button')).find(
-            (x) => x.getAttribute('aria-label') === '设置',
-          );
-          b?.click();
-        });
-        await page.waitForTimeout(700);
+        const anchor = await clickSidebarSettings(page);
         if (theme === 'dark') {
+          // 真实切换路径：设置面板内点「深色」→ useTheme.setMode → apply()
           await page.evaluate(() => {
             const b = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
               (x) => (x.textContent ?? '').trim() === '深色',
@@ -539,106 +873,114 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
           });
           await page.waitForTimeout(500);
         }
+        await waitFloatVisible(page);
 
-        const m = await page.evaluate(() => {
-          const dlg = document.querySelector('[role="dialog"][aria-label="设置"]');
-          if (!dlg) return null;
-          const anchor = dlg.firstElementChild as HTMLElement;
-          const panel = anchor.firstElementChild as HTMLElement;
-          const pr = panel.getBoundingClientRect();
-          const acs = getComputedStyle(anchor);
-          const cs = getComputedStyle(panel);
-          return {
-            vw: window.innerWidth,
-            vh: window.innerHeight,
-            topGap: Math.round(pr.top),
-            bottomGap: Math.round(window.innerHeight - pr.bottom),
-            panelH: Math.round(pr.height),
-            padTop: acs.paddingTop,
-            padBottom: acs.paddingBottom,
-            bottomInViewport: pr.bottom <= window.innerHeight + 0.5 && pr.top >= 0,
-            blRadius: cs.borderBottomLeftRadius,
-            brRadius: cs.borderBottomRightRadius,
-            theme: document.documentElement.getAttribute('data-theme'),
-          };
-        });
+        const m = await probeFloatSettings(page);
         expect(m).not.toBeNull();
         expect(m!.theme).toBe(theme);
-        // 容器 padding 必须上下对称（曾因内联 paddingTop 变成上 48 / 下 24）
-        expect(m!.padTop).toBe(m!.padBottom);
-        /*
-          视觉间距**不再对称**，这是 v0.7 增量的刻意结果，不是回归：
-          Windows 自绘标题栏的三键（尺寸应用改不了，见 src/lib/titleBarTheme.ts 的说明）
-          浮在 y ∈ [0, titleBarHeight) 之上，浮层不整体让位就会把面板头部右端的
-          「关闭设置」按钮压住——那正是用户原话「三键侵入了我们的 UI」的观感来源。
-          故断言从「距顶 == 距底（±2px）」改判为「顶边 ≥ 三键底边，且底部不再贴死」。
+        expect(m!.visibility).toBe('visible');
 
-          ★ 基准值取自**单一出处** `titleBarHeightFor(vw)`，不在页面里重算：
-            口径一改，这里自动跟着改，不会出现「断言比真实要求更松」的假绿。
-        */
-        const expectedTopGap = titleBarHeightFor(m!.vw);
-        expect(m!.topGap).toBeGreaterThanOrEqual(expectedTopGap);
-        expect(m!.bottomGap).toBeGreaterThan(0);
-        /*
-          「面板必须贴满可用高度、不得被缩矮」（否则白丢一屏内容）。
+        // 基准值取**单一出处**：`titleBarHeightFor(vw)`（口径一改这里自动跟着改）
+        const expectedInset = titleBarHeightFor(m!.vw);
 
-          ★ 这条**原先写成一个恒真断言**，已订正：
-              expect(topGap + panelH + bottomGap).toBeGreaterThanOrEqual(vh - 2)
-            由定义 `bottomGap = vh − (topGap + panelH)` 可知三项相加**恒等于 vh**，
-            故该式永远成立、测不出任何东西。实测：把面板 max-h 压到 300px
-            （白丢 ~512px 内容）它**依然全绿** —— 属「恒绿 = 无效断言」。
+        // ① 完整落在视口内，且顶边让开原生三键（三键浮在网页之上，不让位就压住面板头部）
+        expect(m!.top).toBeGreaterThanOrEqual(expectedInset - 0.5);
+        expect(m!.left).toBeGreaterThanOrEqual(VIEWPORT_MARGIN - 0.5);
+        // ② 底/右不越界：底圆角不得被裁（用户原始投诉），右侧留白 ≥ 视口留白口径
+        expect(m!.bottom).toBeLessThanOrEqual(m!.vh - VIEWPORT_MARGIN + 0.5);
+        expect(m!.right).toBeLessThanOrEqual(m!.vw - VIEWPORT_MARGIN + 0.5);
 
-          正确判据是「面板**底边**必须贴到容器的下内边距」：
-          内容被 max-h 截断时，面板底边应停在 vh − padBottom（容器留白处），
-          实测 1600×900 下为 topGap=64 / panelH=812 / bottomGap=24（= padBottom）。
-          基准直接取**同一次测量**里的容器下内边距，不另引常量、也不重算。
-        */
-        const containerPadBottom = Number.parseFloat(m!.padBottom);
-        expect(m!.bottomGap).toBeLessThanOrEqual(containerPadBottom + 2);
-        // 底部圆角不得被推出视口（用户原始投诉）
-        expect(m!.bottomInViewport).toBe(true);
-        expect(m!.blRadius).not.toBe('0px');
-        expect(m!.brRadius).not.toBe('0px');
+        // ③ 锚定在点击处：横向左缘对齐点击点（1180+ px 的右侧空白 ⇒ 不是「固定右侧抽屉」）
+        expect(Math.abs(m!.left - anchor.x)).toBeLessThanOrEqual(2);
+        expect(m!.vw - m!.right).toBeGreaterThan(VIEWPORT_MARGIN + 2);
+
+        // ④ 纵向落位必须是锚定算法的三种结果之一（否则说明面板"漂"在无关位置）
+        //    注：夹取下界是 `margin + insetTop`（resolveAnchoredPosition 的 minY），
+        //    不是 insetTop 本身 —— 写 insetTop 会差 8px 而误红。
+        const anchorFloor = expectedInset + VIEWPORT_MARGIN;
+        const belowAnchor = Math.abs(m!.top - anchor.y) <= 2; // 下方展开
+        const flippedAbove = Math.abs(m!.bottom - (anchor.y - ANCHOR_GAP)) <= 2; // 空间不足翻到上方
+        const clampedToFloor = Math.abs(m!.top - anchorFloor) <= 2; // 面板高于可用空间 → 夹到避让线下沿
+        expect(
+          belowAnchor || flippedAbove || clampedToFloor,
+          `未按锚定算法落位：anchor.y=${anchor.y} top=${m!.top} bottom=${m!.bottom} floor=${anchorFloor}`,
+        ).toBe(true);
+
+        // ⑤ 底圆角非 0（量的是卡片本体，不是 `p-0` 的定位壳）
+        expect(m!.blRadius).toBe('16px');
+        expect(m!.brRadius).toBe('16px');
       } finally {
         await ctx.close();
       }
     }
   }, HEAVY);
 
-  it('Q-A2-2 · 未知身份（内容较短）打开设置：底部圆角仍可见（对称降级但不得被裁）', async () => {
+  it('Q-A2-2 · 换一个触发点（<md 的「⋮ 更多」菜单）：面板跟着新触发点走 + 进场动画真实存在', async () => {
+    /*
+      ★ 为什么把旧用例（「未知身份 → 内容较短 → 底部圆角仍可见」）换成这一条：
+        旧场景在锚定形态下**已经不可构造**——首次身份引导弹窗是 center 档（z-70），
+        设置浮动卡是非 center 档（z-60），真鼠标点击会被引导遮罩吃掉、设置根本打不开；
+        即使用合成点击强行打开，面板也在遮罩之下，量到的几何没有用户可见性。
+        与其留一条靠合成点击绕开遮罩的"假场景"，不如换成**反馈 #3 真正要守的两件事**：
+          ① 面板锚定在**当前触发点**（换一个入口 → 面板必须换位置，而不是固定角落）；
+          ② 有进场动画（用户原话：「弹窗应在鼠标附近出现且有动画」）。
+        「底部圆角不被裁」已由 Q-A2-1 覆盖（那是长内容的极端档，更严）。
+    */
     const { ctx, page } = await open(1600, 900);
     try {
-      // 不确立身份 → 设置面板内容较短（不触发 max-h 截断）
-      await page.evaluate(() => {
-        const b = Array.from(document.querySelectorAll('[data-app-sidebar] button')).find(
-          (x) => x.getAttribute('aria-label') === '设置',
-        );
-        b?.click();
-      });
+      await becomeAdmin(page);
+      // <md(768) 才会渲染「⋮ 更多」菜单（MobileMoreMenu 的容器是 md:hidden）
+      await page.setViewportSize({ width: 767, height: 900 });
+      await page.waitForTimeout(500);
+
+      const more = page.locator('button[aria-label="更多操作"]');
+      const mbox = await more.first().boundingBox();
+      expect(mbox).not.toBeNull();
+      await page.mouse.click(mbox!.x + mbox!.width / 2, mbox!.y + mbox!.height / 2);
+      await page.waitForTimeout(400);
+
+      const item = page.locator('[role="menu"] [role="menuitem"]', { hasText: '设置' });
+      const ibox = await item.first().boundingBox();
+      expect(ibox).not.toBeNull();
+      const anchor = { x: ibox!.x + ibox!.width / 2, y: ibox!.y + ibox!.height / 2 };
+      await page.mouse.click(anchor.x, anchor.y);
       await page.waitForTimeout(700);
-      const m = await page.evaluate(() => {
-        const dlg = document.querySelector('[role="dialog"][aria-label="设置"]');
-        if (!dlg) return null;
-        const panel = (dlg.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
-        const pr = panel.getBoundingClientRect();
-        return {
-          bottomGap: Math.round(window.innerHeight - pr.bottom),
-          bottomInViewport: pr.bottom <= window.innerHeight + 0.5,
-          radius: getComputedStyle(panel).borderBottomLeftRadius,
-        };
-      });
+      await waitFloatVisible(page);
+
+      const m = await probeFloatSettings(page);
       expect(m).not.toBeNull();
-      // 核心底线：底部仍在视口内、且圆角非 0（不再被裁掉）
-      expect(m!.bottomInViewport).toBe(true);
-      expect(m!.bottomGap).toBeGreaterThan(0);
-      expect(m!.radius).toBe('16px');
-      /**
-       * 记录口径偏差（非本 spec 判失败项，供 team-lead 裁决）：
-       * 内容短于 max-h 时面板顶对齐 → 上 = titleBarHeight（1600 视口下 64）/ 下 46 起。
-       * 「距顶 == 距底 ±2px」自 v0.7 增量起**已被取代**（顶边要让开原生三键），
-       * 见 Q-A2-1 的注释；此处只保留「底部不被裁」这条底线。
-       */
-      expect(m!.bottomGap).toBeGreaterThanOrEqual(24);
+      const expectedInset = titleBarHeightFor(m!.vw);
+      expect(m!.vw).toBe(767);
+      // eslint-disable-next-line no-console
+      console.log('[Q-A2-2] anchor=', JSON.stringify(anchor), 'probe=', JSON.stringify(m));
+
+      // ① 仍完整落在视口内、仍让开原生三键（<xl 档三键高 56，口径随视口自动变）
+      expect(m!.top).toBeGreaterThanOrEqual(expectedInset - 0.5);
+      expect(m!.vh - m!.bottom).toBeGreaterThanOrEqual(VIEWPORT_MARGIN - 1);
+      // ② 底圆角可见
+      expect(m!.blRadius).toBe('16px');
+      expect(m!.brRadius).toBe('16px');
+
+      /*
+        ③ 触发点必须落在面板的横向区间内 —— 锚定结果不得把面板甩到与点击处无关的位置。
+           （必要非充分：本视口下触发点右侧只有 405px < 面板 400 + 两侧留白，
+             锚定算法会向左回退到贴左留白，此时左缘不再等于触发点。
+             「左缘精确对齐点击点」的强判别式证据由 Q-A2-1 承担 —— 那里面板右侧有 1000+px 余量。）
+      */
+      expect(anchor.x).toBeGreaterThanOrEqual(m!.left - 2);
+      expect(anchor.x).toBeLessThanOrEqual(m!.right + 2);
+
+      // ④ 进场动画真实存在（不是只挂了个类名——按 computed style 读回动画名与时长）
+      const anim = await page.evaluate(() => {
+        const w = document.querySelector('[data-anchored-float]') as HTMLElement | null;
+        if (!w) return null;
+        const cs = getComputedStyle(w);
+        return { name: cs.animationName, duration: cs.animationDuration, fill: cs.animationFillMode };
+      });
+      expect(anim).not.toBeNull();
+      expect(anim!.name).toBe('float-pop-in');
+      expect(anim!.duration).toBe('0.16s');
+      expect(anim!.fill).toBe('both');
     } finally {
       await ctx.close();
     }

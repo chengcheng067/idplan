@@ -15,6 +15,7 @@ import { isDesktop } from '../../lib/desktopBridge';
 import { titleBarHeight } from '../../lib/titleBarTheme';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
+import { LicenseSection } from '../settings/LicenseSection';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import { useMembersStore } from '../../store/useMembersStore';
 import {
@@ -55,9 +56,15 @@ function nativeTitleBarInset(): number {
 export function SettingsDialog({
   open,
   onClose,
+  anchor = null,
 }: {
   open: boolean;
   onClose(): void;
+  /**
+   * 触发点视口坐标（反馈 #3）：设置面板在**点击位置附近**展开，
+   * 而不是固定在屏幕右侧。由打开它的入口（侧栏齿轮 / 移动端更多）传入。
+   */
+  anchor?: { x: number; y: number } | null;
 }): JSX.Element | null {
   const io = useMemo(() => createLogExportIo(), []);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
@@ -117,8 +124,11 @@ export function SettingsDialog({
     return () => window.removeEventListener('resize', sync);
   }, []);
 
-  /** 面板还需额外下移的量：三键底边 − 容器已给的上内边距 */
-  const avoidTitleBarTop = Math.max(0, titleBarInset - RIGHT_FLOAT_PADDING_SM);
+  /**
+   * ⚠️ 锚定形态下**不再计算下移量**：面板纵向位置由锚定算法连同 `insetTop` 一起算
+   * （见 Modal 的 float 分支），再叠一次 marginTop 会把面板推离点击处。
+   * 旧的 `avoidTitleBarTop` 因此删除；`RIGHT_FLOAT_PADDING_SM` 仍参与 maxHeight 计算。
+   */
 
   // 主题三选控件
   const themeOptions = [
@@ -142,7 +152,7 @@ export function SettingsDialog({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} placement="right-float" ariaLabel="设置">
+      <Modal open={open} onClose={onClose} placement="float" anchor={anchor} ariaLabel="设置">
         {/*
           max-h 口径必须与 Modal 容器的 padding 口径**一致**，否则面板总高超出容器，
           底部圆角会被推出视口裁掉（v0.7 批次 A 修的「设置弹窗底部圆角丢失」）。
@@ -155,23 +165,19 @@ export function SettingsDialog({
           破坏了「对称」这一修复目标，故一并去掉——间距统一由容器 sm:p-6 控制。
         */}
         <div
-          className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-full sm:max-h-[calc(100dvh-3rem)] sm:w-[400px] sm:self-start"
+          className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-2rem)] max-w-[400px] sm:max-h-[calc(100dvh-3rem)]"
           /*
             ── 原生三键避让（仅 Windows 桌面端，其余环境 style 为 undefined）──
-            marginTop：容器已给上 24，再补 avoidTitleBarTop，使面板顶边正好落在
-              y = titleBarHeight()，与顶栏下沿齐平（视觉上像「顶栏之下的一张卡片」）。
-            maxHeight：必须同步扣掉这段，否则「上 24 + 避让 + 原 max-h(100dvh-48)」会超出
-              视口，面板底部连圆角一起被裁出屏幕（批次 A 修过的同一个坑，不能重犯）。
+            ⚠️ 锚定形态下**不再给 marginTop**：面板的纵向位置已由锚定算法连同
+              `insetTop` 一起算好（见 Modal 的 float 分支），再叠一次会把面板推离点击处。
+            maxHeight 仍要扣掉这段，否则「避让 + 原 max-h」会超出视口，
+              面板底部连圆角一起被裁出屏幕（批次 A 修过的同一个坑，不能重犯）。
               这里用内联值而不加 Tailwind 类，是因为类名不能动态拼接（本仓库 BUG-05：
-              静态扫描的类名一旦拼接就整条不生成 CSS），而这里只有 32 / 40 两个取值。
-              ≥sm 的窗口最小宽 960 ⇒ 桌面端不会落进 <sm 分支，故内联不会压坏手机档。
+              静态扫描的类名一旦拼接就整条不生成 CSS），而这里只有两个取值。
           */
           style={
-            avoidTitleBarTop > 0
-              ? {
-                  marginTop: avoidTitleBarTop,
-                  maxHeight: `calc(100dvh - ${titleBarInset + RIGHT_FLOAT_PADDING_SM}px)`,
-                }
+            titleBarInset > 0
+              ? { maxHeight: `calc(100dvh - ${titleBarInset + RIGHT_FLOAT_PADDING_SM}px)` }
               : undefined
           }
         >
@@ -312,6 +318,12 @@ export function SettingsDialog({
                 </div>
               </section>
             )}
+
+            {/*
+              授权区（Windows 桌面版离线许可证）。
+              组件内部自行判断桌面端 —— 浏览器 / NAS 端返回 null（整区不渲染、不发请求）。
+            */}
+            <LicenseSection />
 
             {/* 关于区 */}
             <section>

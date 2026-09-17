@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { createPortal } from 'react-dom';
+import { dimTitleBarForModal, restoreTitleBarAfterModal, titleBarHeight } from '../../lib/titleBarTheme';
+import { resolveAnchoredPosition, type Point } from '../../lib/anchoredPosition';
 
 /**
  * 通用浮层底座（modal-overlay 基础设施）。
@@ -30,17 +32,34 @@ export function Modal({
   onClose,
   placement = 'center',
   ariaLabel = '浮层',
+  anchor = null,
   children,
 }: {
   open: boolean;
   onClose(): void;
-  /** 对齐方式：center（居中弹窗，默认）/ right（右侧滑出抽屉）/ right-float（右侧悬浮圆角卡片） */
-  placement?: 'center' | 'right' | 'right-float';
+  /**
+   * 对齐方式：
+   *   center      居中弹窗（默认，复杂表单 / 确认 / 高风险流程）
+   *   right       右侧滑出抽屉（连续阅读的详情）
+   *   right-float 右侧悬浮圆角卡片（长内容、无锚点的设置类面板）
+   *   float       锚定浮动卡 —— 出现在**触发元素/点击点附近**，空间不足自动翻转（反馈 #3）
+   */
+  placement?: 'center' | 'right' | 'right-float' | 'float';
   /** 无障碍标签，读屏用 */
   ariaLabel?: string;
+  /**
+   * 锚点（视口坐标）。`placement='float'` 时用它在点击位置附近展开；
+   * 缺省时退回右浮动（老调用方零改动）。
+   */
+  anchor?: Point | null;
   children: React.ReactNode;
 }): JSX.Element | null {
   const panelRef = useRef<HTMLDivElement>(null);
+  /** 锚定浮动卡本体（`placement='float'`）；定位需要实测它的尺寸 */
+  const floatRef = useRef<HTMLDivElement>(null);
+  const [floatPos, setFloatPos] = useState<{ top: number; left: number } | null>(null);
+  const anchorX = anchor?.x ?? null;
+  const anchorY = anchor?.y ?? null;
   const lastFocusRef = useRef<HTMLElement | null>(null);
   // 用 ref 持有最新的 onClose，避免父组件重渲染产生新函数引用时导致下面的焦点 effect 重跑（会抢走输入框焦点、打断输入法组合）。
   const onCloseRef = useRef(onClose);
@@ -52,6 +71,7 @@ export function Modal({
 
     // 记录打开前的焦点元素，关闭后还原。
     lastFocusRef.current = document.activeElement as HTMLElement | null;
+    dimTitleBarForModal();
     // 打开后聚焦面板（保证 Tab 循环起始点 + 可读屏聚焦）。
     panelRef.current?.focus();
 
@@ -97,11 +117,84 @@ export function Modal({
       document.body.style.paddingRight = prevPaddingRight;
       // 关闭后把焦点还原给触发元素。
       lastFocusRef.current?.focus();
+      restoreTitleBarAfterModal();
     };
     // 依赖只保留 open：若把 onClose 放进依赖，父组件每次重渲染产生的新函数引用会让本 effect 卸载重跑，
     // cleanup 里的焦点还原 + 重新聚焦面板会在每次击键时抢走输入框焦点，
     // 打断微软拼音的 IME 组合上下文，造成「打第二个字时第一个字消失」的吞字。
   }, [open]);
+
+  /**
+   * `placement='float'`：把面板贴到锚点（触发元素 / 点击坐标）附近。
+   *
+   * 用 layout effect 而非 effect —— 面板必须先量尺寸再定位，否则首帧会先闪在
+   * 静态位置（左上角）再跳到锚点。`floatPos` 为 null 时面板 `visibility:hidden`，
+   * 用户永远看不到那一帧。
+   *
+   * 监听 resize 与 visualViewport 的 scroll：窗口缩放、移动端键盘顶起视口、
+   * 页面滚动都会让「原来的锚点」失准，必须重算，而不是像旧实现那样直接关闭。
+   *
+   * ⚠️ 还必须监听**面板自身的尺寸变化**（ResizeObserver）：
+   *   浮层面板的内容常常是**异步变高**的（设置面板的本地库占用估算、授权状态、
+   *   日志条数、字体加载），而定位只发生一次 —— 内容长高后底边就被推出视口，
+   *   连同底部圆角一起被裁掉（用户原始投诉的那一类观感）。
+   *   回归位：`tests/qa-batch-a-verify.spec.ts` 的 Q-A2-2（断言 `vh − bottom ≥ 8`）。
+   *
+   *   ⚠️ 不会自激：`compute` 只改 top/left，不改尺寸 ⇒ 不会再次触发 ResizeObserver；
+   *   且写 state 前做等值判断，位置没变时返回原对象，避免多余渲染。
+   */
+  useLayoutEffect(() => {
+    if (!open || placement !== 'float') return;
+    const el = floatRef.current;
+    if (!el) return;
+    const compute = (): void => {
+      /*
+        ★ 必须量**布局盒**（offsetWidth/offsetHeight），不能量 getBoundingClientRect()。
+        本 effect 与入场动画 `float-pop-in` 同帧启动，而动画的 from 帧带
+        `transform: translateY(-4px) scale(0.98)` —— rect 量到的是**缩放后**的盒子
+        （真机实测：布局 400×820 被量成 392×803.6，恰好 0.98 倍），据此算出的
+        top/left 随之偏移，动画结束后真实底边越出视口：767×900 实测落在 908.39
+        （视口 900，溢出 8.39px），底部圆角连同背景一起被裁掉 ——
+        正是用户投诉 #2/#3 的那类观感。`translateY(-4px)` 同样会污染 rect.top。
+        offsetWidth/offsetHeight 是**布局盒**尺寸，不受 transform 影响；动画结束后
+        transform 归零（fill-mode: both）⇒ 最终视觉盒 == 布局盒，用布局盒定位才对。
+      */
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
+      if (width === 0 && height === 0) return;
+      const vv = window.visualViewport;
+      const viewport = {
+        width: vv?.width ?? window.innerWidth,
+        height: vv?.height ?? window.innerHeight,
+      };
+      const insetTop = window.idplan?.platform === 'win32' ? titleBarHeight() : 0;
+      const next = resolveAnchoredPosition({
+        // 没有锚点（老调用方 / 键盘触发）：退化为「右下角」而不是右侧全高贴边
+        anchor:
+          anchorX === null || anchorY === null
+            ? { x: viewport.width - width - 16, y: viewport.height - height - 16 }
+            : { x: anchorX, y: anchorY },
+        panel: { width, height },
+        viewport,
+        insetTop,
+      });
+      setFloatPos((prev) =>
+        prev && prev.top === next.top && prev.left === next.left ? prev : next,
+      );
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    window.visualViewport?.addEventListener('resize', compute);
+    window.visualViewport?.addEventListener('scroll', compute);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => compute());
+    ro?.observe(el);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.visualViewport?.removeEventListener('resize', compute);
+      window.visualViewport?.removeEventListener('scroll', compute);
+      ro?.disconnect();
+    };
+  }, [open, placement, anchorX, anchorY]);
   if (!open) return null;
 
   return createPortal(
@@ -145,9 +238,12 @@ export function Modal({
         className={`outline-none flex h-full w-full ${
           placement === 'center'
             ? 'items-center justify-center p-4 sm:p-6'
-            : placement === 'right-float'
-              ? 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:items-start sm:justify-end sm:p-6'
-              : 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:justify-end sm:pt-12'
+            : placement === 'float'
+              ? // 锚定浮动卡：面板由内层 fixed 容器自行定位，外层只当点击捕获层
+                'items-start justify-start p-0'
+              : placement === 'right-float'
+                ? 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:items-start sm:justify-end sm:p-6'
+                : 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:justify-end sm:pt-12'
         }`}
         // 拦截合成 click，阻止其沿 React 组件树冒泡到背后触发器的 onClick（如项目卡片 → 跳转）。
         // 关键：Modal 用 createPortal 只改 DOM 挂载点，React 树仍是调用方的子树，
@@ -158,7 +254,23 @@ export function Modal({
           if (e.target === e.currentTarget) onClose();
         }}
       >
-        {children}
+        {placement === 'float' ? (
+          <div
+            ref={floatRef}
+            data-anchored-float=""
+            className="float-pop-in fixed"
+            style={{
+              top: floatPos?.top ?? 0,
+              left: floatPos?.left ?? 0,
+              // 定位算出来之前不显示，避免首帧闪在 (0,0)
+              visibility: floatPos ? 'visible' : 'hidden',
+            }}
+          >
+            {children}
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </div>,
     document.body,

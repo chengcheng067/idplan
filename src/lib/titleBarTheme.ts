@@ -99,16 +99,36 @@ export function titleBarHeight(): number {
  * 把当前主题下的顶栏配色 + 高度同步给主进程。
  * 非桌面端 / 老 preload 静默短路（这是常态，不是错误）。
  */
+let modalDepth = 0;
+
+function darkenHex(hex: string, factor = 0.55): string {
+  const channels = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+  if (channels.some((channel) => !Number.isFinite(channel))) return hex;
+  return `#${channels.map((channel) => clampByte(channel * factor).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** 把当前主题下的顶栏配色 + 高度同步给主进程；遮罩打开期间标题栏一并压暗。 */
 export function syncTitleBarTheme(): void {
   if (typeof window === 'undefined') return;
   const bridge = window.idplan;
-  if (!bridge || bridge.isDesktop !== true) return;
-  if (typeof bridge.setTitleBarTheme !== 'function') return;
+  if (!bridge || bridge.isDesktop !== true || typeof bridge.setTitleBarTheme !== 'function') return;
+  const color = readTokenHex('--paper-rgb', FALLBACK_COLOR);
   bridge.setTitleBarTheme({
-    color: readTokenHex('--paper-rgb', FALLBACK_COLOR),
+    color: modalDepth > 0 ? darkenHex(color) : color,
     symbolColor: readTokenHex('--ink-rgb', FALLBACK_SYMBOL),
     height: titleBarHeight(),
   });
+}
+
+/** 遮罩型 Modal 计数：嵌套弹窗仅在最后一个关闭后恢复原生三键背景。 */
+export function dimTitleBarForModal(): void {
+  modalDepth += 1;
+  syncTitleBarTheme();
+}
+
+export function restoreTitleBarAfterModal(): void {
+  modalDepth = Math.max(0, modalDepth - 1);
+  syncTitleBarTheme();
 }
 
 /**

@@ -125,6 +125,32 @@ async function readTopBar(win) {
   });
 }
 
+/**
+ * `--paper-rgb` 的 `"31 33 38"` 形态 → `"#1f2126"`。
+ * （标题栏叠加层的下发色是 hex 字符串，两者要能逐字符比。）
+ */
+function hexOfRgbTriple(rgb) {
+  const parts = String(rgb || '')
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .slice(0, 3);
+  if (parts.length < 3) return '';
+  return `#${parts.map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * 遮罩打开期间标题栏的**期望色** —— 与 `src/lib/titleBarTheme.ts` 的 `darkenHex` 同口径（0.55 倍）。
+ *
+ * 为什么不在脚本里 import 产品常量：那是模块内私有实现细节，导出它只为测试会让「改系数」
+ * 变成一次静默的断言同步。写在这里的另一面是——系数一改、本走查立刻红，
+ * 逼人回来确认「压暗强度」是有意调整还是手滑（这正是我们要的摩擦）。
+ */
+function dimHex(hex, factor = 0.55) {
+  return `#${[1, 3, 5]
+    .map((at) => Math.min(255, Math.round(Number.parseInt(hex.slice(at, at + 2), 16) * factor)).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
 async function main() {
   if (!existsSync(DIST_INDEX)) {
     console.error(`✗ 缺少构建产物 ${DIST_INDEX}，请先 npm run build`);
@@ -262,17 +288,22 @@ async function main() {
       record('6d. 主题切换后叠加层配色被重新下发', callsAfter.length > callsBefore,
         `setTitleBarOverlay 调用 ${callsBefore} → ${callsAfter.length}`);
 
-      // ★ 最强断言：下发色必须等于**暗色** --paper 的实际值，而不是亮色兜底 #ffffff。
-      //   这正是用户最初反馈的「顶栏关闭栏与主题割裂」是否真被修好。
-      const paperHex = `#${(after.paperRgb || '')
-        .split(/[\s,]+/)
-        .filter(Boolean)
-        .slice(0, 3)
-        .map((n) => Number(n).toString(16).padStart(2, '0'))
-        .join('')}`;
-      record('6e. 下发色 == 暗色 --paper（消灭「三键区亮 / 顶栏暗」割裂）',
-        !!last && last.color === paperHex,
-        `--paper-rgb=${after.paperRgb} → 期望 ${paperHex}，实发 ${last ? last.color : '无'}`);
+      /*
+        ★ 契约变更（反馈 #2）——这一步的期望值变了，不是产品回归：
+          本步骤是在**设置弹窗（遮罩）打开中**切主题。用户在 v0.8.0002 反馈：
+          「其他地方都被灰掉，但原生三键位置是高亮的」——因为三键由系统绘制、
+          浮在网页之上，遮罩压不到它，只能靠主进程改叠加层配色。
+          于是新契约是：**遮罩打开期间，下发色 = 顶栏底色按设计压暗**（0.55 倍），
+          且必须**不等于**顶栏底色（否则等于没压暗，反馈 #2 就是没修）。
+
+          旧断言写的是「下发色 == 暗色 --paper」，那正是被反馈推翻的旧契约 ——
+          留着它只会每次走查报一条假红（本轮实测：期望 #1f2126、实发 #111215，
+          而 #111215 恰好就是 dim(#1f2126)，说明产品是对的、脚本过期了）。
+      */
+      const paperHex = hexOfRgbTriple(after.paperRgb);
+      record('6e. 遮罩打开期间下发色 == 压暗后的顶栏色（反馈 #2：三键不许在遮罩上高亮）',
+        !!last && last.color === dimHex(paperHex) && last.color !== paperHex,
+        `--paper-rgb=${after.paperRgb} → 期望压暗 ${dimHex(paperHex)}，实发 ${last ? last.color : '无'}`);
 
       // 符号色也应跟着换（否则暗底上仍是深色符号，三键看不清）
       record('6f. 符号色随主题变化（非亮色兜底 #1f2937）',
@@ -288,8 +319,21 @@ async function main() {
       const closeBtn = win.locator('button[aria-label="关闭设置"]').first();
       if ((await closeBtn.count()) > 0) {
         await closeBtn.click();
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 600));
       }
+      /*
+        6e-2：关掉遮罩后必须**恢复**成顶栏底色 —— 压暗不能粘住。
+        （这也是「只用一层计数器」的回归位：若遮罩关闭时没把计数减回去，
+        标题栏会永久停在压暗色，在正常亮色界面上表现为顶栏发灰。）
+        此时主题已切回浅色（上面点了「浅色」），故基准是浅色 --paper。
+      */
+      const afterClose = await readTopBar(win);
+      const callsClosed = await readOverlayCalls(app);
+      const lastClosed = callsClosed.length ? callsClosed[callsClosed.length - 1] : null;
+      const lightPaperHex = hexOfRgbTriple(afterClose.paperRgb);
+      record('6e-2. 关闭设置后叠加层恢复为顶栏底色（压暗不粘住）',
+        !!lastClosed && lastClosed.color === lightPaperHex,
+        `主题=${afterClose.theme} --paper-rgb=${afterClose.paperRgb} → 期望 ${lightPaperHex}，实发 ${lastClosed ? lastClosed.color : '无'}`);
     }
 
     // ── 7. 生产形态：无应用菜单 ──────────────────────────────────────────
