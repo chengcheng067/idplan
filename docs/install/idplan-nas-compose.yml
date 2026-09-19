@@ -9,7 +9,9 @@
 # 说明：
 #   - 两个镜像都从 ghcr.io 拉取（前端 idplan + 后端 idplan-backend），
 #     不需要你本机有任何 Docker，NAS 自己会拉。
-#   - 版本号 0.3.0 可在下方 image 标签里改（如 :latest 表示最新）。
+#   - 下面 image 标签里的版本号请改成已发布的版本（形如 0.8.0）。
+#     镜像由 docker-build.yml 手动触发构建，标签即触发时填写的版本号；
+#     未构建过的版本会拉取失败，请以 Releases 中 docker-<版本> 的标签为准。
 #   - network_mode: bridge 是绿联 Docker 应用的既有约束；用 links 让
 #     前端 nginx 能解析到后端容器（否则 /api 反代会失败）。
 #   - 数据卷 /data 用于保存 SQLite 团队库，容器重建不丢数据。
@@ -21,7 +23,7 @@
 services:
   # ---------------- 前端（nginx 托管页面 + /api 反代到后端） ----------------
   idplan:
-    image: ghcr.io/chengcheng067/idplan:0.3.0
+    image: ghcr.io/chengcheng067/idplan:0.8.0
     container_name: idplan
     restart: always
     ports:
@@ -39,7 +41,7 @@ services:
 
   # ---------------- 后端（Fastify + SQLite，团队共享数据层） ----------------
   backend:
-    image: ghcr.io/chengcheng067/idplan-backend:0.3.0
+    image: ghcr.io/chengcheng067/idplan-backend:0.8.0
     container_name: idplan-backend
     restart: always
     environment:

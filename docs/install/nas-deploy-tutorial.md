@@ -3,13 +3,13 @@
 > 你只需要一台**绿联 NAS**（UGOS Pro 系统）+ 一个浏览器，**不需要**电脑上装任何 Docker 或编程工具。
 > 本教程从零开始，每一步都点哪个按钮都写清楚了。
 
-> ✅ **2026-08-29 已上线**：前端镜像 `idplan:0.3.0` 与后端镜像 `idplan-backend:0.3.0` 均已由 GitHub Actions 云构建完成并推送成功（ghcr 联通已验证 HTTP 200）；`.tar` 离线包也已上传到 GitHub Releases。**可以直接按下面的方式部署了**。
+> 📌 **镜像版本怎么定**：Docker 镜像由 [docker-build.yml](../../.github/workflows/docker-build.yml) **手动触发**构建，镜像标签就是触发时填写的版本号（形如 `idplan:0.8.0`）。所以下面的版本号请替换成 Releases 里 **最新的 `docker-<版本>` 标签**，本文示例统一写作 `<版本>`。若你手上有 `.tar` 离线包，直接导入即可，不必拉取镜像。
 
 ---
 
 ## 一、先明白三件事（1 分钟读完）
 
-1. **ID Plan 是什么**：室内设计项目节点管理工具。部署到 NAS 后，你和工作室的伙伴用它来管理项目阶段、任务、成员，数据集中存在 NAS 上，**多人自动共享**，不用再手动导 JSON。
+1. **ID Plan 是什么**：项目排程工具，覆盖建筑设计、软件开发、市场活动、影视、婚礼、咨询、旅游等 7 个行业（从室内设计场景起步）。部署到 NAS 后，你和工作室的伙伴用它来管理项目阶段、任务、成员，数据集中存在 NAS 上，**多人自动共享**，不用再手动导 JSON。
 2. **为什么要在 NAS 上跑**：因为团队的库要放在一个所有人能访问的地方。NAS 就是这台"家里的服务器"。
 3. **你需要装几个"东西"**：其实就一个"应用",它由 2 个小容器组成（前端负责页面、后端负责存数据），我用一个"项目"文件帮你一次性把它们装配好，你不用手动一个个建。
 
@@ -94,14 +94,15 @@
 
 ## 七、如何拿到镜像（两种来源）
 
-1. **GitHub Releases（最快，离线导入用）**：去仓库 Releases 页下载 `docker-0.3.0` 发布里的 `.tar` 文件（按你的 NAS 架构选 amd64 或 arm64）：
-   - https://github.com/chengcheng067/idplan/releases/tag/docker-0.3.0
-   - 前端：`idplan-amd64.tar`（约 20MB）/ `idplan-arm64.tar`（约 21MB）
-   - 后端：`idplan-backend-amd64.tar`（约 166MB）/ `idplan-backend-arm64.tar`（约 163MB）
-2. **ghcr 拉取（在线，升级方便）**：NAS 直接拉
-   - `ghcr.io/chengcheng067/idplan:0.3.0`（前端）
-   - `ghcr.io/chengcheng067/idplan-backend:0.3.0`（后端）
-   - 两个镜像均可用（ghcr manifest 已用 HTTP 200 验证）。
+1. **GitHub Releases（最快，离线导入用）**：去仓库 Releases 页，找**标签形如 `docker-<版本>` 的最新一条**，下载里面的 `.tar` 文件（按你的 NAS 架构选 amd64 或 arm64）：
+   - https://github.com/chengcheng067/idplan/releases
+   - 前端：`idplan-amd64.tar` / `idplan-arm64.tar`
+   - 后端：`idplan-backend-amd64.tar` / `idplan-backend-arm64.tar`
+2. **ghcr 拉取（在线，升级方便）**：NAS 直接拉（`<版本>` 换成上一步查到的标签）
+   - `ghcr.io/chengcheng067/idplan:<版本>`（前端）
+   - `ghcr.io/chengcheng067/idplan-backend:<版本>`（后端）
+
+> 镜像是**手动触发**构建的，不是每次提交都自动发版。如果某个标签拉不到，说明该版本尚未构建镜像，请换用 Releases 里确实存在的 `docker-<版本>` 标签，或改用 `.tar` 离线导入。
 
 > 怎么知道 NAS 是 amd64 还是 arm64？`控制面板 → 关于本机` 里能看到机型/架构描述；拿不准就下 amd64（绝大多数系列）。
 
@@ -115,4 +116,4 @@
 | `idplan-nas-compose-amd64.yml` | 离线导入版（.tar 为 amd64） |
 | `idplan-nas-compose-arm64.yml` | 离线导入版（.tar 为 arm64） |
 
-**升级方法**：改了 compose 里的镜像版本号（如从 `0.3.0` 改 `0.3.1`），再重新「部署」一次即可，数据不丢。
+**升级方法**：改 compose 里的镜像版本号（如从 `0.8.0` 改成更新的版本），再重新「部署」一次即可，数据不丢。版本号必须对应一个已发布的 `docker-<版本>` 镜像。

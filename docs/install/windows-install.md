@@ -7,7 +7,8 @@
 
 ## 一、安装
 
-1. 下载 `IDPlan-0.3.0-Setup.exe`：[GitHub Releases](https://github.com/chengcheng067/idplan/releases)
+1. 下载 `IDPlan-0.8.0.0005-Setup.exe`：[GitHub Releases](https://github.com/chengcheng067/idplan/releases)
+   > 文件名里的 `0.8.0` 是产品版本，末四位 `0005` 是构建号。同一版本可能有多份构建，以构建号最大的为准。
 2. 双击安装包。
 3. 安装向导会问安装位置，**可以改目录**（不是强制装 C 盘）。
 4. 装完桌面和开始菜单都有「ID Plan」快捷方式，双击即可打开。

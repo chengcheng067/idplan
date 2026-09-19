@@ -26,7 +26,7 @@
 
 ### 第 1 步：下载 .upk 包
 
-到 GitHub Releases 页下载 `amd64_com.chengcheng.idplan_0.3.0.0018.upk`：
+到 GitHub Releases 页下载 `amd64_com.chengcheng.idplan_0.7.0.0001.upk`：
 👉 [https://github.com/chengcheng067/idplan/releases](https://github.com/chengcheng067/idplan/releases)
 
 下载后放在一个好找的地方（比如桌面）。
@@ -97,6 +97,6 @@
 
 | 文件 | 用途 |
 |---|---|
-| `amd64_com.chengcheng.idplan_0.3.0.0018.upk` | UGOS Pro 应用安装包（应用中心手动安装） |
+| `amd64_com.chengcheng.idplan_0.7.0.0001.upk` | UGOS Pro 应用安装包（应用中心手动安装） |
 | [idplan-nas-compose.yml](idplan-nas-compose.yml) | Docker compose 方式（如偏好手动配容器） |
 | [nas-deploy-tutorial.md](nas-deploy-tutorial.md) | Docker compose 版详细教程 |
