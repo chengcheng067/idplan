@@ -52,7 +52,6 @@ async function seedProject(withStages = true): Promise<Project> {
   const project = await bundle.projects.insert({
     id: 'proj_a',
     name: 'Agent 项目',
-    type: 'other' as never,
     address: '',
     clientName: '',
     contractAmount: null,
@@ -106,8 +105,9 @@ beforeEach(async () => {
   await bundle.admin?.replaceAllImport({
     meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
     data: {
-      projects: [], stages: [], tasks: [], members: [],
+      projects: [], stages: [], tasks: [], itineraries: [], members: [],
       assignments: [], logs: [], contracts: [], settings: [],
+      executions: [], executionAttempts: [], executionEvents: [], writebackProposals: [],
     },
   });
 });

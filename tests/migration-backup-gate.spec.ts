@@ -64,10 +64,10 @@ async function seedLibraryAt(verno: 1 | 2 | 3 | 4 | 5): Promise<string> {
   if (verno >= 4) db.version(4).stores({ itineraries: DEXIE_STORES.itineraries });
   if (verno >= 5) {
     db.version(5).stores({
-      executions: DEXIE_V5_STORES.executions,
-      executionAttempts: DEXIE_V5_STORES.executionAttempts,
-      executionEvents: DEXIE_V5_STORES.executionEvents,
-      writebackProposals: DEXIE_V5_STORES.writebackProposals,
+      executions: DEXIE_STORES.executions,
+      executionAttempts: DEXIE_STORES.executionAttempts,
+      executionEvents: DEXIE_STORES.executionEvents,
+      writebackProposals: DEXIE_STORES.writebackProposals,
     });
   }
   await db.open();

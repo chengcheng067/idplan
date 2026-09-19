@@ -18,13 +18,12 @@ import {
   EXPORT_BORDER,
   schedulePngExportOptions,
 } from '../src/lib/schedule-print';
-import { MemberRoleKind, StageStatus } from '../src/core/types/enums';
+import { MemberActorKind, MemberRoleKind, ProjectStatus, ScheduleBasis, StageStatus, TaskStatus } from '../src/core/types/enums';
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 
 const project: Project = {
   id: 'proj_1',
   name: '望江楼茶空间',
-  type: 'tea_space' as never,
   address: '成都市青羊区',
   clientName: '测试甲方',
   contractAmount: 880000,
@@ -32,29 +31,35 @@ const project: Project = {
   plannedStartAt: '2026-08-01',
   plannedEndAt: '2026-12-31',
   coverColor: null,
-  status: 'active',
+  shortLabel: null,
+  stagePresetKey: null,
+  stageTemplateVersion: 0,
+  scheduleBasis: ScheduleBasis.Calendar,
+  domain: null,
+  kind: 'human',
+  status: ProjectStatus.Active,
   revision: 1,
   updatedAt: '2026-08-01T00:00:00.000Z',
 };
 
 const members: Member[] = [
-  { id: 'mem_a', name: '许工', role: '主案', contact: null, avatarColor: '#3D6B5B', active: true, roleKind: MemberRoleKind.Member, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'mem_b', name: '王工', role: '绘图', contact: null, avatarColor: '#D9A441', active: true, roleKind: MemberRoleKind.Member, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'mem_a', name: '许工', role: '主案', contact: null, avatarColor: '#3D6B5B', active: true, roleKind: MemberRoleKind.Member, passwordHash: null, actorKind: MemberActorKind.Human, agentKind: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'mem_b', name: '王工', role: '绘图', contact: null, avatarColor: '#D9A441', active: true, roleKind: MemberRoleKind.Member, passwordHash: null, actorKind: MemberActorKind.Human, agentKind: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
 ];
 
 const stages: Stage[] = [
-  { id: 'stg_1', projectId: 'proj_1', orderIndex: 1, name: '提案', ratioPercent: 5, startAt: '2026-08-01', endAt: '2026-08-07', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'stg_2', projectId: 'proj_1', orderIndex: 2, name: '测量', ratioPercent: 4, startAt: '2026-08-08', endAt: '2026-08-13', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'stg_3', projectId: 'proj_1', orderIndex: 3, name: '平面方案', ratioPercent: 11, startAt: '2026-08-14', endAt: '2026-08-29', status: StageStatus.NotStarted, ownerId: null, visible: false, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'stg_other', projectId: 'proj_2', orderIndex: 9, name: '其他项目阶段', ratioPercent: 5, startAt: '2026-09-01', endAt: '2026-09-30', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'stg_1', projectId: 'proj_1', orderIndex: 1, templateKey: null, colorIndex: 1, customColor: null, name: '提案', ratioPercent: 5, startAt: '2026-08-01', endAt: '2026-08-07', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'stg_2', projectId: 'proj_1', orderIndex: 2, templateKey: null, colorIndex: 2, customColor: null, name: '测量', ratioPercent: 4, startAt: '2026-08-08', endAt: '2026-08-13', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'stg_3', projectId: 'proj_1', orderIndex: 3, templateKey: null, colorIndex: 3, customColor: null, name: '平面方案', ratioPercent: 11, startAt: '2026-08-14', endAt: '2026-08-29', status: StageStatus.NotStarted, ownerId: null, visible: false, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'stg_other', projectId: 'proj_2', orderIndex: 9, templateKey: null, colorIndex: 9, customColor: null, name: '其他项目阶段', ratioPercent: 5, startAt: '2026-09-01', endAt: '2026-09-30', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
 ];
 
 const tasks: Task[] = [
-  { id: 'tsk_1', projectId: 'proj_1', stageId: 'stg_1', title: '意向收集', done: false, assigneeId: 'mem_a', assigneeIds: ['mem_a'], dueDate: '2026-08-05', orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'tsk_2', projectId: 'proj_1', stageId: 'stg_1', title: '主材清单', done: true, assigneeId: 'mem_b', assigneeIds: ['mem_a', 'mem_b'], dueDate: '2026-08-06', orderIndex: 2, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'tsk_3', projectId: 'proj_1', stageId: 'stg_1', title: '未指派任务', done: false, assigneeId: null, assigneeIds: [], dueDate: null, orderIndex: 3, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'tsk_4', projectId: 'proj_1', stageId: 'stg_2', title: '量房', done: false, assigneeId: 'mem_ghost', assigneeIds: ['mem_ghost'], dueDate: '2026-08-12', orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-  { id: 'tsk_other', projectId: 'proj_2', stageId: 'stg_other', title: '别项目任务', done: false, assigneeId: null, assigneeIds: [], dueDate: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'tsk_1', taskNo: null, projectId: 'proj_1', stageId: 'stg_1', title: '意向收集', done: false, assigneeId: 'mem_a', assigneeIds: ['mem_a'], dueDate: '2026-08-05', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'tsk_2', taskNo: null, projectId: 'proj_1', stageId: 'stg_1', title: '主材清单', done: true, assigneeId: 'mem_b', assigneeIds: ['mem_a', 'mem_b'], dueDate: '2026-08-06', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 2, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'tsk_3', taskNo: null, projectId: 'proj_1', stageId: 'stg_1', title: '未指派任务', done: false, assigneeId: null, assigneeIds: [], dueDate: null, source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 3, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'tsk_4', taskNo: null, projectId: 'proj_1', stageId: 'stg_2', title: '量房', done: false, assigneeId: 'mem_ghost', assigneeIds: ['mem_ghost'], dueDate: '2026-08-12', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+  { id: 'tsk_other', taskNo: null, projectId: 'proj_2', stageId: 'stg_other', title: '别项目任务', done: false, assigneeId: null, assigneeIds: [], dueDate: null, source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
 ];
 
 describe('buildScheduleSections：日程表数据组装', () => {

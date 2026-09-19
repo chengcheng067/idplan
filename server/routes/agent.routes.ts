@@ -12,7 +12,8 @@
  *
  * ── v0.8 §7.6「定向反转」的两半（都要，缺一不可）──
  *   ① **放开建板**：AI 能建 `kind='agent'` 的看板（含阶段骨架），阶段来源复用
- *      `templates/stage-library.json` 的 18 套餐 / 56 阶段项；
+ *      `templates/stage-library.json` 的 21 套餐 / 63 阶段项（数量以该 JSON 为准，
+ *      改库后请同步此处的数字——它曾长期停留在 18/56，比数据旧）；
  *   ② **仍然不放开人类项目**：`listProjectCandidates()` 收窄为只列 `kind='human'`，
  *      于是 `?projectName=` 解析**永不可能**命中 Agent 看板（详见该函数的注释）。
  *

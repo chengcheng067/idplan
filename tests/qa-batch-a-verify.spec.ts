@@ -639,7 +639,7 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
 
       // 真实切换路径：设置抽屉里点「深色」→ useTheme.setMode → apply() → syncTitleBarTheme()
       await page.evaluate(() => {
-        const s = Array.from(document.querySelectorAll('[data-app-sidebar] button')).find(
+        const s = Array.from(document.querySelectorAll<HTMLElement>('[data-app-sidebar] button')).find(
           (x) => x.getAttribute('aria-label') === '设置',
         );
         s?.click();
@@ -649,7 +649,7 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
         () => (window as unknown as { __tbCalls: unknown[] }).__tbCalls.length,
       );
       await page.evaluate(() => {
-        const b = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+        const b = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] button')).find(
           (x) => (x.textContent ?? '').trim() === '深色',
         );
         b?.click();
@@ -684,7 +684,7 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
 
       // 关掉设置面板 → 遮罩计数归零 → 叠加层必须**恢复**成顶栏底色（压暗不能粘住）
       await page.evaluate(() => {
-        const b = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+        const b = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] button')).find(
           (x) => x.getAttribute('aria-label') === '关闭设置',
         );
         b?.click();
@@ -866,7 +866,7 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
         if (theme === 'dark') {
           // 真实切换路径：设置面板内点「深色」→ useTheme.setMode → apply()
           await page.evaluate(() => {
-            const b = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+            const b = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] button')).find(
               (x) => (x.textContent ?? '').trim() === '深色',
             );
             b?.click();

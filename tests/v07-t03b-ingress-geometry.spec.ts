@@ -569,11 +569,11 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await page.waitForSelector('header', { timeout: 30000 });
 
       // 侧栏里那个 `input[type=file].hidden`（useBackupIo）——它 display:none，
-      // 故必须 `force` 绕过可见性检查（setInputFiles 本身是赋 value，不需要真点击）
+      // setInputFiles 本身是赋 value，不需要真点击（其选项类型不含 force，故省略）
       await page
         .locator('input[type="file"][accept*="json"]')
         .first()
-        .setInputFiles(fixture, { force: true });
+        .setInputFiles(fixture);
 
       const confirm = page.getByRole('button', { name: '确认恢复' });
       try {

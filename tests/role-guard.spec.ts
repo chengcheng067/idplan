@@ -21,7 +21,7 @@ import {
   sameAssigneeSet,
   countActiveAdmins,
 } from '../src/hooks/useRoleGuard';
-import { MemberRoleKind, StageStatus } from '../src/core/types/enums';
+import { MemberActorKind, MemberRoleKind, StageStatus, TaskStatus } from '../src/core/types/enums';
 import type { Member, Stage, Task } from '../src/core/types/entities';
 
 function member(overrides: Partial<Member> & { id: string; name: string }): Member {
@@ -31,6 +31,9 @@ function member(overrides: Partial<Member> & { id: string; name: string }): Memb
     avatarColor: '#3D6B5B',
     active: true,
     roleKind: MemberRoleKind.Member,
+    passwordHash: null,
+    actorKind: MemberActorKind.Human,
+    agentKind: null,
     revision: 1,
     updatedAt: '2026-08-01T00:00:00.000Z',
     ...overrides,
@@ -252,12 +255,12 @@ describe('isRestrictedView：受限视图判定（BUG-1 回归）', () => {
 
 describe('computeRelatedStageIds：项目详情相关阶段（BUG-1 回归）', () => {
   const stages: Stage[] = [
-    { id: 'stg_1', projectId: 'proj_1', orderIndex: 1, name: '提案', ratioPercent: 5, startAt: '2026-08-01', endAt: '2026-08-07', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-    { id: 'stg_2', projectId: 'proj_1', orderIndex: 2, name: '测量', ratioPercent: 4, startAt: '2026-08-08', endAt: '2026-08-13', status: StageStatus.NotStarted, ownerId: 'mem_member', visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-    { id: 'stg_3', projectId: 'proj_1', orderIndex: 3, name: '平面方案', ratioPercent: 11, startAt: '2026-08-14', endAt: '2026-08-29', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+    { id: 'stg_1', projectId: 'proj_1', orderIndex: 1, templateKey: null, colorIndex: 1, customColor: null, name: '提案', ratioPercent: 5, startAt: '2026-08-01', endAt: '2026-08-07', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+    { id: 'stg_2', projectId: 'proj_1', orderIndex: 2, templateKey: null, colorIndex: 2, customColor: null, name: '测量', ratioPercent: 4, startAt: '2026-08-08', endAt: '2026-08-13', status: StageStatus.NotStarted, ownerId: 'mem_member', visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+    { id: 'stg_3', projectId: 'proj_1', orderIndex: 3, templateKey: null, colorIndex: 3, customColor: null, name: '平面方案', ratioPercent: 11, startAt: '2026-08-14', endAt: '2026-08-29', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
   ];
   const tasks: Task[] = [
-    { id: 'tsk_1', projectId: 'proj_1', stageId: 'stg_3', title: '平面布局', done: false, assigneeId: 'mem_member', assigneeIds: [], dueDate: '2026-08-29', orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+    { id: 'tsk_1', taskNo: null, projectId: 'proj_1', stageId: 'stg_3', title: '平面布局', done: false, assigneeId: 'mem_member', assigneeIds: [], dueDate: '2026-08-29', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
   ];
 
   it('管理员 → null（全量渲染全部阶段）', () => {
@@ -283,7 +286,7 @@ describe('computeRelatedStageIds：项目详情相关阶段（BUG-1 回归）', 
 
   it('多人任务：成员因参与某任务（assigneeIds 含 me）而看到该阶段', () => {
     const multiTasks: Task[] = [
-      { id: 'tsk_multi', projectId: 'proj_1', stageId: 'stg_3', title: '平面深化', done: false, assigneeId: 'mem_other', assigneeIds: ['mem_other', 'mem_member'], dueDate: '2026-08-29', orderIndex: 2, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+      { id: 'tsk_multi', taskNo: null, projectId: 'proj_1', stageId: 'stg_3', title: '平面深化', done: false, assigneeId: 'mem_other', assigneeIds: ['mem_other', 'mem_member'], dueDate: '2026-08-29', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 2, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
     ];
     const ids = computeRelatedStageIds({
       memberView: true,

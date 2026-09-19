@@ -12,31 +12,15 @@ import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService, validateBackupJson } from '../src/core/services/backup.service';
 import type { BackupPackage } from '../src/core/types/dto';
+import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
 let svc: BackupService;
-
-function emptyPackage(): BackupPackage {
-  return {
-    meta: { app: 'changxia', schemaVersion: 1, exportedAt: '2026-08-01T00:00:00.000Z' },
-    data: {
-      projects: [],
-      stages: [],
-      tasks: [],
-      members: [],
-      assignments: [],
-      logs: [],
-      contracts: [],
-      settings: [],
-    },
-  };
-}
 
 /** 预置 1 个项目 + 1 个成员，作为「导入前库内容」基线 */
 async function seedBaseline(): Promise<void> {
   await bundle.projects.insert({
     name: '某茶空间',
-    type: 'commercial',
     address: '上海',
     clientName: '客户A',
     contractAmount: 100000,
@@ -62,7 +46,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   bundle = await createRepositories({ dataSource: 'local' });
   // 清库重建保证隔离
-  await bundle.admin?.replaceAllImport(emptyPackage());
+  await bundle.admin?.replaceAllImport(emptyPackage(1));
   await seedBaseline();
   svc = new BackupService(bundle);
 });
@@ -94,8 +78,10 @@ describe('backup 导入失败路径：预检失败 → 拒绝且零写入', () =
 
   it('meta.app 非 changxia（改名风险点）→ 拒绝且库不变', async () => {
     const before = await snapshotCounts();
-    const pkg = emptyPackage();
-    pkg.meta.app = 'id-plan'; // 模拟误用新名导出
+    const pkg = emptyPackage(1);
+    // 模拟误用新名导出：meta.app 是契约字面量 'changxia'，这里刻意写入非法值来测运行期拒绝，
+    // 故仅对 app 字段做局部放宽（不削弱断言、不改 reject 语义）。
+    (pkg.meta as { app: string }).app = 'id-plan';
     await expect(svc.importAndReplace(pkg)).rejects.toThrow();
     const after = await snapshotCounts();
     expect(after).toEqual(before);
@@ -103,7 +89,7 @@ describe('backup 导入失败路径：预检失败 → 拒绝且零写入', () =
 
   it('members.roleKind 非法值（如 super）→ 拒绝且库不变', async () => {
     const before = await snapshotCounts();
-    const pkg = emptyPackage();
+    const pkg = emptyPackage(1);
     pkg.data.members = [
       {
         id: 'mem_bad',
@@ -123,7 +109,7 @@ describe('backup 导入失败路径：预检失败 → 拒绝且零写入', () =
   });
 
   it('对照：合法包导入成功 → 库被整体替换（证明失败路径不是永远拒绝）', async () => {
-    const pkg = emptyPackage();
+    const pkg = emptyPackage(1);
     pkg.data.projects = [
       {
         id: 'p_imported',

@@ -37,7 +37,6 @@ beforeEach(async () => {
   const project = await projects.createProjectFromContract(
     {
       projectName: '延期闸门测试项目',
-      projectType: 'dining' as never,
       address: '',
       clientName: '',
       contractAmount: null,

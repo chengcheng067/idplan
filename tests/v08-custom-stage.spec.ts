@@ -48,11 +48,16 @@ function emptyPackage(): BackupPackage {
       projects: [],
       stages: [],
       tasks: [],
+      itineraries: [],
       members: [],
       assignments: [],
       logs: [],
       contracts: [],
       settings: [],
+      executions: [],
+      executionAttempts: [],
+      executionEvents: [],
+      writebackProposals: [],
     },
   };
 }
@@ -111,6 +116,10 @@ function payload(domain: string | null): ConfirmedContractPayload {
     stagePresetKey: 'indoor_full',
     scheduleBasis: undefined,
     domain: domain as ConfirmedContractPayload['domain'],
+    createdByManual: false,
+    sourceFileName: null,
+    rawTextDigest: '',
+    parsedResultJsonSnapshot: '',
   };
 }
 

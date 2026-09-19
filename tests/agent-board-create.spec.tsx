@@ -50,7 +50,8 @@ import { resolve } from 'node:path';
 import { installFakeIndexedDB } from './setup';
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
-import type { BackupPackage, StageSelectionItem } from '../src/core/types/dto';
+import type { StageSelectionItem } from '../src/core/types/dto';
+import { emptyPackage } from './helpers/backup-fixture';
 import {
   CreateAgentBoardDialog,
   submitAgentBoardDraft,
@@ -313,21 +314,6 @@ vi.mock('../src/hooks/useRepos', () => ({ useRepos: () => bundle }));
  * vitest `singleThread` 下所有 spec 共用一个 fake-indexeddb 实例，
  * 不清库会让本文件的行污染后续 spec（且自己的断言会看到别人的项目）。进出一律清库。
  */
-function emptyPackage(): BackupPackage {
-  return {
-    meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
-    data: {
-      projects: [],
-      stages: [],
-      tasks: [],
-      members: [],
-      assignments: [],
-      logs: [],
-      contracts: [],
-      settings: [],
-    },
-  };
-}
 
 let root: Root;
 let container: HTMLDivElement;

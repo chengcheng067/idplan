@@ -381,11 +381,16 @@ async function freshBundle(): Promise<IRepositoryBundle> {
       projects: [],
       stages: [],
       tasks: [],
+      itineraries: [],
       members: [],
       assignments: [],
       logs: [],
       contracts: [],
       settings: [],
+      executions: [],
+      executionAttempts: [],
+      executionEvents: [],
+      writebackProposals: [],
     },
   });
   return bundle;

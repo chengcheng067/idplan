@@ -11,11 +11,12 @@ import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService, validateBackupJson } from '../src/core/services/backup.service';
 import type { BackupPackage } from '../src/core/types/dto';
+import { emptyPackage } from './helpers/backup-fixture';
 import { previewSplit } from '../src/core/template/split';
 import { ProjectService } from '../src/core/services/project.service';
 import { resolveProjectDomain } from '../src/core/template/stage-fallback';
 import { getItemKanbanColumn } from '../src/core/template/stage-library';
-import { StageStatus } from '../src/core/types/enums';
+import { StageStatus, TaskStatus } from '../src/core/types/enums';
 import type { Project, Stage } from '../src/core/types/entities';
 
 let bundle: IRepositoryBundle;
@@ -35,23 +36,6 @@ beforeEach(async () => {
   await bundle.admin?.replaceAllImport(emptyPackage());
 });
 
-/** 与 backup.v3-roundtrip.spec 同款空包：仅清库，不带任何行 */
-function emptyPackage(): BackupPackage {
-  return {
-    meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
-    data: {
-      projects: [],
-      stages: [],
-      tasks: [],
-      members: [],
-      assignments: [],
-      logs: [],
-      contracts: [],
-      settings: [],
-    },
-  };
-}
-
 /** 造一份数据齐备的库：1 项目 × 9 阶段 × 若干任务 + 流水 + 设置 */
 async function seedData(): Promise<Project> {
   const projects = new ProjectService({
@@ -62,7 +46,6 @@ async function seedData(): Promise<Project> {
   const project = await projects.createProjectFromContract(
     {
       projectName: '望江楼茶空间',
-      projectType: 'tea_space' as never,
       address: '成都市青羊区',
       clientName: '测试甲方',
       contractAmount: 880000,
@@ -94,7 +77,7 @@ async function seedData(): Promise<Project> {
   // 与「done 由 status 反推」的归一口径（键序铁律的间接验证也依赖这里）。
   if (tasks[0] && tasks[1]) {
     await bundle.tasks.update(tasks[0].id, {
-      status: 'review',
+      status: TaskStatus.Review,
       dependsOn: [tasks[1].id],
       artifacts: [
         {
@@ -146,7 +129,6 @@ describe('backup：导出→清库→导入→逐表 diff 为空', () => {
     // 清库（导入自身即清库重建；这里先写一笔垃圾数据证明导入会整体替换）
     await bundle.projects.insert({
       name: '应被覆盖的脏数据',
-      type: 'dining' as never,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -218,7 +200,6 @@ describe('backup：v0.8 增量往返（domain / kind / customColor）', () => {
     // ① Agent 侧项目：显式 kind='agent'（人类建档路径不传该字段，故这里是唯一的构造方式）
     const agentProject = await bundle.projects.insert({
       name: 'AI 工作区·概念生成',
-      type: 'interior_design' as never,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -285,7 +266,6 @@ describe('backup：v0.8 增量往返（domain / kind / customColor）', () => {
     // ③ 人类侧项目（domain=null 的「未确认」态）一并往返，验证 null 不会被改写成 'indoor'
     await bundle.projects.insert({
       name: '人类侧·未确认板块',
-      type: 'dining' as never,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -412,7 +392,6 @@ describe('backup：Agent 无模板阶段（templateKey=null 且 orderIndex ≤ 9
   it('往返后 templateKey 仍是 null、落列回到「按 orderIndex 均分」，逐表 diff 为空', async () => {
     const agentProject = await bundle.projects.insert({
       name: 'AI 工作区·往返不换列',
-      type: 'interior_design' as never,
       address: '',
       clientName: '',
       contractAmount: null,

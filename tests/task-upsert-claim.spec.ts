@@ -41,6 +41,7 @@ const DIRTY_CLAIMED_AT = '2026-08-01T00:00:00.000Z';
 function legacyDirtyRow(id: string, title: string, status: TaskStatus): Task {
   return {
     id,
+    taskNo: null,
     projectId: 'proj_b01',
     stageId: 'stg_b01',
     title,
@@ -96,8 +97,9 @@ beforeEach(async () => {
   await bundle.admin?.replaceAllImport({
     meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
     data: {
-      projects: [], stages: [], tasks: [], members: [],
+      projects: [], stages: [], tasks: [], itineraries: [], members: [],
       assignments: [], logs: [], contracts: [], settings: [],
+      executions: [], executionAttempts: [], executionEvents: [], writebackProposals: [],
     },
   });
 });

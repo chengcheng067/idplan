@@ -59,8 +59,9 @@ beforeEach(async () => {
   await bundle.admin?.replaceAllImport({
     meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
     data: {
-      projects: [], stages: [], tasks: [], members: [],
+      projects: [], stages: [], tasks: [], itineraries: [], members: [],
       assignments: [], logs: [], contracts: [], settings: [],
+      executions: [], executionAttempts: [], executionEvents: [], writebackProposals: [],
     },
   });
 });

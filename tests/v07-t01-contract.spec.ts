@@ -56,11 +56,16 @@ const emptyPackage = (): BackupPackage => ({
     projects: [],
     stages: [],
     tasks: [],
+    itineraries: [],
     members: [],
     assignments: [],
     logs: [],
     contracts: [],
     settings: [],
+    executions: [],
+    executionAttempts: [],
+    executionEvents: [],
+    writebackProposals: [],
   },
 });
 
@@ -95,7 +100,6 @@ async function seedProject(withStages = true): Promise<string> {
   await bundle.projects.insert({
     id: 'proj_a',
     name: '契约冻结演练',
-    type: 'other' as never,
     address: '',
     clientName: '',
     contractAmount: null,

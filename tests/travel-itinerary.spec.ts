@@ -47,6 +47,10 @@ function emptyPackage(): BackupPackage {
       logs: [],
       contracts: [],
       settings: [],
+      executions: [],
+      executionAttempts: [],
+      executionEvents: [],
+      writebackProposals: [],
     },
   };
 }

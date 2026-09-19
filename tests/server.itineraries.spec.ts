@@ -50,7 +50,7 @@ describe('server itineraries routes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const rows = response.json<Array<{ date: string; transport: string | null }>>();
+    const rows = response.json() as Array<{ date: string; transport: string | null }>;
     expect(rows.map((row) => row.date)).toEqual(['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-10']);
     expect(rows[0]?.transport).toBe('高铁');
   });
@@ -66,13 +66,13 @@ describe('server itineraries routes', () => {
       method: 'POST', url: '/api/projects/travel-1/itineraries', payload: { date: '2026-09-01', budgetAmount: 80 },
     });
     expect(created.statusCode).toBe(200);
-    const id = created.json<{ id: string }>().id;
+    const id = (created.json() as { id: string }).id;
 
     const badPatch = await app.inject({ method: 'PATCH', url: `/api/itineraries/${id}`, payload: { actualAmount: 'NaN' } });
     expect(badPatch.statusCode).toBe(400);
     const patched = await app.inject({ method: 'PATCH', url: `/api/itineraries/${id}`, payload: { actualAmount: 72.5 } });
     expect(patched.statusCode).toBe(200);
-    expect(patched.json<{ actualAmount: number }>().actualAmount).toBe(72.5);
+    expect((patched.json() as { actualAmount: number }).actualAmount).toBe(72.5);
 
     expect((await app.inject({ method: 'DELETE', url: `/api/itineraries/${id}` })).statusCode).toBe(200);
     expect((db.prepare('SELECT COUNT(*) c FROM itineraries WHERE id=?').get(id) as { c: number }).c).toBe(0);

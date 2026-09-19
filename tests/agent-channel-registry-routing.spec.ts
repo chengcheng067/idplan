@@ -45,29 +45,15 @@ import {
   type AgentImportChannel,
 } from '../src/core/agent/transport.contract';
 import type { AgentPayloadV1, ApplyResult } from '../src/core/types/agent-payload';
-import type { BackupPackage } from '../src/core/types/dto';
 import { TaskStatus } from '../src/core/types/enums';
 import type { Stage } from '../src/core/types/entities';
 import { useAgentStore } from '../src/store/useAgentStore';
+import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
 
 beforeAll(async () => {
   installFakeIndexedDB();
-});
-
-const emptyPackage = (): BackupPackage => ({
-  meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-09-01T00:00:00.000Z' },
-  data: {
-    projects: [],
-    stages: [],
-    tasks: [],
-    members: [],
-    assignments: [],
-    logs: [],
-    contracts: [],
-    settings: [],
-  },
 });
 
 beforeEach(async () => {
@@ -82,7 +68,6 @@ async function seedProject(): Promise<string> {
   await bundle.projects.insert({
     id: 'proj_a',
     name: '通道注册表演练',
-    type: 'other' as never,
     address: '',
     clientName: '',
     contractAmount: null,

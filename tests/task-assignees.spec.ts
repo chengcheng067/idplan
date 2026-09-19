@@ -20,7 +20,7 @@ import {
   sameAssigneeSet,
 } from '../src/hooks/useRoleGuard';
 import { createTaskActions, useProjectsStore } from '../src/store/useProjectsStore';
-import { MemberRoleKind, StageStatus } from '../src/core/types/enums';
+import { MemberRoleKind, StageStatus, TaskStatus } from '../src/core/types/enums';
 import type { Member, Stage, Task } from '../src/core/types/entities';
 
 let bundle: IRepositoryBundle;
@@ -38,11 +38,16 @@ beforeEach(async () => {
       projects: [],
       stages: [],
       tasks: [],
+      itineraries: [],
       members: [],
       assignments: [],
       logs: [],
       contracts: [],
       settings: [],
+      executions: [],
+      executionAttempts: [],
+      executionEvents: [],
+      writebackProposals: [],
     },
   });
   // useProjectsStore 是模块级单例：queryTasks 读内存，需同步重置避免跨用例污染
@@ -95,13 +100,13 @@ describe('canMemberToggleTask：多人参与勾选权限', () => {
 
 describe('computeRelatedStageIds：多人任务相关阶段可见', () => {
   const stages: Stage[] = [
-    { id: 'stg_1', projectId: 'proj_1', orderIndex: 1, name: '提案', ratioPercent: 5, startAt: '2026-08-01', endAt: '2026-08-07', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
-    { id: 'stg_2', projectId: 'proj_1', orderIndex: 2, name: '测量', ratioPercent: 4, startAt: '2026-08-08', endAt: '2026-08-13', status: StageStatus.NotStarted, ownerId: 'mem_other', visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+    { id: 'stg_1', projectId: 'proj_1', orderIndex: 1, templateKey: null, colorIndex: 1, customColor: null, name: '提案', ratioPercent: 5, startAt: '2026-08-01', endAt: '2026-08-07', status: StageStatus.NotStarted, ownerId: null, visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+    { id: 'stg_2', projectId: 'proj_1', orderIndex: 2, templateKey: null, colorIndex: 2, customColor: null, name: '测量', ratioPercent: 4, startAt: '2026-08-08', endAt: '2026-08-13', status: StageStatus.NotStarted, ownerId: 'mem_other', visible: true, resourcePath: null, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
   ];
 
   it('成员仅因参与某任务（assigneeIds 含 me，assigneeId 是他人）而看到该阶段', () => {
     const tasks: Task[] = [
-      { id: 'tsk_m', projectId: 'proj_1', stageId: 'stg_2', title: '放线', done: false, assigneeId: 'mem_other', assigneeIds: ['mem_other', 'mem_me'], dueDate: '2026-08-13', orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+      { id: 'tsk_m', taskNo: null, projectId: 'proj_1', stageId: 'stg_2', title: '放线', done: false, assigneeId: 'mem_other', assigneeIds: ['mem_other', 'mem_me'], dueDate: '2026-08-13', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
     ];
     const ids = computeRelatedStageIds({
       memberView: true,

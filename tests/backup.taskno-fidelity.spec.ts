@@ -33,7 +33,9 @@ import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService, validateBackupJson } from '../src/core/services/backup.service';
 import { TASK_NO_SEQ_KEY, formatTaskNo } from '../src/core/lib/task-no';
 import type { BackupPackage } from '../src/core/types/dto';
-import type { Task } from '../src/core/types/entities';
+import type { Project, Task } from '../src/core/types/entities';
+import { ProjectStatus, ScheduleBasis, TaskStatus } from '../src/core/types/enums';
+import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
 
@@ -48,45 +50,25 @@ beforeEach(async () => {
   await bundle.admin?.replaceAllImport(emptyPackage());
 });
 
-function emptyPackage(): BackupPackage {
-  return {
-    meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
-    data: {
-      projects: [],
-      stages: [],
-      tasks: [],
-      members: [],
-      assignments: [],
-      logs: [],
-      contracts: [],
-      settings: [],
-    },
-  };
-}
-
 /** 组装一个备份包（meta 恒 v3，与既有 spec 同款） */
 function pack(data: Partial<BackupPackage['data']>): BackupPackage {
   return {
     meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
     data: {
-      projects: [],
-      stages: [],
-      tasks: [],
-      members: [],
-      assignments: [],
-      logs: [],
-      contracts: [],
-      settings: [],
+      ...emptyPackage().data,
       ...data,
     },
   };
 }
 
-function projectRow(id: string): Record<string, unknown> {
+/**
+ * 一条项目行（full Project 形状；`Project.type` 已删除，故不再带该键）。
+ * 仅作容器，本 spec 的断言聚焦 taskNo 保真，不依赖项目任何具体字段。
+ */
+function projectRow(id: string): Project {
   return {
     id,
     name: `项目 ${id}`,
-    type: 'dining',
     address: '',
     clientName: '',
     contractAmount: null,
@@ -94,14 +76,20 @@ function projectRow(id: string): Record<string, unknown> {
     plannedStartAt: '2026-08-01',
     plannedEndAt: '2026-12-31',
     coverColor: null,
-    status: 'active',
+    shortLabel: null,
+    stagePresetKey: null,
+    stageTemplateVersion: 0,
+    scheduleBasis: ScheduleBasis.Calendar,
+    domain: null,
+    kind: 'human',
+    status: ProjectStatus.Active,
     revision: 1,
     updatedAt: '2026-08-01T00:00:00.000Z',
   };
 }
 
-/** 一条**带号**任务行（显式 `taskNo`），其余字段走 zod 的 `.default()` */
-function taskRow(id: string, taskNo: number | null, orderIndex = 1): Record<string, unknown> {
+/** 一条**带号**任务行（full Task 形状，显式 `taskNo`；其余字段走 zod 的 `.default()`） */
+function taskRow(id: string, taskNo: number | null, orderIndex = 1): Task {
   return {
     id,
     taskNo,
@@ -110,7 +98,17 @@ function taskRow(id: string, taskNo: number | null, orderIndex = 1): Record<stri
     title: `任务 ${id}`,
     done: false,
     assigneeId: null,
+    assigneeIds: [],
     dueDate: null,
+    source: 'human',
+    externalId: null,
+    agentId: null,
+    status: TaskStatus.Draft,
+    description: null,
+    dependsOn: [],
+    artifacts: [],
+    startAt: null,
+    claimedAt: null,
     orderIndex,
     revision: 1,
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -121,7 +119,6 @@ function seedProject(id = 'p1'): Promise<unknown> {
   return bundle.projects.insert({
     id,
     name: `项目 ${id}`,
-    type: 'dining' as never,
     address: '',
     clientName: '',
     contractAmount: null,

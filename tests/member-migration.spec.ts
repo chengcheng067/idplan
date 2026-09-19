@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { normalizeLegacyMemberRoles } from '../src/hooks/useRoleGuard';
-import { MemberRoleKind } from '../src/core/types/enums';
+import { MemberActorKind, MemberRoleKind } from '../src/core/types/enums';
 import type { Member } from '../src/core/types/entities';
 
 function member(overrides: Partial<Member> & { id: string; name: string }): Member {
@@ -21,6 +21,9 @@ function member(overrides: Partial<Member> & { id: string; name: string }): Memb
     avatarColor: '#3D6B5B',
     active: true,
     roleKind: MemberRoleKind.Member,
+    passwordHash: null,
+    actorKind: MemberActorKind.Human,
+    agentKind: null,
     revision: 1,
     updatedAt: '2026-08-01T00:00:00.000Z',
     ...overrides,

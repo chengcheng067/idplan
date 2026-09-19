@@ -61,11 +61,16 @@ function emptyPackage(): BackupPackage {
       projects: [],
       stages: [],
       tasks: [],
+      itineraries: [],
       members: [],
       assignments: [],
       logs: [],
       contracts: [],
       settings: [],
+      executions: [],
+      executionAttempts: [],
+      executionEvents: [],
+      writebackProposals: [],
     },
   };
 }

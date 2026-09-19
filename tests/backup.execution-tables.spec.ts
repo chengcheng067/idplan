@@ -17,6 +17,7 @@ import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService, validateBackupJson } from '../src/core/services/backup.service';
 import type { BackupPackage } from '../src/core/types/dto';
 import { ExecutionStatus, WritebackProposalStatus } from '../src/core/types/agent-execution';
+import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
 
@@ -28,26 +29,6 @@ beforeEach(async () => {
   bundle = await createRepositories({ dataSource: 'local' });
   await bundle.admin?.replaceAllImport(emptyPackage());
 });
-
-function emptyPackage(): BackupPackage {
-  return {
-    meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
-    data: {
-      projects: [],
-      stages: [],
-      tasks: [],
-      members: [],
-      assignments: [],
-      logs: [],
-      contracts: [],
-      settings: [],
-      executions: [],
-      executionAttempts: [],
-      executionEvents: [],
-      writebackProposals: [],
-    },
-  };
-}
 
 function normalize(pkg: unknown): string {
   const p = JSON.parse(
@@ -78,7 +59,6 @@ describe('带数据的四表往返保真', () => {
     await bundle.projects.insert({
       id: 'proj_exec',
       name: '执行域项目',
-      type: 'dining' as never,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -240,20 +220,22 @@ describe('旧备份（无四表）兼容', () => {
     });
 
     const svc = new BackupService(bundle);
-    // 导入一个不带四表的空包
-    await svc.importAndReplace({
-      meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
-      data: {
-        projects: [],
-        stages: [],
-        tasks: [],
-        members: [],
-        assignments: [],
-        logs: [],
-        contracts: [],
-        settings: [],
-      },
-    });
+    // 导入一个不带四表的老包（经校验归一：zod 把缺失表默认成 []，运行时不整包拒绝）
+    await svc.importAndReplace(
+      validateBackupJson({
+        meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
+        data: {
+          projects: [],
+          stages: [],
+          tasks: [],
+          members: [],
+          assignments: [],
+          logs: [],
+          contracts: [],
+          settings: [],
+        },
+      }),
+    );
     const after = await bundle.executions.listExecutionsByProject('p1');
     expect(after).toHaveLength(0);
     const events = await bundle.executions.listEvents(exec.id);

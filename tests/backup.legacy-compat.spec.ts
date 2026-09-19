@@ -20,6 +20,7 @@ import {
   validateBackupJson,
 } from '../src/core/services/backup.service';
 import type { BackupPackage } from '../src/core/types/dto';
+import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
 
@@ -30,24 +31,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   bundle = await createRepositories({ dataSource: 'local' });
   // fake-indexeddb 同 module 实例共享同名库（'changxia'）——每次用空包清库重建保证隔离
-  await bundle.admin?.replaceAllImport(emptyPackage());
+  await bundle.admin?.replaceAllImport(emptyPackage(1));
 });
-
-function emptyPackage(): BackupPackage {
-  return {
-    meta: { app: 'changxia', schemaVersion: 1, exportedAt: '2026-08-01T00:00:00.000Z' },
-    data: {
-      projects: [],
-      stages: [],
-      tasks: [],
-      members: [],
-      assignments: [],
-      logs: [],
-      contracts: [],
-      settings: [],
-    },
-  };
-}
 
 /** 造一份「旧版」备份包：members 无 roleKind 字段，tasks 无 assigneeIds 字段，其余表为空 */
 function legacyPackage(overrides?: {

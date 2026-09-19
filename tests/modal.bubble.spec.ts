@@ -40,12 +40,16 @@ describe('Modal 合成冒泡拦截（bug #1）', () => {
         React.createElement('span', null, '项目卡片'),
         React.createElement(
           Modal,
-          { open: true, onClose: () => {}, ariaLabel: '项目重命名' },
-          React.createElement('input', {
-            'aria-label': '新的项目名称',
-            value: '测试',
-            onChange: () => {},
-          }),
+          {
+            open: true,
+            onClose: () => {},
+            ariaLabel: '项目重命名',
+            children: React.createElement('input', {
+              'aria-label': '新的项目名称',
+              value: '测试',
+              onChange: () => {},
+            }),
+          },
         ),
       ),
     );

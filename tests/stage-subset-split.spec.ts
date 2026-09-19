@@ -240,11 +240,16 @@ beforeEach(async () => {
       projects: [],
       stages: [],
       tasks: [],
+      itineraries: [],
       members: [],
       assignments: [],
       logs: [],
       contracts: [],
       settings: [],
+      executions: [],
+      executionAttempts: [],
+      executionEvents: [],
+      writebackProposals: [],
     },
   });
 });
@@ -260,7 +265,6 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
 
     const project = await svc.createManualProject({
       name: '望江楼 · 方案委托',
-      type: 'dining' as never,
       address: '成都市青羊区',
       clientName: '测试甲方',
       contractAmount: null,
@@ -287,7 +291,6 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
     const svc = makeService();
     const project = await svc.createManualProject({
       name: '望江楼 · 全流程',
-      type: 'dining' as never,
       address: '成都市青羊区',
       clientName: '测试甲方',
       contractAmount: null,
@@ -318,7 +321,6 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
     const svc = makeService();
     const project = await svc.createManualProject({
       name: '键序校验项目',
-      type: 'dining' as never,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -387,7 +389,6 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
 
     const project = await svc.createManualProject({
       name: '二十段项目',
-      type: 'dining' as never,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -411,7 +412,6 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       svc.createProjectFromContract(
         {
           projectName: '空阶段项目',
-          projectType: 'dining' as never,
           address: '',
           clientName: '',
           contractAmount: null,
@@ -438,7 +438,6 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       svc.createProjectFromContract(
         {
           projectName: '超限段项目',
-          projectType: 'dining' as never,
           address: '',
           clientName: '',
           contractAmount: null,
