@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 
 import type { Project, Stage } from '../src/core/types/entities';
+import { ProjectStatus, ScheduleBasis, StageStatus } from '../src/core/types/enums';
 import {
   pickActiveStage,
   currentStageOf,
@@ -40,9 +41,12 @@ function makeStage(p: Partial<Stage> & Pick<Stage, 'orderIndex' | 'startAt' | 'e
   return {
     id: `stg_${p.orderIndex}`,
     projectId: 'proj_x',
+    templateKey: null,
+    colorIndex: p.orderIndex,
+    customColor: null,
     name: `阶段${p.orderIndex}`,
     ratioPercent: 10,
-    status: 'not_started',
+    status: StageStatus.NotStarted,
     ownerId: null,
     visible: true,
     resourcePath: null,
@@ -56,7 +60,6 @@ function makeProject(p: Partial<Project>): Project {
   return {
     id: 'proj_x',
     name: '示例项目',
-    type: 'dining',
     address: '某地址',
     clientName: '某客户',
     contractAmount: null,
@@ -64,7 +67,13 @@ function makeProject(p: Partial<Project>): Project {
     plannedStartAt: '2026-09-01',
     plannedEndAt: '2026-09-30',
     coverColor: null,
-    status: 'active',
+    shortLabel: null,
+    stagePresetKey: null,
+    stageTemplateVersion: 0,
+    scheduleBasis: ScheduleBasis.Calendar,
+    domain: 'indoor',
+    kind: 'human',
+    status: ProjectStatus.Active,
     revision: 1,
     updatedAt: '2026-09-01T00:00:00.000Z',
     ...p,
@@ -91,8 +100,8 @@ function nineStages(todayIso: string): Stage[] {
 
 describe('progress.pickActiveStage / currentStageOf', () => {
   const stages = [
-    makeStage({ orderIndex: 1, startAt: '2026-09-01', endAt: '2026-09-10', status: 'in_progress' }),
-    makeStage({ orderIndex: 2, startAt: '2026-09-11', endAt: '2026-09-20', status: 'not_started' }),
+    makeStage({ orderIndex: 1, startAt: '2026-09-01', endAt: '2026-09-10', status: StageStatus.InProgress }),
+    makeStage({ orderIndex: 2, startAt: '2026-09-11', endAt: '2026-09-20', status: StageStatus.NotStarted }),
   ];
 
   it('今天落在阶段区间内 → 该阶段', () => {
@@ -105,14 +114,14 @@ describe('progress.pickActiveStage / currentStageOf', () => {
     expect(pickActiveStage(stages, '2026-09-25')).toBeNull();
   });
   it('currentStageOf 末阶段回落（全 Completed 时返回最后一条）', () => {
-    const done = stages.map((s) => ({ ...s, status: 'completed' as const }));
+    const done = stages.map((s) => ({ ...s, status: StageStatus.Completed }));
     expect(currentStageOf(done, '2026-09-25')?.orderIndex).toBe(2);
   });
 });
 
 describe('progress.computeProjectStatus / computeProjectPercent', () => {
   it('全部完成 → completed，percent=100', () => {
-    const stages = nineStages('2026-09-15').map((s) => ({ ...s, status: 'completed' as const }));
+    const stages = nineStages('2026-09-15').map((s) => ({ ...s, status: StageStatus.Completed }));
     expect(computeProjectStatus(makeProject({}), stages, '2026-09-15')).toBe('completed');
     expect(computeProjectPercent(stages)).toBe(100);
   });
@@ -121,7 +130,7 @@ describe('progress.computeProjectStatus / computeProjectPercent', () => {
     expect(computeProjectStatus(p, nineStages('2026-09-15'), '2026-09-15')).toBe('not_started');
   });
   it('plannedEndAt < today 且未完成 → overdue', () => {
-    const stages = [makeStage({ orderIndex: 1, startAt: '2026-09-01', endAt: '2026-09-10', status: 'in_progress' })];
+    const stages = [makeStage({ orderIndex: 1, startAt: '2026-09-01', endAt: '2026-09-10', status: StageStatus.InProgress })];
     const p = makeProject({ plannedStartAt: '2026-09-01', plannedEndAt: '2026-09-10' });
     expect(computeProjectStatus(p, stages, '2026-09-20')).toBe('overdue');
   });
@@ -193,7 +202,7 @@ describe('calendarMath.computeCalendarEntry（PRD §4.1 / §4.2）', () => {
 
   it('全部完成：s9 色、bandEnd=plannedEndAt、percent=100', () => {
     const p = makeProject({ plannedStartAt: '2026-09-01', plannedEndAt: '2026-09-30' });
-    const stages = nineStages('2026-09-15').map((s) => ({ ...s, status: 'completed' as const }));
+    const stages = nineStages('2026-09-15').map((s) => ({ ...s, status: StageStatus.Completed }));
     const e = computeCalendarEntry(p, stages, meta);
     expect(e.status).toBe('completed');
     expect(e.progressDate).toBe('2026-09-30');
@@ -204,7 +213,7 @@ describe('calendarMath.computeCalendarEntry（PRD §4.1 / §4.2）', () => {
   });
 
   it('逾期：clay 色、bandEnd 延伸到今天', () => {
-    const stages = [makeStage({ orderIndex: 1, startAt: '2026-09-01', endAt: '2026-09-10', status: 'in_progress' })];
+    const stages = [makeStage({ orderIndex: 1, startAt: '2026-09-01', endAt: '2026-09-10', status: StageStatus.InProgress })];
     const p = makeProject({ plannedStartAt: '2026-09-01', plannedEndAt: '2026-09-10' });
     const e = computeCalendarEntry(p, stages, meta);
     expect(e.status).toBe('overdue');
