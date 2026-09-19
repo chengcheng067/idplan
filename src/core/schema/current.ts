@@ -20,11 +20,14 @@ export const DB_NAME = 'changxia';
  * v2 → v3（v0.7 §6.1 / O1）：Task 的唯一索引换轨 `&externalId` → `&[projectId+externalId]`，
  *   使幂等键的作用域从「全局」收窄为「项目内」。
  * v3 → v4（v0.9 旅游二期）：新增 itineraries 表，按 `[projectId+date]` 唯一。
+ * v4 → v5（Agent 执行域第一切片）：新增四张表 executions / executionAttempts /
+ *   executionEvents / writebackProposals，分别承载 Execution 主实体、Attempt、append-only
+ *   事件流水与字段级写回提案。**不涉及任何既有表的字段或索引改动**。
  *
  * ⚠️ 本常量与备份包的 `BACKUP_SCHEMA_VERSION`（恒为 3）是**两个独立维度**：
  *   前者是 IndexedDB 库版本，后者是备份文件格式版本。本版只动前者。
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** 全部表名（与 dexie.database.ts 的 Table 声明一一对应，备份整库替换遍历用） */
 export const ALL_STORE_NAMES = [
@@ -37,6 +40,10 @@ export const ALL_STORE_NAMES = [
   'stageLogs',
   'contracts',
   'settings',
+  'executions',
+  'executionAttempts',
+  'executionEvents',
+  'writebackProposals',
 ] as const;
 
 export type StoreName = (typeof ALL_STORE_NAMES)[number];
@@ -46,7 +53,15 @@ export type StoreName = (typeof ALL_STORE_NAMES)[number];
  * 说明：tasks 里的 `done` / `[stageId+done]` 是死索引（布尔不是合法 IDB key），
  * 但保留它们是刻意的——删除会让 v2 与 v1 差异变大、增加迁移风险，且无害。
  */
-export const DEXIE_V1_STORES: Readonly<Record<Exclude<StoreName, 'itineraries'>, string>> = {
+export const DEXIE_V1_STORES: Readonly<
+  Record<
+    Exclude<
+      StoreName,
+      'itineraries' | 'executions' | 'executionAttempts' | 'executionEvents' | 'writebackProposals'
+    >,
+    string
+  >
+> = {
   projects: 'id, status, name, updatedAt',
   stages: 'id, projectId, [projectId+orderIndex], updatedAt',
   tasks: 'id, projectId, stageId, assigneeId, done, [stageId+done], dueDate',
@@ -98,8 +113,32 @@ export const DEXIE_V4_STORES: Readonly<Partial<Record<StoreName, string>>> = {
 };
 
 /**
- * 当前版本（SCHEMA_VERSION）的全量索引声明 = v1 ∪ v2 ∪ v3。
- * 守卫测试用它断言：① 表集合完整（8 张，一张不少）；
+ * v5 新增 Agent 执行域四张表（第一切片）。每张表只列自己，**不重声明**任何既有表
+ * （Dexie 对未列出的表自动继承历史定义，重列反而易漂移 / 漏抄）。
+ *
+ * 索引设计（按查询需要建，避免死索引与写放大）：
+ *   - executions：按 projectId（运行中心按项目聚合）、taskId（任务挂载）、status（四类队列
+ *     「待确认/执行中/待验收/异常」过滤）、idempotencyKey（幂等去重）建索引；
+ *     id 为内联主键，createdAt/updatedAt 供排序与诊断。
+ *   - executionAttempts：`[executionId+attemptNo]` 复合唯一（同一 execution 内 attemptNo
+ *     单调递增，重复编号被 DB 层拒绝）；另按 executionId / status 查询。
+ *   - executionEvents：`[executionId+seq]` 复合唯一（append-only，seq 单调递增）；
+ *     idempotencyKey（迟到回执/重复事件幂等拒绝）、type（按类型检索）、executionId 建索引。
+ *   - writebackProposals：按 executionId / projectId / taskId / status / idempotencyKey 建索引。
+ */
+export const DEXIE_V5_STORES: Readonly<Partial<Record<StoreName, string>>> = {
+  executions:
+    'id, projectId, taskId, source, status, idempotencyKey, currentAttemptNo, createdAt, updatedAt',
+  executionAttempts:
+    'id, executionId, &[executionId+attemptNo], status, createdAt, updatedAt',
+  executionEvents: 'id, executionId, &[executionId+seq], idempotencyKey, type, createdAt',
+  writebackProposals:
+    'id, executionId, projectId, taskId, status, idempotencyKey, createdAt, updatedAt',
+};
+
+/**
+ * 当前版本（SCHEMA_VERSION）的全量索引声明 = v1 ∪ v2 ∪ v3 ∪ v4 ∪ v5。
+ * 守卫测试用它断言：① 表集合完整（13 张，一张不少）；
  * ② 每个增量版本对其覆盖的每张表都**逐字包含**该表在全部历史版本里的索引项
  *    （防整体替换丢索引）。
  * 注：tasks 的最终形态取自 v3（后展开者胜），这正是「当前全量」应有的语义。
@@ -109,4 +148,8 @@ export const DEXIE_STORES: Readonly<Record<StoreName, string>> = {
   ...DEXIE_V2_STORES,
   ...DEXIE_V3_STORES,
   itineraries: DEXIE_V4_STORES.itineraries as string,
+  executions: DEXIE_V5_STORES.executions as string,
+  executionAttempts: DEXIE_V5_STORES.executionAttempts as string,
+  executionEvents: DEXIE_V5_STORES.executionEvents as string,
+  writebackProposals: DEXIE_V5_STORES.writebackProposals as string,
 };

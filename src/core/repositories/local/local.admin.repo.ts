@@ -2,6 +2,9 @@ import type { BackupPackage } from '../../types/dto';
 import type {
   AssignmentLog,
   ContractRecord,
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
   ItineraryDay,
   Member,
   Project,
@@ -9,6 +12,7 @@ import type {
   Stage,
   StageLog,
   Task,
+  WritebackProposal,
 } from '../../types/entities';
 import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
 import { BACKUP_SCHEMA_VERSION } from '../../services/backup.service';
@@ -32,25 +36,56 @@ export class LocalAdminRepository implements IAdminRepository {
 
   public async fullExport(): Promise<BackupPackage> {
     try {
-      const [projects, stages, tasks, itineraries, members, assignments, logs, contracts, settings] =
-        await Promise.all([
-          this.db.projects.toArray() as Promise<Project[]>,
-          this.db.stages.toArray() as Promise<Stage[]>,
-          this.db.tasks.toArray() as Promise<Task[]>,
-          this.db.itineraries.toArray() as Promise<ItineraryDay[]>,
-          this.db.members.toArray() as Promise<Member[]>,
-          this.db.assignments.toArray() as Promise<AssignmentLog[]>,
-          this.db.stageLogs.toArray() as Promise<StageLog[]>,
-          this.db.contracts.toArray() as Promise<ContractRecord[]>,
-          this.db.settings.toArray() as Promise<Setting[]>,
-        ]);
+      const [
+        projects,
+        stages,
+        tasks,
+        itineraries,
+        members,
+        assignments,
+        logs,
+        contracts,
+        settings,
+        executions,
+        executionAttempts,
+        executionEvents,
+        writebackProposals,
+      ] = await Promise.all([
+        this.db.projects.toArray() as Promise<Project[]>,
+        this.db.stages.toArray() as Promise<Stage[]>,
+        this.db.tasks.toArray() as Promise<Task[]>,
+        this.db.itineraries.toArray() as Promise<ItineraryDay[]>,
+        this.db.members.toArray() as Promise<Member[]>,
+        this.db.assignments.toArray() as Promise<AssignmentLog[]>,
+        this.db.stageLogs.toArray() as Promise<StageLog[]>,
+        this.db.contracts.toArray() as Promise<ContractRecord[]>,
+        this.db.settings.toArray() as Promise<Setting[]>,
+        this.db.executions.toArray() as Promise<Execution[]>,
+        this.db.executionAttempts.toArray() as Promise<ExecutionAttempt[]>,
+        this.db.executionEvents.toArray() as Promise<ExecutionEvent[]>,
+        this.db.writebackProposals.toArray() as Promise<WritebackProposal[]>,
+      ]);
       return {
         meta: {
           app: 'changxia',
           schemaVersion: BACKUP_SCHEMA_VERSION,
           exportedAt: new Date().toISOString(),
         },
-        data: { projects, stages, tasks, itineraries, members, assignments, logs, contracts, settings },
+        data: {
+          projects,
+          stages,
+          tasks,
+          itineraries,
+          members,
+          assignments,
+          logs,
+          contracts,
+          settings,
+          executions,
+          executionAttempts,
+          executionEvents,
+          writebackProposals,
+        },
       };
     } catch (err) {
       throw new ChangxiaError(ChangxiaErrorCode.Storage, '全量导出失败。', err);
@@ -97,6 +132,15 @@ export class LocalAdminRepository implements IAdminRepository {
           return pkg.data.contracts;
         case 'settings':
           return pkg.data.settings;
+        // v5 Agent 执行域四表：旧备份缺这些字段时安全默认 []，不整包拒绝。
+        case 'executions':
+          return pkg.data.executions ?? [];
+        case 'executionAttempts':
+          return pkg.data.executionAttempts ?? [];
+        case 'executionEvents':
+          return pkg.data.executionEvents ?? [];
+        case 'writebackProposals':
+          return pkg.data.writebackProposals ?? [];
         default:
           return [];
       }

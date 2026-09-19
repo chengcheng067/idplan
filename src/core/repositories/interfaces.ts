@@ -12,6 +12,9 @@ import type { TaskSource, TaskStatus } from '../types/enums';
 import type {
   AssignmentLog,
   ContractRecord,
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
   ItineraryDay,
   Member,
   Project,
@@ -19,6 +22,7 @@ import type {
   Stage,
   StageLog,
   Task,
+  WritebackProposal,
 } from '../types/entities';
 import type {
   CreateItineraryDayCmd,
@@ -31,6 +35,16 @@ import type {
   UpdateStageCmd,
   UpdateTaskCmd,
 } from '../types/dto';
+import type {
+  AttemptStatus,
+  ExecutionConfirmation,
+  ExecutionEventActor,
+  ExecutionEventType,
+  ExecutionSource,
+  ExecutionStatus,
+  WritebackOperation,
+  WritebackProposalStatus,
+} from '../types/agent-execution';
 
 /** 查询过滤条件（尽量简单——全量装载策略下仅需这些维度） */
 export interface ProjectQuery {
@@ -182,6 +196,115 @@ export interface ISettingsRepository {
   replaceAll(rows: Setting[]): Promise<void>;
 }
 
+/* --------------------------------- Agent 执行域 --------------------------------- */
+
+/** 创建执行单的输入（id / 时间戳 / 状态等由仓储统一生成） */
+export interface CreateExecutionCmd {
+  projectId: string;
+  source: ExecutionSource;
+  objective: string;
+  taskId?: string | null;
+  agentMemberId?: string | null;
+  channelKind?: string | null;
+  inputSnapshotHash?: string | null;
+  /** 幂等键（必填，由 makeExecutionIdempotencyKey 生成） */
+  idempotencyKey: string;
+}
+
+/** 更新执行单状态的输入（仅状态机允许的字段，由调用方先经 assertTransition 校验） */
+export interface UpdateExecutionStatusCmd {
+  status: ExecutionStatus;
+  confirmation?: ExecutionConfirmation | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  terminalReason?: string | null;
+  blockedReason?: string | null;
+}
+
+/** 追加执行事件的输入（seq / id 由调用方经 nextSeq / 仓储生成；append-only） */
+export interface AppendExecutionEventCmd {
+  executionId: string;
+  attemptId?: string | null;
+  seq: number;
+  type: ExecutionEventType;
+  actor: ExecutionEventActor;
+  fromStatus?: ExecutionStatus | null;
+  toStatus?: ExecutionStatus | null;
+  reason?: string | null;
+  idempotencyKey?: string | null;
+}
+
+/** 创建执行尝试的输入 */
+export interface CreateAttemptCmd {
+  executionId: string;
+  /**
+   * attemptNo 由仓储统一计算（单调，nextAttemptNo 保证）。
+   * 调用方可选传；若传入则必须与仓储计算值一致，否则抛错（防止乱传）。
+   */
+  attemptNo?: number;
+  status?: AttemptStatus;
+  runtimeKind?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  inputSnapshotHash?: string | null;
+}
+
+/** 更新执行尝试的输入 */
+export interface UpdateAttemptCmd {
+  status?: AttemptStatus;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  errorCode?: string | null;
+  errorSummary?: string | null;
+  terminalReason?: string | null;
+}
+
+/** 创建写回提案的输入 */
+export interface CreateProposalCmd {
+  executionId: string;
+  attemptId?: string | null;
+  projectId: string;
+  taskId?: string | null;
+  operations: WritebackOperation[];
+  /** 幂等键（必填，由 makeWritebackIdempotencyKey 生成） */
+  idempotencyKey: string;
+  status?: WritebackProposalStatus;
+}
+
+/** 更新写回提案的输入 */
+export interface UpdateProposalCmd {
+  operations?: WritebackOperation[];
+  status?: WritebackProposalStatus;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+}
+
+/**
+ * Agent 执行域仓储（第一切片）。
+ *
+ * 聚合承载 executions / executionAttempts / executionEvents / writebackProposals 四类读写，
+ * 与旅游 itineraries 仓储同范式：全量装载策略下仅需 projectId / executionId 维度查询。
+ *
+ * 纪律（铁律 4/6）：
+ * - 全部方法 async；local(Dexie) / remote(fetch) 两套适配器逐一对应实现；
+ * - executionEvents 刻意不暴露 update/delete（append-only 审计流水，用类型系统锁死）；
+ * - 任何失败抛 ChangxiaError{code,userMessage}。
+ */
+export interface IExecutionsRepository {
+  createExecution(cmd: CreateExecutionCmd): Promise<Execution>;
+  getExecution(id: string): Promise<Execution | null>;
+  listExecutionsByProject(projectId: string): Promise<Execution[]>;
+  updateExecutionStatus(id: string, cmd: UpdateExecutionStatusCmd): Promise<Execution>;
+  appendEvent(cmd: AppendExecutionEventCmd): Promise<ExecutionEvent>;
+  listEvents(executionId: string): Promise<ExecutionEvent[]>;
+  createAttempt(cmd: CreateAttemptCmd): Promise<ExecutionAttempt>;
+  updateAttempt(id: string, cmd: UpdateAttemptCmd): Promise<ExecutionAttempt>;
+  listAttempts(executionId: string): Promise<ExecutionAttempt[]>;
+  createProposal(cmd: CreateProposalCmd): Promise<WritebackProposal>;
+  updateProposal(id: string, cmd: UpdateProposalCmd): Promise<WritebackProposal>;
+  listProposals(executionId: string): Promise<WritebackProposal[]>;
+}
+
 /** 备份/引导用管理通道（不走日常业务路径；remote 对应 /api/backup 与导入端点） */
 export interface IAdminRepository {
   /** 全量导出（含 append-only 流水表整表） */
@@ -210,6 +333,8 @@ export interface IRepositoryBundle {
   logs: ILogsRepository;
   contracts: IContractsRepository;
   settings: ISettingsRepository;
+  /** Agent 执行域仓储（第一切片） */
+  executions: IExecutionsRepository;
   admin?: IAdminRepository;
 }
 

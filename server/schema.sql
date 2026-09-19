@@ -182,6 +182,77 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at TEXT NOT NULL
 );
 
+-- v5 Agent 执行域（第一切片）：四张表与 src/core/types/agent-execution.ts 同构。
+-- 执行单主实体（与 Task.status 完全解耦；描述「Agent 执行」这一独立生命周期）。
+CREATE TABLE IF NOT EXISTS executions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  source TEXT NOT NULL,
+  objective TEXT NOT NULL DEFAULT '',
+  agent_member_id TEXT,
+  channel_kind TEXT,
+  input_snapshot_hash TEXT,
+  status TEXT NOT NULL,
+  confirmation TEXT,            -- JSON 化的 ExecutionConfirmation，可空
+  idempotency_key TEXT NOT NULL,
+  current_attempt_no INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  terminal_reason TEXT,
+  blocked_reason TEXT
+);
+
+-- 每次实际执行尝试（不覆盖旧记录，每次新建一条）。
+CREATE TABLE IF NOT EXISTS execution_attempts (
+  id TEXT PRIMARY KEY,
+  execution_id TEXT NOT NULL REFERENCES executions(id),
+  attempt_no INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  runtime_kind TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  input_snapshot_hash TEXT,
+  error_code TEXT,
+  error_summary TEXT,
+  terminal_reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- append-only 执行事件流水（审计 + 迟到回执幂等去重）。
+CREATE TABLE IF NOT EXISTS execution_events (
+  id TEXT PRIMARY KEY,
+  execution_id TEXT NOT NULL REFERENCES executions(id),
+  attempt_id TEXT,
+  seq INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  from_status TEXT,
+  to_status TEXT,
+  reason TEXT,
+  idempotency_key TEXT,
+  created_at TEXT NOT NULL
+);
+
+-- 字段级写回提案（执行成功 ≠ 业务完成，只有写回成功才进完成态）。
+CREATE TABLE IF NOT EXISTS writeback_proposals (
+  id TEXT PRIMARY KEY,
+  execution_id TEXT NOT NULL REFERENCES executions(id),
+  attempt_id TEXT,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  operations TEXT NOT NULL,      -- JSON 化的 WritebackOperation[]
+  status TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  decided_by TEXT,
+  decided_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 -- @SECTION:INDEXES
 
 CREATE INDEX IF NOT EXISTS idx_stages_project ON stages(project_id, order_index);
@@ -207,4 +278,22 @@ CREATE INDEX IF NOT EXISTS idx_members_actor ON members(actor_kind);
 -- append-only 流水索引
 CREATE INDEX IF NOT EXISTS idx_assignments_task ON assignments(task_id);
 CREATE INDEX IF NOT EXISTS idx_logs_stage ON stage_logs(stage_id);
+-- v5 Agent 执行域索引（与 dexie.database.ts DEXIE_V5_STORES 对应维度一致）：
+CREATE INDEX IF NOT EXISTS idx_executions_project ON executions(project_id);
+CREATE INDEX IF NOT EXISTS idx_executions_task ON executions(task_id);
+CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
+CREATE INDEX IF NOT EXISTS idx_executions_idempotency ON executions(idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_execution_attempts_uniq
+  ON execution_attempts(execution_id, attempt_no);
+CREATE INDEX IF NOT EXISTS idx_execution_attempts_execution ON execution_attempts(execution_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_execution_events_uniq
+  ON execution_events(execution_id, seq);
+CREATE INDEX IF NOT EXISTS idx_execution_events_execution ON execution_events(execution_id);
+CREATE INDEX IF NOT EXISTS idx_execution_events_idempotency ON execution_events(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_execution_events_type ON execution_events(type);
+CREATE INDEX IF NOT EXISTS idx_writeback_proposals_execution ON writeback_proposals(execution_id);
+CREATE INDEX IF NOT EXISTS idx_writeback_proposals_project ON writeback_proposals(project_id);
+CREATE INDEX IF NOT EXISTS idx_writeback_proposals_task ON writeback_proposals(task_id);
+CREATE INDEX IF NOT EXISTS idx_writeback_proposals_status ON writeback_proposals(status);
+CREATE INDEX IF NOT EXISTS idx_writeback_proposals_idempotency ON writeback_proposals(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_logs_project ON stage_logs(project_id);

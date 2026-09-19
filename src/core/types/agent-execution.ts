@@ -1,0 +1,307 @@
+/**
+ * Agent 执行域（Execution Domain）核心类型与常量（v1 第一切片）。
+ *
+ * 本文件是**纯类型 + 常量 + 纯函数**，零运行时副作用、零 DOM / 零 Node 专属 API
+ * （与 `src/core/types/**` 同属共享内核，前后端单份编译，见 server/tsconfig.json）。
+ *
+ * 设计约束（来自 feature-dev-agent-board 规格评审）：
+ *   - 执行状态是**独立实体**，绝不污染现有 `Task.status`（7 值，不能承担暂停/取消/失败）。
+ *   - 一个 Execution 可有多个 Attempt（每次实际执行新建一条，不覆盖旧记录）。
+ *   - 所有状态变化、用户动作、Agent 事件、写回都进 append-only 的 ExecutionEvent。
+ *   - 写回先生成字段级 before/after diff（WritebackProposal），经人工批准后才落库。
+ */
+
+/* ----------------------------------- 来源 ----------------------------------- */
+
+/** Execution 的四类入口：统一收敛成同一个 Execution，不允许各自拥有状态 */
+export type ExecutionSource =
+  | 'project-task'
+  | 'natural-language'
+  | 'external'
+  | 'template';
+
+export const EXECUTION_SOURCES: readonly ExecutionSource[] = [
+  'project-task',
+  'natural-language',
+  'external',
+  'template',
+];
+
+/* ------------------------------- 执行状态（10 值） ------------------------------- */
+
+/**
+ * Execution 生命周期状态（10 个，id 严格固定，不得增删或改名）。
+ * 与 TaskStatus 完全解耦——它描述「Agent 执行」这一独立生命周期，
+ * 不回写、不覆盖项目任务的 status。
+ */
+export const ExecutionStatus = {
+  /** 草稿（四类入口统一产出） */
+  Draft: 'draft',
+  /** 待确认（计划已生成，等待人工批准） */
+  AwaitingConfirmation: 'awaiting_confirmation',
+  /** 排队中（已批准，等待调度） */
+  Queued: 'queued',
+  /** 执行中 */
+  Running: 'running',
+  /** 已暂停（合作式暂停，不启动新步骤） */
+  Paused: 'paused',
+  /** 待处理（缺输入/权限/通道/冲突等，需人工介入） */
+  NeedsAttention: 'needs_attention',
+  /** 待验收（产物已产出，等待人工验收） */
+  AwaitingReview: 'awaiting_review',
+  /** 已完成（验收通过且写回成功，终态） */
+  Completed: 'completed',
+  /** 执行失败（终态） */
+  Failed: 'failed',
+  /** 已取消（终态，迟到回执不得再改写） */
+  Cancelled: 'cancelled',
+} as const;
+
+export type ExecutionStatus = (typeof ExecutionStatus)[keyof typeof ExecutionStatus];
+
+/** 终态集合（出边为空） */
+export const EXECUTION_TERMINAL_STATUSES: readonly ExecutionStatus[] = [
+  ExecutionStatus.Completed,
+  ExecutionStatus.Failed,
+  ExecutionStatus.Cancelled,
+];
+
+/* ------------------------------- Attempt 状态（6 值） ------------------------------- */
+
+/** 每一次实际执行 Attempt 的状态 */
+export const AttemptStatus = {
+  Queued: 'queued',
+  Running: 'running',
+  Succeeded: 'succeeded',
+  Failed: 'failed',
+  Cancelled: 'cancelled',
+  Interrupted: 'interrupted',
+} as const;
+
+export type AttemptStatus = (typeof AttemptStatus)[keyof typeof AttemptStatus];
+
+/** Attempt 非终态集合（同一 execution 同时最多一个非终态 attempt） */
+export const ATTEMPT_NON_TERMINAL_STATUSES: readonly AttemptStatus[] = [
+  AttemptStatus.Queued,
+  AttemptStatus.Running,
+];
+
+/* ------------------------------- 事件类型 ------------------------------- */
+
+/** ExecutionEvent 类型（覆盖规格要求的全部事件种类） */
+export type ExecutionEventType =
+  | 'created'
+  | 'status_changed'
+  | 'confirmation_granted'
+  | 'attempt_started'
+  | 'attempt_finished'
+  | 'artifact_registered'
+  | 'writeback_proposed'
+  | 'writeback_applied'
+  | 'cancel_requested'
+  | 'canceled'
+  | 'blocked'
+  | 'resumed'
+  | 'error';
+
+export const EXECUTION_EVENT_TYPES: readonly ExecutionEventType[] = [
+  'created',
+  'status_changed',
+  'confirmation_granted',
+  'attempt_started',
+  'attempt_finished',
+  'artifact_registered',
+  'writeback_proposed',
+  'writeback_applied',
+  'cancel_requested',
+  'canceled',
+  'blocked',
+  'resumed',
+  'error',
+];
+
+/** 事件行为体（谁触发了这条事件） */
+export type ExecutionEventActor = 'user' | 'agent' | 'system' | 'external';
+
+/* ------------------------------- 写回提案状态 ------------------------------- */
+
+/** WritebackProposal 状态 */
+export const WritebackProposalStatus = {
+  Draft: 'draft',
+  Proposed: 'proposed',
+  Applied: 'applied',
+  Rejected: 'rejected',
+  Conflict: 'conflict',
+} as const;
+
+export type WritebackProposalStatus =
+  (typeof WritebackProposalStatus)[keyof typeof WritebackProposalStatus];
+
+/* ----------------------------------- 实体 ----------------------------------- */
+
+/** 人工确认快照（计划不可变，修改计划必须生成新版本） */
+export interface ExecutionConfirmation {
+  confirmedAt: string;
+  confirmedBy: string;
+  planHash: string;
+  planRevision: number;
+}
+
+/** 执行单（Execution）：Agent 的一次「可追踪执行」的主实体 */
+export interface Execution {
+  id: string;
+  /** 归属项目（执行发生在某个人类/ Agent 项目内） */
+  projectId: string;
+  /** 关联任务（可空：natural-language / external / template 可能不直接挂任务） */
+  taskId: string | null;
+  /** 来源入口 */
+  source: ExecutionSource;
+  /** 目标（自然语言目标） */
+  objective: string;
+  /** 执行该 execution 的 Agent Member.id（可空） */
+  agentMemberId: string | null;
+  /** 通道种类（可空，如 loopback / nas / http） */
+  channelKind: string | null;
+  /** 输入快照哈希（可空；用于幂等与迟到回执拒绝） */
+  inputSnapshotHash: string | null;
+  /** 当前执行状态（见 ExecutionStatus） */
+  status: ExecutionStatus;
+  /** 人工确认快照（awaiting_confirmation 之后才有），可空 */
+  confirmation: ExecutionConfirmation | null;
+  /** 幂等键（稳定字符串，由 makeExecutionIdempotencyKey 生成） */
+  idempotencyKey: string;
+  /** 当前 attempt 编号（指向最近一次 attempt） */
+  currentAttemptNo: number;
+  createdAt: string;
+  updatedAt: string;
+  /** 开始时刻（进入 running 时写入），可空 */
+  startedAt: string | null;
+  /** 结束时刻（进入终态时写入），可空 */
+  finishedAt: string | null;
+  /** 终态原因（failed/cancelled 等），可空 */
+  terminalReason: string | null;
+  /** 阻塞原因（needs_attention 时），可空 */
+  blockedReason: string | null;
+}
+
+/** 执行尝试（ExecutionAttempt）：每次实际执行新建一条，不覆盖旧记录 */
+export interface ExecutionAttempt {
+  id: string;
+  executionId: string;
+  /** 单调递增，从 1 开始（nextAttemptNo 保证） */
+  attemptNo: number;
+  status: AttemptStatus;
+  /** 运行时种类（可空，如 local-loopback / remote-http） */
+  runtimeKind: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  inputSnapshotHash: string | null;
+  /** 错误码（failed 时），可空 */
+  errorCode: string | null;
+  /** 错误摘要（failed 时），可空 */
+  errorSummary: string | null;
+  terminalReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 执行事件（ExecutionEvent）：append-only 审计流水 */
+export interface ExecutionEvent {
+  id: string;
+  executionId: string;
+  /** 关联 attempt（可空，非 attempt 维度的事件如 created 无 attempt） */
+  attemptId: string | null;
+  /** 同一 execution 内单调递增，从 1 开始（nextSeq 保证） */
+  seq: number;
+  type: ExecutionEventType;
+  actor: ExecutionEventActor;
+  /** 状态变化事件的起点状态（可空） */
+  fromStatus: ExecutionStatus | null;
+  /** 状态变化事件的终点状态（可空） */
+  toStatus: ExecutionStatus | null;
+  /** 原因（可空） */
+  reason: string | null;
+  /** 幂等键（可空，用于迟到回执/重复事件的幂等拒绝） */
+  idempotencyKey: string | null;
+  createdAt: string;
+}
+
+/** 单次写回操作：字段级 before/after diff */
+export interface WritebackOperation {
+  /** 目标字段（必须为白名单字段，否则提案整体非法） */
+  field: string;
+  /** 写入前的值（执行域只读，不改动既有业务表） */
+  before: unknown;
+  /** 写入后的值（执行域只读，不改动既有业务表） */
+  after: unknown;
+}
+
+/** 写回提案（WritebackProposal）：执行成功不代表业务完成，只有写回成功才进完成态 */
+export interface WritebackProposal {
+  id: string;
+  executionId: string;
+  /** 关联 attempt（可空） */
+  attemptId: string | null;
+  projectId: string;
+  /** 目标任务（可空） */
+  taskId: string | null;
+  /** 字段级 before/after 操作集合 */
+  operations: WritebackOperation[];
+  status: WritebackProposalStatus;
+  /** 幂等键（由 makeWritebackIdempotencyKey 生成） */
+  idempotencyKey: string;
+  /** 决策人（approved/rejected 时），可空 */
+  decidedBy: string | null;
+  /** 决策时刻（可空） */
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* --------------------------------- 写回白名单 --------------------------------- */
+
+/**
+ * v1 写回白名单（字段级，集中一处，后续可配置）。
+ * 首版只允许安全、明确、低风险的字段；明确禁止 task.delete / stage.reorder /
+ * task.assignee 这类破坏性/越权字段。
+ */
+export const WRITEBACK_WRITABLE_FIELDS: readonly string[] = [
+  'task.status',
+  'task.notes.append',
+  'task.comment',
+  'task.attachment.ref',
+];
+
+/**
+ * 判断某字段是否允许写回（白名单校验的唯一出口）。
+ * @param field 形如 'task.status' 的点分字段名
+ */
+export function isFieldWritable(field: string): boolean {
+  return (WRITEBACK_WRITABLE_FIELDS as readonly string[]).includes(field);
+}
+
+/* --------------------------------- 幂等键工具 --------------------------------- */
+
+/**
+ * 生成 Execution 的稳定幂等键（不随机）。
+ * 同一 (source, projectId, naturalKey) 必然得到同一字符串，便于重复导入/触发去重。
+ */
+export function makeExecutionIdempotencyKey(parts: {
+  projectId: string;
+  source: ExecutionSource;
+  naturalKey: string;
+}): string {
+  return `exec:${parts.source}:${parts.projectId}:${parts.naturalKey}`;
+}
+
+/**
+ * 生成 WritebackProposal 的稳定幂等键（不随机）。
+ * 同一 (executionId, taskId, field) 必然得到同一字符串。
+ */
+export function makeWritebackIdempotencyKey(parts: {
+  executionId: string;
+  taskId: string | null;
+  field: string;
+}): string {
+  return `wb:${parts.executionId}:${parts.taskId ?? '-'}:${parts.field}`;
+}

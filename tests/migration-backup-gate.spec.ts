@@ -31,6 +31,7 @@ import {
   DEXIE_STORES,
   DEXIE_V1_STORES,
   DEXIE_V2_STORES,
+  DEXIE_V5_STORES,
   SCHEMA_VERSION,
 } from '../src/core/schema/current';
 import {
@@ -53,7 +54,7 @@ function storesUpTo(verno: 1 | 2 | 3): Record<string, string> {
 }
 
 /** 造一个处于指定 verno 的库（含一行可辨识数据），返回库名 */
-async function seedLibraryAt(verno: 1 | 2 | 3 | 4): Promise<string> {
+async function seedLibraryAt(verno: 1 | 2 | 3 | 4 | 5): Promise<string> {
   const name = `gate-lib-v${verno}`;
   await Dexie.delete(name);
   const db = new Dexie(name);
@@ -61,6 +62,14 @@ async function seedLibraryAt(verno: 1 | 2 | 3 | 4): Promise<string> {
   if (verno >= 2) db.version(2).stores(DEXIE_V2_STORES);
   if (verno >= 3) db.version(3).stores({ tasks: DEXIE_STORES.tasks });
   if (verno >= 4) db.version(4).stores({ itineraries: DEXIE_STORES.itineraries });
+  if (verno >= 5) {
+    db.version(5).stores({
+      executions: DEXIE_V5_STORES.executions,
+      executionAttempts: DEXIE_V5_STORES.executionAttempts,
+      executionEvents: DEXIE_V5_STORES.executionEvents,
+      writebackProposals: DEXIE_V5_STORES.writebackProposals,
+    });
+  }
   await db.open();
   await db.table('projects').add({
     id: `p-v${verno}`,
@@ -178,7 +187,7 @@ describe('闸门判据 needsPreMigrationBackup（唯一出处，测试不另抄�
   });
 
   it('已是当前版本 → 不弹（无需备份）', async () => {
-    const name = await seedLibraryAt(SCHEMA_VERSION as 3);
+    const name = await seedLibraryAt(SCHEMA_VERSION as 5);
     const verno = await detectLocalDbVersion(name);
     expect(verno).toBe(SCHEMA_VERSION);
     expect(needsPreMigrationBackup(verno)).toBe(false);
@@ -194,7 +203,7 @@ describe('闸门判据 needsPreMigrationBackup（唯一出处，测试不另抄�
       [1, true],
       [2, true],
       [3, true],
-      [4, false],
+      [4, true],
       // 比当前更高的版本号（理论上不该出现，但降级安装会）：不弹，
       // 由 Dexie 自己去抛 VersionError，而不是在这里假装要升级。
       [5, false],

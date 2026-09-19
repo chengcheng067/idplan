@@ -59,6 +59,10 @@ import type Database from 'better-sqlite3';
 
 import { ChangxiaError, ChangxiaErrorCode } from '../../src/core/types/enums';
 import type {
+  AppendExecutionEventCmd,
+  CreateAttemptCmd,
+  CreateExecutionCmd,
+  CreateProposalCmd,
   IMembersRepository,
   IProjectsRepository,
   IRepositoryBundle,
@@ -66,11 +70,25 @@ import type {
   IStagesRepository,
   ITasksRepository,
   IItinerariesRepository,
+  IExecutionsRepository,
   ProjectQuery,
   TaskQuery,
   TaskUpsertRow,
+  UpdateAttemptCmd,
+  UpdateExecutionStatusCmd,
+  UpdateProposalCmd,
 } from '../../src/core/repositories/interfaces';
-import type { ItineraryDay, Member, Project, Stage, Task } from '../../src/core/types/entities';
+import type {
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
+  ItineraryDay,
+  Member,
+  Project,
+  Stage,
+  Task,
+  WritebackProposal,
+} from '../../src/core/types/entities';
 // ★ 策略 A：复用既有路由**已导出**的两个映射函数（单一字段口径）
 import { rowToProject } from '../routes/projects.routes';
 import { rowToStage } from '../routes/stages.routes';
@@ -353,7 +371,53 @@ export function createSqliteBundle(
     list: () => notImplemented('contracts.list'),
   };
 
+  // v5 Agent 执行域：第一切片仅落地本地 Dexie 适配器，服务端通道暂不实现。
+  // 与旅游 itineraries 同纪律 —— 一律显式抛 notImplemented，绝不返回空/假数据。
+  //
+  // ⚠️ 待实现真实服务端适配器时，**必须复刻本地适配器的存储边界强制**（否则状态机只在客户端成立）：
+  //   - updateExecutionStatus：事务内先 assertStatusTransition(current, cmd.status, proposals)
+  //     再 assertExecutionConfirmed(current, cmd.status)，最后落库；读-校验-写原子化防并发穿透。
+  //   - createAttempt：事务内 canStartAttempt(attempts) 不通过即抛；attemptNo 由 nextAttemptNo 计算，
+  //     调用方传入值与计算值不一致即抛。
+  //   - appendEvent：事务内要求 cmd.seq === nextSeq(events)，乱序/跳号即抛。
+  // 校验入口集中在 src/core/execution/execution-state.ts，前后端单份编译，服务端应直接复用。
+  const executions: IExecutionsRepository = {
+    createExecution: (_cmd: CreateExecutionCmd): Promise<Execution> =>
+      notImplemented('executions.createExecution'),
+    getExecution: (_id: string): Promise<Execution | null> => notImplemented('executions.getExecution'),
+    listExecutionsByProject: (_projectId: string): Promise<Execution[]> =>
+      notImplemented('executions.listExecutionsByProject'),
+    updateExecutionStatus: (_id: string, _cmd: UpdateExecutionStatusCmd): Promise<Execution> =>
+      notImplemented('executions.updateExecutionStatus'),
+    appendEvent: (_cmd: AppendExecutionEventCmd): Promise<ExecutionEvent> =>
+      notImplemented('executions.appendEvent'),
+    listEvents: (_executionId: string): Promise<ExecutionEvent[]> =>
+      notImplemented('executions.listEvents'),
+    createAttempt: (_cmd: CreateAttemptCmd): Promise<ExecutionAttempt> =>
+      notImplemented('executions.createAttempt'),
+    updateAttempt: (_id: string, _cmd: UpdateAttemptCmd): Promise<ExecutionAttempt> =>
+      notImplemented('executions.updateAttempt'),
+    listAttempts: (_executionId: string): Promise<ExecutionAttempt[]> =>
+      notImplemented('executions.listAttempts'),
+    createProposal: (_cmd: CreateProposalCmd): Promise<WritebackProposal> =>
+      notImplemented('executions.createProposal'),
+    updateProposal: (_id: string, _cmd: UpdateProposalCmd): Promise<WritebackProposal> =>
+      notImplemented('executions.updateProposal'),
+    listProposals: (_executionId: string): Promise<WritebackProposal[]> =>
+      notImplemented('executions.listProposals'),
+  };
+
   // 逐方法装配（不做整体断言）：少写一个方法 = 编译期报错，而不是运行期崩在导入路径上。
   // `admin` 为可选字段，本适配器**刻意不提供**（备份通道走既有 /api/backup*，不经这里）。
-  return { projects, stages, tasks, itineraries, members, logs, contracts, settings };
+  return {
+    projects,
+    stages,
+    tasks,
+    itineraries,
+    members,
+    logs,
+    contracts,
+    settings,
+    executions,
+  };
 }

@@ -16,7 +16,17 @@ import {
   type ProjectKind,
   type TaskSource,
 } from './enums';
-import type { Member, Project, Stage, Task, TaskArtifact } from './entities';
+import type {
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
+  Member,
+  Project,
+  Stage,
+  Task,
+  TaskArtifact,
+  WritebackProposal,
+} from './entities';
 
 /* ------------------------------------ 项目 ----------------------------------- */
 
@@ -381,6 +391,14 @@ export interface BackupPackage {
     logs: import('./entities').StageLog[];
     contracts: import('./entities').ContractRecord[];
     settings: import('./entities').Setting[];
+    /** Agent 执行域（v5 第一切片）：执行单主实体 */
+    executions: Execution[];
+    /** Agent 执行域：每次实际执行尝试（不覆盖旧记录） */
+    executionAttempts: ExecutionAttempt[];
+    /** Agent 执行域：append-only 执行事件流水 */
+    executionEvents: ExecutionEvent[];
+    /** Agent 执行域：字段级写回提案 */
+    writebackProposals: WritebackProposal[];
   };
 }
 

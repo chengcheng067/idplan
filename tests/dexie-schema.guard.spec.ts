@@ -30,6 +30,7 @@ import {
   DEXIE_V2_STORES,
   DEXIE_V3_STORES,
   DEXIE_V4_STORES,
+  DEXIE_V5_STORES,
   SCHEMA_VERSION,
 } from '../src/core/schema/current';
 import {
@@ -77,9 +78,11 @@ beforeAll(async () => {
 });
 
 describe('DEXIE_STORES 声明守卫（防 stores() 整体替换丢索引）', () => {
-  it('表集合完整：8 张表一张不少、一张不多', () => {
+  it('表集合完整：13 张表一张不少、一张不多', () => {
     expect(Object.keys(DEXIE_STORES).sort()).toEqual([...ALL_STORE_NAMES].sort());
     expect(ALL_STORE_NAMES).toContain('stageLogs'); // 驼峰表名不被手滑改错
+    expect(ALL_STORE_NAMES).toContain('executions'); // v5 四表之一
+    expect(ALL_STORE_NAMES).toContain('executionEvents'); // append-only 流水
   });
 
   it('v2 声明只覆盖索引有变化的表（未列出的表继承 v1）', () => {
@@ -156,17 +159,39 @@ describe('DEXIE_STORES 声明守卫（防 stores() 整体替换丢索引）', ()
   });
 
   it('SCHEMA_VERSION 与声明版本号一致（防只改 stores 忘了 bump / 反之）', () => {
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
     // v4 新增 itineraries 表，必须有独立增量声明，不能重声明既有表。
     expect(DEXIE_V4_STORES).toEqual({
       itineraries: 'id, projectId, date, &[projectId+date], updatedAt',
     });
+    // v5 新增 Agent 执行域四表，必须有独立增量声明，不能重声明既有表。
+    expect(DEXIE_V5_STORES).toEqual({
+      executions:
+        'id, projectId, taskId, source, status, idempotencyKey, currentAttemptNo, createdAt, updatedAt',
+      executionAttempts:
+        'id, executionId, &[executionId+attemptNo], status, createdAt, updatedAt',
+      executionEvents: 'id, executionId, &[executionId+seq], idempotencyKey, type, createdAt',
+      writebackProposals:
+        'id, executionId, projectId, taskId, status, idempotencyKey, createdAt, updatedAt',
+    });
+  });
+
+  it('★ v5 四表的索引在「当前全量」DEXIE_STORES 中逐字就位', () => {
+    // 增量声明 v5 的每张表，其索引串必须与 DEXIE_STORES 中的最终形态逐字相等
+    // （防「stores() 整体替换」静默丢索引）。
+    expect(DEXIE_STORES.executions).toBe(DEXIE_V5_STORES.executions);
+    expect(DEXIE_STORES.executionAttempts).toBe(DEXIE_V5_STORES.executionAttempts);
+    expect(DEXIE_STORES.executionEvents).toBe(DEXIE_V5_STORES.executionEvents);
+    expect(DEXIE_STORES.writebackProposals).toBe(DEXIE_V5_STORES.writebackProposals);
+    // 复合唯一索引就位（Dexie 唯一索引带 & 前缀：&[executionId+attemptNo] / &[executionId+seq]）。
+    expect(rawItems(DEXIE_STORES.executionAttempts!)).toContain('&[executionId+attemptNo]');
+    expect(rawItems(DEXIE_STORES.executionEvents!)).toContain('&[executionId+seq]');
   });
 
   it('★ v0.7 taskNo 铁律：taskNo 不建索引；v4 bump 仅因新增 itineraries 表', () => {
     // taskNo 是非索引字段，不应单独触发升级；v4 的唯一原因是新增每日行程表。
-    expect(SCHEMA_VERSION).toBe(4);
-    expect(new ChangxiaDatabase('guard-taskno-probe').verno).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
+    expect(new ChangxiaDatabase('guard-taskno-probe').verno).toBe(5);
 
     // taskNo 只服务「展示」与「全量归约求 max」，不参与任何 .where() 查询，
     // 建索引只有写放大（且会引入「索引 DDL 早于补列」的顺序风险）。
@@ -430,11 +455,11 @@ describe('真·升级链路（fake-indexeddb）', () => {
     db.close();
   });
 
-  it('★ v2→v3 真实升级：数据零丢失、索引换轨、跨项目同幂等键从此各建一行（O1 验收点）', async () => {
+  it('★ v2→当前版 真实升级：数据零丢失、索引换轨、跨项目同幂等键从此各建一行（O1 验收点）', async () => {
     await seedV2Db();
     const db = new ChangxiaDatabase(DB);
     await db.open();
-    expect(db.verno).toBe(4);
+    expect(db.verno).toBe(5);
 
     // ── ① 数据零丢失：v3 无逐行迁移，三行必须原样健在 ──
     const rows = await db.tasks.toArray();

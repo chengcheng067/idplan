@@ -10,6 +10,7 @@ import { LocalLogsRepository } from './local/local.logs.repo';
 import { LocalContractsRepository } from './local/local.contracts.repo';
 import { LocalSettingsRepository } from './local/local.settings.repo';
 import { LocalAdminRepository } from './local/local.admin.repo';
+import { LocalExecutionsRepository } from './local/local.execution.repo';
 
 /**
  * 数据源工厂（进程启动时调用一次，见 repository.provider.tsx）。
@@ -34,6 +35,7 @@ export async function createRepositories(
       logs: new LocalLogsRepository(db),
       contracts: new LocalContractsRepository(db),
       settings: new LocalSettingsRepository(db),
+      executions: new LocalExecutionsRepository(db),
       admin: new LocalAdminRepository(db),
     };
   } catch (err) {

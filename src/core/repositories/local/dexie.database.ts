@@ -4,6 +4,9 @@ import type { BackupPackage } from '../../types/dto';
 import type {
   AssignmentLog,
   ContractRecord,
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
   ItineraryDay,
   Member,
   Project,
@@ -11,6 +14,7 @@ import type {
   Stage,
   StageLog,
   Task,
+  WritebackProposal,
 } from '../../types/entities';
 import { ChangxiaError, ChangxiaErrorCode, MemberActorKind, TaskStatus } from '../../types/enums';
 import {
@@ -20,6 +24,7 @@ import {
   DEXIE_V2_STORES,
   DEXIE_V3_STORES,
   DEXIE_V4_STORES,
+  DEXIE_V5_STORES,
   SCHEMA_VERSION,
 } from '../../schema/current';
 
@@ -48,6 +53,14 @@ export class ChangxiaDatabase extends Dexie {
   public stageLogs!: Table<StageLog, string>;
   public contracts!: Table<ContractRecord, string>;
   public settings!: Table<Setting, string>;
+  /** Agent 执行域（v5）：执行单主实体 */
+  public executions!: Table<Execution, string>;
+  /** Agent 执行域（v5）：执行尝试（每次实际执行新建一条） */
+  public executionAttempts!: Table<ExecutionAttempt, string>;
+  /** Agent 执行域（v5）：append-only 事件流水 */
+  public executionEvents!: Table<ExecutionEvent, string>;
+  /** Agent 执行域（v5）：字段级写回提案 */
+  public writebackProposals!: Table<WritebackProposal, string>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -94,6 +107,9 @@ export class ChangxiaDatabase extends Dexie {
 
     // v4（v0.9 旅游二期）：新增独立 daily itinerary 表；不修改既有行，旧项目零迁移。
     this.version(4).stores(DEXIE_V4_STORES);
+
+    // v5（Agent 执行域第一切片）：新增四张表，纯增量，不修改任何既有表的字段或索引。
+    this.version(5).stores(DEXIE_V5_STORES);
   }
 }
 
@@ -305,7 +321,22 @@ export async function dumpLegacyTables(dbName: string = DB_NAME): Promise<Backup
         schemaVersion: 2,
         exportedAt: new Date().toISOString(),
       },
-      data: { projects, stages, tasks, itineraries: [], members, assignments, logs, contracts, settings },
+      data: {
+        projects,
+        stages,
+        tasks,
+        itineraries: [],
+        members,
+        assignments,
+        logs,
+        contracts,
+        settings,
+        // v5 四表：迁移前快照只标 v2，旧版库没有这些表，导出恒为空数组。
+        executions: [],
+        executionAttempts: [],
+        executionEvents: [],
+        writebackProposals: [],
+      },
     };
   } catch (err) {
     throw new ChangxiaError(ChangxiaErrorCode.Storage, '迁移前备份读取失败。', err);

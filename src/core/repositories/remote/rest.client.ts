@@ -16,6 +16,7 @@ import type {
   ISettingsRepository,
   IAdminRepository,
   IItinerariesRepository,
+  IExecutionsRepository,
 } from '../interfaces';
 import type {
   CreateItineraryDayCmd,
@@ -32,6 +33,9 @@ import type {
 import type {
   AssignmentLog,
   ContractRecord,
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
   Member,
   Project,
   Setting,
@@ -39,9 +43,19 @@ import type {
   StageLog,
   Task,
   ItineraryDay,
+  WritebackProposal,
 } from '../../types/entities';
 import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../../types/enums';
 import type { ProjectQuery, TaskQuery, TaskUpsertRow } from '../interfaces';
+import type {
+  AppendExecutionEventCmd,
+  CreateAttemptCmd,
+  CreateExecutionCmd,
+  CreateProposalCmd,
+  UpdateAttemptCmd,
+  UpdateExecutionStatusCmd,
+  UpdateProposalCmd,
+} from '../interfaces';
 
 /* --------------------------------- fetch 封装 --------------------------------- */
 
@@ -345,6 +359,71 @@ export class RemoteSettingsRepository implements ISettingsRepository {
   }
 }
 
+/**
+ * Agent 执行域远端适配器（v5 第一切片）。
+ *
+ * 与旅游 itineraries 远端适配器不同：执行域第一切片**只落地本地 Dexie 适配器**，
+ * 远端通道暂不接后端端点。本类按接口逐方法实现（类型完整、typecheck 通过），
+ * 但一律抛明确的「尚未实现」错误——避免「默默返回空/假数据」这种更危险的失效模式。
+ */
+export class RemoteExecutionsRepository implements IExecutionsRepository {
+  public constructor(private readonly api: RestClient) {}
+
+  private notImplemented(): never {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.Storage,
+      'Agent 执行域远端通道尚未实现（第一切片仅落地本地 Dexie 适配器）。',
+    );
+  }
+
+  // ⚠️ Agent 执行域远端通道（第一切片仅落地本地 Dexie 适配器，以下均为 notImplemented 桩）。
+  // 待实现真实 REST 适配器时，**必须复刻本地适配器的存储边界强制**，否则状态机只在前端成立：
+  //   - updateExecutionStatus：事务内先 assertStatusTransition(current, cmd.status, proposals)
+  //     再 assertExecutionConfirmed(current, cmd.status)，最后才落库；读-校验-写原子化防并发穿透。
+  //   - createAttempt：事务内 canStartAttempt(attempts) 不通过即抛；attemptNo 由 nextAttemptNo 计算，
+  //     调用方传入值与计算值不一致即抛。
+  //   - appendEvent：事务内要求 cmd.seq === nextSeq(events)，乱序/跳号即抛。
+  // 上述校验入口集中在 src/core/execution/execution-state.ts（assertStatusTransition /
+  // assertExecutionConfirmed / canStartAttempt / nextAttemptNo / nextSeq），前后端单份编译，
+  // 服务端 / 远端应直接复用，不要各写一套。
+  createExecution(_cmd: CreateExecutionCmd): Promise<Execution> {
+    return this.notImplemented();
+  }
+  getExecution(_id: string): Promise<Execution | null> {
+    return this.notImplemented();
+  }
+  listExecutionsByProject(_projectId: string): Promise<Execution[]> {
+    return this.notImplemented();
+  }
+  updateExecutionStatus(_id: string, _cmd: UpdateExecutionStatusCmd): Promise<Execution> {
+    return this.notImplemented();
+  }
+  appendEvent(_cmd: AppendExecutionEventCmd): Promise<ExecutionEvent> {
+    return this.notImplemented();
+  }
+  listEvents(_executionId: string): Promise<ExecutionEvent[]> {
+    return this.notImplemented();
+  }
+  createAttempt(_cmd: CreateAttemptCmd): Promise<ExecutionAttempt> {
+    return this.notImplemented();
+  }
+  updateAttempt(_id: string, _cmd: UpdateAttemptCmd): Promise<ExecutionAttempt> {
+    return this.notImplemented();
+  }
+  listAttempts(_executionId: string): Promise<ExecutionAttempt[]> {
+    return this.notImplemented();
+  }
+  createProposal(_cmd: CreateProposalCmd): Promise<WritebackProposal> {
+    return this.notImplemented();
+  }
+  updateProposal(_id: string, _cmd: UpdateProposalCmd): Promise<WritebackProposal> {
+    return this.notImplemented();
+  }
+  listProposals(_executionId: string): Promise<WritebackProposal[]> {
+    return this.notImplemented();
+  }
+}
+
 class RemoteAdminRepository implements IAdminRepository {
   public constructor(private readonly api: RestClient) {}
 
@@ -395,6 +474,7 @@ export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle 
     logs: new RemoteLogsRepository(api),
     contracts: new RemoteContractsRepository(api),
     settings: new RemoteSettingsRepository(api),
+    executions: new RemoteExecutionsRepository(api),
     admin: new RemoteAdminRepository(api),
   };
 }

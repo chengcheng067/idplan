@@ -455,6 +455,19 @@ export interface Setting {
   updatedAt: string;
 }
 
+/* ------------------------------------ Agent 执行域 ------------------------------------
+ * 下列实体（v5 新增）的**完整类型定义**在 `./agent-execution.ts`（纯类型 + 常量，由规格评审指定）。
+ * 此处仅做类型再导出，使 `entities.ts` 仍是实体类型的统一入口（与 ItineraryDay 等其余实体一致），
+ * 下游（dexie.database / 仓储）统一从本文件导入，不分散指向两个文件。
+ */
+export type {
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
+  WritebackOperation,
+  WritebackProposal,
+} from './agent-execution';
+
 /**
  * 公司休息制度配置（settings 表 key='restPolicy'）。
  * 决定全系统排期的工作日口径——切分、改期、磁吸一律经由 src/lib/workdays.ts 消费。

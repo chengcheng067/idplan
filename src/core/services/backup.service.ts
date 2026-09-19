@@ -8,8 +8,12 @@ import { z } from 'zod';
 import type { BackupPackage } from '../types/dto';
 import type {
   AssignmentLog,
+  Execution,
+  ExecutionAttempt,
+  ExecutionEvent,
   StageLog,
   TaskArtifact,
+  WritebackProposal,
 } from '../types/entities';
 import {
   ChangxiaError,
@@ -329,6 +333,81 @@ const settingSchema = z.object({
   updatedAt: isoString,
 });
 
+/**
+ * Agent 执行域四张表 schema（v5 第一切片）。
+ *
+ * 设计口径与既有表一致：旧备份（v1/v2/v3）**没有**这四张表 → 用 `.default([])` 安全默认，
+ * 绝不整包拒绝（见规格「老备份没有这些字段时必须安全默认 []」）。
+ * 字段级用 `z.string()` 宽收枚举（`status`/`type`/`source`/`actor` 等），防止将来新增枚举值
+ * 时老客户端被拒；嵌套对象（`ExecutionConfirmation` / `WritebackOperation[]`）用 `z.any()`
+ * 保留原值，往返不丢字段。
+ */
+const executionSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  taskId: z.string().nullable(),
+  source: z.string(),
+  objective: z.string(),
+  agentMemberId: z.string().nullable(),
+  channelKind: z.string().nullable(),
+  inputSnapshotHash: z.string().nullable(),
+  status: z.string(),
+  confirmation: z.any().nullable(),
+  idempotencyKey: z.string(),
+  currentAttemptNo: z.number().int(),
+  createdAt: isoString,
+  updatedAt: isoString,
+  startedAt: nullableIso,
+  finishedAt: nullableIso,
+  terminalReason: z.string().nullable(),
+  blockedReason: z.string().nullable(),
+});
+
+const executionAttemptSchema = z.object({
+  id: z.string(),
+  executionId: z.string(),
+  attemptNo: z.number().int(),
+  status: z.string(),
+  runtimeKind: z.string().nullable(),
+  startedAt: nullableIso,
+  finishedAt: nullableIso,
+  inputSnapshotHash: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  errorSummary: z.string().nullable(),
+  terminalReason: z.string().nullable(),
+  createdAt: isoString,
+  updatedAt: isoString,
+});
+
+const executionEventSchema = z.object({
+  id: z.string(),
+  executionId: z.string(),
+  attemptId: z.string().nullable(),
+  seq: z.number().int(),
+  type: z.string(),
+  actor: z.string(),
+  fromStatus: z.string().nullable(),
+  toStatus: z.string().nullable(),
+  reason: z.string().nullable(),
+  idempotencyKey: z.string().nullable(),
+  createdAt: isoString,
+});
+
+const writebackProposalSchema = z.object({
+  id: z.string(),
+  executionId: z.string(),
+  attemptId: z.string().nullable(),
+  projectId: z.string(),
+  taskId: z.string().nullable(),
+  operations: z.array(z.any()),
+  status: z.string(),
+  idempotencyKey: z.string(),
+  decidedBy: z.string().nullable(),
+  decidedAt: nullableIso,
+  createdAt: isoString,
+  updatedAt: isoString,
+});
+
 const backupSchema = z.object({
   meta: z.object({
     app: z.literal('changxia'),
@@ -352,6 +431,10 @@ const backupSchema = z.object({
     logs: z.array(stageLogSchema),
     contracts: z.array(contractSchema),
     settings: z.array(settingSchema),
+    executions: z.array(executionSchema).default([]),
+    executionAttempts: z.array(executionAttemptSchema).default([]),
+    executionEvents: z.array(executionEventSchema).default([]),
+    writebackProposals: z.array(writebackProposalSchema).default([]),
   }),
 });
 
@@ -396,7 +479,22 @@ export class BackupService {
         schemaVersion: BACKUP_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
       },
-      data: { projects, stages, tasks, itineraries, members, assignments: [], logs: [], contracts, settings },
+      data: {
+        projects,
+        stages,
+        tasks,
+        itineraries,
+        members,
+        assignments: [],
+        logs: [],
+        contracts,
+        settings,
+        // 降级路径（无 admin 通道）：执行域四张表暂置空，导入端 zod 仍会 `.default([])` 兜底。
+        executions: [],
+        executionAttempts: [],
+        executionEvents: [],
+        writebackProposals: [],
+      },
     };
   }
 
@@ -425,6 +523,10 @@ export class BackupService {
       members: normalized.data.members,
       tasks: normalized.data.tasks,
       itineraries: normalized.data.itineraries,
+      executions: normalized.data.executions,
+      executionAttempts: normalized.data.executionAttempts,
+      executionEvents: normalized.data.executionEvents,
+      writebackProposals: normalized.data.writebackProposals,
     };
     await this.bundle.admin.replaceAllImport({ ...pkg, data });
   }
