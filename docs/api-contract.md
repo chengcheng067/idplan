@@ -6,7 +6,14 @@
 
 ## 资源命名与 ID
 
-- 前缀规范：`proj_/stg_/tsk_/mem_/log_/ctt_` + uuid 片段（客户端生成，服务端信任）。
+- 前缀规范（`src/lib/id.ts:4-15` 的 `IdPrefix` **全集**）：
+  `proj_` / `stg_` / `tsk_` / `mem_` / `log_` / `ctt_` / `art_` / `cst_` + uuid 片段（客户端生成，服务端信任）。
+  - `art_` = artifacts 条目；`cst_` = 自定义阶段库条目（存 settings KV `customStages`，**不新建表**）。
+- ⚠️ **前缀规范的例外（对接时必须知道）**：`itineraries` 与 Agent 执行域四张表
+  （`executions` / `execution_attempts` / `execution_events` / `writeback_proposals`）
+  **不走 `createId`** —— 服务端直接用裸 `crypto.randomUUID()`，因此**没有** `itn_` / `exe_` 前缀
+  （`server/routes/itineraries.routes.ts:71`、`:93`）。不要对这两类 id 做前缀校验：
+  `looksLikeId()` 对它们返回 `false`，但它们是合法 id。
 
 ## 时间口径
 
@@ -22,7 +29,8 @@
 | GET | `/api/projects/:id` | 详情 |
 | POST | `/api/projects` | 新建（body=CreateProjectCmd & {id?}），返回完整 Project |
 | PATCH | `/api/projects/:id` | 更新（body=UpdateProjectCmd 子集） |
-| POST | `/api/projects/:id/archive` | body `{archived: boolean}` |
+| POST | `/api/projects/:id/archive` | body `{archived: boolean}` → `{ok:true}` |
+| DELETE | `/api/projects/:id` | **永久删除**（不可恢复）：单事务级联清理 `stage_logs` / `assignments` / `tasks` / `stages` / `itineraries` 后删项目；不存在 → 404 `not_found`；否则 `{ok:true}` |
 
 ## Stages
 
@@ -33,6 +41,21 @@
 | POST | `/api/stages/bulk` | `{rows: Stage[]}` 批量插入（建档事务由服务端单一事务包裹） |
 | PATCH | `/api/stages/:id` | UpdateStageCmd 子集 |
 | POST | `/api/stages/:id/reschedule` | `{startAt,endAt,status?}` |
+
+## Itineraries（旅游每日行程卡）
+
+日期卡独立于任务，项目内 `date` 唯一。行形状（服务端 `rowToItinerary`）：
+`{ id, projectId, date, transport, accommodation, budgetAmount, actualAmount, revision, updatedAt }`；
+`transport` / `accommodation` 为 `string | null`；`budgetAmount` / `actualAmount` 为 `number | null`
+（`null` / `''` / 数字字符串均可，其它一律 400）；`date` 为 `YYYY-MM-DD`。
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| GET | `/api/projects/:projectId/itineraries` | 项目每日行程卡列表，`ORDER BY date, id`；项目不存在返回 `[]`（**不 404**） |
+| POST | `/api/projects/:projectId/itineraries/ensure` | body `{startDate, endDate}`：按日逐日 `INSERT OR IGNORE` 补卡，**只补不删**（已存在的日期原样保留，含其已有内容）；起止日期非法或 `startDate > endDate` → 400 `validation`；成功返回该项目**全量**卡列表 |
+| POST | `/api/projects/:projectId/itineraries` | 新建单日卡（body：`date` 必填，`transport` / `accommodation` / `budgetAmount` / `actualAmount` 可选）；`date` 非 `YYYY-MM-DD` → 400 `validation`；金额非法 → 400 `validation`；该日期已有卡 → **409** `conflict` |
+| PATCH | `/api/itineraries/:id` | 可改 `transport` / `accommodation` / `budgetAmount` / `actualAmount`；每次改动 `revision + 1` 且刷新 `updatedAt`；不存在 → 404 `not_found`；金额非法 → 400 `validation`。**`date` 与 `projectId` 不可改** |
+| DELETE | `/api/itineraries/:id` | 删除（**不校验存在性**），响应 `{ ok: true }`；删项目时由 `DELETE /api/projects/:id` 级联清理 |
 
 ## Tasks
 
@@ -55,6 +78,7 @@
 | GET | `/api/members/:id` | 详情 |
 | POST | `/api/members` | CreateMemberCmd → Member |
 | PATCH | `/api/members/:id` | UpdateMemberCmd 子集 |
+| POST | `/api/members/verify` | 密码校验：body `{memberId, password}` → 200 `{ok:true, memberId}`；无此成员 / 已停用 / 密码为空 / 校验失败 → **401** `unauthorized`（统一文案「密码错误」，避免枚举成员）。**哈希不出库**，比对在服务端 scrypt 完成 |
 
 ## Logs（append-only）
 
@@ -89,12 +113,103 @@
 
 | Method | Path | 说明 |
 | --- | --- | --- |
-| GET | `/api/backup` | 全量导出 BackupPackage JSON |
-| POST | `/api/bootstrap` | 启动全量装载：一次性返回全部表（等价本地 Dexie 全表扫描） |
+| GET | `/api/backup` | 导出 BackupPackage JSON：`{ meta: { app:'changxia', schemaVersion:3, exportedAt }, data: { …9 张表 } }`（导入侧同时接受 1/2/3，**导出恒为 3**） |
+| POST | `/api/backup/import` | 服务端整库替换（单事务）；body `{ data: { <表名>: rows[] } }`；响应 `{ok, renumbered}`（见下） |
+| POST | `/api/bootstrap` | 启动全量装载：一次性返回**同样那 9 张表**（等价本地 Dexie 全表扫描），**不鉴权**（V1 待纳入） |
+
+### ⚠️ 「全量」只覆盖 9 张表 —— 两侧不对称，按文档对接前必读
+
+`GET /api/backup`（`meta.routes.ts:398-407`）与 `POST /api/bootstrap`（`:417-425`）的 dump 清单**逐字一致**，
+只有这 9 张表：`projects` / `stages` / `tasks` / `itineraries` / `members` / `assignments` /
+`logs`（实际表名为 `stage_logs`）/ `contracts` / `settings`。
+
+**不在**清单里的四张表：`executions` / `execution_attempts` / `execution_events` / `writeback_proposals`。
+
+- 现状：这四张表在 `server/schema.sql`（L187 起，含索引）**已建表**，但服务端**没有任何 `/api/` 端点**操作它们。
+  Agent 执行域第一切片**只落地本地 Dexie 适配器**，远端适配器 `RemoteExecutionsRepository`
+  （`src/core/repositories/remote/rest.client.ts:365` 起）逐方法抛明确的「尚未实现」错误。
+- **后果（真实的两侧不对称）**：remote（NAS）模式下这四张表的数据**只存在本地 Dexie**，
+  既不进 `/api/backup`，也不进 `/api/bootstrap`。**不要假定 NAS 备份是全量的** ——
+  执行域数据在服务端落地前，只随本地库存在，换机/清库即丢。
+- 未来为执行域补服务端 REST 端点时，**必须同时**把这四张表加进上面两处 dump 清单，
+  并复刻本地适配器的存储边界强制（否则状态机只在前端成立）—— 见 `rest.client.ts` 该桩的注释。
+- ⚠️ **与 `docs/backup-format.md` 的口径差异（不是矛盾，是两条不同通道）**：
+  本地导出的 zip 备份包（`schemaVersion` 5，`backup.service.ts`）**含**执行域四表；
+  而本文件的 `/api/backup`（服务端 NAS 通道）**不含**。对接时先分清走的是哪条通道。
+
+## Agent 通道（`/api/agent/*`）—— 已实现
+
+**四个端点，全部由 `requireAgentToken()` 守门**（`server/lib/agent-auth.ts:138`），
+env 为 **`IDPLAN_AGENT_API_TOKEN`**（`AGENT_API_TOKEN_ENV`，`agent-auth.ts:107`），
+与备份通道的 `IDPLAN_AGENT_TOKEN` **相互独立、可分别轮换/吊销**。鉴权规则与备份通道同语义：
+请求头 `X-Agent-Token` 或 `Authorization: Bearer <token>` 二选一、常量时间比较、
+**fail-closed**（env 未配置 → 四个端点全部 401，启动日志打印 `[IDPLAN-SECURITY]` 告警）。
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| POST | `/api/agent/import` | 幂等导入 Agent payload（`requireAgentToken`；`agent.routes.ts:246`）。query 契约见下 |
+| GET | `/api/agent/health` | 探活（`agent.routes.ts:419`）：`{ ok:true, version, projects, agentSeats: {used, limit} }`。`version` 读 **`version.json` 的四段号**（不取 `package.json` 的 semver；读失败回落 `'unknown'` 而不 500）；`projects` **只列 `kind='human'`**；`agentSeats.limit` = `AGENT_SEAT_LIMIT`（当前 **3**） |
+| GET | `/api/agent/tasks` | 只读任务流（`agent.routes.ts:438`）：query `?projectId=&source=`；响应 `{ tasks: [{ externalId, taskNo, title, status, dueDate, dependsOnExternal }] }`。详见下 |
+| POST | `/api/agent/boards` | 建 Agent 看板（`kind='agent'`）含阶段骨架（`agent.routes.ts:530`），**只新建**；成功 → **201**。详见下 |
+
+### `POST /api/agent/import` —— query 契约与错误码
+
+- body 为 `idplan-agent-payload/v1` schema（**不因通道改动**）；落点名走 query 而非 body，
+  正是为了让仓外既有 Skill 的产物继续可用（改 body schema 会让它们在严格校验下失效）。
+- query：`stageName`（落点阶段名，同义别名 **`createStageIfMissing`**）、`stageId`（**批次级覆盖**，
+  优先于 body.stageId）、`projectId`、`projectName`、`dryRun`。
+- 互斥与「出现但空」：**落点名与 `stageId` 不可同传** → 400 `invalid_field`；
+  `stageName` / `createStageIfMissing` 出现但为空或纯空白 → 400 `invalid_field`
+  （**绝不静默降级为「未声明」**，否则调用方的 bug 会被掩盖成「任务落到了别的阶段」）；
+  两个别名同传且**取值不同** → 400 `invalid_field`（同值则接受）。
+- 项目解析（fail-closed）：body.projectId 与 `?projectId` 同传且**不一致** → 400 `Validation`，
+  **绝不发生任何写入**；两者一致或仅一方给出 → 取该 id；都未给出 → 走 `?projectName`
+  （先精确匹配，再「去空白 + 忽略大小写」）；仍解析不到、或 id 在库里不存在 → 400 `project_unresolved`，
+  响应体**额外**带 `projects` 候选清单（只列 `kind='human'`）。
+- `?dryRun` 判定**偏向安全**：出现且不是 `'0'` / `'false'` 即按「只算不写」处理（`?dryRun=true` 也算预览）。
+- 回执**原样转发** `ApplyResult`（与前端手动粘贴通道共用同一份 `payload.apply.ts`），
+  服务端不做二次加工 —— 保证 NAS 与本地两条通道得到同一答案。
+- body 超过 `bodyLimit` → 400 `too_large`（本作用域错误处理器把 HTTP 413 映射为契约的 400）。
+- 错误码集合：`Validation`（payload schema / 项目解析）、`invalid_field`（query 契约）、
+  `project_unresolved`、`too_large`、`internal`；401 为 `Unauthorized`。
+
+### `GET /api/agent/tasks` —— 只读任务流
+
+- `?projectId=` 与 `?source=`：只有 `source === 'agent'` 或 `'human'` 才会作为过滤条件透传，
+  **其它值（含 `all`）与缺省一律不过滤**；内部委托既有 `GET /api/tasks`（`app.inject` 进程内派发），
+  故过滤口径与行→实体映射与 `/api/tasks` **完全一致**（不抄第二份映射）。
+- `dependsOnExternal` 给的是依赖任务的 **externalId**（库内 `dependsOn` 存的是 Task.id，
+  服务端做一次反查）；解析不到 externalId 的依赖（人工任务没有幂等键）**从结果里剔除**。
+  `externalId` / `taskNo` 在人工任务或老数据上可能为 `null`。
+- 委托返回非 2xx → 500 `internal`（不把上游状态码直接透出）。
+
+### `POST /api/agent/boards` —— 建板契约（只新建）
+
+- 请求体：`{ name, plannedStartAt, plannedEndAt, presetKey?, stageNames? }`。
+- **只新建**：出现 `projectId` / `projectName` → 400 `invalid_field`（要往已有项目写任务请用 `/api/agent/import`）。
+  「写进人类项目」在本端点**没有代码路径**：新看板 id 由既有 `POST /api/projects` 在服务端生成（本 handler 不传 id）。
+- 校验顺序（fail fast，全部通过才开始写，失败路径零残留）：token → 401；`name` 缺失/空白 → 400；
+  起止日期缺失/空白 → 400（**绝不替你猜一个日期**）；`presetKey` 与 `stageNames` 都没给或都为空 → 400；
+  `presetKey` 库里查不到 → 400；展开后阶段数 > `MAX_STAGE_COUNT`（**20**）→ 400。
+- 阶段来源的**唯一数据源** = `templates/stage-library.json`（当前 version 2，**21 套套餐 / 63 个阶段项**，
+  另有 9 个 domain、7 个 industryGroup）。`presetKey` 先展开套餐骨架（并以套餐声明的 `domain` 作为项目主板块），
+  再追加 `stageNames` 声明的名字；名字不在库 → 自定义阶段（`templateKey` 落 `null`，**不伪造 key**）；
+  请求内按 `normalizeStageName` 去重，保留首次出现（归一值**只用于判重、绝不入库**）。
+- 阶段起止日一律取**项目基线**（本端点不声明阶段级日期，凭空切分属于猜测）；建板**不建** `defaultTasks`
+  （任务由后续导入通道喂进来）。纯 `stageNames` 建板时 `domain` / `stagePresetKey` 落 `null`（不猜）。
+- 响应（**201**）：`{ projectId, name, stages: [{ id, name, templateKey }] }`。
+- ⚠️ 代价（如实记录）：建项目走 `app.inject`（异步）无法并入 better-sqlite3 的同步事务，
+  故「建项目 → 建阶段」**不是单事务**；阶段写入失败返回 500 时可能残留一个无阶段的空 agent 看板，
+  **不影响任何人类项目**。
 
 ## 备注
 
-1. 服务端不实现"切分算法"端点——切分是纯函数驻留前端（templates/nine-stages.default.json 同包分发）。
+1. 服务端不实现"切分算法"端点——切分是纯函数驻留前端。**建档（含 Agent 建板）的阶段数据源**是
+   `templates/stage-library.json`（version 2：**21 套套餐 / 63 个阶段项**，另含 9 个 domain 与 7 个 industryGroup），
+   服务端消费点 `agent.routes.ts:69-74`（`getPreset` / `getPresetItems` / `getStageLibraryItems` / `getStageLibraryVersion`）。
+   同包的 `templates/nine-stages.default.json` **仍保留**，但只作为老数据 `templateKey` 的反查源
+   （`src/core/template/stage-fallback.ts:48`），**不再是建档主力数据源**。
+   ⚠️ 套餐/阶段项数以该 JSON 文件为准：`agent.routes.ts` 文件头注释里的「18 套餐 / 56 阶段项」**已过时**。
 2. 认证本期为局域网信任；rest.client.ts 已预留 `Authorization` header 位。
 3. revision 由服务端写路径统一 bump；updatedAt 为 UTC ISO string。
 
@@ -111,7 +226,13 @@
 `source('human'|'agent')` / `externalId`(幂等键，唯一) / `agentId` / `status`(7 值，
 唯一事实源，done 恒 = status==='done') / `description` / `dependsOn`(JSON 数组，
 与 assignee_ids 同走 JSON 列序列化) / `artifacts`(对象数组 JSON 列) / `startAt` /
-`claimedAt`。Agent 幂等写入唯一出口 = `POST /api/tasks/upsert`。
+`claimedAt` / **`taskNo`** / **`itineraryDate`**。Agent 幂等写入唯一出口 = `POST /api/tasks/upsert`。
+
+- `taskNo`：`INTEGER`，**仓储分配字段**（展示用 + 全量归约求最大值；刻意无索引）。
+  请求体里带的 `taskNo` **一律被忽略**，号由服务端分配；老数据可能为 `null`。
+- `itineraryDate`：`YYYY-MM-DD` 或 `null` —— **旅游行程归属日**（`src/core/types/entities.ts:91-96`），
+  仅 travel 项目使用；`null` = 普通任务或尚未排入某日。与 `dueDate` **分工严格区分**：
+  `itineraryDate` 决定「行程第几天」，`dueDate` 仍是任务截止日。
 
 ## 备份通道鉴权（v0.6 · T14，Q9）
 
@@ -137,13 +258,33 @@
     保证导入后新建任务不复用已被（导入前本机或包内）占用的号。
     漏任一项都存在真实可达的撞号路径，见 `resolveTaskNoCollisions` 函数头注释。
 
-## ⚠ Agent HTTP API 边界（写死，勿越）
+## ⚠ Agent HTTP API 边界（写死，勿越）—— 已落地，不是待办
 
-**未来的 Agent 通道绝不复用 `/api/backup`**：独立端点（如 `/api/agent/*`）+ 独立
-Agent Token（与 `IDPLAN_AGENT_TOKEN` 分离，可独立吊销）+ 独立限流。备份通道的
-token 只授权「整库读写」，绝不能等价于「Agent 写任务」的授权面。实现时的落点：
-`server/lib/agent-auth.ts`（requireToken 目前仅 backup 使用；Agent 端点另建
-`requireAgentToken`，校验 `IDPLAN_AGENT_API_TOKEN`）。
+**Agent 通道绝不复用 `/api/backup`**，这条边界**已经实现**（不再是「未来」）：
+
+- **独立端点**：全部挂在 `/api/agent/*`（四个端点，见上文「Agent 通道」一节）——
+  `/api/agent/import`、`/api/agent/health`、`/api/agent/tasks`、`/api/agent/boards`。
+- **独立 Token**：`AGENT_API_TOKEN_ENV = 'IDPLAN_AGENT_API_TOKEN'`（`server/lib/agent-auth.ts:107`），
+  与备份通道的 `IDPLAN_AGENT_TOKEN` 分离，**可独立轮换/吊销**。两者必须分别配置：
+  泄露面不同（备份密钥 = 整库 dump 含密码哈希；Agent 密钥 = 日常写入，会配置在多台机器上），
+  吊销任一方都不应连带打死另一方。
+- **独立闸门**：`requireAgentToken()`（`server/lib/agent-auth.ts:138`，与备份通道的
+  `requireToken()` **同语义、不同 env**）；`requireToken` **一个字节都没有为它改动**
+  （它仍是 `/api/backup*` 的唯一闸门）。新增能力一律走新增函数。
+- **四个端点逐字走该闸门**：`agent.routes.ts:246`（import）/ `:419`（health）/ `:438`（tasks）/ `:530`（boards）。
+- **授权面不等价**：备份 token 只授权「整库读写」；Agent token 授权「按既有 upsert 通道写任务 + 建 agent 看板」，
+  且候选清单与 `?projectName=` 解析**只列 `kind='human'` 项目**（`agent.routes.ts:201`），
+  `POST /api/agent/boards` 又**只新建** `kind='agent'` 看板 —— 两侧互不越界。
+  （独立限流尚未实现，属 V1 待办。）
+
+**维护纪律（新增端点时必守）**：`agent-auth.ts` 的启动告警文案**逐字列出了四个端点名**。
+**新增 `/api/agent/*` 端点时，本行必须同批更新** —— 漏一个端点，该端点的 401 在启动日志里
+就没有任何线索，调用方只会看到「ID Plan 未运行」这种**假无响应**（V1-13 要防的正是这个）。
+定期以**实际注册**为准核对（不以人记为准）：
+
+```
+grep -n "scope\.\(get\|post\|put\|patch\|delete\)('/api/agent" server/routes/agent.routes.ts
+```
 
 ## artifacts 校验口径：payload 通道 vs backup 通道（刻意不同，勿当 bug 修）
 
