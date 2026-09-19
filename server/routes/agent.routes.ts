@@ -49,7 +49,7 @@ import type Database from 'better-sqlite3';
 
 import { AGENT_SEAT_LIMIT } from '../../src/constants/agentTerms';
 // ★ 落库编排与落点解析**都是共享内核**：NAS 形态与本地手动粘贴通道跑的是同一份函数。
-import { applyAgentPayload, previewAgentPayload } from '../../src/core/agent/payload.apply';
+import { applyAgentPayload, previewAgentPayload, resolveAgentProjectId } from '../../src/core/agent/payload.apply';
 import type { ApplyOptions } from '../../src/core/agent/payload.apply';
 // ★ v0.8 建板：**自定义阶段**的属性表只有一份（`buildCreatedStage`，§4.3 逐字段定死）
 import { buildCreatedStage } from '../../src/core/agent/stage-resolve';
@@ -310,9 +310,23 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       /* ── 项目解析：**只放开阶段，绝不放开项目**（§4.5 第一行） ── */
       const queryProjectId = optionalString(query.projectId);
       const queryProjectName = optionalString(query.projectName);
-      let targetProjectId: string | null = isNonBlank(payload.projectId)
-        ? payload.projectId
-        : (queryProjectId ?? null);
+
+      // ★ fail-closed（安全门禁）：query.projectId 与 payload.projectId 同时给出且不一致 →
+      //   400，**绝不发生任何写入**（调用方以为写项目 A、实际可能写项目 B = 静默写错项目）。
+      //   两者一致 / 仅一方给出 → 返回该 id；都未给出 → null（交由下方 ?projectName / project_unresolved）。
+      let targetProjectId: string | null;
+      try {
+        targetProjectId = resolveAgentProjectId({
+          payloadProjectId: payload.projectId,
+          externalProjectId: queryProjectId,
+        });
+      } catch (err) {
+        if (err instanceof ChangxiaError && err.code === ChangxiaErrorCode.Validation) {
+          void reply.status(400);
+          return { error: { code: 'Validation', userMessage: err.userMessage } };
+        }
+        throw err;
+      }
       if (targetProjectId === null && queryProjectName !== undefined) {
         targetProjectId = findProjectIdByName(queryProjectName);
         if (targetProjectId === null) {

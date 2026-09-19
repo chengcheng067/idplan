@@ -134,6 +134,47 @@ function readDeclaredStageName(raw: string | null | undefined): string | null {
 }
 
 /**
+ * 解析 Agent 导入的目标项目，fail-closed（安全门禁：query / payload 的 projectId 冲突）。
+ *
+ * 规则：
+ *   - `payloadProjectId` 与 `externalProjectId`（query 参数 / 调用方 opts 指定的落点）**同时给出且不一致**
+ *     → 抛 `ChangxiaError(Validation)`，调用方（路由 / apply）**不应发生任何写入**；
+ *   - 两者一致 → 返回该 id；
+ *   - 仅一方给出 → 返回那一方；
+ *   - 都未给出（或仅空白）→ 返回 `null`（交由上层走 `?projectName` / 报 `project_unresolved`）。
+ *
+ * ★ 边界判定（明确选择，写死在此）：
+ *   id 是**不透明字符串标识符**，比较前只 `trim()`（归一首尾空白），**不**做大小写折叠 ——
+ *   两个仅在大小写上不同的 id 视为**两个不同项目**，不应被静默归一（那会制造另一种
+ *   「写进了别的项目」）。首尾空白差异（调用方无意输入噪声）则一律忽略。
+ *   故：仅大小写不同 → 判为「不一致」→ 400；仅首尾空白不同 → 判为「一致」→ 正常写入。
+ *
+ * 纯函数、可单测：不读库、不写库、无副作用。
+ */
+export function resolveAgentProjectId(params: {
+  payloadProjectId?: string | null;
+  externalProjectId?: string | null;
+}): string | null {
+  const p = nonBlankId(params.payloadProjectId);
+  const e = nonBlankId(params.externalProjectId);
+  if (p !== null && e !== null && p !== e) {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.Validation,
+      `query 与 payload 的 projectId 不一致（外部指定=${e} / payload=${p}），` +
+        '系统拒绝猜测落点，未写入任何数据。',
+    );
+  }
+  return p ?? e;
+}
+
+/** 去除首尾空白后非空 → 返回已 trim 的字符串，否则 null（仅空白 / 非字符串一律视为未提供） */
+function nonBlankId(v: string | null | undefined): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t.length > 0 ? t : null;
+}
+
+/**
  * 落库编排的共享核心。零写库（成员创建除外——由 apply 在 resolve 后显式调用）。
  */
 async function resolve(
@@ -141,7 +182,12 @@ async function resolve(
   payload: AgentPayloadV1,
   opts?: ApplyOptions,
 ): Promise<ResolvedPlan> {
-  const projectId = payload.projectId ?? opts?.projectId ?? null;
+  // ★ fail-closed（安全门禁）：payload.projectId 与外部指定的 projectId（query / opts）冲突 → 抛 Validation，
+  //   不发生任何写入。覆盖 NAS import 端点（?projectId=）与本机 loopback（?project= → opts.projectId）两条通道。
+  const projectId = resolveAgentProjectId({
+    payloadProjectId: payload.projectId,
+    externalProjectId: opts?.projectId,
+  });
   if (!projectId) {
     throw new ChangxiaError(
       ChangxiaErrorCode.Validation,
