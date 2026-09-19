@@ -18,10 +18,17 @@ export function createId(prefix: IdPrefix): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
-/** 校验外部输入的 ID 是否符合前缀规范（弱校验，仅防御明显错误） */
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 校验外部输入的 ID 是否符合前缀规范（弱校验，仅防御明显错误）。
+ *
+ * 注意：各前缀长度不同（proj_ 为 5 字符，其余前缀均为 4 字符），
+ * 必须按**实际命中的前缀**截取，不能写死 slice(5)——否则除 proj_ 外的
+ * 所有 ID 都会被切掉 UUID 首位而误判为非法。
+ */
 export function looksLikeId(value: string): boolean {
-  if (!PREFIXES.some((p) => value.startsWith(`${p}_`))) return false;
-  const rest = value.slice(5);
-  // UUID v4 形状（8-4-4-4-12）
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rest);
+  const prefix = PREFIXES.find((p) => value.startsWith(`${p}_`));
+  if (!prefix) return false;
+  return UUID_V4.test(value.slice(prefix.length + 1));
 }
