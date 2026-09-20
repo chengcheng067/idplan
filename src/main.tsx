@@ -21,6 +21,7 @@ import { HomeRouteGuard } from './components/layout/HomeRouteGuard';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { MemberBoardPage } from './pages/MemberBoardPage';
 import { AgentBoardPage } from './pages/AgentBoardPage';
+import { AgentExecutionConsolePage } from './pages/AgentExecutionConsolePage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { SchedulePrintPage } from './pages/SchedulePrintPage';
 import { ItineraryPrintPage } from './pages/ItineraryPrintPage';
@@ -35,6 +36,7 @@ import { CalendarPrintPage } from './pages/CalendarPrintPage';
  *   /project/:id/calendar-print 月历打印/导出视图（v0.5）
  *   /my-tasks                  我的任务（成员视角）
  *   /agent                     Agent Board（v0.6 · Agent 任务看板，所有角色可见）
+ *   /agent/executions          Agent 执行控制台（v0.8 · 只读：呈现执行单/尝试/事件/写回提案）
  *
  * 底座：绿联 Docker 应用是 IP:端口直连（根路径 /），不走系统网关、无 /<proxy_path>/ 前缀
  * （proxy_path 是原生应用专用字段）。故无需 basename，路由直接挂根路径。
@@ -55,6 +57,8 @@ export const router = createBrowserRouter(
         { path: 'my-tasks', element: <MyTasksPage /> },
         // Agent Board：放在 my-tasks 之后、* 通配之前（设计文档 T10 要点 7）
         { path: 'agent', element: <AgentBoardPage /> },
+        // Agent 执行控制台（只读）：嵌套在 /agent 之下，故必须排在 'agent' 之后
+        { path: 'agent/executions', element: <AgentExecutionConsolePage /> },
         { path: '*', element: <Navigate to="/" replace /> },
       ] satisfies RouteObject[],
     },

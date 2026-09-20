@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Bot, CalendarRange, LayoutGrid } from 'lucide-react';
+import { Bot, CalendarRange, History, LayoutGrid } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
@@ -85,12 +85,28 @@ export function SidebarNav({
      *   会被读成"某个叫 Agent 的功能"，而它其实是**另一个工作区**（点击后整屏内容都换一套数据）。
      *   页面标题（AgentBoardPage 的 h1）落地为「Agent 看板」，与本项的「工作区」构成
      *   「工作区 → 里面的看板」两级语义，不再与人类侧「项目」混淆。
+     *
+     * v0.8 执行控制台：`/agent` 之下新增 `/agent/executions`（只读执行控制台）。
+     *   `match` 从 `p.startsWith('/agent')` 收紧为**精确匹配** `p === '/agent'`——
+     *   否则进入 `/agent/executions` 时两个导航项会同时点亮（该项 + 控制台项），
+     *   用户无法判断当前在哪一层。其余各项本就是精确匹配 / 前缀专属，故此改动只影响本项。
      */
     {
       to: '/agent',
       label: '工作区',
       Icon: Bot,
-      match: (p) => p.startsWith('/agent'),
+      match: (p) => p === '/agent',
+    },
+    /*
+     * v0.8：执行控制台（只读）。命名「执行记录」而非「控制台」——
+     * 该页**不做任何控制**（不派活、不改状态、不确认），叫「控制台」会让用户
+     * 期待可操作性；「执行记录」如实描述「这里能看到什么」，与只读定位一致。
+     */
+    {
+      to: '/agent/executions',
+      label: '执行记录',
+      Icon: History,
+      match: (p) => p === '/agent/executions',
     },
   ];
 
