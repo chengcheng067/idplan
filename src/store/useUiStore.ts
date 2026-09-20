@@ -91,6 +91,51 @@ function persistMemberBoardView(mode: MemberBoardView): void {
   }
 }
 
+/**
+ * 执行控制台「显示矛盾数据」开关的 localStorage 键。
+ *
+ * ── 这个开关为什么必须有 ──
+ * 矛盾数据 = 终态 execution 上挂着 `queued` / `running` 的 attempt（判据见
+ * `core/execution/execution-recovery.ts` 的 `isContradictoryExecution`）。
+ * 它是**规格空白**——状态机没有合适的边收口，兜底模块明确「不发明归宿、原样保留」，
+ * 于是这些记录会**长期**留在库里。方案有两个极端，都不可接受：
+ *   · **强制显示**：把它们混在正常记录里，用户每看一次控制台就被一条修不掉的
+ *     「执行中」骗一次——这正是要防的「假活态」；
+ *   · **强制隐藏**：那是**藏数据**。用户对控制台的信任建立在「看到的就是全部」，
+ *     悄悄吞掉异常记录比显示它更糟。
+ * 故裁决为**用户可控**：默认**显示**（异常默认可见 = 不藏数据），
+ * 用户可关掉以获得干净列表。
+ *
+ * ── 为什么默认 true（显示）──
+ * 「默认值即立场」。异常数据的默认值只能是「看得见」：要让人主动选择「不看」，
+ * 而不是替人决定「你不用看」。
+ *
+ * ── 为什么用 localStorage 手写而不挂 zustand/persist 中间件 ──
+ * 本 store **刻意不用 `zustand/persist`**：它只承载**三个**持久化偏好，
+ * 其余全是「刷新即失」的瞬态（抽屉 / 搜索词 / 选中项目）。挂 persist 会把瞬态也写进去，
+ * 或在 `partialize` 里维护一张日益变长的白名单——两种都比「一个键 + 一对读写函数」
+ * 更绕。故照 `homeViewMode` / `memberBoardView` 的既有范式**逐键手写**读写。
+ */
+const SHOW_CONTRADICTORY_STORAGE_KEY = 'idplan.execConsole.showContradictory';
+
+/** 读回持久化开关；非法值 / 存储不可用一律回落 true（异常默认可见） */
+function readStoredShowContradictory(): boolean {
+  try {
+    return localStorage.getItem(SHOW_CONTRADICTORY_STORAGE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+/** 写入持久化开关；失败静默（隐私模式 / 禁用存储） */
+function persistShowContradictory(show: boolean): void {
+  try {
+    localStorage.setItem(SHOW_CONTRADICTORY_STORAGE_KEY, show ? '1' : '0');
+  } catch {
+    /* 存储不可用：仅当前会话生效 */
+  }
+}
+
 /** 月历筛选条件（瞬态，不落库）：状态组 + 阶段组，组间 AND、组内 OR */
 export interface CalendarFilters {
   status: Set<CalendarFilterStatus>;
@@ -117,6 +162,12 @@ export interface UiState {
   /** 最近打开的项目（返回首页时该卡片呈现参考稿 §选中态 蓝色光晕） */
   selectedProjectId: string | null;
 
+  /**
+   * 执行控制台：是否显示「矛盾数据」（终态 execution 上挂非终态 attempt）。
+   * 默认 true（异常默认可见，不藏数据）；持久化键见 `SHOW_CONTRADICTORY_STORAGE_KEY`。
+   */
+  showContradictoryExecutions: boolean;
+
   openStageDrawer(stageId: string): void;
   setSearchQuery(query: string): void;
   setSelectedProjectId(projectId: string | null): void;
@@ -129,6 +180,8 @@ export interface UiState {
   setCalendarMonth(month: string): void;
   setHomeViewMode(mode: HomeViewMode): void;
   setMemberBoardView(mode: MemberBoardView): void;
+  /** 切换「显示矛盾数据」；写入 localStorage，刷新后保留 */
+  setShowContradictoryExecutions(show: boolean): void;
   toggleCalendarStatusFilter(status: CalendarFilterStatus): void;
   toggleCalendarStageFilter(orderIndex: number): void;
   clearCalendarFilters(): void;
@@ -153,6 +206,8 @@ export const useUiStore = create<UiState>((set) => ({
 
   searchQuery: '',
   selectedProjectId: null,
+  // 首屏即读回上次选择（异常默认可见：存储不可用 / 键缺失时回落 true）
+  showContradictoryExecutions: readStoredShowContradictory(),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setSelectedProjectId: (projectId) => set({ selectedProjectId: projectId }),
 
@@ -170,6 +225,10 @@ export const useUiStore = create<UiState>((set) => ({
   setMemberBoardView: (mode) => {
     persistMemberBoardView(mode);
     set({ memberBoardView: mode });
+  },
+  setShowContradictoryExecutions: (show) => {
+    persistShowContradictory(show);
+    set({ showContradictoryExecutions: show });
   },
   toggleCalendarStatusFilter: (status) =>
     set((st) => {

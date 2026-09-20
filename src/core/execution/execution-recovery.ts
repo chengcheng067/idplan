@@ -25,7 +25,7 @@
  *    「新增四张表，纯增量」。启动装配流程 + 导入流程是更自然的挂载点。
  */
 
-import { ExecutionStatus, AttemptStatus } from '../types/agent-execution';
+import { ExecutionStatus, AttemptStatus, ATTEMPT_NON_TERMINAL_STATUSES } from '../types/agent-execution';
 import type { Execution, ExecutionAttempt, ExecutionEvent } from '../types/agent-execution';
 import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
 import type { IExecutionsRepository } from '../repositories/interfaces';
@@ -103,6 +103,73 @@ export function isZombieAttemptStatus(status: AttemptStatus): boolean {
 /** attempt 僵尸态的收敛目标（唯一出处；改这里即改行为） */
 export function recoveryTargetForAttempt(status: AttemptStatus): AttemptStatus | null {
   if (status === AttemptStatus.Running) return AttemptStatus.Interrupted;
+  return null;
+}
+
+/* --------------------------- 终态 execution 上的活 attempt --------------------------- */
+
+/**
+ * ★ 「矛盾数据」判据的**唯一出处**：终态 execution 上挂着**未启动或非终态**的 attempt。
+ *
+ * ── 为什么算矛盾 ──
+ * execution 落终态（`completed` / `failed` / `cancelled`）意味着「这次执行已经有结论」；
+ * 而一个 `queued` / `running` 的 attempt 意味着「有一次尝试还没跑完」。两者不能同时为真：
+ * 终态是执行单的**结论**，attempt 是结论所概括的**过程**，过程不可能在结论之后还活着。
+ * 且状态机**没有任何一条边**能把它收口（下面详述），所以它会**永久留存**并持续误导。
+ *
+ * ── 为什么只是「识别」，不发明归宿 ──
+ * 与 `isZombieAttemptStatus` 同源纪律（见其 docstring）：`ATTEMPT_TRANSITIONS` 里
+ *   · `queued → interrupted` **不存在**（打断是对**正在运行**的东西的抢占）；
+ *   · 给 `queued` 判 `cancelled` = 替用户取消（用户没取消）；
+ *   · 给 `queued` 判 `failed` = 谎报失败（它压根没跑）；
+ *   · 而 execution 已终态、出边为空，**无法**先把 execution 挪回活态再收口（那会谎报状态）。
+ * 故本模块**原样保留**它，只把它**标出来给人看**——这正是本判据存在的全部理由。
+ *
+ * ── 为什么 `running` attempt 也算矛盾（与 `isZombieAttemptStatus` 的分工）──
+ * `running` 的 attempt 会被启动兜底收成 `interrupted`（那是「进程死了」的处置）；
+ * 但**兜底只在启动 / 导入时跑**，而每次兜底对终态 execution 都直接 `continue`
+ * （见 `recoverZombieExecutions` 的「终态，绝不改动」硬边界）——于是终态 execution
+ * 上的 `running` attempt **永远等不到收敛**，它同样是矛盾数据。
+ * 即两个判据**服务不同目的、刻意不合并**：
+ *   · `isZombieAttemptStatus` = 「该不该动手收敛」（只有 running，且 execution 必须活态）；
+ *   · `isContradictoryAttempt` = 「该不该标给用户看」（queued 与 running 都算，不管 execution）。
+ *
+ * ── 边界（刻意排除的形态，附理由）──
+ *   · **非终态 execution + 非终态 attempt** → 正常形态（`queued` execution 本就该挂
+ *     一个 `queued` attempt）→ **不算矛盾**。
+ *   · **终态 execution + 终态 attempt**（succeeded / failed / cancelled / interrupted）
+ *     → 正常形态（执行跑完了，它的 attempt 也结束了）→ **不算矛盾**。
+ *   · **终态 execution + `interrupted` attempt** → 正常形态：进程被杀 → 兜底把 attempt
+ *     收成 `interrupted`，而 execution 可能早已是终态。**不算矛盾**。
+ *     （这正是本判据必须用 `ATTEMPT_NON_TERMINAL_STATUSES` 而非「非 succeeded」的原因：
+ *      后者会把「被中断」误报成矛盾。）
+ *
+ * @param execution 执行单（只要状态；不必传整个实体）
+ * @param attempts  该执行单下的 attempt 集合
+ */
+export function isContradictoryExecution(
+  execution: Pick<Execution, 'status'>,
+  attempts: readonly Pick<ExecutionAttempt, 'status'>[],
+): boolean {
+  if (!isTerminal(execution.status)) return false;
+  return attempts.some((a) => ATTEMPT_NON_TERMINAL_STATUSES.includes(a.status));
+}
+
+/**
+ * 矛盾数据的类别标签（供界面按类别给不同文案；判据仍只有 `isContradictoryExecution` 一处）。
+ *
+ * `queued` 与 `running` 分开是因为**用户要采取的动作不同**：
+ *   · `live`（有条 attempt 显示「执行中」）：最刺眼——界面会显示「在跑」而实际不可能在跑；
+ *   · `pending`（只有未启动的 attempt）：显示「排队中」，同样不该存在但观感略轻。
+ * 返回值取**最强的那一档**（有 running 就报 live）。
+ */
+export type ContradictionKind = 'live' | 'pending';
+
+export function contradictionKind(
+  attempts: readonly Pick<ExecutionAttempt, 'status'>[],
+): ContradictionKind | null {
+  if (attempts.some((a) => a.status === AttemptStatus.Running)) return 'live';
+  if (attempts.some((a) => a.status === AttemptStatus.Queued)) return 'pending';
   return null;
 }
 

@@ -103,14 +103,27 @@ export class RestClient {
       } catch {
         /* 非 JSON 错误体保持默认文案 */
       }
-      // HTTP → 业务错误码映射（v0.6 扩展 409）：404=NotFound、409=Conflict（认领
-      // 争抢 / 幂等键冲突），其余归 Network。上层只 catch ChangxiaError 一种类型。
+      // HTTP → 业务错误码映射：404=NotFound、409=Conflict（认领争抢 / 单活 attempt /
+      // 提案已落定）、400|422=Validation、其余归 Network。上层只 catch ChangxiaError 一种类型。
+      //
+      // ★ 400 → Validation 是 v0.8 补上的缺口（此前落进 `else` 被归为 Network）。
+      //   服务端的**状态机拒绝走 400**（见 `server/routes/executions.routes.ts` 的
+      //   `CODE_TO_STATUS`：`validation` → 400），于是「非法的执行状态转移」「seq 跳号」
+      //   「attemptNo 与计算值不一致」「未确认不得入队」这些**确定性拒绝**会被显示成
+      //   「无法连接到服务器」——文案把人指向网络排查，真因是调用方数据不合法，
+      //   且 `Network` 语义上意味着「可重试」，而状态机拒绝重试多少次都一样。
+      //   服务端本来就回传了权威的 `userMessage`（含 from → to 与拒绝原因），
+      //   映射只有对了，那句文案才可能到达用户。
+      // 422 一并归入：同属「请求形状对、语义不合法」的 4xx，服务端当前不发它，
+      //   但反向代理 / 未来中间件可能用；归到 Network 同样是误导。
       const code =
         res.status === 404
           ? ChangxiaErrorCode.NotFound
           : res.status === 409
             ? ChangxiaErrorCode.Conflict
-            : ChangxiaErrorCode.Network;
+            : res.status === 400 || res.status === 422
+              ? ChangxiaErrorCode.Validation
+              : ChangxiaErrorCode.Network;
       throw new ChangxiaError(code, userMessage);
     }
     if (res.status === 204) return undefined as T;
@@ -360,67 +373,184 @@ export class RemoteSettingsRepository implements ISettingsRepository {
 }
 
 /**
- * Agent 执行域远端适配器（v5 第一切片）。
+ * Agent 执行域远端适配器（v0.8 落地）。
  *
- * 与旅游 itineraries 远端适配器不同：执行域第一切片**只落地本地 Dexie 适配器**，
- * 远端通道暂不接后端端点。本类按接口逐方法实现（类型完整、typecheck 通过），
- * 但一律抛明确的「尚未实现」错误——避免「默默返回空/假数据」这种更危险的失效模式。
+ * ── 单一事实源：存下来的是「数据」，不是「状态机」 ──
+ * 本适配器**不复刻状态机校验**（`assertStatusTransition` / `assertExecutionConfirmed` /
+ * `canStartAttempt` / `nextAttemptNo` / `nextSeq`）。理由不是偷懒，是三层硬事实：
+ *
+ *   ① **校验者必须是权威的那一个**。`server/adapters/sqlite.bundle.ts` 的 12 个方法
+ *      在 `.immediate()` 写事务内完成「读 → 校验 → 写」，服务端是唯一能把这三步
+ *      原子化的地方。客户端做同样的事只能「先读后写」，**必然存在竞态窗口**
+ *      —— 两个标签页同时入队，两边都会读到旧状态并各自通过校验。
+ *      即：客户端复刻校验**防不住它想防的并发穿透**，只多一次往返。
+ *   ② **服务端覆盖与本地适配器等量的边界**（已逐条核对，见下方「逐方法对齐」表），
+ *      不存在「服务端少校验一条」的缺口需要客户端补位。
+ *   ③ **重复校验会产生第二个真相源**。将来加一条合法边，要改 client、server、
+ *      local 三处，漏一处就出现「客户端放行、服务端拒绝」或反向的错位。
+ *
+ * ── 客户端**必须**做的两件事（本类实现的就是它们）──
+ *   ① **错误语义原样传播**：把服务端的 `Conflict`(409) / `Validation`(400) /
+ *      `NotFound`(404) 映射成同名的 `ChangxiaError.code`，**绝不吞成 `Network`**
+ *      （映射在 `RestClient` L106-127；`Validation` 那一档是本次补上的缺口）。
+ *      同时服务端的 `userMessage` 逐字透出 —— 它含 `from → to` 与拒绝原因，
+ *      比客户端能编的任何文案都准。
+ *   ② **不静默「修正」**：例如 `createAttempt` 的 `attemptNo` **原样透传**
+ *      （`cmd.attemptNo ?? undefined` 都不做归一），调用方没传就不传，传错了
+ *      让服务端抛 Validation。若在客户端「顺手算一个」号传过去，服务端的
+ *      「号段单调」防护会被自己的客户端绕过，审计流水里的号将不再可信。
+ *
+ * ── 逐方法对齐（服务端端点 ↔ 服务端校验位置）──
+ *   createExecution        POST /projects/:projectId/executions   （形状校验 + source 白名单）
+ *   getExecution           GET  /executions/:id                   （404 → null）
+ *   listExecutionsByProject GET /projects/:projectId/executions
+ *   updateExecutionStatus  PATCH /executions/:id                  （sqlite.bundle L881：邻接表
+ *                                                                    + completed 需 applied 提案
+ *                                                                    + 合并确认快照的人工确认门槛）
+ *   appendEvent            POST /executions/:id/events            （L929：seq === nextSeq）
+ *   listEvents             GET  /executions/:id/events
+ *   createAttempt          POST /executions/:id/attempts          （L995：外键存在性 → NotFound、
+ *                                                                    canStartAttempt → Conflict、
+ *                                                                    attemptNo 一致性 → Validation）
+ *   updateAttempt          PATCH /attempts/:id                    （L1070：attempt 邻接表、
+ *                                                                    终态盖 finishedAt）
+ *   listAttempts           GET  /executions/:id/attempts
+ *   createProposal         POST /executions/:id/proposals         （L1132：创建时不得为 applied/rejected）
+ *   updateProposal         PATCH /proposals/:id                   （L1192：已落定不可变更 → Conflict、
+ *                                                                    落定需 decidedBy → Validation）
+ *   listProposals          GET  /executions/:id/proposals
+ *
+ * ── 时序口径两端一致 ──
+ *   `listEvents` 按 `seq` 升序、`listAttempts` 按 `attemptNo` 升序
+ *   （服务端 `selectEventRows` / `selectAttemptRows` 已 ORDER BY，与本地适配器等价），
+ *   故这里不再二次排序 —— 重复排序只会掩盖服务端排序被改坏的事实。
+ *
+ * ── 路径前缀 ──
+ *   全部用**相对路径**（`/executions/...`）。`createRemoteRepositories` 传入的
+ *   `apiBaseUrl` 已含 `/api`（见 `VITE_API_BASE_URL` 契约与既有 Remote* 适配器），
+ *   这里再写一遍 `/api` 会变成 `/api/api/...`。
  */
 export class RemoteExecutionsRepository implements IExecutionsRepository {
   public constructor(private readonly api: RestClient) {}
 
-  private notImplemented(): never {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Storage,
-      'Agent 执行域远端通道尚未实现（第一切片仅落地本地 Dexie 适配器）。',
-    );
+  createExecution(cmd: CreateExecutionCmd): Promise<Execution> {
+    // projectId 走路径（服务端从 `req.params` 取），**不再放进 body**：
+    // 服务端 handler 显式用 `projectId` 覆盖，body 里的同名值会被忽略；
+    // 放进去只会让「哪个才是真值」看起来有歧义。
+    return this.api.post(`/projects/${cmd.projectId}/executions`, {
+      source: cmd.source,
+      objective: cmd.objective,
+      taskId: cmd.taskId,
+      agentMemberId: cmd.agentMemberId,
+      channelKind: cmd.channelKind,
+      inputSnapshotHash: cmd.inputSnapshotHash,
+      idempotencyKey: cmd.idempotencyKey,
+    });
   }
 
-  // ⚠️ Agent 执行域远端通道（第一切片仅落地本地 Dexie 适配器，以下均为 notImplemented 桩）。
-  // 待实现真实 REST 适配器时，**必须复刻本地适配器的存储边界强制**，否则状态机只在前端成立：
-  //   - updateExecutionStatus：事务内先 assertStatusTransition(current, cmd.status, proposals)
-  //     再 assertExecutionConfirmed(current, cmd.status)，最后才落库；读-校验-写原子化防并发穿透。
-  //   - createAttempt：事务内 canStartAttempt(attempts) 不通过即抛；attemptNo 由 nextAttemptNo 计算，
-  //     调用方传入值与计算值不一致即抛。
-  //   - appendEvent：事务内要求 cmd.seq === nextSeq(events)，乱序/跳号即抛。
-  // 上述校验入口集中在 src/core/execution/execution-state.ts（assertStatusTransition /
-  // assertExecutionConfirmed / canStartAttempt / nextAttemptNo / nextSeq），前后端单份编译，
-  // 服务端 / 远端应直接复用，不要各写一套。
-  createExecution(_cmd: CreateExecutionCmd): Promise<Execution> {
-    return this.notImplemented();
+  /** 不存在返回 null（与接口契约一致，非抛错）——同 `RemoteTasksRepository.get` 范式 */
+  async getExecution(id: string): Promise<Execution | null> {
+    try {
+      return await this.api.get<Execution>(`/executions/${id}`);
+    } catch (err) {
+      if (err instanceof ChangxiaError && err.code === ChangxiaErrorCode.NotFound) return null;
+      throw err;
+    }
   }
-  getExecution(_id: string): Promise<Execution | null> {
-    return this.notImplemented();
+
+  listExecutionsByProject(projectId: string): Promise<Execution[]> {
+    return this.api.get(`/projects/${projectId}/executions`);
   }
-  listExecutionsByProject(_projectId: string): Promise<Execution[]> {
-    return this.notImplemented();
+
+  /**
+   * 状态写入。走 `PATCH /executions/:id`（REST 惯例改资源字段），
+   * 与 `POST /executions/:id/status` 在服务端**共用同一个 handler**，语义完全一致。
+   *
+   * ⚠️ 刻意**不**在这里做 `assertStatusTransition`：见类头 ①②③。
+   * 服务端会拒并回 400 `{code:'validation', userMessage:'非法的执行状态转移：…'}`，
+   * `RestClient` 把它映射成 `ChangxiaError(Validation)` 原样抛出。
+   */
+  updateExecutionStatus(id: string, cmd: UpdateExecutionStatusCmd): Promise<Execution> {
+    // confirmation 三态（undefined / null / 对象）必须原样保留：
+    // 服务端用 `body.confirmation === undefined` 区分「不动既有确认」与「显式清空」，
+    // 写成 `cmd.confirmation ?? null` 会把「没传」变成「清空」——那是静默改语义。
+    // JSON.stringify 天然丢弃 undefined 值键，正好等于「不传该字段」。
+    return this.api.patch(`/executions/${id}`, cmd);
   }
-  updateExecutionStatus(_id: string, _cmd: UpdateExecutionStatusCmd): Promise<Execution> {
-    return this.notImplemented();
+
+  /** 追加事件：`seq` 原样透传（服务端要求 `seq === nextSeq(events)`，跳号/乱序抛 Validation） */
+  appendEvent(cmd: AppendExecutionEventCmd): Promise<ExecutionEvent> {
+    return this.api.post(`/executions/${cmd.executionId}/events`, {
+      attemptId: cmd.attemptId,
+      seq: cmd.seq,
+      type: cmd.type,
+      actor: cmd.actor,
+      fromStatus: cmd.fromStatus,
+      toStatus: cmd.toStatus,
+      reason: cmd.reason,
+      idempotencyKey: cmd.idempotencyKey,
+    });
   }
-  appendEvent(_cmd: AppendExecutionEventCmd): Promise<ExecutionEvent> {
-    return this.notImplemented();
+
+  listEvents(executionId: string): Promise<ExecutionEvent[]> {
+    return this.api.get(`/executions/${executionId}/events`);
   }
-  listEvents(_executionId: string): Promise<ExecutionEvent[]> {
-    return this.notImplemented();
+
+  /**
+   * 新开 attempt。`attemptNo` **原样透传**（调用方没传 → 字段不出现在 body，
+   * 服务端自行计算；传了 → 由服务端校验一致性）。
+   * 服务端会拒：execution 不存在 → NotFound、已存在非终态 attempt → Conflict、
+   * 号不一致 → Validation。三者经 `RestClient` 各归各码，不会混成 Network。
+   */
+  createAttempt(cmd: CreateAttemptCmd): Promise<ExecutionAttempt> {
+    return this.api.post(`/executions/${cmd.executionId}/attempts`, {
+      attemptNo: cmd.attemptNo,
+      status: cmd.status,
+      runtimeKind: cmd.runtimeKind,
+      startedAt: cmd.startedAt,
+      finishedAt: cmd.finishedAt,
+      inputSnapshotHash: cmd.inputSnapshotHash,
+    });
   }
-  createAttempt(_cmd: CreateAttemptCmd): Promise<ExecutionAttempt> {
-    return this.notImplemented();
+
+  /** 更新 attempt：服务端校验 attempt 邻接表 + 进终态自动盖 finishedAt（与本地适配器等价） */
+  updateAttempt(id: string, cmd: UpdateAttemptCmd): Promise<ExecutionAttempt> {
+    return this.api.patch(`/attempts/${id}`, cmd);
   }
-  updateAttempt(_id: string, _cmd: UpdateAttemptCmd): Promise<ExecutionAttempt> {
-    return this.notImplemented();
+
+  listAttempts(executionId: string): Promise<ExecutionAttempt[]> {
+    return this.api.get(`/executions/${executionId}/attempts`);
   }
-  listAttempts(_executionId: string): Promise<ExecutionAttempt[]> {
-    return this.notImplemented();
+
+  /**
+   * 创建写回提案。
+   * `status` 原样透传：服务端会拒「创建即为 applied / rejected」（Validation），
+   * 客户端不预先拦 —— 拦了就有两份判定，将来加状态值时必然分叉。
+   */
+  createProposal(cmd: CreateProposalCmd): Promise<WritebackProposal> {
+    return this.api.post(`/executions/${cmd.executionId}/proposals`, {
+      attemptId: cmd.attemptId,
+      projectId: cmd.projectId,
+      taskId: cmd.taskId,
+      operations: cmd.operations,
+      idempotencyKey: cmd.idempotencyKey,
+      status: cmd.status,
+    });
   }
-  createProposal(_cmd: CreateProposalCmd): Promise<WritebackProposal> {
-    return this.notImplemented();
+
+  /**
+   * 审批落定。服务端两条强制：
+   *   · 已落定（applied / rejected）不可再变更 → 409 Conflict；
+   *   · 落定为终态时 `decidedBy` 必填 → 400 Validation。
+   * 两者都靠 `RestClient` 的码映射如实到达调用方（这是产品铁律
+   * 「未经人工批准不得写回」在远端形态下唯一可见的反馈）。
+   */
+  updateProposal(id: string, cmd: UpdateProposalCmd): Promise<WritebackProposal> {
+    return this.api.patch(`/proposals/${id}`, cmd);
   }
-  updateProposal(_id: string, _cmd: UpdateProposalCmd): Promise<WritebackProposal> {
-    return this.notImplemented();
-  }
-  listProposals(_executionId: string): Promise<WritebackProposal[]> {
-    return this.notImplemented();
+
+  listProposals(executionId: string): Promise<WritebackProposal[]> {
+    return this.api.get(`/executions/${executionId}/proposals`);
   }
 }
 
