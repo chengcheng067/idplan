@@ -473,6 +473,43 @@ describe('⑤ 旧包兼容与清库重建', () => {
     expect(meta.schemaVersion).toBe(3);
   });
 
+  it('current_attempt_no 两端语义一致：服务端有 attempt 时导出的列仍是 0', async () => {
+    // ★ 两端一致性防线（v0.8 裁定）：服务端**不**维护该列（本地也从不维护），
+    //   故即使开了 attempt，导出的 `currentAttemptNo` 仍是 0。
+    //   若服务端单方面回写，这里会导出非 0 → 导入本地后本地就"有了值"，
+    //   而本地自建的仍是 0 → 同一台机器上两种语义并存，无法判断以谁为准。
+    const { executionId } = await seedExecutionDomain(app);
+    const pkg = (
+      await app.inject({ method: 'GET', url: '/api/backup', headers: AUTH })
+    ).json<{
+      data: {
+        executions: Array<{ id: string; currentAttemptNo: number }>;
+        executionAttempts: unknown[];
+      };
+    }>();
+    // 前提：确实存在 attempt（否则本用例退化成平凡情形）
+    expect(pkg.data.executionAttempts).toHaveLength(1);
+    const row = pkg.data.executions.find((e) => e.id === executionId);
+    expect(row?.currentAttemptNo).toBe(0);
+  });
+
+  it('导入后该列仍为 0（往返不引入分歧）', async () => {
+    await seedExecutionDomain(app);
+    const pkg = (
+      await app.inject({ method: 'GET', url: '/api/backup', headers: AUTH })
+    ).json<Record<string, unknown>>();
+    await app.inject({
+      method: 'POST',
+      url: '/api/backup/import',
+      headers: AUTH,
+      payload: pkg,
+    });
+    const raw = db.prepare('SELECT current_attempt_no FROM executions').get() as {
+      current_attempt_no: number;
+    };
+    expect(raw.current_attempt_no).toBe(0);
+  });
+
   it('导出的包能被 validateBackupJson 收下（两端 schemaVersion 对齐的实证）', async () => {
     await seedExecutionDomain(app);
     const res = await app.inject({ method: 'GET', url: '/api/backup', headers: AUTH });

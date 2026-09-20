@@ -258,6 +258,37 @@ const rowToExecution = (r: ExecutionRow): Execution => ({
   blockedReason: r.blocked_reason,
 });
 
+/**
+ * 按 `currentAttemptNo` 的**权威语义**重算该字段：最近一次 attempt 的编号，
+ * 一次都没跑过则为 `0`。
+ *
+ * ── 为什么要重算而不是读列 ──
+ * `executions.current_attempt_no` 在全仓**没有任何读取方**（已实测：`grep` 全仓仅剩
+ * 类型声明 `agent-execution.ts:174`、Dexie 索引声明 `current.ts:131`、备份 schema
+ * `backup.service.ts:358`、创建时赋值 `local.execution.repo.ts:53` 四处，**零处读取**）。
+ * 它是一个**冗余缓存列**，而「第几次尝试」的权威答案始终来自数子表。
+ *
+ * 服务端若去维护它，反而制造比"一致地无值"更隐蔽的问题：dump 是**字段级搬运**，
+ * 服务端算出的值会被导出、再被本地导入 —— 于是本地**导入来的值是对的、
+ * 本地自建的是错的（恒 0）**。这种"有时对有时错"会被误读为可信数据，
+ * 比一个明确的"未启用"信号难诊断得多。故 DB 列两端一致地保持 0，读路径现算。
+ *
+ * ── 语义取 `max(attemptNo)`，**不是** `nextAttemptNo()` ──
+ * 两者差一，务必别搞混：
+ *   · `nextAttemptNo(attempts)`（`execution-state.ts:186`）返回**下一个可用**序号
+ *     （空 → 1；max=3 → 4）—— 它回答的是"新开 attempt 该用几号"；
+ *   · 本函数要的是"**指向最近一次** attempt"（类型注释 `agent-execution.ts:173-174`
+ *     原文），即 max(attemptNo)；空 → 0。
+ * 唯一的观测点也支持后者：`local.execution.repo.ts:53` 在**零 attempt** 时赋 `0`，
+ * 且本地 `createAttempt` 从不更新该列 —— 若语义是 nextAttemptNo，初始值应是 1 而非 0。
+ *
+ * @param attempts 该 execution 的 attempt 列表（未排序也可，本函数自取 max）
+ */
+function withDerivedAttemptNo(execution: Execution, attempts: readonly ExecutionAttempt[]): Execution {
+  const lastUsed = attempts.length === 0 ? 0 : Math.max(...attempts.map((a) => a.attemptNo));
+  return { ...execution, currentAttemptNo: lastUsed };
+}
+
 const rowToAttempt = (r: AttemptRow): ExecutionAttempt => ({
   id: r.id,
   executionId: r.execution_id,
@@ -365,11 +396,14 @@ export function readExecutionDetail(
   id: string,
 ): ExecutionDetail | null {
   const read = db.transaction((executionId: string): ExecutionDetail | null => {
-    const execution = selectExecutionRow(db, executionId);
-    if (!execution) return null;
+    const row = selectExecutionRow(db, executionId);
+    if (!row) return null;
+    const attempts = selectAttemptRows(db, executionId);
     return {
-      execution,
-      attempts: selectAttemptRows(db, executionId),
+      // 与 getExecution / listExecutionsByProject 同一口径（见 withDerivedAttemptNo）：
+      // 三个端点若给出不同的 currentAttemptNo，详情页与列表页会互相矛盾
+      execution: withDerivedAttemptNo(row, attempts),
+      attempts,
       events: selectEventRows(db, executionId),
       proposals: selectProposalRows(db, executionId),
     };
@@ -778,21 +812,47 @@ export function createSqliteBundle(
       }
     },
 
+    /**
+     * ★ `currentAttemptNo` 在**读路径现算**（不读 DB 列）。
+     *
+     * DB 里 `executions.current_attempt_no` 两端一致地恒为 `0`（详见
+     * `withDerivedAttemptNo` 的注释：该列零读取方，本地侧从不维护，
+     * 服务端单方面维护会产生「导入来的值对、本地自建的值错」的分歧）。
+     * 「指向最近一次 attempt」这个语义由本处在**同一读事务**内数子表得出，
+     * 因此对 API 消费者而言语义单一且始终正确。
+     *
+     * ⚠️ 未来若两端决定统一维护该列，需要同步改 `src/`（本地 Dexie 侧的
+     * `createAttempt` / `updateAttempt`）并撤销这里的现算，否则会退化成
+     * 「列里存的值」与「现算的值」两套并存 —— 那时以哪个为准将无从判断。
+     */
     async getExecution(id: string): Promise<Execution | null> {
       try {
-        return selectExecution(id);
+        const read = db.transaction((executionId: string): Execution | null => {
+          const row = selectExecution(executionId);
+          if (!row) return null;
+          // 同一读事务内取 attempts，避免读到「执行单已建、attempt 还没插」的中间态
+          return withDerivedAttemptNo(row, selectAttempts(executionId));
+        });
+        return read(id);
       } catch (err) {
         throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单读取失败。', err);
       }
     },
 
-    /** 排序与本地侧逐字一致：createdAt → id（保证两端列表顺序相同） */
+    /**
+     * 排序与本地侧逐字一致：createdAt → id（保证两端列表顺序相同）。
+     * `currentAttemptNo` 同样在读路径现算，口径与 `getExecution` 完全一致
+     * （两处若不一致，会出现「列表显示第 2 次、点进去显示第 3 次」）。
+     */
     async listExecutionsByProject(projectId: string): Promise<Execution[]> {
       try {
-        const rows = db
-          .prepare('SELECT * FROM executions WHERE project_id = ? ORDER BY created_at, id')
-          .all(projectId) as ExecutionRow[];
-        return rows.map(rowToExecution);
+        const read = db.transaction((pid: string): Execution[] => {
+          const rows = db
+            .prepare('SELECT * FROM executions WHERE project_id = ? ORDER BY created_at, id')
+            .all(pid) as ExecutionRow[];
+          return rows.map((r) => withDerivedAttemptNo(rowToExecution(r), selectAttempts(r.id)));
+        });
+        return read(projectId);
       } catch (err) {
         throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单列表读取失败。', err);
       }
@@ -813,13 +873,19 @@ export function createSqliteBundle(
      * 保留 `pickDefined` 语义（undefined 的字段不覆盖既有值），与本地侧同步：
      * 用 SQL 的 `COALESCE` 做不到——它无法区分「没传」与「显式传 null」，
      * 而 `startedAt: null` 是「清空开始时间」这一真实意图。
+     *
+     * 返回值同样按读路径口径现算 `currentAttemptNo`（见 `withDerivedAttemptNo`）：
+     * 本方法的返回值会被 `PATCH /api/executions/:id` 直接下发，若这里给 DB 列的 0
+     * 而 `getExecution` 给真实值，同一个执行单在两个端点会显示不同的尝试次数。
      */
     async updateExecutionStatus(id: string, cmd: UpdateExecutionStatusCmd): Promise<Execution> {
       return inImmediateTx(() => {
-        const existing = selectExecution(id);
-        if (!existing) {
+        const existingRow = selectExecution(id);
+        if (!existingRow) {
           throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该执行单。');
         }
+        const attempts = selectAttempts(id);
+        const existing = withDerivedAttemptNo(existingRow, attempts);
         assertStatusTransition(existing, cmd.status, selectProposals(id));
         const effectiveConfirmation =
           cmd.confirmation !== undefined ? cmd.confirmation : existing.confirmation;
@@ -984,15 +1050,10 @@ export function createSqliteBundle(
           row.createdAt,
           row.updatedAt,
         );
-
-        // ★ 回写父表的 currentAttemptNo —— 本地侧没做这一步，服务端补上：
-        //   该列在 DDL 里存在且是 Execution 的公开字段，若永不更新就永远停在 0，
-        //   「当前是第几次尝试」这个问题在服务端只能靠数子表回答。语义取 max。
-        db.prepare('UPDATE executions SET current_attempt_no = ?, updated_at = ? WHERE id = ?').run(
-          Math.max(computedNo, 0),
-          now,
-          cmd.executionId,
-        );
+        // ★ 刻意**不**回写父表（既不动 `current_attempt_no`，也不动 `updated_at`）。
+        //   本地侧 `local.execution.repo.ts:180-227` 的 `createAttempt` **逐字同款**：
+        //   它只读子表、校验、插子表，全程不碰 `executions` 行。两端必须一致，
+        //   理由见 `withDerivedAttemptNo` 的注释（冗余缓存列 + 两端数据分歧风险）。
         return row;
       });
     },

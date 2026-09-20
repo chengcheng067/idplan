@@ -414,6 +414,156 @@ describe('服务端执行域端点：读写闭环', () => {
   });
 });
 
+/**
+ * `currentAttemptNo` 的存储与读路径口径（v0.8 裁定后）。
+ *
+ * ── 背景（为什么这几条测试值得单独成组）──
+ * 服务端一开始在 `createAttempt` 里回写父表 `current_attempt_no`，被判定为错误设计：
+ * 该列**全仓零读取方**，是个冗余缓存列；而 dump 是字段级搬运，服务端算出的值会
+ * 被导出、再被本地导入 —— 造成「本地导入来的值是对的、本地自建的是错的（恒 0）」，
+ * 这种"有时对有时错"比"两端一致地无值"难诊断得多。
+ *
+ * 现行设计：**DB 列两端一致地恒为 0**，`currentAttemptNo` 由**读路径现算**
+ * （`withDerivedAttemptNo`，语义 = max(attemptNo)，空 → 0，指向最近一次 attempt）。
+ *
+ * 本组锁死三件事：① 读路径确实给出了正确值；② 写路径确实不再碰父表；
+ * ③ dump 往返后该列与本地侧语义一致（不出现服务端有值 / 本地无值的分歧）。
+ */
+describe('currentAttemptNo：DB 恒为 0，读路径现算', () => {
+  let app: FastifyInstance;
+  let db: Database.Database;
+
+  beforeEach(async () => {
+    ({ app, db } = await buildServer());
+    await seedProject(app);
+  });
+
+  /** 新开一个 attempt 并推进到终态（终态才能再开下一个），返回 attemptNo */
+  async function addAttempt(app: FastifyInstance, executionId: string): Promise<number> {
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${executionId}/attempts`,
+      payload: {},
+    });
+    expect(created.statusCode).toBe(200);
+    const no = created.json<{ attemptNo: number }>().attemptNo;
+    // 落到终态，让下一次能开新的（同一 execution 同时最多一个非终态 attempt）
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/attempts/${created.json<{ id: string }>().id}`,
+      payload: { status: 'cancelled' },
+    });
+    return no;
+  }
+
+  it('0 个 attempt → currentAttemptNo = 0（getExecution 与列表都给 0）', async () => {
+    const exec = await createExecution(app);
+    const one = await app.inject({ method: 'GET', url: `/api/executions/${exec.id}` });
+    expect(one.json<{ currentAttemptNo: number }>().currentAttemptNo).toBe(0);
+
+    const list = await app.inject({ method: 'GET', url: `/api/projects/${PROJECT_ID}/executions` });
+    expect(list.json<Array<{ currentAttemptNo: number }>>()[0].currentAttemptNo).toBe(0);
+  });
+
+  it('1 个 attempt → currentAttemptNo = 1（不是 2：语义是「最近一次」而非「下一个」）', async () => {
+    const exec = await createExecution(app);
+    const no = await addAttempt(app, exec.id as string);
+    expect(no).toBe(1);
+
+    const one = await app.inject({ method: 'GET', url: `/api/executions/${exec.id}` });
+    // ★ 若这里实现成 nextAttemptNo()（max+1）就会得到 2 —— 差一，最易犯的错
+    expect(one.json<{ currentAttemptNo: number }>().currentAttemptNo).toBe(1);
+  });
+
+  it('3 个 attempt → currentAttemptNo = 3（三处读路径口径一致）', async () => {
+    const exec = await createExecution(app);
+    const id = exec.id as string;
+    expect(await addAttempt(app, id)).toBe(1);
+    expect(await addAttempt(app, id)).toBe(2);
+    expect(await addAttempt(app, id)).toBe(3);
+
+    const one = await app.inject({ method: 'GET', url: `/api/executions/${id}` });
+    expect(one.json<{ currentAttemptNo: number }>().currentAttemptNo).toBe(3);
+
+    const list = await app.inject({ method: 'GET', url: `/api/projects/${PROJECT_ID}/executions` });
+    const row = list.json<Array<{ currentAttemptNo: number }>>()[0];
+    expect(row.currentAttemptNo).toBe(3);
+
+    // detail 端点必须同口径（否则列表显示 3、详情页显示别的 → 互相矛盾）
+    const detail = await app.inject({ method: 'GET', url: `/api/executions/${id}/detail` });
+    expect(
+      detail.json<{ execution: { currentAttemptNo: number } }>().execution.currentAttemptNo,
+    ).toBe(3);
+  });
+
+  it('读路径现算：直接改 DB 列不影响返回值（证明真的没在读列）', async () => {
+    const exec = await createExecution(app);
+    const id = exec.id as string;
+    await addAttempt(app, id);
+    // 把列塞一个明显错误的哨兵值
+    db.prepare('UPDATE executions SET current_attempt_no = 999 WHERE id = ?').run(id);
+    const one = await app.inject({ method: 'GET', url: `/api/executions/${id}` });
+    // 返回的仍是数子表算出的 1，而非列里的 999
+    expect(one.json<{ currentAttemptNo: number }>().currentAttemptNo).toBe(1);
+  });
+
+  it('createAttempt **不碰**父表：current_attempt_no 与 updated_at 逐字节不变', async () => {
+    const exec = await createExecution(app);
+    const id = exec.id as string;
+    const before = db
+      .prepare('SELECT current_attempt_no, updated_at FROM executions WHERE id = ?')
+      .get(id) as { current_attempt_no: number; updated_at: string };
+    // 确保父表初始就是 0（本地侧同款）
+    expect(before.current_attempt_no).toBe(0);
+
+    await addAttempt(app, id);
+
+    const after = db
+      .prepare('SELECT current_attempt_no, updated_at FROM executions WHERE id = ?')
+      .get(id) as { current_attempt_no: number; updated_at: string };
+    // ★ 与本地 local.execution.repo.ts:180-227 的 createAttempt 同款：只插子表
+    expect(after.current_attempt_no).toBe(0);
+    expect(after.updated_at).toBe(before.updated_at);
+  });
+
+  it('updateAttempt 同样不碰父表', async () => {
+    const exec = await createExecution(app);
+    const id = exec.id as string;
+    const a = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${id}/attempts`,
+      payload: {},
+    });
+    const before = db
+      .prepare('SELECT current_attempt_no, updated_at FROM executions WHERE id = ?')
+      .get(id) as { current_attempt_no: number; updated_at: string };
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/attempts/${a.json<{ id: string }>().id}`,
+      payload: { status: 'running' },
+    });
+
+    const after = db
+      .prepare('SELECT current_attempt_no, updated_at FROM executions WHERE id = ?')
+      .get(id) as { current_attempt_no: number; updated_at: string };
+    expect(after.current_attempt_no).toBe(0);
+    expect(after.updated_at).toBe(before.updated_at);
+  });
+
+  it('状态写入的返回值也用现算口径（PATCH 与 GET 不得互相矛盾）', async () => {
+    const exec = await createExecution(app);
+    const id = exec.id as string;
+    await addAttempt(app, id);
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/executions/${id}`,
+      payload: { status: 'awaiting_confirmation' },
+    });
+    expect(patched.json<{ currentAttemptNo: number }>().currentAttemptNo).toBe(1);
+  });
+});
+
 describe('服务端存储边界：P0「未人工确认绝不执行」', () => {
   let app: FastifyInstance;
   let db: Database.Database;
