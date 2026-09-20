@@ -142,15 +142,50 @@ describe('带数据的四表往返保真', () => {
     const exported2 = await svc.exportAll();
 
     // 逐表保真（含四张执行域表）
-    expect(normalize(exported2)).toBe(normalize(exported1));
+    //
+    // ★ 导入侧刻意的例外：`importAndReplace` 落库后会跑一次**僵尸态兜底**
+    //   （规格 §12 L223 第 1 条；备份恢复是整库替换、绕过状态迁移校验）。
+    //   故本用例的 `running` 导出 → 导入后必然收敛为 `needs_attention`：
+    //   这不是往返失真，而是**新加的正确行为**（否则「界面显示在跑、实际没人在跑」）。
+    //   所以这里比对的是「**兜底预期的**结果」：把 exported2 的 execution 行归一到
+    //   收敛后的状态，再与 exported1 逐表 diff —— 保真性本身仍被严格锁死
+    //   （attempts / events / proposals 三表与其余所有字段都要求逐字相等）。
+    const normalizedExpected = structuredClone(exported1);
+    normalizedExpected.data.executions = normalizedExpected.data.executions.map((e) =>
+      e.id === exec.id
+        ? {
+            ...e,
+            status: ExecutionStatus.NeedsAttention,
+            updatedAt: exported2.data.executions.find((x) => x.id === exec.id)!.updatedAt,
+            blockedReason: exported2.data.executions.find((x) => x.id === exec.id)!.blockedReason,
+          }
+        : e,
+    );
+    // 兜底会追写一条 status_changed 审计事件（append-only，导入后 seq=3）——
+    // 这正是「状态被改过，就一定有流水」的证据，故 exported2 比 exported1 多这一条。
+    const recoveredEvent = exported2.data.executionEvents.find(
+      (ev) => ev.id !== exported1.data.executionEvents[0]!.id &&
+        ev.id !== exported1.data.executionEvents[1]!.id,
+    );
+    expect(recoveredEvent).toBeDefined();
+    expect(recoveredEvent!.type).toBe('status_changed');
+    expect(recoveredEvent!.actor).toBe('system');
+    expect(recoveredEvent!.fromStatus).toBe(ExecutionStatus.Running);
+    expect(recoveredEvent!.toStatus).toBe(ExecutionStatus.NeedsAttention);
+    normalizedExpected.data.executionEvents = [...normalizedExpected.data.executionEvents, recoveredEvent!];
+
+    expect(normalize(exported2)).toBe(normalize(normalizedExpected));
 
     // 直接读 DB 行断言（不经由序列化）
     const reExec = await bundle.executions.getExecution(exec.id);
-    expect(reExec?.status).toBe(ExecutionStatus.Running);
+    expect(reExec?.status).toBe(ExecutionStatus.NeedsAttention);
     const reAttempts = await bundle.executions.listAttempts(exec.id);
     expect(reAttempts).toHaveLength(1);
     const reEvents = await bundle.executions.listEvents(exec.id);
-    expect(reEvents).toHaveLength(2);
+    // 2 条原始事件（created / attempt_finished）+ 1 条兜底追写的 status_changed = 3。
+    // append-only 语义要求「状态改了流水必在」，故这里断言 3 而不是 2。
+    expect(reEvents).toHaveLength(3);
+    expect(reEvents.map((e) => e.seq)).toEqual([1, 2, 3]);
     const reProposals = await bundle.executions.listProposals(exec.id);
     expect(reProposals[0]!.status).toBe(WritebackProposalStatus.Applied);
   });

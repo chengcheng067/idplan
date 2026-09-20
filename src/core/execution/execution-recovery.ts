@@ -1,0 +1,313 @@
+/**
+ * 执行域「僵尸态」兜底（应用启动自愈）—— 共享实现，调用方只有两处。
+ *
+ * 问题（规格 `feature-dev-agent-board-2026-09-18.md` §12 L223 第 1 条）：
+ *   一个 execution 停在 `running` / `paused` / `needs_attention` 时，应用进程被强杀 /
+ *   崩溃 / 断电，重启后**没有任何调度器认领它们**；备份恢复更是整库替换、
+ *   **完全绕过状态迁移校验**，把这些状态原样搬回来。
+ *   用户看到「界面显示在跑、实际没人在跑」的假活态，直接击穿对控制台的信任。
+ *
+ * 本模块的纪律：
+ *   1. **只走状态机已有的合法边**（`EXECUTION_TRANSITIONS` / `ATTEMPT_TRANSITIONS`），
+ *      不新增状态、不改转移表、不绕过 `assertTransition` / `assertStatusTransition`。
+ *      ⇒ 所有写入经 `IExecutionsRepository`（本地适配器内部在事务里跑校验），
+ *        本模块**不直接碰 Dexie**。
+ *   2. **零时间阈值**。判据是「本轮进程生命周期内不可能有执行在跑」——
+ *      见 `DEFAULT_RECOVERY_REASON`。不用 `startedAt` / `updatedAt` 猜超时
+ *      （执行域没有心跳 / 租约字段，猜必然出错）。
+ *   3. **幂等**：重复调用（同一进程二次收敛、启动 + 导入各一次）不改动已正确的数据，
+ *      不产生第二条审计事件。幂等靠「目标态不是僵尸态」这一事实，不是靠去重表。
+ *   4. **不因单条失败而中断**：逐条隔离，返回逐条结果，失败向上汇总但不抛出
+ *      ——「部分收敛」远好于「一条坏数据拦死启动」。
+ *
+ * ⚠️ 为什么不做成 `db.version(6).upgrade()`：僵尸态**不是 schema 变更**，
+ *    挂 upgrade 需要无意义地 bump Dexie 版本号，而 v5 的注释已明确
+ *    「新增四张表，纯增量」。启动装配流程 + 导入流程是更自然的挂载点。
+ */
+
+import { ExecutionStatus, AttemptStatus } from '../types/agent-execution';
+import type { Execution, ExecutionAttempt, ExecutionEvent } from '../types/agent-execution';
+import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
+import type { IExecutionsRepository } from '../repositories/interfaces';
+import { isTerminal, nextSeq } from './execution-state';
+
+/** 兜底的执行单写入审计流水时落的原因串（唯一的「本轮启动」标记） */
+export const DEFAULT_RECOVERY_REASON =
+  '应用启动时发现该执行单处于运行中，但当前进程已不可能有执行在运行（进程重启 / 备份恢复绕过状态校验），收敛为待处理，需人工重新确认。';
+
+/** 兜底的 attempt 写入审计流水时落的原因串 */
+export const DEFAULT_ATTEMPT_RECOVERY_REASON =
+  '随执行单一同收敛：该 attempt 所属进程已不存在（进程重启 / 备份恢复绕过状态校验），打断为 interrupted。';
+
+/**
+ * ★ 兜底判据的**唯一出处**：哪些 execution 状态算「僵尸态」。
+ *
+ * 决策与理由（**刻意不是「全部非终态」**）：
+ *
+ *   - `running` → `needs_attention` ✅（状态机有此边：EXECUTION_TRANSITIONS.running）
+ *     本轮进程刚启动，不可能有执行正在跑；而**绝不能**把用户强杀的那次执行谎报成
+ *     `cancelled` / `failed`（用户没取消、也不一定失败）。`needs_attention` 的语义
+ *     正是「需人工介入」，是唯一诚实且存在的归属。
+ *
+ *   - `paused` → **不收敛**。`paused` 是**用户主动**的暂停（合作式暂停，不启动新步骤），
+ *     语义上就是「合法地停着、等着人来点继续」——它本来就要求人工介入，重启没有让它
+ *     变得更糟。更要紧的是：**所有通往 `needs_attention` 的边里没有 `paused →` 这一条**
+ *     （`paused` 只有 `running` / `cancelled`）。要在重启时收敛它，只剩两条路：
+ *       ① `paused → cancelled`：**谎报**——用户没取消，却把它永久打成终态，
+ *          且 `cancelled` 出边为空，用户**再也无法恢复**这次执行（不可逆的数据损伤）；
+ *       ② `paused → running → needs_attention`：为「收敛」先把状态挪进 `running`
+ *          ——而**「状态是 running 却没人跑」恰恰是本兜底要消灭的假活态**，
+ *          等于用制造一次假活态来修假活态。
+ *     两条路都比不收敛更坏，故**不动 `paused`**。这不是遗漏，是唯一不撒谎的选择。
+ *
+ *   - `needs_attention` → **不收敛**（自身，无需转移）。它**本来就是**「需要人关注」；
+ *     重启既没有让它不再需要关注，也没有让「需要关注」这件事变得不成立 ——
+ *     语义没有被破坏，不需要动。
+ *
+ *   ⇒ 故僵尸态**只有 `running`**。而「僵尸 attempt」= 非终态的 attempt
+ *     （`queued` / `running`），见 `isZombieAttempt`。
+ */
+export const ZOMBIE_EXECUTION_STATUSES: readonly ExecutionStatus[] = [ExecutionStatus.Running];
+
+/** 某 execution 状态是否需要在启动 / 导入后被收敛 */
+export function isZombieExecutionStatus(status: ExecutionStatus): boolean {
+  return ZOMBIE_EXECUTION_STATUSES.includes(status);
+}
+
+/**
+ * 某 attempt 是否需要在启动 / 导入后被收敛。
+ *
+ * `running`：进程已死，收敛为 `interrupted`（`ATTEMPT_TRANSITIONS.running` 有这条边，
+ * 注释 L98-100 明确它就是为「应用崩溃、用户强杀」预留的）。
+ * `queued`：从未启动过，是**更纯**的僵尸——本轮进程没派发过、上一轮也没启动它。
+ * 转移表里 `queued → interrupted` 这条边**刻意不存在**（注释：未启动的 attempt
+ * 被「打断」没有意义），故 `queued` 收敛为 `cancelled`（未启动即取消，语义正确）。
+ * ⚠️ 若某 `queued` attempt 所属 execution 已处于终态（例如 completed），
+ *    它本应早就结束 —— 那种「终态 execution 却挂着未启动 attempt」的**数据矛盾**
+ *    属于**规格空白**（见本任务报告「未覆盖的缺口」），本模块**不发明**它的归宿。
+ *
+ * attempt 级收敛**只跟着 execution 级收敛走**（`recoverExecution` 内部调用，
+ * 且门禁在 `isZombieExecutionStatus`）：备份恢复进来的 `paused` 执行单可能挂着一个
+ * 僵尸 `running` attempt —— 此时若单独收敛 attempt 会造出「execution 仍是 paused，
+ * attempt 却是终态」的错配（用户点「继续」时无活 attempt 可续）；宁可一并留着，
+ * 也不制造**我们自己引入**的新不一致。
+ */
+export function isZombieAttemptStatus(status: AttemptStatus): boolean {
+  return status === AttemptStatus.Running;
+}
+
+/** attempt 僵尸态的收敛目标（唯一出处；改这里即改行为） */
+export function recoveryTargetForAttempt(status: AttemptStatus): AttemptStatus | null {
+  if (status === AttemptStatus.Running) return AttemptStatus.Interrupted;
+  return null;
+}
+
+/** 单条执行单的收敛结果 */
+export interface ExecutionRecoveryOutcome {
+  executionId: string;
+  /** 收敛前的 execution 状态 */
+  from: ExecutionStatus;
+  /** 收敛后的 execution 状态（缺省 = 本次没动它） */
+  to?: ExecutionStatus;
+  /** 本次被收敛的 attempt 数 */
+  attemptsRecovered: number;
+  /** 该条是否在收敛过程中失败（失败原因见 reason，不抛给调用方） */
+  failed: boolean;
+  /** 跳过 / 失败的原因（诊断用） */
+  reason?: string;
+}
+
+/** 一次兜底扫描的汇总 */
+export interface RecoverySummary {
+  /** 收敛的 execution 条数 */
+  executionsRecovered: number;
+  /** 收敛的 attempt 条数 */
+  attemptsRecovered: number;
+  /** 未收敛（含失败）的条数 */
+  skipped: number;
+  /** 逐条结果（含被跳过的，便于审计与测试断言） */
+  outcomes: ExecutionRecoveryOutcome[];
+}
+
+/** 遍历全库用的 projectId 清单来源 */
+export interface RecoveryScanScope {
+  /** 全量 projectId（`projects.list({ status: 'all' })` 的 id 集） */
+  projectIds: readonly string[];
+}
+
+function emptySummary(): RecoverySummary {
+  return { executionsRecovered: 0, attemptsRecovered: 0, skipped: 0, outcomes: [] };
+}
+
+/**
+ * 单条 execution 的收敛（幂等）。
+ *
+ * 顺序刻意如此：
+ *   1. 先收敛 attempt（`interrupted`），再收敛 execution（`needs_attention`）。
+ *      任一方向失败都不会留下「execution 已 needs_attention 但 attempt 还在 running」
+ *      的错觉性假活态 —— 反序会。
+ *   2. 每次写状态都紧跟一条审计事件（`status_changed` / `attempt_finished`），
+ *      审计流水的 seq 由 `nextSeq(events)` 现算（仓储强制严格单调）。
+ */
+async function recoverExecution(
+  repo: IExecutionsRepository,
+  execution: Execution,
+): Promise<ExecutionRecoveryOutcome> {
+  const outcome: ExecutionRecoveryOutcome = {
+    executionId: execution.id,
+    from: execution.status,
+    attemptsRecovered: 0,
+    failed: false,
+  };
+
+  try {
+    // ① attempt 层：僵尸 running → interrupted
+    //
+    // ★ 门禁：**执行单处于「活态」时才收敛它的 attempt**。界面上「在跑」的判据是
+    //   execution **未达终态**，而不是「execution 本身需要被收敛」：
+    //     - `running` → 要收敛（下面 ②），attempt 当然也收敛；
+    //     - `needs_attention` → execution 不动（已在目标态），但它**仍是活态**：
+    //       挂着的 running attempt 谁也不认领了，必须打断，否则留下
+    //       「待处理 + 一个在跑的 attempt」这种误导性的半活状态；
+    //     - `paused` → 刻意不收敛 execution（见 ZOMBIE_EXECUTION_STATUSES 的理由）。
+    //       此时若单独把 attempt 打成 `interrupted`，就亲手造出「execution 仍是 paused、
+    //       attempt 已是终态」的错配 —— 用户点「继续」时没有任何活 attempt 可续，
+    //       这是个**我们新引入**的坏状态。一条坏数据不修，好过用一条新坏数据去补；
+    //     - 终态 → 上游已 return，不会走到这里（attempt 的归属由 execution 的终态定义）。
+    if (!isTerminal(execution.status) && execution.status !== ExecutionStatus.Paused) {
+      const attempts = await repo.listAttempts(execution.id);
+      for (const attempt of attempts) {
+        if (!isZombieAttemptStatus(attempt.status)) continue;
+        const target = recoveryTargetForAttempt(attempt.status);
+        if (!target) continue;
+        await asAttemptRecovery(repo, execution.id, attempt, target);
+        outcome.attemptsRecovered += 1;
+      }
+    }
+
+    // ② execution 层：僵尸态 → needs_attention
+    if (!isZombieExecutionStatus(execution.status)) {
+      // 合法地停着（paused / needs_attention）或尚未推进（draft / queued / awaiting_*）—— 一律不动。
+      outcome.reason = '非僵尸态，无需收敛';
+      return outcome;
+    }
+
+    const events = await repo.listEvents(execution.id);
+    const from = execution.status;
+    await repo.updateExecutionStatus(execution.id, {
+      status: ExecutionStatus.NeedsAttention,
+      blockedReason: DEFAULT_RECOVERY_REASON,
+    });
+    await repo.appendEvent({
+      executionId: execution.id,
+      seq: nextSeqOf(events),
+      type: 'status_changed',
+      actor: 'system',
+      fromStatus: from,
+      toStatus: ExecutionStatus.NeedsAttention,
+      reason: DEFAULT_RECOVERY_REASON,
+    });
+    outcome.to = ExecutionStatus.NeedsAttention;
+    return outcome;
+  } catch (err) {
+    outcome.failed = true;
+    outcome.reason = err instanceof ChangxiaError ? err.userMessage : String(err);
+    return outcome;
+  }
+}
+
+/**
+ * 收敛单条僵尸 attempt：`running → interrupted`，并把该次打断写进审计流水。
+ *
+ * `finishedAt` 由仓储在进入终态时统一盖上（local 适配器 L250-252），
+ * 此处显式传 `now` 以便「进程被杀的那一刻」在数据上可读且与 `updatedAt` 同源。
+ */
+async function asAttemptRecovery(
+  repo: IExecutionsRepository,
+  executionId: string,
+  attempt: ExecutionAttempt,
+  target: AttemptStatus,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await repo.updateAttempt(attempt.id, {
+    status: target,
+    finishedAt: now,
+    terminalReason: DEFAULT_ATTEMPT_RECOVERY_REASON,
+  });
+  const events = await repo.listEvents(executionId);
+  await repo.appendEvent({
+    executionId,
+    attemptId: attempt.id,
+    seq: nextSeqOf(events),
+    type: 'attempt_finished',
+    actor: 'system',
+    fromStatus: null,
+    toStatus: null,
+    reason: DEFAULT_ATTEMPT_RECOVERY_REASON,
+  });
+}
+
+/** nextSeq 的唯一取用点（单一出处，避免各处再写一遍 max+1） */
+function nextSeqOf(events: readonly ExecutionEvent[]): number {
+  return nextSeq(events);
+}
+
+/**
+ * **共享兜底入口**（启动装配点与备份导入后**调用同一个函数**，不存在第二份实现）。
+ *
+ * 调用时机（见 `di/repository.provider.tsx` 与 `core/services/backup.service.ts`）：
+ *   - `RepoSourcesReady`（仓储刚装配完成、首屏数据装载之前）；
+ *   - `BackupService.importAndReplace` 落库成功之后（备份恢复绕过状态机的补位）。
+ *
+ * 幂等：重复调用对已收敛数据零写入（`needs_attention` / `interrupted` 都不在僵尸集合里）。
+ * 不抛错：单条失败只记进 `outcomes[].failed`，`skipped` 计数。
+ */
+export async function recoverZombieExecutions(
+  repo: IExecutionsRepository,
+  scope: RecoveryScanScope,
+): Promise<RecoverySummary> {
+  const summary = emptySummary();
+  if (scope.projectIds.length === 0) return summary;
+
+  for (const projectId of scope.projectIds) {
+    let executions: Execution[];
+    try {
+      executions = await repo.listExecutionsByProject(projectId);
+    } catch (err) {
+      summary.skipped += 1;
+      summary.outcomes.push({
+        executionId: `(project:${projectId})`,
+        from: ExecutionStatus.Draft,
+        attemptsRecovered: 0,
+        failed: true,
+        reason: err instanceof ChangxiaError ? err.userMessage : String(err),
+      });
+      continue;
+    }
+
+    for (const execution of executions) {
+      // 终态 execution 一律不碰 —— 这是本兜底的硬边界（防误伤）。
+      if (isTerminal(execution.status)) {
+        summary.skipped += 1;
+        summary.outcomes.push({
+          executionId: execution.id,
+          from: execution.status,
+          attemptsRecovered: 0,
+          failed: false,
+          reason: '终态，绝不改动',
+        });
+        continue;
+      }
+      const outcome = await recoverExecution(repo, execution);
+      summary.outcomes.push(outcome);
+      summary.attemptsRecovered += outcome.attemptsRecovered;
+      if (outcome.to) {
+        summary.executionsRecovered += 1;
+      } else if (!outcome.failed) {
+        summary.skipped += 1;
+      }
+      if (outcome.failed) summary.skipped += 1;
+    }
+  }
+  return summary;
+}

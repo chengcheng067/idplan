@@ -24,6 +24,7 @@ import {
   type TaskSource,
 } from '../types/enums';
 import type { IRepositoryBundle } from '../repositories/interfaces';
+import { recoverZombieExecutions } from '../execution/execution-recovery';
 import { normalizeProjectRow, normalizeStageRow } from '../template/stage-fallback';
 
 /**
@@ -529,6 +530,21 @@ export class BackupService {
       writebackProposals: normalized.data.writebackProposals,
     };
     await this.bundle.admin.replaceAllImport({ ...pkg, data });
+
+    // 3) 僵尸态兜底（规格 §12 L223 第 1 条）：**备份恢复是整库替换，完全绕过状态迁移校验**，
+    //    包里的 running / paused / needs_attention 执行单会原样落库。若不在这里收敛，
+    //    「界面显示在跑、实际没人在跑」的假活态会一直挂到**下一次应用启动**才被清掉
+    //    —— 而用户此刻正盯着这个界面（`useBackupIo` 恢复后 `window.location.reload()`）。
+    //    调用**与启动装配点同一个** `recoverZombieExecutions`（无第二份实现）。
+    //    非致命：收敛失败不得让一次成功的恢复变成「失败」（导入已落库，回滚不了），
+    //    故吞掉异常 —— 下次启动仍会兜底，不存在永久漏网。
+    try {
+      await recoverZombieExecutions(this.bundle.executions, {
+        projectIds: data.projects.map((p) => p.id),
+      });
+    } catch {
+      // 见上：兜底是**尽力而为**的补位，不承担数据完整性责任（那是 replaceAllImport 的事务责任）
+    }
   }
 
   /* --------------------------- 降级导出的跨项目聚合 --------------------------- */

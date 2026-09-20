@@ -6,6 +6,7 @@ import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { detectLocalDbVersion, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
+import { recoverZombieExecutions } from '../core/execution/execution-recovery';
 import { exportPreMigrationBackupToFile } from '../components/layout/useBackupIo';
 
 /**
@@ -39,6 +40,16 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
   const startRepositories = useCallback(async (): Promise<void> => {
     try {
       const b = await createRepositories({ dataSource: appEnv.dataSource, apiBaseUrl: appEnv.apiBaseUrl });
+      // ★ 僵尸态兜底（规格 §12 L223 第 1 条）：仓储刚装配完、**首屏数据装载之前**收敛。
+      //   时序是硬要求，不是风格选择：
+      //     - 早于 `createRepositories` 不可能（那时还没有仓储可写）；
+      //     - 晚于 `bootstrapAllStores` 就会先渲染出「还在跑」的假活态再把它抹掉
+      //       —— 哪怕只闪一帧，用户已经看见了不该看见的东西。
+      //   这里 await（而非 fire-and-forget）：失败也不能拦启动（内部已逐条隔离、不抛），
+      //   但必须保证 children 拿到 bundle 时，库里已经没有僵尸态。
+      await recoverZombieExecutions(b.executions, {
+        projectIds: (await b.projects.list({ status: 'all' })).map((p) => p.id),
+      });
       if (!cancelledRef.current) setBundle(b);
     } catch (err: unknown) {
       if (cancelledRef.current) return;
