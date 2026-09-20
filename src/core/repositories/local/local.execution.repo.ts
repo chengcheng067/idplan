@@ -15,7 +15,14 @@ import type {
   UpdateExecutionStatusCmd,
   UpdateProposalCmd,
 } from '../interfaces';
-import { ExecutionStatus, WritebackProposalStatus, AttemptStatus } from '../../types/agent-execution';
+import {
+  ATTEMPT_STATUSES,
+  AttemptStatus,
+  EXECUTION_SOURCES,
+  ExecutionStatus,
+  WRITEBACK_PROPOSAL_STATUSES,
+  WritebackProposalStatus,
+} from '../../types/agent-execution';
 import {
   assertAttemptTransition,
   assertExecutionConfirmed,
@@ -37,6 +44,16 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
   constructor(private readonly db: ChangxiaDatabase) {}
 
   async createExecution(cmd: CreateExecutionCmd): Promise<Execution> {
+    // ★ 审计补齐（原缺口 1 的同源排查）：`source` 此前**本地侧不校验**，
+    //   而远端侧由路由层 `EXECUTION_SOURCES.includes(source)` 拦住 ——
+    //   实测确认这是一处**两端分歧**：本地 `source='whatever'` 落库、远端 400。
+    //   分歧比「两端一致地不完整」更坏，故在本地侧补上（**逐字同款**的判定与文案）。
+    if (!EXECUTION_SOURCES.includes(cmd.source)) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `字段 source 非法：${String(cmd.source)}；合法值为 ${EXECUTION_SOURCES.join(' / ')}。`,
+      );
+    }
     const now = new Date().toISOString();
     const row: Execution = {
       id: crypto.randomUUID(),
@@ -126,39 +143,55 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
 
   async appendEvent(cmd: AppendExecutionEventCmd): Promise<ExecutionEvent> {
     try {
-      // 读-校验-写在单 rw 事务内：seq 单调校验与落库原子化，防止并发乱序穿透。
-      return await this.db.transaction('rw', this.db.executionEvents, async () => {
-        const events = await this.db.executionEvents
-          .where('executionId')
-          .equals(cmd.executionId)
-          .toArray();
-        const expectedSeq = nextSeq(events);
-        // 严格单调：调用方必须传入 nextSeq（迟到 / 乱序 / 跳号一律拒绝）。
-        // 选严格相等而非「> max」：seq 是审计流水的规范排序键，任何缺口都会让
-        // 迟到回执的去重 / 排序语义模糊；乱序写应被拒而非被静默重编号。
-        if (cmd.seq !== expectedSeq) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Validation,
-            `执行事件 seq 非法：调用方传入 ${cmd.seq}，期望 ${expectedSeq}（execution=${cmd.executionId}）。`,
-          );
-        }
-        const now = new Date().toISOString();
-        const row: ExecutionEvent = {
-          id: crypto.randomUUID(),
-          executionId: cmd.executionId,
-          attemptId: cmd.attemptId ?? null,
-          seq: cmd.seq,
-          type: cmd.type,
-          actor: cmd.actor,
-          fromStatus: cmd.fromStatus ?? null,
-          toStatus: cmd.toStatus ?? null,
-          reason: cmd.reason ?? null,
-          idempotencyKey: cmd.idempotencyKey ?? null,
-          createdAt: now,
-        };
-        await this.db.executionEvents.add(row);
-        return row;
-      });
+      // 读-校验-写在单 rw 事务内：父存在性 + seq 单调校验与落库原子化，防止并发乱序穿透。
+      return await this.db.transaction(
+        'rw',
+        this.db.executions,
+        this.db.executionEvents,
+        async () => {
+          // 父 execution 存在性 —— 与 `createAttempt` 同款、同语义（NotFound 而非 Storage）。
+          // 服务端侧由外键拒掉孤儿行（`execution_events.execution_id REFERENCES executions(id)`），
+          // 本地 Dexie 无外键，这条检查是本地侧**唯一**的孤儿防线；
+          // 两端都必须在「入口」就把「父不存在」翻译成 NotFound，否则远端 500 → 客户端 Network，
+          // 文案会指向「网络排查」而真因是父记录不存在。
+          if (!(await this.db.executions.get(cmd.executionId))) {
+            throw new ChangxiaError(
+              ChangxiaErrorCode.NotFound,
+              `未找到执行单 ${cmd.executionId}，不能追加事件。`,
+            );
+          }
+          const events = await this.db.executionEvents
+            .where('executionId')
+            .equals(cmd.executionId)
+            .toArray();
+          const expectedSeq = nextSeq(events);
+          // 严格单调：调用方必须传入 nextSeq（迟到 / 乱序 / 跳号一律拒绝）。
+          // 选严格相等而非「> max」：seq 是审计流水的规范排序键，任何缺口都会让
+          // 迟到回执的去重 / 排序语义模糊；乱序写应被拒而非被静默重编号。
+          if (cmd.seq !== expectedSeq) {
+            throw new ChangxiaError(
+              ChangxiaErrorCode.Validation,
+              `执行事件 seq 非法：调用方传入 ${cmd.seq}，期望 ${expectedSeq}（execution=${cmd.executionId}）。`,
+            );
+          }
+          const now = new Date().toISOString();
+          const row: ExecutionEvent = {
+            id: crypto.randomUUID(),
+            executionId: cmd.executionId,
+            attemptId: cmd.attemptId ?? null,
+            seq: cmd.seq,
+            type: cmd.type,
+            actor: cmd.actor,
+            fromStatus: cmd.fromStatus ?? null,
+            toStatus: cmd.toStatus ?? null,
+            reason: cmd.reason ?? null,
+            idempotencyKey: cmd.idempotencyKey ?? null,
+            createdAt: now,
+          };
+          await this.db.executionEvents.add(row);
+          return row;
+        },
+      );
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
       throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行事件写入失败。', err);
@@ -178,48 +211,75 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
   }
 
   async createAttempt(cmd: CreateAttemptCmd): Promise<ExecutionAttempt> {
+    // 入参白名单：**必须早于任何 await / 事务**，这样非法 status 连一行都不落。
+    // 与 `createProposal` 的「创建时不得为 applied/rejected」同位置、同理由。
+    // 为什么这一步不能交给事务内部：事务里第一句就是读子表，读到一半才拒会留下
+    // 「校验过了但库里已经动过」的错觉（虽然 Dexie 会回滚，但语义上校验属于入口）。
+    // 与服务端 `sqlite.bundle.ts` 的 `createAttempt` 逐字同款（两端一致纪律）。
+    if (cmd.status !== undefined && !ATTEMPT_STATUSES.includes(cmd.status)) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `attempt status 非法：${String(cmd.status)}；合法值为 ${ATTEMPT_STATUSES.join(' / ')}。`,
+      );
+    }
     try {
-      // 读-校验-写在单 rw 事务内：canStartAttempt 与 attemptNo 单调在并发下闭合。
-      return await this.db.transaction('rw', this.db.executionAttempts, async () => {
-        const attempts = await this.db.executionAttempts
-          .where('executionId')
-          .equals(cmd.executionId)
-          .toArray();
-        // 同一 execution 同时最多一个非终态 attempt（并发穿透 / 调用方重复开活都拦下）。
-        if (!canStartAttempt(attempts)) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Conflict,
-            `执行单 ${cmd.executionId} 已存在非终态 attempt，不能新开 attempt。`,
-          );
-        }
-        // attemptNo 由仓储统一计算（单调），调用方若显式传入则必须与计算值一致，
-        // 否则抛错（防止调用方乱传导致号段错乱）。
-        const computedNo = nextAttemptNo(attempts);
-        if (cmd.attemptNo !== undefined && cmd.attemptNo !== computedNo) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Validation,
-            `attemptNo 非法：调用方传入 ${cmd.attemptNo}，期望 ${computedNo}（execution=${cmd.executionId}）。`,
-          );
-        }
-        const now = new Date().toISOString();
-        const row: ExecutionAttempt = {
-          id: crypto.randomUUID(),
-          executionId: cmd.executionId,
-          attemptNo: computedNo,
-          status: cmd.status ?? 'queued',
-          runtimeKind: cmd.runtimeKind ?? null,
-          startedAt: cmd.startedAt ?? null,
-          finishedAt: cmd.finishedAt ?? null,
-          inputSnapshotHash: cmd.inputSnapshotHash ?? null,
-          errorCode: null,
-          errorSummary: null,
-          terminalReason: null,
-          createdAt: now,
-          updatedAt: now,
-        };
-        await this.db.executionAttempts.add(row);
-        return row;
-      });
+      // 读-校验-写在单 rw 事务内：父存在性 + canStartAttempt + attemptNo 单调在并发下闭合。
+      // 父表读进事务是必须的：否则「查的时候还在、写的时候已被删」会留下孤儿 attempt。
+      return await this.db.transaction(
+        'rw',
+        this.db.executions,
+        this.db.executionAttempts,
+        async () => {
+          // 父 execution 存在性 —— 语义与**服务端外键**对齐：
+          // 服务端 `execution_attempts.execution_id REFERENCES executions(id)` 会拒掉孤儿行，
+          // 但那条错误对调用方毫无信息量；两端都把「父不存在」翻译成 NotFound（而不是 Storage）。
+          // （本地 Dexie 没有外键，这条检查就是本地侧**唯一**的孤儿防线。）
+          if (!(await this.db.executions.get(cmd.executionId))) {
+            throw new ChangxiaError(
+              ChangxiaErrorCode.NotFound,
+              `未找到执行单 ${cmd.executionId}，不能为其新建 attempt。`,
+            );
+          }
+          const attempts = await this.db.executionAttempts
+            .where('executionId')
+            .equals(cmd.executionId)
+            .toArray();
+          // 同一 execution 同时最多一个非终态 attempt（并发穿透 / 调用方重复开活都拦下）。
+          if (!canStartAttempt(attempts)) {
+            throw new ChangxiaError(
+              ChangxiaErrorCode.Conflict,
+              `执行单 ${cmd.executionId} 已存在非终态 attempt，不能新开 attempt。`,
+            );
+          }
+          // attemptNo 由仓储统一计算（单调），调用方若显式传入则必须与计算值一致，
+          // 否则抛错（防止调用方乱传导致号段错乱）。
+          const computedNo = nextAttemptNo(attempts);
+          if (cmd.attemptNo !== undefined && cmd.attemptNo !== computedNo) {
+            throw new ChangxiaError(
+              ChangxiaErrorCode.Validation,
+              `attemptNo 非法：调用方传入 ${cmd.attemptNo}，期望 ${computedNo}（execution=${cmd.executionId}）。`,
+            );
+          }
+          const now = new Date().toISOString();
+          const row: ExecutionAttempt = {
+            id: crypto.randomUUID(),
+            executionId: cmd.executionId,
+            attemptNo: computedNo,
+            status: cmd.status ?? AttemptStatus.Queued,
+            runtimeKind: cmd.runtimeKind ?? null,
+            startedAt: cmd.startedAt ?? null,
+            finishedAt: cmd.finishedAt ?? null,
+            inputSnapshotHash: cmd.inputSnapshotHash ?? null,
+            errorCode: null,
+            errorSummary: null,
+            terminalReason: null,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await this.db.executionAttempts.add(row);
+          return row;
+        },
+      );
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
       throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行尝试创建失败。', err);
@@ -272,6 +332,17 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
   }
 
   async createProposal(cmd: CreateProposalCmd): Promise<WritebackProposal> {
+    // ★ 审计补齐（原缺口 1 的同源排查）：`status` 此前**没有任何值域校验**（两端都没有）。
+    //   实测（修复前）：`createProposal({status:'ghost'})` 在本地与远端**都**落库 ——
+    //   注意这里是「两端一致地有缺口」，不是分歧；但缺口本身是真的：
+    //   `updateProposal` 的两条检查（已落定不可变更 / 落定需 decidedBy）都**不是值域校验**，
+    //   一个 `ghost` 提案两者都不触发 → 永久留存，界面按未知状态静默漏显。
+    if (cmd.status !== undefined && !WRITEBACK_PROPOSAL_STATUSES.includes(cmd.status)) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `写回提案 status 非法：${String(cmd.status)}；合法值为 ${WRITEBACK_PROPOSAL_STATUSES.join(' / ')}。`,
+      );
+    }
     // 提案不允许在创建时就落成终态（applied / rejected）：审批事实必须经由 updateProposal 落定，
     // 否则「未经人工批准不得写回」的 P0 只是形状校验——调用方可直接造一个 applied 提案。
     if (
@@ -283,25 +354,45 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         `写回提案不允许直接创建为 ${cmd.status}：提案须先创建（draft / proposed）再经由审批落定。`,
       );
     }
-    const now = new Date().toISOString();
-    const row: WritebackProposal = {
-      id: crypto.randomUUID(),
-      executionId: cmd.executionId,
-      attemptId: cmd.attemptId ?? null,
-      projectId: cmd.projectId,
-      taskId: cmd.taskId ?? null,
-      operations: cmd.operations,
-      status: cmd.status ?? WritebackProposalStatus.Draft,
-      idempotencyKey: cmd.idempotencyKey,
-      decidedBy: null,
-      decidedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
+    // 父存在性检查放在事务内（与 appendEvent / createAttempt 同款）：
+    // 「查父 → 插子」必须在同一个事务里，否则查到之后父被删仍会留下孤儿提案。
+    // ★ 只查 execution，**不查 attemptId** —— 理由见服务端 `sqlite.bundle.ts` 的同名注释：
+    //   DDL 里 `writeback_proposals.attempt_id` 没有 REFERENCES、也没有任何读路径 JOIN 它，
+    //   去查一个 DDL 明确不约束的东西属于**过度收紧**；那会让「提案挂在已被清理的 attempt 上」
+    //   这种合法历史形态在真库上突然被拒，而两端判定还会因清理时序不同而分叉。
     try {
-      await this.db.writebackProposals.add(row);
-      return row;
+      return await this.db.transaction(
+        'rw',
+        this.db.executions,
+        this.db.writebackProposals,
+        async () => {
+          if (!(await this.db.executions.get(cmd.executionId))) {
+            throw new ChangxiaError(
+              ChangxiaErrorCode.NotFound,
+              `未找到执行单 ${cmd.executionId}，不能为其创建写回提案。`,
+            );
+          }
+          const now = new Date().toISOString();
+          const row: WritebackProposal = {
+            id: crypto.randomUUID(),
+            executionId: cmd.executionId,
+            attemptId: cmd.attemptId ?? null,
+            projectId: cmd.projectId,
+            taskId: cmd.taskId ?? null,
+            operations: cmd.operations,
+            status: cmd.status ?? WritebackProposalStatus.Draft,
+            idempotencyKey: cmd.idempotencyKey,
+            decidedBy: null,
+            decidedAt: null,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await this.db.writebackProposals.add(row);
+          return row;
+        },
+      );
     } catch (err) {
+      if (err instanceof ChangxiaError) throw err;
       throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案创建失败。', err);
     }
   }

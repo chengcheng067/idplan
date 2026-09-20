@@ -491,6 +491,82 @@ describe('远端执行域适配器 ↔ 真实服务端（端到端契约）', ()
     expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.NotFound);
   });
 
+  /**
+   * ★ 缺口 2：孤儿父记录写 events / proposals 曾返回 500，经 `RestClient` 映射成
+   * **Network** —— 客户端文案指向「网络排查」，真因却是父记录不存在（外键约束）。
+   *
+   * 这三条（含上面那条 createAttempt）一起构成「同一件事必须同一个码」的**客户端侧**证据：
+   * 单看服务端返回 404 还不够 —— 中间还隔着 HTTP → 业务码的映射
+   * （`rest.client.ts:106-127`），映射表里 404→NotFound、500→Network，
+   * 任何一环写错都会让「服务端对了但客户端拿到的还是 Network」。
+   */
+  it('孤儿 appendEvent（execution 不存在）→ NotFound，不是 500/Network', async () => {
+    const err = await repo
+      .appendEvent({ executionId: 'exec_not_exist', seq: 1, type: 'created', actor: 'user' })
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.NotFound);
+    // 硬纠偏：`Network` 是本缺口修复前的形态，写死它出不来
+    expect((err as ChangxiaError).code).not.toBe(ChangxiaErrorCode.Network);
+  });
+
+  it('孤儿 createProposal（execution 不存在）→ NotFound，不是 500/Network', async () => {
+    const err = await repo
+      .createProposal({
+        executionId: 'exec_not_exist',
+        projectId: PROJECT_ID,
+        operations: [],
+        idempotencyKey: 'wb:orphan',
+      })
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.NotFound);
+    expect((err as ChangxiaError).code).not.toBe(ChangxiaErrorCode.Network);
+  });
+
+  it('createAttempt 的 status 非法 → Validation（不是 500/Network），且没落库', async () => {
+    /**
+     * 缺口 1 的客户端视角：修复前服务端直接 200 落库非法 status，客户端**根本不会报错** ——
+     * 这条用例在修复前是「没有任何异常可捕获」，故它同时锁住「必须报错」与「错在 Validation」。
+     */
+    const exec = await repo.createExecution({
+      projectId: PROJECT_ID,
+      source: 'natural-language',
+      objective: '非法 status',
+      idempotencyKey: 'exec:remote:20',
+    });
+    const err = await repo
+      .createAttempt({ executionId: exec.id, status: 'not-a-status' as never })
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.Validation);
+    expect((err as ChangxiaError).code).not.toBe(ChangxiaErrorCode.Network);
+    // 「拒绝了」还得「什么都没写」：经真服务端读回必须为空
+    expect(await repo.listAttempts(exec.id)).toHaveLength(0);
+  });
+
+  it('createAttempt 的六个合法 status 都能经客户端读写往返', async () => {
+    for (const [i, s] of [
+      'queued',
+      'running',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'interrupted',
+    ].entries()) {
+      const exec = await repo.createExecution({
+        projectId: PROJECT_ID,
+        source: 'natural-language',
+        objective: `合法 status ${s}`,
+        idempotencyKey: `exec:remote:valid:${i}`,
+      });
+      const a = await repo.createAttempt({ executionId: exec.id, status: s as never });
+      expect(a.status).toBe(s);
+      const [reread] = await repo.listAttempts(exec.id);
+      expect(reread?.status).toBe(s);
+    }
+  });
+
   /* ---------------- ③ 字段名 / 形状对齐 ---------------- */
 
   it('camelCase 全程一致：写入的每个字段都能在响应里按同名读回', async () => {

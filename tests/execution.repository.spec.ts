@@ -16,6 +16,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { installFakeIndexedDB } from './setup';
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
+import { ChangxiaError, ChangxiaErrorCode } from '../src/core/types/enums';
 import { ExecutionStatus, WritebackProposalStatus } from '../src/core/types/agent-execution';
 
 let bundle: IRepositoryBundle;
@@ -163,6 +164,116 @@ describe('ExecutionAttempt（每次实际执行新建一条）', () => {
     expect(updated.status).toBe('running');
     expect(updated.errorCode).toBe('e1');
   });
+
+  it('createAttempt：非法 status → Validation，且**一行都不落**', async () => {
+    // 缺口 1 的本地侧：修复前 `status: cmd.status ?? 'queued'` 直接把任意值落库，
+    // 非法值会绕过 `ATTEMPT_NON_TERMINAL_STATUSES.includes()` 的判定（详见
+    // `tests/server.executions.spec.ts` 同名用例的说明与 `ATTEMPT_STATUSES` 注释）。
+    const exec = await bundle.executions.createExecution({ projectId: 'p1', source: 'project-task', objective: 'x', idempotencyKey: 'k' });
+    const err = await bundle.executions
+      .createAttempt({ executionId: exec.id, status: 'not-a-status' as never })
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.Validation);
+    expect((err as ChangxiaError).userMessage).toContain('not-a-status');
+
+    // ★ 「拒绝了」不等于「什么都没写」：本地侧尤其要查，因为 Dexie 没有外键兜底
+    expect(await bundle.executions.listAttempts(exec.id)).toHaveLength(0);
+  });
+
+  it('createAttempt：六个合法值逐个放行，其余拒绝（与远端逐值同款）', async () => {
+    const accepted: string[] = [];
+    const rejected: string[] = [];
+    const payloads = [
+      'queued',
+      'running',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'interrupted',
+      'QUEUED',
+      'Queued',
+      'done',
+      'complete',
+      'canceled', // 美式拼写：不是枚举值（枚举是双 l 的 cancelled）
+      'queued ',
+    ];
+    for (const [i, s] of payloads.entries()) {
+      const exec = await bundle.executions.createExecution({
+        projectId: 'p1',
+        source: 'project-task',
+        objective: `x${i}`,
+        idempotencyKey: `k${i}`,
+      });
+      const res = await bundle.executions
+        .createAttempt({ executionId: exec.id, status: s as never })
+        .then(() => 'ok')
+        .catch(() => 'rejected');
+      if (res === 'ok') accepted.push(s);
+      else rejected.push(s);
+    }
+    expect(accepted).toEqual([
+      'queued',
+      'running',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'interrupted',
+    ]);
+    expect(rejected).toEqual(['QUEUED', 'Queued', 'done', 'complete', 'canceled', 'queued ']);
+  });
+
+  it('createAttempt：父 execution 不存在 → NotFound（不是 Storage）', async () => {
+    // 本地 Dexie 没有外键，这条检查是本地侧**唯一**的孤儿防线；
+    // 服务端侧由 `execution_attempts.execution_id REFERENCES executions(id)` 兜底，
+    // 但两端都必须把「父不存在」翻译成同一个码 NotFound（否则远端 500 → 客户端 Network）。
+    const err = await bundle.executions
+      .createAttempt({ executionId: 'exec_not_exist' })
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.NotFound);
+  });
+
+  it('appendEvent：父 execution 不存在 → NotFound，且不落任何事件', async () => {
+    const err = await bundle.executions
+      .appendEvent({ executionId: 'exec_not_exist', seq: 1, type: 'created', actor: 'user' })
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.NotFound);
+    expect(await bundle.executions.listEvents('exec_not_exist')).toHaveLength(0);
+  });
+
+  it('createProposal：父 execution 不存在 → NotFound，且不落任何提案', async () => {
+    const err = await bundle.executions
+      .createProposal({
+        executionId: 'exec_not_exist',
+        projectId: 'p1',
+        operations: [],
+        idempotencyKey: 'wb:orphan',
+      })
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.NotFound);
+    expect(await bundle.executions.listProposals('exec_not_exist')).toHaveLength(0);
+  });
+
+  it('appendEvent / createProposal：父存在时照常成功（确认没过度收紧）', async () => {
+    const exec = await bundle.executions.createExecution({ projectId: 'p1', source: 'project-task', objective: 'x', idempotencyKey: 'k' });
+    const ev = await bundle.executions.appendEvent({
+      executionId: exec.id,
+      seq: 1,
+      type: 'created',
+      actor: 'user',
+    });
+    expect(ev.seq).toBe(1);
+    const pr = await bundle.executions.createProposal({
+      executionId: exec.id,
+      projectId: 'p1',
+      operations: [],
+      idempotencyKey: 'wb:ok',
+    });
+    expect(pr.status).toBe(WritebackProposalStatus.Draft);
+  });
 });
 
 describe('WritebackProposal（字段级写回提案）', () => {
@@ -189,5 +300,88 @@ describe('WritebackProposal（字段级写回提案）', () => {
     const proposals = await bundle.executions.listProposals(exec.id);
     expect(proposals).toHaveLength(1);
     expect(proposals[0]!.status).toBe(WritebackProposalStatus.Applied);
+  });
+});
+
+/**
+ * 审计补齐（原缺口 1 的**同源排查**，两处都实测确认过）：
+ *   · `createExecution` 的 `source`——本地侧原先**不校验**（远端路由层拦），
+ *     实测是一处**两端分歧**：`source='whatever'` 本地落库、远端 400；
+ *   · `createProposal` 的 `status`——两端**都**不校验（`status='ghost'` 都落库）。
+ */
+describe('审计补齐：source 与 proposal status 的值域校验', () => {
+  it('createExecution：非法 source → Validation（修复前的两端分歧）', async () => {
+    for (const s of ['whatever', '', 'PROJECT-TASK']) {
+      const err = await bundle.executions
+        .createExecution({
+          projectId: 'p1',
+          source: s as never,
+          objective: 'x',
+          idempotencyKey: `k-${s}`,
+        })
+        .then(() => null)
+        .catch((e: unknown) => e);
+      expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.Validation);
+    }
+    // 四个合法来源逐个放行
+    for (const [i, s] of ['project-task', 'natural-language', 'external', 'template'].entries()) {
+      const e = await bundle.executions.createExecution({
+        projectId: 'p1',
+        source: s as never,
+        objective: 'x',
+        idempotencyKey: `ok-${i}`,
+      });
+      expect(e.source).toBe(s);
+    }
+    expect(await bundle.executions.listExecutionsByProject('p1')).toHaveLength(4);
+  });
+
+  it('createProposal：非法 status → Validation，且一行不落', async () => {
+    const exec = await bundle.executions.createExecution({
+      projectId: 'p1',
+      source: 'project-task',
+      objective: 'x',
+      idempotencyKey: 'k',
+    });
+    for (const s of ['ghost', 'DRAFT', 'done', '']) {
+      const err = await bundle.executions
+        .createProposal({
+          executionId: exec.id,
+          projectId: 'p1',
+          operations: [],
+          idempotencyKey: `wb-${s}`,
+          status: s as never,
+        })
+        .then(() => null)
+        .catch((e: unknown) => e);
+      expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.Validation);
+    }
+    expect(await bundle.executions.listProposals(exec.id)).toHaveLength(0);
+
+    // draft / proposed / conflict 放行；applied / rejected 仍被既有 P0 拒
+    for (const [i, s] of ['draft', 'proposed', 'conflict'].entries()) {
+      const p = await bundle.executions.createProposal({
+        executionId: exec.id,
+        projectId: 'p1',
+        operations: [],
+        idempotencyKey: `wb-ok-${i}`,
+        status: s as never,
+      });
+      expect(p.status).toBe(s);
+    }
+    for (const s of ['applied', 'rejected']) {
+      const err = await bundle.executions
+        .createProposal({
+          executionId: exec.id,
+          projectId: 'p1',
+          operations: [],
+          idempotencyKey: `wb-p0-${s}`,
+          status: s as never,
+        })
+        .then(() => null)
+        .catch((e: unknown) => e);
+      expect((err as ChangxiaError | null)?.code).toBe(ChangxiaErrorCode.Validation);
+    }
+    expect(await bundle.executions.listProposals(exec.id)).toHaveLength(3);
   });
 });

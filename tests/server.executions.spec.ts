@@ -31,6 +31,12 @@ import { registerTaskRoutes } from '../server/routes/tasks.routes';
 import { registerMemberRoutes } from '../server/routes/members.routes';
 import { registerMetaRoutes } from '../server/routes/meta.routes';
 import { registerExecutionRoutes } from '../server/routes/executions.routes';
+import {
+  ATTEMPT_NON_TERMINAL_STATUSES,
+  AttemptStatus,
+  ExecutionStatus,
+} from '../src/core/types/agent-execution';
+import { isContradictoryExecution } from '../src/core/execution/execution-recovery';
 
 /** 建内存库 + 注册全量路由（含执行域；与 `server/index.ts` 的注册序一致） */
 async function buildServer(): Promise<{ app: FastifyInstance; db: Database.Database }> {
@@ -716,10 +722,10 @@ describe('服务端写回提案边界', () => {
       });
       expect(res.statusCode).toBe(400);
     }
+
   });
 
-  it('落定终态时 decidedBy 必填 → 400', async () => {
-    const exec = await createExecution(app);
+  it('落定终态时 decidedBy 必填 → 400', async () => {    const exec = await createExecution(app);
     const p = await app.inject({
       method: 'POST',
       url: `/api/executions/${exec.id}/proposals`,
@@ -916,6 +922,75 @@ describe('服务端执行域：外键与排序', () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe('not_found');
   });
 
+  /**
+   * ★ 缺口 2：孤儿父记录写 events / proposals 曾返回 **500 {code:'storage'}**，
+   * 而 `createAttempt` 同场景已是 404 —— 三条写路径对同一件事给了三种反馈。
+   *
+   * 危害不在 500 本身，而在**映射链**：`RestClient` 把 500 归为 `Network`
+   * （`rest.client.ts:106-127` 只认 404/409/400/422），于是远端形态下客户端拿到
+   * 「网络异常，请检查连接」——文案指向网络排查，真因却是父记录不存在。
+   * 这三条用例锁死「同一件事、同一个码」。
+   */
+  it('对不存在的执行单追加事件 → 404（不是 500 storage / Network）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/executions/no_such_exec/events',
+      payload: { seq: 1, type: 'created', actor: 'user' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe('not_found');
+  });
+
+  it('对不存在的执行单创建提案 → 404（不是 500 storage / Network）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/executions/no_such_exec/proposals',
+      payload: { projectId: PROJECT_ID, operations: [], idempotencyKey: 'wb:orphan' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe('not_found');
+  });
+
+  it('父存在时 events / proposals 照常 200（确认没过度收紧）', async () => {
+    // 反向用例：只测「该拒的拒了」会掩盖「把合法的也拒了」——那更糟（功能没了还不报错）。
+    const exec = await createExecution(app);
+    const ev = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/events`,
+      payload: { seq: 1, type: 'created', actor: 'user' },
+    });
+    expect(ev.statusCode).toBe(200);
+    const pr = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/proposals`,
+      payload: { projectId: PROJECT_ID, operations: [], idempotencyKey: 'wb:ok' },
+    });
+    expect(pr.statusCode).toBe(200);
+    expect(pr.json<{ status: string }>().status).toBe('draft');
+  });
+
+  it('proposal 的 attemptId 允许指向不存在的 attempt（不过度收紧，与 DDL 对齐）', async () => {
+    /**
+     * `writeback_proposals.attempt_id` 在 `schema.sql` 里**没有** `REFERENCES`
+     * （`execution_attempts` 有、events/proposals 没有），也没有任何读路径 JOIN 它。
+     * 故这里**刻意**不查 attempt 存在性 —— 本用例把「刻意不查」钉住：
+     * 若将来有人「顺手补一条存在性检查」，这条会红，提醒他先看 DDL 与两端分歧风险。
+     */
+    const exec = await createExecution(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/proposals`,
+      payload: {
+        projectId: PROJECT_ID,
+        attemptId: 'attempt_does_not_exist',
+        operations: [],
+        idempotencyKey: 'wb:ghost-attempt',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ attemptId: string | null }>().attemptId).toBe('attempt_does_not_exist');
+  });
+
   it('列表排序与本地一致：createdAt → id', async () => {
     // 三条执行单，createdAt 有并列 → 必须靠 id 决出稳定次序（两端同序）
     const ids: string[] = [];
@@ -999,5 +1074,293 @@ describe('服务端执行域：入参形状拒绝（400 + 契约错误体）', (
     const body = res.json<{ error: { code: string; userMessage: string } }>();
     expect(body.error.code).toBe('validation');
     expect(typeof body.error.userMessage).toBe('string');
+  });
+});
+
+/**
+ * ★ 缺口 1：`createAttempt` 的 `status` 曾**完全没有白名单校验**。
+ *
+ * 实测（修复前）：`POST /api/executions/<id>/attempts {"status":"not-a-status"}` → **200**，
+ * 落库 `{"attempt_no":1,"status":"not-a-status"}`；`{"status":"succeeded"}` 同样 200。
+ *
+ * ── 为什么这是「静默数据损坏」而不是「输入有点脏」──
+ * attempt 的**创建路径不经过状态机**（`assertAttemptTransition` 只在 `updateAttempt` 上），
+ * 于是非法 / 绕过式 status 一旦落库就**永久留存**，且两个下游判据都会放行它：
+ *   · `ATTEMPT_NON_TERMINAL_STATUSES.includes(a.status)`（`execution-state.ts` 的 `canStartAttempt`）
+ *     → 非法值不在集合里 → 判它「不是活的」→ **允许再开新 attempt**（单活不变量破了）；
+ *   · `isContradictoryExecution`（`execution-recovery.ts:150-156`）同样用那个 `includes`
+ *     → 终态 execution 上挂一个非法 attempt **不被识别为矛盾** → 既不收敛也不标给用户看。
+ * 结果是一条「永远活着又不被识别」的记录。修法见本文件的 `ATTEMPT_STATUSES` 注释。
+ *
+ * ── 合法值集合定为「全部 6 个」而非「只接受 queued」──
+ * 证据：`tests/execution-enforcement.spec.ts`（L208/213/224/236/410/422/433/440）与本 spec
+ * 的 `currentAttemptNo` 组**刻意**用 `createAttempt({status:'running'})` /
+ * `{status:'succeeded'}` 来快速构造「已有一条终态 attempt，可以再开新 attempt」的场景。
+ * 那是既有设计意图（仓储是通用写入口，不只服务「新建即排队」这一条 UI 路径），
+ * 收紧成「只接受 queued」会砍掉它并让一批用例必须改构造方式 —— 那是扩大改动面，
+ * 不是修缺口。故本次只**拒绝非法值**，接受全部 6 个合法值。
+ */
+describe('服务端执行域：attempt 创建时的 status 白名单（缺口 1）', () => {
+  let app: FastifyInstance;
+  let db: Database.Database;
+
+  beforeEach(async () => {
+    ({ app, db } = await buildServer());
+    await seedProject(app);
+  });
+
+  /** 直接查库数 attempt 行数 —— 「拒了但已经落了一行」是最坏的假修复 */
+  function attemptCount(): number {
+    const r = db.prepare('SELECT COUNT(*) AS n FROM execution_attempts').get() as { n: number };
+    return r.n;
+  }
+
+  it('非法 status → 400 validation，且**库里一行都没落**', async () => {
+    const exec = await createExecution(app);
+    expect(attemptCount()).toBe(0);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/attempts`,
+      payload: { status: 'not-a-status' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ error: { code: string; userMessage: string } }>();
+    expect(body.error.code).toBe('validation');
+    // 文案要能让调用方自查：必须列出合法值
+    expect(body.error.userMessage).toContain('not-a-status');
+    expect(body.error.userMessage).toContain('queued');
+
+    // ★ 关键断言：不只是「拒绝了」，而是**什么都没写**
+    expect(attemptCount()).toBe(0);
+    // 并且 attemptNo 号段没被偷偷推进（下次开 attempt 仍是 1）
+    const ok = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/attempts`,
+      payload: {},
+    });
+    expect(ok.json<{ attemptNo: number }>().attemptNo).toBe(1);
+  });
+
+  it('终态 succeeded 可以直接创建（既有设计意图），但**非法**终态如 "done" 一律拒', async () => {
+    /**
+     * 这条刻意把「合法终态放行」与「非法终态拒绝」并排断言，防止两种误读：
+     *   · 只看后半个 → 以为收紧成「只接受 queued」；
+     *   · 只看前半个 → 以为压根没校验（正是修复前的状态）。
+     */
+    const exec = await createExecution(app);
+    const ok = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/attempts`,
+      payload: { status: 'succeeded' },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json<{ status: string }>().status).toBe('succeeded');
+
+    const exec2 = await createExecution(app, 'exec:test:whitelist:2');
+    const bad = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec2.id}/attempts`,
+      payload: { status: 'done' },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json<{ error: { code: string } }>().error.code).toBe('validation');
+    expect(attemptCount()).toBe(1); // 只有上面那条 succeeded
+  });
+
+  it('六个合法值逐个放行，其余全部拒绝（含大小写变体与终态名）', async () => {
+    const accepted: string[] = [];
+    const rejected: string[] = [];
+    const payloads = [
+      'queued',
+      'running',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'interrupted',
+      // 以下全是**必须拒**的：大小写变体、近似词、历史遗留词、空串、非字符串
+      'QUEUED',
+      'Queued',
+      'done',
+      'complete',
+      'canceled', // 美式拼写：不是枚举值（枚举是双 l 的 cancelled）
+      '',
+      'queued ',
+    ];
+    for (const [i, s] of payloads.entries()) {
+      const exec = await createExecution(app, `exec:test:six:${i}`);
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/executions/${exec.id}/attempts`,
+        payload: { status: s },
+      });
+      if (res.statusCode === 200) accepted.push(s);
+      else {
+        rejected.push(s);
+        expect(res.statusCode).toBe(400);
+      }
+    }
+    expect(accepted).toEqual([
+      'queued',
+      'running',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'interrupted',
+    ]);
+    expect(rejected).toEqual(['QUEUED', 'Queued', 'done', 'complete', 'canceled', '', 'queued ']);
+    // 6 条合法 + 7 条非法被拒 → 库里恰好 6 行（非法的连一行都没落）
+    expect(attemptCount()).toBe(6);
+  });
+
+  it('非字符串 status（数字/对象/数组/布尔/null）→ 400 而非 500，且一行不落', async () => {
+    /**
+     * 注意 `null` 也在**拒绝**之列（不是「未提供」）：`optionalEnum` 只放行 `undefined`
+     * 与字符串，其余一律 ShapeError → 400。这条是**实测确认**的，不是照抄推断 ——
+     * 第一版断言写的是「null 可能被当作未提供 → 库里 1 行」，跑出来是 0，说明实现更严，
+     * 于是把断言改正成实现真实行为（而不是把实现改成我猜的样子）。
+     */
+    for (const [i, v] of [1, {}, [], true, null].entries()) {
+      const exec = await createExecution(app, `exec:test:nonstr:${i}`);
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/executions/${exec.id}/attempts`,
+        payload: { status: v },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json<{ error: { code: string } }>().error.code).toBe('validation');
+    }
+    expect(attemptCount()).toBe(0);
+  });
+
+  it('联动：`isContradictoryExecution` 依赖 `includes`，白名单是它的前提', async () => {
+    /**
+     * ── 这条怎么验证联动（不是复述实现）──
+     * 用**真服务端**造出「终态 execution + 一条 attempt」，把 HTTP 层返回的 attempt
+     * 喂给 UI 用的同一个判据函数，比对两类输入的结果差异：
+     *   · 非法 status（`not-a-status`）——修复前它真能落库 —— `includes()` 判 false
+     *     → `isContradictoryExecution` 返回 **false**（识别不出矛盾，正是缺口）；
+     *   · 合法非终态（`queued`）—— 判 true（能识别）。
+     * 修复后前者**根本无法进库**，故本用例的作用是：把「白名单为什么必须存在」
+     * 变成一个可执行的证明，而不是一句注释。若有人撤掉白名单，前段的 400 断言会红。
+     */
+    const exec = await createExecution(app);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/executions/${exec.id}`,
+      payload: { status: 'cancelled' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const blocked = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/attempts`,
+      payload: { status: 'not-a-status' },
+    });
+    expect(blocked.statusCode).toBe(400); // 进不了库 → 矛盾判据不会被它骗过
+
+    const live = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/attempts`,
+      payload: { status: 'queued' },
+    });
+    expect(live.statusCode).toBe(200);
+    const attempt = live.json<{ id: string; status: string }>();
+
+    // 真判据（UI 与兜底扫描共用同一份实现）
+    const listed = await app.inject({
+      method: 'GET',
+      url: `/api/executions/${exec.id}/attempts`,
+    });
+    const attempts = listed.json<Array<{ status: string }>>();
+    expect(attempts.map((a) => a.status)).toEqual([attempt.status]);
+    expect(
+      isContradictoryExecution(
+        { status: ExecutionStatus.Cancelled },
+        attempts as Array<{ status: AttemptStatus }>,
+      ),
+    ).toBe(true);
+    // 对照：非法值（若它真落库了）会被判 false —— 这就是缺口的形状
+    expect(
+      isContradictoryExecution(
+        { status: ExecutionStatus.Cancelled },
+        [{ status: AttemptStatus.Queued }],
+      ),
+    ).toBe(true);
+    const bogus = { status: 'not-a-status' as unknown as AttemptStatus };
+    expect(ATTEMPT_NON_TERMINAL_STATUSES.includes(bogus.status)).toBe(false);
+    expect(isContradictoryExecution({ status: ExecutionStatus.Cancelled }, [bogus])).toBe(false);
+  });
+});
+
+/**
+ * 审计补齐（原缺口 1 的**同源排查**）：`createProposal` 的 `status` 此前也没有值域校验。
+ *
+ * 两条既有检查都是「状态语义」而非「值域」：`status='ghost'` 既不等于 applied 也不等于
+ * rejected，两条都不触发 → 实测**两端都落库**。危害与 attempt 同源（永久留存 +
+ * 界面按未知状态静默漏显），故一并补上并在此锁死。
+ */
+describe('服务端执行域：proposal 创建时的 status 白名单（审计补齐）', () => {
+  let app: FastifyInstance;
+  let db: Database.Database;
+
+  beforeEach(async () => {
+    ({ app, db } = await buildServer());
+    await seedProject(app);
+  });
+
+  function proposalCount(): number {
+    const r = db.prepare('SELECT COUNT(*) AS n FROM writeback_proposals').get() as { n: number };
+    return r.n;
+  }
+
+  it('非法 status → 400 validation，且库里一行都没落', async () => {
+    const exec = await createExecution(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/proposals`,
+      payload: { projectId: PROJECT_ID, operations: [], idempotencyKey: 'wb:ghost', status: 'ghost' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ error: { code: string; userMessage: string } }>();
+    expect(body.error.code).toBe('validation');
+    expect(body.error.userMessage).toContain('ghost');
+    expect(body.error.userMessage).toContain('draft'); // 文案列出合法值
+    expect(proposalCount()).toBe(0);
+  });
+
+  it('五个合法值：draft / proposed / conflict 放行，applied / rejected 仍被 P0 拒', async () => {
+    const exec = await createExecution(app);
+    for (const [i, s] of ['draft', 'proposed', 'conflict'].entries()) {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/executions/${exec.id}/proposals`,
+        payload: { projectId: PROJECT_ID, operations: [], idempotencyKey: `wb:ok:${i}`, status: s },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ status: string }>().status).toBe(s);
+    }
+    for (const s of ['applied', 'rejected']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/executions/${exec.id}/proposals`,
+        payload: { projectId: PROJECT_ID, operations: [], idempotencyKey: `wb:p0:${s}`, status: s },
+      });
+      expect(res.statusCode).toBe(400);
+    }
+    expect(proposalCount()).toBe(3);
+  });
+
+  it('非法值形态：大写变体 / 近似词 / 空串 → 400', async () => {
+    const exec = await createExecution(app);
+    for (const [i, s] of ['DRAFT', 'Proposed', 'done', 'applied ', ''].entries()) {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/executions/${exec.id}/proposals`,
+        payload: { projectId: PROJECT_ID, operations: [], idempotencyKey: `wb:bad:${i}`, status: s },
+      });
+      expect(res.statusCode).toBe(400);
+    }
+    expect(proposalCount()).toBe(0);
   });
 });

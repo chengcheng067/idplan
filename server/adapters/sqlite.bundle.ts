@@ -109,6 +109,7 @@ import {
 } from '../../src/core/execution/execution-state';
 // 枚举必须**值导入**（不是 `import type`）：TS1361 —— 只作类型用时无法取其成员值。
 import {
+  ATTEMPT_STATUSES,
   AttemptStatus,
   ExecutionStatus,
   WritebackProposalStatus,
@@ -920,7 +921,8 @@ export function createSqliteBundle(
     },
 
     /**
-     * 追加事件（append-only）。事务内要求 `cmd.seq === nextSeq(events)`。
+     * 追加事件（append-only）。事务内要求 `cmd.seq === nextSeq(events)`，
+     * 且父 execution 必须存在（不存在 → NotFound，不是 500 外键错误）。
      *
      * 选**严格相等**而非「> max」：seq 是审计流水的规范排序键，任何缺口都会让
      * 迟到回执的去重 / 排序语义模糊；乱序写应被**拒**而不是被静默重编号
@@ -928,6 +930,17 @@ export function createSqliteBundle(
      */
     async appendEvent(cmd: AppendExecutionEventCmd): Promise<ExecutionEvent> {
       return inImmediateTx(() => {
+        // 父存在性显式查一次（与 `createAttempt` 同款、同理由）：
+        // `execution_events.execution_id REFERENCES executions(id)` 且 `foreign_keys = ON`
+        // 会拒掉孤儿行，但那条错误是 SQLITE_CONSTRAINT_FOREIGNKEY → 被包成 Storage/500
+        // → 经 `RestClient` 映射成 Network → 客户端文案指向「网络排查」，
+        // 而真因是「父执行单不存在」。显式查一次把它翻译成 NotFound/404。
+        if (!selectExecution(cmd.executionId)) {
+          throw new ChangxiaError(
+            ChangxiaErrorCode.NotFound,
+            `未找到执行单 ${cmd.executionId}，不能追加事件。`,
+          );
+        }
         const expectedSeq = nextSeq(selectEvents(cmd.executionId));
         if (cmd.seq !== expectedSeq) {
           throw new ChangxiaError(
@@ -991,8 +1004,24 @@ export function createSqliteBundle(
      * ⚠️ 此处**不**校验 `execution` 是否存在：外键会拒掉孤儿行（`execution_id REFERENCES
      * executions(id)` 且 `foreign_keys = ON`），但那条错误是 SQLITE_CONSTRAINT_FOREIGNKEY
      * → 会被包成 Storage/500，对调用方毫无信息量。故先显式查一次，给出 NotFound 语义。
+     *
+     * ⚠️ `cmd.status` 必须属于 `AttemptStatus` 六个值之一（否则 Validation）。
+     * 这条校验**不可省**：attempt 的创建路径**不经过状态机** ——
+     * `assertAttemptTransition` 只在 `updateAttempt` 上生效，创建时直接把 status 落库。
+     * 一个 `status='not-a-status'` 的 attempt 会绕过 `ATTEMPT_NON_TERMINAL_STATUSES.includes()`
+     * 的判定（非法值既不在非终态集合里）→ `canStartAttempt` 认为它「不是活的」而放行新 attempt、
+     * `isContradictoryExecution` 也识别不出它 —— 于是一条**永远活着又不被识别**的记录。
      */
     async createAttempt(cmd: CreateAttemptCmd): Promise<ExecutionAttempt> {
+      // 白名单校验放在事务**之外**是刻意的：非法入参连一条 SELECT 都不该发起，
+      // 也保证「拒了就是库里一行没动」（测试直接查库断言这一点）。
+      // 与本地 `local.execution.repo.ts` 的 `createAttempt` 逐字同款（两端一致纪律）。
+      if (cmd.status !== undefined && !ATTEMPT_STATUSES.includes(cmd.status)) {
+        throw new ChangxiaError(
+          ChangxiaErrorCode.Validation,
+          `attempt status 非法：${String(cmd.status)}；合法值为 ${ATTEMPT_STATUSES.join(' / ')}。`,
+        );
+      }
       return inImmediateTx(() => {
         if (!selectExecution(cmd.executionId)) {
           throw new ChangxiaError(
@@ -1128,6 +1157,18 @@ export function createSqliteBundle(
      * 再借它把 execution 推到 `completed`（`canComplete` 只检查「存在 applied 且 decidedBy 非空」）
      * —— 「未经人工批准不得写回」的 P0 就只剩形状校验。
      * 注意 `decidedBy` 在这一步恒为 null（哪怕 status 传 applied 也已被上面拒掉）。
+     *
+     * ★ 父 execution 必须存在（不存在 → NotFound，不是 500 外键错误），与 `createAttempt`
+     *   同款同理由。检查放在 `inImmediateTx` 内：`writeback_proposals` 的 INSERT 原本在
+     *   事务外裸跑（靠 try/catch 兜外键），「查父 → 插子」若不原子，查到之后父被删仍会
+     *   留下孤儿提案 —— 那正是本函数要修掉的那类缺陷。
+     *
+     * ★ **不**校验 `cmd.attemptId` 是否存在：DDL 里 `writeback_proposals.attempt_id`
+     *   既没有 `REFERENCES`，也没有任何读路径 JOIN 它（提案的归属维度是 execution / project）。
+     *   去查一个 DDL 明确不约束的东西属于**过度收紧**：合法历史形态（attempt 被清理后
+     *   提案仍在）会在真库上突然被拒，而两端判定还会因清理时序不同而分叉。
+     *   若将来真要约束 attempt，正确做法是先给 DDL 补 `REFERENCES`（两端一起改），
+     *   再让外键与显式检查二选一 —— 不是单方面在应用层加一条 DDL 里没有的规则。
      */
     async createProposal(cmd: CreateProposalCmd): Promise<WritebackProposal> {
       if (
@@ -1139,46 +1180,54 @@ export function createSqliteBundle(
           `写回提案不允许直接创建为 ${cmd.status}：提案须先创建（draft / proposed）再经由审批落定。`,
         );
       }
-      const now = new Date().toISOString();
-      const row: WritebackProposal = {
-        id: crypto.randomUUID(),
-        executionId: cmd.executionId,
-        attemptId: cmd.attemptId ?? null,
-        projectId: cmd.projectId,
-        taskId: cmd.taskId ?? null,
-        operations: cmd.operations,
-        status: cmd.status ?? WritebackProposalStatus.Draft,
-        idempotencyKey: cmd.idempotencyKey,
-        decidedBy: null,
-        decidedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      try {
-        db.prepare(
-          `INSERT INTO writeback_proposals
-             (id, execution_id, attempt_id, project_id, task_id, operations, status,
-              idempotency_key, decided_by, decided_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          row.id,
-          row.executionId,
-          row.attemptId,
-          row.projectId,
-          row.taskId,
-          serializeJson(row.operations),
-          row.status,
-          row.idempotencyKey,
-          row.decidedBy,
-          row.decidedAt,
-          row.createdAt,
-          row.updatedAt,
-        );
-        return row;
-      } catch (err) {
-        if (err instanceof ChangxiaError) throw err;
-        throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案创建失败。', err);
-      }
+      return inImmediateTx(() => {
+        if (!selectExecution(cmd.executionId)) {
+          throw new ChangxiaError(
+            ChangxiaErrorCode.NotFound,
+            `未找到执行单 ${cmd.executionId}，不能为其创建写回提案。`,
+          );
+        }
+        const now = new Date().toISOString();
+        const row: WritebackProposal = {
+          id: crypto.randomUUID(),
+          executionId: cmd.executionId,
+          attemptId: cmd.attemptId ?? null,
+          projectId: cmd.projectId,
+          taskId: cmd.taskId ?? null,
+          operations: cmd.operations,
+          status: cmd.status ?? WritebackProposalStatus.Draft,
+          idempotencyKey: cmd.idempotencyKey,
+          decidedBy: null,
+          decidedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        try {
+          db.prepare(
+            `INSERT INTO writeback_proposals
+               (id, execution_id, attempt_id, project_id, task_id, operations, status,
+                idempotency_key, decided_by, decided_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(
+            row.id,
+            row.executionId,
+            row.attemptId,
+            row.projectId,
+            row.taskId,
+            serializeJson(row.operations),
+            row.status,
+            row.idempotencyKey,
+            row.decidedBy,
+            row.decidedAt,
+            row.createdAt,
+            row.updatedAt,
+          );
+          return row;
+        } catch (err) {
+          if (err instanceof ChangxiaError) throw err;
+          throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案创建失败。', err);
+        }
+      });
     },
 
     /**

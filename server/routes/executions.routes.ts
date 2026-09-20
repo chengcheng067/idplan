@@ -53,8 +53,10 @@ import type {
   AttemptStatus,
 } from '../../src/core/types/agent-execution';
 import {
+  ATTEMPT_STATUSES,
   EXECUTION_SOURCES,
   EXECUTION_EVENT_TYPES,
+  WRITEBACK_PROPOSAL_STATUSES,
 } from '../../src/core/types/agent-execution';
 import {
   createSqliteBundle,
@@ -181,6 +183,34 @@ function optionalEnum<T extends string>(
     throw new ShapeError(`字段 ${field} 必须是非空字符串。`);
   }
   return v as T;
+}
+
+/**
+ * 可选枚举字段（**白名单版**）：在 `optionalEnum` 的形状校验之上，再要求值属于 `allowed`。
+ *
+ * ── 什么时候该用它，什么时候该用 `optionalEnum` ──
+ * 判据只有一条：**这个字段有没有下游校验**。
+ *   · 有（`execution.status` 走 `assertStatusTransition`）→ 用 `optionalEnum`，
+ *     让状态机当唯一真相源（理由见其 docstring）；
+ *   · 没有（`CreateAttemptCmd.status` 不经过任何状态机）→ 用本函数。
+ *     否则一个 `status='not-a-status'` 的 attempt 会落库并**永久留存**：
+ *     `ATTEMPT_NON_TERMINAL_STATUSES.includes()` 判它「不是活的」→ `canStartAttempt` 放行新 attempt，
+ *     `isContradictoryExecution` 也识别不出它 —— 一条永远活着又不被识别的记录。
+ *
+ * 与 `source` / 事件 `type` 同款（那两处是手写 `includes` 判断，本函数是同一模式的可复用形）。
+ * 文案里列出合法值：调用方拿到 400 时能直接看出该传什么，不必翻源码。
+ */
+function optionalEnumOf<T extends string>(
+  body: Record<string, unknown>,
+  field: string,
+  allowed: readonly T[],
+): T | undefined {
+  const v = optionalEnum<T>(body, field);
+  if (v === undefined) return undefined;
+  if (!allowed.includes(v)) {
+    throw new ShapeError(`字段 ${field} 非法：${v}；合法值为 ${allowed.join(' / ')}。`);
+  }
+  return v;
 }
 
 /** 纯形状错误（本文件内部使用；handler 统一捕获转 400） */
@@ -396,7 +426,12 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
         executionId: id,
         // attemptNo 可选：传了必须与仓储计算值一致（仓储会校验并抛错）
         attemptNo: optionalNumber(body, 'attemptNo'),
-        status: optionalEnum<AttemptStatus>(body, 'status'),
+        // ★ 这里**不用** optionalEnum（它只验「是字符串」）。理由见其 docstring 的边界：
+        //   那条论证针对的是**有状态机兜底**的路径（execution.status 走 assertStatusTransition），
+        //   而 attempt 的**创建路径不经过状态机** —— 没有任何下游会拒非法 status，
+        //   见 ATTEMPT_STATUSES 的注释（非法值会让 attempt「永远活着又不被识别」）。
+        //   与 source / 事件 type 同款：值域没有下游校验，就必须在入口拦。
+        status: optionalEnumOf(body, 'status', ATTEMPT_STATUSES),
         runtimeKind: optionalString(body, 'runtimeKind'),
         startedAt: optionalString(body, 'startedAt'),
         finishedAt: optionalString(body, 'finishedAt'),
@@ -454,7 +489,9 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
         taskId: optionalString(body, 'taskId'),
         operations: ops as WritebackOperation[],
         idempotencyKey: requireString(body, 'idempotencyKey'),
-        status: optionalEnum<WritebackProposalStatus>(body, 'status'),
+        // 与 attempt status 同理：`updateProposal` 的检查（已落定 / 需 decidedBy）
+        // **不是值域校验**，没有任何下游会拒 `status='ghost'` —— 必须在入口拦。
+        status: optionalEnumOf(body, 'status', WRITEBACK_PROPOSAL_STATUSES),
       };
     });
     if ('error' in parsed) {

@@ -86,6 +86,34 @@ export const ATTEMPT_NON_TERMINAL_STATUSES: readonly AttemptStatus[] = [
   AttemptStatus.Running,
 ];
 
+/**
+ * Attempt 的**全部合法值**（白名单，用于入参校验）。
+ *
+ * ── 为什么需要这个常量（`AttemptStatus` 本身不够用）──
+ * `AttemptStatus` 是「运行期对象」，`Object.values(AttemptStatus)` 也能枚举出同样的值，
+ * 但那要求调用方**显式写 `Object.values`** —— 一个忘记写的调用方就会「看起来在校验、
+ * 实际没校验」（`includes` 拿到非数组会抛、写成 `in` 又会把原型链上的键放进来）。
+ * 此处落一个**逐字展开**的只读数组：它与 `AttemptStatus` 同文件、同段，
+ * 任何一侧增删值都会在 `readonly AttemptStatus[]` 这个类型上**编译期报错**
+ * （少写一个值 → 数组字面量不缺元素但语义残缺，靠就近 reviewers 一眼可比）。
+ *
+ * ── 为什么不给 `ExecutionStatus` / `WritebackProposalStatus` 也落一份 ──
+ * 那两个走的是**状态机**（`assertStatusTransition` 用邻接表判定、`updateProposal`
+ * 有终态封闭），非法值在存储边界已有一处权威判定（`server/routes/executions.routes.ts:166-184`
+ * 的 `optionalEnum` 注释详述了这个取舍）。
+ * 而 **attempt 的创建路径不经过任何状态机** —— `createAttempt` 直接把 status 落库，
+ * 没有 `assertAttemptTransition` 兜底（那条边只在 `updateAttempt` 上）。
+ * 故这里是「没有下游校验」的特例，必须自带白名单。
+ */
+export const ATTEMPT_STATUSES: readonly AttemptStatus[] = [
+  AttemptStatus.Queued,
+  AttemptStatus.Running,
+  AttemptStatus.Succeeded,
+  AttemptStatus.Failed,
+  AttemptStatus.Cancelled,
+  AttemptStatus.Interrupted,
+];
+
 /* ------------------------------- 事件类型 ------------------------------- */
 
 /** ExecutionEvent 类型（覆盖规格要求的全部事件种类） */
@@ -136,6 +164,27 @@ export const WritebackProposalStatus = {
 
 export type WritebackProposalStatus =
   (typeof WritebackProposalStatus)[keyof typeof WritebackProposalStatus];
+
+/**
+ * 写回提案状态的**全部合法值**（白名单，用于入参校验）。
+ *
+ * ── 为什么它也需要（与 `ATTEMPT_STATUSES` 不同的理由）──
+ * `updateProposal` 确实有边界强制（已落定不可再变更、落定终态需 decidedBy），
+ * 但那**不是值域校验**：一个 `status='ghost'` 的提案会被 `updateProposal` 正常接受
+ * （它既不等于 applied 也不等于 rejected，所以两条检查都不触发），
+ * `createProposal` 同样原样落库。实测确认（修复前）：
+ *   · 本地侧 `createProposal({status:'ghost'})` → 落库；
+ *   · 远端侧 `POST /proposals {"status":"ghost"}` → 200，落库 `status='ghost'`。
+ * 危害与 attempt 同源：`canComplete` 只看「存在 applied 且 decidedBy 非空」，
+ * 而一个非法状态的提案在 `listProposals` 里会让界面按未知状态渲染（静默漏显）。
+ */
+export const WRITEBACK_PROPOSAL_STATUSES: readonly WritebackProposalStatus[] = [
+  WritebackProposalStatus.Draft,
+  WritebackProposalStatus.Proposed,
+  WritebackProposalStatus.Applied,
+  WritebackProposalStatus.Rejected,
+  WritebackProposalStatus.Conflict,
+];
 
 /* ----------------------------------- 实体 ----------------------------------- */
 
