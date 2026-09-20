@@ -64,8 +64,13 @@ export const DEFAULT_ATTEMPT_RECOVERY_REASON =
  *     重启既没有让它不再需要关注，也没有让「需要关注」这件事变得不成立 ——
  *     语义没有被破坏，不需要动。
  *
- *   ⇒ 故僵尸态**只有 `running`**。而「僵尸 attempt」= 非终态的 attempt
- *     （`queued` / `running`），见 `isZombieAttempt`。
+ *   ⇒ 故僵尸态**只有 `running`**。而「僵尸 attempt」= **`running` 的 attempt**
+ *     （**不是**「非终态 attempt」：`queued` attempt 刻意不处理，
+ *     理由见 `isZombieAttemptStatus` 的 docstring）。
+ *
+ * ⚠️ 本常量只管 **execution 层**。attempt 层的收敛门禁另有一条（见 `recoverExecution`），
+ *    两者**不是同一个集合**：`needs_attention` / `awaiting_review` 不在本集合里
+ *    （execution 不动），但它们的僵尸 attempt 仍会被收敛。
  */
 export const ZOMBIE_EXECUTION_STATUSES: readonly ExecutionStatus[] = [ExecutionStatus.Running];
 
@@ -77,20 +82,19 @@ export function isZombieExecutionStatus(status: ExecutionStatus): boolean {
 /**
  * 某 attempt 是否需要在启动 / 导入后被收敛。
  *
- * `running`：进程已死，收敛为 `interrupted`（`ATTEMPT_TRANSITIONS.running` 有这条边，
- * 注释 L98-100 明确它就是为「应用崩溃、用户强杀」预留的）。
- * `queued`：从未启动过，是**更纯**的僵尸——本轮进程没派发过、上一轮也没启动它。
- * 转移表里 `queued → interrupted` 这条边**刻意不存在**（注释：未启动的 attempt
- * 被「打断」没有意义），故 `queued` 收敛为 `cancelled`（未启动即取消，语义正确）。
- * ⚠️ 若某 `queued` attempt 所属 execution 已处于终态（例如 completed），
- *    它本应早就结束 —— 那种「终态 execution 却挂着未启动 attempt」的**数据矛盾**
- *    属于**规格空白**（见本任务报告「未覆盖的缺口」），本模块**不发明**它的归宿。
+ * **只有 `running`。** `running` 的进程已死，收敛为 `interrupted`
+ * （`ATTEMPT_TRANSITIONS.running` 有这条边，`execution-state.ts:95 / 98-100` 明确
+ * 它就是为「应用崩溃、用户强杀、调度撤回」预留的）。
  *
- * attempt 级收敛**只跟着 execution 级收敛走**（`recoverExecution` 内部调用，
- * 且门禁在 `isZombieExecutionStatus`）：备份恢复进来的 `paused` 执行单可能挂着一个
- * 僵尸 `running` attempt —— 此时若单独收敛 attempt 会造出「execution 仍是 paused，
- * attempt 却是终态」的错配（用户点「继续」时无活 attempt 可续）；宁可一并留着，
- * 也不制造**我们自己引入**的新不一致。
+ * `queued` attempt **刻意不处理**（不是遗漏）：`ATTEMPT_TRANSITIONS` 里
+ * `queued → interrupted` 这条边**根本不存在**，理由与本模块同一套 ——
+ * 未启动的 attempt 没有「被打断」的语义（打断是对**正在运行**的东西的抢占），
+ * 未启动的它本应走 `cancelled` / `failed`。既然启动兜底**只能走已有合法边**，
+ * 也就没有一条合适的边可走：给它 `cancelled` 等于替用户取消（用户没取消），
+ * 给它 `failed` 等于谎报失败（它压根没跑）。**故静默保留**，交由人来处置。
+ * （另注：备份恢复进来的 `queued` attempt 若属于一个终态 execution，那是
+ * 「终态 execution 却挂着未启动 attempt」的**数据矛盾**，属规格空白，本模块
+ * 同样**不发明**它的归宿。）
  */
 export function isZombieAttemptStatus(status: AttemptStatus): boolean {
   return status === AttemptStatus.Running;
@@ -164,16 +168,51 @@ async function recoverExecution(
     // ① attempt 层：僵尸 running → interrupted
     //
     // ★ 门禁：**执行单处于「活态」时才收敛它的 attempt**。界面上「在跑」的判据是
-    //   execution **未达终态**，而不是「execution 本身需要被收敛」：
+    //   execution **未达终态**，而不是「execution 本身需要被收敛」。逐个交代：
     //     - `running` → 要收敛（下面 ②），attempt 当然也收敛；
     //     - `needs_attention` → execution 不动（已在目标态），但它**仍是活态**：
     //       挂着的 running attempt 谁也不认领了，必须打断，否则留下
     //       「待处理 + 一个在跑的 attempt」这种误导性的半活状态；
-    //     - `paused` → 刻意不收敛 execution（见 ZOMBIE_EXECUTION_STATUSES 的理由）。
-    //       此时若单独把 attempt 打成 `interrupted`，就亲手造出「execution 仍是 paused、
-    //       attempt 已是终态」的错配 —— 用户点「继续」时没有任何活 attempt 可续，
-    //       这是个**我们新引入**的坏状态。一条坏数据不修，好过用一条新坏数据去补；
+    //     - `awaiting_review` → execution **不动**（它不是终态、也不是僵尸态：
+    //       它等的是**人工审批**，重启并没有让「产物已产出、等验收」这件事变得不成立），
+    //       但挂在它上面的 running attempt **必须收敛**。两条理由：
+    //         ① 语义上 `awaiting_review` = 「本次执行**已经跑完**，等人工审批」，
+    //            既然跑完了，那个 attempt 就不该停在 `running`（它是旧进程的遗留物，
+    //            attempt 的终态写入发生在进程内，进程没了就永远没写）；
+    //         ② 这正是 `execution-state.ts:10-11` 显式设计的形态 ——
+    //            「`awaiting_review` 不允许回 `running`：重试必须**新建 attempt**」。
+    //            故把旧 attempt 收成 `interrupted` 不新增任何非法边，反而是
+    //            「重试要新建 attempt」这条纪律得以成立的前提（否则
+    //            `canStartAttempt=false` 会把重试路径堵死，见下方 paused 同款后果）。
+    //       ⚠️ 可达性（**不是**「不该存在的数据」）：正常状态机路径就能走到
+    //          `running → awaiting_review` 而 attempt 仍为 `running`
+    //          —— 进程恰在写入 attempt 终态之前被杀即可（已实测复现）。
+    //     - `draft` / `awaiting_confirmation` / `queued` → 正常路径下**走不到**
+    //       「挂着 running attempt」（`running` 必须经 `queued` 且已人工确认，
+    //       attempt 也只在该链路里启动）。这里的收敛属**防御性覆盖**：
+    //       万一出现（手改库、恢复被篡改的包、未来新增入口），不要让僵尸 attempt
+    //       滞留在活态 execution 上。代价为零（这些状态下 attempt 本就该是终态）。
+    //     - `paused` → **execution 与 attempt 都不动**，见下。
     //     - 终态 → 上游已 return，不会走到这里（attempt 的归属由 execution 的终态定义）。
+    //
+    // ★★ `paused` 的取舍及其**代价**（如实记录，结论仍是不收敛）：
+    //   `paused` 是用户主动的合作式暂停，语义上就是「合法地停着、等人来点继续」，
+    //   重启没有破坏它；而转移表里**没有** `paused → needs_attention` 边，强行收敛
+    //   只剩两条坏路：`paused → cancelled` 是**谎报**（用户没取消，且 `cancelled`
+    //   出边为空，用户**再也无法恢复**这次执行 —— 不可逆的数据损伤）；
+    //   `paused → running → needs_attention` 则要先制造一次「状态是 running 却没人跑」
+    //   ——**正是本兜底要消灭的假活态**。故不收敛，宁可留着。
+    //
+    //   **代价（实测，必须知情）**：若恢复包里的 `paused` execution 挂着一个僵尸
+    //   `running` attempt，则 `canStartAttempt=false`（`createAttempt` 抛 Conflict
+    //   「已存在非终态 attempt，不能新开」）且 `canComplete.ok=false`（非
+    //   `awaiting_review`），即**该执行单卡住**：既不能新开 attempt，也不能进完成态。
+    //   缓解路径是存在的——用户可点「继续」（`paused → running` 合法且实测成功），
+    //   但此时那个僵尸 attempt 仍是 `running` 而**没有任何进展**，
+    //   会一直显示为「在跑」，直到下一次启动兜底才被收成 `interrupted`。
+    //   即：**不是硬死锁，但会跨一次重启才自愈**。这是为了让 `paused` 不被谎报取消
+    //   而接受的代价；若将来有产品裁决允许询问用户「上次那个执行还算数吗」，
+    //   应改为**交互式收敛**而不是在这里静默选一个终态。
     if (!isTerminal(execution.status) && execution.status !== ExecutionStatus.Paused) {
       const attempts = await repo.listAttempts(execution.id);
       for (const attempt of attempts) {

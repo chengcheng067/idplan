@@ -454,6 +454,136 @@ describe('recoverZombieExecutions：paused 与 needs_attention 的决策', () =>
   });
 });
 
+/* ================================================================== *
+ * attempt 收敛门禁的分支覆盖
+ *
+ * ★ 为什么单开一节：attempt 收敛门禁是 `!isTerminal(status) && status !== Paused`。
+ *   若把它错误地收窄成「只处理 `execution.status === Running`」，本文件其余用例
+ *   只会红 `needs_attention` 一条 —— 其余分支**零覆盖**。本节把门禁的每个分支
+ *   都钉死，使任何收窄必然大面积变红。
+ * ================================================================== */
+
+describe('attempt 收敛门禁：活态 execution 的僵尸 running attempt', () => {
+  /**
+   * `awaiting_review` —— **正常状态机路径可达的真实场景**，不是「不该存在的数据」。
+   *
+   * 场景：execution 推进到 `running`、attempt 也在 `running`，此时**进程被强杀**。
+   * attempt 的终态写入发生在进程内，进程没了就永远没写；而 execution 可能已经
+   * 被推进到 `awaiting_review`（跑完了等人工审批）。重启后就是：
+   * `awaiting_review` + 僵尸 `running` attempt（已实测复现，走的是合法状态链）。
+   */
+  it('awaiting_review 挂僵尸 running attempt：attempt → interrupted，execution 不动', async () => {
+    const id = await newExecution('gate-review');
+    // ★ 走合法状态链到 running，挂上 running attempt，**再**推进到 awaiting_review
+    //   （不能复用 toAwaitingReview：它会从头再推一次链）。
+    await toRunning(id);
+    await addRunningAttempt(id);
+    await setStatus(id, ExecutionStatus.AwaitingReview);
+    const beforeExec = await bundle.executions.getExecution(id);
+    expect(beforeExec?.status).toBe(ExecutionStatus.AwaitingReview);
+    expect((await bundle.executions.listAttempts(id))[0]!.status).toBe(AttemptStatus.Running);
+
+    const summary = await recoverZombieExecutions(bundle.executions, scope);
+
+    // attempt 被收成 interrupted —— 语义上「本次已跑完，旧 attempt 不该停在 running」；
+    // 这也正是「重试必须新建 attempt」（execution-state.ts:10-11）得以成立的前提。
+    const attempts = await bundle.executions.listAttempts(id);
+    expect(attempts[0]!.status).toBe(AttemptStatus.Interrupted);
+    expect(attempts[0]!.finishedAt).toBeTruthy();
+    // execution 不动：它等的是人工审批，重启没破坏这个语义（它不是僵尸态）。
+    const after = await bundle.executions.getExecution(id);
+    expect(after?.status).toBe(ExecutionStatus.AwaitingReview);
+    expect(after?.updatedAt).toBe(beforeExec!.updatedAt);
+    expect(summary.executionsRecovered).toBe(0);
+    expect(summary.attemptsRecovered).toBe(1);
+  });
+
+  it('awaiting_review 收敛 attempt 后，重试路径未被堵死（可新开 attempt）', async () => {
+    // 反向证据：若 attempt 不收成终态，`canStartAttempt=false` 会让「新建 attempt 重试」
+    // 直接抛 Conflict —— 那才是真正的坏后果。这里断言收敛**打开**了重试路径。
+    const id = await newExecution('gate-review-retry');
+    await toRunning(id);
+    await addRunningAttempt(id);
+    await setStatus(id, ExecutionStatus.AwaitingReview);
+
+    await recoverZombieExecutions(bundle.executions, scope);
+
+    // 不抛 = 可以新开（若 attempt 还停在 running，仓储会抛「已存在非终态 attempt」）
+    const fresh = await bundle.executions.createAttempt({
+      executionId: id,
+      status: AttemptStatus.Queued,
+    });
+    expect(fresh.attemptNo).toBe(2);
+  });
+
+  /**
+   * 防御性覆盖：`draft` / `awaiting_confirmation` / `queued` 在**正常流程下不可达**
+   * 「挂着 running attempt」（`running` 必须经 `queued` 且已人工确认，attempt 也只在
+   * 该链路里启动）。这里用**真实仓储**构造（不绕仓储直塞 Dexie），锁住门禁的
+   * **防御行为**：万一出现（手改库、恢复被篡改的包、将来新增入口），僵尸 attempt
+   * 不应滞留在活态 execution 上。
+   *
+   * ⚠️ 不要把它们当成正常路径的特性来理解——它们锁的是「门禁边界」不是「业务语义」。
+   */
+  it.each([
+    [ExecutionStatus.Draft, []],
+    [ExecutionStatus.AwaitingConfirmation, [ExecutionStatus.AwaitingConfirmation]],
+    [ExecutionStatus.Queued, [ExecutionStatus.AwaitingConfirmation, ExecutionStatus.Queued]],
+  ] as const)(
+    '【防御性】%s 挂僵尸 running attempt：attempt → interrupted，execution 不动',
+    async (expectedStatus, steps) => {
+      const id = await newExecution(`gate-def-${expectedStatus}`);
+      for (const s of steps) await setStatus(id, s as ExecutionStatus);
+      await addRunningAttempt(id);
+      const beforeExec = await bundle.executions.getExecution(id);
+      expect(beforeExec?.status).toBe(expectedStatus);
+
+      const summary = await recoverZombieExecutions(bundle.executions, scope);
+
+      const attempts = await bundle.executions.listAttempts(id);
+      expect(attempts[0]!.status).toBe(AttemptStatus.Interrupted);
+      const after = await bundle.executions.getExecution(id);
+      expect(after?.status).toBe(expectedStatus); // execution 零变化
+      expect(after?.updatedAt).toBe(beforeExec!.updatedAt);
+      expect(summary.executionsRecovered).toBe(0);
+      expect(summary.attemptsRecovered).toBe(1);
+    },
+  );
+
+  it('门禁边界汇总：活态 execution 全部收敛 attempt，paused / 终态一律不动', async () => {
+    // 一张表把门禁的每个分支钉死：任何收窄都会让本用例变红。
+    const running = await newExecution('gate-all-running');
+    await toRunning(running);
+    await addRunningAttempt(running);
+
+    const needs = await newExecution('gate-all-needs');
+    await toRunning(needs);
+    await addRunningAttempt(needs);
+    await setStatus(needs, ExecutionStatus.NeedsAttention);
+
+    const review = await newExecution('gate-all-review');
+    await toRunning(review);
+    await addRunningAttempt(review);
+    await setStatus(review, ExecutionStatus.AwaitingReview);
+
+    const paused = await newExecution('gate-all-paused');
+    await toRunning(paused);
+    await addRunningAttempt(paused);
+    await setStatus(paused, ExecutionStatus.Paused);
+
+    await recoverZombieExecutions(bundle.executions, scope);
+
+    const statusOf = async (id: string) => (await bundle.executions.listAttempts(id))[0]!.status;
+    // 活态（未终态、非 paused）→ 收敛
+    expect(await statusOf(running)).toBe(AttemptStatus.Interrupted);
+    expect(await statusOf(needs)).toBe(AttemptStatus.Interrupted);
+    expect(await statusOf(review)).toBe(AttemptStatus.Interrupted);
+    // paused → 刻意不收敛（execution 与 attempt 都不动）
+    expect(await statusOf(paused)).toBe(AttemptStatus.Running);
+    expect((await bundle.executions.getExecution(paused))?.status).toBe(ExecutionStatus.Paused);
+  });
+});
+
 describe('僵尸判据：单一出处与备份恢复场景', () => {
   it('ZOMBIE_EXECUTION_STATUSES 只有 running（不是「全部非终态」）', () => {
     expect([...ZOMBIE_EXECUTION_STATUSES]).toEqual([ExecutionStatus.Running]);
