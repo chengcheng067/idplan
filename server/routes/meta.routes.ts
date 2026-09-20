@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3';
 // v0.6：JSON 数组列反序列化统一走通用实现（parseJsonArray<Task>）。
 // ★ 旧的本地实现内含 `filter(x => typeof x === 'string')`——对 artifacts（对象数组）
 //   会把对象元素全部滤掉、静默清空，必须换成 server/lib/json-columns.ts 的版本。
-import { parseJsonArray } from '../lib/json-columns';
+import { parseJson, parseJsonArray } from '../lib/json-columns';
 import { requireToken, unauthorizedBody } from '../lib/agent-auth';
 
 // ★ v0.7（T01-b）：备份导入的号段归一走**前后端共享的同一份纯函数** —— 与 local
@@ -337,12 +337,38 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
    */
   const JSON_ARRAY_COLUMNS: Record<string, string[]> = {
     tasks: ['assignee_ids', 'depends_on', 'artifacts'],
+    // ★ v0.8 执行域：writeback_proposals.operations 是 JSON 化的 WritebackOperation[]
+    //   （DDL 注释明写）。不登记 → 导出成 JSON **字符串** → 前端 zod
+    //   `writebackProposalSchema.operations: z.array(z.any())` 期望数组却收到 string
+    //   → **整份备份包被拒收**（tasks 表已有同类先例，注释见 JSON_ARRAY_COLUMNS 头）。
+    writeback_proposals: ['operations'],
   };
 
-  /** snake_case 行 → camelCase DTO（key 下划线转驼峰；布尔列 0/1 转 boolean；JSON 数组列反序列化） */
+  /**
+   * ★ v0.8 执行域：以 JSON **对象**串存储的列——与上面的数组列**必须分开**，不可混用。
+   *
+   * `executions.confirmation` 是 JSON 化的 `ExecutionConfirmation`（DDL 注释明写），
+   * 单个对象而非数组。若误登记进 `JSON_ARRAY_COLUMNS`，`parseJsonArray` 会走
+   * `Array.isArray(v) ? v : []` 回落成 `[]` —— 把「人工确认凭据」整条**静默清空**，
+   * 而它正是「未人工确认绝不执行」这条 P0 闸门（`assertExecutionConfirmed` 要求
+   * `confirmedAt` 与 `planHash` 双非空）的**唯一数据来源**：确认过的执行会退化成
+   * 未确认，恢复出来的记录要么再也执行不了、要么闸门形同虚设。
+   *
+   * 这里用 `parseJson(v, null)`：列可空，'null' 串/空串/脏数据一律回落 null，
+   * 与 DTO 的 `confirmation: ExecutionConfirmation | null` 形状一致。
+   */
+  const JSON_OBJECT_COLUMNS: Record<string, string[]> = {
+    executions: ['confirmation'],
+  };
+
+  /**
+   * snake_case 行 → camelCase DTO（key 下划线转驼峰；布尔列 0/1 转 boolean；
+   * JSON 数组列反序列化回数组；JSON 对象列反序列化回对象/null）
+   */
   function rowToDto(table: string, o: Record<string, unknown>): Record<string, unknown> {
     const boolCols = BOOLEAN_COLUMNS[table] ?? [];
     const jsonArrCols = JSON_ARRAY_COLUMNS[table] ?? [];
+    const jsonObjCols = JSON_OBJECT_COLUMNS[table] ?? [];
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(o)) {
       const camelKey = k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
@@ -351,6 +377,9 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
       } else if (jsonArrCols.includes(k)) {
         // 通用版（无 filter(string)）：保证 artifacts 对象数组往返保真
         out[camelKey] = parseJsonArray<unknown>(v);
+      } else if (jsonObjCols.includes(k)) {
+        // 对象列专用回落 null（**不可**走 parseJsonArray，见 JSON_OBJECT_COLUMNS 注释）
+        out[camelKey] = parseJson<unknown>(v, null);
       } else {
         out[camelKey] = v;
       }
@@ -404,6 +433,13 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
         logs: dumpTable('stage_logs'),
         contracts: dumpTable('contracts'),
         settings: dumpTable('settings'),
+        // ★ v0.8 执行域四表：**顺序须与导入侧 `map` 的父先子后一致**（此处虽无顺序
+        //   约束，但两端同序便于人工比对）。此前四表只建在 schema.sql 里、不在 dump
+        //   清单中 → 服务端备份 / bootstrap / NAS 迁移时执行域数据**整片丢失**。
+        executions: dumpTable('executions'),
+        executionAttempts: dumpTable('execution_attempts'),
+        executionEvents: dumpTable('execution_events'),
+        writebackProposals: dumpTable('writeback_proposals'),
       },
     };
   });
@@ -423,6 +459,11 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
       logs: dumpTable('stage_logs'),
       contracts: dumpTable('contracts'),
       settings: dumpTable('settings'),
+      // ★ v0.8 执行域四表（与 GET /api/backup 逐字同构，避免两侧清单漂移）
+      executions: dumpTable('executions'),
+      executionAttempts: dumpTable('execution_attempts'),
+      executionEvents: dumpTable('execution_events'),
+      writebackProposals: dumpTable('writeback_proposals'),
     };
   });
 
@@ -447,13 +488,22 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
         // 直接 bind 数组会被隐式 join 成字符串（如 ['a'] → "a"），
         // 读取端 JSON.parse 失败 → 静默丢数据（曾导致 task.assigneeIds 导入后变 []）。
         // 这里统一处理，覆盖 assigneeIds 及未来任何数组字段。
+        //
+        // ★ v0.8 执行域：**普通对象**同理必须序列化。`executions.confirmation` 是
+        //   `ExecutionConfirmation | null`，若直接 bind，better-sqlite3 会因 bind 值
+        //   不是受支持类型而**抛错**（不会静默）；但即使侥幸落库也会变成
+        //   "[object Object]" → 读回时 parseJson 失败回落 null → 确认凭据丢失。
+        //   注意这里**不能**顺手把 Date/其他对象一概序列化：本函数逐列处理，
+        //   对象只可能来自 JSON 列（备份 DTO 里没有别的对象取值），故安全。
         const val = Array.isArray(v)
           ? JSON.stringify(v)
           : typeof v === 'boolean'
             ? v
               ? 1
               : 0
-            : v;
+            : v !== null && typeof v === 'object'
+              ? JSON.stringify(v)
+              : v;
         out[k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] = val;
       }
       return out;
@@ -466,6 +516,21 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
       ).run(...cols.map((c) => o[c]));
     };
 
+    // ★ 声明序 = **INSERT 正序**（父表在前）；DELETE 用它的**逆序**（子表在前）。
+    //   顺序由 `server/schema.sql` 的 **REFERENCES 声明**决定，不是拍脑袋排的：
+    //     · execution_attempts.execution_id → REFERENCES executions(id)
+    //     · execution_events.execution_id   → REFERENCES executions(id)
+    //     · writeback_proposals.execution_id→ REFERENCES executions(id)
+    //   三张子表的唯一父表是 `executions`；子表之间**互不引用**
+    //   （`writeback_proposals.attempt_id` 在 DDL 里**没有** REFERENCES，故不需要
+    //   排在 execution_attempts 之后；同理 project_id / task_id 也无 REFERENCES）。
+    //   → 父在前、三个子表紧随其后任意次序即可。
+    //
+    //   ⚠️ 顺序错了**会被发现**而不是静默出错：`server/db.ts` 的 `openDb()` 有
+    //   `db.pragma('foreign_keys = ON')`（生产与本机测试一致），且三处 REFERENCES
+    //   **均无 ON DELETE CASCADE**、约束亦非 deferrable —— 非空库下先删 `executions`
+    //   会立刻抛 `SQLITE_CONSTRAINT_FOREIGNKEY`；反过来先插子表也会立刻抛。
+    //   这是刻意要的：宁可整库替换失败，也不要留下半删半插的残缺库。
     const map: Record<string, string> = {
       projects: 'projects',
       stages: 'stages',
@@ -476,6 +541,12 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
       logs: 'stage_logs',
       contracts: 'contracts',
       settings: 'settings',
+      // ★ v0.8 执行域四表：`executions` 是父表，必须排在三张子表**之前**。
+      //   四表放在 `settings` 之后只是因为执行域不与前述九表互引，位置本身不敏感。
+      executions: 'executions',
+      executionAttempts: 'execution_attempts',
+      executionEvents: 'execution_events',
+      writebackProposals: 'writeback_proposals',
     };
 
     // ★ v0.7（T01-b）：包内任务行交给共享纯函数做号段归一。

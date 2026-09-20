@@ -34,6 +34,20 @@
  *   只依赖 dayjs 与其 isoWeek 插件，`dayjs` 在 dependencies 内，服务端可解析）。
  *   同样地，**显式列出**而不是让它停在 import 图的隐式副产物里：将来有人往这批文件里
  *   加一句 `document.*` 或 `node:fs`，`npm run typecheck:server` 会当场红。
+ *
+ *   v0.8 · T04-SRV（执行域）追加 `../src/core/execution/` 全量：
+ *   服务端执行域仓储（`server/adapters/sqlite.bundle.ts` 的 `executions` 实现）
+ *   必须复用状态机的**唯一实现**（`execution-state.ts` 的邻接表 / 人工确认门槛 /
+ *   单活 attempt / seq 单调 / canComplete）——在服务端重写邻接表会立刻产生第二份
+ *   真相源，症状是「同一次状态变更在 NAS 与本机得到不同结果」。
+ *   该模块是纯函数（只 import `types/**`），服务端可解析。
+ *
+ *   ⚠️ **刻意不**纳入 `../src/core/repositories/local/local.projects.repo.ts`：
+ *   本适配器需要它的 `pickDefined`（「undefined 不覆盖既有值」的唯一实现），
+ *   但该文件经 import 图带上 `./dexie.database.ts` → 后者直接引用
+ *   `globalThis.indexedDB`（浏览器 API），纳入后 `npm run typecheck:server` 会红两条
+ *   TS7017（已实测）。故 `sqlite.bundle.ts` 改为**本地复刻同语义的 pickDefined**
+ *   （见该文件注释：三行循环，语义逐字一致；跨端一致由两处单测各自锁住）。
  */
 {
   "compilerOptions": {
@@ -65,6 +79,8 @@
     "../src/lib/progress.ts",
     // v0.8 · T04-SRV：建板的阶段骨架数据源 + 阶段上限/色号夹取的唯一实现（见文件头）
     "../src/core/template/stage-library.ts",
-    "../src/core/template/split.ts"
+    "../src/core/template/split.ts",
+    // v0.8 · T04-SRV（执行域）：状态机的唯一实现（见文件头）
+    "../src/core/execution/**/*.ts"
   ]
 }

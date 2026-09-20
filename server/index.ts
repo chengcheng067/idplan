@@ -16,6 +16,8 @@ import { registerTaskRoutes } from './routes/tasks.routes';
 import { registerItineraryRoutes } from './routes/itineraries.routes';
 import { registerMemberRoutes } from './routes/members.routes';
 import { registerMetaRoutes } from './routes/meta.routes';
+// v0.8（T04-SRV）：Agent 执行域 REST 端点（读取 + 写入，含状态机存储边界强制）
+import { registerExecutionRoutes } from './routes/executions.routes';
 // v0.7（T02）：Agent 导入通道（独立 token `IDPLAN_AGENT_API_TOKEN`，与备份通道分离）
 import { registerAgentRoutes } from './routes/agent.routes';
 
@@ -49,6 +51,10 @@ async function main(): Promise<void> {
   registerItineraryRoutes(app, db);
   registerMemberRoutes(app, db);
   registerMetaRoutes(app, db);
+  // ★ v0.8（T04-SRV）：执行域端点。同样必须在既有路由之后——它经 `app.inject`
+  //   委托既有处理器，且与本文件下方 `registerAgentRoutes` 使用**同一个**
+  //   `createSqliteBundle` 实现（执行域语义只有一份，不因入口不同而分叉）。
+  registerExecutionRoutes(app, db);
   // ★ v0.7（T02）：**必须排在既有路由之后**——Agent 通道的服务端 bundle
   //   （`server/adapters/sqlite.bundle.ts`）通过 `app.inject` 委托既有处理器完成
   //   幂等 upsert 与成员写入（详见该文件头「三条实现策略」）。先后顺序不影响
