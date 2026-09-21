@@ -193,6 +193,30 @@ docker run --rm -p 28080:80 -e VITE_DATA_SOURCE=local idplan:local
 - compose 不写 `build:`；`${VAR}` 必须在 project.yaml `parameters` 声明（`TZ` 内置，声明反而报错）
 - 同一 `x.y.z` 下 `--build` 号必须递增，否则应用中心拒绝覆盖安装
 
+### 5.0.1 版本号流向：project.yaml 是唯一真相源
+
+> 这里曾埋过一个地雷：打出 `…_0.7.0.0001.upk`，装的却是 `0.3.0` 旧镜像，
+> 且文件名、文档都对、用户完全看不出来。根因是**版本号散落四处、互不校验**。
+> 现在 `pack-*.sh` 会在打包前跑预检，把「静默出错」变成「响亮失败」。
+
+任何一次发版，下面几处必须指向**同一个版本号**：
+
+| 位置 | 控制什么 |
+|---|---|
+| `ugnas/upk/project.yaml` 的 `version:` | UPK **文件名**的 `x.y.z`（`ugcli pack --build N` → `…_x.y.z.N.upk`）——**单一真相源** |
+| `ugnas/upk/rootfs_common/docker-compose.yaml` 各服务 `image: name:<tag>` | 容器**实际拉起**的镜像 tag，必须与 tar 内 tag 完全一致 |
+| `ugnas/scripts/pack-amd64.sh` 的 `VERSION` | **不再硬编码**——改为从上面 `project.yaml` 派生，决定去 `upk-images-<VERSION>` Release 下载镜像 tar |
+| `ugnas/project.yaml` 的 `version:` | 仅被已弃用的 `pack.sh` 使用（对应 `ugnas/docker-compose.yaml`），与 `upk/` 下的那份需各自保持一致 |
+
+- `pack-amd64.sh` 与 `pack.sh` 都会在真正下载/打包**之前** source `ugnas/scripts/check_upk_versions.sh` 并调用 `check_upk_versions`：
+  读 `project.yaml` 的 `version`，与每个 `docker-compose.yaml` 的 `image:` tag 比对，
+  **不一致立即退出，并打印「读到的是什么 / 期望什么 / 该改哪个文件哪一行」**。
+- **发版时必须同步改**：
+  1. `ugnas/upk/project.yaml` 的 `version`；
+  2. `ugnas/upk/rootfs_common/docker-compose.yaml` 里两个 `image:` 的 tag（与 ① 同值）；
+  3. 让 `upk-images` 工作流以同一版本号导出镜像 tar（Release tag `upk-images-<版本>`；该工作流当前默认 `0.3.0`，需按版本手动触发或打 `upk-<版本>-N` tag）。
+  若只改其一，预检会拦下，不会放出错的包。
+
 ### 5.1 构建产物 + 导镜像（pack.sh 已封装，需本机 Docker，已弃用）
 ```bash
 cd changxia && bash ugnas/scripts/pack.sh --build 1

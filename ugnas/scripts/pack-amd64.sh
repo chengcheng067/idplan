@@ -17,11 +17,21 @@ set -euo pipefail
 # UPK 项目根：<repo>/changxia/ugnas/upk/（含 project.yaml + rootfs_*/）
 # 用脚本自身绝对位置定位，避免从不同 cwd 调用时相对路径出错。
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# 共享版本预检（镜像 tag 必须与 project.yaml 的 version 一致，否则响亮失败）
+source "${SCRIPT_DIR}/check_upk_versions.sh"
 UPK_ROOT="$(cd "${SCRIPT_DIR}/../upk" && pwd)"
 cd "$UPK_ROOT"
 
 BUILD="${1:-1}"
-VERSION="0.3.0"
+# 版本号单一真相源：不再硬编码，改为从 UPK 项目配置 ugnas/upk/project.yaml
+# 的 `version:` 字段派生。这样文件名（x.y.z.b）永远与 project.yaml 同步，
+# 不会再出现「脚本里写死 0.3.0、project.yaml 已改 0.7.0、产物名是新的、内容却旧」的错位。
+VERSION="$(grep -E '^[[:space:]]*version:[[:space:]]' project.yaml \
+           | head -n1 | sed -E 's/^[[:space:]]*version:[[:space:]]*//' | tr -d '\r')"
+# 预检：compose 里的镜像 tag 必须与解析出的 version 完全一致，否则立即退出，
+# 把「静默产出错误包」变成「响亮失败」（当前仓库 state 应为 0.7.0 vs 0.3.0 → 失败）。
+check_upk_versions "${UPK_ROOT}/project.yaml" \
+                   "${UPK_ROOT}/rootfs_common/docker-compose.yaml"
 RELEASE_TAG="upk-images-${VERSION}"
 REPO="chengcheng067/id-aura-app"
 API="https://api.github.com/repos/${REPO}"

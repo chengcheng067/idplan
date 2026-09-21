@@ -26,9 +26,17 @@ APP_ID="com.chengcheng.idplan"
 
 # 允许从 ugnas/ 或仓库根两种位置运行
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 共享版本预检（镜像 tag 必须与 project.yaml 的 version 一致，否则响亮失败）
+source "${SCRIPT_DIR}/check_upk_versions.sh"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${ROOT_DIR}"
+
+# 预检（pack.sh 已弃用，但仍要拦住版本错位）：本路径使用的 project.yaml 是
+# ugnas/project.yaml，compose 源是 ugnas/docker-compose.yaml，二者必须同版本。
+# 注意：本脚本镜像 tag 另由 package.json 派生（不在本预检范围，属发布决策）。
+check_upk_versions "${ROOT_DIR}/project.yaml" \
+                   "${ROOT_DIR}/docker-compose.yaml"
 
 echo "==> [1/6] 构建前端 dist"
 npm run build
