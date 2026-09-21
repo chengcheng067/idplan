@@ -31,9 +31,19 @@ import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
 import type { IExecutionsRepository } from '../repositories/interfaces';
 import { isTerminal, nextSeq } from './execution-state';
 
-/** 兜底的执行单写入审计流水时落的原因串（唯一的「本轮启动」标记） */
+/**
+ * 兜底的执行单写入审计流水时落的原因串（唯一的「本轮启动」标记）。
+ *
+ * ⚠️ 文案必须说真话（stale approval 收紧切片 · 分支乙）：
+ * 本兜底把 `running` 收敛为 `needs_attention`，但**不触碰确认凭据**——
+ * 因为 `needs_attention` 在状态机里**无法回到 `awaiting_confirmation`**（已实测其出边只有
+ * running / cancelled / failed，无任何一条能到达 awaiting_confirmation），若在此清空确认，
+ * 这条执行会陷入「凭据没了、又没有路径重新确认」的死胡同，永远跑不起来。
+ * 故此处明确陈述：进程已不存在故收敛；**确认凭据保持不变**；若计划未变更，确认仍然有效，
+ * 可重新进入 running（无需重新确认）。这与「同一计划重试不需要重新确认」的语义一致。
+ */
 export const DEFAULT_RECOVERY_REASON =
-  '应用启动时发现该执行单处于运行中，但当前进程已不可能有执行在运行（进程重启 / 备份恢复绕过状态校验），收敛为待处理，需人工重新确认。';
+  '应用启动时发现该执行单处于运行中，但当前进程已不可能有执行在运行（进程重启 / 备份恢复绕过状态校验），收敛为待处理；确认凭据保持不变，若计划未变更则确认仍然有效、可重新进入运行（无需重新确认）。';
 
 /** 兜底的 attempt 写入审计流水时落的原因串 */
 export const DEFAULT_ATTEMPT_RECOVERY_REASON =

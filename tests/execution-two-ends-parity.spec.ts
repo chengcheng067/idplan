@@ -52,9 +52,11 @@ import type { IExecutionsRepository } from '../src/core/repositories/interfaces'
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { ChangxiaErrorCode } from '../src/core/types/enums';
+import { computePlanHash } from '../src/core/execution/plan-hash';
 import {
   ATTEMPT_STATUSES,
   EXECUTION_SOURCES,
+  ExecutionStatus,
   WRITEBACK_PROPOSAL_STATUSES,
 } from '../src/core/types/agent-execution';
 
@@ -605,5 +607,97 @@ describe('执行域两端一致：同一输入 → 同一个码（护栏）', ()
     ).toBe(ChangxiaErrorCode.NotFound);
     const ev = db.prepare('SELECT COUNT(*) AS n FROM execution_events').get() as { n: number };
     expect(ev.n).toBe(0);
+  });
+
+  /* ------------- ⑤ 授予点限制（stale approval 收紧 · 缺口 C）------------- */
+
+  /**
+   * 缺口 C：确认凭据若能在**任意**合法迁移上写入，校验看到的就正是「调用方自己刚塞进来的
+   * 那个值」——用提交者提供的凭据证明提交者的正当性。故凭据只能在**授予点**写入。
+   *
+   * 本组刻意**两端跑同一段流程**：只在一端加限制会立刻变红。
+   * 实测背景：撤掉服务端适配层这项限制时，全量 103 个文件**零红存活** ——
+   * 即该限制在服务端原本是装饰性存在，正是本组用例要消除的盲区。
+   */
+  const grantPointConfirmation = (repo: IExecutionsRepository, id: string) =>
+    repo.getExecution(id).then((live) => {
+      if (!live) throw new Error('parity: 执行单不存在');
+      return {
+        confirmedAt: '2026-08-01T00:00:00.000Z',
+        confirmedBy: 'u1',
+        planHash: computePlanHash(live),
+        planRevision: 1,
+      };
+    });
+
+  /** 把一端推进到「已授予确认的 queued」（返回授予这一步的结果码） */
+  async function grantToQueued(repo: IExecutionsRepository, id: string): Promise<string> {
+    await repo.updateExecutionStatus(id, { status: ExecutionStatus.AwaitingConfirmation });
+    // planHash 必须按「真实执行单」算，两端各自计算（它们计划字段相同，故 hash 相同）
+    const confirmation = await grantPointConfirmation(repo, id);
+    return outcomeOf(() =>
+      repo.updateExecutionStatus(id, { status: ExecutionStatus.Queued, confirmation }),
+    );
+  }
+
+  it('授予点限制：非授予点自带新确认快照 → 两端同码拒绝，且两端都停在 queued', async () => {
+    const { localId, remoteId } = await seedBoth('parity:grantpoint');
+
+    // 授予点写入：两端都合法
+    const localGranted = await grantToQueued(localBundle.executions, localId);
+    const remoteGranted = await grantToQueued(remote, remoteId);
+    expect(localGranted).toBe('ok');
+    expect(remoteGranted).toEqual(localGranted);
+
+    // ★ 关键构造：这份新快照的 planHash **必须与当前计划匹配**。
+    //   若给一个不匹配的 hash，两端都会因「绑定不符」而拒绝 —— 护栏就退化成在测
+    //   「绑定比对」，从而**漏掉**「服务端跳过授予点限制」这类变异（实测会存活）。
+    //   只有让「唯一拒绝理由」是授予点本身，本用例才真正把授予点限制钉在两端。
+    const snapshotFor = async (repo: IExecutionsRepository, id: string) => ({
+      ...(await grantPointConfirmation(repo, id)),
+      confirmedAt: '2026-08-02T00:00:00.000Z',
+      confirmedBy: 'u2', // 换个人、换个时刻 —— 但绑定的仍是同一版计划
+    });
+    const localSnapshot = await snapshotFor(localBundle.executions, localId);
+    const remoteSnapshot = await snapshotFor(remote, remoteId);
+
+    const localOutcome = await outcomeOf(() =>
+      localBundle.executions.updateExecutionStatus(localId, {
+        status: ExecutionStatus.Running,
+        confirmation: localSnapshot,
+      }),
+    );
+    const remoteOutcome = await outcomeOf(() =>
+      remote.updateExecutionStatus(remoteId, {
+        status: ExecutionStatus.Running,
+        confirmation: remoteSnapshot,
+      }),
+    );
+
+    expect(remoteOutcome).toEqual(localOutcome); // 护栏：只改一端必红
+    expect(localOutcome).toEqual(ChangxiaErrorCode.Validation); // 正确性：两端一起错也红
+    // 拒绝 ≠ 什么都没写：两端都仍停在 queued、凭据未被改写
+    expect((await localBundle.executions.getExecution(localId))?.status).toBe(
+      ExecutionStatus.Queued,
+    );
+    expect((await remote.getExecution(remoteId))?.status).toBe(ExecutionStatus.Queued);
+  });
+
+  it('授予点限制不误杀：非授予点**复用已落库凭据** → 两端都放行', async () => {
+    const { localId, remoteId } = await seedBoth('parity:grantreuse');
+
+    await grantToQueued(localBundle.executions, localId);
+    await grantToQueued(remote, remoteId);
+
+    // 不携带新凭据（undefined = 不动既有）→ 授予点限制不介入，绑定比对通过 → 放行
+    const localOutcome = await outcomeOf(() =>
+      localBundle.executions.updateExecutionStatus(localId, { status: ExecutionStatus.Running }),
+    );
+    const remoteOutcome = await outcomeOf(() =>
+      remote.updateExecutionStatus(remoteId, { status: ExecutionStatus.Running }),
+    );
+
+    expect(remoteOutcome).toEqual(localOutcome);
+    expect(localOutcome).toBe('ok');
   });
 });

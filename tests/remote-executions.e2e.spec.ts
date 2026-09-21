@@ -41,6 +41,7 @@ import { RemoteExecutionsRepository, RestClient } from '../src/core/repositories
 import { ChangxiaError, ChangxiaErrorCode } from '../src/core/types/enums';
 import { AttemptStatus, ExecutionStatus } from '../src/core/types/agent-execution';
 import type { ExecutionConfirmation } from '../src/core/types/agent-execution';
+import { computePlanHash } from '../src/core/execution/plan-hash';
 
 const PROJECT_ID = 'proj_remote';
 /** `VITE_API_BASE_URL` 的真实形状：**已含 /api** 且**无尾斜杠**（装配点会 strip） */
@@ -119,12 +120,23 @@ async function seedProject(app: FastifyInstance): Promise<void> {
   expect(res.statusCode).toBeLessThan(300);
 }
 
-const CONFIRMATION: ExecutionConfirmation = {
-  confirmedAt: '2026-09-01T00:00:00.000Z',
-  confirmedBy: 'm_human',
-  planHash: 'hash_remote',
-  planRevision: 1,
-};
+/**
+ * 用「真实执行单」算出确认快照：stale-approval 收紧后 planHash 必须 ==
+ * computePlanHash(execution) 才能过门槛，故测试不再手抄 hash，而是按真实实体计算。
+ */
+async function confirmationFor(
+  repo: RemoteExecutionsRepository,
+  id: string,
+): Promise<ExecutionConfirmation> {
+  const exec = await repo.getExecution(id);
+  if (!exec) throw new Error(`fixture: execution ${id} 不存在`);
+  return {
+    confirmedAt: '2026-09-01T00:00:00.000Z',
+    confirmedBy: 'm_human',
+    planHash: computePlanHash(exec),
+    planRevision: 1,
+  };
+}
 
 /* --------------------------------- 用例 --------------------------------- */
 
@@ -196,10 +208,10 @@ describe('远端执行域适配器 ↔ 真实服务端（端到端契约）', ()
     // ★ 合并确认快照：同一步带 confirmation 入队必须放行（服务端 L890-895）
     const queued = await repo.updateExecutionStatus(exec.id, {
       status: ExecutionStatus.Queued,
-      confirmation: CONFIRMATION,
+      confirmation: await confirmationFor(repo, exec.id),
     });
     expect(queued.status).toBe(ExecutionStatus.Queued);
-    expect(queued.confirmation).toEqual(CONFIRMATION);
+    expect(queued.confirmation).toEqual(await confirmationFor(repo, exec.id));
   });
 
   it('createAttempt / listAttempts / updateAttempt：attemptNo 由服务端分配并原样读回', async () => {
@@ -363,7 +375,7 @@ describe('远端执行域适配器 ↔ 真实服务端（端到端契约）', ()
     });
     await repo.updateExecutionStatus(exec.id, { status: ExecutionStatus.AwaitingConfirmation });
     await repo.updateExecutionStatus(exec.id, {
-      status: ExecutionStatus.Queued, confirmation: CONFIRMATION,
+      status: ExecutionStatus.Queued, confirmation: await confirmationFor(repo, exec.id),
     });
     await repo.updateExecutionStatus(exec.id, { status: ExecutionStatus.Running });
     await repo.updateExecutionStatus(exec.id, { status: ExecutionStatus.AwaitingReview });
@@ -604,12 +616,12 @@ describe('远端执行域适配器 ↔ 真实服务端（端到端契约）', ()
     });
     await repo.updateExecutionStatus(exec.id, { status: ExecutionStatus.AwaitingConfirmation });
     await repo.updateExecutionStatus(exec.id, {
-      status: ExecutionStatus.Queued, confirmation: CONFIRMATION,
+      status: ExecutionStatus.Queued, confirmation: await confirmationFor(repo, exec.id),
     });
 
     // 不传 confirmation：保留既有（推进到 running 时仍带确认）
     const running = await repo.updateExecutionStatus(exec.id, { status: ExecutionStatus.Running });
-    expect(running.confirmation).toEqual(CONFIRMATION);
+    expect(running.confirmation).toEqual(await confirmationFor(repo, exec.id));
 
     // 显式 null：撤销确认
     const cleared = await repo.updateExecutionStatus(exec.id, {

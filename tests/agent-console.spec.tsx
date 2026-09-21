@@ -22,6 +22,8 @@ import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { ChangxiaError, ChangxiaErrorCode } from '../src/core/types/enums';
 import { ExecutionStatus, WritebackProposalStatus } from '../src/core/types/agent-execution';
+import type { ExecutionConfirmation } from '../src/core/types/agent-execution';
+import { computePlanHash } from '../src/core/execution/plan-hash';
 import { emptyPackage } from './helpers/backup-fixture';
 
 // 本页只依赖 useRepos 这一个 DI 入口，顶掉它即可（同既有 spec）。
@@ -150,12 +152,15 @@ async function seedExecution(input: {
   }
 
   // awaiting_confirmation → queued（补确认快照）
+  // ★ stale-approval 绑定门槛：planHash 必须 == computePlanHash(真实执行单)，故此处重算。
+  const liveExec = await bundle.executions.getExecution(exec.id);
+  if (!liveExec) throw new Error(`fixture: execution ${exec.id} 不存在`);
   await bundle.executions.updateExecutionStatus(exec.id, {
     status: ExecutionStatus.Queued,
     confirmation: {
       confirmedAt: '2026-08-01T00:00:00.000Z',
       confirmedBy: 'u1',
-      planHash: 'plan-hash-1',
+      planHash: computePlanHash(liveExec),
       planRevision: 1,
     },
   });
@@ -373,10 +378,14 @@ describe('Agent 执行控制台 · 详情展开', () => {
       errorSummary: '目标字段已被他人修改',
       terminalReason: '写回冲突',
     });
+    // ★ seq 必须严格连续（appendEvent 拒绝乱序），且**不能手抄字面量**：
+    //   seedExecution 里「awaiting_confirmation → queued」带确认，已同事务落一条
+    //   `confirmation_granted` 审计事件。故按真实条数推导基准。
+    const seqBase = (await bundle.executions.listEvents(execId)).length;
     await bundle.executions.appendEvent({
       executionId: execId,
       attemptId: attempt.id,
-      seq: 1,
+      seq: seqBase + 1,
       type: 'created',
       actor: 'user',
       fromStatus: null,
@@ -387,7 +396,7 @@ describe('Agent 执行控制台 · 详情展开', () => {
     await bundle.executions.appendEvent({
       executionId: execId,
       attemptId: attempt.id,
-      seq: 2,
+      seq: seqBase + 2,
       type: 'status_changed',
       actor: 'agent',
       fromStatus: ExecutionStatus.Draft,

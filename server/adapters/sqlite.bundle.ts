@@ -865,7 +865,10 @@ export function createSqliteBundle(
      * 三步在同一 `.immediate()` 事务内（读 → 校验 → 写）：
      *   ① 读 current，不存在 → NotFound；
      *   ② `assertStatusTransition(current, cmd.status, proposals)`（含 completed 需 applied 提案）；
-     *   ③ `assertExecutionConfirmed(合并后的确认快照, cmd.status)`。
+     *   ③ `assertExecutionConfirmed(合并后的确认快照, cmd.status, { confirmationWrittenByCaller })`：
+     *      授予点限制（确认对象只能在 awaiting_confirmation 写入，堵缺口 C）+ 进入 queued/running
+     *      时要求 confirmedAt / confirmedBy / planHash 非空且 `planHash === computePlanHash(当前 execution)`
+     *      （确认绑定的是这一版计划）。
      *
      * ③ 的入参是**合并后**的确认：`cmd.confirmation !== undefined ? cmd.confirmation : existing.confirmation`
      * ——「确认」与「入队」经常是同一步请求（前端一次提交既批计划又入队），
@@ -888,11 +891,14 @@ export function createSqliteBundle(
         const attempts = selectAttempts(id);
         const existing = withDerivedAttemptNo(existingRow, attempts);
         assertStatusTransition(existing, cmd.status, selectProposals(id));
+        // 人工确认门槛（stale approval 收紧）：用「合并后」的确认快照校验。
+        // 合并后的快照要写回，故构造一份带 effectiveConfirmation 的副本（校验读它算计划指纹）。
         const effectiveConfirmation =
           cmd.confirmation !== undefined ? cmd.confirmation : existing.confirmation;
         assertExecutionConfirmed(
-          { id: existing.id, status: existing.status, confirmation: effectiveConfirmation },
+          { ...existing, confirmation: effectiveConfirmation },
           cmd.status,
+          { confirmationWrittenByCaller: cmd.confirmation !== undefined && cmd.confirmation !== null },
         );
 
         const next: Execution = {
@@ -916,6 +922,30 @@ export function createSqliteBundle(
           next.updatedAt,
           id,
         );
+
+        // 审计：本次**成功写入了一个新确认对象** → 同事务内 INSERT 一条 confirmation_granted。
+        // 拒绝的写入在上方 assert 已抛错、不会走到这里；`null`（清空）不算「授予」，不落审计。
+        if (cmd.confirmation !== undefined && cmd.confirmation !== null) {
+          const granted = cmd.confirmation;
+          db.prepare(
+            `INSERT INTO execution_events
+               (id, execution_id, attempt_id, seq, type, actor, from_status, to_status, reason,
+                idempotency_key, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(
+            crypto.randomUUID(),
+            id,
+            null,
+            nextSeq(selectEvents(id)),
+            'confirmation_granted',
+            'user',
+            null,
+            null,
+            `确认已授予：planHash=${granted.planHash}；confirmedBy=${granted.confirmedBy}`,
+            null,
+            new Date().toISOString(),
+          );
+        }
         return next;
       });
     },

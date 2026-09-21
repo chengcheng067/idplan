@@ -37,6 +37,7 @@ import {
   ExecutionStatus,
 } from '../src/core/types/agent-execution';
 import { isContradictoryExecution } from '../src/core/execution/execution-recovery';
+import { computePlanHash } from '../src/core/execution/plan-hash';
 
 /** 建内存库 + 注册全量路由（含执行域；与 `server/index.ts` 的注册序一致） */
 async function buildServer(): Promise<{ app: FastifyInstance; db: Database.Database }> {
@@ -105,13 +106,22 @@ async function createExecution(
   return res.json<Record<string, unknown>>();
 }
 
-/** 常见推进路径：draft → awaiting_confirmation → queued（带上确认凭据） */
-const CONFIRMATION = {
-  confirmedAt: '2026-09-01T00:00:00.000Z',
-  confirmedBy: 'm_human',
-  planHash: 'hash_abc',
-  planRevision: 1,
-};
+/**
+ * 用「真实执行单」算出确认快照：stale-approval 收紧后 planHash 必须 ==
+ * computePlanHash(execution) 才能过门槛，故测试按真实实体计算，不再手抄 hash。
+ */
+function confirmationFor(
+  exec: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    confirmedAt: '2026-09-01T00:00:00.000Z',
+    confirmedBy: 'm_human',
+    planHash: computePlanHash(exec as never),
+    planRevision: 1,
+    ...overrides,
+  };
+}
 
 describe('服务端执行域端点：读写闭环', () => {
   let app: FastifyInstance;
@@ -182,12 +192,12 @@ describe('服务端执行域端点：读写闭环', () => {
     const toQueued = await app.inject({
       method: 'POST',
       url: `/api/executions/${exec.id}/status`,
-      payload: { status: 'queued', confirmation: CONFIRMATION },
+      payload: { status: 'queued', confirmation: confirmationFor(exec) },
     });
     expect(toQueued.statusCode).toBe(200);
     const queued = toQueued.json<Record<string, unknown>>();
     expect(queued.status).toBe('queued');
-    expect(queued.confirmation).toEqual(CONFIRMATION);
+    expect(queued.confirmation).toEqual(confirmationFor(exec));
   });
 
   it('PATCH 与 POST /status 两个入口语义完全一致', async () => {
@@ -607,8 +617,8 @@ describe('服务端存储边界：P0「未人工确认绝不执行」', () => {
       payload: { status: 'awaiting_confirmation' },
     });
     for (const bad of [
-      { confirmedAt: CONFIRMATION.confirmedAt, confirmedBy: 'm', planRevision: 1 },
-      { confirmedBy: 'm', planHash: CONFIRMATION.planHash, planRevision: 1 },
+      { confirmedAt: '2026-09-01T00:00:00.000Z', confirmedBy: 'm', planRevision: 1 },
+      { confirmedBy: 'm', planHash: 'stale-hash', planRevision: 1 },
     ]) {
       const res = await app.inject({
         method: 'PATCH',
@@ -655,7 +665,7 @@ describe('服务端存储边界：P0「未人工确认绝不执行」', () => {
     });
     await app.inject({
       method: 'PATCH', url: `/api/executions/${id}`,
-      payload: { status: 'queued', confirmation: CONFIRMATION },
+      payload: { status: 'queued', confirmation: confirmationFor(exec) },
     });
     await app.inject({
       method: 'PATCH', url: `/api/executions/${id}`, payload: { status: 'running' },
@@ -822,12 +832,7 @@ describe('服务端执行域：JSON 列往返保真（静默数据销毁防线�
       method: 'PATCH', url: `/api/executions/${id}`,
       payload: { status: 'awaiting_confirmation' },
     });
-    const confirmation = {
-      confirmedAt: '2026-09-01T00:00:00.000Z',
-      confirmedBy: 'm_human',
-      planHash: 'hash_deep',
-      planRevision: 3,
-    };
+    const confirmation = confirmationFor(exec, { planRevision: 3 });
     const res = await app.inject({
       method: 'PATCH', url: `/api/executions/${id}`,
       payload: { status: 'queued', confirmation },
@@ -851,13 +856,13 @@ describe('服务端执行域：JSON 列往返保真（静默数据销毁防线�
     });
     await app.inject({
       method: 'PATCH', url: `/api/executions/${id}`,
-      payload: { status: 'queued', confirmation: CONFIRMATION },
+      payload: { status: 'queued', confirmation: confirmationFor(exec) },
     });
     // 缺省 → 保留
     const kept = await app.inject({
       method: 'PATCH', url: `/api/executions/${id}`, payload: { status: 'running' },
     });
-    expect(kept.json<{ confirmation: unknown }>().confirmation).toEqual(CONFIRMATION);
+    expect(kept.json<{ confirmation: unknown }>().confirmation).toEqual(confirmationFor(exec));
     // 显式 null → 清空
     const cleared = await app.inject({
       method: 'PATCH', url: `/api/executions/${id}`,
@@ -876,13 +881,13 @@ describe('服务端执行域：JSON 列往返保真（静默数据销毁防线�
     });
     await app.inject({
       method: 'PATCH', url: `/api/executions/${id}`,
-      payload: { status: 'queued', confirmation: CONFIRMATION },
+      payload: { status: 'queued', confirmation: confirmationFor(exec) },
     });
     const raw = db.prepare('SELECT confirmation FROM executions WHERE id = ?').get(id) as {
       confirmation: string;
     };
     expect(raw.confirmation.startsWith('{')).toBe(true);
-    expect(JSON.parse(raw.confirmation)).toEqual(CONFIRMATION);
+    expect(JSON.parse(raw.confirmation)).toEqual(confirmationFor(exec));
   });
 });
 

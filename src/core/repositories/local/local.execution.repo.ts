@@ -104,7 +104,12 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
     try {
       // 读-校验-写三步放进单 rw 事务：状态机校验与落库原子化，防止并发穿透
       // （两个请求同时读到同一 current 并各自 put 会绕过相邻校验）。
-      return await this.db.transaction('rw', this.db.executions, this.db.writebackProposals, async () => {
+      return await this.db.transaction(
+        'rw',
+        this.db.executions,
+        this.db.writebackProposals,
+        this.db.executionEvents,
+        async () => {
         const existing = await this.db.executions.get(id);
         if (!existing) {
           throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该执行单。');
@@ -115,14 +120,17 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
           .equals(id)
           .toArray();
         assertStatusTransition(existing, cmd.status, proposals);
-        // 人工确认门槛：推进到 queued / running 前必须已确认。
-        // 注意用「合并后」的确认快照：确认与入队常是同一步（cmd.confirmation 提供），
+        // 人工确认门槛（stale approval 收紧）：
+        // 用「合并后」的确认快照校验——确认与入队常是同一步（cmd.confirmation 提供），
         // 旧行此时尚未带 confirmation，故以 cmd.confirmation ?? existing.confirmation 为准。
+        // 合并后的快照要写回 execution 实体，故这里构造一份带 effectiveConfirmation 的副本给校验函数
+        // （校验函数据此读 confirmation 并计算计划指纹，不影响 existing 其余字段）。
         const effectiveConfirmation =
           cmd.confirmation !== undefined ? cmd.confirmation : existing.confirmation;
         assertExecutionConfirmed(
-          { id: existing.id, status: existing.status, confirmation: effectiveConfirmation },
+          { ...existing, confirmation: effectiveConfirmation },
           cmd.status,
+          { confirmationWrittenByCaller: cmd.confirmation !== undefined && cmd.confirmation !== null },
         );
 
         const next: Execution = {
@@ -133,6 +141,28 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
           updatedAt: new Date().toISOString(),
         };
         await this.db.executions.put(next);
+
+        // 审计：本次**成功写入了一个新确认对象** → 同事务内 append 一条 confirmation_granted。
+        // 拒绝的写入在上方 assert 已抛错、不会走到这里；`null`（清空）不算「授予」，不落审计。
+        if (cmd.confirmation !== undefined && cmd.confirmation !== null) {
+          const events = await this.db.executionEvents
+            .where('executionId')
+            .equals(id)
+            .toArray();
+          await this.db.executionEvents.add({
+            id: crypto.randomUUID(),
+            executionId: id,
+            attemptId: null,
+            seq: nextSeq(events),
+            type: 'confirmation_granted',
+            actor: 'user',
+            fromStatus: null,
+            toStatus: null,
+            reason: `确认已授予：planHash=${cmd.confirmation.planHash}；confirmedBy=${cmd.confirmation.confirmedBy}`,
+            idempotencyKey: null,
+            createdAt: new Date().toISOString(),
+          });
+        }
         return next;
       });
     } catch (err) {

@@ -26,8 +26,10 @@ import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import {
   AttemptStatus,
   ExecutionStatus,
+  type Execution,
   type ExecutionConfirmation,
 } from '../src/core/types/agent-execution';
+import { computePlanHash } from '../src/core/execution/plan-hash';
 import { emptyPackage } from './helpers/backup-fixture';
 import {
   DEFAULT_RECOVERY_REASON,
@@ -39,13 +41,6 @@ import {
 } from '../src/core/execution/execution-recovery';
 
 let bundle: IRepositoryBundle;
-
-const CONFIRMATION: ExecutionConfirmation = {
-  confirmedAt: '2026-08-01T00:00:00.000Z',
-  confirmedBy: 'u1',
-  planHash: 'plan-hash-1',
-  planRevision: 1,
-};
 
 beforeAll(async () => {
   await installFakeIndexedDB();
@@ -68,13 +63,30 @@ async function newExecution(suffix: string): Promise<string> {
   return created.id;
 }
 
+/** 用「真实执行单」算出的确认快照（planHash 必须 == computePlanHash(exec) 才能过门槛） */
+function confirmationFor(exec: Execution): ExecutionConfirmation {
+  return {
+    confirmedAt: '2026-08-01T00:00:00.000Z',
+    confirmedBy: 'u1',
+    planHash: computePlanHash(exec),
+    planRevision: 1,
+  };
+}
+
 async function setStatus(id: string, status: ExecutionStatus) {
-  // queued / running 需要人工确认快照（assertExecutionConfirmed 是存储边界硬门槛）
-  const needConfirm = status === ExecutionStatus.Queued || status === ExecutionStatus.Running;
-  return bundle.executions.updateExecutionStatus(
-    id,
-    needConfirm ? { status, confirmation: CONFIRMATION } : { status },
-  );
+  // 人工确认快照只在「授予点（awaiting_confirmation → queued）」写入一次；
+  // 之后 queued → running 复用已落库的凭据（assertExecutionConfirmed 的授予点限制：
+  // 当前态非 awaiting_confirmation 时不允许再写确认对象）。
+  // stale-approval 绑定门槛要求 planHash == computePlanHash(真实执行单)，故用真实执行单重算。
+  if (status !== ExecutionStatus.Queued) {
+    return bundle.executions.updateExecutionStatus(id, { status });
+  }
+  const exec = await bundle.executions.getExecution(id);
+  if (!exec) throw new Error(`fixture: execution ${id} 不存在`);
+  return bundle.executions.updateExecutionStatus(id, {
+    status,
+    confirmation: confirmationFor(exec),
+  });
 }
 
 /** 合法推进到 running（draft → awaiting_confirmation → queued → running） */

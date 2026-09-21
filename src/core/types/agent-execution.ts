@@ -188,11 +188,24 @@ export const WRITEBACK_PROPOSAL_STATUSES: readonly WritebackProposalStatus[] = [
 
 /* ----------------------------------- 实体 ----------------------------------- */
 
-/** 人工确认快照（计划不可变，修改计划必须生成新版本） */
+/**
+ * 人工确认快照（计划不可变，修改计划必须生成新版本）。
+ *
+ * 绑定关系（stale approval 收紧切片后的唯一真相）：
+ *   确认是否仍然有效，由 `planHash === computePlanHash(execution)` 决定——
+ *   计划一旦变更，旧确认的 hash 必然对不上，门槛直接拒绝。这正是「批准的是这一版计划」。
+ *
+ * @deprecated `planRevision` 在此切片后**明确废弃，且不再作为任何门槛**。
+ *   理由：内容绑定（`planHash`）已经覆盖了它宣称的能力——计划一旦变更 hash 就变，
+ *   重放旧凭据必然被拒；因此再维护一个单调版本号是冗余基础设施。
+ *   「留着字段但没人读」比删掉更危险：它会误导后来人以为计划版本化已实现。
+ *   保留该字段只为兼容既有（备份导入）形状，新代码**不得**把它当门槛或读它做判定。
+ */
 export interface ExecutionConfirmation {
   confirmedAt: string;
   confirmedBy: string;
   planHash: string;
+  /** @deprecated 不再作为门槛；内容绑定（planHash）已覆盖其能力。 */
   planRevision: number;
 }
 

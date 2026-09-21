@@ -17,6 +17,7 @@ import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService, validateBackupJson } from '../src/core/services/backup.service';
 import type { BackupPackage } from '../src/core/types/dto';
 import { ExecutionStatus, WritebackProposalStatus } from '../src/core/types/agent-execution';
+import { computePlanHash } from '../src/core/execution/plan-hash';
 import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
@@ -80,12 +81,15 @@ describe('带数据的四表往返保真', () => {
     await bundle.executions.updateExecutionStatus(exec.id, {
       status: ExecutionStatus.AwaitingConfirmation,
     });
+    // ★ stale-approval 绑定门槛：planHash 必须 == computePlanHash(真实执行单)。
+    const liveExec = await bundle.executions.getExecution(exec.id);
+    if (!liveExec) throw new Error(`fixture: execution ${exec.id} 不存在`);
     await bundle.executions.updateExecutionStatus(exec.id, {
       status: ExecutionStatus.Queued,
       confirmation: {
         confirmedAt: '2026-08-01T00:00:00.000Z',
         confirmedBy: 'u1',
-        planHash: 'plan-hash-1',
+        planHash: computePlanHash(liveExec),
         planRevision: 1,
       },
     });
@@ -95,10 +99,15 @@ describe('带数据的四表往返保真', () => {
       attemptNo: 1,
       status: 'succeeded',
     });
+    // ★ seq 必须严格连续（appendEvent 会拒绝乱序），且**不能手抄字面量**：
+    //   上面「awaiting_confirmation → queued」带确认，已同事务落一条
+    //   `confirmation_granted` 审计事件（seq=1）。故这里按真实条数推导基准，
+    //   将来上游再加审计事件也不会撞车。
+    const seqBase = (await bundle.executions.listEvents(exec.id)).length;
     await bundle.executions.appendEvent({
       executionId: exec.id,
       attemptId: attempt.id,
-      seq: 1,
+      seq: seqBase + 1,
       type: 'created',
       actor: 'user',
       fromStatus: null,
@@ -109,7 +118,7 @@ describe('带数据的四表往返保真', () => {
     await bundle.executions.appendEvent({
       executionId: exec.id,
       attemptId: attempt.id,
-      seq: 2,
+      seq: seqBase + 2,
       type: 'attempt_finished',
       actor: 'agent',
       fromStatus: null,
@@ -161,12 +170,13 @@ describe('带数据的四表往返保真', () => {
           }
         : e,
     );
-    // 兜底会追写一条 status_changed 审计事件（append-only，导入后 seq=3）——
+    // 兜底会追写一条 status_changed 审计事件（append-only）——
     // 这正是「状态被改过，就一定有流水」的证据，故 exported2 比 exported1 多这一条。
-    const recoveredEvent = exported2.data.executionEvents.find(
-      (ev) => ev.id !== exported1.data.executionEvents[0]!.id &&
-        ev.id !== exported1.data.executionEvents[1]!.id,
-    );
+    // ★ 用「id 不在导出集内」判定新增事件，**不要按位置排除**：导出的事件条数会随
+    //   上游新增审计事件而变化（例如本次的 confirmation_granted），按位置排除会静默
+    //   匹配到错误的事件，让断言看起来仍然通过。
+    const beforeIds = new Set(exported1.data.executionEvents.map((ev) => ev.id));
+    const recoveredEvent = exported2.data.executionEvents.find((ev) => !beforeIds.has(ev.id));
     expect(recoveredEvent).toBeDefined();
     expect(recoveredEvent!.type).toBe('status_changed');
     expect(recoveredEvent!.actor).toBe('system');
@@ -182,10 +192,11 @@ describe('带数据的四表往返保真', () => {
     const reAttempts = await bundle.executions.listAttempts(exec.id);
     expect(reAttempts).toHaveLength(1);
     const reEvents = await bundle.executions.listEvents(exec.id);
-    // 2 条原始事件（created / attempt_finished）+ 1 条兜底追写的 status_changed = 3。
-    // append-only 语义要求「状态改了流水必在」，故这里断言 3 而不是 2。
-    expect(reEvents).toHaveLength(3);
-    expect(reEvents.map((e) => e.seq)).toEqual([1, 2, 3]);
+    // 3 条原始事件（授予确认的 confirmation_granted / created / attempt_finished）
+    // + 1 条兜底追写的 status_changed = 4。
+    // append-only 语义要求「状态改了流水必在」，故这里断言 4 而不是 3。
+    expect(reEvents).toHaveLength(4);
+    expect(reEvents.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
     const reProposals = await bundle.executions.listProposals(exec.id);
     expect(reProposals[0]!.status).toBe(WritebackProposalStatus.Applied);
   });

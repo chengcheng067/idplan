@@ -283,3 +283,50 @@ describe('写回白名单', () => {
     expect(isFieldWritable('task.attachment.ref')).toBe(true);
   });
 });
+
+/**
+ * 可达性事实（stale approval 收紧切片的**决策依据**，不是装饰）。
+ *
+ * 「确认凭据只能在授予点（awaiting_confirmation）写入」这条收紧带来一个必须写下来的
+ * 边界：一旦离开授予点，就**没有任何合法路径回去**。这直接决定了两件事：
+ *   ① 僵尸兜底（execution-recovery）在把 running 收敛为 needs_attention 时
+ *      **绝不能清空 confirmation** —— 清了就再没法重新确认，这条执行永远跑不起来；
+ *   ② 未来若引入「可编辑计划 / 计划版本化」，必须同时开一条回到 awaiting_confirmation
+ *      的合法边，否则「计划一变 → 凭据失效 → 卡死」是必然结果。
+ */
+describe('可达性事实（授予点限制的边界）', () => {
+  function reachableFrom(start: ExecutionStatus): Set<ExecutionStatus> {
+    const seen = new Set<ExecutionStatus>([start]);
+    const queue: ExecutionStatus[] = [start];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (const next of EXECUTION_TRANSITIONS[cur]) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    return seen;
+  }
+
+  it('needs_attention 无法到达 awaiting_confirmation（故僵尸兜底绝不能清空确认凭据）', () => {
+    // 变红 = 有人给状态机加了新边 → 请重新审视 execution-recovery.ts 里
+    // 「保留凭据、只改文案」的决定（DEFAULT_RECOVERY_REASON 与 recoverExecution）。
+    expect(
+      reachableFrom(ExecutionStatus.NeedsAttention).has(ExecutionStatus.AwaitingConfirmation),
+    ).toBe(false);
+  });
+
+  it('离开 awaiting_confirmation 后各态均无法回到授予点（计划若变更则只能取消/失败）', () => {
+    for (const s of [
+      ExecutionStatus.Queued,
+      ExecutionStatus.Running,
+      ExecutionStatus.Paused,
+      ExecutionStatus.NeedsAttention,
+      ExecutionStatus.AwaitingReview,
+    ]) {
+      expect(reachableFrom(s).has(ExecutionStatus.AwaitingConfirmation), s).toBe(false);
+    }
+  });
+});

@@ -35,6 +35,8 @@ import { registerMemberRoutes } from '../server/routes/members.routes';
 import { registerMetaRoutes } from '../server/routes/meta.routes';
 import { registerExecutionRoutes } from '../server/routes/executions.routes';
 import { validateBackupJson } from '../src/core/services/backup.service';
+import { computePlanHash } from '../src/core/execution/plan-hash';
+import type { Execution } from '../src/core/types/entities';
 
 const AUTH = { authorization: 'Bearer test-token' };
 const PROJECT_ID = 'proj_bk';
@@ -96,6 +98,10 @@ async function seedExecutionDomain(app: FastifyInstance): Promise<{
   });
   const executionId = created.json<{ id: string }>().id;
 
+  // ★ stale-approval 绑定门槛：取回真实执行单，用 computePlanHash 算绑定 hash。
+  const live = (await app.inject({ method: 'GET', url: `/api/executions/${executionId}` })).json<Execution>();
+  const planHash = computePlanHash(live);
+
   await app.inject({
     method: 'PATCH',
     url: `/api/executions/${executionId}`,
@@ -109,7 +115,7 @@ async function seedExecutionDomain(app: FastifyInstance): Promise<{
       confirmation: {
         confirmedAt: '2026-09-01T00:00:00.000Z',
         confirmedBy: 'm_human',
-        planHash: 'hash_seed',
+        planHash,
         planRevision: 2,
       },
     },
@@ -290,7 +296,14 @@ describe('③ JSON 列序列化（静默数据销毁防线）', () => {
   });
 
   it('confirmation 导出为**对象**（不是 []，不是字符串）', async () => {
-    await seedExecutionDomain(app);
+    const { executionId } = await seedExecutionDomain(app);
+    const live = (await app.inject({ method: 'GET', url: `/api/executions/${executionId}` })).json<Execution>();
+    const expected = {
+      confirmedAt: '2026-09-01T00:00:00.000Z',
+      confirmedBy: 'm_human',
+      planHash: computePlanHash(live),
+      planRevision: 2,
+    };
     const res = await app.inject({ method: 'GET', url: '/api/backup', headers: AUTH });
     const row = res.json<{ data: { executions: Array<{ confirmation: unknown }> } }>().data
       .executions[0];
@@ -298,16 +311,18 @@ describe('③ JSON 列序列化（静默数据销毁防线）', () => {
     //   对象会被 `Array.isArray` 判否而回落 `[]` —— 「人工确认凭据」被静默清空。
     expect(Array.isArray(row.confirmation), 'confirmation 不得是数组').toBe(false);
     expect(typeof row.confirmation).toBe('object');
-    expect(row.confirmation).toEqual({
-      confirmedAt: '2026-09-01T00:00:00.000Z',
-      confirmedBy: 'm_human',
-      planHash: 'hash_seed',
-      planRevision: 2,
-    });
+    expect(row.confirmation).toEqual(expected);
   });
 
   it('往返后 confirmation 仍是对象（导入侧的 snake() 也序列化了对象）', async () => {
-    await seedExecutionDomain(app);
+    const { executionId } = await seedExecutionDomain(app);
+    const live = (await app.inject({ method: 'GET', url: `/api/executions/${executionId}` })).json<Execution>();
+    const expected = {
+      confirmedAt: '2026-09-01T00:00:00.000Z',
+      confirmedBy: 'm_human',
+      planHash: computePlanHash(live),
+      planRevision: 2,
+    };
     const pkg = (
       await app.inject({ method: 'GET', url: '/api/backup', headers: AUTH })
     ).json<Record<string, unknown>>();
@@ -322,18 +337,13 @@ describe('③ JSON 列序列化（静默数据销毁防线）', () => {
     };
     // 库里存的是 JSON 文本，不是 "[object Object]"
     expect(raw.confirmation.startsWith('{')).toBe(true);
-    expect(JSON.parse(raw.confirmation)).toMatchObject({ planHash: 'hash_seed' });
+    expect(JSON.parse(raw.confirmation)).toMatchObject({ planHash: expected.planHash });
 
     const again = await app.inject({ method: 'GET', url: '/api/backup', headers: AUTH });
     const row = again.json<{ data: { executions: Array<{ confirmation: unknown }> } }>().data
       .executions[0];
     // 逐字相等（不是「大致像」）：往返不得丢字段、不得多字段
-    expect(row.confirmation).toEqual({
-      confirmedAt: '2026-09-01T00:00:00.000Z',
-      confirmedBy: 'm_human',
-      planHash: 'hash_seed',
-      planRevision: 2,
-    });
+    expect(row.confirmation).toEqual(expected);
   });
 
   it('往返后 operations 仍是数组且内容不变', async () => {

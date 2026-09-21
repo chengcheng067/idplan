@@ -24,6 +24,7 @@ import {
   type WritebackProposal,
   WritebackProposalStatus,
 } from '../types/agent-execution';
+import { computePlanHash } from './plan-hash';
 
 /**
  * 执行状态邻接表（显式，覆盖全部合法边）。
@@ -231,21 +232,76 @@ export function assertStatusTransition(
  *
  * 产品铁律：**未人工确认绝不执行**。这条不能只写在 UI 里——
  * 任何试图把执行单推进到「即将真实执行」的状态（queued / running）的写入，
- * 都必须要求 `confirmation.confirmedAt` 与 `confirmation.planHash` 同时非空。
- * 其余状态（草稿、待确认、终态等）不受此门槛约束。
+ * 都必须通过本函数的全部校验。
+ *
+ * 本函数承载「stale approval 收紧」切片的两条核心纪律：
+ *
+ * ① **授予点限制（缺口 C 的根）**：
+ *    确认凭据**只能在其合法授予点写入**（默认 `awaiting_confirmation`）。
+ *    若调用方显式**写入了一个 confirmation 对象**（非 undefined 且非 null——`undefined`
+ *    表示「不动既有凭据」、`null` 表示「撤销确认」），而当前状态**不是**授予点，
+ *    则直接抛 `Validation`，**绝不静默忽略**。
+ *    这堵住了「`paused → running` 自带一份新确认快照通过校验」这类重放：它只能用
+ *    已存的那份凭据，且那份还要过下面的绑定比对。
+ *    （授予点集合以 `EXECUTION_TRANSITIONS` 为准：当前唯一能合法「写入并推进」确认的
+ *     是 `awaiting_confirmation → queued`；其余状态若带确认对象一律视为非法。
+ *     `null` 清空在授予点之外是合法的撤销动作，不在此拦截范围。）
+ *
+ * ② **绑定比对（本切片的主刀）**：
+ *    进入 queued / running 时，有效确认必须**同时满足**：
+ *      · `confirmedAt` 非空；
+ *      · `confirmedBy` 非空（此前零读取方，本次补齐——只校验「非空」，不校验它是否真是一个人）；
+ *      · `planHash` 非空；
+ *      · `planHash === computePlanHash(当前 execution)`——确认绑定的是**这一版计划**，
+ *        计划变了旧凭据必然被拒（这正是规格 §224 的验收项）。
+ *    任一不满足 → 抛 `Validation`，文案须能指出「确认绑定的是另一版计划」。
  */
+export interface AssertConfirmationOptions {
+  /**
+   * 调用方本次是否**显式写入了一个 confirmation 对象**（非 undefined 且非 null）。
+   * 三态语义：`undefined` = 不动既有凭据；`null` = 显式清空（撤销确认）；
+   * 对象 = 显式写入一份新凭据。① 只拦截「**写入对象**却不在授予点」这一种非法形态
+   * （用提交者提供的凭据证明提交者的正当性——缺口 C 的根）；`null` 清空在授予点之外
+   * 是合法的撤销动作，不在此拦截范围。
+   */
+  confirmationWrittenByCaller: boolean;
+  /** 合法授予点（默认 awaiting_confirmation）；应以 EXECUTION_TRANSITIONS 的代码事实为准 */
+  grantPointStatus?: ExecutionStatus;
+}
+
 export function assertExecutionConfirmed(
-  execution: Pick<Execution, 'id' | 'status' | 'confirmation'>,
+  execution: Execution,
   next: ExecutionStatus,
+  opts: AssertConfirmationOptions,
 ): void {
+  const current = execution.status;
+  const grantPoint = opts.grantPointStatus ?? ExecutionStatus.AwaitingConfirmation;
+
+  // ① 授予点限制：显式**写入**（对象）确认，却不在授予点 → 拒绝（堵缺口 C）。
+  if (opts.confirmationWrittenByCaller && current !== grantPoint) {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.Validation,
+      `确认凭据只能在授予点（${grantPoint}）写入；当前状态为 ${current}，不允许写入确认（execution=${execution.id}）。`,
+    );
+  }
+
+  // ② 绑定比对：仅对「即将真实执行」的态做门槛。
   if (next !== ExecutionStatus.Queued && next !== ExecutionStatus.Running) {
     return;
   }
   const confirmation = execution.confirmation;
-  if (!confirmation || !confirmation.confirmedAt || !confirmation.planHash) {
+  if (!confirmation || !confirmation.confirmedAt || !confirmation.confirmedBy || !confirmation.planHash) {
     throw new ChangxiaError(
       ChangxiaErrorCode.Validation,
-      `未确认的执行单不得进入 ${next} 态：要求 confirmation.confirmedAt 与 confirmation.planHash 均非空（execution=${execution.id}）`,
+      `未确认的执行单不得进入 ${next} 态：要求 confirmation.confirmedAt / confirmedBy / planHash 均非空（execution=${execution.id}）`,
+    );
+  }
+  // 内容绑定：确认必须对应「这一版计划」。
+  const actualHash = computePlanHash(execution);
+  if (confirmation.planHash !== actualHash) {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.Validation,
+      `进入 ${next} 态被拒：确认绑定的计划（planHash=${confirmation.planHash}）与当前执行单的计划（planHash=${actualHash}）不一致，确认已失效，需重新确认（execution=${execution.id}）。`,
     );
   }
 }
