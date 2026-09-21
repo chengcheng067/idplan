@@ -33,21 +33,40 @@ VERSION="$(grep -E '^[[:space:]]*version:[[:space:]]' project.yaml \
 check_upk_versions "${UPK_ROOT}/project.yaml" \
                    "${UPK_ROOT}/rootfs_common/docker-compose.yaml"
 RELEASE_TAG="upk-images-${VERSION}"
-REPO="chengcheng067/id-aura-app"
+# GitHub 仓库（owner/name），必须与 `git remote -v` 指向的仓库完全一致。
+# 历史上这里曾错写成另一个仓库名（旧仓库迁移/改名时遗漏未改），
+# 会导致下载 URL 指向不存在的仓库，即便版本号对齐也只会 404。务必保持为 chengcheng067/idplan。
+REPO="chengcheng067/idplan"
 API="https://api.github.com/repos/${REPO}"
 GH_TOKEN="${GH_TOKEN:-}"
-# ugcli.exe 所在目录：本脚本位于 <repo>/changxia/ugnas/scripts/，
-# 其上级两级是 <repo>/changxia/，再上级是 <repo>。优先 <repo>/tools/ugcli.exe，
-# 其次上级 Workspace 根 <repo>/../tools/ugcli.exe。
-# SCRIPT_DIR 已在顶部用脚本自身绝对位置计算（与当前 cwd 无关），这里直接复用。
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"        # <repo>/
-CHANGXIA_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"        # <repo>/changxia/
-if [ -x "${REPO_ROOT}/tools/ugcli.exe" ]; then
-  UGCLI="${REPO_ROOT}/tools/ugcli.exe"
-elif [ -x "${CHANGXIA_ROOT}/tools/ugcli.exe" ]; then
-  UGCLI="${CHANGXIA_ROOT}/tools/ugcli.exe"
-else
-  UGCLI="${REPO_ROOT}/../tools/ugcli.exe"
+# ugcli 位置解析（显式，不再靠目录深度「侥幸命中」）：
+#   本脚本位于 <repo>/changxia/ugnas/scripts/
+#   仓库根 REPO_ROOT = <...>/changxia/；其上一级（含 changxia/ 与 tools/ 的同级目录）
+#   是 workspace 根 WS_ROOT。实测 ugcli.exe 就在 WS_ROOT/tools/ugcli.exe
+#   （不在仓库内、也不进 git）。
+#   依次查找下列候选，命中即止；全部未命中则列出所有搜过的路径后失败。
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"   # <repo>/changxia/
+WS_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"   # 仓库外的同级 workspace（含 changxia/ 与 tools/）
+
+UGCLI_CANDIDATES=(
+  "${WS_ROOT}/tools/ugcli.exe"       # 首选：workspace 同级 tools/（实测位置）
+  "${REPO_ROOT}/tools/ugcli.exe"     # 次选：仓库根 tools/（若日后放进仓库）
+  "${WS_ROOT}/../tools/ugcli.exe"    # 兜底：workspace 再上一级 tools/
+)
+UGCLI=""
+for cand in "${UGCLI_CANDIDATES[@]}"; do
+  if [ -x "$cand" ]; then UGCLI="$cand"; break; fi
+done
+if [ -z "$UGCLI" ]; then
+  echo "✗ 找不到 ugcli.exe，已按以下顺序搜索：" >&2
+  i=1
+  for cand in "${UGCLI_CANDIDATES[@]}"; do
+    echo "    ${i}. $cand" >&2
+    i=$((i+1))
+  done
+  echo "  请确认 ugcli 已放置在以上任一处（实测在 workspace 同级 tools/），" >&2
+  echo "  或从绿联开发者工具获取：https://developer.ugnas.com/doc/tools/ugcli.html" >&2
+  exit 1
 fi
 
 # 通过 Release API 动态解析资产 ID，再走 API 通道下载（实测比
