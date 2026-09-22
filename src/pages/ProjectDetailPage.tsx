@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Link, useParams } from 'react-router-dom';
 
-import { ArrowLeft, Archive, Bot, CalendarRange } from 'lucide-react';
+import { ArrowLeft, Archive, ArrowRightLeft, Bot, CalendarRange } from 'lucide-react';
 
 import { useAgentStore } from '../store/useAgentStore';
 import { createProjectActions } from '../store/useProjectsStore';
@@ -16,11 +16,19 @@ import {
   useProjectById,
   useProjectStages,
   useProjectTasks,
+  useHumanProjects,
+  useHumanStages,
+  useHumanTasks,
 } from '../core/project/visibility';
 import { domainLabel } from '../components/contract-wizard/DomainCascade';
 import { TravelItineraryPanel } from '../components/travel/TravelItineraryPanel';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
+import {
+  TransferDialog,
+  type TransferCommand,
+  type TransferOutcome,
+} from '../components/agent/TransferDialog';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
 import { TimelineView, pickActiveStage } from '../components/timeline/TimelineView';
 import { MobileStageList } from '../components/timeline/MobileStageList';
@@ -90,6 +98,22 @@ export function ProjectDetailPage(): JSX.Element {
   const { role, currentMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
   const isNarrow = useIsNarrowViewport();
+
+  /*
+   * ★ v0.8 T04-B · 接管弹窗的数据源（PRD B11 / B12 / D5）。
+   *
+   * 三份数据全部走**隔离漏斗的合法出口**，不直读 store.projects：
+   *   · `useHumanProjects()` —— 目标候选（只能是人类项目；把任务搬进另一块
+   *     Agent 看板是无意义搬运，那种错误由漏斗在调用点挡住）；
+   *   · `useHumanStages()` / `useHumanTasks()` —— 候选项目的阶段与任务。
+   *     bootstrap 时已全量入 store，这里按 kind 收窄取人类侧；
+   *     TransferDialog 内部再按选中目标过滤（阶段属于项目，预览的
+   *     "将更新 Y"要比对目标项目内的 externalId）。
+   */
+  const humanProjects = useHumanProjects();
+  const humanStages = useHumanStages();
+  const humanTasks = useHumanTasks();
+  const [transferOpen, setTransferOpen] = useState(false);
 
   // 相关阶段：管理员 → null（全量）；成员 → 自己相关阶段；未进入 → 空集（受限空态）
   const relatedStageIds = useMemo(
@@ -265,6 +289,34 @@ export function ProjectDetailPage(): JSX.Element {
                   <Bot size={14} /> Agent Board
                 </button>
               )}
+              {/*
+                ★ v0.8 T04-B · 「接管」入口（PRD B11 / B12 / D5 / §7.3 #27）。
+                TransferDialog 的**宿主接线**（此前组件建好但没有任何页面引用它，
+                tests/agent-board-create.spec.tsx 的未覆盖备注即指此）。
+
+                三道门叠在这颗按钮上（缺一不可）：
+                  · `!memberView` —— 外层片段已拦（D5：接管仅 admin；未进入身份同样不可见）；
+                  · `projectKindOf(project) === 'agent'` —— 只有 Agent 看板需要接管
+                    （人类项目本来就是人类侧的，没有"接管"语义）；
+                  · TransferDialog 内部还有一层 `useRoleGuard()` 双门（UI 隐藏不是
+                    安全边界，服务端 assert 才是——见该组件文件头）。
+
+                为什么放在详情页而不是 AgentBoardPage：#27 明示详情页是 Agent 看板
+                "唯一允许穿越的通道"，用户深链/收藏夹直达的第一落点就是这里；
+                且接管要选**人类项目**做目标，详情页的人类 chrome（面包屑等）
+                正好提供"我现在在哪"的方位感。
+              */}
+              {projectKindOf(project) === 'agent' && (
+                <button
+                  type="button"
+                  data-transfer-open=""
+                  onClick={() => setTransferOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
+                  title="转为正式项目，或把任务搬进人类项目"
+                >
+                  <ArrowRightLeft size={14} /> 接管
+                </button>
+              )}
               {/* 归档是**写操作**，仍限管理员（v0.7-D 只放开打印，未放开任何写） */}
               <button
                 type="button"
@@ -381,6 +433,36 @@ export function ProjectDetailPage(): JSX.Element {
       )}
 
       <StageDrawer projectId={project.id} members={members} />
+
+      {/*
+        「接管」弹窗（PRD B11 / B12）。与入口按钮同三道门：本行 `!memberView` 决定
+        进不进渲染树（TransferDialog 内部还会再判一次 admin）；`projectKindOf` 保证
+        只有 Agent 看板能打开它。数据全部来自隔离漏斗出口（见上方 humanProjects 注释）。
+      */}
+      {transferOpen && !memberView && projectKindOf(project) === 'agent' && (
+        <TransferDialog
+          open
+          onClose={() => setTransferOpen(false)}
+          sourceBoard={{ id: project.id, name: project.name }}
+          tasks={tasks}
+          candidates={humanProjects}
+          targetStages={humanStages}
+          targetTasks={humanTasks}
+          onConfirm={async (cmd: TransferCommand): Promise<TransferOutcome> => {
+            if (cmd.mode === 'convert') {
+              await actions.takeoverConvert(cmd.sourceBoardId);
+              return { movedTaskCount: 0 };
+            }
+            const outcome = await actions.takeoverMove({
+              boardId: cmd.sourceBoardId,
+              targetProjectId: cmd.targetProjectId ?? '',
+              stageId: cmd.stageId ?? '',
+              taskIds: cmd.taskIds,
+            });
+            return { movedTaskCount: outcome.created + outcome.updated };
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, FolderKanban, PenLine, Save, Settings, Upload } from 'lucide-react';
+import { Bot, ChevronDown, FolderKanban, PenLine, Save, Settings, Upload } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { SettingsDialog } from './SettingsDialog';
@@ -8,7 +8,8 @@ import { useBackupIo } from './useBackupIo';
 import { SidebarCollapseToggle } from './SidebarCollapseToggle';
 import { navItemClass, SidebarNav } from './SidebarNav';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
-import { useHumanProjects, useHumanStages } from '../../core/project/visibility';
+import { useAgentProjects, useHumanProjects, useHumanStages } from '../../core/project/visibility';
+import { useAgentStore } from '../../store/useAgentStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore, isXlViewport } from '../../store/useLayoutStore';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
@@ -121,6 +122,24 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   */
   const projects = useHumanProjects();
   const stages = useHumanStages();
+  /*
+   * ★ v0.8 T04-B · PRD B14 后半：「在 Agent 侧时侧栏显示独立的『Agent 看板』列表」。
+   *
+   * 为什么按**路由条件**渲染而不是常驻：B14 的原话是"在 Agent 侧时"——
+   * 人类路由上侧栏只剩「项目」（人类列表）才对，常驻一个 Agent 区块会让两个
+   * 工作区在人类侧 chrome 里同屏出现（§7.2 #11 的精神：人类侧零 Agent 痕迹）。
+   *
+   * 数据走 `useAgentProjects()` 漏斗（与 AgentBoardPage 同一出口）—— 侧栏不自己
+   * 判 kind；点击行为与 ProjectDetailPage 的「Agent Board」跳转按钮同口径：
+   * setCurrentProject + Link 到 /agent（已在该路由时仅切选中，页面 effect 负责装载）。
+   *
+   * ⚠️ 收起态（64px）刻意**不**放 Agent 看板：那 3 枚人类项目方块有严格的几何
+   *    验收（L-01~L-08），且收起态点击导航的 Agent 图标 → 展开态即见列表。
+   *    收起态切换看板的需求若被提出，应单开一轮（含几何验收更新），不夹带在此。
+   */
+  const agentBoards = useAgentProjects();
+  const agentCurrentId = useAgentStore((s) => s.currentProjectId);
+  const onAgentRoute = pathname === '/agent' || pathname.startsWith('/agent/');
 
   const { save, pick, fileInput, confirmDialog } = useBackupIo();
   const { status } = useUpdateCheck();
@@ -229,6 +248,57 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           {/* 主导航（§2.2：纵向 gap 4；每项高 40、横向 padding 12、gap 10、圆角 12） */}
           <SidebarNav collapsed={false} drawer={inDrawer} />
 
+          {/*
+            ★ B14 · Agent 侧独立的「Agent 看板」列表（仅 /agent 路由；见上方数据源注释）。
+
+            视觉刻意与下面的人类项目列表**可辨**（PRD B15 同一精神）：
+            Bot 图标 ＋ 浅靂底（pine-soft）chip；当前看板 pine 描边 + pine-soft 底
+            （人类列表的激活态是 sunken 凹陷底，两套.active 形态不混用）。
+            条目是 Link 到 /agent 的按钮形态：看板不是路由，选中态在 store。
+          */}
+          {onAgentRoute && agentBoards.length > 0 && (
+            <div className="mt-3 px-3">
+              <div className="flex h-7 items-center pb-1">
+                <Bot size={12} className="mr-1.5 shrink-0 text-pine" aria-hidden />
+                <span className="text-[11px] font-medium text-mist">Agent 看板</span>
+              </div>
+              <ul data-agent-board-sidebar="" className="flex flex-col gap-0.5">
+                {agentBoards.map((b) => {
+                  const active = agentCurrentId === b.id;
+                  return (
+                    <li key={b.id}>
+                      <Link
+                        to="/agent"
+                        data-agent-board-sidebar-item={b.id}
+                        title={b.name}
+                        aria-current={active ? 'page' : undefined}
+                        onClick={() => {
+                          useAgentStore.getState().setCurrentProject(b.id);
+                          closeDrawer(); // <1280 抽屉：点完即关，与导航项同行为
+                        }}
+                        className={cn(
+                          'flex h-9 w-full items-center gap-2 rounded-md border px-2 py-1.5 outline-none transition-colors',
+                          'focus-visible:ring-2 focus-visible:ring-pine/40',
+                          active
+                            ? 'border-pine bg-pine-soft'
+                            : 'border-transparent hover:bg-sand',
+                        )}
+                      >
+                        <span
+                          aria-hidden
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-pine-soft text-pine"
+                        >
+                          <Bot size={12} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{b.name}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
           {/* 项目列表（§2.2）：容器 gap 2、padding 4；标题行高 28「我的项目」11/500 mist；
               条目高 36、padding 8、gap 8、圆角 12，含阶段色条 + 项目名 + 状态点 */}
           {projects.length > 0 && (
@@ -260,7 +330,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                 已由外层 `min-h-0 flex-1 overflow-y-auto py-1`（可滚动区）承担，高度约束在
                 flex 布局下由 `flex-1 + min-h-0` 共同给出；展开后条目多于此区高度时内部滚动。
               */}
-              <ul className="flex flex-col gap-0.5">
+              <ul data-sidebar-project-list="" className="flex flex-col gap-0.5">
                 {projects.slice(0, visibleProjectCount(projects.length, projectsExpanded)).map((p) => {
                   const active = currentProjectId === p.id;
                   const accentStage = projectAccentStage(p.id, stages);

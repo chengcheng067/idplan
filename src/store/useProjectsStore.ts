@@ -33,8 +33,10 @@ import {
   ProjectService,
   type CreateAgentBoardCmd,
 } from '../core/services/project.service';
+import { AgentTakeoverService, type MoveOutcome } from '../core/services/agent-takeover.service';
 import { StageService } from '../core/services/stage.service';
 import type { UnlockHintSignal } from '../core/services/stage.service';
+import { appEnv } from '../config/env';
 import { sameAssigneeSet, taskAssigneeIds } from '../hooks/useRoleGuard';
 
 /**
@@ -150,6 +152,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
 function makeServices(repos: import('../core/repositories/interfaces').IRepositoryBundle): {
   projects: ProjectService;
   stages: StageService;
+  takeover: AgentTakeoverService;
 } {
   return {
     projects: new ProjectService({
@@ -157,7 +160,28 @@ function makeServices(repos: import('../core/repositories/interfaces').IReposito
       bundle: repos,
     }),
     stages: new StageService({ stages: repos.stages, logs: repos.logs }),
+    takeover: new AgentTakeoverService({ bundle: repos }),
   };
+}
+
+/**
+ * 接管两个动作的**档位门**（remote 一律拒发）。
+ *
+ * 为什么必须在 store action 层拦，而不是留给服务层/UI：
+ * move 依赖「保留 taskNo 的跨项目新建」与「PATCH 支持 project_id/stage_id」——
+ * 服务端 tasks 路由的 merged 白名单**没有**这些字段（传了会被静默丢弃 ⇒ 任务留在
+ * 源项目；调用方若接着删源行就是**数据丢失**）。静默丢弃是最坏的失败模式，
+ * 所以在这里**响亮拒绝**：错误文案说清"仅本机档可用"，绝不发一个注定被曲解的请求。
+ * convert 虽然只翻 kind（服务端 PATCH 支持），但两侧能力集保持对称——要么都可用、
+ * 要么都明示不可用，不制造"能转正但不能搬运"的半吊子状态。
+ */
+function assertTakeoverAllowed(): void {
+  if (appEnv.dataSource !== 'local') {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.Validation,
+      '接管操作仅支持本机数据档：NAS 档的服务端尚未提供跨项目搬移端点。',
+    );
+  }
 }
 
 /** 页面级动作集合（React 组件经 useRepos() 拿 bundle 后调用这些函数） */
@@ -351,6 +375,74 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.pushToast('success', `「${projectName ?? '项目'}」已删除`);
       } catch (err) {
         store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '删除失败');
+      }
+    },
+
+    /**
+     * ★ v0.8 T04-B · 接管（a）：Agent 看板转为正式项目（PRD B11 / D5）。
+     *
+     * 只翻 kind：阶段、任务、taskNo 原样保留。store 镜像只需 `putProject(updated)`
+     * —— kind 一变，`useAgentProjects()` 漏斗下一帧即排除它、`useHumanProjects()`
+     * 自动纳入（「Agent 侧消失、人类侧出现」由漏斗天然完成，不需要第二个动作）。
+     *
+     * 错误向上抛（toast 后）：接管弹窗要就地展示真实原因（如"只能接管 Agent 看板"），
+     * 与 createAgentBoard 同款纪律——笼统的「操作失败」在跨工作区写入场景里不够用。
+     */
+    async takeoverConvert(boardId: string): Promise<Project> {
+      assertTakeoverAllowed();
+      try {
+        const updated = await services.takeover.convertBoardToHuman(boardId);
+        store.putProject(updated);
+        store.pushToast('success', `「${updated.name}」已转为正式项目，归「我的项目」管理`);
+        return updated;
+      } catch (err) {
+        const msg = err instanceof ChangxiaError ? err.userMessage : '接管失败，请重试。';
+        store.pushToast('error', msg);
+        throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
+      }
+    },
+
+    /**
+     * ★ v0.8 T04-B · 接管（b）：任务搬到人类项目（PRD B12 / D5）。
+     *
+     * 镜像刷新用**两侧重读替换**（与 createFromContract 同口径）而不是逐条 patch：
+     * 搬运同时涉及"源行删除 / 目标新建（新 id）/ 目标更新（旧 id覆写）/ 源侧重接线"
+     * 四种形态，逐条 patch 要同时维护四套分支；重读两个项目的任务集一把替换，
+     * 语义就是"以库为准"，不会出现"镜像与库各说各话"。
+     */
+    async takeoverMove(input: {
+      boardId: string;
+      targetProjectId: string;
+      stageId: string;
+      taskIds: readonly string[];
+    }): Promise<MoveOutcome> {
+      assertTakeoverAllowed();
+      try {
+        const outcome = await services.takeover.moveTasksToHumanProject(input);
+        const [srcTasks, tgtTasks] = await Promise.all([
+          repos.tasks.listByProject(input.boardId),
+          repos.tasks.listByProject(input.targetProjectId),
+        ]);
+        useProjectsStore.setState((st) => ({
+          tasks: [
+            ...st.tasks.filter(
+              (t) => t.projectId !== input.boardId && t.projectId !== input.targetProjectId,
+            ),
+            ...srcTasks,
+            ...tgtTasks,
+          ],
+        }));
+        const dropped = outcome.droppedDependencies + outcome.sourceDroppedDependencies;
+        store.pushToast(
+          'success',
+          `已搬运 ${outcome.created + outcome.updated} 条任务` +
+            (dropped > 0 ? `（剥离 ${dropped} 条悬空依赖）` : ''),
+        );
+        return outcome;
+      } catch (err) {
+        const msg = err instanceof ChangxiaError ? err.userMessage : '搬运失败，请重试。';
+        store.pushToast('error', msg);
+        throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
     },
 

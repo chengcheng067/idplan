@@ -111,6 +111,24 @@ export interface UpdateProjectCmd {
    * （`server/routes/projects.routes.ts` 的 merged 字面量），故 remote 通路无需改动。
    */
   domain?: StageTemplateDomain | null;
+  /**
+   * 归属侧（v0.8 T04-B · 接管「转为正式项目」的唯一落点，**可选**）。
+   *
+   * 为什么开这个口子：`convertAgentBoardToHuman`（agent-takeover.service）的唯一
+   * 落库动作就是 `repo.update(id, { kind: 'human' })`。不开这道口子，实施方会
+   * 退化成「绕过仓储直写 Dexie」——那会让接管的写入点脱离仓储的事务与镜像纪律。
+   *
+   * ⚠️ 与 `domain` 的关键差别：改 `kind` 是**跨工作区接管**，不是普通字段更新：
+   *   · 合法调用方只有 `agent-takeover.service` 的两个方法（先校验「源确实是
+   *     Agent 看板」才允许翻 human；反向 human→agent 同样只经该服务）；
+   *   · 服务端 `PATCH /api/projects/:id` 对 kind 的变更另有**显式意图门**
+   *     （`body.takeover === true`，`projects.routes.ts`，测试见
+   *     `server.project-kind-boundary.spec.ts`）——它挡的是误操作，本字段是
+   *     本地（Dexie）通路的对应开口，两端门槛不同形但同向：都不允许"顺手带上"。
+   *   · `pickDefined` 语义一致：`undefined` = 不改；**不提供 `null`**（行实体
+   *     `Project.kind` 非空，清空 kind 没有合法含义，故类型上就不给 null）。
+   */
+  kind?: ProjectKind;
   status?: ProjectStatus;
 }
 
@@ -289,6 +307,36 @@ export interface UpdateItineraryDayCmd {
 export interface UpdateTaskCmd {
   title?: string;
   done?: boolean;
+  /**
+   * 归属项目（v0.8 T04-B · 接管「搬运任务」的落点，**可选**）。
+   *
+   * ⚠️ 这不是"普通编辑入口"：跨项目搬移的合法调用方只有
+   * `agent-takeover.service` 的 `moveTasksToHumanProject`（先校验目标必须是
+   * 人类项目、阶段必须属于目标项目，才允许写这两个字段）。其它调用方传它
+   * 属于绕过接管语义的直接搬移，评审时应拒。
+   *
+   * ⚠️ remote 档不可用：服务端 `PATCH /api/tasks/:id` 的 merged 白名单
+   * （`server/routes/tasks.routes.ts`）**没有** project_id / stage_id ——
+   * 传了会被静默丢弃（任务留在源项目），若调用方接着删源行就是数据丢失。
+   * 故 store action 层对非 local 档直接拒发（见 useProjectsStore 的档位门）。
+   */
+  projectId?: string;
+  /**
+   * 归属阶段（v0.8 T04-B · 接管「搬运任务」的落点，**可选**）。
+   * 必须属于 `projectId` 所指项目（服务层校验）；与 projectId 同进同出。
+   */
+  stageId?: string;
+  /**
+   * 来源（v0.8 T04-B · 接管搬运的 update 路径透传，**可选**）。
+   * 与 projectId/stageId 同一纪律：合法调用方只有 agent-takeover.service。
+   * 为什么必须带上：目标项目已有同 externalId 的行时走**更新**，其语义与 v3
+   * `upsertByExternalId` 的命中分支一致——源行（Agent 导入的任务，`source='agent'`）
+   * 覆盖目标行的内容字段；不带这一字段，目标的 source/agentId 会**静默保留旧值**，
+   * 出现"同一条 externalId、两处来源标注不同"的分歧。
+   */
+  source?: TaskSource;
+  /** 产出者 Agent 的 Member.id（接管搬运 update 路径透传；人工任务为 null） */
+  agentId?: string | null;
   assigneeId?: string | null;
   /** 参与人全集（可选；集合变化时 store 层写集合级 Change 流水） */
   assigneeIds?: string[];

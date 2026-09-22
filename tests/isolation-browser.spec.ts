@@ -966,6 +966,13 @@ describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真�
    *   · Agent 面对 Agent 数据 → 取 `<main>`（#20 的项目下拉 / #21 统计卡都在这里）；
    *   · 共享侧栏 → 单独断言它**确实**列人类项目（#11 = P 的正向证据），
    *     于是"人类名 0 次"这条边界的适用范围不再有歧义。
+   *
+   * ★ 2026-09-23 B14 后半落地后的**边界修订**：侧栏从"只有人类列表"变成
+   *   「我的项目」＋ 独立「Agent 看板」两段（`data-sidebar-project-list` /
+   *   `data-agent-board-sidebar` 两个锚点）。隔离划线随之**精确化**而不是放松：
+   *   旧断言"侧栏整体不出现 Agent 名"会把 B14 要求的专属列表判成泄漏 ——
+   *   新划线：Agent 名只准出现在**专属区块**里，「我的项目」列表（#11 的 P 出口）
+   *   依旧一个都不许混入。两边都是正向+反向双侧断言，缺一边就意味着某一段串味。
    */
   const mainText = async (page: Page): Promise<string> => page.locator('main').innerText();
   const sidebarText = async (page: Page): Promise<string> =>
@@ -996,10 +1003,22 @@ describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真�
         'Agent 页 main 没渲染出 Agent 看板 ⇒ 隔离断言无判别力',
       ).toBeGreaterThan(0);
 
-      // ④ 边界正向证据：共享侧栏按 #11（P）**应当**列人类项目 —— 且不该列 Agent 看板
+      // ④ 边界正向证据：共享侧栏按 #11（P）**应当**列人类项目
       const side = await sidebarText(page);
       expect(side, '侧栏（#11 = P）未列人类项目 ⇒ 与 #11 的接法不符').toContain(HUMAN_NAME);
-      expect(side, '侧栏把 Agent 看板混进了「我的项目」列表').not.toContain(AGENT_NAME);
+      // ⑤ ★ B14（2026-09-23 落地）：Agent 路由的侧栏是**两段**，隔离按段划线：
+      //    「我的项目」列表（P 出口）里一个 Agent 看板都不许混入；
+      //    Agent 名只准出现在专属的「Agent 看板」区块里（且必须真的在 = 判别力）。
+      const humanList = await page.locator('[data-sidebar-project-list]').first().innerText();
+      expect(
+        humanList,
+        'Agent 看板混进了侧栏「我的项目」列表（#11 = P：人类侧列表只列人类项目）',
+      ).not.toContain(AGENT_NAME);
+      const agentSection = await page.locator('[data-agent-board-sidebar]').first().innerText();
+      expect(
+        agentSection,
+        'B14：Agent 路由的侧栏应有独立的「Agent 看板」列表（没渲染 ⇒ 专属区块缺失）',
+      ).toContain(AGENT_NAME);
     } finally {
       await page.close();
     }

@@ -26,14 +26,24 @@
  *
  *   · `'convert'` 转为正式项目：把这块 Agent 看板**整体**变成人类侧的项目（kind: agent → human）。
  *     选它时**不改动**看板名与阶段，故不需要"搬运哪些任务"这种选择。
- *   · `'move'`  搬运任务：把选中的任务搬进**已有**的人类项目。故必须先选目标项目，
- *     且必须至少选中一条任务（空选择 = 什么都没搬，属于误点，直接不允许确认）。
+ *   · `'move'`  搬运任务：把选中的任务搬进**已有**的人类项目。故必须先选目标项目、
+ *     **显式选落点阶段**（不提供"自动建阶段"，PRD B12 硬性），且必须至少选中一条任务
+ *     （空选择 = 什么都没搬，属于误点，直接不允许确认）。
+ *
+ * ══════════════════════════ 预览为什么是"算出来的"而不是写死的文案 ══════════════════════════
+ *
+ * 预览与执行**共用** `agent-takeover.service` 的同一对纯函数（`planTaskMove` +
+ * `previewMove`）：将新建 X / 将更新 Y（目标项目已有同 externalId 的任务）/ 将剔除
+ * 悬空依赖 Z 条（逐条列出"哪条任务失去哪个前驱"）。写死文案会出现"预览说搬 3 条、
+ * 实际搬 5 条"——那种缺陷单看界面永远发现不了。悬空依赖必须显式列表：`dag.ts` 把
+ * 解不到的依赖当作**已满足**，静默留一条空边会让任务**悄悄变成可开工**。
  *
  * ══════════════════════════ 数据来源（本组件不读任何 store） ══════════════════════════
  *
- * `sourceBoard` / `tasks` / `candidates` 全部由调用方传入。特别是 `candidates`：
- * 调用方**必须**已用隔离漏斗收窄为 `'human'`（`visibleProjectsFor('human', …)`）——
- * 本组件不替调用方过滤，因为"喂错数据"这件事必须在**调用点**一眼可见（同 `AgentBoardList` 的纪律）。
+ * `sourceBoard` / `tasks` / `candidates` / `targetStages` / `targetTasks` 全部由调用方
+ * 传入。特别是 `candidates`：调用方**必须**已用隔离漏斗收窄为 `'human'`
+ * （`visibleProjectsFor('human', …)` 或 `humanTakeoverCandidates`）——本组件不替调用方
+ * 过滤，因为"喂错数据"这件事必须在**调用点**一眼可见（同 `AgentBoardList` 的纪律）。
  * 把人类项目搬进……不，把 Agent 任务搬进 **Agent** 看板是**无意义**的搬运，
  * 那种"目标其实是另一块 Agent 看板"的错误只能由调用点的漏斗挡住。
  */
@@ -42,8 +52,9 @@ import { useMemo, useState } from 'react';
 
 import { AlertTriangle, ArrowRight, X } from 'lucide-react';
 
-import type { Project, Task } from '../../core/types/entities';
+import type { Project, Stage, Task } from '../../core/types/entities';
 import { ChangxiaError } from '../../core/types/enums';
+import { planTaskMove, previewMove } from '../../core/services/agent-takeover.service';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { Modal } from '../common/Modal';
 import { cn } from '../../lib/cn';
@@ -65,6 +76,8 @@ export interface TransferCommand {
   mode: TransferMode;
   /** `mode === 'move'` 时为**人类项目** id；`convert` 时为 `null`（无目标，看板自身转正） */
   targetProjectId: string | null;
+  /** `mode === 'move'` 时为目标项目里的**落点阶段** id；`convert` 时为 `null` */
+  stageId: string | null;
   /** `mode === 'move'` 时要搬走的任务 id（非空）；`convert` 时为空数组 */
   taskIds: readonly string[];
 }
@@ -75,12 +88,20 @@ export interface TransferOutcome {
   movedTaskCount: number;
 }
 
+/** 预览摘要的展示行（目标侧悬空依赖，逐条） */
+interface DroppedDepRow {
+  taskTitle: string;
+  depTitle: string;
+}
+
 export function TransferDialog({
   open,
   onClose,
   sourceBoard,
   tasks,
   candidates,
+  targetStages,
+  targetTasks,
   onConfirm,
 }: {
   open: boolean;
@@ -94,6 +115,14 @@ export function TransferDialog({
    * 收窄 —— 传进来的是 Agent 看板是调用方的错，本组件不替它兜。
    */
   candidates: readonly Project[];
+  /**
+   * 目标项目的阶段（落点选择的数据源）。传入**人类侧全部**阶段即可——
+   * 本组件内部按选中目标过滤（阶段属于项目，说什么也不能把 A 项目的阶段
+   * 列给 B 项目当落点）。调用方无需为每次切换目标做异步加载。
+   */
+  targetStages: readonly Stage[];
+  /** 目标项目的任务（预览"将更新 Y"的比对底数）。同为人类侧全量，内部按目标过滤。 */
+  targetTasks: readonly Task[];
   /** 确认接管。成功返回回执；失败请抛（`ChangxiaError.userMessage` 会就地展示） */
   onConfirm(cmd: TransferCommand): Promise<TransferOutcome>;
 }): JSX.Element | null {
@@ -103,6 +132,7 @@ export function TransferDialog({
 
   const [mode, setMode] = useState<TransferMode>('convert');
   const [targetId, setTargetId] = useState<string>('');
+  const [stageId, setStageId] = useState<string>('');
   /** 勾选的任务 id（默认**全选**：用户说"搬到人类项目"时，通常就是要搬全部） */
   const [selectedTaskIds, setSelectedTaskIds] = useState<readonly string[]>(() =>
     tasks.map((t) => t.id),
@@ -112,12 +142,61 @@ export function TransferDialog({
 
   const selectedCount = selectedTaskIds.length;
 
+  /** 目标与落点任一变了，旧的落点阶段选择对新目标即失效（阶段属于项目） */
+  const onTargetChange = (next: string): void => {
+    setTargetId(next);
+    setStageId('');
+  };
+
+  /** 选中目标的阶段选项（按 orderIndex 排；没选目标 → 空） */
+  const stageOptions = useMemo(
+    () =>
+      targetId === ''
+        ? []
+        : targetStages
+            .filter((s) => s.projectId === targetId)
+            .sort((a, b) => a.orderIndex - b.orderIndex),
+    [targetStages, targetId],
+  );
+
+  /** 选中目标的任务（预览的 externalId 比对底数；没选目标 → 空） */
+  const targetProjectTasks = useMemo(
+    () => (targetId === '' ? [] : targetTasks.filter((t) => t.projectId === targetId)),
+    [targetTasks, targetId],
+  );
+
   /** 确认按钮的可提交条件（两条路径各有门槛，见上方"两条接管路径"） */
   const canSubmit = useMemo(() => {
     if (submitting) return false;
     if (mode === 'convert') return true;
-    return targetId !== '' && selectedCount > 0;
-  }, [mode, submitting, targetId, selectedCount]);
+    return targetId !== '' && stageId !== '' && selectedCount > 0;
+  }, [mode, submitting, targetId, stageId, selectedCount]);
+
+  /**
+   * 搬运预览 —— 与执行共用同一对纯函数（预览/执行不可能漂移）。
+   * 落点未选全时算不出计划（stageId 为空），预览区退回静态说明。
+   */
+  const movePreview = useMemo(() => {
+    if (mode !== 'move' || targetId === '' || stageId === '') return null;
+    const plan = planTaskMove({
+      sourceTasks: tasks,
+      targetTasks: targetProjectTasks,
+      taskIds: selectedTaskIds,
+      stageId,
+      targetProjectId: targetId,
+    });
+    return previewMove(plan);
+  }, [mode, targetId, stageId, tasks, targetProjectTasks, selectedTaskIds]);
+
+  /** 悬空依赖展示行（目标侧；源侧只有计数，避免同一个弹窗里两张长列表） */
+  const droppedDepRows: DroppedDepRow[] = useMemo(() => {
+    if (!movePreview) return [];
+    const rows: DroppedDepRow[] = [];
+    for (const m of movePreview.moves) {
+      for (const d of m.droppedDeps) rows.push({ taskTitle: m.title, depTitle: d.depTitle });
+    }
+    return rows;
+  }, [movePreview]);
 
   const toggleTask = (taskId: string): void => {
     setSelectedTaskIds((prev) =>
@@ -136,6 +215,7 @@ export function TransferDialog({
         sourceBoardId: sourceBoard.id,
         mode,
         targetProjectId: mode === 'move' ? targetId : null,
+        stageId: mode === 'move' ? stageId : null,
         taskIds: mode === 'move' ? selectedTaskIds : [],
       });
       onClose();
@@ -200,7 +280,7 @@ export function TransferDialog({
                 {
                   key: 'move' as const,
                   label: '搬运任务',
-                  hint: '把选中的任务搬进一个已有的人类项目。',
+                  hint: '把选中的任务搬进一个已有的人类项目（需选落点阶段）。',
                 },
               ] satisfies Array<{ key: TransferMode; label: string; hint: string }>
             ).map((opt) => (
@@ -230,7 +310,7 @@ export function TransferDialog({
           </div>
         </fieldset>
 
-        {/* 搬运任务：目标项目 + 任务勾选 */}
+        {/* 搬运任务：目标项目 + 落点阶段 + 任务勾选 */}
         {mode === 'move' && (
           <>
             <label className="mb-3 block text-sm">
@@ -249,13 +329,51 @@ export function TransferDialog({
                 <select
                   data-transfer-target=""
                   value={targetId}
-                  onChange={(e) => setTargetId(e.target.value)}
+                  onChange={(e) => onTargetChange(e.target.value)}
                   className="h-[38px] w-full rounded-md border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-pine"
                 >
                   <option value="">（请选择目标项目）</option>
                   {candidates.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </label>
+
+            {/*
+              落点阶段（PRD B12 硬性：**显式选**，且**不提供"自动建阶段"**）。
+              阶段属于项目 ⇒ 换目标必须清空重选（见 onTargetChange）。
+              目标项目的阶段由调用方异步加载；未加载完时给明确文案而不是空下拉。
+            */}
+            <label className="mb-3 block text-sm">
+              <span className="mb-1 block font-medium text-ink">
+                落点阶段
+                <span className="text-clay"> *（不自动新建阶段）</span>
+              </span>
+              {targetId === '' ? (
+                <p className="rounded-md border border-dashed border-line px-3 py-2 text-xs text-mist">
+                  请先选择目标项目。
+                </p>
+              ) : stageOptions.length === 0 ? (
+                <p
+                  data-transfer-no-stage=""
+                  className="rounded-md border border-dashed border-line px-3 py-2 text-xs text-mist"
+                >
+                  目标项目还没有阶段，请先在其详情页添加阶段后再搬运。
+                </p>
+              ) : (
+                <select
+                  data-transfer-stage=""
+                  value={stageId}
+                  onChange={(e) => setStageId(e.target.value)}
+                  className="h-[38px] w-full rounded-md border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-pine"
+                >
+                  <option value="">（请选择落点阶段）</option>
+                  {stageOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.orderIndex}. {s.name}
                     </option>
                   ))}
                 </select>
@@ -303,13 +421,47 @@ export function TransferDialog({
           </>
         )}
 
-        {/* 预览（确认前把"将发生什么"讲清楚） */}
-        <div className="mb-3 rounded-md border border-line bg-cream/50 px-3 py-2.5 text-xs leading-5 text-mist">
+        {/* 预览（确认前把"将发生什么"讲清楚；搬运模式用与服务端同源的计划函数实算） */}
+        <div
+          data-transfer-preview=""
+          className="mb-3 rounded-md border border-line bg-cream/50 px-3 py-2.5 text-xs leading-5 text-mist"
+        >
           {mode === 'convert' ? (
             <>
               预览：把看板「{sourceBoard.name}」整体转为人类工作区的正式项目
               （其中 {tasks.length} 条任务一并转入）。
             </>
+          ) : movePreview ? (
+            <div className="flex flex-col gap-1.5">
+              <p>
+                预览：把选中的 <strong className="text-ink">{selectedCount}</strong> 条任务从「
+                {sourceBoard.name}」搬入{' '}
+                <strong className="text-ink">
+                  {candidates.find((p) => p.id === targetId)?.name ?? '（未选择目标项目）'}
+                </strong>
+                ，其中新建 <strong className="text-ink">{movePreview.createCount}</strong> 条、
+                更新既有 <strong className="text-ink">{movePreview.updateCount}</strong> 条
+                （目标项目已有同外部编号的任务）。
+              </p>
+              {movePreview.droppedDependencyCount > 0 && (
+                <p data-transfer-preview-dropped="" className="text-clay">
+                  将剔除 {movePreview.droppedDependencyCount} 条悬空依赖（前驱未随本批搬走，
+                  留着会让任务被误判为可开工）：
+                  {droppedDepRows.map((r, i) => (
+                    <span key={`${r.taskTitle}-${r.depTitle}-${i}`} className="block pl-2">
+                      · 「{r.taskTitle}」不再依赖「{r.depTitle}」
+                    </span>
+                  ))}
+                </p>
+              )}
+              {movePreview.sourceDroppedDependencyCount > 0 && (
+                <p className="text-amber">
+                  源看板中另有 {movePreview.sourceDroppedDependencyCount} 条依赖指向被搬走的任务，
+                  将一并剥除（涉及 {movePreview.sourceRewires.length} 条留下的任务）。
+                </p>
+              )}
+              {selectedCount === 0 && <p className="text-clay">请至少勾选一条任务。</p>}
+            </div>
           ) : (
             <>
               预览：把选中的 <strong className="text-ink">{selectedCount}</strong> 条任务
@@ -317,7 +469,7 @@ export function TransferDialog({
               <strong className="text-ink">
                 {candidates.find((p) => p.id === targetId)?.name ?? '（未选择目标项目）'}
               </strong>
-              。
+              。选好目标项目与落点阶段后，这里会列出将新建 / 将更新 / 将剔除的悬空依赖。
             </>
           )}
         </div>
@@ -332,7 +484,7 @@ export function TransferDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
+            className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
           >
             取消
           </button>

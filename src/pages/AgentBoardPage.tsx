@@ -62,7 +62,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AlertTriangle, ClipboardPaste, FileOutput, Info, Plug } from 'lucide-react';
+import { AlertTriangle, ClipboardPaste, FileOutput, Info, Plug, Trash2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
@@ -87,7 +87,7 @@ import { useRepos } from '../hooks/useRepos';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { useAgentStore } from '../store/useAgentStore';
 import { useMembersStore } from '../store/useMembersStore';
-import { useProjectsStore } from '../store/useProjectsStore';
+import { createProjectActions, useProjectsStore } from '../store/useProjectsStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useLayoutStore } from '../store/useLayoutStore';
 import {
@@ -98,6 +98,7 @@ import {
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
 import { AgentBoardList } from '../components/agent/AgentBoardList';
 import { CreateAgentBoardDialog } from '../components/agent/CreateAgentBoardDialog';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import {
   AgentIngressPanel,
   LOOPBACK_ORIGIN,
@@ -313,6 +314,16 @@ export function AgentBoardPage(): JSX.Element {
   const [loaded, setLoaded] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const [handoffOpen, setHandoffOpen] = useState(false);
+  /**
+   * 「删除 Agent 看板」确认弹窗（PRD B13）。
+   *
+   * ⚠️ 与「接管」相反，删除**不按 D5 的 member/build 放行**：它是不可逆的破坏性写，
+   * 对齐人类侧 `removeProject` 的既有口径（store 注释原文「危险操作，仅 admin 使用」）。
+   * 门控同样双层：本页 `isAdmin &&` 决定进不进渲染树；删除动作本身没有服务端角色
+   * 断言（Dexie 直写档），所以这一层不是"体验"而是**唯一门**——member 看不到即可，
+   * 与 TransferDialog 的"UI 隐藏不是安全边界"不同（那条有服务端 assertAdmin 兜底）。
+   */
+  const [deleteOpen, setDeleteOpen] = useState(false);
   /**
    * 「新建 Agent 看板」弹窗（§6.1 时序图第 1 步）。
    *
@@ -557,12 +568,21 @@ export function AgentBoardPage(): JSX.Element {
    *   · 局部快照（`loadedAgentBoards`）是本页 `loadAll` 直读 repo 的**最新**结果 ——
    *     刚建的看板已经在库里、却还没进 store（store 只在 bootstrap 时被写），只有它也认，
    *     用户才能"建完即见"。
-   * 两条来源都经同一谓词收窄（前者在 `visibility.ts`，后者用 `visibleProjectsFor`），
-   * 故并集**不可能**漏进人类项目。
+   *
+   * ★ 2026-09-23 接管接线后补的一道**当前态过滤**：并集之后再统一过一次谓词
+   * （`visibleProjectsFor('agent', …)`）。原因是快照是**装载时**收窄的，而
+   * 「接管 · 转为正式项目」发生在装载**之后** —— 不看板只翻 kind，store 里该行
+   * 即时变 human（漏斗出口下一帧即排除），但快照还是收窄前的老副本，
+   * 不这道过滤的话被接管的看板会继续显示在 Agent 页（且选中它渲染出人类项目内容，
+   * 正是 #20/#21 要堵的反向泄漏）。两道来源都过谓词，故过滤不可能误伤。
    */
   const agentBoards = useMemo(() => {
     const seen = new Set(funnelAgentBoards.map((p) => p.id));
-    return [...funnelAgentBoards, ...loadedAgentBoards.filter((p) => !seen.has(p.id))];
+    const merged = [
+      ...funnelAgentBoards,
+      ...loadedAgentBoards.filter((p) => !seen.has(p.id)),
+    ];
+    return visibleProjectsFor('agent', merged);
   }, [funnelAgentBoards, loadedAgentBoards]);
 
   // 选中看板（URL 无状态；首次进入取第一块 Agent 看板）
@@ -737,6 +757,29 @@ export function AgentBoardPage(): JSX.Element {
                 </option>
               ))}
             </select>
+            {/*
+              ★ B13：「删除 Agent 看板」（danger 变体，仅 admin 可见；见 deleteOpen 注释）。
+
+              · 只在**选中了看板**时可点（`scopedProjectId`，与交接包按钮同口径——
+                不用裸 currentProjectId，那个可能是人类 id，本页拿不到目标）；
+              · 不进「已归档」语义：`removeProject` 是**永久删除 + 级联清理**
+                （阶段/任务/流水），PRD B13 原话「删除后不进人类"已归档"语义」；
+              · 删除后当前选中若是这块，选择 effect 会自动改选第一块剩余看板
+                （`isAgentBoard` 判否 → 清选择 → 取 agentBoards[0]），无需在此处理。
+            */}
+            {isAdmin && (
+              <button
+                type="button"
+                data-agent-board-delete=""
+                onClick={() => setDeleteOpen(true)}
+                disabled={!scopedProjectId}
+                className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl border border-clay/50 px-3.5 text-sm text-clay transition-colors hover:bg-clay-soft disabled:opacity-40"
+                title={scopedProjectId ? '永久删除当前 Agent 看板' : '先选中一块 Agent 看板'}
+              >
+                <Trash2 size={14} aria-hidden />
+                删除看板
+              </button>
+            )}
             {/*
               ★ 反馈 #8 收口：工具条**不再常驻**「新建 Agent 看板」。
 
@@ -1214,6 +1257,29 @@ export function AgentBoardPage(): JSX.Element {
             onClose={() => setHandoffOpen(false)}
           />
         </Modal>
+      )}
+
+      {/*
+        B13 · 删除确认（danger 变体）。与 ProjectCard 的永久删除确认同一形状，
+        但文案多一句「不进已归档」——人类项目的删除确认建议"先归档"，
+        而 Agent 看板**没有归档语义**（B18 是 P1 未做），替代路径是「接管」。
+      */}
+      {deleteOpen && scopedProjectId && (
+        <ConfirmDialog
+          open
+          title="删除 Agent 看板"
+          confirmText="永久删除"
+          danger
+          onConfirm={() => {
+            void createProjectActions(repos).removeProject(scopedProjectId, project?.name);
+            setDeleteOpen(false);
+          }}
+          onCancel={() => setDeleteOpen(false)}
+        >
+          确认删除「{project?.name}」？该看板下的所有阶段与任务将一并永久删除，{' '}
+          <span className="font-medium text-clay">不可恢复</span>，且不会进入「已归档」。
+          若只是想把它留在项目里，请改用详情页的「接管 · 转为正式项目」。
+        </ConfirmDialog>
       )}
 
       {/* 任务详情抽屉 */}

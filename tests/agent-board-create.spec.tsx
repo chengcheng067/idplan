@@ -36,8 +36,9 @@
  *   · **源码层**：`readFileSync` 读组件/页面源码做断言（同 `isolation-guard` 手法）。
  *     只用于"不存在某结构"这类行为断言覆盖不到的约束。
  *
- * ⚠️ 未覆盖（如实标注，勿当成已验）：`TransferDialog` 的宿主接线（`ProjectDetailPage.tsx`）
- * 属 T05，本文件不涉及。
+ * ✅ TransferDialog 的宿主接线已落地（2026-09-23）：`ProjectDetailPage.tsx` 渲染它并接
+ *    `takeoverConvert` / `takeoverMove` store action；门控（Agent 看板 + admin）与交互
+ *    预览由 `tests/agent-takeover.spec.tsx` 覆盖（含源码级接线断言），本文件不重复。
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
