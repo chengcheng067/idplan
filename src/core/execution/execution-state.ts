@@ -247,14 +247,17 @@ export function assertStatusTransition(
  *     是 `awaiting_confirmation → queued`；其余状态若带确认对象一律视为非法。
  *     `null` 清空在授予点之外是合法的撤销动作，不在此拦截范围。）
  *
- * ② **绑定比对（本切片的主刀）**：
+ * ② **字段非空**：
  *    进入 queued / running 时，有效确认必须**同时满足**：
  *      · `confirmedAt` 非空；
  *      · `confirmedBy` 非空（此前零读取方，本次补齐——只校验「非空」，不校验它是否真是一个人）；
- *      · `planHash` 非空；
+ *      · `planHash` 非空。
+ *    任一为空 → 抛 `Validation`。
+ *
+ * ③ **内容绑定（本切片的主刀）**：
  *      · `planHash === computePlanHash(当前 execution)`——确认绑定的是**这一版计划**，
  *        计划变了旧凭据必然被拒（这正是规格 §224 的验收项）。
- *    任一不满足 → 抛 `Validation`，文案须能指出「确认绑定的是另一版计划」。
+ *    不满足 → 抛 `Validation`，文案须能指出「确认绑定的是另一版计划」。
  */
 export interface AssertConfirmationOptions {
   /**
@@ -285,7 +288,7 @@ export function assertExecutionConfirmed(
     );
   }
 
-  // ② 绑定比对：仅对「即将真实执行」的态做门槛。
+  // ② 字段非空与 ③ 内容绑定：仅对「即将真实执行」的态做门槛。
   if (next !== ExecutionStatus.Queued && next !== ExecutionStatus.Running) {
     return;
   }
@@ -296,7 +299,7 @@ export function assertExecutionConfirmed(
       `未确认的执行单不得进入 ${next} 态：要求 confirmation.confirmedAt / confirmedBy / planHash 均非空（execution=${execution.id}）`,
     );
   }
-  // 内容绑定：确认必须对应「这一版计划」。
+  // ③ 内容绑定：确认必须对应「这一版计划」。
   const actualHash = computePlanHash(execution);
   if (confirmation.planHash !== actualHash) {
     throw new ChangxiaError(
