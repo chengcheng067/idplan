@@ -57,9 +57,12 @@ describe('备份导出必然包含四张执行域表', () => {
 describe('带数据的四表往返保真', () => {
   it('执行单 + 尝试 + 事件 + 写回提案 → 导出 → 导入 → 再导出，逐表 diff 为空', async () => {
     // 建项目（让 execution 有个归属 projectId，验证过滤维度不串）
+    // ★ 2026-09-20 执行域归属关卡：宿主项目必须是 Agent 看板（kind='agent'），
+    //   否则 createExecution 会被存储侧关卡拒（Validation）。
     await bundle.projects.insert({
       id: 'proj_exec',
       name: '执行域项目',
+      kind: 'agent',
       address: '',
       clientName: '',
       contractAmount: null,
@@ -246,6 +249,22 @@ describe('旧备份（无四表）兼容', () => {
   });
 
   it('不带四表的包导入后，DB 四表被清空重建（不残留旧行）', async () => {
+    // ★ 2026-09-20 执行域归属关卡：宿主项目必须是 Agent 看板（kind='agent'）。
+    //   本用例只关心「导入不带四表的老包 → 四表清空重建」，
+    //   p1 仅是执行单的宿主，importAndReplace 会连同它一起整库替换。
+    await bundle.projects.insert({
+      id: 'p1',
+      name: '旧备份清空用例看板',
+      kind: 'agent',
+      address: '',
+      clientName: '',
+      contractAmount: null,
+      signedAt: null,
+      plannedStartAt: '2026-08-01',
+      plannedEndAt: '2026-12-31',
+      coverColor: null,
+    });
+
     // 先写入一些执行域数据
     const exec = await bundle.executions.createExecution({
       projectId: 'p1',

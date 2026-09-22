@@ -215,6 +215,9 @@ function fakeBundle(executions: Execution[], attemptsByExec: Map<string, Executi
         {
           id: 'proj_a',
           name: '矛盾数据测试项目',
+          // ★ 2026-09-20 执行域归属关卡的前端镜像：控制台只按 kind==='agent'
+          //   的板分桶（存储侧 createExecution 已强制，界面侧各守一半）
+          kind: 'agent',
           archivedAt: null,
           revision: 1,
           updatedAt: '2026-09-01T00:00:00.000Z',
@@ -393,7 +396,7 @@ describe('执行控制台 · 矛盾数据标记与开关', () => {
   it('单条 attempt 取数失败：不崩、不误报为矛盾、不把整页推入错误态', async () => {
     const ex = [normalExecution(NORMAL_ID, '正常：attempt 取数失败')];
     bundle = {
-      projects: { list: async () => [{ id: 'proj_a', name: 'P' }] },
+      projects: { list: async () => [{ id: 'proj_a', name: 'P', kind: 'agent' }] },
       executions: {
         listExecutionsByProject: async () => ex,
         getExecution: async () => ex[0],

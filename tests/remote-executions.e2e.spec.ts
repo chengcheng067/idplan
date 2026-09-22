@@ -108,6 +108,9 @@ async function seedProject(app: FastifyInstance): Promise<void> {
     payload: {
       id: PROJECT_ID,
       name: '远端执行域项目',
+      // ★ 2026-09-20 执行域归属关卡：服务端 createExecution 强制 projectId 指向
+      //   kind='agent' 的项目（本 spec 全程经服务端端点造执行单）
+      kind: 'agent',
       address: '',
       clientName: '',
       contractAmount: null,

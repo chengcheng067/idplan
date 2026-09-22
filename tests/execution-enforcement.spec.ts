@@ -26,6 +26,7 @@ import {
 } from '../src/core/types/agent-execution';
 import type { Execution } from '../src/core/types/entities';
 import { ChangxiaError, ChangxiaErrorCode } from '../src/core/types/enums';
+import { ProjectStatus, ScheduleBasis } from '../src/core/types/enums';
 import { BackupService } from '../src/core/services/backup.service';
 import {
   assertExecutionConfirmed,
@@ -51,7 +52,31 @@ beforeEach(async () => {
   await bundle.admin?.replaceAllImport({
     meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
     data: {
-      projects: [],
+      // ★ v0.8 隔离补齐（2026-09-20）：执行域只属于 Agent 看板 —— 仓储层 createExecution /
+      //   createProposal 现在强制 projectId 指向 kind='agent' 的项目。夹具里的 p1 因此
+      //   必须是 agent 板（此前 projects 为空数组，p1 是幻影 id，现在会被关卡拒）。
+      projects: [
+        {
+          id: 'p1',
+          name: 'Agent 看板',
+          address: '',
+          clientName: '',
+          contractAmount: null,
+          signedAt: null,
+          plannedStartAt: '2026-08-01',
+          plannedEndAt: '2026-12-31',
+          coverColor: null,
+          shortLabel: null,
+          stagePresetKey: 'indoor_full',
+          stageTemplateVersion: 2,
+          scheduleBasis: ScheduleBasis.Calendar,
+          domain: 'indoor',
+          kind: 'agent',
+          status: ProjectStatus.Active,
+          revision: 1,
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+      ],
       stages: [],
       tasks: [],
       members: [],
@@ -766,5 +791,100 @@ describe('端到端：completed 的真实防线是「有审批人落定的 appli
 
     const done = await setStatus(id, ExecutionStatus.Completed);
     expect(done.status).toBe(ExecutionStatus.Completed);
+  });
+});
+
+/**
+ * 执行域归属关卡（v0.8 隔离补齐 · 2026-09-20）：本地 Dexie 侧与服务端
+ * `sqlite.bundle.ts` 的同名关卡**逐字同义**。
+ *
+ * 覆盖：人类项目 / 幻影 id 两条创建路径（执行单 + 提案）均被拒且零写入；
+ * agent 板放行（上方全部存量用例已在证明——它们的 p1 现在是 agent 板）。
+ * 拒绝理由可分辨：不存在 → NotFound；存在但 kind 非 agent → Validation。
+ */
+describe('执行域归属关卡：本地存储边界（只属于 Agent 看板）', () => {
+  /** 另种一个 kind='human' 的项目，作为「打错归属」的拒绝对象 */
+  async function seedHumanProject(): Promise<void> {
+    await bundle.projects.insert({
+      id: 'p_human',
+      name: '人类项目',
+      address: '',
+      clientName: '',
+      contractAmount: null,
+      signedAt: null,
+      plannedStartAt: '2026-08-01',
+      plannedEndAt: '2026-12-31',
+      coverColor: null,
+      shortLabel: null,
+      stagePresetKey: 'indoor_full',
+      stageTemplateVersion: 2,
+      scheduleBasis: ScheduleBasis.Calendar,
+      domain: 'indoor',
+      kind: 'human',
+    });
+  }
+
+  it('createExecution：人类项目 → Validation 且零写入', async () => {
+    await seedHumanProject();
+    await expect(
+      bundle.executions.createExecution({
+        projectId: 'p_human',
+        source: 'project-task',
+        objective: 'x',
+        idempotencyKey: 'gate:local:human:1',
+      }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.Validation });
+  });
+
+  it('createExecution：幻影 id（项目不存在）→ NotFound', async () => {
+    await expect(
+      bundle.executions.createExecution({
+        projectId: 'no_such_project',
+        source: 'project-task',
+        objective: 'x',
+        idempotencyKey: 'gate:local:ghost:1',
+      }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.NotFound });
+  });
+
+  it('createProposal：写回目标指向人类项目 → Validation 且零写入', async () => {
+    await seedHumanProject();
+    const id = await newExecution(); // 执行单在 p1（agent 板）上，合法
+    await expect(
+      bundle.executions.createProposal({
+        executionId: id,
+        projectId: 'p_human',
+        taskId: 't1',
+        operations: [{ field: 'task.status', before: 'review', after: 'done' }],
+        idempotencyKey: 'gate:local:proposal:human',
+      }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.Validation });
+    expect(await bundle.executions.listProposals(id)).toHaveLength(0);
+  });
+
+  it('createProposal：写回目标是幻影 id → NotFound 且零写入', async () => {
+    const id = await newExecution();
+    await expect(
+      bundle.executions.createProposal({
+        executionId: id,
+        projectId: 'no_such_project',
+        taskId: 't1',
+        operations: [{ field: 'task.status', before: 'review', after: 'done' }],
+        idempotencyKey: 'gate:local:proposal:ghost',
+      }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.NotFound });
+    expect(await bundle.executions.listProposals(id)).toHaveLength(0);
+  });
+
+  it('拒否文案带实际 kind（排错不用翻库）', async () => {
+    await seedHumanProject();
+    await expect(
+      bundle.executions.createExecution({
+        projectId: 'p_human',
+        source: 'project-task',
+        objective: 'x',
+        idempotencyKey: 'gate:local:msg:1',
+      }),
+    ).rejects.toThrow(/kind="human"/);
   });
 });

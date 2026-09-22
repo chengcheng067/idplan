@@ -96,11 +96,18 @@ async function click(el: Element): Promise<void> {
 
 /* ------------------------------ 造数据 ------------------------------ */
 
-/** 建一个项目（insert 会自动补齐 shortLabel/domain/kind 等默认字段）。 */
+/**
+ * 建一个项目（insert 会自动补齐 shortLabel/domain 等默认字段）。
+ *
+ * ★ 2026-09-20 执行域归属关卡：`createExecution` / 提案的 projectId 必须指向
+ *   `kind='agent'` 的项目（存储侧强制）。本 spec 的夹具项目是执行单的宿主，
+ *   故一律建 Agent 看板 —— 建人类项目会让每一条 seedExecution 撞 400。
+ */
 async function seedProject(id: string, name: string): Promise<void> {
   await bundle.projects.insert({
     id,
     name,
+    kind: 'agent',
     address: '',
     clientName: '',
     contractAmount: null,

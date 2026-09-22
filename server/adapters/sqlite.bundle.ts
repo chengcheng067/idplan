@@ -754,6 +754,46 @@ export function createSqliteBundle(
     }
   }
 
+  /**
+   * 执行域归属关卡（v0.8 隔离补齐 · 2026-09-20）：**执行域的一切数据只属于 Agent 看板**。
+   *
+   * ── 为什么需要它 ──
+   * v0.8 的物理隔离（设计 §5.2 二十七项清单）覆盖的是「看板列表 / 导航」层；
+   * 执行域（S1–S5）只开了 API、没开界面入口，**零 kind 关卡** ——
+   * `POST /api/projects/:projectId/executions` 此前只验参数形状，`schema.sql` 里
+   * `executions.project_id` 连 `REFERENCES` 外键都没有 ⇒ **任意** projectId
+   * （人类项目、甚至不存在的 id）都能挂上执行单与写回提案。这正是
+   * 「Agent 执行数据与人类项目扯上关系」在执行域的口子。
+   *
+   * ── 判据方向 ──
+   * 与隔离谓词同向（`visibility.ts` 的 `projectKindOf`：只认字面量 `'agent'`）：
+   * 脏值 / 老库缺列一律**默认拒绝**。「除非明确标记为 agent 否则放行」是反方向，
+   * 会把将来新增的第三种 kind 悄悄放进执行域。
+   *
+   * ── 错误码分工 ──
+   * 项目不存在 → `NotFound`（404；与 `appendEvent` 的父存在性检查同款）；
+   * 项目存在但 kind 非 agent → `Validation`（400；请求的落点语义不被允许）。
+   * 两者与服务端 / 本地两端逐字同义（本地侧见 `local.execution.repo.ts` 同名方法）。
+   */
+  const assertAgentOnlyProject = (projectId: string): void => {
+    const row = db.prepare('SELECT kind FROM projects WHERE id = ?').get(projectId) as
+      | { kind: string }
+      | undefined;
+    if (!row) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.NotFound,
+        `未找到项目 ${projectId}，不能为它创建执行域数据。`,
+      );
+    }
+    if (row.kind !== 'agent') {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `执行域只属于 Agent 看板：项目 ${projectId} 的 kind="${row.kind}"，不是 agent。` +
+          ' 人工项目的排期不经由 Agent 执行通道。',
+      );
+    }
+  };
+
   const executions: IExecutionsRepository = {
     /** 与本地侧同款：新建恒为 Draft，currentAttemptNo 从 0 起，全部可选字段归一 null */
     async createExecution(cmd: CreateExecutionCmd): Promise<Execution> {
@@ -779,33 +819,38 @@ export function createSqliteBundle(
         blockedReason: null,
       };
       try {
-        db.prepare(
-          `INSERT INTO executions
-             (id, project_id, task_id, source, objective, agent_member_id, channel_kind,
-              input_snapshot_hash, status, confirmation, idempotency_key, current_attempt_no,
-              created_at, updated_at, started_at, finished_at, terminal_reason, blocked_reason)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          row.id,
-          row.projectId,
-          row.taskId,
-          row.source,
-          row.objective,
-          row.agentMemberId,
-          row.channelKind,
-          row.inputSnapshotHash,
-          row.status,
-          // 对象列：显式序列化（bind 对象会被 better-sqlite3 拒绝，见 serializeJson 注释）
-          serializeJson(row.confirmation),
-          row.idempotencyKey,
-          row.currentAttemptNo,
-          row.createdAt,
-          row.updatedAt,
-          row.startedAt,
-          row.finishedAt,
-          row.terminalReason,
-          row.blockedReason,
-        );
+        // 归属关卡 + INSERT 收进同一 immediate 事务：读 kind 与写入之间若有并发
+        // 翻转了项目 kind，非事务化会让「关卡看过的事实」与「写入的事实」不是同一时刻。
+        inImmediateTx(() => {
+          assertAgentOnlyProject(cmd.projectId);
+          db.prepare(
+            `INSERT INTO executions
+               (id, project_id, task_id, source, objective, agent_member_id, channel_kind,
+                input_snapshot_hash, status, confirmation, idempotency_key, current_attempt_no,
+                created_at, updated_at, started_at, finished_at, terminal_reason, blocked_reason)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(
+            row.id,
+            row.projectId,
+            row.taskId,
+            row.source,
+            row.objective,
+            row.agentMemberId,
+            row.channelKind,
+            row.inputSnapshotHash,
+            row.status,
+            // 对象列：显式序列化（bind 对象会被 better-sqlite3 拒绝，见 serializeJson 注释）
+            serializeJson(row.confirmation),
+            row.idempotencyKey,
+            row.currentAttemptNo,
+            row.createdAt,
+            row.updatedAt,
+            row.startedAt,
+            row.finishedAt,
+            row.terminalReason,
+            row.blockedReason,
+          );
+        });
         return row;
       } catch (err) {
         if (err instanceof ChangxiaError) throw err;
@@ -1217,6 +1262,10 @@ export function createSqliteBundle(
             `未找到执行单 ${cmd.executionId}，不能为其创建写回提案。`,
           );
         }
+        // 执行域归属关卡：提案的 projectId 是「写回目标」——它同样只属于 Agent 看板。
+        // 少了这一条，调用方可以给 Agent 看板上的执行单建一个指向**人类项目**的提案，
+        // 「Agent 执行产物不经人类项目」就在提案层被绕开（执行单层面是堵着的）。
+        assertAgentOnlyProject(cmd.projectId);
         const now = new Date().toISOString();
         const row: WritebackProposal = {
           id: crypto.randomUUID(),

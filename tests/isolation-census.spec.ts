@@ -781,12 +781,12 @@ const rows: CensusRow[] = [
     where: 'Agent 通道 listProjectCandidates()',
     source: '全量项目',
     wiring: 'P',
-    see: 'human',
+    see: 'agent',
     target: AGENT_NAME,
-    expect: 0,
+    expect: 1,
     fixture: MAIN,
     derive: (f, see) => projectsFor(f, see).map((p) => p.name),
-    note: '★ 是 `human` **不是** `agent`：候选集只列人类项目（防 AI 误写人类项目）。SQL 侧收窄由源码锚点断言',
+    note: '★ 是 `agent` **不是** `human`（2026-09-20 用户裁决「Agent 与她自己的项目零关系」后再反转）：导入合法落点 / 健康探活 / project_unresolved 诊断载荷全部只剩 Agent 看板。SQL 侧收窄由源码锚点断言',
   },
   {
     id: 27,
@@ -877,8 +877,8 @@ describe('L2 · 判别力：故意关掉 kind 收窄后，Agent 数据**确实**
 describe('L3 · 反向：人类数据在 Agent 侧出现 0 次（§7.7 的「#20/#21 反向排除」）', () => {
   const mirror = rows.filter((r) => r.see === 'agent');
 
-  it('镜像行恰好是 #20/#21（清单漂移会让本用例先红）', () => {
-    expect(mirror.map((r) => r.id)).toEqual([20, 21]);
+  it('镜像行恰好是 #20/#21/#26（清单漂移会让本用例先红）', () => {
+    expect(mirror.map((r) => r.id)).toEqual([20, 21, 26]);
   });
 
   for (const row of mirror) {
@@ -892,12 +892,12 @@ describe('L3 · 反向：人类数据在 Agent 侧出现 0 次（§7.7 的「#20
     });
   }
 
-  it('#26 · listProjectCandidates() 只含人类项目 —— 反向（`agent` 侧）必须能看到看板', () => {
+  it('#26 · listProjectCandidates() 只含 Agent 看板 —— 反向（`human` 侧）必须能看到人类项目', () => {
     const row = rows.find((r) => r.id === 26)!;
-    // 正向：候选集里没有 Agent 看板（0 次）
-    expect(countOf(row.derive(row.fixture, 'human'), AGENT_NAME)).toBe(0);
-    // 反向：同一个派生换个 side，Agent 看板**确实**在库里 —— 证明上面那个 0 是真的过滤出来的
-    expect(countOf(row.derive(row.fixture, 'agent'), AGENT_NAME)).toBe(1);
+    // 正向：候选集里没有人类项目（0 次）—— Agent 通道与她自己的项目零关系
+    expect(countOf(row.derive(row.fixture, 'agent'), HUMAN_NAME)).toBe(0);
+    // 反向：同一个派生换个 side，人类项目**确实**在库里 —— 证明上面那个 0 是真的过滤出来的
+    expect(countOf(row.derive(row.fixture, 'human'), HUMAN_NAME)).toBe(1);
   });
 
   it('L3 · 人类侧全量列表（#1/#2/#11/#16 共用口径）在两类数据都在库时不含 Agent 看板', () => {
@@ -1036,11 +1036,11 @@ describe('源码锚点（接线真的接上了，而不只是派生写对了）'
     expect(detail).toContain("!== 'agent'");
   });
 
-  it('#26 · 服务端候选集按等值 kind = human 收窄（不是 `<> agent`）', () => {
+  it('#26 · 服务端候选集按等值 kind = agent 收窄（不是 `<> human`）', () => {
     const routes = stripComments(read('server/routes/agent.routes.ts'));
-    expect(routes).toContain("kind = 'human'");
+    expect(routes).toContain("kind = 'agent'");
     // 反应式断言（只看代码）：等值写法是刻意的 —— 避免将来第三种 kind 悄悄混进候选集
-    expect(routes).not.toContain("kind <> 'agent'");
+    expect(routes).not.toContain("kind <> 'human'");
   });
 
   it('#8 · 首页看板不再从 preset 反推 domain（getPreset 已从本页代码移除）', () => {
@@ -1059,6 +1059,20 @@ describe('源码锚点（接线真的接上了，而不只是派生写对了）'
     const backup = read('src/core/services/backup.service.ts');
     // projectSchema 必须声明 kind —— 否则导出会把它丢掉，导入后 Agent 看板会"变成人类项目"
     expect(backup).toMatch(/kind:\s*z\.[^\n]*/);
+  });
+
+  it('2026-09-20 三道归属关卡都接上了：落点门 / 读门 / 执行域门（两端同义）', () => {
+    const routes = stripComments(read('server/routes/agent.routes.ts'));
+    // ① 导入落点门：显式 id 也必须过 kind 门（"存在" ≠ "可写"）
+    expect(routes).toContain("targetRow.kind !== 'agent'");
+    // ② 任务流读门：未指定 projectId 时不再返回全库任务（默认范围收窄到 Agent 看板）
+    expect(routes).toContain('agentBoardIds.has(r.projectId)');
+    // ③ 执行域门：服务端（闭包）与本地（私有方法）**两端同义**，
+    //    createExecution / createProposal 各有一处调用 —— 少一处 = 有一条创建路径在裸奔
+    const server = stripComments(read('server/adapters/sqlite.bundle.ts'));
+    expect((server.match(/assertAgentOnlyProject\(cmd\.projectId\)/g) ?? []).length).toBe(2);
+    const local = stripComments(read('src/core/repositories/local/local.execution.repo.ts'));
+    expect((local.match(/this\.assertAgentOnlyProject\(cmd\.projectId\)/g) ?? []).length).toBe(2);
   });
 });
 

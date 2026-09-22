@@ -30,6 +30,9 @@ import {
   type ExecutionConfirmation,
 } from '../src/core/types/agent-execution';
 import { computePlanHash } from '../src/core/execution/plan-hash';
+import type { BackupPackage } from '../src/core/types/dto';
+import { ProjectStatus, ScheduleBasis } from '../src/core/types/enums';
+import type { Project } from '../src/core/types/entities';
 import { emptyPackage } from './helpers/backup-fixture';
 import {
   DEFAULT_RECOVERY_REASON,
@@ -48,8 +51,51 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   bundle = await createRepositories({ dataSource: 'local' });
-  await bundle.admin?.replaceAllImport(emptyPackage());
+  await bundle.admin?.replaceAllImport(pkgWith());
 });
+
+/**
+ * 带 Agent 看板的恢复包基线（★ 2026-09-20 执行域归属关卡）。
+ *
+ * `createExecution` / `createProposal` 的 projectId 必须指向 `kind='agent'` 的项目
+ * （本地与服务端存储侧双重强制）。本 spec 的 p1/p2/p9 都是执行单宿主 —— 此前是
+ * 幻影 id（`emptyPackage` 的 projects 为空数组），现在会被关卡拒。
+ *
+ * 为什么不在 `emptyPackage()` 里塞项目：它是十几个 spec 共用的「清库重建」基线，
+ * 为一个 spec 改共享夹具会悄悄改变别的 spec 的起点。故在这里叠加。
+ */
+function pkgWith(over: Partial<BackupPackage['data']> = {}): BackupPackage {
+  // 显式返回类型 `Project`：helper 的字面量脱离赋值上下文后 `kind` 会被推断成
+  // `string`（不必 `ProjectKind`），不注解就过不了 typecheck:tests。
+  const board = (id: string): Project => ({
+    id,
+    name: `Agent 看板 ${id}`,
+    address: '',
+    clientName: '',
+    contractAmount: null,
+    signedAt: null,
+    plannedStartAt: '2026-08-01',
+    plannedEndAt: '2026-12-31',
+    coverColor: null,
+    shortLabel: null,
+    stagePresetKey: null,
+    stageTemplateVersion: 0,
+    scheduleBasis: ScheduleBasis.Calendar,
+    domain: null,
+    kind: 'agent',
+    status: ProjectStatus.Active,
+    revision: 1,
+    updatedAt: '2026-08-01T00:00:00.000Z',
+  });
+  return {
+    ...emptyPackage(),
+    data: {
+      ...emptyPackage().data,
+      projects: [board('p1'), board('p2'), board('p9')],
+      ...over,
+    },
+  };
+}
 
 /* ------------------------------- 夹具与助手 ------------------------------- */
 
@@ -158,10 +204,7 @@ async function restoreAs(id: string, status: ExecutionStatus): Promise<void> {
   if (!row) throw new Error('fixture missing');
   // ★ 注意：备份恢复是**整库替换**，会把**其他所有项目的数据一起清掉**。
   //   故此法只能用来搬「同一条 execution 的新状态」，且必须在造其他夹具**之前**调用。
-  await bundle.admin!.replaceAllImport({
-    ...emptyPackage(),
-    data: { ...emptyPackage().data, executions: [{ ...row, status }] },
-  });
+  await bundle.admin!.replaceAllImport(pkgWith({ executions: [{ ...row, status }] }));
 }
 
 /**
@@ -172,10 +215,9 @@ async function restoreAs(id: string, status: ExecutionStatus): Promise<void> {
 async function restoreWithAttempts(executionId: string, status: ExecutionStatus): Promise<void> {
   const row = await bundle.executions.getExecution(executionId);
   const attempts = await bundle.executions.listAttempts(executionId);
-  await bundle.admin!.replaceAllImport({
-    ...emptyPackage(),
-    data: { ...emptyPackage().data, executions: [{ ...row!, status }], executionAttempts: attempts },
-  });
+  await bundle.admin!.replaceAllImport(
+    pkgWith({ executions: [{ ...row!, status }], executionAttempts: attempts }),
+  );
 }
 
 const scope = { projectIds: ['p1'] };
@@ -292,14 +334,12 @@ describe('recoverZombieExecutions：终态保护（防误伤）', () => {
     const attemptId = await addRunningAttempt(id);
     const row = await bundle.executions.getExecution(id);
     const attempts = await bundle.executions.listAttempts(id);
-    await bundle.admin!.replaceAllImport({
-      ...emptyPackage(),
-      data: {
-        ...emptyPackage().data,
+    await bundle.admin!.replaceAllImport(
+      pkgWith({
         executions: [{ ...row!, status: ExecutionStatus.Cancelled }],
         executionAttempts: attempts,
-      },
-    });
+      }),
+    );
     const before = await snapshot(id);
 
     await recoverZombieExecutions(bundle.executions, scope);
@@ -638,16 +678,14 @@ describe('僵尸判据：单一出处与备份恢复场景', () => {
     await toRunning(b);
     const rowA = await bundle.executions.getExecution(a);
     const rowB = await bundle.executions.getExecution(b);
-    await bundle.admin!.replaceAllImport({
-      ...emptyPackage(),
-      data: {
-        ...emptyPackage().data,
+    await bundle.admin!.replaceAllImport(
+      pkgWith({
         executions: [
           { ...rowA!, status: ExecutionStatus.Paused },
           { ...rowB!, status: ExecutionStatus.NeedsAttention },
         ],
-      },
-    });
+      }),
+    );
 
     await recoverZombieExecutions(bundle.executions, scope);
 

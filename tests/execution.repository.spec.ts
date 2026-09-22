@@ -16,7 +16,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { installFakeIndexedDB } from './setup';
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
-import { ChangxiaError, ChangxiaErrorCode } from '../src/core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, ProjectStatus, ScheduleBasis } from '../src/core/types/enums';
 import { ExecutionStatus, WritebackProposalStatus } from '../src/core/types/agent-execution';
 
 let bundle: IRepositoryBundle;
@@ -30,7 +30,51 @@ beforeEach(async () => {
   await bundle.admin?.replaceAllImport({
     meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
     data: {
-      projects: [],
+      // ★ 2026-09-20 执行域归属关卡：`createExecution` / 提案的 projectId 必须指向
+      //   `kind='agent'` 的项目（存储侧强制）。本 spec 的 p1/p2 是执行单宿主，
+      //   故一律建成 Agent 看板（此前是幻影 id，现在会被关卡拒）。
+      projects: [
+        {
+          id: 'p1',
+          name: 'Agent 看板 p1',
+          address: '',
+          clientName: '',
+          contractAmount: null,
+          signedAt: null,
+          plannedStartAt: '2026-08-01',
+          plannedEndAt: '2026-12-31',
+          coverColor: null,
+          shortLabel: null,
+          stagePresetKey: null,
+          stageTemplateVersion: 0,
+          scheduleBasis: ScheduleBasis.Calendar,
+          domain: null,
+          kind: 'agent',
+          status: ProjectStatus.Active,
+          revision: 1,
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+        {
+          id: 'p2',
+          name: 'Agent 看板 p2',
+          address: '',
+          clientName: '',
+          contractAmount: null,
+          signedAt: null,
+          plannedStartAt: '2026-08-01',
+          plannedEndAt: '2026-12-31',
+          coverColor: null,
+          shortLabel: null,
+          stagePresetKey: null,
+          stageTemplateVersion: 0,
+          scheduleBasis: ScheduleBasis.Calendar,
+          domain: null,
+          kind: 'agent',
+          status: ProjectStatus.Active,
+          revision: 1,
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+      ],
       stages: [],
       tasks: [],
       members: [],

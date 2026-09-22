@@ -4,7 +4,8 @@
  * ── 覆盖 ──
  * PRD B7（AI 能建板 / 仍不能碰人类项目）、B8（阶段来源＝18 套餐 / 56 阶段项；不在库 → 自定义）、
  * B9（名称＋起止日期＋阶段集合缺一即拒，**绝不猜日期**）、B10（人类项目一字不改，回归铁律）；
- * 设计 §7.6（定向反转）、§7.2 #26（候选清单只列人类项目）。
+ * 设计 §7.6（定向反转）、§7.2 #26（候选清单只列 Agent 看板 —— 2026-09-20 用户
+ * 裁决「Agent 与她自己的项目零关系」后再反转，修订记录见 PRD 文末）。
  *
  * ── 为什么全部走 `app.inject` 端到端 ──
  * 本任务的缺口几乎全是**集成缺口**：校验判序、零写入、`kind` 落库值、阶段骨架的来源与
@@ -499,11 +500,17 @@ describe('★ 建板端点只新建：projectId / projectName 一律不接受', 
 });
 
 /* ======================================================================================
- * 四、§7.6 / §7.2 #26 · 定向反转的另一半：候选清单只列人类项目
+ * 四、§7.6 / §7.2 #26 · 候选清单只列 Agent 看板（2026-09-20 用户裁决后再反转）
+ *
+ * ── 为什么是「再反转」而不是回归疏漏 ──
+ * v0.8 §7.6「定向反转」原定候选只列**人类**项目（AI 辅助排期写进人类项目，
+ * PRD §5.2 #26 + 隔离清单测试钉死）。用户 2026-09-20 明确边界：「Agent 可以在
+ * 各个专业领域排期，但肯定跟我自己的项目没关系」⇒ 候选集合翻转为 Agent 看板。
+ * 修订记录见 `deliverables/research/v0.8-增量PRD-建档重构与Agent工作区.md` 文末。
  * ==================================================================================== */
 
-describe('§7.6 / §7.2 #26 · listProjectCandidates() 只列人类项目', () => {
-  it('探活清单含人类项目、不含已建的 Agent 看板', async () => {
+describe('§7.6 / §7.2 #26 · listProjectCandidates() 只列 Agent 看板', () => {
+  it('探活清单含已建的 Agent 看板、不含人类项目', async () => {
     const app = await buildServer();
     await createHumanProject(app, 'p_human', '人类项目');
     const board = await postBoard(app, {
@@ -521,53 +528,180 @@ describe('§7.6 / §7.2 #26 · listProjectCandidates() 只列人类项目', () =
     });
     expect(health.statusCode).toBe(200);
     const body = health.json() as { projects: Array<{ id: string; name: string }> };
-    expect(body.projects.map((p) => p.id)).toContain('p_human');
-    // ★ 反向断言：Agent 看板**不在**候选集里（现状最刺眼处：AI 会往人类项目写，人会选到 Agent 板）
-    expect(body.projects.map((p) => p.id)).not.toContain(board.body.projectId);
-    expect(body.projects.map((p) => p.name)).not.toContain('AI 看板 · 候选边界');
+    // ★ 合法落点只剩 Agent 看板：探活清单呈现的就是「导得进去的那些板」
+    expect(body.projects.map((p) => p.id)).toContain(board.body.projectId);
+    expect(body.projects.map((p) => p.name)).toContain('AI 看板 · 候选边界');
+    // ★ 反向断言：人类项目**不在**候选集里（用户边界：Agent 与她自己的项目零关系）
+    expect(body.projects.map((p) => p.id)).not.toContain('p_human');
+    expect(body.projects.map((p) => p.name)).not.toContain('人类项目');
   });
 
-  it('★ ?projectName=<已存在的 Agent 看板名> → project_unresolved 且**零写入**（B7/B10 边界）', async () => {
+  it('★ ?projectName=<人类项目名> → project_unresolved 且**零写入**（按名解析被结构性排除）', async () => {
+    const app = await buildServer();
+    await createHumanProject(app, 'p_human', '人类项目');
+    const before = tableCounts();
+
+    const res = await doImport(app, `?projectName=${encodeURIComponent('人类项目')}`);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error?.code).toBe('project_unresolved');
+    // 按名解析的第一道排除：人类项目名不进候选集 ⇒ 名字「查无此项」
+    expect(res.body.error?.userMessage).toContain('未找到名为');
+    // ★ 零写入：既没有新任务、也没有新阶段
+    expect(tableCounts()).toEqual(before);
+    // 诊断载荷里的候选清单同样只剩 Agent 看板（此刻一口都没有 → 空数组，
+    // 否则等于在诱导调用方去选一个必然被拒的落点）
+    expect(res.body.error?.projects).toEqual([]);
+    // 人类项目本体逐字段未变（一个阶段都没被建出来）
+    expect(projectRow('p_human').kind).toBe('human');
+    expect(stageRows('p_human')).toHaveLength(0);
+  });
+
+  it('★ ?projectId=<人类项目 id> → 400 project_unresolved（归属关卡：文案指明「不是 Agent 看板」）', async () => {
+    const app = await buildServer();
+    await createHumanProject(app, 'p_human', '人类项目');
+    const before = tableCounts();
+
+    // 显式 id 绕过按名解析 —— 这一道由**归属关卡**接住（与存在性合并为一次查询）
+    const res = await doImport(app, '?projectId=p_human');
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error?.code).toBe('project_unresolved');
+    // 文案指明归属：落点不是 Agent 看板（不是「名字打错了」那种无信息量报错）
+    expect(res.body.error?.userMessage).toContain('不是 Agent 看板');
+    expect(res.body.error?.userMessage).toContain('p_human');
+    // ★ 零写入 + 人类项目本体一字未改
+    expect(tableCounts()).toEqual(before);
+    expect(projectRow('p_human')).toMatchObject({ kind: 'human' });
+    expect(stageRows('p_human')).toHaveLength(0);
+  });
+
+  it('★ ?projectId=<不存在的 id> → 400 project_unresolved（存在性关卡：文案指明「不存在」）', async () => {
+    const app = await buildServer();
+    const before = tableCounts();
+
+    // 显式 id 指向一个从未建过的项目（既不是人类项目、也不是 Agent 看板）——
+    // 这一道由**存在性判定**接住（与归属关卡同一次查询：先判存在、再判 kind）。
+    // 变异验证锚点：把 `if (!targetRow)` 改成永假，本用例必须转红。
+    const res = await doImport(app, '?projectId=p_ghost');
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error?.code).toBe('project_unresolved');
+    expect(res.body.error?.userMessage).toContain('不存在');
+    expect(res.body.error?.userMessage).toContain('p_ghost');
+    // ★ 零写入
+    expect(tableCounts()).toEqual(before);
+  });
+
+  it('?projectName=<Agent 看板名> → 正常按名解析导入（合法落点：任务落进看板已有阶段）', async () => {
     const app = await buildServer();
     const board = await postBoard(app, {
-      name: 'AI 看板 · 不可被导入',
+      name: 'AI 看板 · 合法落点',
       plannedStartAt: '2026-03-01',
       plannedEndAt: '2026-08-31',
       presetKey: 'indoor_full',
     });
     expect(board.statusCode, board.raw).toBe(201);
 
-    const before = tableCounts();
+    // 显式声明落点名 → 命中 indoor_full 骨架里的「提案」，任务落进去
     const res = await doImport(
       app,
-      `?projectName=${encodeURIComponent('AI 看板 · 不可被导入')}`,
-    );
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error?.code).toBe('project_unresolved');
-    // ★ 零写入：导入通道**结构上**不可能命中 Agent 看板（它不在候选集里），
-    //   因此既没有新任务、也没有新阶段（哪怕这条看板有 9 个可见阶段）
-    expect(tableCounts()).toEqual(before);
-    // 诊断载荷里的候选清单同样只剩人类项目（否则等于在诱导调用方去选一个必然被拒的落点）
-    expect(res.body.error?.projects).toEqual([]);
-    // 看板本体逐字段未变
-    expect(projectRow(board.body.projectId!)).toMatchObject({ kind: 'agent' });
-    expect(stageRows(board.body.projectId!)).toHaveLength(9);
-  });
-
-  it('?projectName=<人类项目名> → 仍正常按名解析导入（反转只针对 Agent 看板，人类通道零变化）', async () => {
-    const app = await buildServer();
-    await createHumanProject(app, 'p_human', '人类项目');
-
-    // 显式声明落点名 → 自动建一个阶段并落一条任务（§4.4 按名选点）
-    const res = await doImport(
-      app,
-      `?projectName=${encodeURIComponent('人类项目')}&stageName=${encodeURIComponent('实施')}`,
+      `?projectName=${encodeURIComponent('AI 看板 · 合法落点')}&stageName=${encodeURIComponent('提案')}`,
     );
     expect(res.statusCode, JSON.stringify(res.body)).toBe(200);
     const tasks = db.prepare('SELECT COUNT(*) AS c FROM tasks').get() as { c: number };
-    expect(tasks.c).toBe(1); // 人类项目这条通道一个字都没改
-    expect(stageRows('p_human')).toHaveLength(1);
+    expect(tasks.c).toBe(1); // 反转后这条通道照样能用——只是落点换了对象
+    // 任务确实落进了 Agent 看板（不是别的项目）
+    const row = db.prepare('SELECT project_id FROM tasks').get() as { project_id: string };
+    expect(row.project_id).toBe(board.body.projectId);
+    // 看板骨架 9 段一字未增（stageName 命中的是已有阶段，不是新建）
+    expect(stageRows(board.body.projectId!)).toHaveLength(9);
+  });
+});
+
+/* ======================================================================================
+ * 四二、★ 2026-09-20 补齐 · GET /api/agent/tasks 读侧归属关卡
+ *
+ * 写侧的落点门（第四节）只拦「导入」；读侧同样有归属：Skill 拿任务流是为了**回喂
+ * payload**，若这里还带着人类项目的任务，「看得见」会被误解为「导得进」—— 白费
+ * 一轮 depends_unresolved，且等于把她的排期整库递给任何持 token 的调用方。
+ * ==================================================================================== */
+
+/** 给项目插一个可见批次（不经建板端点，模拟「库里已有的人类项目」） */
+function seedStage(projectId: string, id = `stg_${projectId}`): void {
+  db.prepare(
+    `INSERT INTO stages (id, project_id, order_index, template_key, color_index, custom_color,
+       name, ratio_percent, start_at, end_at, status, owner_id, visible, resource_path, revision, updated_at)
+     VALUES (?, ?, 1, NULL, 1, NULL, '批次1', 10, '2026-01-01', '2026-12-31',
+       'not_started', NULL, 1, NULL, 1, '2026-01-01T00:00:00.000Z')`,
+  ).run(id, projectId);
+}
+
+/** 往项目插一条人工任务（走既有 POST /api/tasks，不经 Agent 通道） */
+async function createManualTask(
+  app: App,
+  projectId: string,
+  stageId: string,
+  title: string,
+): Promise<void> {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/tasks',
+    payload: { projectId, stageId, title },
+  });
+  expect(res.statusCode, res.body).toBe(200);
+}
+
+describe('§3.3 GET /api/agent/tasks · 读侧归属关卡（2026-09-20 补齐）', () => {
+  it('★ 显式 projectId 指向人类项目 → 400 project_unresolved（即使库里确实有任务）', async () => {
+    const app = await buildServer();
+    await createHumanProject(app, 'p_human', '人类项目');
+    seedStage('p_human');
+    // 人类项目里确实有一条任务 —— 证明 400 不是「恰好为空」的假红
+    await createManualTask(app, 'p_human', 'stg_p_human', '人类任务');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/agent/tasks?projectId=p_human',
+      headers: { 'x-agent-token': TOKEN },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string; userMessage: string; projects: unknown[] } };
+    expect(body.error.code).toBe('project_unresolved');
+    expect(body.error.userMessage).toContain('Agent 看板');
+    expect(body.error.projects).toEqual([]);
+  });
+
+  it('★ 未指定 projectId → 只回 Agent 看板的任务（人类项目任务一条都不出现）', async () => {
+    const app = await buildServer();
+    // ① 人类项目 + 1 条人工任务
+    await createHumanProject(app, 'p_human', '人类项目');
+    seedStage('p_human');
+    await createManualTask(app, 'p_human', 'stg_p_human', '人类任务');
+    // ② Agent 看板 + 1 条导入任务
+    const board = await postBoard(app, {
+      name: 'AI 看板 · 读侧边界',
+      plannedStartAt: '2026-03-01',
+      plannedEndAt: '2026-08-31',
+      presetKey: 'indoor_full',
+    });
+    expect(board.statusCode, board.raw).toBe(201);
+    const imp = await doImport(
+      app,
+      `?projectId=${board.body.projectId}&stageName=${encodeURIComponent('提案')}`,
+    );
+    expect(imp.statusCode, JSON.stringify(imp.body)).toBe(200);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/agent/tasks',
+      headers: { 'x-agent-token': TOKEN },
+    });
+    expect(res.statusCode).toBe(200);
+    const tasks = (res.json() as { tasks: Array<{ title: string }> }).tasks;
+    // 库里明明有两条任务（人类一条 + 看板一条），Agent 通道只看得见看板那条
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]!.title).toBe('写提案'); // makePayload 的固定标题
   });
 });
 

@@ -43,6 +43,33 @@ import { pickDefined } from './local.projects.repo';
 export class LocalExecutionsRepository implements IExecutionsRepository {
   constructor(private readonly db: ChangxiaDatabase) {}
 
+  /**
+   * 执行域归属关卡（v0.8 隔离补齐 · 2026-09-20）：与服务端
+   * `sqlite.bundle.ts` 的同名关卡**逐字同义**（两端判定必须一致，
+   * 分歧比「两端共同不完整」更坏——理由同下方 source 校验的审计补齐）。
+   *
+   * 背景：执行域（S1–S5）只有 API 没有界面入口，此前本地侧同样零 kind 关卡，
+   * 任意 projectId 都能挂执行单/提案。本方法把「执行域只属于 Agent 看板」
+   * 落成本地存储边界：项目不存在 → NotFound；kind 非 `'agent'`（含脏值/
+   * 老库缺列，默认拒绝而非默认放行）→ Validation。
+   */
+  private async assertAgentOnlyProject(projectId: string): Promise<void> {
+    const project = await this.db.projects.get(projectId);
+    if (!project) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.NotFound,
+        `未找到项目 ${projectId}，不能为它创建执行域数据。`,
+      );
+    }
+    if (project.kind !== 'agent') {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `执行域只属于 Agent 看板：项目 ${projectId} 的 kind="${project.kind}"，不是 agent。` +
+          ' 人工项目的排期不经由 Agent 执行通道。',
+      );
+    }
+  }
+
   async createExecution(cmd: CreateExecutionCmd): Promise<Execution> {
     // ★ 审计补齐（原缺口 1 的同源排查）：`source` 此前**本地侧不校验**，
     //   而远端侧由路由层 `EXECUTION_SOURCES.includes(source)` 拦住 ——
@@ -54,6 +81,8 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         `字段 source 非法：${String(cmd.source)}；合法值为 ${EXECUTION_SOURCES.join(' / ')}。`,
       );
     }
+    // 执行域归属关卡（先于任何写入）：只有 Agent 看板上能建执行单。
+    await this.assertAgentOnlyProject(cmd.projectId);
     const now = new Date().toISOString();
     const row: Execution = {
       id: crypto.randomUUID(),
@@ -395,6 +424,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         'rw',
         this.db.executions,
         this.db.writebackProposals,
+        this.db.projects, // 归属关卡要在事务内读项目 kind（只读不写，但必须同事务才够原子）
         async () => {
           if (!(await this.db.executions.get(cmd.executionId))) {
             throw new ChangxiaError(
@@ -402,6 +432,9 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
               `未找到执行单 ${cmd.executionId}，不能为其创建写回提案。`,
             );
           }
+          // 执行域归属关卡（与服务端同款、同位置）：提案的 projectId 是「写回目标」，
+          // 同样只属于 Agent 看板；事务内读项目再写提案，与父存在性检查同一原子性。
+          await this.assertAgentOnlyProject(cmd.projectId);
           const now = new Date().toISOString();
           const row: WritebackProposal = {
             id: crypto.randomUUID(),

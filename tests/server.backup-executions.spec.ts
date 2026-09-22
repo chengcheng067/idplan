@@ -77,6 +77,9 @@ async function seedExecutionDomain(app: FastifyInstance): Promise<{
     payload: {
       id: PROJECT_ID,
       name: '备份执行域项目',
+      // ★ 2026-09-20 执行域归属关卡：服务端 createExecution 强制 projectId 指向
+      //   kind='agent' 的项目（本 spec 的执行单经 POST /executions 落库）
+      kind: 'agent',
       address: '',
       clientName: '',
       contractAmount: null,

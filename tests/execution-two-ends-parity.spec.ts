@@ -51,7 +51,7 @@ import { RemoteExecutionsRepository, RestClient } from '../src/core/repositories
 import type { IExecutionsRepository } from '../src/core/repositories/interfaces';
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
-import { ChangxiaErrorCode } from '../src/core/types/enums';
+import { ChangxiaErrorCode, ProjectStatus, ScheduleBasis } from '../src/core/types/enums';
 import { computePlanHash } from '../src/core/execution/plan-hash';
 import {
   ATTEMPT_STATUSES,
@@ -117,6 +117,8 @@ async function seedRemoteProject(app: FastifyInstance): Promise<void> {
     payload: {
       id: PROJECT_ID,
       name: '两端一致性项目',
+      // ★ v0.8 隔离补齐（2026-09-20）：执行域只属于 Agent 看板，两端夹具都建 agent 板
+      kind: 'agent',
       address: '',
       clientName: '',
       contractAmount: null,
@@ -143,7 +145,31 @@ async function resetLocal(): Promise<void> {
   await localBundle.admin?.replaceAllImport({
     meta: { app: 'changxia', schemaVersion: 3, exportedAt: '2026-08-01T00:00:00.000Z' },
     data: {
-      projects: [],
+      // ★ v0.8 隔离补齐（2026-09-20）：本地执行域仓储同样只接受 Agent 看板 ——
+      //   此前这里是空数组 + 注释「本地 projectId 无外键约束，随便用」，
+      //   归属关卡落地后必须种一个 kind='agent' 的真项目。
+      projects: [
+        {
+          id: PROJECT_ID,
+          name: '两端一致性项目',
+          address: '',
+          clientName: '',
+          contractAmount: null,
+          signedAt: null,
+          plannedStartAt: '2026-08-01',
+          plannedEndAt: '2026-12-31',
+          coverColor: null,
+          shortLabel: null,
+          stagePresetKey: 'indoor_full',
+          stageTemplateVersion: 2,
+          scheduleBasis: ScheduleBasis.Calendar,
+          domain: 'indoor',
+          kind: 'agent',
+          status: ProjectStatus.Active,
+          revision: 1,
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+      ],
       stages: [],
       tasks: [],
       // `itineraries` 必填：`execution.repository.spec.ts` 的同类 fixture 漏了它，
@@ -197,7 +223,13 @@ describe('执行域两端一致：同一输入 → 同一个码（护栏）', ()
     await resetLocal();
   });
 
-  /** 两端各建一个执行单，返回各自的 executionId（本地 projectId 无外键约束，随便用） */
+  /**
+   * 两端各建一个执行单，返回各自的 executionId。
+   *
+   * ★ v0.8 隔离补齐（2026-09-20）：PROJECT_ID 两端都种的是 kind='agent' 的板
+   *    （远端 seedRemoteProject / 本地 resetLocal）——执行域归属关卡落地后，
+   *    本地 projectId 不再是「无外键约束随便用」：关卡会查项目存在性与 kind。
+   */
   async function seedBoth(key: string): Promise<{ localId: string; remoteId: string }> {
     const l = await localBundle.executions.createExecution({
       projectId: PROJECT_ID,

@@ -67,14 +67,28 @@ afterEach(() => {
   db.close();
 });
 
-/** 建一个人类项目（kind 落 'human'），用于落点候选 */
-async function createHumanProject(app: App, id: string, name = id): Promise<void> {
+/**
+ * 建一个 Agent 看板（`kind='agent'`），用于落点候选。
+ *
+ * ★ 2026-09-20 用户裁决「现在关」后，Agent 看板是导入通道的**唯一合法落点**
+ *   （`agent.routes.ts` 落点归属关卡）。本 spec 测的是 projectId 冲突 fail-closed，
+ *   冲突判序**先于**归属关卡（resolveAgentProjectId 在查库之前抛错），故本文件
+ *   的全部用例都不受关卡影响——把夹具从人类项目换成 Agent 看板即可原样通过。
+ */
+async function createAgentBoard(app: App, id: string, name = id): Promise<void> {
   const res = await app.inject({
     method: 'POST',
     url: '/api/projects',
-    payload: { id, name, type: 'dining', plannedStartAt: '2026-01-01', plannedEndAt: '2026-12-31' },
+    payload: {
+      id,
+      name,
+      type: 'dining',
+      plannedStartAt: '2026-01-01',
+      plannedEndAt: '2026-12-31',
+      kind: 'agent',
+    },
   });
-  expect(res.statusCode, `建人类项目失败：${res.body}`).toBe(200);
+  expect(res.statusCode, `建 Agent 看板失败：${res.body}`).toBe(200);
 }
 
 /** 给项目插一个可见批次（import 无 stageId / 无声明名时落到最后一个可见批次） */
@@ -149,8 +163,8 @@ async function postImport(
 describe('POST /api/agent/import · projectId 冲突 fail-closed', () => {
   it('query 与 payload 不一致 → 400，且**零写入**（projects/stages/tasks 行数前后相等）', async () => {
     const app = await buildServer();
-    await createHumanProject(app, 'proj_a');
-    await createHumanProject(app, 'proj_b');
+    await createAgentBoard(app, 'proj_a');
+    await createAgentBoard(app, 'proj_b');
     seedStage('proj_a');
     seedStage('proj_b');
 
@@ -169,7 +183,7 @@ describe('POST /api/agent/import · projectId 冲突 fail-closed', () => {
 
   it('query 与 payload 一致 → 200，正常写入 1 条', async () => {
     const app = await buildServer();
-    await createHumanProject(app, 'proj_a');
+    await createAgentBoard(app, 'proj_a');
     seedStage('proj_a');
 
     const before = tableCounts();
@@ -183,7 +197,7 @@ describe('POST /api/agent/import · projectId 冲突 fail-closed', () => {
 
   it('只有 query 提供（payload.projectId=null）→ 200，正常写入', async () => {
     const app = await buildServer();
-    await createHumanProject(app, 'proj_a');
+    await createAgentBoard(app, 'proj_a');
     seedStage('proj_a');
 
     const res = await postImport(app, importPayload(null), { projectId: 'proj_a' });
@@ -193,7 +207,7 @@ describe('POST /api/agent/import · projectId 冲突 fail-closed', () => {
 
   it('只有 payload 提供（无 query）→ 200，正常写入', async () => {
     const app = await buildServer();
-    await createHumanProject(app, 'proj_a');
+    await createAgentBoard(app, 'proj_a');
     seedStage('proj_a');
 
     const res = await postImport(app, importPayload('proj_a'));
@@ -203,7 +217,7 @@ describe('POST /api/agent/import · projectId 冲突 fail-closed', () => {
 
   it('边界：仅大小写不同 → 判为不一致 → 400（不折叠大小写）', async () => {
     const app = await buildServer();
-    await createHumanProject(app, 'proj_a');
+    await createAgentBoard(app, 'proj_a');
 
     const res = await postImport(app, importPayload('proj_a'), { projectId: 'PROJ_A' });
     expect(res.statusCode).toBe(400);
@@ -213,7 +227,7 @@ describe('POST /api/agent/import · projectId 冲突 fail-closed', () => {
 
   it('边界：query 带首尾空白（?projectId= proj_a ）与 payload 一致 → 200，正常写入', async () => {
     const app = await buildServer();
-    await createHumanProject(app, 'proj_a');
+    await createAgentBoard(app, 'proj_a');
     seedStage('proj_a');
 
     const res = await postImport(app, importPayload('proj_a'), { projectId: ' proj_a ' });

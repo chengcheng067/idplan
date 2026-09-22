@@ -675,7 +675,18 @@ export function AgentExecutionConsolePage() {
 
     (async () => {
       try {
-        const projects = await repos.projects.list();
+        const all = await repos.projects.list();
+        /**
+         * 执行域归属关卡的前端镜像（v0.8 隔离补齐 · 2026-09-20）：
+         * **执行域的一切数据只属于 Agent 看板**（存储层的创建入口已强制 kind 归属，
+         * 见本地仓储与服务端 bundle 的同款关卡），故本控制台只按 `kind==='agent'`
+         * 的板分桶。
+         *
+         * 不过滤会发生什么：存储侧关卡挡住「新写」，但挡不住历史/备份种进人类项目的
+         * 畸形数据被这里读出来分桶显示 —— 隔离谓词的方向必须是「默认排除」，
+         * 界面侧与存储侧各守一半，任何一半单独失效都还有另一半兜底。
+         */
+        const projects = all.filter((p) => p.kind === 'agent');
         const collected: ProjectBucket[] = [];
         /**
          * 矛盾判定需要 attempt 集合，而 `Execution` 实体里**没有**它

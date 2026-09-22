@@ -112,6 +112,11 @@ async function createProject(app: App, id = PROJECT_ID, plannedEnd = '2026-12-31
       clientName: '',
       plannedStartAt: '2026-01-01',
       plannedEndAt: plannedEnd,
+      // ★ 2026-09-20 用户裁决「现在关」：Agent 导入通道的合法落点只剩 Agent 看板
+      //   （`agent.routes.ts` 落点归属关卡）。本 spec 的 import / tasks 用例全部以
+      //   PROJECT_ID 为落点，故夹具一律建 `kind='agent'`——建人类项目会让每一个
+      //   导入用例撞上 400 project_unresolved（那不是用例想测的失效）。
+      kind: 'agent',
     },
   });
   expect(res.statusCode, `建项目失败：${res.body}`).toBe(200);

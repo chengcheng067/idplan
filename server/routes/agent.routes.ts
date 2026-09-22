@@ -10,12 +10,15 @@
  *      它不接受 `projectId` / `projectName`，也没有任何通往「已有项目」的写路径 ——
  *      「AI 不能碰人类项目」在这条通道上是**结构性**的（见该 handler 的段首注释）。
  *
- * ── v0.8 §7.6「定向反转」的两半（都要，缺一不可）──
+ * ── 落点scope：Agent 通道只碰 Agent 看板（2026-09-20 用户裁决后再收窄）──
  *   ① **放开建板**：AI 能建 `kind='agent'` 的看板（含阶段骨架），阶段来源复用
  *      `templates/stage-library.json` 的 21 套餐 / 63 阶段项（数量以该 JSON 为准，
  *      改库后请同步此处的数字——它曾长期停留在 18/56，比数据旧）；
- *   ② **仍然不放开人类项目**：`listProjectCandidates()` 收窄为只列 `kind='human'`，
- *      于是 `?projectName=` 解析**永不可能**命中 Agent 看板（详见该函数的注释）。
+ *   ② ★ **导入/读取的合法集合都只剩 Agent 看板**：`listProjectCandidates()` 与
+ *      落点解析、任务流的默认范围全部按 `kind='agent'` 收窄。曾按 v0.8 §7.6
+ *      「定向反转」只列**人类**项目（AI 辅助排期写进人类项目）；用户边界为
+ *      「Agent 在各专业领域排期，但绝不跟她自己的项目扯关系」⇒ 再反转，
+ *      修订记录见 `deliverables/research/v0.8-增量PRD-建档重构与Agent工作区.md`。
  *
  * ── 本文件是「薄壳」，判定逻辑不在它身上 ──
  * 落点判定（按名复用 / 计划新建 / 无落点）、幂等键、环检测、两段式 upsert 全部在
@@ -94,7 +97,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * `GET /api/tasks` 返回行的**读取侧最小形状**（只声明本端点真正读到的字段）。
  *
  * 刻意不 import `tasks.routes.ts` 的 `rowToTask`：它**未导出**（该文件写锁属 T01）。
- * 也不抄一遍完整映射 —— 这里只做「从既有端点的产物里取 6 个字段」，多一个字段都不读，
+ * 也不抄一遍完整映射 —— 这里只取本端点用到的字段，多一个字段都不读（`projectId`
+ * 是 2026-09-20 隔离补齐后为「默认范围 = Agent 看板」的过滤而加入的第七个），
  * 因此不存在第二份字段口径；字段一旦改名，这个接口会在编译期红。
  */
 interface AgentTaskListRow {
@@ -106,6 +110,8 @@ interface AgentTaskListRow {
   dueDate: string | null;
   /** 落库形状：存的是 **Task.id**（不是 externalId），见下方反查注释 */
   dependsOn: string[];
+  /** 归属项目 id：仅用于「未指定 projectId 时收窄到 Agent 看板」的过滤（隔离边界读侧） */
+  projectId: string;
 }
 
 /**
@@ -173,35 +179,33 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
   /**
    * 项目候选清单（探活与 `project_unresolved` 共用：`{id,name}`，按名称排序）。
    *
-   * ★ v0.8 §7.6「定向反转」：**只列人类项目**（`kind = 'human'`）。
+   * ★ 2026-09-20 用户裁决后再收窄：**只列 Agent 看板**（`kind = 'agent'`）。
    *
-   * 这一条 SQL 同时、且**结构性**地解决了 v0.8 的两个需求 —— 不是两处规则，
-   * 而是同一个事实的两个面：
-   *   ① §7.2 #26「候选清单只列人类项目」（注意是 `'human'`，**不是** `'agent'`）：
-   *      这份清单是给调用方（Skill）**选落点**用的，它只允许往人类项目写任务；
-   *   ② §7.6 / §7.3 #26「`?projectName=` 永不可能解析到 Agent 看板」：
-   *      `findProjectIdByName()` **复用同一份清单**，故 Agent 看板名根本不进候选集
-   *      ⇒ 按名解析必然落空 ⇒ 走既有的 `project_unresolved` 分支 ⇒ **零写入**（PRD B7 末句）。
+   * 这一条 SQL 同时、且**结构性**地解决两件事（与 v0.8 原设计同一手法，只是方向相反）：
+   *   ① `?projectName=` 解析**永不可能**命中人类项目：`findProjectIdByName()` 复用
+   *      同一份清单，人类项目名根本不进候选集 ⇒ 按名解析必然落空 ⇒ 走
+   *      `project_unresolved` 分支 ⇒ **零写入**；
+   *   ② 诊断载荷与健康探活的 `projects` 字段只呈现**合法落点**：调用方（Skill）
+   *      拿到的候选清单就是「导得进去的那些板」，不会被诱导去选一个必被拒的目标。
    *
-   * ★ 为什么**不**再加一段「若解析到 agent 就拒绝」的分支：
-   *   那会把「结构上不可能命中」降级为「运行时校验挡住」，同一个不变式于是有**两处规则**，
-   *   两处迟早漂移（改一处忘另一处 = AI 又能写人类项目，而且没有任何测试会发现）。
-   *   一句话记住：**零写入是结构性的，不是校验出来的** —— 候选集里根本没有 Agent 看板，
-   *   就无所谓「命中之后再拦住」。
+   * ── 为什么这是「再反转」而不是回归疏漏 ──
+   * v0.8 §7.6「定向反转」原定候选只列**人类**项目（AI 辅助排期写进人类项目，
+   * v0.7 主功能的延续，PRD §5.2 第 26 行 + 隔离清单测试钉死）。用户 2026-09-20
+   * 明确边界：「Agent 可以在各个专业领域排期，但肯定跟我自己的项目没关系」⇒
+   * 导入通道与人类项目脱钩，落点集合翻转为 Agent 看板。修订记录见
+   * `deliverables/research/v0.8-增量PRD-建档重构与Agent工作区.md` 文末。
+   *
+   * ⚠️ 用等值 `kind = 'agent'` 而**不是** `kind <> 'human'`：后者会把将来可能出现的
+   *   第三种 kind 悄悄放进候选集（隔离谓词的默认方向必须是「排除在候选外」，
+   *   而不是「除非明确标记为 human」）。老库经 `migrateColumns` 补列后由 DDL 的
+   *   `NOT NULL DEFAULT 'human'` 补齐，故不存在 `kind IS NULL` 的行。
    *
    * 影响面（有意如此，非副作用）：本函数被 5 处引用 —— `findProjectIdByName`（落点解析）、
-   * 三处 `project_unresolved` 诊断载荷（`:256/:268/:281/:322`）与健康探活的 `projects`
-   * 字段（`:347`）。全部**剩人类项目**正是 §7.2 #26 的期望行为：诊断载荷里的候选清单
-   * 若混着 Agent 看板，反而是在诱导调用方去选一个「一定会被拒绝」的落点。
-   *
-   * ⚠️ 用等值 `kind = 'human'` 而**不是** `kind <> 'agent'`：后者会把将来可能出现的
-   *   第三种 kind 悄悄放进候选集（隔离谓词的默认方向必须是「排除在候选外」，
-   *   而不是「除非明确标记为 agent」）。老库经 `migrateColumns` 补列后由 DDL 的
-   *   `NOT NULL DEFAULT 'human'` 补齐，故不存在 `kind IS NULL` 的行。
+   * 三处 `project_unresolved` 诊断载荷与健康探活的 `projects` 字段，全部**只剩 Agent 看板**。
    */
   const listProjectCandidates = (): Array<{ id: string; name: string }> =>
     db
-      .prepare("SELECT id, name FROM projects WHERE kind = 'human' ORDER BY name")
+      .prepare("SELECT id, name FROM projects WHERE kind = 'agent' ORDER BY name")
       .all() as Array<{
       id: string;
       name: string;
@@ -352,15 +356,43 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           },
         };
       }
-      const projectExists = db
-        .prepare('SELECT id FROM projects WHERE id = ?')
-        .get(targetProjectId) as { id: string } | undefined;
-      if (!projectExists) {
+      /**
+       * 目标项目存在性 + 归属关卡（**一次查询、两道判定**）。
+       *
+       * ★ 2026-09-20 用户裁决：**Agent 导入的合法落点只剩 Agent 看板**（`kind='agent'`）。
+       * v0.7/v0.8 的设计是「AI 辅助排期 → 写进人类项目」（PRD §5.2 #26），
+       * 用户边界明确为「Agent 在各专业领域排期，但绝不跟她自己的项目扯关系」，
+       * 故本通道与人类项目脱钩：显式 id 与按名解析（`listProjectCandidates`
+       * 已只剩 Agent 看板）都导不进来。
+       *
+       * 为什么并入存在性检查而不是另起一段：两个判定读的是同一行，拆开会变成
+       * 「同一不变式两处规则」——本文件的历史教训（见候选清单 docstring）正是
+       * 结构性收口优于运行时补丁。
+       *
+       * 错误码分工：id 不存在 → `project_unresolved`（打错 id）；
+       * id 存在但 kind 非 agent → 同码但文案指明归属（打错落点，候选清单即合法集）。
+       */
+      const targetRow = db
+        .prepare('SELECT id, kind FROM projects WHERE id = ?')
+        .get(targetProjectId) as { id: string; kind: string } | undefined;
+      if (!targetRow) {
         void reply.status(400);
         return {
           error: {
             code: 'project_unresolved',
             userMessage: `目标项目（id=${targetProjectId}）不存在，可能已被删除，请重新选择。`,
+            projects: listProjectCandidates(),
+          },
+        };
+      }
+      if (targetRow.kind !== 'agent') {
+        void reply.status(400);
+        return {
+          error: {
+            code: 'project_unresolved',
+            userMessage:
+              `目标项目（id=${targetProjectId}）不是 Agent 看板，Agent 通道不能往里写任务。` +
+              ' 人类项目只能由你主动发起（界面手动粘贴 / 显式接管），Agent token 无法触碰。',
             projects: listProjectCandidates(),
           },
         };
@@ -446,6 +478,31 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       // 直接把这个过滤条件透给既有 `GET /api/tasks`（同一份过滤实现）。
       const source = optionalString(q.source);
 
+      /**
+       * ★ v0.8 隔离补齐（2026-09-20）：**Agent 通道与人类项目零数据关系**（读侧）。
+       *
+       * ① 显式 `projectId` 必须指向 Agent 看板：打错归属 → 400（候选只列 Agent 板）。
+       *    id 不存在 → 不在本处报错，维持既有语义（委托 `/api/tasks` 过滤后自然为空）。
+       * ② **未指定 projectId 不再返回全库任务** —— 那等于把她的项目任务整库递给
+       *    任何持 token 的调用方。默认范围收窄为 Agent 看板（下方按项目集合过滤）。
+       */
+      if (projectId !== undefined) {
+        const row = db.prepare('SELECT kind FROM projects WHERE id = ?').get(projectId) as
+          | { kind: string }
+          | undefined;
+        if (row && row.kind !== 'agent') {
+          void reply.status(400);
+          return {
+            error: {
+              code: 'project_unresolved',
+              userMessage:
+                `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道读不到它的任务。`,
+              projects: listProjectCandidates(),
+            },
+          };
+        }
+      }
+
       const params = new URLSearchParams();
       if (projectId !== undefined) params.set('projectId', projectId);
       if (source === 'agent' || source === 'human') params.set('source', source);
@@ -463,7 +520,20 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           },
         };
       }
-      const rows = res.json<AgentTaskListRow[]>();
+      let rows = res.json<AgentTaskListRow[]>();
+      // 默认范围（未指定 projectId）= Agent 看板：隔离边界在读侧也成立 ——
+      // 落点只允许 Agent 看板，任务流若还带着人类项目的任务，Skill 会把「看得见」
+      // 误解为「导得进」，白费一轮 depends_unresolved。
+      if (projectId === undefined) {
+        const agentBoardIds = new Set(
+          (
+            db.prepare("SELECT id FROM projects WHERE kind = 'agent'").all() as Array<{
+              id: string;
+            }>
+          ).map((r) => r.id),
+        );
+        rows = rows.filter((r) => agentBoardIds.has(r.projectId));
+      }
 
       /**
        * `dependsOn` 里存的是 **Task.id**（落库形状），而契约要求的 `dependsOnExternal`

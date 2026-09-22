@@ -68,14 +68,21 @@ async function buildServer(): Promise<{ app: FastifyInstance; db: Database.Datab
 
 const PROJECT_ID = 'proj_exec';
 
-/** 建一个最小项目（执行单的归属；不建它则外键/查询维度无法验证） */
-async function seedProject(app: FastifyInstance): Promise<void> {
+/**
+ * 建一个最小项目（执行单的归属；不建它则外键/查询维度无法验证）。
+ *
+ * ★ v0.8 隔离补齐（2026-09-20）：执行域只属于 Agent 看板，故夹具恒建
+ * `kind='agent'` 的板 —— 本 spec 的其余用例测的是状态机，不是归属；
+ * 归属关卡本身由下方「kind 关卡」专用用例覆盖。
+ */
+async function seedProject(app: FastifyInstance, kind: 'agent' | 'human' = 'agent'): Promise<void> {
   const res = await app.inject({
     method: 'POST',
     url: '/api/projects',
     payload: {
       id: PROJECT_ID,
       name: '执行域项目',
+      kind,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -1396,5 +1403,131 @@ describe('服务端执行域：proposal 创建时的 status 白名单（审计�
       expect(res.statusCode).toBe(400);
     }
     expect(proposalCount()).toBe(0);
+  });
+});
+
+/**
+ * 执行域归属关卡（v0.8 隔离补齐 · 2026-09-20）：**执行域的一切数据只属于 Agent 看板**。
+ *
+ * 背景：执行域（S1–S5）只有 API、没有界面入口，此前 `createExecution` /
+ * `createProposal` 零 kind 关卡，任意 projectId 都能挂执行单/提案 ——
+ * `schema.sql` 里 `executions.project_id` 连 `REFERENCES` 外键都没有。
+ * 这正是「Agent 执行数据与人类项目扯上关系」在执行域的口子，本块把它在
+ * 服务端存储边界锁死。
+ *
+ * ── 用例设计：两条拒绝理由必须**可分辨** ──
+ *   · 项目不存在 → 404 `not_found`（打错 id）；
+ *   · 项目存在但 `kind='human'` → 400 `validation`，文案带 kind 值与「Agent 看板」（打错归属）。
+ * 两者若混淆（都回同一状态码/错误码），调用方无法判断该修 id 还是该换落点，
+ * 排错成本从「秒级」变「分钟级」——错误码分工与实现处 docstring 的承诺一致。
+ */
+describe('服务端执行域：归属关卡（只属于 Agent 看板）', () => {
+  const HUMAN_ID = 'proj_human_gate';
+
+  let app: FastifyInstance;
+  let db: Database.Database;
+
+  beforeEach(async () => {
+    ({ app, db } = await buildServer());
+    await seedProject(app); // PROJECT_ID，kind='agent'（本块其余用例测的是状态机，不是归属）
+    // 另建一个 kind='human' 的项目，作为「打错归属」的拒绝对象
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      payload: {
+        id: HUMAN_ID,
+        name: '人类项目',
+        kind: 'human',
+        address: '',
+        clientName: '',
+        contractAmount: null,
+        signedAt: null,
+        plannedStartAt: '2026-08-01',
+        plannedEndAt: '2026-12-31',
+        coverColor: null,
+      },
+    });
+    expect(res.statusCode).toBeLessThan(300);
+  });
+
+  const countExecutions = (): number =>
+    (db.prepare('SELECT COUNT(*) AS n FROM executions').get() as { n: number }).n;
+  const countProposals = (): number =>
+    (db.prepare('SELECT COUNT(*) AS n FROM writeback_proposals').get() as { n: number }).n;
+
+  it('createExecution：人类项目 → 400 validation，零写入', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${HUMAN_ID}/executions`,
+      payload: { source: 'project-task', objective: 'x', idempotencyKey: 'gate:human:1' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ error: { code: string; userMessage: string } }>();
+    expect(body.error.code).toBe('validation');
+    expect(body.error.userMessage).toContain('Agent 看板');
+    expect(body.error.userMessage).toContain('human'); // 文案带上实际 kind，排错不用翻库
+    expect(countExecutions()).toBe(0);
+  });
+
+  it('createExecution：不存在的项目 → 404 not_found，零写入', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects/no_such_project/executions',
+      payload: { source: 'project-task', objective: 'x', idempotencyKey: 'gate:ghost:1' },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json<{ error: { code: string; userMessage: string } }>();
+    expect(body.error.code).toBe('not_found');
+    expect(countExecutions()).toBe(0);
+  });
+
+  it('createProposal：写回目标指向人类项目 → 400 validation，零写入', async () => {
+    // 执行单建在 Agent 板上（合法），但提案的 projectId（写回目标）指向人类项目 ——
+    // 少了这道关卡，「Agent 执行产物不经人类项目」就在提案层被绕开。
+    const exec = await createExecution(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/proposals`,
+      payload: {
+        projectId: HUMAN_ID,
+        operations: [],
+        idempotencyKey: 'gate:proposal:human',
+        status: 'draft',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ error: { code: string; userMessage: string } }>();
+    expect(body.error.code).toBe('validation');
+    expect(body.error.userMessage).toContain('Agent 看板');
+    expect(countProposals()).toBe(0);
+  });
+
+  it('createProposal：写回目标是不存在的项目 → 404 not_found，零写入', async () => {
+    const exec = await createExecution(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/proposals`,
+      payload: {
+        projectId: 'no_such_project',
+        operations: [],
+        idempotencyKey: 'gate:proposal:ghost',
+        status: 'draft',
+      },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe('not_found');
+    expect(countProposals()).toBe(0);
+  });
+
+  it('Agent 看板上的合法创建不受影响（关卡不误杀）', async () => {
+    const exec = await createExecution(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/executions/${exec.id}/proposals`,
+      payload: { projectId: PROJECT_ID, operations: [], idempotencyKey: 'gate:agent:ok', status: 'draft' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(countExecutions()).toBe(1);
+    expect(countProposals()).toBe(1);
   });
 });
