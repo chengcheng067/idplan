@@ -18,12 +18,12 @@
 # 正确做法：buildx 单架构构建 + `--output type=docker,dest=xxx.tar`
 #   → 产出经典 docker-tar（含 manifest.json + 压缩 layer），tag 可控。
 #
-# tar 内部 tag 固定为：idplan:0.3.0 / idplan-backend:0.3.0
+# tar 内部 tag 固定为：idplan:0.7.0 / idplan-backend:0.7.0
 # 必须与 ugnas/upk/rootfs_common/docker-compose.yaml 的 image: 完全一致。
 #
 # 触发（两种都行）：
 #   1. 推送 upk- 开头的 tag，例如：
-#        git tag upk-0.3.0-2 && git push origin upk-0.3.0-2
+#        git tag upk-0.7.0-1 && git push origin upk-0.7.0-1
 #      版本号从 tag 名里解析（upk-<版本>-<序号> → <版本>）
 #   2. 在 GitHub → Actions → upk-images → Run workflow 手动点
 # =====================================================================
@@ -36,9 +36,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "镜像版本号（默认 0.3.0，需与 ghcr 上已存在的 tag 一致）"
+        description: "镜像版本号（默认 0.7.0，需与 ghcr 上已存在的 tag 一致）"
         required: false
-        default: "0.3.0"
+        default: "0.7.0"
 
 env:
   OWNER: chengcheng067
@@ -62,13 +62,13 @@ jobs:
       - name: 确定版本号
         run: |
           VER="${{ github.event.inputs.version }}"
-          # 从 tag 解析：upk-0.3.0-2 → 0.3.0
+          # 从 tag 解析：upk-0.7.0-1 → 0.7.0
           if [ -z "$VER" ] && [[ "${GITHUB_REF}" == refs/tags/upk-* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
             REST="${TAG#upk-}"
             VER="${REST%-*}"
           fi
-          if [ -z "$VER" ]; then VER="0.3.0"; fi
+          if [ -z "$VER" ]; then VER="0.7.0"; fi
           echo "VERSION=${VER}" >> "$GITHUB_ENV"
           echo "解析到版本号：${VER}（来源 ref=${GITHUB_REF}）"
 

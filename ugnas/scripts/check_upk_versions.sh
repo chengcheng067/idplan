@@ -7,7 +7,7 @@
 #   ① ugnas/upk/project.yaml 的 `version:`  → 决定产出 UPK 文件名的 x.y.z
 #   ② ugnas/upk/rootfs_common/docker-compose.yaml 各服务的 `image: name:tag`
 #      → 决定容器实际拉起哪个镜像；tag 必须与 tar 内 tag 完全一致
-#      （ugnas/README.md 明文要求；upk-images.yml 工作流默认 0.3.0）。
+#      （ugnas/README.md 明文要求；upk-images.yml 工作流默认 0.7.0）。
 #
 # 本片段只定义函数，不自动执行，供 pack-amd64.sh / pack.sh source 后调用。
 # 不引入任何外部依赖（只用 grep/sed/tr），可在 Windows Git Bash 直接跑。

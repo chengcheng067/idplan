@@ -174,7 +174,7 @@ docker run --rm -p 28080:80 -e VITE_DATA_SOURCE=local idplan:local
 
 ```
 ① 推 tag 触发云端导出：
-   git tag upk-0.3.0-3 && git push origin upk-0.3.0-3
+   git tag upk-0.7.0-1 && git push origin upk-0.7.0-1
    → .github/workflows/upk-images.yml
    → buildx --output type=docker 导出「经典 docker-save 格式」tar
      （不能用 docker save：runner 的 containerd 存储会输出 OCI layout，绿联不认；
@@ -184,7 +184,7 @@ docker run --rm -p 28080:80 -e VITE_DATA_SOURCE=local idplan:local
 ② 本地打包（下载走 GitHub API 资产通道，比直链快几十倍；含断点续传重试）：
    GH_TOKEN=<pat> bash ugnas/scripts/pack-amd64.sh 1
    → 下载 4 个 tar → 放入 rootfs_<arch>/images/ → ugcli check → ugcli pack
-   → build_dir/pkgs/upk/{amd64|arm64}_com.chengcheng.idplan_0.3.0.0001.upk
+   → build_dir/pkgs/upk/{amd64|arm64}_com.chengcheng.idplan_0.7.0.0001.upk
 ```
 
 **关键约束（ugcli 硬校验，错了直接打包失败）**：
@@ -214,7 +214,7 @@ docker run --rm -p 28080:80 -e VITE_DATA_SOURCE=local idplan:local
 - **发版时必须同步改**：
   1. `ugnas/upk/project.yaml` 的 `version`；
   2. `ugnas/upk/rootfs_common/docker-compose.yaml` 里两个 `image:` 的 tag（与 ① 同值）；
-  3. 让 `upk-images` 工作流以同一版本号导出镜像 tar（Release tag `upk-images-<版本>`；该工作流当前默认 `0.3.0`，需按版本手动触发或打 `upk-<版本>-N` tag）。
+  3. 让 `upk-images` 工作流以同一版本号导出镜像 tar（Release tag `upk-images-<版本>`；该工作流当前默认 `0.7.0`，需按版本手动触发或打 `upk-<版本>-N` tag）。
   若只改其一，预检会拦下，不会放出错的包。
 
 ### 5.1 构建产物 + 导镜像（pack.sh 已封装，需本机 Docker，已弃用）
@@ -258,7 +258,7 @@ ugcli pack --arch all --build 1
 | 字段 | 值 | 说明 |
 |---|---|---|
 | `app_id` | `com.chengcheng.idplan` | 上架后不可改 |
-| `version` | `0.3.0` | `ugcli pack --build N` 后最终 `0.3.0.N` |
+| `version` | `0.7.0` | `ugcli pack --build N` 后最终 `0.7.0.N` |
 | `is_docker_app` | `true` | 当前 Docker 形态 |
 | `depend_docker_version` | `1.7.0.0000` | 依赖 Docker 套件最低版 |
 | `port` | `28080` | 宿主端口（Docker 应用 IP:端口直连），与 compose `28080:80` 对应 |

@@ -3,7 +3,7 @@
 # ID Plan · 绿联 UPK 本地打包脚本（amd64 调试版）
 #
 # 用途：本机没有 Docker，镜像 tar 由 GitHub Actions 导出并挂在
-#       Release upk-images-0.3.0 上。本脚本负责：
+#       Release upk-images-0.7.0 上。本脚本负责：
 #         [1/4] 下载 amd64 的前端 + 后端镜像 tar
 #         [2/4] 放进 rootfs_amd64/images/
 #         [3/4] ugcli check 校验
@@ -29,7 +29,8 @@ BUILD="${1:-1}"
 VERSION="$(grep -E '^[[:space:]]*version:[[:space:]]' project.yaml \
            | head -n1 | sed -E 's/^[[:space:]]*version:[[:space:]]*//' | tr -d '\r')"
 # 预检：compose 里的镜像 tag 必须与解析出的 version 完全一致，否则立即退出，
-# 把「静默产出错误包」变成「响亮失败」（当前仓库 state 应为 0.7.0 vs 0.3.0 → 失败）。
+# 把「静默产出错误包」变成「响亮失败」（对齐后 0.7.0 vs 0.7.0 → 通过；
+# 谁再把某一处改漏，这里立刻拦下并指明该改哪个文件哪一行）。
 check_upk_versions "${UPK_ROOT}/project.yaml" \
                    "${UPK_ROOT}/rootfs_common/docker-compose.yaml"
 RELEASE_TAG="upk-images-${VERSION}"
