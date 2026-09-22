@@ -128,13 +128,49 @@ if (ASAR_CANDIDATES.length) {
   }
   if (ASAR_CANDIDATES.length > 6) console.log(`       … 其余 ${ASAR_CANDIDATES.length - 6} 个`);
 }
-// 顺带把同目录的 NSIS 安装包也报出来：走查/交付时要用它，且便于核对「包与 exe 同批」
-const setupExe = fs
-  .readdirSync(path.dirname(path.dirname(ASAR)))
-  .filter((n) => n.endsWith('.exe') && /Setup/i.test(n));
-for (const n of setupExe) {
-  const p = path.join(path.dirname(path.dirname(ASAR)), n);
-  console.log(`   同批 NSIS: ${n}  ${stampOf(fs.statSync(p).mtimeMs)}  ${fs.statSync(p).size} bytes`);
+/*
+ * 同批 NSIS 安装包核对（技能 §四/§六：「同批 NSIS 安装包的路径/mtime/字节也一并打印」）。
+ *
+ * ⚠️ 目录层数曾吃错：asar 在 `<out>/win-unpacked/resources/app.asar`，dirname 吃**两层**
+ * 只到 `win-unpacked/`——那里面只有 `ID Plan.exe`（不过 /Setup/i 过滤），整段静默跳过，
+ * "包与 exe 同批"的自动核对**实际从未执行**（缺功能，不产生假 PASS，但技能要求的核对
+ * 一直在裸奔）。要吃**三层**才到输出目录 `<out>/`，Setup.exe 在那里。
+ *
+ * 三态而不是布尔：有 exe 且时序合理 → pass；有 exe 但时序不合理 → **fail**
+ * （"包与 exe 不是同一次构建"正是这条要防的）；找不到 exe → skipped 并打醒目警告行
+ * （unpacked-only 是合法场景，既不伪装 PASS 也不当作失败拉低总判定）。
+ *
+ * 窗口为什么是**有向**的：electron-builder 先落 `<out>/win-unpacked/resources/app.asar`，
+ * 再由它编译 NSIS 安装包 ⇒ **同一次构建内 exe 的 mtime 必 ≥ asar**，且编译只花秒级
+ * 到分钟级（实测 58.6s）。故判据取「exe 不得旧于 asar 60s 以上（陈旧包），也不得新于
+ * asar 10 分钟以上（同一次构建不可能这么久）」——曾用对称 60s 窗，慢机器上会**误杀**
+ * 合法的同批包（58.6s 已贴窗），那不是这道关卡的本意。
+ */
+const outDir = path.dirname(path.dirname(path.dirname(ASAR)));
+const setupCandidates = fs.existsSync(outDir)
+  ? fs
+      .readdirSync(outDir)
+      .filter((n) => n.endsWith('.exe') && /Setup/i.test(n))
+      .map((n) => ({ name: n, mtimeMs: fs.statSync(path.join(outDir, n)).mtimeMs }))
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)
+  : [];
+let exeBatch = 'skipped'; // 'pass' | 'fail' | 'skipped'
+if (setupCandidates.length === 0) {
+  console.log('   ⚠ 未找到同批 NSIS 安装包（<out>/*Setup*.exe）：跳过同批核对（unpacked-only 场景合法）');
+} else {
+  const exe = setupCandidates[0];
+  const exePath = path.join(outDir, exe.name);
+  const stat = fs.statSync(exePath);
+  // 有向差值：exe 相对 asar 新多少秒（负数 = exe 比 asar 还旧）
+  const deltaS = (exe.mtimeMs - ASAR_MTIME) / 1000;
+  exeBatch = deltaS < -60 || deltaS > 600 ? 'fail' : 'pass';
+  console.log(
+    `   同批 NSIS: ${exePath}\n` +
+      `             mtime ${stampOf(exe.mtimeMs)}  体积 ${stat.size} bytes  exe 新于 asar ${deltaS.toFixed(1)}s  ` +
+      (exeBatch === 'pass'
+        ? '（同批 PASS：asar 必先于 exe，间隔在打包合理区间）'
+        : '（!! 不同批 FAIL：exe 旧于 asar 超过 60s（陈旧包）或新于 asar 超过 10min（非同一次构建））'),
+  );
 }
 
 /* ================================================================================================
@@ -278,7 +314,15 @@ console.log('\n   已导出包内 CSS 到 tmp/asar-extracted.css，字节数:', 
 
 const cnt = (re) => (css.match(re) || []).length;
 
-console.log('\n=== 2) 三个阶段色类名生成数（BUG-05 判据，期望各 9）===');
+/*
+ * 三个阶段色类名生成数（BUG-05 判据）。
+ *
+ * 判据是「每组 **≥9**」而不是「恰 9」——注释曾写"期望各 9"，与代码（n<9 才失败）
+ * 和实测都不符：实心块组实测 18 = 基态 `.bg-stage-sN` 9 个 ＋ 15% 透明度变体
+ * `.bg-stage-sN/15` 9 个（正则按前缀匹配，变体一并计入）。这是**预期内的重复
+ * 计数**，不是生成缺陷；真要抓"多生成"得逐个精确比对类名集合，不在本判据职责内。
+ */
+console.log('\n=== 2) 三个阶段色类名生成数（BUG-05 判据，每组 ≥9）===');
 const groups = [
   ['bg-stage-band-sN  (宽面)', /\.bg-stage-band-s[1-9]/g],
   ['text-stage-ink-sN (面内字)', /\.text-stage-ink-s[1-9]/g],
@@ -428,8 +472,13 @@ console.log('   BUG-06 dark 绑定应用内开关    :', passBug06 ? 'PASS' : 'F
 console.log('   主进程层 + 授权公钥齐备且无私钥泄漏:', passElectron ? 'PASS' : 'FAIL');
 console.log('   死产物清理（assets == 引用闭包）:', closureOk ? `PASS (${assetNames.length})` : `FAIL (assets ${assetNames.length} / 闭包 ${closure.size})`);
 console.log('   解包目录无残留（目录 == asar）:', sameNames ? `PASS (${dirAssetNames.length})` : `FAIL (目录 ${dirAssetNames.length} / asar ${asarNamesSorted.length})`);
+console.log(
+  '   包与 exe 同批核对（asar 先于 exe，≤10min）:',
+  exeBatch === 'pass' ? 'PASS' : exeBatch === 'fail' ? 'FAIL' : 'SKIP（未找到 Setup.exe，unpacked-only 合法）',
+);
 console.log('   打印锁浅色 .print-root 与亮色块同一选择器:', passPrint ? 'PASS' : 'FAIL');
 console.log('   本结论对应产物                :', `${ASAR} @ ${stampOf(ASAR_MTIME)}`);
-const allPass = passElectron && passBug05 && passBug06 && closureOk && sameNames && passPrint;
+const allPass =
+  passElectron && passBug05 && passBug06 && closureOk && sameNames && passPrint && exeBatch !== 'fail';
 console.log('\n   总体:', allPass ? 'ALL PASS' : 'HAS FAILURE');
 process.exitCode = allPass ? 0 : 1;

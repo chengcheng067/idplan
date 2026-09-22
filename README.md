@@ -10,7 +10,7 @@
 
 > ID Plan 从室内设计场景起步，现在覆盖 **7 个行业大类 / 9 个主板块**。把项目的金额、类型、阶段节点、参与成员整理成一条时间轴，用看板、月历、甘特随时掌握进度，并把排期导成能直接发给甲方的交付页。
 
-当前版本：**v0.8.0（构建号 0.8.0.0005）**
+当前版本：**v0.8.0（构建号 0.8.0.0006）**
 
 ---
 
@@ -102,7 +102,7 @@ ghcr.io/chengcheng067/idplan-backend:<版本>  # 后端（Fastify + SQLite）
 
 | 平台 | 最新产物 | 说明 |
 |------|----------|------|
-| Windows | `IDPlan-0.8.0.0005-Setup.exe`（构建号 0005） | 桌面安装，个人使用 |
+| Windows | `IDPlan-0.8.0.0006-Setup.exe`（构建号 0006） | 桌面安装，个人使用 |
 | 绿联 NAS (amd64) | `amd64_com.chengcheng.idplan_0.7.0.0001.upk` | UGOS Pro 手动导入 |
 | Docker 镜像 | `ghcr.io/chengcheng067/idplan-backend:<版本>` 等 | 离线导入 / 自建 |
 
