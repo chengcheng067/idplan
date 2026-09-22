@@ -629,6 +629,35 @@ describe('服务端存储边界：P0「未人工确认绝不执行」', () => {
     }
   });
 
+  // 上一用例的两个畸形体**都缺 planHash**（或给陈旧 hash），拒绝实际由关卡③
+  // （计划绑定比对）完成，关卡②的字段级检查被掩盖。这里补齐字段级覆盖：
+  // planHash 与当前计划匹配（关卡③无从拒绝），只缺 confirmedBy / confirmedAt 之一。
+  // （对抗式验证 report M3/M3b 遗留补救；删除关卡②对应字段检查时本用例必须红。）
+
+  it('confirmation planHash 匹配但 confirmedBy / confirmedAt 为空 → 仍拒（关卡②字段级）', async () => {
+    const exec = await createExecution(app);
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/executions/${exec.id}`,
+      payload: { status: 'awaiting_confirmation' },
+    });
+    for (const bad of [
+      confirmationFor(exec, { confirmedBy: '' }),
+      confirmationFor(exec, { confirmedAt: '' }),
+    ]) {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/executions/${exec.id}`,
+        payload: { status: 'queued', confirmation: bad },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = res.json<{ error: { code: string; userMessage: string } }>();
+      expect(body.error.code).toBe('validation');
+      // 拒绝文案来自关卡②（「均非空」）而非关卡③（「不一致」）——证明确实测的是字段级检查
+      expect(body.error.userMessage).toContain('均非空');
+    }
+  });
+
   it('非法邻接：draft → completed 直接拒（且 completed 还要求 applied 提案）', async () => {
     const exec = await createExecution(app);
     const res = await app.inject({

@@ -419,6 +419,81 @@ describe('updateExecutionStatus：人工确认门槛（未确认绝不进入 que
     });
     expect((await bundle.executions.getExecution(id))?.status).toBe(ExecutionStatus.Queued);
   });
+
+  // ── 关卡②字段级覆盖（对抗式验证 report M3/M3b 的遗留补救）────────────────
+  // 背景：`assertExecutionConfirmed` 关卡②对 confirmedAt / confirmedBy / planHash
+  // 的逐字段非空检查曾零变异覆盖（删光它们全量测试全绿）。以下用例的构造纪律：
+  //   · planHash 一律 == computePlanHash(exec)（否则被关卡③先行拒绝，测的不是②）；
+  //   · confirmationWrittenByCaller: false（否则踩关卡①的授予点限制）。
+  // 每条用例在「删掉对应字段检查」的变异下必须变红。
+
+  it('纯函数：planHash 匹配但 confirmedAt 为空 → 拒（关卡②字段级覆盖）', () => {
+    const exec = makeExecution('e1', ExecutionStatus.Queued);
+    const pure = { confirmationWrittenByCaller: false };
+    expect(() =>
+      assertExecutionConfirmed(
+        { ...exec, confirmation: confirmationFor(exec, { confirmedAt: '' }) },
+        ExecutionStatus.Running,
+        pure,
+      ),
+    ).toThrow(ChangxiaError);
+  });
+
+  it('纯函数：planHash 匹配但 confirmedBy 为空 → 拒（关卡②字段级覆盖）', () => {
+    const exec = makeExecution('e1', ExecutionStatus.Queued);
+    const pure = { confirmationWrittenByCaller: false };
+    expect(() =>
+      assertExecutionConfirmed(
+        { ...exec, confirmation: confirmationFor(exec, { confirmedBy: '' }) },
+        ExecutionStatus.Running,
+        pure,
+      ),
+    ).toThrow(ChangxiaError);
+  });
+
+  it('存储边界：库里存着畸形确认（planHash 匹配但 confirmedBy / confirmedAt 空）→ queued → running 被拒且零写入', async () => {
+    // 与上面「计划被改写」用例同款路径：备份导入是整库替换、零校验，
+    // 用它把畸形确认种进真实存储，再走 updateExecutionStatus 写路径。
+    for (const field of ['confirmedBy', 'confirmedAt'] as const) {
+      const id = await newExecution();
+      await setStatus(id, ExecutionStatus.AwaitingConfirmation);
+      await setStatus(id, ExecutionStatus.Queued, CONFIRMATION); // 合法授予（planHash 匹配）
+
+      const svc = new BackupService(bundle);
+      const pkg = await svc.exportAll();
+      const patched = {
+        ...pkg,
+        data: {
+          ...pkg.data,
+          executions: pkg.data.executions.map((e) => {
+            if (e.id !== id) return e;
+            const c = e.confirmation!;
+            return {
+              ...e,
+              confirmation:
+                field === 'confirmedBy'
+                  ? { ...c, confirmedBy: '' }
+                  : { ...c, confirmedAt: '' },
+            };
+          }),
+        },
+      };
+      await svc.importAndReplace(patched as typeof pkg);
+
+      const tampered = await bundle.executions.getExecution(id);
+      expect(tampered?.status).toBe(ExecutionStatus.Queued); // 导入不改状态
+      const stored = tampered?.confirmation;
+      expect(stored).not.toBeNull();
+      expect(stored![field]).toBe(''); // 前提：畸形确认已落库
+      // planHash 未被导入改动 → 关卡③不掩盖，拒绝只能来自关卡②
+      expect(stored!.planHash).toBe(computePlanHash(tampered!));
+
+      await expect(setStatus(id, ExecutionStatus.Running)).rejects.toMatchObject({
+        code: ChangxiaErrorCode.Validation,
+      });
+      expect((await bundle.executions.getExecution(id))?.status).toBe(ExecutionStatus.Queued); // 零写入
+    }
+  });
 });
 
 describe('createAttempt：单活 attempt + attemptNo 计算', () => {

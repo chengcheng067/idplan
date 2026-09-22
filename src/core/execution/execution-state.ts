@@ -301,7 +301,7 @@ export function assertExecutionConfirmed(
   if (confirmation.planHash !== actualHash) {
     throw new ChangxiaError(
       ChangxiaErrorCode.Validation,
-      `进入 ${next} 态被拒：确认绑定的计划（planHash=${confirmation.planHash}）与当前执行单的计划（planHash=${actualHash}）不一致，确认已失效，需重新确认（execution=${execution.id}）。`,
+      `进入 ${next} 态被拒：确认绑定的计划（planHash=${confirmation.planHash}）与当前执行单的计划（planHash=${actualHash}）不一致，确认已失效；离开授予点后无法重新确认，此执行单只能取消或失败后新建（execution=${execution.id}）。`,
     );
   }
 }
