@@ -74,8 +74,15 @@ export function AppShell(): JSX.Element {
       <IdentityDialog />
       {/* 手动建档兜底：全局挂载，「新建项目」直接打开（v0.3 移除导入合同建档入口后） */}
       <ManualFallbackForm open={manualFormOpen} onClose={closeManualForm} />
-      {/* 瞬时 Toast 层（≤2s，无 loading 圈；v0.3 玻璃化） */}
-      <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
+      {/*
+        瞬时 Toast 层（≤2s，无 loading 圈；v0.3 玻璃化）。
+        ★ z-50：必须高于**最高**的模态层（Modal center 遮罩 = z-[70]，见
+          Modal.tsx 的分层注释）。曾是 z-50 ⇒ 弹窗内的操作反馈（如接入面板的
+          「生成接入信息」结果）被压在置灰遮罩**底下**，用户只看到背景变暗、
+          看不到提示（2026-09-24 实测投诉）。层级顺序由
+          tests/toast-above-modal.spec.ts 钉住。
+      */}
+      <div className="pointer-events-none fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
           <button
             key={t.id}

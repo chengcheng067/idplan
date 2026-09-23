@@ -226,32 +226,16 @@ ipcMain.on('agent:token:set', (_event, token) => {
 // 外部写入方（如 WorkBuddy）读这一个文件即完成接入：地址 / 令牌 / 端点 / payload
 // schema / 用法全在里面。固定路径是设计的核心——零传递成本，令牌轮换后重新生成、
 // 写方重读即可。渲染进程不碰 fs（sandbox preload 也不能），落盘只在此处。
-const INGRESS_DIR_NAME = 'ID Plan';
-const INGRESS_FILE_NAME = 'agent-ingress.json';
-
-function ingressFilePath(documentsDir) {
-  return path.join(documentsDir, INGRESS_DIR_NAME, INGRESS_FILE_NAME);
-}
+// ★ 形状门与路径是**共享 CJS 模块**（electron/ingress-file.cjs）而非内联：
+//   内联版曾读错字段路径（扁平 payload.token，实际是嵌套 auth.token）把合法
+//   请求判死，且无任何测试覆盖得到；共享后有契约测试钉死。
+const { writeIngressFile, ingressFilePath } = require('./ingress-file.cjs');
 
 ipcMain.handle('agent-ingress:path', () => ingressFilePath(app.getPath('documents')));
 
-ipcMain.handle('agent-ingress:write', (_event, payload) => {
-  const filePath = ingressFilePath(app.getPath('documents'));
-  // 形状闸门（轻量）：缺 origin / token 的"接入文件"对写方无用，宁可不写。
-  const origin = payload && typeof payload.origin === 'string' ? payload.origin.trim() : '';
-  const token = payload && typeof payload.token === 'string' ? payload.token.trim() : '';
-  if (!origin || !token) {
-    return { ok: false, path: filePath, reason: '接入信息不完整（缺地址或令牌），拒绝写文件。' };
-  }
-  try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-    return { ok: true, path: filePath };
-  } catch (err) {
-    // 磁盘满 / 目录被占：把真实原因带回渲染层展示，不静默（静默=用户以为接上了）
-    return { ok: false, path: filePath, reason: String((err && err.message) || err).slice(0, 200) };
-  }
-});
+ipcMain.handle('agent-ingress:write', (_event, payload) =>
+  writeIngressFile(app.getPath('documents'), payload),
+);
 
 // 渲染进程把「落库结果 / 错误」回传给挂起的 HTTP 请求
 ipcMain.on('agent:import-result', (_event, payload) => {
