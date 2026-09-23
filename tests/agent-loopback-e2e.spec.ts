@@ -28,9 +28,9 @@ import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import {
   handleAgentLoopbackMessage,
   type AgentCreateBoardRequest,
-  type AgentImportRequest,
   type AgentListTasksRequest,
 } from '../src/hooks/useAgentLoopbackReceiver';
+// AgentImportRequest 是 vite-env.d.ts 的**全局**接口（不经 receiver 导出）
 import { emptyPackage } from './helpers/backup-fixture';
 import { ChangxiaErrorCode } from '../src/core/types/enums';
 
