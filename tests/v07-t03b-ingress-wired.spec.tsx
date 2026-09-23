@@ -145,6 +145,9 @@ vi.mock('../src/components/agent/AgentIngressPanel', async (importOriginal) => {
 });
 
 import { LOOPBACK_ORIGIN } from '../src/components/agent/AgentIngressPanel';
+
+/** 模块加载时的桌面桥快照（afterEach 还原用；浏览器态为 undefined） */
+const originalIdplan = (window as unknown as { idplan?: unknown }).idplan;
 import type { AgentIngressPanelProps } from '../src/components/agent/AgentIngressPanel';
 import {
   AgentBoardPage,
@@ -365,6 +368,10 @@ afterEach(() => {
     useAgentStore.setState({ currentProjectId: null, drawerTaskId: null });
   });
   localStorage.clear();
+  // ★ 假桌面桥必须还原：本文件单 worker 串行、jsdom 环境跨文件复用（vitest
+  //   singleThread），不还原会把 window.idplan 泄漏给后续 spec（license-ui
+  //   的「浏览器端不渲染授权区」实测被它打红过）。模块加载时桥上不存在。
+  (window as unknown as { idplan?: unknown }).idplan = originalIdplan;
   vi.unstubAllGlobals();
 });
 
@@ -398,8 +405,12 @@ describe('T03-B ① 页侧门控：接入面板只有管理员能打开', () => 
     expect(addr!.value).toBe(LOOPBACK_ORIGIN);
     expect(addr!.readOnly).toBe(true);
 
-    // 令牌：初始未配置（localStorage 已清空）——页面只喂布尔，故这里是「未配置」而非空串
-    expect(panel!.querySelector('[data-ingress-token-state]')!.textContent).toBe('未配置');
+    // 接入信息：本机档初始未生成（localStorage 已清空）——页面只喂布尔，故这里是「未生成」而非空串
+    expect(panel!.querySelector('[data-ingress-token-state]')!.textContent).toBe('未生成');
+    // 2026-09-23 重设计：本机档主入口是「生成接入信息」（自动令牌 → 固定路径文件），
+    // 不再是让人粘贴一个无处可得的令牌
+    expect(panel!.querySelector('[data-ingress-generate]')).not.toBeNull();
+    expect(panel!.querySelector('[data-ingress-token-input]')).toBeNull();
 
     // ⑤ 诚实：本轮没有"最近一次同步"的数据源 → 页面如实传 null，面板显示空态
     expect(
@@ -458,15 +469,99 @@ describe('T03-B ① 页侧门控：接入面板只有管理员能打开', () => 
 });
 
 /* ================================================================================================
- * ③ ★ token 安全：原文既不进 DOM，也不进面板 props
+ * ③ ★ 令牌 / 接入信息安全：原文既不进 DOM，也不进面板 props
+ *
+ * 2026-09-23 重设计后分两档：
+ *   · 本机档：令牌**自动生成**（无处粘贴是旧死锁的根因），接入信息经主进程写固定
+ *     路径文件；本用例用假 bridge 走完整生成流，钉死「原文只进 localStorage 与文件」。
+ *   · NAS 档：仍是粘贴服务端令牌（password 输入框 + 保存后清空 + 布尔 props）。
  * ================================================================================================ */
 
-describe('T03-B ③ ★ token：写入后不回显原文', () => {
-  const SECRET = 'idplan-agent-token-T03B-SECRET-abcdef123456';
+describe('T03-B ③ ★ 本机档「生成接入信息」：自动令牌、文件落盘、原文零暴露', () => {
+  it('★ 生成后：令牌只进 localStorage 与接入文件，DOM 与面板 props 里都查不到', async () => {
+    const written: Array<Record<string, unknown>> = [];
+    const setAgentToken = vi.fn();
+    // 假桌面桥：只提供本流程用得到的两族能力（与 preload 暴露同形）
+    (window as unknown as { idplan?: unknown }).idplan = {
+      isDesktop: true,
+      platform: 'win32',
+      setAgentToken,
+      writeAgentIngressFile: async (payload: Record<string, unknown>) => {
+        written.push(payload);
+        return { ok: true, path: 'C:\\Users\\x\\Documents\\ID Plan\\agent-ingress.json' };
+      },
+    };
 
-  it('★ 保存后：原文只在 localStorage，DOM 与面板 props 里都查不到', async () => {
     await mountBoard('admin');
     await openIngress();
+
+    await act(async () => {
+      click(document.querySelector('[data-ingress-generate]')!);
+    });
+    await flush(2);
+
+    // ① 令牌自动生成（idp_ 前缀 + 32 位十六进制）且唯一落点是 localStorage
+    const stored = localStorage.getItem(AGENT_TOKEN_STORAGE_KEY) ?? '';
+    expect(stored).toMatch(/^idp_[0-9a-f]{32}$/);
+    // 主进程同步拿到新令牌（只比对、不回传；旧令牌从此失效）
+    expect(setAgentToken).toHaveBeenCalledWith(stored);
+
+    // ② 接入文件内容经假 bridge 落盘：地址 / 令牌 / 端点 / schema 齐全
+    expect(written).toHaveLength(1);
+    const payload = written[0]!;
+    expect(payload.origin).toBe(`http://${LOOPBACK_ORIGIN}`);
+    expect(payload.auth).toEqual({ type: 'bearer', token: stored });
+    expect(payload.schema).toBe('idplan-agent-ingress/v1');
+    expect(payload.payloadSchema).toBe('idplan-agent-payload/v1');
+    expect(Array.isArray(payload.endpoints)).toBe(true);
+    expect((payload.endpoints as Array<{ path: string }>).map((e) => e.path)).toContain(
+      '/api/agent/import',
+    );
+
+    // ③ ★ 文件路径展示在面板上（机器可读的那一位），但**原文不在 DOM**
+    expect(document.querySelector('[data-ingress-file-path]')!.textContent).toBe(
+      'C:\\Users\\x\\Documents\\ID Plan\\agent-ingress.json',
+    );
+    expect(document.body.innerHTML).not.toContain(stored);
+    expect(document.body.textContent ?? '').not.toContain(stored);
+
+    // ④ ★ 面板 props 仍只有布尔（记录器是唯一能钉死"直接传原文"的判别式）
+    const last = H.panelProps[H.panelProps.length - 1]!;
+    expect(typeof last.tokenConfigured).toBe('boolean');
+    expect(last.tokenConfigured).toBe(true);
+    expect(JSON.stringify(H.panelProps)).not.toContain(stored);
+
+    // ⑤ 反馈走全站 toast 通道（jsdom 无剪贴板 → 只报路径，不报"已复制"）
+    expect(H.toasts.some((t) => t.message.includes('接入信息已生成'))).toBe(true);
+  });
+
+  it('已生成过 → 打开面板即显示「令牌已生成」与文件路径，原文依旧不进 DOM', async () => {
+    const PRE = 'idp_0123456789abcdef0123456789abcdef';
+    await mountBoard('admin', { token: PRE });
+    await openIngress();
+
+    const state = document.querySelector('[data-ingress-token-state]');
+    expect(state!.getAttribute('data-ingress-token-state')).toBe('configured');
+    expect(state!.textContent).toBe('令牌已生成');
+    expect(document.body.innerHTML).not.toContain(PRE);
+    expect(JSON.stringify(H.panelProps)).not.toContain(PRE);
+  });
+});
+
+describe("T03-B ③' ★ NAS 档 token：写入后不回显原文", () => {
+  const SECRET = 'idplan-agent-token-T03B-SECRET-abcdef123456';
+
+  /** 切到 NAS 档（粘贴输入框只在该档渲染） */
+  async function openNasIngress(): Promise<void> {
+    await mountBoard('admin');
+    await openIngress();
+    await act(async () => {
+      click(document.querySelector('[data-ingress-mode="nas"]')!);
+    });
+  }
+
+  it('★ 保存后：原文只在 localStorage，DOM 与面板 props 里都查不到', async () => {
+    await openNasIngress();
 
     const input = document.querySelector<HTMLInputElement>('[data-ingress-token-input]');
     expect(input).not.toBeNull();
@@ -501,21 +596,24 @@ describe('T03-B ③ ★ token：写入后不回显原文', () => {
     expect(JSON.stringify(H.panelProps)).not.toContain(SECRET);
 
     // ④ 布尔真的被用上（不是恒 false 之类的"看起来安全"）：徽标翻成「已配置」
-    const state = document.querySelector('[data-ingress-token-state]');
-    expect(state!.getAttribute('data-ingress-token-state')).toBe('configured');
+    const state = document.querySelector('[data-ingress-token-state-nas]');
+    expect(state!.getAttribute('data-ingress-token-state-nas')).toBe('configured');
     expect(state!.textContent).toBe('已配置');
 
     // ⑤ 反馈走全站既有 toast 通道（不另造提示条）
     expect(H.toasts.some((t) => t.message.includes('访问令牌'))).toBe(true);
   });
 
-  it('已有存盘令牌 → 打开面板即显示「已配置」，但原文依旧不进 DOM', async () => {
+  it('已有存盘令牌 → NAS 档打开面板即显示「已配置」，但原文依旧不进 DOM', async () => {
     const PRE = 'preexisting-token-value';
     await mountBoard('admin', { token: PRE });
     await openIngress();
+    await act(async () => {
+      click(document.querySelector('[data-ingress-mode="nas"]')!);
+    });
 
-    const state = document.querySelector('[data-ingress-token-state]');
-    expect(state!.getAttribute('data-ingress-token-state')).toBe('configured');
+    const state = document.querySelector('[data-ingress-token-state-nas]');
+    expect(state!.getAttribute('data-ingress-token-state-nas')).toBe('configured');
     expect(state!.textContent).toBe('已配置');
     expect(document.body.innerHTML).not.toContain(PRE);
     expect(JSON.stringify(H.panelProps)).not.toContain(PRE);

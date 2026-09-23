@@ -507,7 +507,8 @@ describe.skipIf(!CAN_RUN_FRESH)(
       });
       if (opts.stubDesktopBridge) {
         // 最小假 bridge：字段与 electron/preload.cjs 暴露对象同形；**故意不暴露
-        // setTitleBarTheme**（与老版 preload 一致，顺带覆盖 titleBarTheme 的存在性判断分支）。
+        // windowControls / setTitleBarTheme**（与老版 preload 一致，顺带覆盖自绘三键的
+        // 存在性判断分支——且本桩 platform=linux，自绘三键本就只 Windows 渲染）。
         await ctx.addInitScript(
           (payload: Record<string, unknown>) => {
             (window as unknown as { idplan?: unknown }).idplan = {

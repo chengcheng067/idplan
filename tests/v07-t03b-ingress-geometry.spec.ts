@@ -775,12 +775,31 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await page.close();
     }, 120000);
 
-    it('④ ★ token 原文在真 DOM 任意角落都不出现（jsdom 那条的正交复核）', async () => {
+    it('④ ★ token 原文在真 DOM 任意角落都不出现；本机档已无粘贴死链（2026-09-23 重设计）', async () => {
       const page = await adminCtx.newPage();
       await openIngressAt(page, 1280, 900);
 
-      // 前置：初始应为「未配置」（独立 context，localStorage 干净）
-      expect(await page.locator(TOKEN_STATE).getAttribute('data-ingress-token-state')).toBe('unset');
+      /* ---- 本机档（默认）：自动生成，**没有**粘贴输入框 ----
+       * 旧形态让人「粘贴访问令牌」而全应用无处产生令牌（用户投诉的死链）；
+       * 重设计后本机档主入口是「生成接入信息」，输入框整个消失——
+       * 比"输入框存在但不回显"更彻底：没有可泄漏的入口。 */
+      expect(await page.locator(TOKEN_INPUT).count(), '本机档不应再有令牌粘贴框').toBe(0);
+      expect(
+        await page.locator('[data-ingress-generate]').count(),
+        '本机档主入口应为「生成接入信息」',
+      ).toBe(1);
+      expect(await page.locator(TOKEN_STATE).getAttribute('data-ingress-token-state')).toBe(
+        'unset',
+      );
+      expect(await page.locator(TOKEN_STATE).innerText()).toContain('未生成');
+
+      /* ---- NAS 档：仍是粘贴服务端令牌，原文零泄漏（原契约保留） ---- */
+      await page.locator('[data-ingress-mode="nas"]').click();
+      await page.waitForTimeout(250);
+      const nasState = '[data-ingress-token-state-nas]';
+      expect(await page.locator(nasState).getAttribute('data-ingress-token-state-nas')).toBe(
+        'unset',
+      );
 
       await page.locator(TOKEN_INPUT).fill(SECRET);
       await page.locator(TOKEN_SAVE).click();
@@ -795,7 +814,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       expect(stored, '令牌未落 localStorage —— 保存链路没跑，下面的「查不到原文」是空过').toBe(
         SECRET,
       );
-      expect(await page.locator(TOKEN_STATE).getAttribute('data-ingress-token-state')).toBe(
+      expect(await page.locator(nasState).getAttribute('data-ingress-token-state-nas')).toBe(
         'configured',
       );
 

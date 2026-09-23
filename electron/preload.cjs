@@ -30,21 +30,41 @@ contextBridge.exposeInMainWorld('idplan', {
     return () => ipcRenderer.removeListener('update:available', handler);
   },
   /**
-   * 通知主进程同步**自绘标题栏叠加层**（Windows titleBarOverlay）的配色与高度，
-   * 让原生三键区与顶栏内容区同色一体（画板 02 亮 / 板 12 暗）。
+   * 自绘窗口三键（2026-09-23 起；此前是 setTitleBarTheme 给原生叠加层下发配色）。
    *
-   * 入参由渲染进程从 CSS 变量的**实际计算值**取出（见 src/lib/titleBarTheme.ts）：
-   *   color      顶栏底色（亮 #FFFFFF / 暗 #1F2126，即 --paper）
-   *   symbolColor 顶栏前景（即 --ink）
-   *   height      顶栏高度（<xl 56 / ≥xl 64，与 TopBar 的 h-14 xl:h-16 同口径）
-   * 单向 send 即可：主进程无需回执，且非 Windows 时主进程会静默忽略。
+   * 为什么换：原生 titleBarOverlay 由系统合成器画在网页之上，DOM 模态遮罩盖不住它 ——
+   * 弹窗一开背景压暗、三键亮度不变，像贴上去的（用户 2026-09-23 投诉）。
+   * 自绘三键与内容同层同源，随主题/遮罩自然变暗，一类问题整类消失。
+   *
+   * 暴露面：三个动作（send）+ 最大化态查询（invoke）+ 最大化态变更推送（on）。
+   * `onMaximizeChange` 返回取消订阅函数（与 onUpdateAvailable 同款最小暴露）。
+   * 非 Windows（macOS/Linux）走系统装饰，`windowControls` 仍暴露但主进程无对应
+   * 窗口语义时调用方应以 `isDesktop && platform === 'win32'` 先行判断（TopBar 已做）。
    */
-  setTitleBarTheme: (theme) =>
-    ipcRenderer.send('theme:set', {
-      color: theme?.color,
-      symbolColor: theme?.symbolColor,
-      height: theme?.height,
-    }),
+  windowControls: {
+    minimize: () => ipcRenderer.send('window:minimize'),
+    toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+    close: () => ipcRenderer.send('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    onMaximizeChange: (cb) => {
+      const handler = (_e, payload) => cb(payload);
+      ipcRenderer.on('window:maximize-change', handler);
+      return () => ipcRenderer.removeListener('window:maximize-change', handler);
+    },
+  },
+
+  /**
+   * Agent 接入文件（v0.8 · T04-B「接入外部写入方」重设计）。
+   *
+   * 渲染进程**不碰 fs**（sandbox preload 也不能）：由主进程把接入信息
+   * （{origin, token, endpoints, payloadSchema, 用法}）写到固定路径
+   * （documents/ID Plan/agent-ingress.json），外部写入方（如 WorkBuddy）
+   * 读这一个文件即完成接入；令牌轮换后重新生成、写方重读。
+   * `writeAgentIngressFile` 返回实际写入路径（目录不存在时创建）。
+   */
+  writeAgentIngressFile: (payload) => ipcRenderer.invoke('agent-ingress:write', payload),
+  /** 只查固定路径（不触发写入；供面板展示「上次生成到哪」） */
+  agentIngressFilePath: () => ipcRenderer.invoke('agent-ingress:path'),
 
   /**
    * 本机 Agent loopback（v1.0 · P0）：订阅主进程转来的导入请求。

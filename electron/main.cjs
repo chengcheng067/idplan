@@ -158,44 +158,54 @@ function scheduleAutoUpdateCheck(win) {
 // ---- 顶栏与主题融合（画板 02 亮色顶栏 / 画板 12 暗色顶栏） ----
 // 设计稿的顶栏是「内容区的一部分」（亮 #FFFFFF / 暗 #1F2126，仅面包屑+搜索+头像三块），
 // 而原生 Windows 标题栏是系统灰白，两者拼在一起就是用户说的「顶栏关闭栏与主题割裂」。
-// 解法：隐藏原生标题栏（titleBarStyle:'hidden'），改用**自绘叠加层** titleBarOverlay
-// 绘制最小化/最大化/关闭三键，其底色与符号色由渲染进程按当前主题实时下发（见下方
-// 'theme:set'），做到「原生栏与内容区同色一体的感觉」。
+//
+// 解法演进（2026-09-23 二次重构，勿再回头用 titleBarOverlay）：
+//   ① 第一版：titleBarStyle:'hidden' + **原生叠加层** titleBarOverlay 画三键，
+//      颜色由渲染进程 'theme:set' IPC 实时下发。
+//   ② 它修不好用户投诉的「弹窗一开、背景压暗，三键亮度不变像贴上去的」——
+//      原因是结构性的：原生层由系统合成器画在网页之上，DOM 遮罩盖不住它；
+//      压暗只能是近似（0.55× 乘出来的灰 ≠ 遮罩实际合成的灰，仍是两块色）。
+//   ③ 现行：**自绘三键**（DOM 按钮，见 src/components/layout/TopBar.tsx 的
+//      WindowControls）。三键与内容同层同源，随主题/遮罩自然变暗，一类问题整类消失。
+//      本文件只保留窗口控制 IPC；拖拽所需的 titleBarStyle:'hidden' 保留，
+//      拖拽区由 CSS 提供（global.css 的 .app-titlebar-drag / .app-no-drag）——
+//      叠加层时代拖拽靠原生栏，自绘后必须显式声明，否则窗口无法移动。
 
-/** 叠加层配色的**首帧兜底**（亮色）：与 src/styles/global.css 的 --paper / --ink 同源。
- *  运行期由 'theme:set' 用 CSS 变量的实际计算值覆盖，这里只保证
- *  「窗口创建 → 首帧 IPC 到达」之间不闪出错误颜色。 */
-const TITLEBAR_FALLBACK = { color: '#ffffff', symbolColor: '#1f2937' };
+/** 是否启用自绘窗口三键。仅 Windows：macOS 走系统红绿灯（自绘会破坏原生手势），
+ *  Linux 走系统装饰。与 TopBar 的 usesSelfDrawnWindowControls 同源判定。 */
+const USE_SELF_DRAWN_WINDOW_CONTROLS = process.platform === 'win32';
 
-/** 叠加层高度兜底（≥xl 口径，64）。渲染进程按视口宽度算实际值（<xl 为 56），
- *  与 TopBar 的 `h-14 xl:h-16` 严格一致——若两者不等，按钮会与顶栏内容错位。 */
-const TITLEBAR_HEIGHT_FALLBACK = 64;
-
-/** 是否启用自绘标题栏叠加层。仅 Windows 支持 titleBarOverlay：
- *  macOS 走系统红绿灯（自绘会破坏原生手势），Linux 不支持该 API。 */
-const USE_TITLEBAR_OVERLAY = process.platform === 'win32';
-
-/**
- * 顶栏主题下发：渲染进程写完 `<html data-theme>` 后，取 --paper / --ink 的**实际
- * 计算值**发来，主进程据此重设叠加层底色与符号色。
- * 颜色不在主进程另起一套 hex——否则 CSS 变量一改这里就漂移。
- */
-ipcMain.on('theme:set', (event, payload) => {
-  if (!USE_TITLEBAR_OVERLAY) return;
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || win.isDestroyed()) return;
-  const color = payload && typeof payload.color === 'string' ? payload.color : '';
-  const symbolColor = payload && typeof payload.symbolColor === 'string' ? payload.symbolColor : '';
-  if (!color || !symbolColor) return;
-  const height = Number.isFinite(payload.height)
-    ? Math.round(payload.height)
-    : TITLEBAR_HEIGHT_FALLBACK;
-  try {
-    win.setTitleBarOverlay({ color, symbolColor, height });
-  } catch {
-    /* 平台/版本不支持时静默：顶栏仍由 CSS 正常渲染，只是原生按钮区不跟随换肤 */
-  }
-});
+/** 窗口控制 IPC（自绘三键的宿主）：三个动作 + 最大化态查询与变更推送。 */
+if (USE_SELF_DRAWN_WINDOW_CONTROLS) {
+  const winOf = (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win && !win.isDestroyed() ? win : null;
+  };
+  ipcMain.on('window:minimize', (event) => {
+    winOf(event)?.minimize();
+  });
+  ipcMain.on('window:toggle-maximize', (event) => {
+    const win = winOf(event);
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+  ipcMain.on('window:close', (event) => {
+    winOf(event)?.close();
+  });
+  ipcMain.handle('window:is-maximized', (event) => winOf(event)?.isMaximized() ?? false);
+  // 最大化态变更推送：按钮图标要在「最大化 ⇄ 还原」之间切换（用户双击标题栏
+  // 或按系统快捷键时同样走这条推送，否则图标与实际状态不一致）。
+  const broadcastMaximize = (win) => {
+    if (win && !win.isDestroyed()) win.webContents.send('window:maximize-change', win.isMaximized());
+  };
+  app.whenReady().then(() => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.on('maximize', () => broadcastMaximize(win));
+      win.on('unmaximize', () => broadcastMaximize(win));
+    }
+  });
+}
 
 // ── 本机 Agent loopback 接线（v1.0 · P0） ──
 // 渲染进程把 token 告知主进程（仅比对，绝不回传原文）
@@ -210,6 +220,37 @@ ipcMain.handle('license:import', (_event, raw) => {
 
 ipcMain.on('agent:token:set', (_event, token) => {
   setLoopbackToken(token);
+});
+
+// ── Agent 接入文件（v0.8 · T04-B「接入外部写入方」重设计） ──
+// 外部写入方（如 WorkBuddy）读这一个文件即完成接入：地址 / 令牌 / 端点 / payload
+// schema / 用法全在里面。固定路径是设计的核心——零传递成本，令牌轮换后重新生成、
+// 写方重读即可。渲染进程不碰 fs（sandbox preload 也不能），落盘只在此处。
+const INGRESS_DIR_NAME = 'ID Plan';
+const INGRESS_FILE_NAME = 'agent-ingress.json';
+
+function ingressFilePath(documentsDir) {
+  return path.join(documentsDir, INGRESS_DIR_NAME, INGRESS_FILE_NAME);
+}
+
+ipcMain.handle('agent-ingress:path', () => ingressFilePath(app.getPath('documents')));
+
+ipcMain.handle('agent-ingress:write', (_event, payload) => {
+  const filePath = ingressFilePath(app.getPath('documents'));
+  // 形状闸门（轻量）：缺 origin / token 的"接入文件"对写方无用，宁可不写。
+  const origin = payload && typeof payload.origin === 'string' ? payload.origin.trim() : '';
+  const token = payload && typeof payload.token === 'string' ? payload.token.trim() : '';
+  if (!origin || !token) {
+    return { ok: false, path: filePath, reason: '接入信息不完整（缺地址或令牌），拒绝写文件。' };
+  }
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    return { ok: true, path: filePath };
+  } catch (err) {
+    // 磁盘满 / 目录被占：把真实原因带回渲染层展示，不静默（静默=用户以为接上了）
+    return { ok: false, path: filePath, reason: String((err && err.message) || err).slice(0, 200) };
+  }
 });
 
 // 渲染进程把「落库结果 / 错误」回传给挂起的 HTTP 请求
@@ -317,18 +358,12 @@ function createWindow() {
     // 原值 '#f5f2ec' 是改造前的旧暖白，与 v0.7 令牌不同源，会在
     // 「窗口创建 → 首帧渲染」之间闪出一块对不上的暖色。
     backgroundColor: '#f8fafc',
-    // 自绘标题栏（仅 Windows）：隐藏原生栏，改用叠加层画三键，颜色随主题下发。
+    // 自绘标题栏（仅 Windows）：隐藏原生栏，三键由 DOM 自绘（TopBar.WindowControls）。
+    // 注意：这里**不再有** titleBarOverlay——叠加层是系统画在网页之上的，DOM 遮罩
+    // 盖不住它（用户投诉「弹窗一开三键像贴上去的」根因），自绘后随主题/遮罩自然变暗。
+    // 拖拽因此必须由 CSS 声明（global.css 的 .app-titlebar-drag），不是原生栏附赠。
     // 非 Windows 不传该组键，保持系统原生标题栏（红绿灯 / 各桌面环境自绘）。
-    ...(USE_TITLEBAR_OVERLAY
-      ? {
-          titleBarStyle: 'hidden',
-          titleBarOverlay: {
-            color: TITLEBAR_FALLBACK.color,
-            symbolColor: TITLEBAR_FALLBACK.symbolColor,
-            height: TITLEBAR_HEIGHT_FALLBACK,
-          },
-        }
-      : {}),
+    ...(USE_SELF_DRAWN_WINDOW_CONTROLS ? { titleBarStyle: 'hidden' } : {}),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

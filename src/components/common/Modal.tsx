@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { createPortal } from 'react-dom';
-import { dimTitleBarForModal, restoreTitleBarAfterModal, titleBarHeight } from '../../lib/titleBarTheme';
+import { titleBarHeight } from '../../lib/topbarMetrics';
 import { resolveAnchoredPosition, type Point } from '../../lib/anchoredPosition';
 
 /**
@@ -71,7 +71,6 @@ export function Modal({
 
     // 记录打开前的焦点元素，关闭后还原。
     lastFocusRef.current = document.activeElement as HTMLElement | null;
-    dimTitleBarForModal();
     // 打开后聚焦面板（保证 Tab 循环起始点 + 可读屏聚焦）。
     panelRef.current?.focus();
 
@@ -117,7 +116,6 @@ export function Modal({
       document.body.style.paddingRight = prevPaddingRight;
       // 关闭后把焦点还原给触发元素。
       lastFocusRef.current?.focus();
-      restoreTitleBarAfterModal();
     };
     // 依赖只保留 open：若把 onClose 放进依赖，父组件每次重渲染产生的新函数引用会让本 effect 卸载重跑，
     // cleanup 里的焦点还原 + 重新聚焦面板会在每次击键时抢走输入框焦点，

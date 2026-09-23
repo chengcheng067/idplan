@@ -118,6 +118,11 @@ import { TaskDrawer } from '../components/agent/TaskDrawer';
 import { Modal } from '../components/common/Modal';
 import { remainingDays } from '../lib/date';
 import { cn } from '../lib/cn';
+import {
+  buildIngressInstructionBlock,
+  buildIngressPayload,
+  generateAgentToken,
+} from '../core/agent/ingress-file';
 
 /**
  * 四组标题 —— **写死在 BOARD 组件**（设计文档 :459 / PRD §4.5）。
@@ -197,6 +202,21 @@ function writeStoredAgentBaseUrl(next: string): void {
     localStorage.setItem(AGENT_BASE_URL_STORAGE_KEY, next);
   } catch {
     /* 同 writeStoredAgentToken */
+  }
+}
+
+/**
+ * 剪贴板写入（统一出口）。不可用 / 权限被拒时返回 false，由调用方决定提示文案
+ * —— 非安全上下文（http 非 localhost）拿不到 navigator.clipboard。
+ */
+async function copyText(text: string): Promise<boolean> {
+  const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+  if (!clip || typeof clip.writeText !== 'function') return false;
+  try {
+    await clip.writeText(text);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -451,16 +471,96 @@ export function AgentBoardPage(): JSX.Element {
       pushToast('error', '尚未配置访问令牌。');
       return;
     }
-    const clip = navigator.clipboard;
-    if (!clip || typeof clip.writeText !== 'function') {
-      pushToast('error', '当前环境不支持剪贴板，请手动复制。');
-      return;
-    }
-    void clip.writeText(token).then(
-      () => pushToast('success', '访问令牌已复制。'),
-      () => pushToast('error', '复制失败，请重试。'),
+    void copyText(token).then(
+      (ok) => pushToast(ok ? 'success' : 'error', ok ? '访问令牌已复制。' : '复制失败，请重试。'),
     );
   }, [pushToast]);
+
+  /* ------------------------------ 接入文件（2026-09-23 重设计 · 用户裁决） ------------------------------
+   *
+   * 旧流程死锁：面板让人「粘贴访问令牌」，而全应用没有任何地方能产生令牌——用户
+   * 根本不知道去哪找。重设计为「接入文件 + 指令块兜底」（用户 2026-09-23 选）：
+   *   ① 令牌**自动生成**（`generateAgentToken`），用户不再发明暗号；
+   *   ② 接入信息（地址/令牌/端点/payload schema/用法）由**主进程**写到固定路径
+   *      （documents/ID Plan/agent-ingress.json）——渲染进程不碰 fs；
+   *   ③ 文件路径一键复制（写入方读文件即接入）+ 接入指令块兜底（不能读文件的
+   *      写入方，人肉粘给它）。
+   * 令牌原文的传播面与旧「复制令牌」按钮同级（localStorage + 剪贴板/文件），
+   * 不新增暴露面；文件是固定路径、内容机器可读，令牌轮换后重新生成即一致。
+   * ------------------------------------------------------------------------------------------ */
+
+  /** 接入文件写入结果；null = 本会话尚未生成过（持久事实以磁盘文件为准） */
+  const [ingressFile, setIngressFile] = useState<{ path: string } | null>(null);
+
+  /**
+   * 生成（或轮换重生成）接入信息：令牌 → 接入文件 → 复制路径。
+   *
+   * 令牌策略：**有则沿用、无则生成**——重生成不是默认路径（会配过的用户没必要被
+   * 强制轮换）；确实没有时才自动生成，这正是治旧流程死锁的那一步。
+   * 轮换入口由面板在「已配置」状态下提供（重新生成 = 换新令牌 + 重写文件）。
+   */
+  const onGenerateIngress = useCallback(
+    async (rotate: boolean): Promise<void> => {
+      const bridge = window.idplan;
+      if (!bridge?.writeAgentIngressFile) {
+        pushToast('error', '当前运行环境不支持写入接入文件（仅 Windows 桌面版可用）。');
+        return;
+      }
+      let token = readStoredAgentToken().trim();
+      if (token.length === 0 || rotate) {
+        token = generateAgentToken();
+        writeStoredAgentToken(token); // 原文只落 localStorage
+        setTokenConfigured(true);
+        // 主进程只留着比对，绝不回传原文；换了令牌必须同步告知（旧令牌即失效）
+        if (bridge.setAgentToken) bridge.setAgentToken(token);
+      }
+      const payload = buildIngressPayload({ origin: `http://${LOOPBACK_ORIGIN}`, token });
+      const res = await bridge.writeAgentIngressFile(payload as unknown as Record<string, unknown>);
+      if (!res.ok) {
+        pushToast('error', `接入文件写入失败：${res.reason ?? '未知原因'}`);
+        return;
+      }
+      setIngressFile({ path: res.path });
+      const ok = await copyText(res.path);
+      pushToast(
+        'success',
+        ok ? `接入信息已生成，路径已复制：${res.path}` : `接入信息已生成：${res.path}`,
+      );
+    },
+    [pushToast],
+  );
+
+  /** 复制接入文件路径（写入方的第一步就是读它） */
+  const onCopyIngressPath = useCallback((): void => {
+    if (!ingressFile) {
+      pushToast('error', '尚未生成接入信息，请先点「生成接入信息」。');
+      return;
+    }
+    void copyText(ingressFile.path).then((ok) =>
+      pushToast(ok ? 'success' : 'error', ok ? '文件路径已复制。' : '复制失败，请重试。'),
+    );
+  }, [ingressFile, pushToast]);
+
+  /**
+   * 复制接入指令块（兜底通道）。
+   * 令牌明文只出现在这个块里——与旧「复制令牌」按钮同一暴露面，不新增；
+   * 文件路径在前、明文令牌在后：优先引导读文件。
+   */
+  const onCopyIngressInstruction = useCallback((): void => {
+    const token = readStoredAgentToken().trim();
+    if (!token) {
+      pushToast('error', '尚未生成访问令牌，请先生成接入信息。');
+      return;
+    }
+    const payload = buildIngressPayload({ origin: `http://${LOOPBACK_ORIGIN}`, token });
+    const block = buildIngressInstructionBlock({
+      filePath: ingressFile?.path ?? '（尚未生成接入文件，请先在面板点「生成接入信息」）',
+      payload,
+    });
+    void copyText(block).then((ok) =>
+      pushToast(ok ? 'success' : 'error', ok ? '接入指令已复制，粘给写入方即可。' : '复制失败，请重试。'),
+    );
+  }, [ingressFile, pushToast]);
 
   /** 「手动粘贴」是**另一个入口**（离线兜底），不得与通道配置合并（主 PRD §4.1） */
   const onIngressOpenManual = useCallback((): void => {
@@ -1184,6 +1284,16 @@ export function AgentBoardPage(): JSX.Element {
             tokenConfigured={tokenConfigured}
             onSaveToken={onIngressSaveToken}
             onCopyToken={onIngressCopyToken}
+            /*
+             * ★ 2026-09-23 重设计（用户裁决「接入文件 + 指令块兜底」）：
+             *   本机档位主入口从「粘贴令牌」改为「生成接入信息」——令牌自动生成、
+             *   接入文件写固定路径、文件路径与接入指令一键复制。令牌原文不出
+             *   localStorage（生成即存、面板只见布尔与路径）。
+             */
+            ingressFile={ingressFile}
+            onGenerateIngress={onGenerateIngress}
+            onCopyIngressPath={onCopyIngressPath}
+            onCopyIngressInstruction={onCopyIngressInstruction}
             /*
              * 结构兼容由**本行类型标注**兜底：`probe()` 返回 `AgentProbeView`，
              * 若它和面板的 `IngressProbeView` 字段漂移，这里当场编译失败

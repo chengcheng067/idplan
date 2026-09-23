@@ -75,6 +75,11 @@ function defaultProps(overrides: Partial<AgentIngressPanelProps> = {}): AgentIng
     tokenConfigured: false,
     onSaveToken: vi.fn(),
     onCopyToken: vi.fn(),
+    // 2026-09-23 重设计新增（本机档主入口）
+    ingressFile: null,
+    onGenerateIngress: vi.fn(),
+    onCopyIngressPath: vi.fn(),
+    onCopyIngressInstruction: vi.fn(),
     probeResult: null,
     onProbe: vi.fn(),
     status: null,
@@ -208,35 +213,139 @@ describe('② 服务地址：本机只读 / NAS 可编辑', () => {
   });
 });
 
-/* ========================= ③ ★ token 安全 ========================= */
+/* ========================= ③ 本机档 · 接入文件（2026-09-23 重设计的主入口）========================= */
 
-describe('③ ★ token：写入后只回显「已配置」，DOM 里查不到原文', () => {
+describe('③ 本机档 · 接入信息：生成 / 轮换 / 路径复制（旧「粘贴令牌」死链的替代）', () => {
+  it('未生成 → 「生成接入信息」可点；复制路径 / 复制指令禁用；无路径展示', () => {
+    setRole(MemberRoleKind.Admin);
+    const el = render(
+      <AgentIngressPanel {...defaultProps({ mode: 'local', tokenConfigured: false, ingressFile: null })} />,
+    );
+
+    expect(el.querySelector('[data-ingress-generate]')).not.toBeNull();
+    // 未配置时没有「重新生成」（轮换是显式动作，不该诱导首次用户）
+    expect(el.querySelector('[data-ingress-regenerate]')).toBeNull();
+    expect(el.querySelector<HTMLButtonElement>('[data-ingress-copy-path]')!.disabled).toBe(true);
+    expect(el.querySelector<HTMLButtonElement>('[data-ingress-copy-instruction]')!.disabled).toBe(true);
+    expect(el.querySelector('[data-ingress-file-path]')).toBeNull();
+    expect(el.textContent).toContain('尚未生成');
+  });
+
+  it('★ 点击生成 → onGenerateIngress(false)：无令牌时自动生成（治旧死锁的那一步）', () => {
+    setRole(MemberRoleKind.Admin);
+    const onGenerateIngress = vi.fn();
+    const el = render(
+      <AgentIngressPanel {...defaultProps({ mode: 'local', tokenConfigured: false, onGenerateIngress })} />,
+    );
+
+    act(() => {
+      click(el.querySelector('[data-ingress-generate]')!);
+    });
+    expect(onGenerateIngress).toHaveBeenCalledTimes(1);
+    // rotate=false：有令牌则沿用、无则生成——不是默认强制轮换
+    expect(onGenerateIngress).toHaveBeenCalledWith(false);
+  });
+
+  it('已配置 → 「重新生成」出现且走 rotate=true（换新令牌，旧令牌即失效）', () => {
+    setRole(MemberRoleKind.Admin);
+    const onGenerateIngress = vi.fn();
+    const el = render(
+      <AgentIngressPanel
+        {...defaultProps({ mode: 'local', tokenConfigured: true, onGenerateIngress })}
+      />,
+    );
+
+    const regen = el.querySelector('[data-ingress-regenerate]');
+    expect(regen).not.toBeNull();
+    act(() => {
+      click(regen!);
+    });
+    expect(onGenerateIngress).toHaveBeenCalledWith(true);
+  });
+
+  it('★ 写入成功后：路径原样展示（机器可读），两个复制按钮均可用', () => {
+    setRole(MemberRoleKind.Admin);
+    const onCopyIngressPath = vi.fn();
+    const onCopyIngressInstruction = vi.fn();
+    const el = render(
+      <AgentIngressPanel
+        {...defaultProps({
+          mode: 'local',
+          tokenConfigured: true,
+          ingressFile: { path: 'C:\\Users\\x\\Documents\\ID Plan\\agent-ingress.json' },
+          onCopyIngressPath,
+          onCopyIngressInstruction,
+        })}
+      />,
+    );
+
+    const pathBox = el.querySelector('[data-ingress-file-path]');
+    expect(pathBox!.textContent).toBe('C:\\Users\\x\\Documents\\ID Plan\\agent-ingress.json');
+
+    act(() => {
+      click(el.querySelector('[data-ingress-copy-path]')!);
+    });
+    expect(onCopyIngressPath).toHaveBeenCalledTimes(1);
+    act(() => {
+      click(el.querySelector('[data-ingress-copy-instruction]')!);
+    });
+    expect(onCopyIngressInstruction).toHaveBeenCalledTimes(1);
+  });
+
+  it('★ 安全不变式延续：令牌原文在面板 DOM 里任何角落都不出现（本机档连输入框都没有）', () => {
+    setRole(MemberRoleKind.Admin);
+    const SECRET = 'idp_0123456789abcdef0123456789abcdef';
+    const el = render(
+      <AgentIngressPanel
+        {...defaultProps({
+          mode: 'local',
+          tokenConfigured: true,
+          ingressFile: { path: 'C:\\x\\agent-ingress.json' },
+        })}
+      />,
+    );
+
+    // 本机档没有任何 token 输入框（自动生成，无需粘贴）——比旧形态更彻底
+    expect(el.querySelector('[data-ingress-token-input]')).toBeNull();
+    // 面板只暴露布尔 + 文件路径；原文靠 localStorage / 接入文件 / 剪贴板传递
+    expect(el.innerHTML).not.toContain(SECRET);
+    expect(el.textContent).not.toContain(SECRET);
+    expect(el.outerHTML).not.toContain(SECRET);
+    // 状态徽标仍只有布尔语义
+    const state = el.querySelector('[data-ingress-token-state]');
+    expect(['configured', 'unset']).toContain(state!.getAttribute('data-ingress-token-state'));
+  });
+});
+
+/* ========================= ③' NAS 档 · 服务端令牌（粘贴，原文不回显）========================= */
+
+describe("③' NAS 档 · 访问令牌：写入后只回显「已配置」，DOM 里查不到原文", () => {
   const SECRET = 'idplan-agent-token-SECRET-abc123XYZ';
 
   it('未配置 → 显示「未配置」，复制按钮禁用', () => {
     setRole(MemberRoleKind.Admin);
-    const el = render(<AgentIngressPanel {...defaultProps({ tokenConfigured: false })} />);
+    const el = render(<AgentIngressPanel {...defaultProps({ mode: 'nas', tokenConfigured: false })} />);
 
-    const state = el.querySelector('[data-ingress-token-state]');
+    const state = el.querySelector('[data-ingress-token-state-nas]');
     expect(state!.textContent).toBe('未配置');
-    expect(state!.getAttribute('data-ingress-token-state')).toBe('unset');
+    expect(state!.getAttribute('data-ingress-token-state-nas')).toBe('unset');
     expect(el.querySelector<HTMLButtonElement>('[data-ingress-token-copy]')!.disabled).toBe(true);
   });
 
   it('已配置 → 显示「已配置」且复制按钮可用', () => {
     setRole(MemberRoleKind.Admin);
-    const el = render(<AgentIngressPanel {...defaultProps({ tokenConfigured: true })} />);
+    const el = render(<AgentIngressPanel {...defaultProps({ mode: 'nas', tokenConfigured: true })} />);
 
-    const state = el.querySelector('[data-ingress-token-state]');
+    const state = el.querySelector('[data-ingress-token-state-nas]');
     expect(state!.textContent).toBe('已配置');
-    expect(state!.getAttribute('data-ingress-token-state')).toBe('configured');
+    expect(state!.getAttribute('data-ingress-token-state-nas')).toBe('configured');
     expect(el.querySelector<HTMLButtonElement>('[data-ingress-token-copy]')!.disabled).toBe(false);
   });
 
   it('★ 保存后：原文不在 DOM、不在输入框、回调拿到的是原文', () => {
     setRole(MemberRoleKind.Admin);
     const onSaveToken = vi.fn();
-    const el = render(<AgentIngressPanel {...defaultProps({ onSaveToken })} />);
+    const el = render(<AgentIngressPanel {...defaultProps({ mode: 'nas', onSaveToken })} />);
     const input = el.querySelector<HTMLInputElement>('[data-ingress-token-input]');
 
     // 输入框是 password 型（防肩窥 / 防浏览器自动填充）
@@ -264,11 +373,11 @@ describe('③ ★ token：写入后只回显「已配置」，DOM 里查不到�
 
   it('★ 即使 tokenConfigured=true，面板里也没有任何承载原文的节点', () => {
     setRole(MemberRoleKind.Admin);
-    const el = render(<AgentIngressPanel {...defaultProps({ tokenConfigured: true })} />);
+    const el = render(<AgentIngressPanel {...defaultProps({ mode: 'nas', tokenConfigured: true })} />);
 
     // 面板只暴露布尔事实：state 只有 configured / unset 两个取值
-    const state = el.querySelector('[data-ingress-token-state]');
-    expect(['configured', 'unset']).toContain(state!.getAttribute('data-ingress-token-state'));
+    const state = el.querySelector('[data-ingress-token-state-nas]');
+    expect(['configured', 'unset']).toContain(state!.getAttribute('data-ingress-token-state-nas'));
     // 唯一承载用户输入的 token 输入框是空的（只有地址框会有值，且那是既定事实非机密）
     expect(el.querySelector<HTMLInputElement>('[data-ingress-token-input]')!.value).toBe('');
     // React 会给受控 input 落一个空的 value 属性（`""`），这同样不含原文；
@@ -282,7 +391,7 @@ describe('③ ★ token：写入后只回显「已配置」，DOM 里查不到�
     setRole(MemberRoleKind.Admin);
     const onCopyToken = vi.fn();
     const el = render(
-      <AgentIngressPanel {...defaultProps({ tokenConfigured: true, onCopyToken })} />,
+      <AgentIngressPanel {...defaultProps({ mode: 'nas', tokenConfigured: true, onCopyToken })} />,
     );
 
     act(() => {
@@ -294,7 +403,7 @@ describe('③ ★ token：写入后只回显「已配置」，DOM 里查不到�
   it('空草稿不触发保存（避免写入空令牌）', () => {
     setRole(MemberRoleKind.Admin);
     const onSaveToken = vi.fn();
-    const el = render(<AgentIngressPanel {...defaultProps({ onSaveToken })} />);
+    const el = render(<AgentIngressPanel {...defaultProps({ mode: 'nas', onSaveToken })} />);
 
     expect(el.querySelector<HTMLButtonElement>('[data-ingress-token-save]')!.disabled).toBe(true);
     act(() => {

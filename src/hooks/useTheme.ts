@@ -1,7 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
-import { installTitleBarThemeSync, syncTitleBarTheme } from '../lib/titleBarTheme';
-
 /**
  * 双主题（亮 / 暗）状态源。
  *
@@ -61,10 +59,6 @@ function apply(next: ThemeMode): void {
   mode = next;
   current = resolveTheme(mode);
   document.documentElement.dataset.theme = current;
-  // 主题已落 DOM → 立刻同步原生标题栏叠加层配色（内部读 CSS 变量实际值，
-  // getComputedStyle 会强制同步样式重算，故此处能拿到新主题的颜色）。
-  // 非桌面端短路，浏览器 / NAS 端无副作用。
-  syncTitleBarTheme();
   try {
     if (next === 'system') {
       // 删除显式键：让 resolveTheme() 自然回退到 systemTheme()
@@ -99,12 +93,6 @@ function getServerSnapshot(): 'light' | 'dark' {
  */
 export function initTheme(): void {
   document.documentElement.dataset.theme = resolveTheme(storedMode());
-  // 首屏也要同步一次原生标题栏配色：index.html 的内联脚本虽已写好 data-theme，
-  // 但叠加层颜色是主进程持有的状态，不通知就仍是 main.cjs 的亮色兜底值——
-  // 暗色启动时会出现「顶栏暗、三键区亮」的割裂（正是本项要修的现象）。
-  syncTitleBarTheme();
-  // 视口宽度跨 xl（1280）时顶栏高度 56↔64 变化，需重发高度给主进程
-  installTitleBarThemeSync();
 
   if (typeof window.matchMedia !== 'function') return;
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
@@ -112,8 +100,6 @@ export function initTheme(): void {
     if (readStoredTheme() !== null) return;
     current = e.matches ? 'dark' : 'light';
     document.documentElement.dataset.theme = current;
-    // 「跟随系统」路径同样要通知主进程，否则系统切暗色时原生栏不跟随
-    syncTitleBarTheme();
     listeners.forEach((l) => l());
   });
 }

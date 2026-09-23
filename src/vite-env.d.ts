@@ -68,18 +68,25 @@ interface IdPlanBridge {
     }) => void,
   ) => () => void;
   /**
-   * 同步自绘标题栏叠加层配色（Windows titleBarOverlay）。
-   * 可选：老版本 preload 未暴露该方法，故调用方必须做存在性判断
-   * （见 src/lib/titleBarTheme.ts）。浏览器 / NAS 端 window.idplan 本身就不存在。
+   * 自绘窗口三键（2026-09-23 起，取代原 setTitleBarTheme 叠加层配色下发）。
+   * 原生 titleBarOverlay 由系统合成器画在网页之上，DOM 遮罩盖不住它——
+   * 自绘三键与内容同层同源，随主题/遮罩自然变暗。
+   * 可选：老版本 preload 未暴露，调用方须做存在性判断（TopBar 的 WindowControls 已做）。
    */
-  setTitleBarTheme?: (theme: {
-    /** 顶栏底色（--paper 实际值） */
-    color: string;
-    /** 顶栏前景（--ink 实际值） */
-    symbolColor: string;
-    /** 顶栏高度（<xl 56 / ≥xl 64） */
-    height: number;
-  }) => void;
+  windowControls?: {
+    minimize: () => void;
+    toggleMaximize: () => void;
+    close: () => void;
+    isMaximized: () => Promise<boolean>;
+    onMaximizeChange: (cb: (maximized: boolean) => void) => () => void;
+  };
+  /**
+   * 写入 Agent 接入文件（固定路径 documents/ID Plan/agent-ingress.json）。
+   * 外部写入方读该文件即完成接入；返回实际路径或失败原因。老版本 preload 可选。
+   */
+  writeAgentIngressFile?: (payload: Record<string, unknown>) => Promise<{ ok: boolean; path: string; reason?: string }>;
+  /** 只查接入文件固定路径（不触发写入）；老版本 preload 可选 */
+  agentIngressFilePath?: () => Promise<string>;
   /**
    * 本机 Agent loopback（v1.0 · P0）：订阅主进程转来的导入请求。
    * 渲染进程用 payload.apply + 自己的 repos 落库，再经 sendAgentImportResult 回传。

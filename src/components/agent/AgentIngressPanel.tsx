@@ -1,20 +1,27 @@
 /**
- * 外部写入方「接入配置面板」（v0.7 · T03 · P0-9 剩余部分 / PRD §4.8）。
+ * 外部写入方「接入配置面板」（v0.7 · T03 · P0-9 剩余部分 / PRD §4.8；
+ * **2026-09-23 重设计**：本机档位改「接入文件」主入口）。
  *
- * ── 本组件是**纯展示**（本批唯一形态）──
- * 它**不发任何网络请求、不 import 任何仓储、不 import `useAgentStore`**。
+ * ── 2026-09-23 重设计（用户裁决「接入文件 + 指令块兜底」）──
+ * 旧形态的死锁：本机档位让人「粘贴访问令牌」，而全应用没有任何地方能产生令牌。
+ * 新形态（**仅本机模式**）：
+ *   ① 令牌**自动生成**（用户不再发明暗号）；
+ *   ② 接入信息（地址/令牌/端点/payload schema/用法）由主进程写到**固定路径**
+ *      （documents/ID Plan/agent-ingress.json），写入方读一个文件即完成接入；
+ *   ③ 「复制路径」+「复制接入指令」两个兜底按钮（后者给不能读文件的写入方）。
+ * NAS 模式维持原状：地址 + 粘贴服务端令牌（那边令牌由服务端 env 配置，
+ * 与本机自动生成是两回事，不混在一档里）。
+ *
+ * ── 本组件是**纯展示**（不发任何网络请求、不 import 任何仓储 / store）──
+ * **禁止 import**：`useAgentStore`（会触发真实 preview/commit）、`useRepos` /
+ * 仓储层、以及任何自行比对 `roleKind` 的角色判定——权限唯一出口是 `useRoleGuard()`。
  * 面板需要的一切「外部事实」都从 props 进：
  *   · `probeResult` / `status` —— `probe()` / `status()` 的结果；
- *   · `onProbe` / `onSaveToken` / `onCopyToken` / `onAddressChange` —— 动作出海。
+ *   · `onProbe` / `onGenerateIngress` / `onCopyIngressPath` / `onCopyIngressInstruction`
+ *     / `onSaveToken` / `onCopyToken` / `onAddressChange` —— 动作出海。
  * 真正的通道实现（`transport.contract.ts` + 主进程 loopback / NAS HTTP）在 T01 冻结
  * 契约、T03-B 落地后接上。**本批绝不给出「已连通」的假象**——面板内以说明行
  * 明确写出「当前状态由上层传入」。
- *
- * ── 为什么这样切（T03-A / T03-B 分工）──
- * 面板四件里**三件与契约无关**（地址、token、`isAdmin` 门控），可先落地并验证；
- * 剩一件（服务状态 / 最近同步记录）的**数据来自 `probe()`/`status()`**，其响应类型
- * 属 `transport.contract.ts`（§6.2：跨任务共享类型**全部在 T01 冻结**）。
- * 故本批只**接收**这些值，不自己调、不自己声明契约类型。
  *
  * ── 与「手动粘贴」是**两个入口**，不得合并（主 PRD §4.1 明定）──
  *   ① 本面板 = 外部 Agent 的**通道配置**（自动写入）；
@@ -22,21 +29,18 @@
  * 二者共用同一份 payload schema，但入口语义不同。本面板只提供一个**跳转回调**
  * `onOpenManual`，绝不内嵌、绝不替代手动粘贴。
  *
- * ── 安全硬约束（不可协商，见 §3.4 / 本任务派单）──
- * **token 原文绝不回显**：写入后只显示「已配置」+ 复制按钮。
- *   · 输入框用 `type="password"` 且 `autoComplete="off"`（肩窥 / 浏览器自动填充泄漏）；
- *   · 保存成功后**立即清空**本地草稿态 —— 原文既不留在组件 state，也不留在 DOM；
- *   · 「复制」走 `onCopyToken()` **回调取件**，不经 DOM 读取。
- *   · 故 `useState` 里**只有草稿**，且草稿在一次保存后即消失；本组件**从不**接收
- *     token 原文作为 prop（props 只有布尔 `tokenConfigured`）。
+ * ── 安全硬约束（不可协商，见 §3.4）──
+ * **token 原文绝不回显**：本机模式的令牌由「生成」出海（onGenerateIngress），
+ * 面板只见布尔 `tokenConfigured` 与文件路径；NAS 模式的输入框用 `type="password"`
+ * 且 `autoComplete="off"`，保存成功后**立即清空**本地草稿态——原文既不留在组件
+ * state，也不留在 DOM；「复制」走回调取件，不经 DOM 读取。
  *
  * ── `isAdmin` 门控（§5.4 #16：成员看不到接入面板）──
  * 权限唯一出口 = `useRoleGuard()`（禁止自行比对 `roleKind`）。
  * ⚠️ `useRoleGuard()` **必须在所有条件 return 之前**调用（React #310：hook 数量
  * 在两次渲染间变化会整树白屏——本项目已因 hook 顺序栽过一次，见
  * `tests/stage-drawer-hook-order.spec.tsx`）。
- * 判定用 `isAdmin`（非管理员，含 `role === null` 未进入，**一律不可见**）——
- * 与 `isRestrictedView(role) === (role !== 'admin')` 同一语义。
+ * 判定用 `isAdmin`（非管理员，含 `role === null` 未进入，**一律不可见**）。
  *
  * 零新色：只用既有 token（cream/paper/sunken/sand/line/ink/mist/pine/amber/clay/stage…）。
  * 圆角：本仓 `rounded-lg/xl/2xl` **全是 16px**（`tailwind.config.ts` 重映射过），
@@ -98,12 +102,27 @@ export interface AgentIngressPanelProps {
   address: string;
   onAddressChange(next: string): void;
 
-  /** token 是否已配置 —— **只传布尔，绝不传原文** */
+  /** token 是否已配置 —— **只传布尔，绝不传原文**（NAS 档展示用） */
   tokenConfigured: boolean;
-  /** 写入 token。原文只经此回调出海；本组件不留存、不回显 */
+  /** 写入 token（NAS 档）。原文只经此回调出海；本组件不留存、不回显 */
   onSaveToken(token: string): void;
-  /** 复制 token（回调取件，不经 DOM 读取） */
+  /** 复制 token（NAS 档；回调取件，不经 DOM 读取） */
   onCopyToken(): void;
+
+  /**
+   * 接入文件状态（本机档）：主进程写盘后的路径；null = 本会话尚未生成。
+   * 只传路径字符串——文件内容是主进程落的，组件不重建一份。
+   */
+  ingressFile: { path: string } | null;
+  /**
+   * 生成 / 轮换接入信息（本机档主入口）。`rotate=true` 表示用户显式换新令牌
+   * （旧令牌即失效，主进程经 IPC 同步）；false = 无令牌时自动生成、有则沿用。
+   */
+  onGenerateIngress(rotate: boolean): void;
+  /** 复制接入文件路径（写入方的第一步就是读它） */
+  onCopyIngressPath(): void;
+  /** 复制接入指令块（不能读文件的写入方的兜底；令牌明文只在块内） */
+  onCopyIngressInstruction(): void;
 
   /** 服务状态探测结果（未探测过 → null） */
   probeResult: IngressProbeView | null;
@@ -143,6 +162,10 @@ export function AgentIngressPanel({
   tokenConfigured,
   onSaveToken,
   onCopyToken,
+  ingressFile,
+  onGenerateIngress,
+  onCopyIngressPath,
+  onCopyIngressInstruction,
   probeResult,
   onProbe,
   status,
@@ -193,14 +216,17 @@ export function AgentIngressPanel({
       </div>
 
       {/*
-        诚实说明行：本批**不含任何 API 调用**，面板上的状态值由上层传入。
-        绝不写「已连通」——那会让用户以为配好了，然后发现任务根本没进来。
+        诚实说明行：只承诺界面上真有的东西。
+        （旧文案曾承诺「下方的导入格式」——面板里从来没有这一段，2026-09-23 随
+         重设计一并修正：格式现在真的在接入文件与指令块里。）
       */}
       <div className="mb-3 flex items-start gap-2 rounded-md bg-sunken px-3.5 py-2.5 text-xs text-mist">
         <Info size={13} className="mt-0.5 shrink-0 text-pine" aria-hidden />
         <span>
-          在 Windows 桌面版的<strong className="text-ink">本机模式</strong>下，应用已可接收自动导入；
-          在这里设置访问令牌后点击“复制”，再将令牌与下方的导入格式提供给 WorkBuddy 或其他写入方。
+          在 Windows 桌面版的<strong className="text-ink">本机模式</strong>下，点下方「生成接入信息」即可：
+          访问令牌自动生成，接入信息（地址 / 令牌 / 端点 / payload 格式）写入固定路径的{' '}
+          <code className="font-mono text-ink">agent-ingress.json</code>，WorkBuddy 等写入方
+          <strong className="text-ink">读这个文件即完成接入</strong>。
           <strong className="text-ink">NAS 模式当前只支持连通探测，远程自动写入尚未启用。</strong>
         </span>
       </div>
@@ -256,65 +282,142 @@ export function AgentIngressPanel({
 
         <p className="mt-1.5 text-[11px] text-mist">
           {isLocal
-            ? '本机模式仅监听 127.0.0.1，不对外暴露；配置令牌后可接收自动导入。'
+            ? '本机模式仅监听 127.0.0.1，不对外暴露；生成接入信息后即可接收自动导入。'
             : 'NAS 模式当前仅支持地址与令牌的连通探测；远程自动写入尚未启用。'}
         </p>
       </section>
 
-      {/* ---------------- ② 令牌（写入后只回显「已配置」，绝不回显原文） ---------------- */}
-      <section className="mt-3 rounded-md border border-line bg-paper p-3.5">
-        <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-xs font-semibold text-ink">访问令牌</h3>
-          {/* 只暴露「是否已配置」这一个布尔事实 */}
-          <span
-            data-ingress-token-state={tokenConfigured ? 'configured' : 'unset'}
-            className={cn(
-              'ml-auto shrink-0 rounded-md px-2 py-0.5 text-[11px]',
-              tokenConfigured ? 'bg-pine-soft text-pine' : 'bg-sand text-mist',
+      {/* ---------------- ② 本机档：接入文件（2026-09-23 重设计的主入口） ---------------- */}
+      {isLocal ? (
+        <section className="mt-3 rounded-md border border-line bg-paper p-3.5">
+          <div className="mb-2 flex items-center gap-2">
+            <h3 className="text-xs font-semibold text-ink">接入信息</h3>
+            <span
+              data-ingress-token-state={tokenConfigured ? 'configured' : 'unset'}
+              className={cn(
+                'ml-auto shrink-0 rounded-md px-2 py-0.5 text-[11px]',
+                tokenConfigured ? 'bg-pine-soft text-pine' : 'bg-sand text-mist',
+              )}
+            >
+              {tokenConfigured ? '令牌已生成' : '未生成'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-ingress-generate=""
+              onClick={() => onGenerateIngress(false)}
+              className="inline-flex h-[38px] shrink-0 items-center rounded-md bg-pine px-3.5 text-sm text-white transition-colors hover:bg-pine-deep"
+            >
+              生成接入信息
+            </button>
+            {tokenConfigured && (
+              /* 轮换是显式动作：换新令牌后旧令牌立即失效，写入方需重读文件 */
+              <button
+                type="button"
+                data-ingress-regenerate=""
+                onClick={() => onGenerateIngress(true)}
+                className="inline-flex h-[38px] shrink-0 items-center rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken"
+                title="生成新令牌并重写接入文件（旧令牌立即失效）"
+              >
+                重新生成
+              </button>
             )}
-          >
-            {tokenConfigured ? '已配置' : '未配置'}
-          </span>
-        </div>
+            <button
+              type="button"
+              data-ingress-copy-path=""
+              onClick={onCopyIngressPath}
+              disabled={!ingressFile}
+              className="inline-flex h-[38px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
+            >
+              <Copy size={13} aria-hidden />
+              复制文件路径
+            </button>
+            <button
+              type="button"
+              data-ingress-copy-instruction=""
+              onClick={onCopyIngressInstruction}
+              disabled={!tokenConfigured}
+              className="inline-flex h-[38px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
+              title="复制完整接入指令（给不能读文件的写入方兜底）"
+            >
+              <Copy size={13} aria-hidden />
+              复制接入指令
+            </button>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            data-ingress-token-input=""
-            type="password"
-            autoComplete="off"
-            value={tokenDraft}
-            onChange={(e) => setTokenDraft(e.target.value)}
-            aria-label="访问令牌"
-            placeholder={tokenConfigured ? '重新输入以替换现有令牌' : '粘贴访问令牌'}
-            className="h-[38px] min-w-0 flex-1 rounded-md border border-line bg-paper px-3 font-mono text-xs text-ink outline-none focus:border-pine"
-          />
-          <button
-            type="button"
-            data-ingress-token-save=""
-            onClick={saveToken}
-            disabled={tokenDraft.trim().length === 0}
-            className="inline-flex h-[38px] shrink-0 items-center rounded-md bg-pine px-3.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-40"
-          >
-            保存
-          </button>
-          {/* 复制走回调取件 —— 绝不从 DOM 读值（DOM 里根本没有原文） */}
-          <button
-            type="button"
-            data-ingress-token-copy=""
-            onClick={onCopyToken}
-            disabled={!tokenConfigured}
-            aria-label="复制令牌"
-            className="inline-flex h-[38px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
-          >
-            <Copy size={13} aria-hidden />
-            复制
-          </button>
-        </div>
+          {ingressFile ? (
+            <p
+              data-ingress-file-path=""
+              className="mt-2 break-all rounded-md bg-sunken px-3 py-2 font-mono text-[11px] text-ink"
+            >
+              {ingressFile.path}
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-mist">
+              尚未生成。点「生成接入信息」后，把文件路径提供给写入方（或让它直接读这个固定路径）。
+            </p>
+          )}
+          <p className="mt-1.5 text-[11px] text-mist">
+            令牌由本机自动生成，无需手动设置；轮换后以接入文件的最新版本为准。
+          </p>
+        </section>
+      ) : (
+        /* ---------------- ②' NAS 档：服务端令牌（由服务端 env 配置，粘贴即可用） ---------------- */
+        <section className="mt-3 rounded-md border border-line bg-paper p-3.5">
+          <div className="mb-2 flex items-center gap-2">
+            <h3 className="text-xs font-semibold text-ink">访问令牌</h3>
+            <span
+              data-ingress-token-state-nas={tokenConfigured ? 'configured' : 'unset'}
+              className={cn(
+                'ml-auto shrink-0 rounded-md px-2 py-0.5 text-[11px]',
+                tokenConfigured ? 'bg-pine-soft text-pine' : 'bg-sand text-mist',
+              )}
+            >
+              {tokenConfigured ? '已配置' : '未配置'}
+            </span>
+          </div>
 
-        <p className="mt-1.5 text-[11px] text-mist">
-          令牌只写入本机，保存后不再回显原文——需要时用「复制」取用。
-        </p>
-      </section>
+          <div className="flex items-center gap-2">
+            <input
+              data-ingress-token-input=""
+              type="password"
+              autoComplete="off"
+              value={tokenDraft}
+              onChange={(e) => setTokenDraft(e.target.value)}
+              aria-label="访问令牌"
+              placeholder={tokenConfigured ? '重新输入以替换现有令牌' : '粘贴 NAS 服务端配置的访问令牌'}
+              className="h-[38px] min-w-0 flex-1 rounded-md border border-line bg-paper px-3 font-mono text-xs text-ink outline-none focus:border-pine"
+            />
+            <button
+              type="button"
+              data-ingress-token-save=""
+              onClick={saveToken}
+              disabled={tokenDraft.trim().length === 0}
+              className="inline-flex h-[38px] shrink-0 items-center rounded-md bg-pine px-3.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-40"
+            >
+              保存
+            </button>
+            {/* 复制走回调取件 —— 绝不从 DOM 读值（DOM 里根本没有原文） */}
+            <button
+              type="button"
+              data-ingress-token-copy=""
+              onClick={onCopyToken}
+              disabled={!tokenConfigured}
+              aria-label="复制令牌"
+              className="inline-flex h-[38px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
+            >
+              <Copy size={13} aria-hidden />
+              复制
+            </button>
+          </div>
+
+          <p className="mt-1.5 text-[11px] text-mist">
+            NAS 档的令牌由服务端环境变量配置（与 NAS 上设置的保持一致）；保存后不再回显原文。
+          </p>
+        </section>
+      )}
 
       {/* ---------------- ③ 服务状态（值由上层传入，本批不自行探测） ---------------- */}
       <section

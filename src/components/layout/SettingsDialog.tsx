@@ -12,7 +12,7 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useRepos } from '../../hooks/useRepos';
 import { BUILD_VERSION, FRONTEND_STACK, REPO_URL } from '../../constants/version';
 import { isDesktop } from '../../lib/desktopBridge';
-import { titleBarHeight } from '../../lib/titleBarTheme';
+import { titleBarHeight } from '../../lib/topbarMetrics';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 import { LicenseSection } from '../settings/LicenseSection';

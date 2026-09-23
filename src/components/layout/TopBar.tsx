@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Menu, Search, X } from 'lucide-react';
+import { ArrowLeft, Maximize2, Menu, Minus, Minimize2, Search, X } from 'lucide-react';
 import type { RefObject } from 'react';
 
 import { MemberIdentityPicker } from './MemberIdentityPicker';
@@ -49,27 +49,31 @@ import { cn } from '../../lib/cn';
  *      「汉堡 + 品牌 + 搜索入口 40×40 + 头像 32×32」，没有 ⋮）。
  *      故本文件里所有「<xl 才渲染 ⋮」的表述**均已失效**，不要再按 <xl 推断。
  *
- * ── Electron 自绘标题栏（画板 02/12 的「顶栏与主题融合」）──
- *   `titleBarStyle:'hidden'` + `titleBarOverlay`（见 electron/main.cjs）之后，
- *   **窗口失去默认可拖拽区域**，必须由 CSS 提供，否则用户无法移动窗口。
- *   故 `<header>` 声明 `.app-titlebar-drag`，其中交互元素由 global.css 的
- *   后代选择器统一回退为 `no-drag`（漏一个就表现为「那个按钮点不动」）。
- *   叠加层右侧的窗口三键浮在内容之上，故末尾留 `WINDOW_CONTROLS_WIDTH` 避让。
+ * ── Electron 自绘标题栏（2026-09-23 起：自绘三键，告别原生叠加层）──
+ *   `titleBarStyle:'hidden'`（见 electron/main.cjs）之后，**窗口失去默认可拖拽区域**，
+ *   必须由 CSS 提供，否则用户无法移动窗口。故 `<header>` 声明 `.app-titlebar-drag`，
+ *   其中交互元素由 global.css 的后代选择器统一回退为 `no-drag`（漏一个就表现为
+ *   「那个按钮点不动」）。
+ *   窗口三键（最小化/最大化/关闭）由本文件末尾的 `WindowControls` **自绘**：
+ *   · 为什么不再用原生 titleBarOverlay：叠加层由系统合成器画在网页之上，DOM 模态
+ *     遮罩盖不住它——弹窗一开背景压暗、三键亮度不变，像贴上去的（2026-09-23 用户
+ *     投诉；此前的 0.55× 压暗近似方案见 git 历史，必然修不好，原因是结构性的）。
+ *   · 自绘后三键与内容同层同源：随主题换色、随遮罩变暗，一类问题整类消失。
+ *   · 三键总宽 138px（3×46，Windows 10/11 标准命中宽），与旧避让位同宽——
+ *     头像等右组元素位置因此**零位移**。
+ *   · 仅 Windows 自绘；macOS（红绿灯）/ Linux（桌面装饰）维持系统原生，不渲染。
  */
 
 /**
- * Electron 自绘标题栏叠加层里窗口三键（最小化/最大化/关闭）的避让宽度。
- * 三键由系统绘制、浮在网页内容**之上**，不避让就会盖住顶栏右端的搜索框 / 头像。
- * 取值：三键各约 46px（Windows 10/11 标准），合计 ≈138px。
- * 仅 Windows 桌面端生效——浏览器 / NAS 端没有原生栏，不留白（否则白丢一块宽度）。
- *
- * 注：避让清单里**不含「⋮更多」**——自绘标题栏只在桌面（≥1280）出现，而 ⋮ 自
- * v0.7 T04 起只在手机档（<768）渲染，两者档位互斥，永不重叠。
+ * 自绘窗口三键的总宽（3 × 46px，Windows 10/11 标准命中宽）。
+ * 该宽度即三键容器自身占位——旧实现是「给原生叠加层留避让位」（三键系统绘制、
+ * 浮在内容之上），现在三键就是 DOM，占位与绘制合一，右组元素位置零位移。
+ * 仅 Windows 桌面端渲染；浏览器 / NAS 端没有窗口三键，不留白。
  */
 const WINDOW_CONTROLS_WIDTH = 138;
 
-/** 是否处于「自绘标题栏」环境：桌面端且平台为 win32（与 main.cjs 的判定同源） */
-function usesTitleBarOverlay(): boolean {
+/** 是否处于「自绘窗口三键」环境：桌面端且平台为 win32（与 main.cjs 的判定同源） */
+function usesSelfDrawnWindowControls(): boolean {
   return isDesktop() && window.idplan?.platform === 'win32';
 }
 
@@ -262,7 +266,19 @@ export function TopBar(): JSX.Element {
   }, [location.pathname]);
 
   return (
-    <header className="app-titlebar-drag relative z-40 flex shrink-0 flex-col border-b border-line bg-paper print:hidden md:h-14 md:flex-row xl:h-16">
+    <header
+      // 双击顶栏空白处 = 最大化/还原切换（Windows 原生标题栏的标配行为；
+      // 自绘后必须自己补上，否则用户失去这条肌肉记忆）。
+      // 守卫：落在交互元素上的双击不放行（按钮点两次是点击，不是拖拽意图）——
+      // 交互元素本就被 CSS 标为 no-drag，语义上也不该触发窗口操作。
+      onDoubleClick={(e) => {
+        if (!usesSelfDrawnWindowControls()) return;
+        const el = e.target as HTMLElement;
+        if (el.closest('button, a, input, select, textarea, [role="button"], [role="tab"], [role="menu"]')) return;
+        window.idplan?.windowControls?.toggleMaximize();
+      }}
+      className="app-titlebar-drag relative z-40 flex shrink-0 flex-col border-b border-line bg-paper print:hidden md:h-14 md:flex-row xl:h-16"
+    >
       {/*
         ⚠️ 为什么 header 是 `flex-col md:flex-row` + `md:h-14 xl:h-16`（而不是原来的 `flex h-14`）：
         原来 header 是**横向** flex 且固定 56 高，而它有两个子块（主行 + 手机第二行搜索），
@@ -351,16 +367,12 @@ export function TopBar(): JSX.Element {
           <MemberIdentityPicker />
         </div>
 
-        {/* Electron 自绘标题栏的窗口三键避让位（仅 Windows 桌面端渲染）。
-            叠加层三键由系统绘制、浮在内容之上，不避让会盖住**头像**。
-            （避让清单里不含 ⋮更多：自绘标题栏只在桌面 ≥1280 出现，而 ⋮ 现在只在
-              手机档 <768 渲染，两者档位互斥，永不重叠。） */}
-        {usesTitleBarOverlay() && (
-          <div
-            className="shrink-0"
-            style={{ width: WINDOW_CONTROLS_WIDTH }}
-            aria-hidden
-          />
+        {/* 自绘窗口三键（仅 Windows 桌面端渲染）。
+            DOM 按钮、总宽 138px——与旧「原生叠加层避让位」同宽，右组元素零位移。
+            三键是 button，被 global.css 的 `.app-titlebar-drag button` 规则自动
+            回退为 no-drag，点它们不会误拖窗口。 */}
+        {usesSelfDrawnWindowControls() && (
+          <WindowControls width={WINDOW_CONTROLS_WIDTH} />
         )}
       </div>
 
@@ -370,5 +382,95 @@ export function TopBar(): JSX.Element {
         <SearchField inputRef={mobileSearchRef} className="w-full rounded-xl" />
       </div>
     </header>
+  );
+}
+
+/**
+ * 自绘窗口三键（最小化 / 最大化⇄还原 / 关闭）。
+ *
+ * ── 为什么自绘（2026-09-23，用户投诉「弹窗一开三键像贴上去的」）──
+ * 此前三键是 Windows 原生 titleBarOverlay：系统合成器画在网页**之上**，DOM 模态
+ * 遮罩盖不住它，背景压暗时它仨亮度不变。压暗近似方案（0.55× 乘）修不好——
+ * 乘出来的灰 ≠ 遮罩合成的灰，仍是两块色。自绘后三键与内容同层同源，
+ * 随主题/遮罩自然变暗，一类问题整类消失（文件头有完整说明）。
+ *
+ * ── 行为契约 ──
+ *   · 每键 46×全高（Windows 10/11 标准命中宽），总宽 138px 由入参给定；
+ *   · 最大化态图标联动：初值 `isMaximized()` 查询 + `onMaximizeChange` 订阅
+ *     （双击标题栏 / 系统快捷键改态时同样走推送，图标不与实际状态漂移）；
+ *   · 关闭键悬停用 clay 白字（Windows 惯例：唯一红色警示键），其余两键悬停 sand；
+ *   · 桥不存在（老 preload / 非 Electron）时按钮**照样渲染**但点击空转——
+ *     调用方（TopBar）已按 `usesSelfDrawnWindowControls()` 平台门控，正常情况下
+ *     桥必然存在；这层兜底防的是「桥被热更新换掉」这类边界，不承担主门控。
+ *   · 键盘可达性：原生 button + aria-label + 焦点环（global.css 焦点环统一）。
+ */
+function WindowControls({ width }: { width: number }): JSX.Element {
+  const controls = window.idplan?.windowControls;
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!controls) return;
+    let alive = true;
+    void controls
+      .isMaximized()
+      .then((v) => {
+        if (alive) setMaximized(v);
+      })
+      .catch(() => undefined);
+    const off = controls.onMaximizeChange((v) => setMaximized(v));
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [controls]);
+
+  const btnBase = 'flex h-full w-[46px] items-center justify-center text-mist transition-colors';
+
+  return (
+    <div
+      data-window-controls=""
+      role="group"
+      aria-label="窗口控制"
+      /*
+       * `bg-paper` + 高 calc(100% + 1px)：顶栏 h-14/h-16 含 1px 底边框，行内容盒
+       * 因此是 55/63——若只拿 h-full，三键比原生标题栏矮 1px，且边框线会从按钮
+       * 底下穿过（原生叠加层时代系统按 64 高绘制、连边框段一起覆盖，观感无分割）。
+       * 这里把按钮组向下多绘 1px 并以纸面底色盖住边框段：悬停高亮也随之覆盖整段，
+       * 与 Windows 原生Caption 观感一致。QA 几何验收（Q-A1-4/5）钉 64/56 两个值。
+       */
+      className="flex shrink-0 items-stretch bg-paper"
+      style={{ width, height: 'calc(100% + 1px)' }}
+    >
+      <button
+        type="button"
+        data-window-control="minimize"
+        aria-label="最小化"
+        title="最小化"
+        onClick={() => controls?.minimize()}
+        className={cn(btnBase, 'hover:bg-sand hover:text-ink')}
+      >
+        <Minus size={16} aria-hidden />
+      </button>
+      <button
+        type="button"
+        data-window-control="maximize"
+        aria-label={maximized ? '还原' : '最大化'}
+        title={maximized ? '还原' : '最大化'}
+        onClick={() => controls?.toggleMaximize()}
+        className={cn(btnBase, 'hover:bg-sand hover:text-ink')}
+      >
+        {maximized ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
+      </button>
+      <button
+        type="button"
+        data-window-control="close"
+        aria-label="关闭"
+        title="关闭"
+        onClick={() => controls?.close()}
+        className={cn(btnBase, 'hover:bg-clay hover:text-white')}
+      >
+        <X size={16} aria-hidden />
+      </button>
+    </div>
   );
 }

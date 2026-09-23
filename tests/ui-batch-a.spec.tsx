@@ -3,7 +3,8 @@
  * v0.7 批次 A 回归测试（顶栏主题融合 / 设置弹窗对称 / 日历入口持久化）。
  *
  * 每条用例都锚定一个**具体的、曾经真实存在的缺陷**，而不是复述实现：
- *   A1 - 自绘标题栏配色必须来自 token；非桌面端必须短路。
+ *   A1 - 自绘窗口三键：平台门控 / 窗口控制桥 / 最大化态联动（2026-09-23 起，
+ *        原生 titleBarOverlay 因「弹窗遮罩盖不住原生层」被用户投诉后退役）。
  *   A2 - Modal 面板上不得再出现内联 paddingTop（它是「上 48 / 下 24」不对称的根因）。
  *   A4 - homeViewMode 必须落盘并能读回（否则刷新回落看板 = 「入口又不见了」）。
  *
@@ -24,86 +25,173 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
+import { MemoryRouter } from 'react-router-dom';
 
-import { syncTitleBarTheme, titleBarHeight } from '../src/lib/titleBarTheme';
+import { titleBarHeight } from '../src/lib/topbarMetrics';
 import { Modal } from '../src/components/common/Modal';
 import { SegmentedControl } from '../src/components/ui/SegmentedControl';
+import { TopBar } from '../src/components/layout/TopBar';
 
-/* ============================ A1 · 自绘标题栏 ============================ */
+/* TopBar 子树（MobileMoreMenu → useBackupIo）需要仓储上下文；本文件只测顶栏 DOM，
+ * 按仓库惯例（同 v07-t03b-ingress-wired）mock 掉 useRepos。深代理兜住任意解构深度。 */
+vi.mock('../src/hooks/useRepos', () => {
+  const deep = (): unknown =>
+    new Proxy(function async() { return undefined; } as unknown as object, {
+      get: () => deep(),
+    });
+  return { useRepos: (): unknown => deep() };
+});
 
-describe('A1 · 顶栏与主题融合（titleBarOverlay 配色同步）', () => {
+/* ============================ A1 · 自绘窗口三键 ============================
+ *
+ * 2026-09-23：原生 titleBarOverlay 退役，改自绘三键（用户投诉「弹窗一开、
+ * 背景压暗，原生三键亮度不变像贴上去的」——叠加层由系统合成器画在网页之上，
+ * DOM 遮罩盖不住它，压暗近似必然修不好）。本段钉新契约：三键是 DOM、
+ * 随平台门控、走窗口控制桥、最大化态图标联动。
+ * ========================================================================== */
+
+describe('A1 · 自绘窗口三键（窗口控制桥 + 平台门控 + 最大化态联动）', () => {
   const original = window.idplan;
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
 
   afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
     window.idplan = original;
-    document.documentElement.removeAttribute('style');
   });
 
-  it('桌面端：把顶栏配色与高度下发给主进程，且颜色是合法 hex', () => {
-    const spy = vi.fn();
+  function stubBridge(
+    controls: Record<string, unknown> = {},
+    platform = 'win32',
+  ): void {
     window.idplan = {
       isDesktop: true,
-      platform: 'win32',
+      platform,
       version: '0.0.0.0',
-      setTitleBarTheme: spy,
+      // 子树（MobileMoreMenu → useUpdateCheck）订阅更新推送：给最小形状即可
+      checkUpdate: async () => null,
+      onUpdateAvailable: () => () => undefined,
+      windowControls: {
+        minimize: vi.fn(),
+        toggleMaximize: vi.fn(),
+        close: vi.fn(),
+        isMaximized: async () => false,
+        onMaximizeChange: () => () => undefined,
+        ...controls,
+      },
     } as unknown as typeof window.idplan;
+  }
 
-    syncTitleBarTheme();
+  async function renderTopBar(): Promise<void> {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <TopBar />
+        </MemoryRouter>,
+      );
+    });
+  }
 
-    expect(spy).toHaveBeenCalledTimes(1);
-    const arg = spy.mock.calls[0][0] as { color: string; symbolColor: string; height: number };
-    // 颜色一律是 #rrggbb（由 CSS 变量实际值转换，或兜底值），不得是空串 / rgba 串
-    expect(arg.color).toMatch(/^#[0-9a-f]{6}$/);
-    expect(arg.symbolColor).toMatch(/^#[0-9a-f]{6}$/);
-    // jsdom 不加载样式表，读不到 CSS 变量 → 走亮色兜底（--paper #ffffff / --ink #1f2937），
-    // 这也顺带验证了「读不到时不崩、有确定兜底」。
-    expect(arg.color).toBe('#ffffff');
-    expect(arg.symbolColor).toBe('#1f2937');
-    expect(arg.height).toBe(titleBarHeight());
+  it('win32 桌面端：三键渲染，aria/锚点齐全，总宽 138 = 3×46', async () => {
+    stubBridge();
+    await renderTopBar();
+
+    const group = document.querySelector('[data-window-controls]');
+    expect(group).not.toBeNull();
+    expect(group!.getAttribute('aria-label')).toBe('窗口控制');
+    for (const [anchor, label] of [
+      ['minimize', '最小化'],
+      ['maximize', '最大化'],
+      ['close', '关闭'],
+    ] as const) {
+      const btn = document.querySelector<HTMLButtonElement>(`[data-window-control="${anchor}"]`);
+      expect(btn, `缺少 ${anchor} 键`).not.toBeNull();
+      expect(btn!.getAttribute('aria-label')).toBe(label);
+      expect(btn!.type).toBe('button');
+      // 命中宽 46px（Windows 10/11 标准）——写在类名上，几何真值由真浏览器验收钉
+      expect(btn!.className).toContain('w-[46px]');
+    }
+    // 总宽 138 = 旧「原生叠加层避让位」同宽 ⇒ 右组元素（头像等）零位移
+    expect((group as HTMLElement).style.width).toBe('138px');
   });
 
-  it('高度与 TopBar 的 h-14 xl:h-16 同口径：<1280 → 56，≥1280 → 64', () => {
-    const spy = vi.fn();
-    window.idplan = {
-      isDesktop: true,
-      platform: 'win32',
-      version: '0.0.0.0',
-      setTitleBarTheme: spy,
-    } as unknown as typeof window.idplan;
+  it('★ 点击三键 → 对应窗口控制桥调用（最小化 / 最大化切换 / 关闭）', async () => {
+    const minimize = vi.fn();
+    const toggleMaximize = vi.fn();
+    const close = vi.fn();
+    stubBridge({ minimize, toggleMaximize, close });
+    await renderTopBar();
 
+    for (const anchor of ['minimize', 'maximize', 'close'] as const) {
+      await act(async () => {
+        document
+          .querySelector<HTMLButtonElement>(`[data-window-control="${anchor}"]`)!
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    }
+    expect(minimize).toHaveBeenCalledTimes(1);
+    expect(toggleMaximize).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('★ 最大化态联动：初值查询 + 变更推送 → 图标语义在「最大化 ⇄ 还原」间切换', async () => {
+    let pushChange: ((v: boolean) => void) | null = null;
+    stubBridge({
+      isMaximized: async () => false,
+      onMaximizeChange: (cb: (v: boolean) => void) => {
+        pushChange = cb;
+        return () => undefined;
+      },
+    });
+    await renderTopBar();
+
+    const maxBtn = () =>
+      document.querySelector<HTMLButtonElement>('[data-window-control="maximize"]')!;
+    expect(maxBtn().getAttribute('aria-label')).toBe('最大化');
+
+    // 双击标题栏 / 系统快捷键改变态时，主进程走同一条推送
+    await act(async () => {
+      pushChange?.(true);
+    });
+    expect(maxBtn().getAttribute('aria-label')).toBe('还原');
+
+    await act(async () => {
+      pushChange?.(false);
+    });
+    expect(maxBtn().getAttribute('aria-label')).toBe('最大化');
+  });
+
+  it('非 win32（linux / macOS）不渲染三键——走系统装饰', async () => {
+    stubBridge({}, 'linux');
+    await renderTopBar();
+    expect(document.querySelector('[data-window-controls]')).toBeNull();
+  });
+
+  it('浏览器 / NAS 端（无 window.idplan）不渲染、不抛错', async () => {
+    window.idplan = undefined;
+    await renderTopBar();
+    expect(document.querySelector('[data-window-controls]')).toBeNull();
+  });
+
+  it('高度口径保留（topbarMetrics 单一出处）：<1280 → 56，≥1280 → 64', () => {
     const setWidth = (w: number): void => {
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: w });
     };
-
     setWidth(1600);
     expect(titleBarHeight()).toBe(64);
-    syncTitleBarTheme();
-    expect(spy.mock.calls[0][0].height).toBe(64);
-
     setWidth(1279); // 临界值必须走 56（断点严格锁 xl=1280，不得引入 lg=1024）
     expect(titleBarHeight()).toBe(56);
-    syncTitleBarTheme();
-    expect(spy.mock.calls[1][0].height).toBe(56);
-
-    setWidth(390);
-    expect(titleBarHeight()).toBe(56);
-
     setWidth(1024);
     expect(titleBarHeight()).toBe(56);
-  });
-
-  it('浏览器 / NAS 端（无 window.idplan）必须静默短路，不得抛错', () => {
-    window.idplan = undefined;
-    expect(() => syncTitleBarTheme()).not.toThrow();
-  });
-
-  it('老 preload 未暴露 setTitleBarTheme 时短路（不抛 not a function）', () => {
-    window.idplan = {
-      isDesktop: true,
-      platform: 'win32',
-      version: '0.0.0.0',
-    } as unknown as typeof window.idplan;
-    expect(() => syncTitleBarTheme()).not.toThrow();
   });
 });
 

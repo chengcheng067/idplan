@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 // ★ 顶栏高度口径的**单一出处**（与产品同一份实现）。
 //   绝不在 `page.evaluate` 里重算 `innerWidth >= 1280 ? 64 : 56`：
 //   那份副本会在口径变更时静默不同步，而它恰是断言另一边的基准 → 直接放进假绿。
-import { titleBarHeightFor } from '../src/lib/titleBarTheme';
+import { titleBarHeightFor } from '../src/lib/topbarMetrics';
 // ★ 锚定浮层的留白口径也取产品同一份常量：写死 8 会在调参后静默放宽断言。
 import { ANCHOR_GAP, VIEWPORT_MARGIN } from '../src/lib/anchoredPosition';
 
@@ -149,27 +149,25 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
 }
 
 /**
- * 遮罩期间标题栏的期望色 —— 与 `src/lib/titleBarTheme.ts` 的 `darkenHex` **同口径**（0.55 倍）。
+ * 伪装 Windows 桌面端（注入 preload 等价物），用于自绘窗口三键相关断言。
  *
- * 为什么不直接引产品常量：该函数是模块内私有实现细节，导出它只为测试会让「改系数」
- * 变成一次静默的断言同步。写在这里的另一面是——系数一改，本用例立刻变红，
- * 逼人回来确认「压暗强度」是有意调整还是手滑（这正是我们要的摩擦）。
- */
-function dimHex(hex: string, factor = 0.55): string {
-  const channels = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
-  return `#${channels
-    .map((channel) => Math.min(255, Math.round(channel * factor)).toString(16).padStart(2, '0'))
-    .join('')}`;
-}
-
-/** 伪装 Windows 桌面端（注入 preload 等价物），用于顶栏叠加层相关断言 */
+ * 2026-09-23：原桩记录 `setTitleBarTheme`（原生叠加层配色下发）——叠加层已退役
+ * （系统合成器画在网页之上，DOM 遮罩盖不住它，用户投诉「弹窗一开三键像贴上去的」），
+ * 改为记录 `windowControls` 调用。三键是 DOM：遮罩（fixed inset-0 z-[70]）打开时
+ * 自然盖住 header（z-40）里的三键——"随遮罩变暗"不再需要任何近似机制。 */
 const IDPLAN_STUB = `
-window.__tbCalls = [];
+window.__wcCalls = [];
 window.idplan = {
   isDesktop: true,
   platform: 'win32',
   version: '0.0.0.0',
-  setTitleBarTheme: function (t) { window.__tbCalls.push(t); },
+  windowControls: {
+    minimize: function () { window.__wcCalls.push('minimize'); },
+    toggleMaximize: function () { window.__wcCalls.push('toggleMaximize'); },
+    close: function () { window.__wcCalls.push('close'); },
+    isMaximized: function () { return Promise.resolve(false); },
+    onMaximizeChange: function () { return function () {}; },
+  },
   checkUpdate: function () {
     return Promise.resolve({ current: '0.0.0.0', latest: '0.0.0.0', hasUpdate: false,
       releaseUrl: null, publishedAt: null, notes: null, exeAssetUrl: null });
@@ -589,9 +587,18 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
     }
   }, HEAVY);
 
-  /* ================= A1 · 顶栏高度 / 主题融合 / 拖拽区 / 138 避让 ================= */
+  /* ================= A1 · 自绘窗口三键（2026-09-23 重构；原生叠加层退役） =================
+   *
+   * 背景（用户投诉「弹窗一开、背景压暗，最小化/最大化/关闭三键亮度不变，像贴在
+   * 背景上」）：三键此前是 Windows 原生 titleBarOverlay——由系统合成器画在网页
+   * **之上**，DOM 遮罩（fixed inset-0 z-[70]）永远盖不住它；0.55× 压暗近似修不好
+   * （乘出来的灰 ≠ 遮罩实际合成的灰，仍是两块色）。现行方案：三键改为 **DOM 自绘**
+   * （TopBar.tsx 的 WindowControls），与内容同层同源——遮罩打开时自然盖住它们，
+   * 一类问题整类消失。本组验收随之从「配色下发 / 压暗系数」重构为
+   * 「存在性 / 几何 / 平台门控 / 遮罩覆盖 / 拖拽纪律 / 断点跟随」。
+   * ------------------------------------------------------------------------ */
 
-  it('Q-A1-1 · 顶栏高度与 titleBarHeight 同口径：<1280→56，≥1280→64（含临界 1279/1280）', async () => {
+  it('Q-A1-1 · 顶栏高度口径：<1280→56，≥1280→64（含临界 1279/1280）', async () => {
     for (const [w, expected] of [
       [1279, 56],
       [1280, 64],
@@ -604,104 +611,76 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
           return el ? Math.round(el.getBoundingClientRect().height) : 0;
         });
         expect(h).toBe(expected);
-        // 下发给主进程的高度必须与真实顶栏一致（否则原生三键与内容纵向错位）
-        const calls = await page.evaluate(
-          () => (window as unknown as { __tbCalls: { height: number }[] }).__tbCalls,
-        );
-        expect(calls.length).toBeGreaterThan(0);
-        expect(calls[calls.length - 1].height).toBe(expected);
       } finally {
         await ctx.close();
       }
     }
   }, HEAVY);
 
-  it('Q-A1-2 · 亮/暗两主题：titleBarOverlay 的 color 必须等于顶栏实测底色（真实主题切换路径）', async () => {
+  it('Q-A1-2 · ★ 自绘三键：win32 桌面端渲染，且弹窗遮罩打开时被整体盖住（原生叠加层投诉的结构性修复）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
       await becomeAdmin(page);
-      const toHex = (rgb: string): string => {
-        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb);
-        if (!m) return '';
-        return `#${[m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`;
-      };
 
-      const light = await page.evaluate(() => {
-        const h = document.querySelector('header');
-        const calls = (window as unknown as { __tbCalls: { color: string; symbolColor: string; height: number }[] })
-          .__tbCalls;
-        return { bg: h ? getComputedStyle(h).backgroundColor : '', last: calls[calls.length - 1] };
+      // ① 三键是 DOM（原生叠加层时代 querySelector 根本查不到它们——系统绘制）
+      const btns = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('[data-window-control]')).map((b) => ({
+          key: b.getAttribute('data-window-control'),
+          label: b.getAttribute('aria-label'),
+        })),
+      );
+      expect(btns).toEqual([
+        { key: 'minimize', label: '最小化' },
+        { key: 'maximize', label: '最大化' },
+        { key: 'close', label: '关闭' },
+      ]);
+
+      // 无遮罩时三键可命中（点击可达 = 不是死按钮）
+      const clickableBefore = await page.evaluate(() => {
+        const closeBtn = document.querySelector('[data-window-control="close"]')!;
+        const r = closeBtn.getBoundingClientRect();
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return top === closeBtn || closeBtn.contains(top);
       });
-      expect(light.bg).not.toBe('');
-      expect(light.last.color).toMatch(/^#[0-9a-f]{6}$/);
-      // 亮色：叠加层底色 == 顶栏底色（核心：同色一体，不得是系统灰白）
-      expect(light.last.color).toBe(toHex(light.bg));
+      expect(clickableBefore).toBe(true);
 
-      // 真实切换路径：设置抽屉里点「深色」→ useTheme.setMode → apply() → syncTitleBarTheme()
+      // ② 打开设置面板（遮罩型 Modal）→ 三键被遮罩整体盖住。
+      //    elementFromPoint 落在遮罩（z-[70]）而非按钮（header z-40）——
+      //    这正是用户投诉的结构性修复：原生叠加层在网页之上，遮罩永远盖不住。
       await page.evaluate(() => {
-        const s = Array.from(document.querySelectorAll<HTMLElement>('[data-app-sidebar] button')).find(
-          (x) => x.getAttribute('aria-label') === '设置',
-        );
-        s?.click();
+        const s = Array.from(document.querySelectorAll('header')).length;
+        const btn = Array.from(
+          document.querySelectorAll<HTMLButtonElement>('[data-app-sidebar] button'),
+        ).find((x) => x.getAttribute('aria-label') === '设置');
+        btn?.click();
       });
       await page.waitForTimeout(500);
-      const before = await page.evaluate(
-        () => (window as unknown as { __tbCalls: unknown[] }).__tbCalls.length,
-      );
-      await page.evaluate(() => {
-        const b = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] button')).find(
-          (x) => (x.textContent ?? '').trim() === '深色',
-        );
-        b?.click();
-      });
-      await page.waitForTimeout(600);
+      expect(await page.locator('[role="dialog"]').count()).toBeGreaterThan(0);
 
-      const dark = await page.evaluate(() => {
-        const h = document.querySelector('header');
-        const calls = (window as unknown as { __tbCalls: { color: string; height: number }[] }).__tbCalls;
-        return {
-          theme: document.documentElement.getAttribute('data-theme'),
-          bg: h ? getComputedStyle(h).backgroundColor : '',
-          count: calls.length,
-          last: calls[calls.length - 1],
-        };
+      const covered = await page.evaluate(() => {
+        const closeBtn = document.querySelector('[data-window-control="close"]')!;
+        const r = closeBtn.getBoundingClientRect();
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return top === closeBtn || (top ? closeBtn.contains(top) : false);
       });
-      // 切主题必须触发一次下发（不是只改 DOM 不通知主进程）
-      expect(dark.count).toBeGreaterThan(before);
-      expect(dark.theme).toBe('dark');
-      /*
-        ★ 契约变更（反馈 #2）：本步骤是在**设置面板（遮罩）打开中**切主题。
-          遮罩打开期间标题栏必须与遮罩同暗（否则原生三键在灰掉的内容上高亮 —— 用户投诉的正是这个）。
-          故此处不断言「等于顶栏底色」，而断言：
-            ① 等于**按设计压暗后**的顶栏色（0.55 倍，与 src/lib/titleBarTheme.ts 同口径）；
-            ② 且**不等于**顶栏底色（否则等于没压暗，反馈 #2 就是没修）。
-          暗色 --paper = #1F2126 ⇒ 压暗后 #111215。
-      */
-      const darkBaseHex = toHex(dark.bg);
-      expect(darkBaseHex).toBe('#1f2126');
-      expect(dark.last.color).not.toBe(darkBaseHex);
-      expect(dark.last.color).toBe(dimHex(darkBaseHex));
+      expect(covered, '遮罩打开时三键仍可命中 ⇒ 未随遮罩压暗（投诉复现）').toBe(false);
 
-      // 关掉设置面板 → 遮罩计数归零 → 叠加层必须**恢复**成顶栏底色（压暗不能粘住）
-      await page.evaluate(() => {
-        const b = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] button')).find(
-          (x) => x.getAttribute('aria-label') === '关闭设置',
-        );
-        b?.click();
-      });
+      // ③ 关掉遮罩 → 三键恢复可命中（压暗/覆盖不粘住）
+      await page.keyboard.press('Escape');
       await page.waitForTimeout(400);
-      const restored = await page.evaluate(() => {
-        const calls = (window as unknown as { __tbCalls: { color: string }[] }).__tbCalls;
-        return calls[calls.length - 1];
+      const clickableAfter = await page.evaluate(() => {
+        const closeBtn = document.querySelector('[data-window-control="close"]')!;
+        const r = closeBtn.getBoundingClientRect();
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return top === closeBtn || closeBtn.contains(top);
       });
-      expect(restored.color).toBe(darkBaseHex);
-      expect(light.last.color).not.toBe(dark.last.color);
+      expect(clickableAfter).toBe(true);
     } finally {
       await ctx.close();
     }
   }, HEAVY);
 
-  it('Q-A1-3 · 拖拽区逐个元素核对：header=drag，其内交互元素全部 no-drag（漏一个就点不动）', async () => {
+  it('Q-A1-3 · 拖拽区逐个元素核对：header=drag，其内交互元素（含自绘三键）全部 no-drag', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
       await becomeAdmin(page);
@@ -723,113 +702,78 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
             .map((el) => `${el.tagName}[${el.getAttribute('aria-label') ?? ''}]=${region(el)}`),
         };
       });
-      // 顶栏整体是拖拽区（否则用户无法移动无原生标题栏的窗口）
+      // 顶栏整体是拖拽区（否则用户无法移动无原生标题栏的窗口；自绘三键后
+      // 拖拽全靠它——原生叠加层时代拖拽由系统栏附赠，现在必须显式声明）
       expect(probe.headerRegion).toBe('drag');
       expect(probe.count).toBeGreaterThan(3);
-      // 交互元素零例外（面包屑按钮 / 搜索框 / 头像 / ⋮更多 全部覆盖）
+      // 交互元素零例外（面包屑按钮 / 搜索框 / 头像 / ⋮更多 / 自绘三键 全部覆盖）
       expect(probe.violations).toEqual([]);
     } finally {
       await ctx.close();
     }
   }, HEAVY);
 
-  it('Q-A1-4 · Windows 桌面端留 138px 避让窗口三键；浏览器端不留白且不遮挡头像', async () => {
+  it('Q-A1-4 · 自绘三键占位 138 = 3×46、高度跟顶栏；内容不被盖；浏览器端不渲染', async () => {
     {
       const { ctx, page } = await open(1600, 900);
       try {
         const m = await page.evaluate(() => {
-          const header = document.querySelector('header');
-          const row = header ? header.firstElementChild : null;
-          const spacer = row ? row.lastElementChild : null;
-          const avatar = Array.from(document.querySelectorAll('header button')).pop() ?? null;
-          const sr = spacer ? spacer.getBoundingClientRect() : null;
+          const group = document.querySelector<HTMLElement>('[data-window-controls]');
+          const btns = Array.from(document.querySelectorAll<HTMLElement>('[data-window-control]'));
+          // 头像 = 右组最末的**内容**按钮（排除自绘三键——它们是 window 装饰，
+          // 本来就该贴右缘；旧实现里三键是系统绘制不进 DOM，pop() 恰好抓到头像）
+          const avatar = Array.from(document.querySelectorAll('header button'))
+            .filter((b) => !b.closest('[data-window-controls]'))
+            .pop() ?? null;
           const ar = avatar ? avatar.getBoundingClientRect() : null;
-          const cs = row ? getComputedStyle(row) : null;
           return {
-            spacerW: sr ? Math.round(sr.width) : 0,
-            rowPadRight: cs ? cs.paddingRight : '',
+            groupW: group ? Math.round(group.getBoundingClientRect().width) : 0,
+            widths: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
+            heights: btns.map((b) => Math.round(b.getBoundingClientRect().height)),
             avatarRight: ar ? Math.round(ar.right) : -1,
             vw: window.innerWidth,
           };
         });
-        expect(m.spacerW).toBe(138);
-        /**
-         * 避让位的判定口径：锚点是「内容离窗口右缘的净空」而非「避让块贴到窗口右缘」——
-         * 顶栏行自带 xl:px-6（右内边距 24），故避让块右缘 = 视口宽 − 24，属预期，
-         * 不是缺陷（不写这条会误报红）。
-         * 真正要守住的是：内容（头像右缘）离窗口右缘 ≥ 138，否则原生三键盖住头像。
-         */
+        // 每键 46px（Windows 10/11 标准命中宽）；容器 138 与旧「原生叠加层避让位」
+        // 同宽 ⇒ 右组元素（头像等）位置零位移，不是视觉调整
+        expect(m.widths).toEqual([46, 46, 46]);
+        expect(m.groupW).toBe(138);
+        // 高度跟顶栏（xl=64）：自绘后同层同源，不再有原生叠加层的纵向错位问题
+        expect(m.heights).toEqual([64, 64, 64]);
+        // 内容（头像右缘）离窗口右缘 ≥ 138：自绘后三键是布局占位（比浮动叠加层更强）
         expect(m.vw - m.avatarRight).toBeGreaterThanOrEqual(138);
       } finally {
         await ctx.close();
       }
     }
     {
-      // 浏览器 / NAS 端：无 idplan → 不得预留 138（否则白丢一块宽度）
+      // 浏览器 / NAS 端：无 idplan → 不得渲染三键（走系统装饰，不留白不占位）
       const { ctx, page } = await open(1600, 900, { desktop: false });
       try {
-        const has = await page.evaluate(() => typeof window.idplan);
-        const spacerW = await page.evaluate(() => {
-          const header = document.querySelector('header');
-          const row = header ? header.firstElementChild : null;
-          const spacer = row ? row.lastElementChild : null;
-          return spacer ? Math.round(spacer.getBoundingClientRect().width) : 0;
-        });
-        expect(has).toBe('undefined');
-        expect(spacerW).not.toBe(138);
+        expect(await page.evaluate(() => typeof window.idplan)).toBe('undefined');
+        expect(await page.locator('[data-window-controls]').count()).toBe(0);
       } finally {
         await ctx.close();
       }
     }
   }, HEAVY);
 
-  it('Q-A1-5 · 跨 xl 断点 resize 必须重发高度（56↔64）；system 模式跟随系统换肤也须重发配色', async () => {
+  it('Q-A1-5 · 跨 xl 断点 resize：顶栏与三键高度跟随（56↔64）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
-      /*
-        ★ 先确立身份，消掉首次引导弹窗。
-        本用例断言「叠加层配色 == 顶栏实测底色」，而**遮罩打开期间标题栏按设计一并压暗**
-        （反馈 #2：三键不许在遮罩上高亮）。首次引导弹窗本身就是遮罩型 Modal，
-        不先关掉它，这条断言测到的就是「压暗后的色 vs 未压暗的顶栏色」——
-        测的是一个被产品改掉了的旧契约。管理员身份确立后无遮罩，等式才成立。
-      */
       await becomeAdmin(page);
-      const callsOf = (): Promise<{ height: number; color: string }[]> =>
-        page.evaluate(
-          () =>
-            (window as unknown as { __tbCalls: { height: number; color: string }[] }).__tbCalls.slice(),
-        );
-
-      // 1) resize 1600 → 1200（跌出 xl）：高度必须从 64 变 56 并重发
+      const btnH = () =>
+        page.evaluate(() => {
+          const btn = document.querySelector<HTMLElement>('[data-window-control]');
+          return btn ? Math.round(btn.getBoundingClientRect().height) : 0;
+        });
+      expect(await btnH()).toBe(64);
       await page.setViewportSize({ width: 1200, height: 900 });
-      await page.waitForTimeout(500);
-      const afterShrink = await callsOf();
-      expect(afterShrink[afterShrink.length - 1].height).toBe(56);
-
-      // 2) resize 1200 → 1600：回到 64
+      await page.waitForTimeout(400);
+      expect(await btnH()).toBe(56);
       await page.setViewportSize({ width: 1600, height: 900 });
-      await page.waitForTimeout(500);
-      const afterGrow = await callsOf();
-      expect(afterGrow[afterGrow.length - 1].height).toBe(64);
-      expect(afterGrow.length).toBeGreaterThan(afterShrink.length - 1);
-
-      // 3) system 模式（未显式选主题）下系统切暗色：必须重发暗色配色
-      //    初始未写过 idplan-theme → mode=system；页面加载时已下发亮色
-      const beforeCalls = (await callsOf()).length;
-      await page.emulateMedia({ colorScheme: 'dark' });
-      await page.waitForTimeout(600);
-      const afterMedia = await page.evaluate(() => {
-        const h = document.querySelector('header');
-        const calls = (window as unknown as { __tbCalls: { height: number; color: string }[] }).__tbCalls;
-        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(h ? getComputedStyle(h).backgroundColor : '');
-        const hex = m
-          ? `#${[m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`
-          : '';
-        return { theme: document.documentElement.getAttribute('data-theme'), bg: hex, last: calls[calls.length - 1], count: calls.length };
-      });
-      expect(afterMedia.theme).toBe('dark');
-      expect(afterMedia.count).toBeGreaterThan(beforeCalls);
-      expect(afterMedia.last.color).toBe(afterMedia.bg);
+      await page.waitForTimeout(400);
+      expect(await btnH()).toBe(64);
     } finally {
       await ctx.close();
     }
