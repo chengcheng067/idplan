@@ -28,8 +28,15 @@ interface AgentImportRequest {
 /** 渲染进程回传的落库结果 / 错误（与主进程 loopback.cjs 解析严格一致） */
 interface AgentImportResult {
   requestId: string;
-  /** 成功：ApplyResult（四键恒定） */
-  result?: import('./core/types/agent-payload').ApplyResult;
+  /**
+   * 成功体（多态，按请求 kind 区分）：
+   *   · import  → `ApplyResult`（四键恒定）
+   *   · boards  → `{ projectId, name, stages:[{id,name,templateKey}] }`（镜像服务端 201 体）
+   *   · tasks   → `{ tasks:[{externalId,taskNo,title,status,dueDate,dependsOnExternal}] }`
+   * 2026-09-24 桌面通道补齐 boards/tasks 后由单一 ApplyResult 放宽为 unknown——
+   * 主进程只透传不解析，形状契约在渲染侧 runAgent* 与服务端路由两处同源镜像。
+   */
+  result?: unknown;
   /** 失败：机器码 + HTTP 状态码 + 用户可读中文 */
   error?: { code: string; httpStatus?: number; userMessage: string };
 }

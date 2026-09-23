@@ -75,6 +75,9 @@ async function seedProject(): Promise<string> {
     plannedStartAt: '2026-09-01',
     plannedEndAt: '2026-09-30',
     coverColor: null,
+    // ★ 2026-09-24：归属门提到共享核心后，Agent 导入的合法落点必须显式 kind='agent'
+    // （缺省按口径读作 human，会被 resolve() 的归属门拒绝——门该有的效果）。
+    kind: 'agent',
   });
   await bundle.stages.bulkInsert([
     {

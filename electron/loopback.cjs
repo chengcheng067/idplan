@@ -31,7 +31,12 @@ const crypto = require('node:crypto');
 const { BrowserWindow } = require('electron');
 
 const LOOPBACK_HOST = '127.0.0.1';
-const LOOPBACK_PORT = 17788;
+/**
+ * 端口默认 17788（接入文件/指令块里的地址就是它，**生产不改**）。
+ * 仅测试可经 `IDPLAN_LOOPBACK_PORT` 覆盖：单测要真起 server 做路由/CORS 断言，
+ * 而用户正在运行的应用占着 17788（同机双实例会 EADDRINUSE 互相干扰）。
+ */
+const LOOPBACK_PORT = Number(process.env.IDPLAN_LOOPBACK_PORT) || 17788;
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2MB
 const REQUEST_TIMEOUT_MS = 10000;
 /** 探活超时：远短于写入超时，health 不该让调用方等 10s */
@@ -117,11 +122,28 @@ function pingRenderer() {
   });
 }
 
+/**
+ * CORS 头（2026-09-24 补；用户实测「一键探测」显示不可连通的根因）。
+ *
+ * 面板里的探测是**渲染页面发起的跨源 fetch**（页面 origin 是自定义协议
+ * idplan:// 或 dev 的 localhost:5173，目标是 127.0.0.1:17788）——没有
+ * Access-Control-Allow-Origin 时浏览器直接拦响应，curl 能通、面板却「不可连通」。
+ * 为什么 `*` 可接受：本服务严格绑 127.0.0.1（不对外暴露）且写操作有令牌门，
+ * CORS 在这里防的不是「外部站点偷数据」而是浏览器同源策略的机械拦截；
+ * 放开 `*` 只是让本机页面能读到自己机器的响应，不新增攻击面。
+ */
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Agent-Token',
+};
+
 function sendJson(res, status, obj) {
   const data = JSON.stringify(obj);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(data),
+    ...CORS_HEADERS,
   });
   res.end(data);
 }
@@ -166,7 +188,12 @@ function readBody(req, maxBytes) {
 }
 
 /** 把写入请求转发到渲染进程并等待回传（10s 超时） */
-function forwardToRenderer(request) {
+/**
+ * 转发渲染进程并等回传（泛化：import / boards / tasks 三类请求共用同一在途表与超时）。
+ * `eventName` 决定渲染侧哪条监听器接活；回传一律走 `agent:import-result`
+ * （渲染侧 runAgent* 系列统一回这个事件，主进程按 requestId 解挂）。
+ */
+function forwardToRenderer(request, eventName = 'agent:import-request') {
   return new Promise((resolve, reject) => {
     const win = getMainWindow();
     if (!win) {
@@ -179,7 +206,7 @@ function forwardToRenderer(request) {
     }, REQUEST_TIMEOUT_MS);
     pending.set(request.requestId, { resolve, reject, timer });
     try {
-      win.webContents.send('agent:import-request', request);
+      win.webContents.send(eventName, request);
     } catch {
       clearTimeout(timer);
       pending.delete(request.requestId);
@@ -199,6 +226,32 @@ async function handleHealth(_req, res) {
   });
 }
 
+/**
+ * Bearer 鉴权（fail-closed）。返回 true = 通过；false = 已写好 401 响应。
+ * import / boards 共用——令牌门是通道级纪律，不允许某个写端点"忘了查"。
+ */
+function checkBearerToken(req, res) {
+  const auth = req.headers['authorization'] || '';
+  const m = /^Bearer\s+(.+)$/i.exec(auth);
+  const provided = m ? m[1].trim() : '';
+  if (!configuredToken) {
+    sendJson(res, 401, {
+      error: {
+        code: 'unauthorized',
+        userMessage: '未配置访问令牌，拒绝写入。请在 ID Plan 接入面板配置令牌。',
+      },
+    });
+    return false;
+  }
+  if (!provided || provided !== configuredToken) {
+    sendJson(res, 401, {
+      error: { code: 'unauthorized', userMessage: '令牌无效，拒绝写入。' },
+    });
+    return false;
+  }
+  return true;
+}
+
 async function handleImport(req, res, url) {
   // 1) content-type 必须是 application/json
   const ct = req.headers['content-type'] || '';
@@ -208,23 +261,8 @@ async function handleImport(req, res, url) {
     });
   }
 
-  // 2) 鉴权：Bearer token；未配置 token 一律拒绝（fail-closed）
-  const auth = req.headers['authorization'] || '';
-  const m = /^Bearer\s+(.+)$/i.exec(auth);
-  const provided = m ? m[1].trim() : '';
-  if (!configuredToken) {
-    return sendJson(res, 401, {
-      error: {
-        code: 'unauthorized',
-        userMessage: '未配置访问令牌，拒绝写入。请在 ID Plan 接入面板配置令牌。',
-      },
-    });
-  }
-  if (!provided || provided !== configuredToken) {
-    return sendJson(res, 401, {
-      error: { code: 'unauthorized', userMessage: '令牌无效，拒绝写入。' },
-    });
-  }
+  // 2) 鉴权
+  if (!checkBearerToken(req, res)) return;
 
   // 3) body（含 2MB 上限）
   let body;
@@ -271,6 +309,104 @@ async function handleImport(req, res, url) {
   sendJson(res, 200, forwarded.result);
 }
 
+/**
+ * POST /api/agent/boards（2026-09-24 补齐；实测报告：承诺四端点、桌面只通两个）。
+ *
+ * ★ 主进程**不校验、不写库**：建板的全部校验（name / 起止日期 / 阶段集合，
+ *   fail fast 零写入）在渲染侧 `ProjectService.createAgentBoard`——与服务端路由
+ *   同源的那份实现。主进程只转发，避免第二份校验口径（报告第四节的老病）。
+ * ★ 只新建：body 出现 projectId / projectName 直接 400（与服务端同口径——
+ *   把调用方的误解说清楚；建板通道的形状就决定了它碰不到已有项目）。
+ */
+async function handleBoards(req, res) {
+  const ct = req.headers['content-type'] || '';
+  if (!ct.toLowerCase().includes('application/json')) {
+    return sendJson(res, 415, {
+      error: { code: 'invalid_content_type', userMessage: '仅接受 application/json。' },
+    });
+  }
+  if (!checkBearerToken(req, res)) return;
+
+  let body;
+  try {
+    body = JSON.parse(await readBody(req, MAX_BODY_BYTES));
+  } catch (e) {
+    const err = e;
+    if (err.httpStatus) {
+      return sendJson(res, err.httpStatus, {
+        error: { code: err.code || 'bad_request', userMessage: err.userMessage || '读取请求体失败。' },
+      });
+    }
+    return sendJson(res, 400, {
+      error: { code: 'invalid_json', userMessage: 'payload 不是合法 JSON。' },
+    });
+  }
+  if (body && typeof body === 'object' && ('projectId' in body || 'projectName' in body)) {
+    return sendJson(res, 400, {
+      error: {
+        code: 'invalid_field',
+        userMessage:
+          '建板通道**只新建**看板，不接受 projectId / projectName（那是导入通道的落点解析参数）。' +
+          '要往已有项目写任务，请用 POST /api/agent/import。',
+      },
+    });
+  }
+
+  let forwarded;
+  try {
+    forwarded = await forwardToRenderer(
+      { requestId: crypto.randomUUID(), kind: 'create-board', body },
+      'agent:create-board-request',
+    );
+  } catch (e) {
+    const err = e;
+    return sendJson(res, err.httpStatus || 504, {
+      error: { code: err.code || 'gateway', userMessage: err.userMessage || '转发失败。' },
+    });
+  }
+  if (forwarded && forwarded.error) {
+    const fe = forwarded.error;
+    return sendJson(res, typeof fe.httpStatus === 'number' ? fe.httpStatus : 400, {
+      error: { code: fe.code || 'apply_failed', userMessage: fe.userMessage || '建板失败。' },
+    });
+  }
+  // 201 Created：与服务端 boards 端点同状态码（写入方按 2xx 判成功，201 更精确）
+  sendJson(res, 201, forwarded.result);
+}
+
+/**
+ * GET /api/agent/tasks（2026-09-24 补齐；只读）。
+ *
+ * 归属门在渲染侧（共享核心口径）：显式 projectId 非 Agent 看板 → 拒；
+ * 未指定 → 只回 Agent 看板的任务（读侧隔离边界，与服务端同义）。
+ * 返回字段逐字镜像服务端（externalId / taskNo / title / status / dueDate /
+ * dependsOnExternal）——两端漂移会让写入方在同一份代码里得到两种形状。
+ */
+async function handleTasks(req, res, url) {
+  if (!checkBearerToken(req, res)) return;
+  const projectId = url.searchParams.get('projectId') || undefined;
+
+  let forwarded;
+  try {
+    forwarded = await forwardToRenderer(
+      { requestId: crypto.randomUUID(), kind: 'list-tasks', projectId },
+      'agent:list-tasks-request',
+    );
+  } catch (e) {
+    const err = e;
+    return sendJson(res, err.httpStatus || 504, {
+      error: { code: err.code || 'gateway', userMessage: err.userMessage || '转发失败。' },
+    });
+  }
+  if (forwarded && forwarded.error) {
+    const fe = forwarded.error;
+    return sendJson(res, typeof fe.httpStatus === 'number' ? fe.httpStatus : 400, {
+      error: { code: fe.code || 'read_failed', userMessage: fe.userMessage || '读取任务失败。' },
+    });
+  }
+  sendJson(res, 200, forwarded.result);
+}
+
 function handle(req, res) {
   let url;
   try {
@@ -279,11 +415,24 @@ function handle(req, res) {
     return sendJson(res, 400, { error: { code: 'bad_request', userMessage: '非法请求 URL。' } });
   }
 
+  // 预检（跨源 fetch 带 Authorization 头必触发 OPTIONS）：直接 204 + CORS 头。
+  // 放在路由之前：预检不带令牌，走业务分支只会 401 把浏览器挡在门外。
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, CORS_HEADERS);
+    return res.end();
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/agent/health') {
     return handleHealth(req, res);
   }
   if (req.method === 'POST' && url.pathname === '/api/agent/import') {
     return handleImport(req, res, url);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/agent/boards') {
+    return handleBoards(req, res);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/agent/tasks') {
+    return handleTasks(req, res, url);
   }
   return sendJson(res, 404, { error: { code: 'not_found', userMessage: '未知端点。' } });
 }

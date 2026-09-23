@@ -82,6 +82,10 @@ const CODE_TO_STATUS: Record<ChangxiaErrorCode, number> = {
   [ChangxiaErrorCode.Network]: 502,
   [ChangxiaErrorCode.ParseFailed]: 400,
   [ChangxiaErrorCode.Cancelled]: 499,
+  // Agent 导入落点不可解析（共享核心 resolve() 的归属/存在性门）。执行域端点
+  // 理论上不会抛它（执行域有自己的 assertAgentOnlyProject 门），但 exhaustive
+  // 表强制每个新码都有明确口径：落点错属调用方错误 → 400。
+  [ChangxiaErrorCode.ProjectUnresolved]: 400,
 };
 
 /**

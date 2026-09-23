@@ -16,7 +16,9 @@ import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { applyAgentPayload, previewAgentPayload } from '../src/core/agent/payload.apply';
 import type { AgentPayloadV1 } from '../src/core/types/agent-payload';
 import type { Stage } from '../src/core/types/entities';
-import { MemberActorKind, TaskStatus } from '../src/core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, MemberActorKind, TaskStatus } from '../src/core/types/enums';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
@@ -64,7 +66,10 @@ async function seedProject(): Promise<string> {
     plannedStartAt: '2026-09-01',
     plannedEndAt: '2026-09-30',
     coverColor: null,
-  });
+    // ★ 2026-09-24：归属门提到共享核心后，Agent 导入的合法落点必须显式 kind='agent'
+    // （缺省按口径读作 human，会被 resolve() 的归属门拒绝——这正是门该有的效果）。
+    kind: 'agent',
+  } as never);
   await bundle.stages.bulkInsert([
     makeStage('stg_v1', 1),
     makeStage('stg_v2', 2),
@@ -342,5 +347,104 @@ describe('批内重复 externalId（QA 返工 🟠-1）：逐条 conflict、绝�
 
     const tasks = await bundle.tasks.listByProject(projectId);
     expect(tasks.map((t) => t.title)).toEqual(['甲·首到']);
+  });
+});
+
+/* ================================================================================================
+ * 归属门（2026-09-24 提到共享核心；实测报告 9.2/9.4 的回归钉）
+ *
+ * 为什么钉在**共享核心**这一层：桌面 loopback 与服务端 Fastify 两条通道、
+ * preview/apply 两种模式都走 resolve()——在这里钉一条，等于四处同源生效。
+ * 此前门只装在服务端路由，桌面通道 dryRun 打人类项目全放行（报告 9.2 实测）。
+ * ================================================================================================ */
+
+describe('★ 归属门：Agent 导入的合法落点只剩 Agent 看板（两通道/预览实写同源）', () => {
+  /** 建一个 kind=human 的项目（老库无 kind 列的口径也读作 human，一并覆盖） */
+  async function seedHumanProject(id: string, withKindField: boolean): Promise<void> {
+    await bundle.projects.insert({
+      id,
+      name: `人类项目·${id}`,
+      address: '',
+      clientName: '',
+      contractAmount: null,
+      signedAt: null,
+      plannedStartAt: '2026-09-01',
+      plannedEndAt: '2026-09-30',
+      coverColor: null,
+      ...(withKindField ? { kind: 'human' } : {}),
+    } as never);
+  }
+
+  function payloadFor(projectId: string): AgentPayloadV1 {
+    return {
+      schema: 'idplan-agent-payload/v1',
+      producedBy: 'workbuddy',
+      tasks: [
+        {
+          externalId: `probe:${projectId}:t1`,
+          title: '归属门探针',
+          status: 'draft',
+        },
+      ],
+    } as unknown as AgentPayloadV1;
+  }
+
+  it('★ 显式 id 指向人类项目（kind 字段存在）→ ProjectUnresolved，零写入', async () => {
+    await seedHumanProject('proj_human_1', true);
+    const before = await bundle.tasks.listByProject('proj_human_1');
+
+    await expect(
+      previewAgentPayload(bundle, payloadFor('proj_human_1'), { projectId: 'proj_human_1' }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.ProjectUnresolved });
+    await expect(
+      applyAgentPayload(bundle, payloadFor('proj_human_1'), { projectId: 'proj_human_1' }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.ProjectUnresolved });
+
+    expect(await bundle.tasks.listByProject('proj_human_1')).toEqual(before);
+  });
+
+  it('★ 老库口径（无 kind 字段 → 读作 human）同样被拒——回落口径复用 projectKindOf', async () => {
+    await seedHumanProject('proj_legacy', false);
+    await expect(
+      applyAgentPayload(bundle, payloadFor('proj_legacy'), { projectId: 'proj_legacy' }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.ProjectUnresolved });
+  });
+
+  it('★ 不存在的 id → 同码（存在性与归属共用 ProjectUnresolved，文案指明「不存在」）', async () => {
+    const err = await applyAgentPayload(bundle, payloadFor('proj_ghost'), {
+      projectId: 'proj_ghost',
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(ChangxiaError);
+    expect((err as ChangxiaError).code).toBe(ChangxiaErrorCode.ProjectUnresolved);
+    expect((err as ChangxiaError).userMessage).toContain('不存在');
+  });
+
+  it('★ 接管转正（kind 翻 human）后再导入 → 被拒（报告 9.4 要求的回归用例）', async () => {
+    const id = await seedProject(); // kind='agent'
+    // 模拟 agent-takeover 的转正：只翻 kind（服务本身另有完整测试）
+    const row = await bundle.projects.get(id);
+    await bundle.projects.update(id, { ...row!, kind: 'human' } as never);
+
+    await expect(
+      applyAgentPayload(bundle, payloadFor(id), { projectId: id }),
+    ).rejects.toMatchObject({ code: ChangxiaErrorCode.ProjectUnresolved });
+  });
+
+  it('★ 跨通道一致性：同一 payload 在本地通道与服务端路由得到同一错误码', async () => {
+    // 本地通道（共享核心）
+    await seedHumanProject('proj_x', true);
+    const localErr = await applyAgentPayload(bundle, payloadFor('proj_x'), {
+      projectId: 'proj_x',
+    }).catch((e) => e);
+    expect((localErr as ChangxiaError).code).toBe(ChangxiaErrorCode.ProjectUnresolved);
+
+    // 服务端路由：catch 把 ProjectUnresolved 映射成对外契约码 project_unresolved
+    // （字面量与枚举值逐字相等——这就是「同一码」的契约）
+    expect(ChangxiaErrorCode.ProjectUnresolved).toBe('project_unresolved');
+    // 服务端路由的映射分支存在性（源码锚点：消重后唯一映射处）
+    const routes = readFileSync(resolve(process.cwd(), 'server/routes/agent.routes.ts'), 'utf8');
+    expect(routes).toContain('ChangxiaErrorCode.ProjectUnresolved');
+    // 且路由里**不再有**第二份 kind 判定（消重的证据）
+    expect(routes).not.toContain("targetRow.kind !== 'agent'");
   });
 });

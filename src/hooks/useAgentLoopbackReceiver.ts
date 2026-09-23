@@ -37,7 +37,9 @@ import { useEffect } from 'react';
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { previewAgentPayload, applyAgentPayload } from '../core/agent/payload.apply';
 import { validateAgentPayload } from '../core/types/agent-payload';
-import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, projectKindOf } from '../core/types/enums';
+import { createProjectActions } from '../store/useProjectsStore';
+import type { CreateAgentBoardCmd } from '../core/services/project.service';
 // token 存储键的**唯一出处**（与 AgentBoardPage 同源，避免再散一份字面量）
 import { AGENT_TOKEN_STORAGE_KEY } from '../pages/AgentBoardPage';
 import { useRepos } from './useRepos';
@@ -48,10 +50,26 @@ export interface AgentPingRequest {
   kind: 'ping';
 }
 
+/** 主进程转来的建板请求（POST /api/agent/boards 的桌面形态） */
+export interface AgentCreateBoardRequest {
+  requestId: string;
+  kind: 'create-board';
+  body: Record<string, unknown>;
+}
+
+/** 主进程转来的任务流读取请求（GET /api/agent/tasks 的桌面形态） */
+export interface AgentListTasksRequest {
+  requestId: string;
+  kind: 'list-tasks';
+  projectId?: string;
+}
+
 /** 渲染侧桥的最小形状（IdPlanBridge 的结构子集；所有方法可选，便于非 Electron 静默跳过） */
 export interface LoopbackReceiverBridge {
   onAgentImport?: (cb: (payload: AgentImportRequest) => void) => () => void;
   onAgentPing?: (cb: (payload: AgentPingRequest) => void) => () => void;
+  onCreateBoard?: (cb: (payload: AgentCreateBoardRequest) => void) => () => void;
+  onListTasks?: (cb: (payload: AgentListTasksRequest) => void) => () => void;
   sendAgentImportResult?: (payload: AgentImportResult) => void;
   sendAgentPong?: (payload: { requestId: string }) => void;
   setAgentToken?: (token: string) => void;
@@ -95,18 +113,139 @@ export async function runAgentImport(
   }
 }
 
+export function isCreateBoardRequest(req: unknown): req is AgentCreateBoardRequest {
+  return !!req && typeof req === 'object' && (req as { kind?: unknown }).kind === 'create-board';
+}
+
+export function isListTasksRequest(req: unknown): req is AgentListTasksRequest {
+  return !!req && typeof req === 'object' && (req as { kind?: unknown }).kind === 'list-tasks';
+}
+
 /**
- * 把一条主进程转来的请求（落库 / ping）桥接到渲染侧落库点。
- * ★ ping **短路**：立即 `sendPong`，绝不走 `runAgentImport`（不读写数据库）。
+ * 建板（桌面通道补齐 POST /api/agent/boards 的渲染侧一半）。
+ *
+ * ★ 校验**不在这里重写**：直接调 `createProjectActions(repos).createAgentBoard`——
+ *   与服务端 boards 路由同源的那份实现（name / 起止日期 / 阶段集合，fail fast 零写入）。
+ *   主进程只转发、渲染侧只桥接，判定逻辑仍只有一份。
+ * ★ 回执形状逐字镜像服务端 201 体：`{ projectId, name, stages:[{id,name,templateKey}] }`。
+ */
+export async function runAgentCreateBoard(
+  repos: IRepositoryBundle,
+  req: AgentCreateBoardRequest,
+): Promise<AgentImportResult> {
+  try {
+    const body = req.body ?? {};
+    const cmd: CreateAgentBoardCmd = {
+      name: typeof body.name === 'string' ? body.name : '',
+      plannedStartAt: typeof body.plannedStartAt === 'string' ? body.plannedStartAt : '',
+      plannedEndAt: typeof body.plannedEndAt === 'string' ? body.plannedEndAt : '',
+      ...(typeof body.presetKey === 'string' ? { presetKey: body.presetKey } : {}),
+      ...(Array.isArray(body.stageNames) ? { stageNames: body.stageNames as string[] } : {}),
+    };
+    const project = await createProjectActions(repos).createAgentBoard(cmd);
+    const stages = await repos.stages.listByProject(project.id);
+    return {
+      requestId: req.requestId,
+      result: {
+        projectId: project.id,
+        name: project.name,
+        stages: stages.map((st) => ({ id: st.id, name: st.name, templateKey: st.templateKey })),
+      },
+    };
+  } catch (err) {
+    const message = err instanceof ChangxiaError ? err.userMessage : '建板失败。';
+    const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
+    return { requestId: req.requestId, error: { code, httpStatus: 400, userMessage: message } };
+  }
+}
+
+/**
+ * 任务流读取（桌面通道补齐 GET /api/agent/tasks 的渲染侧一半）。
+ *
+ * 归属口径**逐字镜像服务端**：显式 projectId 非 Agent 看板 → 拒（ProjectUnresolved）；
+ * 未指定 → 只回 Agent 看板的任务（读侧隔离边界）。返回字段与服务端同形
+ * （externalId / taskNo / title / status / dueDate / dependsOnExternal，
+ * dependsOn 做 id→externalId 反查、人工任务剔除、去重）。
+ */
+export async function runAgentListTasks(
+  repos: IRepositoryBundle,
+  req: AgentListTasksRequest,
+): Promise<AgentImportResult> {
+  try {
+    let scopeIds: string[];
+    if (req.projectId) {
+      const project = await repos.projects.get(req.projectId);
+      if (!project || projectKindOf(project) !== 'agent') {
+        return {
+          requestId: req.requestId,
+          error: {
+            code: ChangxiaErrorCode.ProjectUnresolved,
+            httpStatus: 400,
+            userMessage: `目标项目（id=${req.projectId}）不是 Agent 看板，Agent 通道读不到它的任务。`,
+          },
+        };
+      }
+      scopeIds = [req.projectId];
+    } else {
+      const all = await repos.projects.list({ status: 'all' });
+      scopeIds = all.filter((p) => projectKindOf(p) === 'agent').map((p) => p.id);
+    }
+
+    const rows = [];
+    for (const pid of scopeIds) {
+      rows.push(...(await repos.tasks.listByProject(pid)));
+    }
+    const idToExternal = new Map<string, string>();
+    for (const r of rows) {
+      if (r.externalId) idToExternal.set(r.id, r.externalId);
+    }
+    return {
+      requestId: req.requestId,
+      result: {
+        tasks: rows.map((r) => {
+          const deps: string[] = [];
+          for (const depId of r.dependsOn ?? []) {
+            const ext = idToExternal.get(depId);
+            if (ext && !deps.includes(ext)) deps.push(ext);
+          }
+          return {
+            externalId: r.externalId,
+            taskNo: r.taskNo,
+            title: r.title,
+            status: r.status,
+            dueDate: r.dueDate,
+            dependsOnExternal: deps,
+          };
+        }),
+      },
+    };
+  } catch (err) {
+    const message = err instanceof ChangxiaError ? err.userMessage : '读取任务失败。';
+    const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
+    return { requestId: req.requestId, error: { code, httpStatus: 400, userMessage: message } };
+  }
+}
+
+/**
+ * 把一条主进程转来的请求（落库 / 建板 / 读任务 / ping）桥接到渲染侧落库点。
+ * ★ ping **短路**：立即 `sendPong`，绝不走落库（不读写数据库）。
  */
 export async function handleAgentLoopbackMessage(opts: {
   repos: IRepositoryBundle;
-  req: AgentImportRequest | AgentPingRequest;
+  req: AgentImportRequest | AgentPingRequest | AgentCreateBoardRequest | AgentListTasksRequest;
   sendImportResult: (r: AgentImportResult) => void;
   sendPong: (p: { requestId: string }) => void;
 }): Promise<void> {
   if (isPingRequest(opts.req)) {
     opts.sendPong({ requestId: opts.req.requestId });
+    return;
+  }
+  if (isCreateBoardRequest(opts.req)) {
+    opts.sendImportResult(await runAgentCreateBoard(opts.repos, opts.req));
+    return;
+  }
+  if (isListTasksRequest(opts.req)) {
+    opts.sendImportResult(await runAgentListTasks(opts.repos, opts.req));
     return;
   }
   const result = await runAgentImport(opts.repos, opts.req);
@@ -125,12 +264,19 @@ export function wireLoopbackReceiver(opts: {
   const { repos, bridge } = opts;
   const onImport = bridge?.onAgentImport;
   const onPing = bridge?.onAgentPing;
+  const onCreateBoard = bridge?.onCreateBoard;
+  const onListTasks = bridge?.onListTasks;
   if (!onImport && !onPing) {
     // 非 Electron / 老 preload：无桥可订阅，静默跳过（V1-13 诚实降级的一部分）
     return { dispose: () => {} };
   }
 
-  const handler = (req: AgentImportRequest | AgentPingRequest): void => {
+  type LoopbackRequest =
+    | AgentImportRequest
+    | AgentPingRequest
+    | AgentCreateBoardRequest
+    | AgentListTasksRequest;
+  const handler = (req: LoopbackRequest): void => {
     void handleAgentLoopbackMessage({
       repos,
       req,
@@ -141,10 +287,16 @@ export function wireLoopbackReceiver(opts: {
 
   const offImport = onImport?.(handler as (payload: AgentImportRequest) => void);
   const offPing = onPing?.(handler as (payload: AgentPingRequest) => void);
+  // 2026-09-24 桌面通道补齐：建板 / 读任务两条新事件复用同一 handler（按 kind 分发）。
+  // 老 preload 没有这两个订阅方法 → 可选链自然跳过（import/ping 不受影响）。
+  const offCreateBoard = onCreateBoard?.(handler as (payload: AgentCreateBoardRequest) => void);
+  const offListTasks = onListTasks?.(handler as (payload: AgentListTasksRequest) => void);
   return {
     dispose: () => {
       offImport?.();
       offPing?.();
+      offCreateBoard?.();
+      offListTasks?.();
     },
   };
 }

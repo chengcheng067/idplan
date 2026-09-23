@@ -46,29 +46,21 @@ import { useMemo } from 'react';
 
 import { useProjectsStore } from '../../store/useProjectsStore';
 import type { Project, Stage, Task } from '../types/entities';
-import { DEFAULT_PROJECT_KIND, type ProjectKind } from '../types/enums';
+import { DEFAULT_PROJECT_KIND, projectKindOf, type ProjectKind } from '../types/enums';
+
+// 对外仍是「唯一出处」：实现 import 进作用域后 re-export（见下方 export 行）
 import type { StageTemplateDomain } from '../types/dto';
 import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../template/stage-fallback';
 
 /* ══════════════════════════════ 纯函数（可测、无 IO） ══════════════════════════════ */
 
 /**
- * 读时回落：`Project.kind` ⇒ `'human' | 'agent'`。**唯一允许判 kind 的地方。**
- *
- * 只认**字面量** `'agent'`，其余（`undefined` / `null` / 脏值）一律按人类侧处理。
- *
- * 为什么不写成 `p.kind ?? DEFAULT_PROJECT_KIND`（那样脏值会原样透出成一个非法 kind）：
- *   ① **与 T01 的落库口径一致** —— `normalizeProjectRow` 对缺列就是落 `'human'`，
- *      老备份导入后 kind 一定是 `'human'`，不会停留在 `undefined`；
- *   ② **两种"猜错"的代价不对称**，这里选代价小的那个：
- *      · 脏值（如手工改库写成 `'agentt'`）按人类侧 ⇒ 多出一个可见的 Agent 看板，
- *        **看得见、能改**；
- *      · 若是把"其实不是 agent 的东西"当中 agent ⇒ 项目从人类侧**凭空消失**，
- *        用户会以为数据丢了，**看不见、难排查**。
+ * 读时回落判 kind 的**唯一出处**——实现已迁到 `src/core/types/enums.ts`
+ * （2026-09-24：服务端也要同一口径，而本文件经 import 图带 react/store，
+ * 服务端 tsconfig 不能纳入）。此处 re-export，既有消费方零改动；
+ * 判定语义与"为什么只认字面量 agent"的完整论证见 enums.ts 的实现注释。
  */
-export function projectKindOf(p: Pick<Project, 'kind'> | null | undefined): ProjectKind {
-  return p?.kind === 'agent' ? 'agent' : DEFAULT_PROJECT_KIND;
-}
+export { projectKindOf };
 
 /**
  * 给定 kind，算出"该 kind 该看到哪些项目 id"。

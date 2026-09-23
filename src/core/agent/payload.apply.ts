@@ -42,6 +42,7 @@ import {
   ChangxiaErrorCode,
   MemberActorKind,
   MemberRoleKind,
+  projectKindOf,
   TaskStatus,
 } from '../types/enums';
 import type { Stage, Task, TaskArtifact } from '../types/entities';
@@ -196,7 +197,30 @@ async function resolve(
   }
   const project = await repos.projects.get(projectId);
   if (!project) {
-    throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到目标项目，无法导入 payload。');
+    /*
+     * ★ 2026-09-24（实测报告 9.2/9.4）：存在性与归属**两道判定、同一个错误码**，
+     * 且**落在共享核心**——此前服务端路由有一份 kind 门、桌面 loopback 通道
+     * 完全没有（dryRun 打人类项目全放行，「结构性隔离」在本机只是一句文案）。
+     * preview/apply 共用本 resolve()，故补在这里 = 两通道、预览/实写四处同源。
+     *
+     * 错误码 `ProjectUnresolved`（对外契约码，接入文件/指令块向写入方承诺过）；
+     * 文案分工与服务端历史口径逐字一致：不存在 → 指明「不存在」；存在但非
+     * agent → 指明「不是 Agent 看板」+ id（服务端 spec 断言这两组子串）。
+     *
+     * kind 判定**只准** `projectKindOf`（enums 的唯一出处；老库/脏值按 human）——
+     * 就地写 `kind === 'agent'` 会制造第二份判定口径（enums/visibility 都警告过）。
+     */
+    throw new ChangxiaError(
+      ChangxiaErrorCode.ProjectUnresolved,
+      `目标项目（id=${projectId}）不存在，可能已被删除，请重新选择。`,
+    );
+  }
+  if (projectKindOf(project) !== 'agent') {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.ProjectUnresolved,
+      `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道不能往里写任务。` +
+        ' 人类项目只能由你主动发起（界面手动粘贴 / 显式接管），Agent token 无法触碰。',
+    );
   }
 
   const rejected: ApplyRejection[] = [];

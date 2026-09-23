@@ -357,46 +357,18 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         };
       }
       /**
-       * 目标项目存在性 + 归属关卡（**一次查询、两道判定**）。
+       * 目标项目的存在性 + 归属关卡：**不再在本路由判定**（2026-09-24 消重）。
        *
-       * ★ 2026-09-20 用户裁决：**Agent 导入的合法落点只剩 Agent 看板**（`kind='agent'`）。
-       * v0.7/v0.8 的设计是「AI 辅助排期 → 写进人类项目」（PRD §5.2 #26），
-       * 用户边界明确为「Agent 在各专业领域排期，但绝不跟她自己的项目扯关系」，
-       * 故本通道与人类项目脱钩：显式 id 与按名解析（`listProjectCandidates`
-       * 已只剩 Agent 看板）都导不进来。
+       * 历史：2026-09-20 用户裁决「Agent 导入的合法落点只剩 Agent 看板」后，这道门
+       * 只装在了本路由；桌面 loopback 通道走共享核心 `resolve()`，**没有这道门**
+       * （实测报告 9.2：dryRun 打人类项目全放行，「结构性隔离」在本机只是文案）。
+       * 现门已提到共享核心 `payload.apply.ts::resolve()`（preview/apply 共用），
+       * 两通道、预览/实写四处同源；本路由只负责把 `ProjectUnresolved` 映射成
+       * 对外契约码 `project_unresolved` 并附候选清单（见下方 catch）。
        *
-       * 为什么并入存在性检查而不是另起一段：两个判定读的是同一行，拆开会变成
-       * 「同一不变式两处规则」——本文件的历史教训（见候选清单 docstring）正是
-       * 结构性收口优于运行时补丁。
-       *
-       * 错误码分工：id 不存在 → `project_unresolved`（打错 id）；
-       * id 存在但 kind 非 agent → 同码但文案指明归属（打错落点，候选清单即合法集）。
+       * 按名解析（`?projectName=`）的结构性排除**仍在本路由**：候选清单只列
+       * Agent 看板，人类项目名根本不进候选集（零写入），与共享核心互补不重叠。
        */
-      const targetRow = db
-        .prepare('SELECT id, kind FROM projects WHERE id = ?')
-        .get(targetProjectId) as { id: string; kind: string } | undefined;
-      if (!targetRow) {
-        void reply.status(400);
-        return {
-          error: {
-            code: 'project_unresolved',
-            userMessage: `目标项目（id=${targetProjectId}）不存在，可能已被删除，请重新选择。`,
-            projects: listProjectCandidates(),
-          },
-        };
-      }
-      if (targetRow.kind !== 'agent') {
-        void reply.status(400);
-        return {
-          error: {
-            code: 'project_unresolved',
-            userMessage:
-              `目标项目（id=${targetProjectId}）不是 Agent 看板，Agent 通道不能往里写任务。` +
-              ' 人类项目只能由你主动发起（界面手动粘贴 / 显式接管），Agent token 无法触碰。',
-            projects: listProjectCandidates(),
-          },
-        };
-      }
 
       /* ── query 的 stageId 是「批次级覆盖」，优先于 body.stageId（§3.1 query 说明） ── */
       const effectiveStageId: string | null = queryStageId ?? bodyStageId ?? null;
@@ -427,6 +399,17 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           if (err.code === ChangxiaErrorCode.Validation) {
             void reply.status(400);
             return { error: { code: 'Validation', userMessage: err.userMessage } };
+          }
+          // ★ 共享核心的归属/存在性门（resolve()）：对外契约码 + 候选清单（合法落点集）
+          if (err.code === ChangxiaErrorCode.ProjectUnresolved) {
+            void reply.status(400);
+            return {
+              error: {
+                code: 'project_unresolved',
+                userMessage: err.userMessage,
+                projects: listProjectCandidates(),
+              },
+            };
           }
           if (err.code === ChangxiaErrorCode.NotFound) {
             void reply.status(400);

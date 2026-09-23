@@ -91,6 +91,31 @@ export type ProjectKind = 'human' | 'agent';
 /** 出厂默认归属侧。⚠️ **绝不改为 'agent'** —— 老库无该列时必须落回人类侧。 */
 export const DEFAULT_PROJECT_KIND: ProjectKind = 'human';
 
+/**
+ * 读时回落：`Project.kind` ⇒ `'human' | 'agent'`。**唯一允许判 kind 的地方。**
+ *
+ * 只认**字面量** `'agent'`，其余（`undefined` / `null` / 脏值）一律按人类侧处理。
+ *
+ * 为什么不写成 `p.kind ?? DEFAULT_PROJECT_KIND`（那样脏值会原样透出成一个非法 kind）：
+ *   ① **与 T01 的落库口径一致** —— `normalizeProjectRow` 对缺列就是落 `'human'`，
+ *      老备份导入后 kind 一定是 `'human'`，不会停留在 `undefined`；
+ *   ② **两种"猜错"的代价不对称**，这里选代价小的那个：
+ *      · 脏值（如手工改库写成 `'agentt'`）按人类侧 ⇒ 多出一个可见的 Agent 看板，
+ *        **看得见、能改**；
+ *      · 若是把"其实不是 agent 的东西"当中 agent ⇒ 项目从人类侧**凭空消失**，
+ *        用户会以为数据丢了，**看不见、难排查**。
+ *
+ * ── 为什么实现落在 enums 而不是 visibility（2026-09-24 迁移）──
+ * 服务端（server/routes、sqlite.bundle）需要同一口径判 kind，而 visibility.ts
+ * 经 import 图带上 react/zustand store，**服务端 tsconfig 不能纳入**。把实现放在
+ * 零依赖的 enums（types 层，两端 tsconfig 都已纳入）后，服务端与共享核心、渲染侧
+ * 共用同一份判定；visibility.ts 保留 re-export，既有消费方零改动。
+ * 纪律不变：**判 kind 只准调本函数**（就地写 `kind === 'agent'` 一律视为违规）。
+ */
+export function projectKindOf(p: { kind?: ProjectKind | null } | null | undefined): ProjectKind {
+  return p?.kind === 'agent' ? 'agent' : DEFAULT_PROJECT_KIND;
+}
+
 /** 公司休息制度（决定排期的工作日口径） */
 export enum RestPolicyKind {
   /** 双休：周六 + 周日休息 */
@@ -275,6 +300,16 @@ export enum ChangxiaErrorCode {
   Network = 'network',
   ParseFailed = 'parse_failed',
   Cancelled = 'cancelled',
+  /**
+   * Agent 导入落点不可解析（2026-09-24 新增）：id 不存在、或存在但 kind 非 agent。
+   *
+   * 为什么单立一码而不是复用 Validation：这是**对外契约码**——接入文件/指令块
+   * 向写入方承诺「人类项目一律拒绝（project_unresolved）」，写入方（如 WorkBuddy）
+   * 按码分支（打错 id vs 打错归属 vs 参数格式错）。服务端路由此前直接返回该字面量
+   * 码，但共享核心（payload.apply.resolve）没有对应枚举 ⇒ 桌面通道压根没这道门
+   * （实测报告 9.2：dryRun 打人类项目全放行）。补码后两通道同源抛此错。
+   */
+  ProjectUnresolved = 'project_unresolved',
 }
 
 /** 统一业务异常：上层只需捕获此类型并向 toast 展示 userMessage */

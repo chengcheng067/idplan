@@ -71,7 +71,9 @@ function makePayload(
   } as AgentPayloadV1;
 }
 
-/** 显式建一个人类项目（固定 id），带一个可见批次 */
+/** 显式建一个 **Agent 看板**（固定 id），带一个可见批次。
+ * 2026-09-24：归属门提到共享核心后，人类项目作落点会在冲突逻辑之前被归属门拒——
+ * 本 spec 测的是「projectId 冲突 fail-closed」，落点必须合法（agent）才摸得到冲突分支。 */
 async function seedProject(id: string): Promise<void> {
   await bundle.projects.insert({
     id,
@@ -84,6 +86,7 @@ async function seedProject(id: string): Promise<void> {
     plannedStartAt: '2026-09-01',
     plannedEndAt: '2026-09-30',
     coverColor: null,
+    kind: 'agent',
   });
   await bundle.stages.bulkInsert([
     {

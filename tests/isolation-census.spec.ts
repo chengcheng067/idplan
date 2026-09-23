@@ -1063,8 +1063,16 @@ describe('源码锚点（接线真的接上了，而不只是派生写对了）'
 
   it('2026-09-20 三道归属关卡都接上了：落点门 / 读门 / 执行域门（两端同义）', () => {
     const routes = stripComments(read('server/routes/agent.routes.ts'));
-    // ① 导入落点门：显式 id 也必须过 kind 门（"存在" ≠ "可写"）
-    expect(routes).toContain("targetRow.kind !== 'agent'");
+    /* ① 导入落点门（2026-09-24 位置迁移）：门本体在**共享核心**
+     *    `payload.apply.ts::resolve()`（preview/apply、桌面/服务端四处同源），
+     *    服务端路由只把 ProjectUnresolved 映射成对外契约码。锚点跟着门走：
+     *    共享核心必须有 kind 判定 + 服务端必须有映射分支（消重后唯一映射处）。 */
+    const core = stripComments(read('src/core/agent/payload.apply.ts'));
+    expect(core).toContain('projectKindOf(project)');
+    expect(core).toContain('ChangxiaErrorCode.ProjectUnresolved');
+    expect(routes).toContain('ChangxiaErrorCode.ProjectUnresolved');
+    // 服务端不再有第二份 kind 判定（消重的证据）
+    expect(routes).not.toContain("targetRow.kind !== 'agent'");
     // ② 任务流读门：未指定 projectId 时不再返回全库任务（默认范围收窄到 Agent 看板）
     expect(routes).toContain('agentBoardIds.has(r.projectId)');
     // ③ 执行域门：服务端（闭包）与本地（私有方法）**两端同义**，

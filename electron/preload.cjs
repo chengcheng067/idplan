@@ -83,6 +83,21 @@ contextBridge.exposeInMainWorld('idplan', {
   /** 把落库结果 / 错误回传给主进程（经 IPC），与 `onAgentImport` 配对 */
   sendAgentImportResult: (payload) => ipcRenderer.send('agent:import-result', payload),
   /**
+   * 建板 / 读任务两条新事件（2026-09-24 桌面通道补齐 boards/tasks）。
+   * 与 onAgentImport 同形：订阅主进程转发、渲染侧按 kind 分发；老版本 preload
+   * 没有这两个键时，渲染侧 wireLoopbackReceiver 用可选链自然跳过。
+   */
+  onCreateBoard: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on('agent:create-board-request', handler);
+    return () => ipcRenderer.removeListener('agent:create-board-request', handler);
+  },
+  onListTasks: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on('agent:list-tasks-request', handler);
+    return () => ipcRenderer.removeListener('agent:list-tasks-request', handler);
+  },
+  /**
    * 订阅主进程 `health` 探活的 ping（`dataLayer` 真实判定的渲染侧一半）。
    *
    * ★ 收到 ping **只回 pong，不碰数据库** —— 探活每天会被打很多次，若让它走落库
