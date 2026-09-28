@@ -17,7 +17,7 @@
 services:
   # ---------------- 前端（nginx 静态托管 + /api 反代到后端） ----------------
   idplan:
-    image: idplan:0.7.0
+    image: idplan:0.3.0
     container_name: idplan
     restart: always
     ports:
@@ -47,7 +47,7 @@ services:
 
   # ---------------- 后端（Fastify + better-sqlite3，团队共享数据层） ----------------
   backend:
-    image: idplan-backend:0.7.0
+    image: idplan-backend:0.3.0
     container_name: idplan-backend
     restart: always
     environment:
