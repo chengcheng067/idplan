@@ -111,8 +111,6 @@ interface IdPlanBridge {
   sendAgentPong?: (payload: { requestId: string }) => void;
   /** 把 token 告知主进程（主进程只比对，绝不回传原文） */
   setAgentToken?: (token: string) => void;
-  licenseStatus?: () => Promise<{ machineId: string; licensed: boolean; reason: string | null; expiresAt: string | null }>;
-  importLicense?: (raw: string) => Promise<{ machineId: string; licensed: boolean; reason: string | null; expiresAt: string | null }>;
 }
 
 interface Window {

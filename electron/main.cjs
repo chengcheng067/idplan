@@ -8,7 +8,6 @@
  * 复用 ID Aura 的 Electron 打包思路：独立窗口 + NSIS 安装 + 数据落应用独立目录。
  */
 const { app, BrowserWindow, protocol, shell, Menu, ipcMain } = require('electron');
-const { readLicenseStatus, importLicense } = require('./license.cjs');
 const path = require('node:path');
 const fs = require('node:fs');
 const https = require('node:https');
@@ -209,15 +208,6 @@ if (USE_SELF_DRAWN_WINDOW_CONTROLS) {
 
 // ── 本机 Agent loopback 接线（v1.0 · P0） ──
 // 渲染进程把 token 告知主进程（仅比对，绝不回传原文）
-ipcMain.handle('license:status', () => readLicenseStatus(app.getPath('userData'), APP_VERSION));
-ipcMain.handle('license:import', (_event, raw) => {
-  try {
-    return importLicense(app.getPath('userData'), raw, APP_VERSION);
-  } catch {
-    return { machineId: '', licensed: false, reason: '许可证文件不是有效 JSON。', expiresAt: null };
-  }
-});
-
 ipcMain.on('agent:token:set', (_event, token) => {
   setLoopbackToken(token);
 });

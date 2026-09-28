@@ -15,7 +15,6 @@ import { isDesktop } from '../../lib/desktopBridge';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
-import { LicenseSection } from '../settings/LicenseSection';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import { useMembersStore } from '../../store/useMembersStore';
 import {
@@ -323,8 +322,6 @@ export function SettingsDialog({
               授权区（Windows 桌面版离线许可证）。
               组件内部自行判断桌面端 —— 浏览器 / NAS 端返回 null（整区不渲染、不发请求）。
             */}
-            <LicenseSection />
-
             {/* 关于区 */}
             <section>
               <div className="mb-2 flex items-center gap-1.5">
