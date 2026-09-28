@@ -62,6 +62,8 @@ export interface AgentListTasksRequest {
   requestId: string;
   kind: 'list-tasks';
   projectId?: string;
+  /** source 过滤（仅 'agent' | 'human' 生效；与服务端同口径；2026-09-28 补） */
+  source?: 'agent' | 'human';
 }
 
 /** 渲染侧桥的最小形状（IdPlanBridge 的结构子集；所有方法可选，便于非 Electron 静默跳过） */
@@ -109,7 +111,12 @@ export async function runAgentImport(
     const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
     const httpStatus =
       err instanceof ChangxiaError && err.code === ChangxiaErrorCode.NotFound ? 404 : 400;
-    return { requestId: req.requestId, error: { code, httpStatus, userMessage: message } };
+    // ★ 契约码映射（2026-09-28 走查 #11）：服务端同场景回字面 'Validation'
+    //   （agent.routes.ts），桌面上游抛内部枚举小写 'validation'——按码分支的
+    //   写入方会漏判。NotFound 已在下方由共享核心统一为 project_unresolved 码抛出。
+    const mappedCode =
+      err instanceof ChangxiaError && err.code === ChangxiaErrorCode.Validation ? 'Validation' : code;
+    return { requestId: req.requestId, error: { code: mappedCode, httpStatus, userMessage: message } };
   }
 }
 
@@ -154,7 +161,15 @@ export async function runAgentCreateBoard(
     };
   } catch (err) {
     const message = err instanceof ChangxiaError ? err.userMessage : '建板失败。';
-    const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
+    // ★ 契约码映射（2026-09-28 走查 #11）：throw 的是内部枚举（validation），服务端
+    //   同场景回 invalid_field——按码分支的写入方必须拿到同一个码，否则两通道
+    //   同一错误两种 code。映射只此一处（翻转点：上游改码只动这张表）。
+    const code =
+      err instanceof ChangxiaError
+        ? err.code === ChangxiaErrorCode.Validation
+          ? 'invalid_field'
+          : err.code
+        : ChangxiaErrorCode.Storage;
     return { requestId: req.requestId, error: { code, httpStatus: 400, userMessage: message } };
   }
 }
@@ -195,6 +210,9 @@ export async function runAgentListTasks(
     for (const pid of scopeIds) {
       rows.push(...(await repos.tasks.listByProject(pid)));
     }
+    // source 过滤（桌面 2026-09-28 补：旧版完全忽略该参数，同请求两通道结果不同）
+    const filtered =
+      req.source === undefined ? rows : rows.filter((t) => t.source === req.source);
     const idToExternal = new Map<string, string>();
     for (const r of rows) {
       if (r.externalId) idToExternal.set(r.id, r.externalId);
@@ -202,7 +220,7 @@ export async function runAgentListTasks(
     return {
       requestId: req.requestId,
       result: {
-        tasks: rows.map((r) => {
+        tasks: filtered.map((r) => {
           const deps: string[] = [];
           for (const depId of r.dependsOn ?? []) {
             const ext = idToExternal.get(depId);
@@ -214,6 +232,8 @@ export async function runAgentListTasks(
             title: r.title,
             status: r.status,
             dueDate: r.dueDate,
+            // projectId：server 契约 AgentTaskListRow 的字段（桌面 2026-09-28 补）
+            projectId: r.projectId,
             dependsOnExternal: deps,
           };
         }),

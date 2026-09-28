@@ -57,10 +57,17 @@ describe('Agent loopback 通道 · 渲染侧', () => {
       status: 200,
       json: async () => OK_APPLY_RESULT,
     }));
-    (globalThis as unknown as { fetch: unknown }).fetch = fetchMock;
+    // ★ 必须用 vi.stubGlobal（9-28 实锤的跨 spec 污染）：裸赋值
+    //   `globalThis.fetch = fetchMock` 时，`vi.restoreAllMocks()` **不还原**它
+    //   （它只还原 vi.fn/spyOn 创建的桩）→ 假 fetch 泄漏给后续 spec——
+    //   agent-loopback-server.spec 的真 fetch 全被替换成这个桩，症状是整条
+    //   路由族 500 空 body、我方 handler 零日志（打的是本机 server，桩在客户端侧）。
+    //   stubGlobal + unstubAllGlobals 由 vitest 托管，跑完自动还原。
+    vi.stubGlobal('fetch', fetchMock);
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
     delete (globalThis as unknown as { window?: unknown }).window;

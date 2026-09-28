@@ -32,11 +32,15 @@ const { BrowserWindow } = require('electron');
 
 const LOOPBACK_HOST = '127.0.0.1';
 /**
- * 端口默认 17788（接入文件/指令块里的地址就是它，**生产不改**）。
- * 仅测试可经 `IDPLAN_LOOPBACK_PORT` 覆盖：单测要真起 server 做路由/CORS 断言，
- * 而用户正在运行的应用占着 17788（同机双实例会 EADDRINUSE 互相干扰）。
+ * loopback 端口（运行时读取，默认 17788——接入文件/指令块里的地址就是它，
+ * **生产不改**）。为什么是函数而非常量：测试要真起 server 做路由/CORS 断言，
+ * 而用户正在运行的应用占着 17788；常量在 require 时冻结，测试只能靠
+ * 「import 前设 env」且撞 PID 复用/TIME_WAIT（9-28 实测：整族 500 无尸首）。
+ * 运行时读取让 spec 能先探明空闲端口再起服。
  */
-const LOOPBACK_PORT = Number(process.env.IDPLAN_LOOPBACK_PORT) || 17788;
+function loopbackPort() {
+  return Number(process.env.IDPLAN_LOOPBACK_PORT) || 17788;
+}
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2MB
 const REQUEST_TIMEOUT_MS = 10000;
 /** 探活超时：远短于写入超时，health 不该让调用方等 10s */
@@ -231,9 +235,14 @@ async function handleHealth(_req, res) {
  * import / boards 共用——令牌门是通道级纪律，不允许某个写端点"忘了查"。
  */
 function checkBearerToken(req, res) {
+  // 两种头二选一（与 server/lib/agent-auth.ts 同口径）：Authorization: Bearer <t>
+  // 或 X-Agent-Token: <t>。桌面旧版只读 Authorization，而仓库自家 transport.http
+  // 专用 X-Agent-Token ⇒ 自家路径拿正确令牌也吃 401「令牌无效」（走查发现 #10）。
   const auth = req.headers['authorization'] || '';
   const m = /^Bearer\s+(.+)$/i.exec(auth);
-  const provided = m ? m[1].trim() : '';
+  const fromHeader = m ? m[1].trim() : '';
+  const fromAlt = typeof req.headers['x-agent-token'] === 'string' ? req.headers['x-agent-token'].trim() : '';
+  const provided = fromHeader || fromAlt;
   if (!configuredToken) {
     sendJson(res, 401, {
       error: {
@@ -283,16 +292,106 @@ async function handleImport(req, res, url) {
     });
   }
 
-  // 4) query 参数
-  const dryRun = url.searchParams.get('dryRun') === '1' || url.searchParams.get('dryRun') === 'true';
-  const projectId = url.searchParams.get('project') || undefined;
-  const stageName = url.searchParams.get('stageName') || undefined;
+  // 4) query 参数（2026-09-28 走查修复：桌面/service 两通道口径对齐）
+  //
+  // ① dryRun：**出现且非 ''/'0'/'false' 即预览**——与 api-contract.md 及服务端
+  //   agent.routes.ts 逐字同口径（契约明言「偏向安全」）。旧版只认严格小写
+  //   '1'/'true' ⇒ ?dryRun=yes/TRUE/2 被静默**实写**（写方以为预览、库已落数据，
+  //   实机坐实的最高危偏差）。
+  const dryRunRaw = url.searchParams.get('dryRun');
+  const dryRun =
+    dryRunRaw !== null && dryRunRaw !== '' && dryRunRaw !== '0' && dryRunRaw !== 'false';
+
+  // ② 落点项目：契约名 `projectId`（服务端同）；桌面历史别名 `project`（v0.8 面板
+  //   自带此形）继续兼容。同传不同值/出现但空 → 400（不猜测落点）。
+  const hasProject = url.searchParams.has('project');
+  const hasProjectId = url.searchParams.has('projectId');
+  const projectRaw = url.searchParams.get('project');
+  const projectIdRaw = url.searchParams.get('projectId');
+  const isBlank = (v) => v === null || v.trim() === '';
+  if ((hasProject && isBlank(projectRaw)) || (hasProjectId && isBlank(projectIdRaw))) {
+    return sendJson(res, 400, {
+      error: {
+        code: 'invalid_field',
+        userMessage: 'query 参数出现但值为空/仅空白：显式声明落点时不能给空（系统不当作「未声明」）。',
+      },
+    });
+  }
+  if (hasProject && hasProjectId && projectRaw.trim() !== projectIdRaw.trim()) {
+    return sendJson(res, 400, {
+      error: {
+        code: 'invalid_field',
+        userMessage:
+          'query 参数 project 与 projectId 同传但取值不同：两者是同义别名（契约名 projectId），取值必须一致。',
+      },
+    });
+  }
+  const projectId = (hasProjectId ? projectIdRaw : projectRaw)?.trim() || undefined;
+
+  // ③ 落点阶段名：主名 `stageName` + 同义别名 `createStageIfMissing`（服务端同构）。
+  //    同传不同值 → 400；出现但空 → 400（都不静默降级）。
+  const hasStageName = url.searchParams.has('stageName');
+  const hasCreateAlias = url.searchParams.has('createStageIfMissing');
+  const stageNameRaw = url.searchParams.get('stageName');
+  const createAliasRaw = url.searchParams.get('createStageIfMissing');
+  if ((hasStageName && isBlank(stageNameRaw)) || (hasCreateAlias && isBlank(createAliasRaw))) {
+    return sendJson(res, 400, {
+      error: {
+        code: 'invalid_field',
+        userMessage:
+          'query 参数出现但值为空/仅空白：显式声明落点阶段名时不能给空名称（系统不会把它当作「未声明」）。',
+      },
+    });
+  }
+  if (hasStageName && hasCreateAlias && stageNameRaw.trim() !== createAliasRaw.trim()) {
+    return sendJson(res, 400, {
+      error: {
+        code: 'invalid_field',
+        userMessage: 'query 参数 stageName 与 createStageIfMissing 同传但取值不同：两者是同义别名，取值必须一致。',
+      },
+    });
+  }
+  const stageName = (hasStageName ? stageNameRaw : createAliasRaw)?.trim() || undefined;
+
+  // ④ stageId（批次级覆盖）：优先于 body.stageId，直接合成进 payload——渲染侧
+  //   resolve() 只认 payload.stageId，旧版桌面完全忽略此参数 ⇒ 静默落错批（实机坐实）。
+  const stageIdRaw = url.searchParams.get('stageId');
+  if (stageIdRaw !== null && stageIdRaw.trim() === '') {
+    return sendJson(res, 400, {
+      error: { code: 'invalid_field', userMessage: 'query 参数 stageId 出现但值为空/仅空白。' },
+    });
+  }
+  const effectiveStageId = stageIdRaw?.trim() || undefined;
+  const effectivePayload =
+    effectiveStageId && payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? { ...payload, stageId: effectiveStageId }
+      : payload;
+  // 落点名与 stageId 互斥（query 或 body 任一）——与服务端口径一致
+  const bodyStageId =
+    payload && typeof payload === 'object' && !Array.isArray(payload) && typeof payload.stageId === 'string'
+      ? payload.stageId
+      : undefined;
+  if (stageName !== undefined && (effectiveStageId !== undefined || bodyStageId !== undefined)) {
+    return sendJson(res, 400, {
+      error: {
+        code: 'invalid_field',
+        userMessage:
+          '落点阶段名与 stageId 互斥（?stageId 或 body.stageId 与落点名同传）：语义重叠说明调用方对落点不确定，系统报错而不是猜测。',
+      },
+    });
+  }
   const requestId = crypto.randomUUID();
 
   // 5) 转发渲染进程并等待回传
   let forwarded;
   try {
-    forwarded = await forwardToRenderer({ requestId, dryRun, projectId, stageName, payload });
+    forwarded = await forwardToRenderer({
+      requestId,
+      dryRun,
+      projectId,
+      stageName,
+      payload: effectivePayload,
+    });
   } catch (e) {
     const err = e;
     return sendJson(res, err.httpStatus || 504, {
@@ -385,11 +484,15 @@ async function handleBoards(req, res) {
 async function handleTasks(req, res, url) {
   if (!checkBearerToken(req, res)) return;
   const projectId = url.searchParams.get('projectId') || undefined;
+  // source 透传（仅 agent/human 生效，与服务端同口径；旧版桌面完全忽略此参数）
+  const sourceRaw = url.searchParams.get('source');
+  const source =
+    sourceRaw === 'agent' || sourceRaw === 'human' ? sourceRaw : undefined;
 
   let forwarded;
   try {
     forwarded = await forwardToRenderer(
-      { requestId: crypto.randomUUID(), kind: 'list-tasks', projectId },
+      { requestId: crypto.randomUUID(), kind: 'list-tasks', projectId, source },
       'agent:list-tasks-request',
     );
   } catch (e) {
@@ -410,7 +513,7 @@ async function handleTasks(req, res, url) {
 function handle(req, res) {
   let url;
   try {
-    url = new URL(req.url, `http://${LOOPBACK_HOST}:${LOOPBACK_PORT}`);
+    url = new URL(req.url, `http://${LOOPBACK_HOST}:${loopbackPort()}`);
   } catch {
     return sendJson(res, 400, { error: { code: 'bad_request', userMessage: '非法请求 URL。' } });
   }
@@ -452,9 +555,17 @@ function startLoopbackServer() {
       }
     };
     server = http.createServer((req, res) => {
+      if (process.env.LOOPBACK_DEBUG_REQ) process.stdout.write(`[req] ${req.method} ${req.url}
+`);
       try {
         handle(req, res);
-      } catch {
+      } catch (err) {
+        // ★ 500 绝不静默（仓库纪律）：把真实栈打到主进程控制台，否则「全 500」时
+        //   排查者面对的是一个没有尸体的命案（9-28 全量跑实测踩过：两 spec 经
+        //   nodeRequire 共享模块实例，症状是整条路由族 500、无任何线索）
+        // eslint-disable-next-line no-console
+        // eslint-disable-next-line no-console
+        console.error('[loopback] handler error:', err);
         if (!res.headersSent) {
           sendJson(res, 500, { error: { code: 'internal', userMessage: '服务器内部错误。' } });
         }
@@ -465,7 +576,7 @@ function startLoopbackServer() {
       server = null;
       finish(false);
     });
-    server.listen(LOOPBACK_PORT, LOOPBACK_HOST, () => {
+    server.listen(loopbackPort(), LOOPBACK_HOST, () => {
       finish(true);
     });
   });
@@ -486,13 +597,26 @@ function stopLoopbackServer() {
   return new Promise((resolve) => {
     const s = server;
     server = null;
+    // ★ keep-alive 连接必须先断（Node 18.2+）：只 close() 会等浏览器/探针的
+    //   保活连接自然超时（实测可滞留数十秒）——「服务器关了但端口还占着」
+    //   会让紧随其后的重启吃 EADDRINUSE（热重载/测试连跑都踩过）。
+    if (typeof s.closeAllConnections === 'function') s.closeAllConnections();
     s.close(() => resolve());
   });
 }
 
 module.exports = {
   LOOPBACK_HOST,
-  LOOPBACK_PORT,
+  loopbackPort,
+  /**
+   * 路由本体导出（9-28：供进程内 spec 直调）。export 它不是为了运行时——
+   * main 只经 start/stop/setToken 打交道——而是让测试能**不起真 HTTP server**
+   * 就覆盖路由/CORS/鉴权/query 解析（真起 server 在某些环境 event-loop 级不稳：
+   * socket 可连但 HTTP 无响应、定时器不触发，见 agent-loopback-server.spec 头注）。
+   * 是纯函数形状：给 req/res 即出响应，无隐藏 IO。
+   */
+  handle,
+  CORS_HEADERS,
   setLoopbackToken,
   resolveLoopbackResult,
   resolveLoopbackPong,

@@ -30,6 +30,7 @@ import type {
   CreateProjectCmd,
 } from '../types/dto';
 import { ChangxiaError, ChangxiaErrorCode, StageLogType, StageStatus, TaskStatus } from '../types/enums';
+import { normalizeStageName } from '../lib/task-no';
 import {
   DEFAULT_REST_POLICY,
   DEFAULT_SCHEDULE_BASIS,
@@ -564,9 +565,14 @@ export interface CreateAgentBoardCmd {
  */
 export function dedupeAgentStageNames(names: readonly string[]): string[] {
   const out: string[] = [];
+  const seen: string[] = [];
   for (const raw of names) {
     const name = typeof raw === 'string' ? raw.trim() : '';
-    if (name === '' || out.includes(name)) continue;
+    if (name === '') continue;
+    // 判重键归一、入库保留 trim 原值（2026-09-28 走查 #6）
+    const key = normalizeStageName(name);
+    if (seen.includes(key)) continue;
+    seen.push(key);
     out.push(name);
   }
   return out;
@@ -580,7 +586,10 @@ export function dedupeAgentStageNames(names: readonly string[]): string[] {
  * 同名（不同行业可以有同名阶段）时取 JSON 声明顺序里的第一个：顺序口径与 `getStageLibraryItems` 一致。
  */
 function findLibraryStageItemByName(name: string): StageTemplateItem | null {
-  return getStageLibraryItems().find((item) => item.name === name) ?? null;
+  // 归一键比对（2026-09-28 走查 #6；与服务端口径一致）：调用方声明「提案。」
+  // 应命中库里的「提案」，而不是另建一段自定义阶段。
+  const key = normalizeStageName(name);
+  return getStageLibraryItems().find((item) => normalizeStageName(item.name) === key) ?? null;
 }
 
 /**
@@ -636,7 +645,18 @@ export function resolveAgentStageItems(
   declaredNames: readonly string[],
 ): StageSelectionItem[] {
   const items: StageSelectionItem[] = [];
-  if (presetKey) items.push(...getPresetItems(presetKey));
+  if (presetKey) {
+    // ★ 2026-09-28 走查 #5：presetKey 查无即抛（服务端口径 400 invalid_field）。
+    //   旧版 getPresetItems 查无返回 []、若同传 stageNames 仍走完建板流程——
+    //   调用方写错套餐名时「静默丢掉整个套餐骨架」比报错危险得多。
+    if (!getPreset(presetKey)) {
+      throw new ChangxiaError(
+        ChangxiaErrorCode.Validation,
+        `未找到阶段套餐（presetKey=${presetKey}）：套餐名不存在，请核对 stage-library 的 21 个套餐。`,
+      );
+    }
+    items.push(...getPresetItems(presetKey));
+  }
   if (declaredNames.length === 0) return items;
 
   const fallbackDomain: StageTemplateDomain =
@@ -644,7 +664,10 @@ export function resolveAgentStageItems(
   const each = 100 / (items.length + declaredNames.length);
 
   for (const name of declaredNames) {
-    if (items.some((it) => it.name === name)) continue;
+    // ★ 判重键 = normalizeStageName（2026-09-28 走查 #6；与服务端/导入通道「按名选点」
+    //   同一份算式）。旧版精确比较 ⇒「提案。」与「提案」可建成两段，之后导入按名
+    //   落点随即歧义。归一值只做判定键，不入库（task-no.ts:305 注释同纪律）。
+    if (items.some((it) => normalizeStageName(it.name) === normalizeStageName(name))) continue;
     const libraryItem = findLibraryStageItemByName(name);
     // 库里有的名字 → 原样用库项（占比/色号/默认任务都来自库，不另填）
     if (libraryItem) {

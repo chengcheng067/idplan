@@ -88,8 +88,14 @@ export interface AgentPayloadV1 {
 /** 单条拒绝原因。code 为机器可读；reason 为可直接 toast 的中文。 */
 export interface ApplyRejection {
   externalId: string;
-  /** 机器可读原因码 */
-  code: 'dep_unresolved' | 'cycle' | 'invalid_field' | 'conflict' | 'stage_limit';
+  /**
+   * 机器可读原因码。
+   * ★ 2026-09-28 走查 #14：删掉 'invalid_field'——该值是**死契约**（全仓无任何
+   *   产出路径；它是 query 参数层错误码，不是条目级拒绝码）。留着等于对外宣称
+   *   支持一个永远不会出现的分支，按码分支的写入方会写永不可达代码。
+   *   实际产出只有四码：dep / cycle / conflict / stage_limit。
+   */
+  code: 'dep_unresolved' | 'cycle' | 'conflict' | 'stage_limit';
   /** 用户可读中文 */
   reason: string;
 }

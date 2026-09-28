@@ -32,7 +32,14 @@
  * 这正是本 spec 不可被单端用例替代的证明。
  */
 
-import { describe, expect, it, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeAll, beforeEach, vi, afterEach } from 'vitest';
+
+/* ★ 9-28 实锤：`vi.stubGlobal('fetch')` 若不全局还原会泄漏给后续 spec（假 fetch
+ * 令 agent-loopback-server.spec 的真请求整族 500）。一个 afterEach 根治。
+ */
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';

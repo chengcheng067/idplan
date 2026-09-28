@@ -24,7 +24,7 @@
  * 不涉及 React（另见 `tests/agent-console-consistency.spec.tsx` 的 UI 侧）。
  */
 
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';

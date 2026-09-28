@@ -296,3 +296,29 @@ grep -n "scope\.\(get\|post\|put\|patch\|delete\)('/api/agent" server/routes/age
 **为什么不同 ≠ 疏忽**：payload 是「机器→机器」的增量事实流（宽松宽容、逐条拒绝），
 backup 是「人→机器」的全量恢复（形状已定、严格保真）。前向兼容只给 kind 这类
 纯展示字段，不给主键。
+
+## 桌面 loopback 通道口径（v0.8 · 2026-09-28 走查后补）
+
+桌面形态（默认）走 Electron 主进程的 loopback server（`electron/loopback.cjs`，绑
+`127.0.0.1:17788`，**不对外暴露**）。四个端点与上节服务端同构，但以下口径**刻意不同**，
+对接前先分清自己打的是哪条通道（判别法：看 health 回包有没有 `dataLayer`——有 = 桌面）：
+
+| 维度 | 桌面 loopback | 服务端（NAS） |
+| --- | --- | --- |
+| health 鉴权 | **免令牌**（`loopback.cjs` handleHealth 无 token 门） | `requireAgentToken()` |
+| health 回包 | `{ ok, version, dataLayer }`（dataLayer 为渲染进程 ping/pong 真实判定，非窗口存在性） | `{ ok, version, projects, agentSeats }` |
+| CORS | 全响应带 `Access-Control-Allow-Origin: *`（面板探测是跨源 fetch；loopback 绑本机 + 写有令牌门，放开不新增攻击面） | 由部署层决定 |
+| 落点参数 | `?projectId=`（契约名）或 `?project=`（v0.8 面板历史别名）二选一，同传须同值；body.projectId 同样认 | `?projectId=` / `?projectName=` |
+| 落点阶段名 | `?stageName=` 或同义别名 `?createStageIfMissing=`（同传须同值）；与 `?stageId=`/body.stageId 互斥 | 同左 |
+| dryRun | 出现且非 `''`/`'0'`/`'false'` 即预览（**偏向安全**） | 同左 |
+| 写落点 | 经 IPC 转发渲染进程落库（主进程不碰 Dexie） | Fastify 直查 SQLite |
+| boards 校验 | 与建板对话框同源的 `ProjectService.createAgentBoard`（name/起止日期/阶段集合 fail-fast） | 路由内同等校验 |
+| 不存在 projectId 读侧 | 400 `project_unresolved` | 200 空列表（刻意语义） |
+
+**接入入口**：本机档优先读接入文件（默认 `%USERPROFILE%\Documents\ID Plan\agent-ingress.json`，
+内容 = 地址 / 令牌 / 四端点 / payload schema / 用法；令牌轮换后重新读取即可）。
+指令块兜底在 ID Plan 接入面板「复制接入指令」。
+
+**错误码**：桌面把内部异常映射为契约码后回传——import 参数/结构类错误 → `Validation`
+（字面，与服务端一致）；boards 字段类 → `invalid_field`；落点不存在/非 Agent 看板 →
+`project_unresolved`（共享核心单码，两通道同源）。

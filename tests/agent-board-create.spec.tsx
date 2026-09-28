@@ -613,3 +613,49 @@ describe('§7.4 权限：建板路径上**没有**角色闸门', () => {
     expect(pageSrc).toContain('<CreateAgentBoardDialog');
   });
 });
+
+/* ================================================================================================
+ * 2026-09-28 走查修复回归钉（service 纯函数层）
+ *   #5 未知 presetKey 静默丢段（服务端 400 / 桌面旧版 201 仍建板）
+ *   #6 阶段名判重口径分叉（服务端 normalizeStageName / 桌面旧版精确比较）
+ * ================================================================================================ */
+import { resolveAgentStageItems, dedupeAgentStageNames } from '../src/core/services/project.service';
+// ChangxiaError / ChangxiaErrorCode 由文件顶部统一 import（此处勿重复——9-28 踩过：
+// 尾部二次 import 触发 TS2300 Duplicate identifier）
+
+describe('resolveAgentStageItems · presetKey 查无即抛（走查 #5）', () => {
+  it('★ 未知 presetKey → Validation 抛出（旧版静默丢段仍 201）', () => {
+    expect(() => resolveAgentStageItems('no_such_preset', ['提案'])).toThrowError(
+      /未找到阶段套餐/,
+    );
+    try {
+      resolveAgentStageItems('no_such_preset', null as never);
+    } catch (e) {
+      expect(e).toBeInstanceOf(ChangxiaError);
+      expect((e as ChangxiaError).code).toBe(ChangxiaErrorCode.Validation);
+    }
+  });
+
+  it('已知 presetKey 不受影响（indoor_full 九段照常展开）', () => {
+    const items = resolveAgentStageItems('indoor_full', []);
+    expect(items).toHaveLength(9);
+  });
+});
+
+describe('resolveAgentStageItems / dedupeAgentStageNames · 判重键归一（走查 #6）', () => {
+  it('★ 同义判重：「提案」「提案。」「提案 」只留一段，且入库名保留首现原值', () => {
+    const deduped = dedupeAgentStageNames(['提案', '提案。', '提案 ', '测量']);
+    expect(deduped).toEqual(['提案', '测量']);
+  });
+
+  it('★ 声明名带尾标点也命中库项（旧版会另建自定义段）', () => {
+    const items = resolveAgentStageItems(null, ['提案。']);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.name).toBe('提案'); // 库项原样名（归一只做判定键）
+  });
+
+  it('preset + 同义声明名不叠加（indoor_full 已含「提案」→ 仍 9 段）', () => {
+    const items = resolveAgentStageItems('indoor_full', ['提案', '提案。']);
+    expect(items).toHaveLength(9);
+  });
+});
