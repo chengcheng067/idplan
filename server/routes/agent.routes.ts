@@ -473,13 +473,18 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         const row = db.prepare('SELECT kind FROM projects WHERE id = ?').get(projectId) as
           | { kind: string }
           | undefined;
-        if (row && row.kind !== 'agent') {
+        /* ★ 2026-09-28 走查 #7：不存在也按 400 project_unresolved 处理——
+         *   「不存在」与「不是 Agent 看板」对写入方是同一个语义：**这个 id 上没有
+         *   它能读的东西**。旧行为（不存在→200 空列表）会让调用方把「打错 id」
+         *   误读成「这个板没任务」然后反复重试；且与「projectName 落空→400」的
+         *   既有入口风格自洽（同一契约码）。桌面侧本就是 400，本处对齐后两通道同码。
+         *   （雯丞征询建议后采纳：统一 400。） */
+        if (!row || row.kind !== 'agent') {
           void reply.status(400);
           return {
             error: {
               code: 'project_unresolved',
-              userMessage:
-                `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道读不到它的任务。`,
+              userMessage: `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道读不到它的任务。`,
               projects: listProjectCandidates(),
             },
           };

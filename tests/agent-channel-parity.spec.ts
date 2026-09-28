@@ -227,7 +227,7 @@ describe('跨通道同参同性：同一请求，两通道必须同状态码同�
     expect(d.code).toBe(s.code);
   });
 
-  it('记档分叉（待拍板，各自钉死防漂移）：不存在 projectId 读侧——server 200 / desktop 400', async () => {
+  it('★ 不存在 projectId 读侧：两通道同 400 project_unresolved（走查 #7 已于 9-28 统一）', async () => {
     const s = await app.inject({
       method: 'GET', url: '/api/agent/tasks?projectId=p_ghost_parity',
       headers: { 'x-agent-token': TOKEN },
@@ -235,7 +235,7 @@ describe('跨通道同参同性：同一请求，两通道必须同状态码同�
     const d = await runAgentListTasks(bundle, {
       requestId: 'parity-ghost', kind: 'list-tasks', projectId: 'p_ghost_parity',
     });
-    expect(s.statusCode).toBe(200); // server：刻意 200 空列表
-    expect(envelope(d).status).toBe(400); // desktop：project_unresolved
+    expect(s.statusCode).toBe(400);
+    expect(envelope(d).status).toBe(400);
   });
 });

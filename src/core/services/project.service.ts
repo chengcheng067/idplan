@@ -361,12 +361,16 @@ export class ProjectService {
     const stageItems = resolveAgentStageItems(presetKey, declaredNames);
     // 切分复用**唯一一份**实现（previewSplit）：不自己写日期分配，
     // 否则"子集内占比归一化 + 残差吸收 + 工作日口径"会立刻出现第二份口径。
+    // ★ 2026-09-28 雯丞拍板（走查 #4）：**阶段起止统一为项目基线**，不按占比
+    //   切分。previewSplit 只用来分配 orderIndex/colorIndex/name/ratioPercent；
+    //   日期一律取项目 plannedStartAt/plannedEndAt——「凭空切分属于猜测」，
+    //   与服务端口径逐字一致（同一请求两通道同一份排期）。
     const drafts = previewSplit({
       startAt: plannedStartAt,
       endAt: plannedEndAt,
       stageItems,
       scheduleBasis: DEFAULT_SCHEDULE_BASIS,
-    });
+    }).map((d) => ({ ...d, startAt: plannedStartAt, endAt: plannedEndAt }));
     // 复用同类的落库前闸门：上限 20 ＋ orderIndex 连续 ＋ 阶段名不重复（A9/A10）
     this.assertDraftsValid(drafts);
 
