@@ -53,31 +53,53 @@ def sha256(b: bytes) -> str:
 LAYER_ALLOWED_EXT = {".ts", ".sql", ".json"}
 
 
-def server_layer_tar(server_dir: str) -> bytes:
-    """把整个 server/ -> 未压缩 tar，条目根为 app/server。
-    仅覆盖 app/server 下所有源文件（.ts/.sql/.json，见 LAYER_ALLOWED_EXT），
+def _add_tree(tf, src_dir: str, arc_root: str, skipped: list) -> int:
+    """把 src_dir 下的白名单文件写进 tar 的 arc_root 子树，返回入层文件数。"""
+    included = 0
+    for dirpath, dirnames, filenames in os.walk(src_dir):
+        rel_dir = os.path.relpath(dirpath, src_dir).replace("\\", "/")
+        arc_dir = arc_root if rel_dir == "." else f"{arc_root}/{rel_dir}"
+        if arc_dir != arc_root:
+            tf.addfile(pax_info(arc_dir, 0, 0o755, True), io.BytesIO(b""))
+        for fn in sorted(filenames):
+            rel = os.path.relpath(os.path.join(dirpath, fn), src_dir).replace("\\", "/")
+            ext = os.path.splitext(fn)[1].lower()
+            if ext not in LAYER_ALLOWED_EXT:
+                skipped.append(f"{arc_root}/{rel}")
+                continue
+            data = open(os.path.join(dirpath, fn), "rb").read()
+            tf.addfile(pax_info(f"{arc_root}/{rel}", len(data), 0o644, False), io.BytesIO(data))
+            included += 1
+    return included
+
+
+def backend_layer_tar(server_dir: str, src_dir: str, templates_dir: str) -> bytes:
+    """后端镜像源码层：**app/server + app/src + app/templates 三棵树打进同一层**。
+
+    为什么必须带 src/（2026-09-29 线上事故的修复）：server/ 自 b376a85
+    （旅游行业）起大量 import ../../src/...（共享核心 payload.apply /
+    enums / entities / stage-library / lib/date ...，共 30+ 处）。tsx 不打包、
+    按 import 逐文件解析——镜像里缺 app/src ⇒ 容器启动即
+    ERR_MODULE_NOT_FOUND: /app/src/lib/date（用户 0.8.0.0010 UPK 实机复现，
+    日志见 Downloads/idplan-backend.txt）。Dockerfile.backend 同步补了
+    COPY src/，此函数是产物 tar 侧的同一修复（两处必须同时改，否则
+    docker build 对、UPK 补丁错，或反之）。
+
+    为什么 src 可以全量进层：白名单只放行 .ts/.sql/.json——src 下的 .tsx
+    React 组件、.css、图片等天然被挡；实测入层 97 文件 / 866KB，可忽略。
+
     保留层内目录结构；其余扩展名（开发库、日志等运行时产物）一律排除。
     返回未压缩字节：diffID = sha256(未压缩 tar)，层 blob = gzip(未压缩 tar)。"""
     buf = io.BytesIO()
-    root = "app/server"
     skipped: list = []
     included = 0
     with tarfile.open(fileobj=buf, mode="w", format=tarfile.PAX_FORMAT) as tf:
-        tf.addfile(pax_info(root, 0, 0o755, True), io.BytesIO(b""))
-        for dirpath, dirnames, filenames in os.walk(server_dir):
-            rel_dir = os.path.relpath(dirpath, server_dir).replace("\\", "/")
-            arc_dir = root if rel_dir == "." else f"{root}/{rel_dir}"
-            if arc_dir != root:
-                tf.addfile(pax_info(arc_dir, 0, 0o755, True), io.BytesIO(b""))
-            for fn in sorted(filenames):
-                rel = os.path.relpath(os.path.join(dirpath, fn), server_dir).replace("\\", "/")
-                ext = os.path.splitext(fn)[1].lower()
-                if ext not in LAYER_ALLOWED_EXT:
-                    skipped.append(rel)
-                    continue
-                data = open(os.path.join(dirpath, fn), "rb").read()
-                tf.addfile(pax_info(f"{root}/{rel}", len(data), 0o644, False), io.BytesIO(data))
-                included += 1
+        tf.addfile(pax_info("app/server", 0, 0o755, True), io.BytesIO(b""))
+        included += _add_tree(tf, server_dir, "app/server", skipped)
+        tf.addfile(pax_info("app/src", 0, 0o755, True), io.BytesIO(b""))
+        included += _add_tree(tf, src_dir, "app/src", skipped)
+        tf.addfile(pax_info("app/templates", 0, 0o755, True), io.BytesIO(b""))
+        included += _add_tree(tf, templates_dir, "app/templates", skipped)
     print(f">> 打包入层 {included} 个源码/配置文件（白名单 {sorted(LAYER_ALLOWED_EXT)}）")
     if skipped:
         print(f">> 已按白名单排除 {len(skipped)} 个（运行时产物，不进镜像）:")
@@ -103,6 +125,18 @@ def main():
     server_dir = os.path.abspath(sys.argv[3])
     if not os.path.isdir(server_dir):
         print("!! server 目录不存在:", server_dir)
+        sys.exit(1)
+    # src 与 server 同级（<repo>/src）——server/ 的共享核心依赖全在那边
+    src_dir = os.path.join(os.path.dirname(server_dir), "src")
+    if not os.path.isdir(src_dir):
+        print("!! src 目录不存在:", src_dir, "（server routes 依赖 ../../src，缺它容器必崩）")
+        sys.exit(1)
+    # templates/ 与 server/src 同级：src/core/template/*.ts 以
+    # ../../../templates/*.json 静态 import 阶段库与九段默认骨架
+    # （nine-stages.ts / stage-library.ts）——容器缺它同样是启动即崩。
+    templates_dir = os.path.join(os.path.dirname(server_dir), "templates")
+    if not os.path.isdir(templates_dir):
+        print("!! templates 目录不存在:", templates_dir, "（stage-library/nine-stages 依赖，缺它容器必崩）")
         sys.exit(1)
 
     with tarfile.open(in_tar, "r") as t:
@@ -138,10 +172,11 @@ def main():
     old_digest_sha = classic[0]["Layers"][server_layer_index].split("/")[-1]
     print(">> 旧 server 层:", old_digest_sha[:16], "index", server_layer_index)
 
-    # 重建该层：用本地 server/ 整体覆盖（后端跑 tsx，直接替换所有 .ts 源）
+    # 重建该层：用本地 server/ + src/ 整体覆盖（后端跑 tsx，直接替换所有 .ts 源；
+    # src/ 是 2026-09-29 事故修复——缺 app/src 则容器 ERR_MODULE_NOT_FOUND）
     # 关键：diffID = sha256(未压缩层 tar)。docker load 会逐层解压重算 diffID，
     # 与 config blob 的 rootfs.diff_ids 比对，不一致直接拒载（NAS 安装失败的根因）。
-    new_tar = server_layer_tar(server_dir)
+    new_tar = backend_layer_tar(server_dir, src_dir, templates_dir)
     new_diff_id = sha256(new_tar)
     new_gz = gzip.compress(new_tar, mtime=0)
     new_sha = sha256(new_gz)

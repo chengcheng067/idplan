@@ -34,8 +34,20 @@ ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 COPY package.json package-lock.json* ./
 RUN npm install --include=optional --no-audit --no-fund
 
-# 拷贝后端源码（server/）
+# 拷贝后端源码（server/）**与它依赖的共享核心（src/）**
+#
+# ★ 2026-09-29 线上事故修复：server/ 自 b376a85（旅游行业）起大量 import
+#   ../../src/...（payload.apply / enums / entities / stage-library / lib/date
+#   等 30+ 处）。旧 Dockerfile 只 COPY server/，本地 tsx 从仓库根跑能解析
+#   （src 在仓库里），容器里 /app 下没有 src ⇒ 启动即
+#   ERR_MODULE_NOT_FOUND: /app/src/lib/date（0.8.0.0010 UPK 实机复现）。
+#   src 全量COPY（含 .tsx 组件）无妨：tsx 按 import 逐文件解析，未引用的
+#   文件只是躺在层里；产物 tar 侧同一修复见 scripts/patch_backend_tar.py。
 COPY server/ ./server/
+COPY src/ ./src/
+# templates/：src/core/template/*.ts 静态 import 阶段库/九段骨架 json
+# （stage-library.ts / nine-stages.ts），缺它容器同样启动即崩
+COPY templates/ ./templates/
 
 # ---------- 运行阶段 ----------
 FROM node:20-slim
@@ -46,6 +58,8 @@ WORKDIR /app
 # 运行期只需要 better-sqlite3 的 .node 产物与 fastify 等运行时依赖
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server ./server
+COPY --from=build /app/src ./src
+COPY --from=build /app/templates ./templates
 COPY package.json ./
 
 # 数据目录：SQLite 单文件 + WAL 副文件都落这里，由 compose 挂卷持久化。
