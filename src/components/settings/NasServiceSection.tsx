@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { Check, KeyRound, Save, Server } from 'lucide-react';
+import { Check, KeyRound, PlugZap, Save, Server } from 'lucide-react';
 
 import { appEnv } from '../../config/env';
 import { API_TOKEN_KEY } from '../../core/repositories/remote/rest.client';
@@ -33,6 +33,26 @@ export function NasServiceSection(): JSX.Element | null {
   const [draft, setDraft] = useState('');
   const [configured, setConfigured] = useState(false);
   const [saved, setSaved] = useState(false);
+  /** 备份通道自检（0.8.3）：idle 未测 / testing 测中 / ok / auth / net / err */
+  const [probe, setProbe] = useState<'idle' | 'testing' | 'ok' | 'auth' | 'net' | 'err'>('idle');
+
+  /**
+   * 备份通道自检：GET {apiBaseUrl}/backup 带当前令牌。
+   * 用 GET 而不是 POST——它只读导出、不写库，探活零副作用。
+   * 判读：200=通 / 401=令牌不匹配（服务端有配但值不对，或服务端没配）/ 网络错=地址不通。
+   */
+  const testConnection = useCallback(async () => {
+    setProbe('testing');
+    const token = (localStorage.getItem(API_TOKEN_KEY) ?? '').trim();
+    try {
+      const res = await fetch(`${appEnv.apiBaseUrl}/backup`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      setProbe(res.status === 200 ? 'ok' : res.status === 401 ? 'auth' : 'err');
+    } catch {
+      setProbe('net');
+    }
+  }, []);
 
   useEffect(() => {
     if (!remote) return;
@@ -97,7 +117,31 @@ export function NasServiceSection(): JSX.Element | null {
             {saved ? <Check size={13} className="text-moss" /> : <Save size={13} />}
             {saved ? '已保存' : '保存'}
           </button>
+          <button
+            type="button"
+            onClick={() => void testConnection()}
+            disabled={probe === 'testing'}
+            title="用当前令牌向服务端备份通道发一次只读探测"
+            className="flex items-center gap-1 rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <PlugZap size={13} />
+            {probe === 'testing' ? '探测中' : '测试连接'}
+          </button>
         </div>
+        {probe !== 'idle' && (
+          <p
+            className={`text-[11px] ${
+              probe === 'ok' ? 'text-moss' : probe === 'testing' ? 'text-mist' : 'text-amber'
+            }`}
+          >
+            {probe === 'ok' && '备份通道连通：令牌已被服务端接受，可以正常保存备份。'}
+            {probe === 'auth' &&
+              '服务端拒绝了令牌（401）：两侧值不一致，或服务端 IDPLAN_AGENT_TOKEN 未配/留空。'}
+            {probe === 'net' && '连不上服务端：检查地址是否可达（应为本机局域网的 NAS 地址）。'}
+            {probe === 'err' && '服务端返回了意外状态，稍后重试或查看 NAS 容器日志。'}
+            {probe === 'testing' && '正在探测备份通道…'}
+          </p>
+        )}
         {configured && (
           <p className="text-[11px] text-moss">当前已配置备份令牌，保存备份应该可以正常使用了。</p>
         )}

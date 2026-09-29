@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bot, ChevronDown, FolderKanban, PenLine, Save, Settings, Upload } from 'lucide-react';
+import { Bot, ChevronDown, FolderKanban, PenLine, Save, Settings, Sparkles, Upload } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { SettingsDialog } from './SettingsDialog';
@@ -141,7 +141,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   const agentCurrentId = useAgentStore((s) => s.currentProjectId);
   const onAgentRoute = pathname === '/agent' || pathname.startsWith('/agent/');
 
-  const { save, pick, fileInput, confirmDialog } = useBackupIo();
+  const { save, pick, loadDemo, fileInput, confirmDialog } = useBackupIo();
   const { status } = useUpdateCheck();
   const hasUpdate = status === 'has-update';
 
@@ -454,9 +454,22 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             <span className="truncate text-[13px] text-ink">设置</span>
           </button>
 
-          {/* 备份两按钮：**管理员专属**（与原 TopBar 一致，不放开权限口径） */}
+          {/* 备份族：**管理员专属**（与原 TopBar 一致，不放开权限口径） */}
           {isAdmin && (
             <>
+              {/* 载入示例项目（0.8.3）：放备份族首位——陌生人第一小时的入口，
+                  与首启三幕引导的示例选项同一个 loadDemo 链路
+                  （fetch 随包 demo-backup.json → zod 校验 → 覆盖式导入） */}
+              <button
+                type="button"
+                onClick={() => void loadDemo()}
+                aria-label="载入示例项目"
+                title="载入 5 个演示项目（覆盖式替换当前数据）——用来快速看懂产品"
+                className={cn(navItemClass(false, false, inDrawer))}
+              >
+                <Sparkles size={18} className="shrink-0 text-mist" aria-hidden />
+                <span className="truncate text-[13px] text-ink">载入示例项目</span>
+              </button>
               <button
                 type="button"
                 onClick={() => void save()}

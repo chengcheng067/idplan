@@ -28,6 +28,12 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 export interface BackupIo {
   /** 导出全量数据并触发浏览器下载 */
   save(): Promise<void>;
+  /**
+   * 载入示例项目（0.8.3）：fetch 随包分发的 public/demo-backup.json，
+   * 过 zod 校验后走与「从备份恢复」完全相同的覆盖式导入链路
+   * （含二次确认弹窗）。设计意图：陌生人第一小时不用先造数据就能看懂产品。
+   */
+  loadDemo(): Promise<void>;
   /** 弹出系统文件选择器（走隐藏 input，非 window API） */
   pick(): void;
   /** 隐藏的 file input，必须渲染 */
@@ -76,6 +82,8 @@ export function useBackupIo(): BackupIo {
   const repos = useRepos();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingPkg, setPendingPkg] = useState<BackupPackage | null>(null);
+  /** 待确认的备份来源（0.8.3）：file=用户选的备份文件；demo=随包示例数据（文案不同） */
+  const [pendingSource, setPendingSource] = useState<'file' | 'demo'>('file');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const toast = (kind: 'success' | 'error' | 'info', message: string): void => {
@@ -94,12 +102,37 @@ export function useBackupIo(): BackupIo {
 
   const pick = (): void => fileRef.current?.click();
 
+  /**
+   * 载入示例项目（0.8.3 条目1）。
+   *
+   * 为什么不单独写导入逻辑：示例数据就是一份标准备份包（schema 现版本、
+   * 5 项目 45 阶段 190 任务），复用 validateBackupJson + importAndReplace
+   * 意味着「演示数据的导入路径 == 真实备份的导入路径」——后者被
+   * roundtrip spec 钉死，前者因此自动获得同等保证，零新增数据面代码。
+   * 失败分支全部既有：fetch 失败 / 校验失败 → toast + 日志，零写入。
+   */
+  const loadDemo = async (): Promise<void> => {
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}demo-backup.json`);
+      if (!res.ok) throw new Error(`demo fetch ${res.status}`);
+      const json: unknown = await res.json();
+      validateBackupJson(json);
+      setPendingPkg(json as BackupPackage);
+      setPendingSource('demo');
+      setConfirmOpen(true);
+    } catch (err) {
+      toast('error', '示例数据加载失败，未做任何改动。');
+      logError('备份', '示例数据加载失败', err);
+    }
+  };
+
   const onFileSelected = async (f: File): Promise<void> => {
     try {
       const json: unknown = JSON.parse(await f.text());
       // 预检：结构不符 → toast 且零写入，绝不进入确认
       validateBackupJson(json);
       setPendingPkg(json as BackupPackage);
+      setPendingSource('file');
       setConfirmOpen(true);
     } catch (err) {
       toast('error', '备份文件校验失败，未做任何改动。');
@@ -126,6 +159,7 @@ export function useBackupIo(): BackupIo {
   return {
     save,
     pick,
+    loadDemo,
     fileInput: (
       <input
         ref={fileRef}
@@ -143,14 +177,24 @@ export function useBackupIo(): BackupIo {
     confirmDialog: (
       <ConfirmDialog
         open={confirmOpen}
-        title="从备份恢复"
+        title={pendingSource === 'demo' ? '载入示例项目' : '从备份恢复'}
         danger
-        confirmText="确认恢复"
+        confirmText={pendingSource === 'demo' ? '确认载入' : '确认恢复'}
         onConfirm={() => void onConfirmRestore()}
         onCancel={() => setConfirmOpen(false)}
       >
         <p>
-          恢复将<strong>整体替换当前全部数据且不可撤销</strong>。建议先「保存备份」留档，再确认恢复。
+          {pendingSource === 'demo' ? (
+            <>
+              将载入<strong>5 个演示项目</strong>（覆盖式），
+              <strong>整体替换当前全部数据且不可撤销</strong>。没有真实数据的库可以放心载入；
+              有真实数据建议先「保存备份」留档。
+            </>
+          ) : (
+            <>
+              恢复将<strong>整体替换当前全部数据且不可撤销</strong>。建议先「保存备份」留档，再确认恢复。
+            </>
+          )}
         </p>
         <p className="mt-2 text-xs text-mist">
           文件：{pendingPkg ? `${(pendingPkg.meta as { exportedAt?: string }).exportedAt ?? ''}` : ''}

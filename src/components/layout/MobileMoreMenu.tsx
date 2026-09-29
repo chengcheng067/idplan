@@ -8,6 +8,7 @@ import {
   PenLine,
   Save,
   Settings,
+  Sparkles,
   Upload,
 } from 'lucide-react';
 
@@ -69,7 +70,7 @@ export function MobileMoreMenu(): JSX.Element {
   const location = useLocation();
   const { isAdmin } = useRoleGuard();
   const openManualForm = useUiStore((s) => s.openManualForm);
-  const { save, pick, fileInput, confirmDialog } = useBackupIo();
+  const { save, pick, loadDemo, fileInput, confirmDialog } = useBackupIo();
   // 仅桌面端且主进程推送过「有新版本」时为 true。
   // 注：本菜单只在手机档渲染（根节点 md:hidden），而推送只发生在桌面端 ——
   // 故这一份红点在新版 Windows 桌面端**永远不会亮**；桌面/平板可见的落点是
@@ -194,6 +195,19 @@ export function MobileMoreMenu(): JSX.Element {
                   新建项目
                 </button>
               )}
+              {/* 载入示例项目（0.8.3）：陌生人第一小时入口，同 Sidebar 的 loadDemo 链路 */}
+              <button
+                type="button"
+                role="menuitem"
+                className={ITEM}
+                onClick={() => {
+                  setMenuOpen(false);
+                  void loadDemo();
+                }}
+              >
+                <Sparkles size={15} className={ITEM_ICON} />
+                载入示例项目
+              </button>
               <button
                 type="button"
                 role="menuitem"

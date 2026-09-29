@@ -1,0 +1,3985 @@
+{
+  "meta": {
+    "app": "changxia",
+    "schemaVersion": 3,
+    "exportedAt": "2026-09-29T17:02:04.000Z"
+  },
+  "data": {
+    "projects": [
+      {
+        "id": "proj_yunqi",
+        "name": "云栖·湖畔茶室",
+        "type": "tea_space",
+        "address": "成都市锦江区东湖公园南侧",
+        "clientName": "周女士",
+        "contractAmount": 32000,
+        "signedAt": "2026-09-05T00:00:00.000Z",
+        "plannedStartAt": "2026-09-05",
+        "plannedEndAt": "2026-12-05",
+        "coverColor": "amber",
+        "stagePresetKey": "indoor_full",
+        "stageTemplateVersion": 1,
+        "scheduleBasis": "calendar",
+        "status": "active",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue",
+        "name": "川悦·川味小馆",
+        "type": "dining",
+        "address": "成都市武侯区桐梓林北路 88 号",
+        "clientName": "刘老板",
+        "contractAmount": 45000,
+        "signedAt": "2026-08-12T00:00:00.000Z",
+        "plannedStartAt": "2026-08-12",
+        "plannedEndAt": "2027-01-03",
+        "coverColor": "clay",
+        "stagePresetKey": "indoor_full",
+        "stageTemplateVersion": 1,
+        "scheduleBasis": "calendar",
+        "status": "active",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan",
+        "name": "半山·云栖民宿",
+        "type": "homestay",
+        "address": "青城山镇南麓半山村 12 号",
+        "clientName": "陈先生",
+        "contractAmount": 58000,
+        "signedAt": "2026-07-26T00:00:00.000Z",
+        "plannedStartAt": "2026-07-26",
+        "plannedEndAt": "2026-12-18",
+        "coverColor": "pine",
+        "stagePresetKey": "indoor_full",
+        "stageTemplateVersion": 1,
+        "scheduleBasis": "calendar",
+        "status": "active",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu",
+        "name": "森屿·社区书店",
+        "type": "bookstore",
+        "address": "成都市高新区天府三街 199 号",
+        "clientName": "方老师",
+        "contractAmount": 36000,
+        "signedAt": "2026-06-28T00:00:00.000Z",
+        "plannedStartAt": "2026-06-28",
+        "plannedEndAt": "2026-11-29",
+        "coverColor": "cream",
+        "stagePresetKey": "indoor_full",
+        "stageTemplateVersion": 1,
+        "scheduleBasis": "calendar",
+        "status": "active",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian",
+        "name": "初见·湖畔民宿",
+        "type": "homestay",
+        "address": "成都市龙泉驿区洛带古镇",
+        "clientName": "林女士",
+        "contractAmount": 52000,
+        "signedAt": "2026-04-23T00:00:00.000Z",
+        "plannedStartAt": "2026-04-23",
+        "plannedEndAt": "2026-09-25",
+        "coverColor": "pine",
+        "stagePresetKey": "indoor_full",
+        "stageTemplateVersion": 1,
+        "scheduleBasis": "calendar",
+        "status": "active",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      }
+    ],
+    "stages": [
+      {
+        "id": "proj_yunqi_s1",
+        "projectId": "proj_yunqi",
+        "orderIndex": 1,
+        "templateKey": "indoor.proposal",
+        "colorIndex": 1,
+        "name": "提案",
+        "ratioPercent": 5,
+        "startAt": "2026-09-26",
+        "endAt": "2026-10-11",
+        "status": "in_progress",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s2",
+        "projectId": "proj_yunqi",
+        "orderIndex": 2,
+        "templateKey": "indoor.measure",
+        "colorIndex": 2,
+        "name": "测量",
+        "ratioPercent": 4,
+        "startAt": "2026-10-12",
+        "endAt": "2026-10-27",
+        "status": "not_started",
+        "ownerId": "mem_karina",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s3",
+        "projectId": "proj_yunqi",
+        "orderIndex": 3,
+        "templateKey": "indoor.concept_plan",
+        "colorIndex": 3,
+        "name": "平面方案",
+        "ratioPercent": 11,
+        "startAt": "2026-10-28",
+        "endAt": "2026-11-12",
+        "status": "not_started",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s4",
+        "projectId": "proj_yunqi",
+        "orderIndex": 4,
+        "templateKey": "indoor.su_model",
+        "colorIndex": 4,
+        "name": "SU 建模",
+        "ratioPercent": 10,
+        "startAt": "2026-11-13",
+        "endAt": "2026-11-28",
+        "status": "not_started",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s5",
+        "projectId": "proj_yunqi",
+        "orderIndex": 5,
+        "templateKey": "indoor.rendering",
+        "colorIndex": 5,
+        "name": "效果图",
+        "ratioPercent": 14,
+        "startAt": "2026-11-29",
+        "endAt": "2026-12-14",
+        "status": "not_started",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s6",
+        "projectId": "proj_yunqi",
+        "orderIndex": 6,
+        "templateKey": "indoor.construction_drawing",
+        "colorIndex": 6,
+        "name": "施工图深化",
+        "ratioPercent": 22,
+        "startAt": "2026-12-15",
+        "endAt": "2026-12-30",
+        "status": "not_started",
+        "ownerId": "mem_giselle",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s7",
+        "projectId": "proj_yunqi",
+        "orderIndex": 7,
+        "templateKey": "indoor.material_list",
+        "colorIndex": 7,
+        "name": "材料表",
+        "ratioPercent": 10,
+        "startAt": "2026-12-31",
+        "endAt": "2027-01-15",
+        "status": "not_started",
+        "ownerId": "mem_jisoo",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s8",
+        "projectId": "proj_yunqi",
+        "orderIndex": 8,
+        "templateKey": "indoor.handover",
+        "colorIndex": 8,
+        "name": "交付",
+        "ratioPercent": 19,
+        "startAt": "2027-01-16",
+        "endAt": "2027-01-31",
+        "status": "not_started",
+        "ownerId": "mem_rose",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_s9",
+        "projectId": "proj_yunqi",
+        "orderIndex": 9,
+        "templateKey": "indoor.photography",
+        "colorIndex": 9,
+        "name": "实景",
+        "ratioPercent": 5,
+        "startAt": "2027-02-01",
+        "endAt": "2027-02-16",
+        "status": "not_started",
+        "ownerId": "mem_lisa",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s1",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 1,
+        "templateKey": "indoor.proposal",
+        "colorIndex": 1,
+        "name": "提案",
+        "ratioPercent": 5,
+        "startAt": "2026-08-25",
+        "endAt": "2026-09-09",
+        "status": "completed",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s2",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 2,
+        "templateKey": "indoor.measure",
+        "colorIndex": 2,
+        "name": "测量",
+        "ratioPercent": 4,
+        "startAt": "2026-09-10",
+        "endAt": "2026-09-25",
+        "status": "completed",
+        "ownerId": "mem_karina",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s3",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 3,
+        "templateKey": "indoor.concept_plan",
+        "colorIndex": 3,
+        "name": "平面方案",
+        "ratioPercent": 11,
+        "startAt": "2026-09-26",
+        "endAt": "2026-10-11",
+        "status": "in_progress",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s4",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 4,
+        "templateKey": "indoor.su_model",
+        "colorIndex": 4,
+        "name": "SU 建模",
+        "ratioPercent": 10,
+        "startAt": "2026-10-12",
+        "endAt": "2026-10-27",
+        "status": "not_started",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s5",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 5,
+        "templateKey": "indoor.rendering",
+        "colorIndex": 5,
+        "name": "效果图",
+        "ratioPercent": 14,
+        "startAt": "2026-10-28",
+        "endAt": "2026-11-12",
+        "status": "not_started",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s6",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 6,
+        "templateKey": "indoor.construction_drawing",
+        "colorIndex": 6,
+        "name": "施工图深化",
+        "ratioPercent": 22,
+        "startAt": "2026-11-13",
+        "endAt": "2026-11-28",
+        "status": "not_started",
+        "ownerId": "mem_giselle",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s7",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 7,
+        "templateKey": "indoor.material_list",
+        "colorIndex": 7,
+        "name": "材料表",
+        "ratioPercent": 10,
+        "startAt": "2026-11-29",
+        "endAt": "2026-12-14",
+        "status": "not_started",
+        "ownerId": "mem_jisoo",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s8",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 8,
+        "templateKey": "indoor.handover",
+        "colorIndex": 8,
+        "name": "交付",
+        "ratioPercent": 19,
+        "startAt": "2026-12-15",
+        "endAt": "2026-12-30",
+        "status": "not_started",
+        "ownerId": "mem_rose",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_s9",
+        "projectId": "proj_chuanyue",
+        "orderIndex": 9,
+        "templateKey": "indoor.photography",
+        "colorIndex": 9,
+        "name": "实景",
+        "ratioPercent": 5,
+        "startAt": "2026-12-31",
+        "endAt": "2027-01-15",
+        "status": "not_started",
+        "ownerId": "mem_lisa",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s1",
+        "projectId": "proj_banshan",
+        "orderIndex": 1,
+        "templateKey": "indoor.proposal",
+        "colorIndex": 1,
+        "name": "提案",
+        "ratioPercent": 5,
+        "startAt": "2026-07-24",
+        "endAt": "2026-08-08",
+        "status": "completed",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s2",
+        "projectId": "proj_banshan",
+        "orderIndex": 2,
+        "templateKey": "indoor.measure",
+        "colorIndex": 2,
+        "name": "测量",
+        "ratioPercent": 4,
+        "startAt": "2026-08-09",
+        "endAt": "2026-08-24",
+        "status": "completed",
+        "ownerId": "mem_karina",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s3",
+        "projectId": "proj_banshan",
+        "orderIndex": 3,
+        "templateKey": "indoor.concept_plan",
+        "colorIndex": 3,
+        "name": "平面方案",
+        "ratioPercent": 11,
+        "startAt": "2026-08-25",
+        "endAt": "2026-09-09",
+        "status": "completed",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s4",
+        "projectId": "proj_banshan",
+        "orderIndex": 4,
+        "templateKey": "indoor.su_model",
+        "colorIndex": 4,
+        "name": "SU 建模",
+        "ratioPercent": 10,
+        "startAt": "2026-09-10",
+        "endAt": "2026-09-25",
+        "status": "completed",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s5",
+        "projectId": "proj_banshan",
+        "orderIndex": 5,
+        "templateKey": "indoor.rendering",
+        "colorIndex": 5,
+        "name": "效果图",
+        "ratioPercent": 14,
+        "startAt": "2026-09-26",
+        "endAt": "2026-10-11",
+        "status": "in_progress",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s6",
+        "projectId": "proj_banshan",
+        "orderIndex": 6,
+        "templateKey": "indoor.construction_drawing",
+        "colorIndex": 6,
+        "name": "施工图深化",
+        "ratioPercent": 22,
+        "startAt": "2026-10-12",
+        "endAt": "2026-10-27",
+        "status": "not_started",
+        "ownerId": "mem_giselle",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s7",
+        "projectId": "proj_banshan",
+        "orderIndex": 7,
+        "templateKey": "indoor.material_list",
+        "colorIndex": 7,
+        "name": "材料表",
+        "ratioPercent": 10,
+        "startAt": "2026-10-28",
+        "endAt": "2026-11-12",
+        "status": "not_started",
+        "ownerId": "mem_jisoo",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s8",
+        "projectId": "proj_banshan",
+        "orderIndex": 8,
+        "templateKey": "indoor.handover",
+        "colorIndex": 8,
+        "name": "交付",
+        "ratioPercent": 19,
+        "startAt": "2026-11-13",
+        "endAt": "2026-11-28",
+        "status": "not_started",
+        "ownerId": "mem_rose",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_s9",
+        "projectId": "proj_banshan",
+        "orderIndex": 9,
+        "templateKey": "indoor.photography",
+        "colorIndex": 9,
+        "name": "实景",
+        "ratioPercent": 5,
+        "startAt": "2026-11-29",
+        "endAt": "2026-12-14",
+        "status": "not_started",
+        "ownerId": "mem_lisa",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s1",
+        "projectId": "proj_senyu",
+        "orderIndex": 1,
+        "templateKey": "indoor.proposal",
+        "colorIndex": 1,
+        "name": "提案",
+        "ratioPercent": 5,
+        "startAt": "2026-06-22",
+        "endAt": "2026-07-07",
+        "status": "completed",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s2",
+        "projectId": "proj_senyu",
+        "orderIndex": 2,
+        "templateKey": "indoor.measure",
+        "colorIndex": 2,
+        "name": "测量",
+        "ratioPercent": 4,
+        "startAt": "2026-07-08",
+        "endAt": "2026-07-23",
+        "status": "completed",
+        "ownerId": "mem_karina",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s3",
+        "projectId": "proj_senyu",
+        "orderIndex": 3,
+        "templateKey": "indoor.concept_plan",
+        "colorIndex": 3,
+        "name": "平面方案",
+        "ratioPercent": 11,
+        "startAt": "2026-07-24",
+        "endAt": "2026-08-08",
+        "status": "completed",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s4",
+        "projectId": "proj_senyu",
+        "orderIndex": 4,
+        "templateKey": "indoor.su_model",
+        "colorIndex": 4,
+        "name": "SU 建模",
+        "ratioPercent": 10,
+        "startAt": "2026-08-09",
+        "endAt": "2026-08-24",
+        "status": "completed",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s5",
+        "projectId": "proj_senyu",
+        "orderIndex": 5,
+        "templateKey": "indoor.rendering",
+        "colorIndex": 5,
+        "name": "效果图",
+        "ratioPercent": 14,
+        "startAt": "2026-08-25",
+        "endAt": "2026-09-09",
+        "status": "completed",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s6",
+        "projectId": "proj_senyu",
+        "orderIndex": 6,
+        "templateKey": "indoor.construction_drawing",
+        "colorIndex": 6,
+        "name": "施工图深化",
+        "ratioPercent": 22,
+        "startAt": "2026-09-10",
+        "endAt": "2026-09-25",
+        "status": "completed",
+        "ownerId": "mem_giselle",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s7",
+        "projectId": "proj_senyu",
+        "orderIndex": 7,
+        "templateKey": "indoor.material_list",
+        "colorIndex": 7,
+        "name": "材料表",
+        "ratioPercent": 10,
+        "startAt": "2026-09-26",
+        "endAt": "2026-10-11",
+        "status": "in_progress",
+        "ownerId": "mem_jisoo",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s8",
+        "projectId": "proj_senyu",
+        "orderIndex": 8,
+        "templateKey": "indoor.handover",
+        "colorIndex": 8,
+        "name": "交付",
+        "ratioPercent": 19,
+        "startAt": "2026-10-12",
+        "endAt": "2026-10-27",
+        "status": "delayed",
+        "ownerId": "mem_rose",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_s9",
+        "projectId": "proj_senyu",
+        "orderIndex": 9,
+        "templateKey": "indoor.photography",
+        "colorIndex": 9,
+        "name": "实景",
+        "ratioPercent": 5,
+        "startAt": "2026-10-28",
+        "endAt": "2026-11-12",
+        "status": "not_started",
+        "ownerId": "mem_lisa",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s1",
+        "projectId": "proj_chujian",
+        "orderIndex": 1,
+        "templateKey": "indoor.proposal",
+        "colorIndex": 1,
+        "name": "提案",
+        "ratioPercent": 5,
+        "startAt": "2026-05-21",
+        "endAt": "2026-06-05",
+        "status": "completed",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s2",
+        "projectId": "proj_chujian",
+        "orderIndex": 2,
+        "templateKey": "indoor.measure",
+        "colorIndex": 2,
+        "name": "测量",
+        "ratioPercent": 4,
+        "startAt": "2026-06-06",
+        "endAt": "2026-06-21",
+        "status": "completed",
+        "ownerId": "mem_karina",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s3",
+        "projectId": "proj_chujian",
+        "orderIndex": 3,
+        "templateKey": "indoor.concept_plan",
+        "colorIndex": 3,
+        "name": "平面方案",
+        "ratioPercent": 11,
+        "startAt": "2026-06-22",
+        "endAt": "2026-07-07",
+        "status": "completed",
+        "ownerId": "mem_admin",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s4",
+        "projectId": "proj_chujian",
+        "orderIndex": 4,
+        "templateKey": "indoor.su_model",
+        "colorIndex": 4,
+        "name": "SU 建模",
+        "ratioPercent": 10,
+        "startAt": "2026-07-08",
+        "endAt": "2026-07-23",
+        "status": "completed",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s5",
+        "projectId": "proj_chujian",
+        "orderIndex": 5,
+        "templateKey": "indoor.rendering",
+        "colorIndex": 5,
+        "name": "效果图",
+        "ratioPercent": 14,
+        "startAt": "2026-07-24",
+        "endAt": "2026-08-08",
+        "status": "completed",
+        "ownerId": "mem_winter",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s6",
+        "projectId": "proj_chujian",
+        "orderIndex": 6,
+        "templateKey": "indoor.construction_drawing",
+        "colorIndex": 6,
+        "name": "施工图深化",
+        "ratioPercent": 22,
+        "startAt": "2026-08-09",
+        "endAt": "2026-08-24",
+        "status": "completed",
+        "ownerId": "mem_giselle",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s7",
+        "projectId": "proj_chujian",
+        "orderIndex": 7,
+        "templateKey": "indoor.material_list",
+        "colorIndex": 7,
+        "name": "材料表",
+        "ratioPercent": 10,
+        "startAt": "2026-08-25",
+        "endAt": "2026-09-09",
+        "status": "completed",
+        "ownerId": "mem_jisoo",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s8",
+        "projectId": "proj_chujian",
+        "orderIndex": 8,
+        "templateKey": "indoor.handover",
+        "colorIndex": 8,
+        "name": "交付",
+        "ratioPercent": 19,
+        "startAt": "2026-09-10",
+        "endAt": "2026-09-25",
+        "status": "completed",
+        "ownerId": "mem_rose",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_s9",
+        "projectId": "proj_chujian",
+        "orderIndex": 9,
+        "templateKey": "indoor.photography",
+        "colorIndex": 9,
+        "name": "实景",
+        "ratioPercent": 5,
+        "startAt": "2026-09-26",
+        "endAt": "2026-10-11",
+        "status": "completed",
+        "ownerId": "mem_lisa",
+        "visible": true,
+        "resourcePath": null,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      }
+    ],
+    "tasks": [
+      {
+        "id": "proj_yunqi_t1_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s1",
+        "title": "需求沟通与现场踏勘预约",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t1_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s1",
+        "title": "概念意向与风格提案",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t1_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s1",
+        "title": "概算与报价",
+        "done": false,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t1_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s1",
+        "title": "签订合同",
+        "done": false,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t1_5",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s1",
+        "title": "方案前测·风格意向问卷",
+        "done": false,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t2_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s2",
+        "title": "现场尺寸复测核对",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t2_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s2",
+        "title": "拍摄全景/细节/管线点位照片",
+        "done": false,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t2_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s2",
+        "title": "记录结构与机电现状",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t2_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s2",
+        "title": "输出测量记录册",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t3_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s3",
+        "title": "平面布局与动线推敲",
+        "done": false,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t3_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s3",
+        "title": "功能分区与桌椅排布",
+        "done": false,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t3_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s3",
+        "title": "给业主方案汇报",
+        "done": false,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t3_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s3",
+        "title": "业主修改意见确认",
+        "done": false,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t3_5",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s3",
+        "title": "平面方案前测·动线模拟",
+        "done": false,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t4_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s4",
+        "title": "SketchUp 空间体块建模",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t4_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s4",
+        "title": "场景与相机视角搭建",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t4_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s4",
+        "title": "材质初步贴面",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t4_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s4",
+        "title": "立面推敲与造型深化",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t5_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s5",
+        "title": "灯光氛围渲染",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t5_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s5",
+        "title": "关键视角出图",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t5_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s5",
+        "title": "材质色彩终选呈现",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t5_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s5",
+        "title": "业主审美确认与局部调整",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t6_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s6",
+        "title": "平面图全套深化",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t6_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s6",
+        "title": "立面图绘制",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t6_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s6",
+        "title": "剖面图绘制",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t6_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s6",
+        "title": "水电点位图",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t7_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s7",
+        "title": "主材软装选样定版",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t7_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s7",
+        "title": "样品封样确认",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t7_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s7",
+        "title": "供应商比价",
+        "done": false,
+        "assigneeId": "mem_jisoo",
+        "assigneeIds": [
+          "mem_jisoo"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t7_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s7",
+        "title": "下单跟催",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t8_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s8",
+        "title": "施工交底与图纸答疑",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2027-01-31",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t8_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s8",
+        "title": "水电验收巡场",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2027-01-31",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t8_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s8",
+        "title": "瓦木油验收陪同",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2027-01-31",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t8_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s8",
+        "title": "竣工验收",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2027-01-31",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t9_1",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s9",
+        "title": "完工摄影安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2027-02-16",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t9_2",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s9",
+        "title": "回访拍摄安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2027-02-16",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t9_3",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s9",
+        "title": "软陈摆场收尾",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2027-02-16",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_yunqi_t9_4",
+        "projectId": "proj_yunqi",
+        "stageId": "proj_yunqi_s9",
+        "title": "案例复盘归档",
+        "done": false,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2027-02-16",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t1_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s1",
+        "title": "需求沟通与现场踏勘预约",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t1_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s1",
+        "title": "概念意向与风格提案",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t1_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s1",
+        "title": "概算与报价",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t1_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s1",
+        "title": "签订合同",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t1_5",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s1",
+        "title": "方案前测·风格意向问卷",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t2_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s2",
+        "title": "现场尺寸复测核对",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t2_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s2",
+        "title": "拍摄全景/细节/管线点位照片",
+        "done": true,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t2_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s2",
+        "title": "记录结构与机电现状",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t2_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s2",
+        "title": "输出测量记录册",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t3_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s3",
+        "title": "平面布局与动线推敲",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t3_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s3",
+        "title": "功能分区与桌椅排布",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t3_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s3",
+        "title": "给业主方案汇报",
+        "done": false,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t3_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s3",
+        "title": "业主修改意见确认",
+        "done": false,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t3_5",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s3",
+        "title": "平面方案前测·动线模拟",
+        "done": false,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t4_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s4",
+        "title": "SketchUp 空间体块建模",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t4_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s4",
+        "title": "场景与相机视角搭建",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t4_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s4",
+        "title": "材质初步贴面",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t4_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s4",
+        "title": "立面推敲与造型深化",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t5_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s5",
+        "title": "灯光氛围渲染",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t5_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s5",
+        "title": "关键视角出图",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t5_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s5",
+        "title": "材质色彩终选呈现",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t5_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s5",
+        "title": "业主审美确认与局部调整",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t6_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s6",
+        "title": "平面图全套深化",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t6_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s6",
+        "title": "立面图绘制",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t6_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s6",
+        "title": "剖面图绘制",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t6_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s6",
+        "title": "水电点位图",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t7_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s7",
+        "title": "主材软装选样定版",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t7_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s7",
+        "title": "样品封样确认",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t7_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s7",
+        "title": "供应商比价",
+        "done": false,
+        "assigneeId": "mem_jisoo",
+        "assigneeIds": [
+          "mem_jisoo"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t7_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s7",
+        "title": "下单跟催",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t8_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s8",
+        "title": "施工交底与图纸答疑",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t8_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s8",
+        "title": "水电验收巡场",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t8_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s8",
+        "title": "瓦木油验收陪同",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t8_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s8",
+        "title": "竣工验收",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-12-30",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t9_1",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s9",
+        "title": "完工摄影安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t9_2",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s9",
+        "title": "回访拍摄安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t9_3",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s9",
+        "title": "软陈摆场收尾",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chuanyue_t9_4",
+        "projectId": "proj_chuanyue",
+        "stageId": "proj_chuanyue_s9",
+        "title": "案例复盘归档",
+        "done": false,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2027-01-15",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t1_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s1",
+        "title": "需求沟通与现场踏勘预约",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t1_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s1",
+        "title": "概念意向与风格提案",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t1_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s1",
+        "title": "概算与报价",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t1_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s1",
+        "title": "签订合同",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t1_5",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s1",
+        "title": "方案前测·风格意向问卷",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t2_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s2",
+        "title": "现场尺寸复测核对",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t2_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s2",
+        "title": "拍摄全景/细节/管线点位照片",
+        "done": true,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t2_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s2",
+        "title": "记录结构与机电现状",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t2_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s2",
+        "title": "输出测量记录册",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t3_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s3",
+        "title": "平面布局与动线推敲",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t3_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s3",
+        "title": "功能分区与桌椅排布",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t3_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s3",
+        "title": "给业主方案汇报",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t3_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s3",
+        "title": "业主修改意见确认",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t3_5",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s3",
+        "title": "平面方案前测·动线模拟",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t4_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s4",
+        "title": "SketchUp 空间体块建模",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t4_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s4",
+        "title": "场景与相机视角搭建",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t4_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s4",
+        "title": "材质初步贴面",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t4_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s4",
+        "title": "立面推敲与造型深化",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t5_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s5",
+        "title": "灯光氛围渲染",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t5_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s5",
+        "title": "关键视角出图",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t5_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s5",
+        "title": "材质色彩终选呈现",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t5_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s5",
+        "title": "业主审美确认与局部调整",
+        "done": false,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t6_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s6",
+        "title": "平面图全套深化",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t6_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s6",
+        "title": "立面图绘制",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t6_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s6",
+        "title": "剖面图绘制",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t6_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s6",
+        "title": "水电点位图",
+        "done": false,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t7_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s7",
+        "title": "主材软装选样定版",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t7_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s7",
+        "title": "样品封样确认",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t7_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s7",
+        "title": "供应商比价",
+        "done": false,
+        "assigneeId": "mem_jisoo",
+        "assigneeIds": [
+          "mem_jisoo"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t7_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s7",
+        "title": "下单跟催",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t8_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s8",
+        "title": "施工交底与图纸答疑",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t8_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s8",
+        "title": "水电验收巡场",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t8_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s8",
+        "title": "瓦木油验收陪同",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t8_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s8",
+        "title": "竣工验收",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-11-28",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t9_1",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s9",
+        "title": "完工摄影安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t9_2",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s9",
+        "title": "回访拍摄安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t9_3",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s9",
+        "title": "软陈摆场收尾",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_banshan_t9_4",
+        "projectId": "proj_banshan",
+        "stageId": "proj_banshan_s9",
+        "title": "案例复盘归档",
+        "done": false,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-12-14",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t1_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s1",
+        "title": "需求沟通与现场踏勘预约",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t1_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s1",
+        "title": "概念意向与风格提案",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t1_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s1",
+        "title": "概算与报价",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t1_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s1",
+        "title": "签订合同",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t1_5",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s1",
+        "title": "方案前测·风格意向问卷",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t2_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s2",
+        "title": "现场尺寸复测核对",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t2_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s2",
+        "title": "拍摄全景/细节/管线点位照片",
+        "done": true,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t2_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s2",
+        "title": "记录结构与机电现状",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t2_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s2",
+        "title": "输出测量记录册",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t3_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s3",
+        "title": "平面布局与动线推敲",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t3_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s3",
+        "title": "功能分区与桌椅排布",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t3_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s3",
+        "title": "给业主方案汇报",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t3_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s3",
+        "title": "业主修改意见确认",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t3_5",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s3",
+        "title": "平面方案前测·动线模拟",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t4_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s4",
+        "title": "SketchUp 空间体块建模",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t4_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s4",
+        "title": "场景与相机视角搭建",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t4_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s4",
+        "title": "材质初步贴面",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t4_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s4",
+        "title": "立面推敲与造型深化",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t5_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s5",
+        "title": "灯光氛围渲染",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t5_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s5",
+        "title": "关键视角出图",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t5_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s5",
+        "title": "材质色彩终选呈现",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t5_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s5",
+        "title": "业主审美确认与局部调整",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t6_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s6",
+        "title": "平面图全套深化",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t6_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s6",
+        "title": "立面图绘制",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t6_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s6",
+        "title": "剖面图绘制",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t6_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s6",
+        "title": "水电点位图",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t7_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s7",
+        "title": "主材软装选样定版",
+        "done": true,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t7_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s7",
+        "title": "样品封样确认",
+        "done": true,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t7_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s7",
+        "title": "供应商比价",
+        "done": false,
+        "assigneeId": "mem_jisoo",
+        "assigneeIds": [
+          "mem_jisoo"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t7_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s7",
+        "title": "下单跟催",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t8_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s8",
+        "title": "施工交底与图纸答疑",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t8_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s8",
+        "title": "水电验收巡场",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t8_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s8",
+        "title": "瓦木油验收陪同",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t8_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s8",
+        "title": "竣工验收",
+        "done": false,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-10-27",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t9_1",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s9",
+        "title": "完工摄影安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t9_2",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s9",
+        "title": "回访拍摄安排",
+        "done": false,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t9_3",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s9",
+        "title": "软陈摆场收尾",
+        "done": false,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_senyu_t9_4",
+        "projectId": "proj_senyu",
+        "stageId": "proj_senyu_s9",
+        "title": "案例复盘归档",
+        "done": false,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-11-12",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t1_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s1",
+        "title": "需求沟通与现场踏勘预约",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-06-05",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t1_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s1",
+        "title": "概念意向与风格提案",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-06-05",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t1_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s1",
+        "title": "概算与报价",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-06-05",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t1_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s1",
+        "title": "签订合同",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-06-05",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t1_5",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s1",
+        "title": "方案前测·风格意向问卷",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-06-05",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t2_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s2",
+        "title": "现场尺寸复测核对",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-06-21",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t2_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s2",
+        "title": "拍摄全景/细节/管线点位照片",
+        "done": true,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-06-21",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t2_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s2",
+        "title": "记录结构与机电现状",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-06-21",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t2_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s2",
+        "title": "输出测量记录册",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-06-21",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t3_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s3",
+        "title": "平面布局与动线推敲",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t3_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s3",
+        "title": "功能分区与桌椅排布",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t3_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s3",
+        "title": "给业主方案汇报",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t3_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s3",
+        "title": "业主修改意见确认",
+        "done": true,
+        "assigneeId": "mem_admin",
+        "assigneeIds": [
+          "mem_admin"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t3_5",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s3",
+        "title": "平面方案前测·动线模拟",
+        "done": true,
+        "assigneeId": "mem_karina",
+        "assigneeIds": [
+          "mem_karina"
+        ],
+        "dueDate": "2026-07-07",
+        "orderIndex": 5,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t4_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s4",
+        "title": "SketchUp 空间体块建模",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t4_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s4",
+        "title": "场景与相机视角搭建",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t4_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s4",
+        "title": "材质初步贴面",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t4_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s4",
+        "title": "立面推敲与造型深化",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-07-23",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t5_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s5",
+        "title": "灯光氛围渲染",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t5_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s5",
+        "title": "关键视角出图",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t5_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s5",
+        "title": "材质色彩终选呈现",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t5_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s5",
+        "title": "业主审美确认与局部调整",
+        "done": true,
+        "assigneeId": "mem_winter",
+        "assigneeIds": [
+          "mem_winter"
+        ],
+        "dueDate": "2026-08-08",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t6_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s6",
+        "title": "平面图全套深化",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t6_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s6",
+        "title": "立面图绘制",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t6_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s6",
+        "title": "剖面图绘制",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t6_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s6",
+        "title": "水电点位图",
+        "done": true,
+        "assigneeId": "mem_giselle",
+        "assigneeIds": [
+          "mem_giselle"
+        ],
+        "dueDate": "2026-08-24",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t7_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s7",
+        "title": "主材软装选样定版",
+        "done": true,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t7_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s7",
+        "title": "样品封样确认",
+        "done": true,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t7_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s7",
+        "title": "供应商比价",
+        "done": true,
+        "assigneeId": "mem_jisoo",
+        "assigneeIds": [
+          "mem_jisoo"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t7_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s7",
+        "title": "下单跟催",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-09-09",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t8_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s8",
+        "title": "施工交底与图纸答疑",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t8_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s8",
+        "title": "水电验收巡场",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t8_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s8",
+        "title": "瓦木油验收陪同",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t8_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s8",
+        "title": "竣工验收",
+        "done": true,
+        "assigneeId": "mem_rose",
+        "assigneeIds": [
+          "mem_rose"
+        ],
+        "dueDate": "2026-09-25",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t9_1",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s9",
+        "title": "完工摄影安排",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 1,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t9_2",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s9",
+        "title": "回访拍摄安排",
+        "done": true,
+        "assigneeId": "mem_jennie",
+        "assigneeIds": [
+          "mem_jennie"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 2,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t9_3",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s9",
+        "title": "软陈摆场收尾",
+        "done": true,
+        "assigneeId": "mem_ningning",
+        "assigneeIds": [
+          "mem_ningning"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 3,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "proj_chujian_t9_4",
+        "projectId": "proj_chujian",
+        "stageId": "proj_chujian_s9",
+        "title": "案例复盘归档",
+        "done": true,
+        "assigneeId": "mem_lisa",
+        "assigneeIds": [
+          "mem_lisa"
+        ],
+        "dueDate": "2026-10-11",
+        "orderIndex": 4,
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      }
+    ],
+    "members": [
+      {
+        "id": "mem_admin",
+        "name": "设计师本人",
+        "role": "主案设计师",
+        "contact": "designer@demo.local",
+        "avatarColor": "#5B8C5A",
+        "active": true,
+        "roleKind": "admin",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_karina",
+        "name": "刘知珉",
+        "role": "方案设计师",
+        "contact": "karina@demo.cn",
+        "avatarColor": "#B25C5C",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_giselle",
+        "name": "金慧玲",
+        "role": "深化设计师",
+        "contact": "giselle@demo.cn",
+        "avatarColor": "#5C7A9E",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_winter",
+        "name": "金敏珍",
+        "role": "效果图渲染",
+        "contact": "winter@demo.cn",
+        "avatarColor": "#C98D5B",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_ningning",
+        "name": "朴宁宁",
+        "role": "软装陈设",
+        "contact": "ningning@demo.cn",
+        "avatarColor": "#7A6C9E",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_jisoo",
+        "name": "金智秀",
+        "role": "材料选型",
+        "contact": "jisoo@demo.cn",
+        "avatarColor": "#5B8C5A",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_jennie",
+        "name": "金珍妮",
+        "role": "项目助理",
+        "contact": "jennie@demo.cn",
+        "avatarColor": "#B8905C",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_rose",
+        "name": "朴彩英",
+        "role": "现场驻场",
+        "contact": "rose@demo.cn",
+        "avatarColor": "#8A959E",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "mem_lisa",
+        "name": "拉丽萨",
+        "role": "拍摄策划",
+        "contact": "lisa@demo.cn",
+        "avatarColor": "#6C8AA8",
+        "active": true,
+        "roleKind": "member",
+        "revision": 1,
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      }
+    ],
+    "assignments": [
+      {
+        "id": "log_a1",
+        "taskId": "proj_chuanyue_t3_1",
+        "projectId": "proj_chuanyue",
+        "memberId": "mem_admin",
+        "action": "assign",
+        "operatorName": "设计师本人",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_a2",
+        "taskId": "proj_banshan_t5_1",
+        "projectId": "proj_banshan",
+        "memberId": "mem_winter",
+        "action": "assign",
+        "operatorName": "设计师本人",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_a3",
+        "taskId": "proj_senyu_t7_1",
+        "projectId": "proj_senyu",
+        "memberId": "mem_jisoo",
+        "action": "assign",
+        "operatorName": "设计师本人",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_a4",
+        "taskId": "proj_senyu_t8_1",
+        "projectId": "proj_senyu",
+        "memberId": "mem_rose",
+        "action": "change",
+        "operatorName": "设计师本人",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      }
+    ],
+    "logs": [
+      {
+        "id": "log_p2a",
+        "stageId": "proj_chuanyue_s1",
+        "projectId": "proj_chuanyue",
+        "type": "status_changed",
+        "fromStatus": "not_started",
+        "toStatus": "completed",
+        "oldStartAt": null,
+        "newStartAt": null,
+        "oldEndAt": null,
+        "newEndAt": null,
+        "reason": null,
+        "operatorName": "设计师本人",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_p2b",
+        "stageId": "proj_chuanyue_s3",
+        "projectId": "proj_chuanyue",
+        "type": "status_changed",
+        "fromStatus": "not_started",
+        "toStatus": "in_progress",
+        "oldStartAt": null,
+        "newStartAt": null,
+        "oldEndAt": null,
+        "newEndAt": null,
+        "reason": null,
+        "operatorName": "设计师本人",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_p3a",
+        "stageId": "proj_banshan_s5",
+        "projectId": "proj_banshan",
+        "type": "status_changed",
+        "fromStatus": "not_started",
+        "toStatus": "in_progress",
+        "oldStartAt": null,
+        "newStartAt": null,
+        "oldEndAt": null,
+        "newEndAt": null,
+        "reason": null,
+        "operatorName": "金敏珍",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_p4a",
+        "stageId": "proj_senyu_s7",
+        "projectId": "proj_senyu",
+        "type": "status_changed",
+        "fromStatus": "not_started",
+        "toStatus": "in_progress",
+        "oldStartAt": null,
+        "newStartAt": null,
+        "oldEndAt": null,
+        "newEndAt": null,
+        "reason": null,
+        "operatorName": "金智秀",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_p4b",
+        "stageId": "proj_senyu_s8",
+        "projectId": "proj_senyu",
+        "type": "status_changed",
+        "fromStatus": "not_started",
+        "toStatus": "delayed",
+        "oldStartAt": null,
+        "newStartAt": null,
+        "oldEndAt": null,
+        "newEndAt": null,
+        "reason": null,
+        "operatorName": "朴彩英",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "log_p4c",
+        "stageId": "proj_senyu_s8",
+        "projectId": "proj_senyu",
+        "type": "rescheduled",
+        "fromStatus": null,
+        "toStatus": null,
+        "oldStartAt": "2026-10-12",
+        "newStartAt": null,
+        "oldEndAt": "2026-10-12",
+        "newEndAt": "2026-10-27",
+        "reason": "合同书约定工期顺延",
+        "operatorName": "设计师本人",
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      }
+    ],
+    "contracts": [
+      {
+        "id": "ctt_p2",
+        "projectId": "proj_chuanyue",
+        "fileName": "川味小馆-装修合同.pdf",
+        "rawTextDigest": "a1b2c3d4e5f60718",
+        "parsedResultJson": "{\"projectName\": \"川悦·川味小馆\", \"amount\": 45000}",
+        "confirmedPayloadJson": "{\"projectName\": \"川悦·川味小馆\", \"projectType\": \"dining\", \"address\": \"成都市武侯区桐梓林北路 88 号\", \"clientName\": \"刘老板\", \"contractAmount\": 45000, \"signedAt\": \"2026-08-12T00:00:00.000Z\", \"startAt\": \"2026-08-12\", \"endAt\": \"2027-01-03\", \"createdByManual\": true, \"sourceFileName\": \"川味小馆-装修合同.pdf\"}",
+        "createdByManual": true,
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "id": "ctt_p4",
+        "projectId": "proj_senyu",
+        "fileName": "社区书店-装修合同.pdf",
+        "rawTextDigest": "a1b2c3d4e5f60718",
+        "parsedResultJson": "{\"projectName\": \"森屿·社区书店\", \"amount\": 36000}",
+        "confirmedPayloadJson": "{\"projectName\": \"森屿·社区书店\", \"projectType\": \"homestay\", \"address\": \"成都市高新区天府三街 199 号\", \"clientName\": \"方老师\", \"contractAmount\": 36000, \"signedAt\": \"2026-06-28T00:00:00.000Z\", \"startAt\": \"2026-06-28\", \"endAt\": \"2026-11-29\", \"createdByManual\": true, \"sourceFileName\": \"社区书店-装修合同.pdf\"}",
+        "createdByManual": true,
+        "createdAt": "2026-09-29T17:02:04.000Z"
+      }
+    ],
+    "settings": [
+      {
+        "key": "currentMemberId",
+        "valueJson": "\"mem_admin\"",
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      },
+      {
+        "key": "restPolicy",
+        "valueJson": "{\"kind\": \"double_off\", \"anchorWeek\": null}",
+        "updatedAt": "2026-09-29T17:02:04.000Z"
+      }
+    ]
+  }
+}

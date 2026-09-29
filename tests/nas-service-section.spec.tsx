@@ -100,6 +100,36 @@ describe('NasServiceSection（备份令牌配置区 · 0.8.2.0002）', () => {
     window.removeEventListener(API_TOKEN_EVENT, onEvt);
   });
 
+
+  it('④ 测试连接：200 → 通 / 401 → 令牌不匹配 / 抛错 → 网络不通', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchImpl);
+    await renderInto(container);
+
+    const probeBtn = (): HTMLButtonElement | undefined =>
+      Array.from(container.querySelectorAll('button')).find((b) => /测试连接/.test(b.textContent ?? ''));
+
+    await act(async () => {
+      probeBtn()?.click();
+    });
+    expect(fetchImpl).toHaveBeenCalled();
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain('/backup');
+    expect(container.textContent).toContain('备份通道连通');
+
+    fetchImpl.mockResolvedValue(new Response('{}', { status: 401 }));
+    await act(async () => {
+      probeBtn()?.click();
+    });
+    expect(container.textContent).toContain('401');
+
+    fetchImpl.mockRejectedValue(new Error('down'));
+    await act(async () => {
+      probeBtn()?.click();
+    });
+    expect(container.textContent).toContain('连不上服务端');
+    vi.unstubAllGlobals();
+  });
+
   it('③ 已有配置：状态文案出现，但令牌值不在 DOM 里', async () => {
     localStorage.setItem(API_TOKEN_KEY, 'idplan-preset-secret');
     await renderInto(container);
