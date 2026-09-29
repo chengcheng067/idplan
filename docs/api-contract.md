@@ -57,6 +57,13 @@
 | PATCH | `/api/itineraries/:id` | 可改 `transport` / `accommodation` / `budgetAmount` / `actualAmount`；每次改动 `revision + 1` 且刷新 `updatedAt`；不存在 → 404 `not_found`；金额非法 → 400 `validation`。**`date` 与 `projectId` 不可改** |
 | DELETE | `/api/itineraries/:id` | 删除（**不校验存在性**），响应 `{ ok: true }`；删项目时由 `DELETE /api/projects/:id` 级联清理 |
 
+> **旅游二期归档结论（2026-09-30 · 0.8.4）**：曾有两种二期候选——① 放宽 20 段上限；
+> ② 行程卡模式。裁决：**维持行程卡模式，不动 20 段上限**。理由：20 段是 9 色色板 +
+> 时间轴可读性的真实约束（v0.8 PRD §7），为长行程放宽它会让甘特整体退化；长行程的
+> 正确形态是**行程卡按日承载**（每日一张 `date` 唯一卡，`ensure` 只补不删），它与
+> 阶段时间轴是两个正交维度——阶段管合同工期，行程卡管每日执行。将来若做「按周汇总」，
+> 以 `ensure` 之上的**读取侧聚合**实现，不改写入模型。
+
 ## Tasks
 
 | Method | Path | 说明 |
