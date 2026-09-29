@@ -322,3 +322,19 @@ backup 是「人→机器」的全量恢复（形状已定、严格保真）。�
 **错误码**：桌面把内部异常映射为契约码后回传——import 参数/结构类错误 → `Validation`
 （字面，与服务端一致）；boards 字段类 → `invalid_field`；落点不存在/非 Agent 看板 →
 `project_unresolved`（共享核心单码，两通道同源）。
+
+## WorkBuddy 接入 skill 同步基线
+
+本仓库 `docs/` 之外的接入指引还有一份：WorkBuddy 侧 skill
+`idplan-agent-loopback`（记录接入实测方法与坑位，位于用户 skill 目录、**不在本仓库**）。
+
+**已知漂移史**：该 skill 曾在 0009 前长期停更（如坚持「落点键名两通道不一致」，而 `73abe87` 已对齐；dryRun 只认 `'1'/'true'`，而契约偏安全早已两通道统一）。skill 不在仓库、无 CI 看守，漂移只能靠人记得——这是结构性问题，暂时只能登记不能根治。
+
+**同步基线（每次发版核对这一行）**：
+
+| 项 | 基线值 |
+|---|---|
+| skill 最后对齐的构建号 | `0.8.1.0001`（2026-09-29 回写：键名/0010 query 契约/dryRun 真值矩阵/X-Agent-Token/source） |
+| 本仓库契约权威文档 | 本文档（api-contract.md）+ `src/core/agent/ingress-file.ts` 的 `INGRESS_ENDPOINTS` / 指令块构造函数 |
+| 纪律 | 发版 checklist 增加一行「skill 口径 vs 本文档逐条过」；若将来 skill 收编进仓库源管理，此节作废 |
+
