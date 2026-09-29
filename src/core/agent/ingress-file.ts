@@ -116,6 +116,10 @@ export function buildIngressInstructionBlock(input: {
     ...input.payload.endpoints.map((e) => `    ${e.method} ${e.path}    ${e.summary}`),
     `· payload schema：${input.payload.payloadSchema}`,
     '· 注意：人类项目一律拒绝（project_unresolved）——结构性隔离，不是配置问题。',
+    '· 落点参数：导入（POST /api/agent/import）的目标看板用 projectId 指定——',
+    '    query（?projectId=<板id>，桌面别号 ?project= 同样认）或 body.projectId 二选一；',
+    '    建板（POST /api/agent/boards）回执里的 projectId 就是它。?stageId= 可指定批次，',
+    '    ?stageName= 缺段时按名补建；?dryRun=1 预览不落库（任意真值均为预览，唯 0/false 实写）。',
   ];
   return lines.join('\n');
 }

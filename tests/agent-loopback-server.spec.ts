@@ -355,3 +355,53 @@ describe('loopback · query 契约（2026-09-28 修复回归）', () => {
     expect(sent.find(([ch]) => ch === 'agent:list-tasks-request')![1].source).toBeUndefined();
   });
 });
+
+/* ================================================================================================
+ * ingress 承诺清单 ⊆ loopback 路由集（0.8.2 条目 4 · 走查遗留 B1/E1 的能力侧）
+ *
+ * 已有断言各自钉一边：agent-ingress-file.spec 钉「指令块文案含什么」，
+ * 上面「四端点路由」钉「loopback 能干什么」。两边都绿、合起来分叉的事
+ * 0008 上演过（承诺四端点桌面只通两个、curl 通而面板不通）——所以这里
+ * 钉**两个集合的包含关系**：接入文件对外承诺的每个 (method, path)，
+ * 都必须能在 loopback 路由集里找到（非 404、鉴权门正确）。
+ * 将来若有人在 INGRESS_ENDPOINTS 加端点却在 loopback 忘实现（或反之），
+ * 本用例精确转红。
+ * ================================================================================================ */
+describe('ingress 承诺清单 ⊆ loopback 路由集（承诺 = 能力，集合版）', () => {
+  it('★ INGRESS_ENDPOINTS 四条端点逐一命中 loopback（无 404、鉴权门一致）', async () => {
+    // INGRESS_ENDPOINTS 是渲染侧纯模块（ingress-file.ts）——ESM import 直取
+    const { INGRESS_ENDPOINTS } = await import('../src/core/agent/ingress-file');
+    expect(INGRESS_ENDPOINTS).toHaveLength(4);
+
+    for (const ep of INGRESS_ENDPOINTS) {
+      // health 免令牌（桌面通道口径）；其余三条必须过 Bearer 门
+      const needsAuth = ep.path !== '/api/agent/health';
+      const headers: Record<string, string> = {};
+      if (needsAuth) headers.authorization = `Bearer ${TOKEN}`;
+      if (ep.method === 'POST') headers['content-type'] = 'application/json';
+
+      const res = await call(
+        ep.method as 'GET' | 'POST',
+        ep.path,
+        ep.method === 'POST'
+          ? { headers, body: ep.path.endsWith('boards')
+              ? { name: '能力探针板', plannedStartAt: '2026-10-01', plannedEndAt: '2026-10-31', presetKey: 'indoor_full' }
+              : validBody }
+          : { headers },
+      );
+      expect(res.status, `${ep.method} ${ep.path} 不应 404：承诺清单里有、路由集里也必须真有`).not.toBe(404);
+
+      // 反向钉：不给令牌的写端点必须 401（承诺清单宣称的鉴权不是空头支票）
+      if (needsAuth) {
+        const noAuth = await call(
+          ep.method as 'GET' | 'POST',
+          ep.path,
+          ep.method === 'POST'
+            ? { headers: { 'content-type': 'application/json' }, body: validBody }
+            : {},
+        );
+        expect(noAuth.status, `${ep.method} ${ep.path} 无令牌应 401（fail-closed）`).toBe(401);
+      }
+    }
+  }, 30000);
+});
