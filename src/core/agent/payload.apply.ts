@@ -37,6 +37,7 @@
  *     把这个功能当 bug 删掉。
  */
 
+import { createHash } from 'node:crypto';
 import {
   ChangxiaError,
   ChangxiaErrorCode,
@@ -511,8 +512,16 @@ async function resolve(
       );
       assigneeId = agent?.id ?? null;
     }
-    const artifacts: TaskArtifact[] = t.artifacts.map((a) => ({
-      id: `art_${crypto.randomUUID()}`,
+    const artifacts: TaskArtifact[] = t.artifacts.map((a, i) => ({
+      // ★ 2026-09-29 走查 #3（0.8.2 条目8）：artifact id 确定性生成。
+      //   旧码 `art_${randomUUID()}` 每次 resolve 都换 id ⇒ 同一 externalId 重复导入
+      //   后引用漂移（下游拿着旧 id 找不到行）。键 = (externalId, 序号, kind, title)：
+      //   序号进键是为了容忍「同题多附件」；title 进键让「换标题=换附件」。
+      //   碰撞面：sha256 前 24 hex ≈ 2^96，同板同任务同序号同标题同时不同内容才撞。
+      id: `art_${createHash('sha256')
+        .update(`${t.externalId}|${i}|${a.kind}|${a.title ?? ''}`)
+        .digest('hex')
+        .slice(0, 24)}`,
       kind: a.kind,
       title: a.title,
       path: a.path,

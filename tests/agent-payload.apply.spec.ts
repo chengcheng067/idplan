@@ -448,3 +448,38 @@ describe('★ 归属门：Agent 导入的合法落点只剩 Agent 看板（两�
     expect(routes).not.toContain("targetRow.kind !== 'agent'");
   });
 });
+
+describe('artifact id 稳定化（2026-09-29 走查 #3 / 0.8.2 条目8）', () => {
+  it('★ 同一 externalId 重复导入，artifacts id 集合逐字稳定（旧码每次换 randomUUID）', async () => {
+    const projectId = await seedProject();
+    const payload = makePayload(projectId, [
+      {
+        title: '带附件的任务',
+        artifacts: [
+          { kind: 'file', title: '平面图.dwg', path: '/a/plan.dwg', url: null, note: null },
+          { kind: 'link', title: '参考链接', path: null, url: 'https://example.com', note: '参考' },
+        ],
+      },
+    ]);
+
+    const first = await applyAgentPayload(bundle, payload, { projectId });
+    expect(first.rejected).toEqual([]);
+    const rows1 = await bundle.tasks.listByProject(projectId);
+    const art1 = rows1.map((t) => t.artifacts.map((a) => a.id));
+
+    // 同 payload 原样重放（幂等路径）——id 不应漂移
+    await applyAgentPayload(bundle, payload, { projectId });
+    const rows2 = await bundle.tasks.listByProject(projectId);
+    const art2 = rows2.map((t) => t.artifacts.map((a) => a.id));
+
+    expect(art2).toEqual(art1);
+    // 且 id 确实是确定性形状（art_ + 24 hex），不是 randomUUID（36 字符带连字符）
+    for (const t of rows2) {
+      for (const a of t.artifacts) {
+        expect(a.id).toMatch(/^art_[0-9a-f]{24}$/);
+      }
+    }
+    // 同任务两个附件 id 互异（序号进键的判别力）
+    expect(rows2[0]!.artifacts[0]!.id).not.toBe(rows2[0]!.artifacts[1]!.id);
+  });
+});
