@@ -277,6 +277,16 @@ export function TaskDrawer({
                 {agent.agentKind}
               </span>
             )}
+            {/* 人话模式的来源批次 chip（0.8.4）：全 runId 太长，短显 8 位 +
+                title 悬停看全值；null（人工/老数据）不渲染，不打扰普通人 */}
+            {human && task.source === 'agent' && task.runId && (
+              <span
+                className="rounded-[6px] bg-sand px-1.5 py-0.5 text-[10px] text-mist"
+                title={`来源批次：${task.runId}（写入该任务的那一次 Agent 运行）`}
+              >
+                来源批次 {task.runId.slice(0, 8)}
+              </span>
+            )}
             {canClaim && (
               <button
                 type="button"
@@ -302,6 +312,12 @@ export function TaskDrawer({
                 <Field label="source">{task.source}</Field>
                 <Field label="agentId">
                   <span className="font-mono">{agent ? `${agent.name}` : (task.agentId ?? '—')}</span>
+                </Field>
+                {/* 0.8.4 条目5（0.8.2 收尾）：runId 批次追溯——「这批任务是哪一次
+                    Agent 运行导入的」。人工任务/老数据为 null（显示 —）；绝不进
+                    幂等键的铁律见 entities.Task.runId 注释。 */}
+                <Field label="runId">
+                  <span className="font-mono">{task.runId ?? '—'}</span>
                 </Field>
               </>
             )}
@@ -356,6 +372,12 @@ export function TaskDrawer({
                 <Field label="source">{task.source}</Field>
                 <Field label="agentId">
                   <span className="font-mono">{agent ? `${agent.name}` : (task.agentId ?? '—')}</span>
+                </Field>
+                {/* 0.8.4 条目5（0.8.2 收尾）：runId 批次追溯——「这批任务是哪一次
+                    Agent 运行导入的」。人工任务/老数据为 null（显示 —）；绝不进
+                    幂等键的铁律见 entities.Task.runId 注释。 */}
+                <Field label="runId">
+                  <span className="font-mono">{task.runId ?? '—'}</span>
                 </Field>
                 <Field label="startAt">
                   <span className="font-mono">{task.startAt?.slice(0, 10) ?? '—'}</span>
