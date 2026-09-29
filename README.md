@@ -122,8 +122,9 @@ npm run electron:build # 构建 + 打 Windows NSIS 安装包
 
 ### 绿联 NAS（团队共享）
 数据集中在 NAS 上，所有人看到同一份。只需要一台绿联 NAS（UGOS Pro）+ 浏览器：
-- 📦 **UPK 应用包**（最省事）：[教程](docs/install/upk-install-tutorial.md)
-- ⚙️ **Docker compose**（手动配容器）：[教程](docs/install/nas-deploy-tutorial.md) · [compose 文件](docs/install/idplan-nas-compose.yml)
+- 📦 **UPK 应用包**（最省事，**仅 amd64 机型**——arm64 机型见下）：[教程](docs/install/upk-install-tutorial.md)
+- ⚙️ **Docker compose**（手动配容器，amd64 / arm64 均可）：[教程](docs/install/nas-deploy-tutorial.md) · [compose 文件](docs/install/idplan-nas-compose.yml)
+- ℹ️ arm64 机型暂无 UPK 包（无真机验证环境，不做无验证发布）；Docker 镜像为多架构，compose 形态 arm64 直接可用
 
 ### Docker（通用 / 自建服务器）
 ```bash
@@ -156,6 +157,7 @@ ghcr.io/chengcheng067/idplan-backend:<版本>  # 后端（Fastify + SQLite）
 - 🪧 [Windows 安装](docs/install/windows-install.md) · 📦 [NAS · UPK](docs/install/upk-install-tutorial.md) · ⚙️ [NAS · Docker](docs/install/nas-deploy-tutorial.md)
 - 🔌 [接口契约（Agent 四端点）](docs/api-contract.md) · 🗂️ [备份格式](docs/backup-format.md) · 🧪 [迁移演练](docs/migration-drill.md)
 - 🗺️ [路线图（含「明确不做」清单）](docs/roadmap.md)
+- 🧾 [发布 checklist（含 arm64 路线与踩坑汇编）](docs/release-checklist.md)
 
 ---
 

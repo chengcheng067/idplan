@@ -85,6 +85,20 @@
 
 ---
 
+## 五·补、arm64 机型说明（UGREEN ARM 架构 NAS）
+
+当前只发布 **amd64** 安装包（发布方无 arm64 真机，不做无验证发布）。
+arm64 机型用户两条路：
+
+1. **等**：arm64 UPK 排在后续批次（CI 镜像产线 `upk-images.yml` 早已支持
+   `linux/arm64` 双构建，缺的只是手动触发与打包——路线已定，见
+   `docs/release-checklist.md` 第 6 节）。
+2. **现在用**：走 **Docker compose 形态**（[教程](nas-deploy-tutorial.md)）。
+   ghcr.io/chengcheng067/idplan 是**多架构镜像**（linux/amd64 + linux/arm64
+   同一 tag），`docker pull` 会按你机器的架构自动选层——arm64 NAS 直接可用。
+
+---
+
 ## 六、数据在哪里 / 怎么备份
 
 - 数据存在 Docker 的 **`idplan-data` 卷**（NAS 的 docker 目录下）里的 `changxia.db`。

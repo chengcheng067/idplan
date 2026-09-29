@@ -122,8 +122,9 @@ Download the installer and double-click; data stays **on your machine**: 📄 [I
 
 ### UGREEN NAS (team sharing)
 Data lives on the NAS; everyone sees the same picture. You only need a UGREEN NAS (UGOS Pro) + a browser:
-- 📦 **UPK app package** (easiest): [tutorial](docs/install/upk-install-tutorial.md)
-- ⚙️ **Docker compose** (manual): [tutorial](docs/install/nas-deploy-tutorial.md) · [compose file](docs/install/idplan-nas-compose.yml)
+- 📦 **UPK app package** (easiest, **amd64 NAS only** — see note below): [tutorial](docs/install/upk-install-tutorial.md)
+- ⚙️ **Docker compose** (manual, amd64 / arm64): [tutorial](docs/install/nas-deploy-tutorial.md) · [compose file](docs/install/idplan-nas-compose.yml)
+- ℹ️ No UPK for arm64 NAS yet (no arm64 test machine — no untested releases); the Docker image is multi-arch, so the compose form works on arm64 as-is
 
 ### Docker (generic / self-hosted)
 ```bash
@@ -156,6 +157,7 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 - 🪧 [Windows install](docs/install/windows-install.md) · 📦 [NAS · UPK](docs/install/upk-install-tutorial.md) · ⚙️ [NAS · Docker](docs/install/nas-deploy-tutorial.md)
 - 🔌 [API contract (four Agent endpoints)](docs/api-contract.md) · 🗂️ [Backup format](docs/backup-format.md) · 🧪 [Migration drill](docs/migration-drill.md)
 - 🗺️ [Roadmap (including the "explicitly not doing" list)](docs/roadmap.md)
+- 🧾 [发布 checklist（含 arm64 路线与踩坑汇编）](docs/release-checklist.md)
 
 ---
 
