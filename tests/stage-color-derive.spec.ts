@@ -985,7 +985,8 @@ describe('T02-L · 派生结果 === 冻结的 global.css 令牌（54 个令牌�
 
   it('L-03 · 打印锁亮色：.print-root 与 :root 同块 ⇒ 打印稿取亮色令牌', () => {
     // global.css 把亮色令牌同时声明在 `:root, .print-root` 上（就近继承压过 <html data-theme>）
-    const lightStart = CSS_SRC.indexOf(':root,\n.print-root {');
+    // anchor 换行无关：autocrlf 会把两行在 LF/CRLF 间来回搬（本次实测假红过一次）
+    const lightStart = CSS_SRC.search(/:root,\s*\.print-root \{/);
     expect(lightStart).toBeGreaterThan(0);
     expect(lightStart).toBeLessThan(DARK_START);
     // 亮色段内 s1..s9 的 27 个令牌必须齐全（缺一个 ⇒ 打印稿某个阶段会掉色）

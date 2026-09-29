@@ -20,6 +20,7 @@ import {
   useHumanStages,
   useHumanTasks,
 } from '../core/project/visibility';
+import { PrintPreviewDialog } from '../components/print/PrintPreviewDialog';
 import { domainLabel } from '../components/contract-wizard/DomainCascade';
 import { TravelItineraryPanel } from '../components/travel/TravelItineraryPanel';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
@@ -98,6 +99,8 @@ export function ProjectDetailPage(): JSX.Element {
   const { role, currentMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
   const isNarrow = useIsNarrowViewport();
+  // 0.8.4 打印内置化：日程表改应用内预览面板（替代 window.open 新窗口）
+  const [printPreviewId, setPrintPreviewId] = useState<string | null>(null);
 
   /*
    * ★ v0.8 T04-B · 接管弹窗的数据源（PRD B11 / B12 / D5）。
@@ -232,9 +235,9 @@ export function ProjectDetailPage(): JSX.Element {
           {role !== null && projectKindOf(project) !== 'agent' && (
             <button
               type="button"
-              onClick={() => window.open(`/project/${project.id}/schedule-print`, '_blank')}
+              onClick={() => setPrintPreviewId(project.id)}
               className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
-              title="打开日程表打印视图（新窗口）"
+              title="打印预览（应用内面板）"
             >
               <CalendarRange size={14} /> 日程表
             </button>
@@ -463,6 +466,12 @@ export function ProjectDetailPage(): JSX.Element {
           }}
         />
       )}
+      {/* 0.8.4 打印内置化：日程表应用内预览面板 */}
+      <PrintPreviewDialog
+        projectId={printPreviewId ?? ''}
+        open={printPreviewId !== null}
+        onClose={() => setPrintPreviewId(null)}
+      />
     </div>
   );
 }

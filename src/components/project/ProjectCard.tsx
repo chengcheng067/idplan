@@ -13,6 +13,7 @@ import { useRepos } from '../../hooks/useRepos';
 import { createProjectActions } from '../../store/useProjectsStore';
 import { useNavigate } from 'react-router-dom';
 import { AvatarStack } from '../common/AvatarStack';
+import { PrintPreviewDialog } from '../print/PrintPreviewDialog';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ImeInput } from '../common/ImeInput';
 import { Modal } from '../common/Modal';
@@ -85,6 +86,8 @@ export function ProjectCard({
   const navigate = useNavigate();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // 0.8.4 打印内置化：卡片与下拉的日程表入口改应用内预览面板
+  const [printPreviewId, setPrintPreviewId] = useState<string | null>(null);
   /**
    * 菜单锚点（视口坐标，portal 到 body 后必须自己算位置）。
    * ★ 反馈 #3：菜单必须出现在**触发点**附近 —— 左键取按钮矩形、右键取本次点击坐标。
@@ -309,10 +312,10 @@ export function ProjectCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              window.open(`/project/${project.id}/schedule-print`, '_blank');
+              setPrintPreviewId(project.id);
             }}
             aria-label="导出日程表"
-            title="导出日程表（新窗口，只读导出）"
+            title="打印预览（应用内面板，只读导出）"
             className="shrink-0 rounded-full p-1.5 text-mist transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
           >
             <CalendarRange size={16} aria-hidden />
@@ -379,7 +382,7 @@ export function ProjectCard({
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
-                    window.open(`/project/${project.id}/schedule-print`, '_blank');
+                    setPrintPreviewId(project.id);
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink hover:bg-sunken"
                 >
@@ -537,6 +540,12 @@ export function ProjectCard({
         确认删除「{project.name}」？该项目下的所有阶段、任务与操作记录将一并永久删除，{' '}
         <span className="font-medium text-clay">不可恢复</span>。建议先归档而非删除。
       </ConfirmDialog>
+      {/* 0.8.4 打印内置化：应用内打印预览（日程表纸面与独立路由共用） */}
+      <PrintPreviewDialog
+        projectId={printPreviewId ?? ''}
+        open={printPreviewId !== null}
+        onClose={() => setPrintPreviewId(null)}
+      />
     </div>
   );
 }

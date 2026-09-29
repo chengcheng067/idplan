@@ -44,7 +44,7 @@ export function Modal({
    *   right-float 右侧悬浮圆角卡片（长内容、无锚点的设置类面板）
    *   float       锚定浮动卡 —— 出现在**触发元素/点击点附近**，空间不足自动翻转（反馈 #3）
    */
-  placement?: 'center' | 'right' | 'right-float' | 'float';
+  placement?: 'center' | 'right' | 'right-float' | 'float' | 'fullscreen';
   /** 无障碍标签，读屏用 */
   ariaLabel?: string;
   /**
@@ -204,7 +204,14 @@ export function Modal({
       // 让其内部冒出的更浅层浮层（如指派弹层 z-[65]）能盖在抽屉之上。抽屉自身不参与 center 的顶层竞争。
       // Soft UI 不用 backdrop-blur（玻璃拟态）；层次靠统一的主色遮罩 + 面板外凸阴影表达。
       // 去掉模糊后遮罩要略实一点，否则背景噪点会穿透、压不住层级。
-      className={`fixed inset-0 ${placement === 'center' ? 'z-[70] bg-ink/45' : 'z-[60] bg-ink/25'}`}
+      className={`fixed inset-0 ${
+        placement === 'center'
+          ? 'z-[70] bg-ink/45'
+          : placement === 'fullscreen'
+            ? // 0.8.4 打印预览：层级压过一切 Modal、低于 Toast 反馈层（数字见本行类名），遮罩同 center 浓度
+              'z-[75] bg-ink/45'
+            : 'z-[60] bg-ink/25'
+      }`}
     >
       {/* 点击关闭判定放在锚点面板（e.currentTarget）上而非遮罩：因为面板是 flex 容器且覆盖内容区，
           点面板自身的空白区域（子面板之外）即关闭，点子面板内部不关闭。这样居中/右侧抽屉一致生效，
@@ -236,7 +243,10 @@ export function Modal({
         className={`outline-none flex h-full w-full ${
           placement === 'center'
             ? 'items-center justify-center p-4 sm:p-6'
-            : placement === 'float'
+            : placement === 'fullscreen'
+              ? // 打印预览：全屏、无点击缓冲区（面板不透明，遮罩仅入场动画期可见）
+                'p-0'
+              : placement === 'float'
               ? // 锚定浮动卡：面板由内层 fixed 容器自行定位，外层只当点击捕获层
                 'items-start justify-start p-0'
               : placement === 'right-float'

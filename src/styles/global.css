@@ -2,6 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================ v0.8.4 打印内置化（A 方案） ============================ */
+
+/* §3.4 暗色主题下预览面板内 A4 纸面加深投影（范围限定 .print-preview，
+   独立打印路由的视觉不变——零回归）。亮色底上 0.18 黑按原样足够。 */
+:root[data-theme='dark'] .print-preview .a4-page {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* §5.4 兜底：iframe 打印失败回退主窗口打印时，应用 chrome 必须让位
+   （工具条/动作条隐藏、预览区回归文档流让 contentWindow 拿到全部纸面）。 */
+[data-printing] .print-preview-toolbar,
+[data-printing] .print-preview-actionbar {
+  display: none !important;
+}
+[data-printing] .print-preview-stage {
+  position: static;
+  overflow: visible;
+}
+
+/* §3.5 预览入场动效（关停清单见下方 reduced-motion 段） */
+.print-preview {
+  animation: preview-in 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes preview-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+
 /* ---------------------------------------------------------------------------
  * 《ID Plan》Soft UI 全局样式基线（v0.7 · 双主题）
  *
@@ -827,8 +862,14 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   .dialog-pop,
   .drawer-slide-in,
   .float-pop-in,
-  .toast-enter {
+  .toast-enter,
+  /* v0.8.4：打印预览入场动效同样进关停清单（规范 §3.5：漏了就是无障碍回归） */
+  .print-preview {
     animation: none;
+  }
+  /* v0.8.4：预览缩放 wrapper 的 transform 过渡一并关 */
+  .print-preview [style*='transform'] {
+    transition: none;
   }
 
   .soft-hover-float:hover,

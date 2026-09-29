@@ -7,28 +7,9 @@ import { ArrowLeft, CalendarDays, Download, FileText, Printer } from 'lucide-rea
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useProjectById, useProjectStages, useProjectTasks } from '../core/project/visibility';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
-import { useMembersStore } from '../store/useMembersStore';
-import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../hooks/useRoleGuard';
-import { StageStatus, ScheduleBasis, SCHEDULE_BASIS_LABELS } from '../core/types/enums';
-import {
-  STAGE_COLOR_NAMES,
-  stageSolidClass,
-  stageBandClass,
-  stageBandOutline,
-  stageSolidColor,
-  stageBandColor,
-} from '../components/timeline/stageColors';
-import { customStageColor } from '../components/timeline/stageColorKey';
-import {
-  buildScheduleSections,
-  paginateSections,
-  exportSchedulePngPages,
-  schedulePngFileName,
-  A4_WIDTH_PX,
-  A4_HEIGHT_PX,
-  type ScheduleSection,
-} from '../lib/schedule-print';
-import { buildMonthTicks, totalDaysInclusive } from '../lib/date';
+import { SchedulePaper } from '../components/print/SchedulePaper';
+import { useSchedulePaperData } from '../components/print/useSchedulePaperData';
+import { exportSchedulePngPages, schedulePngFileName } from '../lib/schedule-print';
 
 /**
  * 打印页 · 排期客户稿（A4 · 强制浅色 · 画板 09）：
@@ -65,151 +46,46 @@ export function SchedulePrintPage(): JSX.Element {
    * 另注：`ProjectSourceBadge` 只吃 `kind`（`Pick<Project,'kind'>`），因此即便项目
    * 尚未装载（`project === undefined`）也只是不渲染徽章，不会抛错。
    */
-  const project = useProjectById(id);
-  const stages = useProjectStages(id);
-  const tasks = useProjectTasks(id);
-  const members = useMembersStore((s) => s.members);
-  // v0.7-D：页首守卫只看 role（`role === null` 与 `isRestrictedView(role)` 是**两个档位**，
-  // 不可混同）；`memberView` 的口径与 ProjectDetailPage / MonthlyCalendarView **逐字一致**，
-  // 不自造第三种判定。
-  const { role, currentMember, hydrated } = useRoleGuard();
-  const memberView = isRestrictedView(role);
+  // 纸面数据与算法收敛单一 hook（0.8.4：与打印预览面板共用，防第二份算法副本）
+  const d = useSchedulePaperData(id);
+  const project = d.project;
+  const pages = d.pages;
+  const sections = d.sections;
+  const bandGeom = d.bandGeom;
+  const monthTicks = d.monthTicks;
+  const nowText = d.nowText;
+  const startAt = d.startAt;
+  const endAt = d.endAt;
+  const totalDays = d.totalDays;
+  const role = d.role;
+  const hydrated = d.hydrated;
+  const memberView = d.memberView;
 
+  // 独立路由模式自持的导出/打印状态（应用内预览面板由 PrintPreviewDialog 自持）
   const [pngBusy, setPngBusy] = useState(false);
   const [pdfHint, setPdfHint] = useState(false);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
 
-  // ⚠️ 所有 Hook 必须在任何条件提前 return 之前调用完成，否则不同 render 路径下
-  //    React 记录的 Hook 数量不一致会触发 error #310。
-  //
-  // 相关阶段（v0.7-D 补漏）：**与 `ProjectDetailPage.tsx:64-77` 同一母本**——
-  //   管理员（memberView=false）→ `relatedStageIds=null` → 全量；
-  //   成员 → `computeRelatedStageIds` 收窄为「我负责（ownerId）或我名下有任务」的阶段；
-  //   未进入 → 空集（但本页页首守卫已先把它重定向掉，接触不到这里）。
-  // 补漏背景：放开成员打印时**未同时收窄范围**，导致打印页成了「成员看到项目全量阶段」
-  // 的侧门（详情页与月历都收窄，打印页是唯一例外）。本轮按母本补齐。
-  const relatedStageIds = useMemo(
-    () =>
-      computeRelatedStageIds({
-        memberView,
-        currentMemberId: currentMember?.id ?? null,
-        stages,
-        tasks,
-      }),
-    [memberView, currentMember, stages, tasks],
-  );
+  const onPrint = (): void => window.print();
 
-  /** 收窄后的阶段集合：全量（admin）或仅与当前成员相关——后续一切取数都用它，不再直接用 `stages` */
-  const visibleStages = useMemo(
-    () => (relatedStageIds ? stages.filter((s) => relatedStageIds.has(s.id)) : stages),
-    [relatedStageIds, stages],
-  );
-
-  const sections = useMemo(
-    () => (project ? buildScheduleSections({ project, stages: visibleStages, tasks, members }) : []),
-    [project, visibleStages, tasks, members],
-  );
-  const pages = useMemo(() => paginateSections(sections), [sections]);
-  const nowIso = new Date().toISOString();
-
-  /**
-   * 时间轴甘特视图窗口 = **计划窗口 ∪ 阶段实际起止**。
-   *
-   * ⚠️ 这里曾是「只用计划窗口」（`viewStart/viewEnd = plannedStart/plannedEnd`），
-   *    于是 `left + width = totalDaysInclusive(viewStart, endAt) / viewDays * 100`：
-   *      · 阶段 `endAt > plannedEndAt` → **> 100%**；
-   *      · 阶段 `startAt < plannedStartAt` → **left < 0**。
-   *    色条是 `absolute`、轨道是 `relative`（无 `overflow-hidden`），越界部分就压到
-   *    右侧「起止日期」文字上（用户实测截图里 9 个阶段中后 3 个全越界）。
-   *    这是**脏数据的常规形态**（阶段改期超出合同工期），不是异常输入。
-   *
-   * 为什么取 union，而不是照抄 `TimelineView.baseRange` 的「只用阶段跨度」：
-   *    打印稿头部 `:177-179` 会打出「周期：X – Y（共 N 天）」这句**合同工期**声明，
-   *    轴若只按阶段跨度画，轴与这句声明会不一致；保留计划基线是有意义的信息。
-   *    union 下所有阶段都落在区间内 ⇒ 不变式 `0 ≤ left` 且 `left + width ≤ 100` 恒成立。
-   *
-   * 参照：同一个越界 bug 详情页 `TimelineView.tsx:114-125` 早已修过（改为按阶段实际起止），
-   *      月历打印页 `CalendarPrintPage.tsx:165-166` 也是「阶段跨度 ∪ 计划窗口」同款口径——
-   *      本页是**第三处独立实现**，此前两处都收了，它没收，所以这个 bug 才复发。
-   *
-   * ⚠️ 不要在 `bandGeom` 里加 `Math.min(…, 100 - left)` 之类**钳制兜底**：那会把将来的
-   *    回归静默吃掉（色条被截断但没人知道），越界重新变得不可观测。窗口扩展后已不可能越界，
-   *    真越界就应该被 `tests/schedule-print-band-bounds.spec.tsx` 抓住变红。
-   *
-   * 注：`viewStart/viewEnd` 依赖 `sections`，而下面的 `monthTicks` 用 `useMemo` 依赖
-   *     `[project, viewStart, viewEnd, viewDays]`——前三个都是**字符串原始值**，按值比较即会随
-   *     `sections` 变化而失效重算，不存在陈旧值问题（无需把 `sections` 塞进该依赖数组）。
-   *
-   * ⚠️ 取 min/max 前先滤掉**空日期**：`Stage.startAt/endAt` 在类型上是必填，但备份/老数据
-   *    仍可能落地 `''`。空串在字符串比较里**最小**（`'' < '2026-01-01'`），一条脏行就会把
-   *    `viewStart` 拉成 `''` → `viewDays = NaN` → **整轴所有色条一起 NaN**。旧实现（只用
-   *    计划窗口）没有这个放大效应，所以这行过滤是本次改动**自带的防回归**：让脏行只坏它
-   *    自己那一行（旧行为），不污染其它行。见 `tests/schedule-print-band-bounds.spec.tsx`
-   *    的「单条脏行不得污染整轴」用例。
-   */
-  const plannedStart = project ? project.plannedStartAt.slice(0, 10) : '';
-  const plannedEnd = project ? project.plannedEndAt.slice(0, 10) : '';
-  const sectionStarts = sections.map((s) => s.startAt.slice(0, 10)).filter((d) => d !== '');
-  const sectionEnds = sections.map((s) => s.endAt.slice(0, 10)).filter((d) => d !== '');
-  const viewStart = sectionStarts.length
-    ? [plannedStart, ...sectionStarts].reduce((a, b) => (a < b ? a : b))
-    : plannedStart;
-  const viewEnd = sectionEnds.length
-    ? [plannedEnd, ...sectionEnds].reduce((a, b) => (a > b ? a : b))
-    : plannedEnd;
-  const viewDays = Math.max(totalDaysInclusive(viewStart, viewEnd), 1);
-  const offsetDays = (iso: string): number => totalDaysInclusive(viewStart, iso) - 1;
-  const bandGeom = (startAt: string, endAt: string): { left: number; width: number } => {
-    const lo = offsetDays(startAt);
-    const hi = offsetDays(endAt);
-    const left = (lo / viewDays) * 100;
-    const width = Math.max(((hi - lo + 1) / viewDays) * 100, 2.5);
-    return { left, width };
+  const onExportPdf = (): void => {
+    setPdfHint(true);
+    window.print();
   };
-  /**
-   * 月份刻度 —— **必须与色条共用同一坐标系**（`offsetDays` / `viewDays`）。
-   *
-   * ── 旧实现错在哪（用户反馈原话：「打印时间轴和甘特图好像不是对应关系，
-   *    时间和甘特图的图标是对应不上的」；**别改回去**）──
-   * 旧刻度行是一个整宽 `flex justify-between` 的月份数组，按**月份索引等分**铺满
-   * **整幅宽度**；而色条是 `left = offsetDays/viewDays*100`（按**真实天数比例**）画在
-   * **轨道内**，轨道还被左侧 160px 名称列往右挤。两者叠在同一张纸上：
-   *   · **时间基数不同**：刻度按月索引等分（忽略大小月与首月裁剪），色条按真实天数；
-   *   · **坐标系原点不同**：刻度从纸张左缘起算，色条从轨道左缘起算。
-   * 表现为「刻度指着 4 月、色条却落在 5 月附近」——**色条本身没算错**
-   * （`bandGeom` 与打印分页共用同一份 offset），错的是刻度。
-   *
-   * ── 现在怎么做 ──
-   * · 时间窗口复用**同一份** `viewStart/viewEnd`（交给 `buildMonthTicks`，与屏幕端
-   *   `TimelineView` 同一个已测函数，见 `src/lib/date.ts:115`）；
-   * · 位置用**与 `bandGeom` 逐字相同**的 `(offsetDays(月首日)/viewDays)*100`；
-   * · DOM 上复刻轨道行的两栏结构（`w-40 shrink-0` 占位 + `gap-3` + `flex-1` 轨道），
-   *   让两个坐标系的原点与宽度逐像素一致。**这三点缺一即退回错位。**
-   *
-   * ── 关于 `MIN_LABEL_GAP_PCT` ──
-   * 刻度改为真实定位后，跨度大的项目（如数年）会出现月标签**挤压重叠**——旧的等分写法
-   * 不会重叠，但那正是错的来源。故加一道**保守抽稀**：相邻标签间距不足阈值就跳过，
-   * 只保留放得下的（首个月永远保留）。阈值为**启发式**：A4 时间轴轨道约 520px，
-   * 11px 字号下「2026年3月」约 62px ≈ 12%。取小了会重叠、取大了会丢月份，
-   * 故按「宁少勿糊」取 12%。若将来轨道宽度变化（版式调整），此值需一并复核。
-   */
-  const MIN_LABEL_GAP_PCT = 12;
 
-  const monthTicks = useMemo<{ label: string; leftPercent: number }[]>(() => {
-    if (!project || !Number.isFinite(viewDays) || viewDays <= 0) return [];
-    const kept: { label: string; leftPercent: number }[] = [];
-    for (const t of buildMonthTicks(viewStart, viewEnd)) {
-      // 首个月的月首日可能早于 viewStart（窗口从月中开始）→ 钳到 0，不越出轨道左缘
-      const leftPercent = Math.max((offsetDays(t.start) / viewDays) * 100, 0);
-      const prev = kept[kept.length - 1];
-      if (prev && leftPercent - prev.leftPercent < MIN_LABEL_GAP_PCT) continue;
-      kept.push({ label: t.label, leftPercent });
+  const onExportPng = async (): Promise<void> => {
+    const els = pageRefs.current.filter((el): el is HTMLDivElement => el !== null);
+    if (els.length === 0) return;
+    setPngBusy(true);
+    try {
+      await exportSchedulePngPages(els, schedulePngFileName(project?.name ?? 'project'));
+    } catch {
+      useProjectsStore.getState().pushToast('error', 'PNG 导出失败，请改用「打印 / 另存为 PDF」。');
+    } finally {
+      setPngBusy(false);
     }
-    return kept;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- offsetDays 由 viewStart 派生，viewStart 已在依赖里
-  }, [project, viewStart, viewEnd, viewDays]);
+  };
 
-  // bootstrap 完成前先展示加载态（首帧 members 未装载时 role 恒 null，避免误判重定向）
   if (!hydrated) {
     return <div className="py-16 text-center text-mist">正在装载日程表…</div>;
   }
@@ -270,60 +146,10 @@ export function SchedulePrintPage(): JSX.Element {
       </div>
     );
   }
-  const nowText = `${nowIso.slice(0, 10)} ${nowIso.slice(11, 16)}`;
-  const startAt = project.plannedStartAt.slice(0, 10);
-  const endAt = project.plannedEndAt.slice(0, 10);
-  const totalDays = totalDaysInclusive(startAt, endAt);
-
-  const onPrint = (): void => window.print();
-
-  const onExportPdf = (): void => {
-    setPdfHint(true);
-    window.print();
-  };
-
-  const onExportPng = async (): Promise<void> => {
-    const els = pageRefs.current.filter((el): el is HTMLDivElement => el !== null);
-    if (els.length === 0) return;
-    setPngBusy(true);
-    try {
-      await exportSchedulePngPages(els, schedulePngFileName(project.name));
-    } catch {
-      useProjectsStore.getState().pushToast('error', 'PNG 导出失败，请改用「打印 / 另存为 PDF」。');
-    } finally {
-      setPngBusy(false);
-    }
-  };
-
-  /** 状态胶囊（浅色底 + 深色字：纸面与打印均清晰可读，全部走命名 token） */
-  const statusChipCls = (status: StageStatus): string => {
-    switch (status) {
-      case StageStatus.InProgress:
-        return 'bg-pine-soft text-pine';
-      case StageStatus.Completed:
-        return 'bg-moss-soft text-moss';
-      case StageStatus.Delayed:
-        return 'bg-clay-soft text-clay';
-      default:
-        return 'bg-sunken text-mist';
-    }
-  };
-
-  const statusLabel = (status: StageStatus): string => {
-    switch (status) {
-      case StageStatus.InProgress:
-        return '进行中';
-      case StageStatus.Completed:
-        return '已完成';
-      case StageStatus.Delayed:
-        return '延期';
-      default:
-        return '未开始';
-    }
-  };
 
   return (
-    <div className="print-root mx-auto w-full max-w-[900px] px-6 py-8">
+    <>
+      {/* 独立路由模式的操作栏（打印时隐藏）；应用内预览面板模式由 PrintPreviewDialog 自绘工具条/动作条 */}
       {/* 操作栏（打印时隐藏） */}
       <div className="no-print mb-6 flex flex-wrap items-center gap-2 text-sm">
         <Link
@@ -383,223 +209,23 @@ export function SchedulePrintPage(): JSX.Element {
         )}
       </div>
 
-      {/* A4 分页纸面（画板 09：宽 900 · paper 底 · line 描边 · padding 56） */}
-      {pages.map((pageSections, idx) => (
-        <div
-          key={idx}
-          ref={(el) => {
-            pageRefs.current[idx] = el;
-          }}
-          className="a4-page mx-auto mb-6 flex flex-col"
-          style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX, padding: 56 }}
-        >
-          {/* 打印头部（画板 09：项目名 18/700 + 委托方·周期 13 · 右 打印日期 11） */}
-          <header className="flex items-start justify-between border-b border-line pb-3">
-            <div>
-              <h1 className="text-[18px] font-bold leading-tight text-ink">{project.name}</h1>
-              <p className="mt-0.5 text-[13px] text-mist">
-                {/* 委托方：仅管理员（与 ProjectDetailPage.tsx:181 同一门控口径）。
-                    放开成员打印前此页只对 admin 开放，无条件渲染当时是对的；
-                    放开后若不门控，客户名就成了「同一条数据一处屏蔽一处敞开」的洞。 */}
-                {role === 'admin' && project.clientName && (
-                  <span>委托方：{project.clientName}　</span>
-                )}
-                周期：{startAt} – {endAt}（共 {totalDays} 天）
-              </p>
-            </div>
-            <span className="shrink-0 text-[11px] tabular-nums text-mist">打印日期 {nowText}</span>
-          </header>
-
-          {/* 第一页：打印时间轴（甘特）+ 阶段清单 */}
-          {idx === 0 && (
-            <>
-              {/* 打印时间轴（画板 09：刻度行 + 每条阶段 阶段点 + 名称 + 日期区间 + 跨度色带） */}
-              <section className="mt-6">
-                <h2 className="mb-2 text-[15px] font-semibold text-ink">打印时间轴</h2>
-                {/*
-                  刻度行：**与色条同一坐标系**（`monthTicks` 注释有完整判据，别改回去）。
-                  ⚠️ 两栏结构必须与下面轨道行**逐项对齐**（`w-40` / `gap-3` / `flex-1`）：
-                    少一个 gap-3 或把 w-40 写成别的宽度，刻度就会重新与色条错位
-                    —— 这正是本次修复的核心判据，不是排版偏好。
-                */}
-                <div className="mb-1.5 flex gap-3 text-[11px] text-mist">
-                  {/* 与轨道行的阶段名列同宽：占位，让右侧轨道起点与色条轨道起点一致 */}
-                  <div className="w-40 shrink-0" aria-hidden />
-                  <div className="relative h-4 flex-1">
-                    {monthTicks.map((t) => (
-                      <span
-                        key={t.label}
-                        data-print-month-tick=""
-                        data-tick-left={t.leftPercent.toFixed(2)}
-                        className="absolute top-0 whitespace-nowrap tabular-nums"
-                        style={{ left: `${t.leftPercent}%` }}
-                      >
-                        {t.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  {sections.map((s) => {
-                    const g = bandGeom(s.startAt, s.endAt);
-                    // ★ v0.8 通路 B：自定义 ⇒ 描边走 --stage-local-ink(-rgb)；内置 ⇒ 逐字节不变
-                    const outline = stageBandOutline(s.orderIndex, s.colorIndex, s.customColor);
-                    // 判定 + data-stage-key 一次取齐（状态点与色带同属这一行的自定义色作用域，
-                    // 挂在各自元素上即可，不依赖共同祖先）
-                    const sc = customStageColor(s.customColor);
-                    return (
-                      <div key={s.orderIndex} className="flex items-center gap-3">
-                        <div className="flex w-40 shrink-0 items-center gap-1.5">
-                          <span
-                            className={`schedule-status-dot inline-block h-2.5 w-2.5 shrink-0 rounded-full${
-                              sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
-                            }`}
-                            style={
-                              sc.isCustom
-                                ? { backgroundColor: stageSolidColor(s.orderIndex, s.colorIndex, s.customColor) }
-                                : undefined
-                            }
-                            {...sc.attrs}
-                          />
-                          <span className="truncate text-[13px] text-ink">{s.name}</span>
-                        </div>
-                        <div className="relative h-9 flex-1 rounded-lg bg-sunken">
-                          <div
-                            className={`schedule-bar-segment absolute inset-y-1.5 rounded-md${
-                              sc.isCustom ? '' : ` ${stageBandClass(s.orderIndex)}`
-                            }`}
-                            style={{
-                              left: `${g.left}%`,
-                              width: `${g.width}%`,
-                              boxShadow: outline.boxShadow,
-                              ...(sc.isCustom
-                                ? { backgroundColor: stageBandColor(s.orderIndex, s.colorIndex, s.customColor) }
-                                : {}),
-                            }}
-                            {...sc.attrs}
-                            title={`${s.orderIndex}. ${s.name}（${s.startAt} — ${s.endAt} · ${statusLabel(s.status)}）`}
-                          />
-                        </div>
-                        <span className="shrink-0 tabular-nums text-[11px] text-mist">
-                          {s.startAt} — {s.endAt}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* 图例：阶段色点（实心块）+ 状态（全部命名 token，无裸 hex） */}
-                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-mist">
-                  <span className="inline-flex items-center gap-1.5">阶段色：</span>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                    <span
-                      key={n}
-                      className={`schedule-status-dot inline-block h-3 w-3 rounded-sm ${stageSolidClass(n)}`}
-                      title={`${n} ${STAGE_COLOR_NAMES[n] ?? ''}`}
-                    />
-                  ))}
-                  <span className="inline-flex items-center gap-1.5">
-                    状态：
-                    {(
-                      [
-                        StageStatus.NotStarted,
-                        StageStatus.InProgress,
-                        StageStatus.Completed,
-                        StageStatus.Delayed,
-                      ] as StageStatus[]
-                    ).map((st) => (
-                      <span key={st} className="ml-1 inline-flex items-center gap-1">
-                        <span
-                          className={`schedule-status-dot inline-block h-2.5 w-2.5 rounded-full ${statusDotCls(st)}`}
-                        />
-                        {statusLabel(st)}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              </section>
-
-              {/* 项目信息（画板 09 打印头部下方：排期基准 / 打印时间） */}
-              <p className="mt-4 text-xs leading-relaxed text-mist">
-                排期基准：{SCHEDULE_BASIS_LABELS[project.scheduleBasis] ?? SCHEDULE_BASIS_LABELS[ScheduleBasis.Calendar]}
-                {'　·　'}打印时间：{nowText}
-              </p>
-            </>
-          )}
-
-          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 34 · 数据行 42 · 斑马纹） */}
-          <section className="mt-6 break-inside-avoid">
-            <h2 className="mb-2 text-[15px] font-semibold text-ink">阶段清单</h2>
-            <table className="schedule-table w-full overflow-hidden rounded-lg border border-line text-[13px]">
-              <thead>
-                <tr className="bg-sunken text-left text-[11px] font-semibold text-mist">
-                  <th className="h-[34px] px-3 font-semibold">序号</th>
-                  <th className="px-3 font-semibold">阶段</th>
-                  <th className="px-3 font-semibold">起止日期</th>
-                  <th className="px-3 font-semibold">状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageSections.map((s, i) => {
-                  // ★ 与时间轴摘要同一判定出口：阶段清单里的实心小块也必须跟着自定义色走
-                  //   （否则同一阶段在同一页上出现「两个色」——表格退回内置色）
-                  const sc = customStageColor(s.customColor);
-                  return (
-                    <tr key={s.orderIndex} className={i % 2 === 1 ? 'bg-sunken/60' : ''}>
-                      <td className="h-[42px] px-3">
-                        <span
-                          className={`mr-1.5 inline-block h-3 w-3 rounded-sm align-middle${
-                            sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
-                          }`}
-                          style={
-                            sc.isCustom
-                              ? { backgroundColor: stageSolidColor(s.orderIndex, s.colorIndex, s.customColor) }
-                              : undefined
-                          }
-                          {...sc.attrs}
-                        />
-                        <span className="text-ink">{s.orderIndex}</span>
-                      </td>
-                      <td className="px-3 text-ink">{s.name}</td>
-                      <td className="px-3 tabular-nums text-mist">{s.startAt} — {s.endAt}</td>
-                      <td className="px-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusChipCls(s.status)}`}
-                        >
-                          {statusLabel(s.status)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-
-          {/* 打印页脚（画板 09：左 署名 · 右 页码） */}
-          <footer className="mt-auto flex items-center justify-between border-t border-line pt-3 text-[11px] tabular-nums text-mist">
-            <span>ID Plan · 项目排期与交付管理</span>
-            <span>
-              第 {idx + 1} / {pages.length} 页
-            </span>
-          </footer>
-        </div>
-      ))}
-    </div>
+      {/* 纸面：与打印预览面板共用同一组件（0.8.4 A 方案） */}
+      <SchedulePaper
+        project={project}
+        pages={pages}
+        sections={sections}
+        bandGeom={bandGeom}
+        monthTicks={monthTicks}
+        nowText={nowText}
+        startAt={startAt}
+        endAt={endAt}
+        totalDays={totalDays}
+        role={role}
+        pageRef={(idx) => (el: HTMLDivElement | null) => {
+          pageRefs.current[idx] = el;
+        }}
+      />
+    </>
   );
 }
 
-/** 状态图例色点（命名 token，无裸 hex） */
-function statusDotCls(status: StageStatus): string {
-  switch (status) {
-    case StageStatus.InProgress:
-      return 'bg-pine';
-    case StageStatus.Completed:
-      return 'bg-moss';
-    case StageStatus.Delayed:
-      return 'bg-clay';
-    default:
-      return 'bg-mist';
-  }
-}
-
-export type { StageStatus };

@@ -1064,8 +1064,10 @@ function ungatedClientNameSpots(code: string): string[] {
 }
 
 describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () => {
-  it('★ SchedulePrintPage：走 computeRelatedStageIds，且阶段入参是收窄后的集合', () => {
-    const code = readCode('SchedulePrintPage.tsx');
+  it('★ 日程表链路：走 computeRelatedStageIds，且阶段入参是收窄后的集合（0.8.4 改锁 hook）', () => {
+    // v0.8.4：算法从 SchedulePrintPage 内联搬入 useSchedulePaperData.ts（单一出处，
+    // 独立路由与打印预览面板共用）。锁的目标跟着架构迁——纪律在哪个文件，锁哪个。
+    const code = readCode('../components/print/useSchedulePaperData.ts');
 
     expect(code, '必须走既有唯一口径 computeRelatedStageIds').toContain('computeRelatedStageIds');
     expect(code, 'memberView 口径必须与详情页一致').toContain('isRestrictedView(role)');
@@ -1073,8 +1075,9 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
     expect(code, '不得把全量 stages 喂给 buildScheduleSections').not.toContain(
       'buildScheduleSections({ project, stages,',
     );
-    // 空态必须存在（零相关阶段时不得输出白纸稿）
-    expect(code).toContain('该项目的阶段与你无关');
+    // 空态文案在页壳（守卫仍归页面）——hook 只出数据，两处分工各锁一遍
+    const shell = readCode('SchedulePrintPage.tsx');
+    expect(shell, '空态必须存在（零相关阶段时不得输出白纸稿）').toContain('该项目的阶段与你无关');
   });
 
   it('★ CalendarPrintPage：三处取数同源吃 `scopedStages`（漏改一处即半成品修法）', () => {
@@ -1102,9 +1105,15 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
    * ⚠️ 这是**静态**锁，只证明源码里放着这行订阅；**行为**由上面「任务支」组的两个用例保证。
    *    两者缺一不可：静态锁防「顺手删掉」，行为用例防「订阅写了但没用上」（如接错 projectId）。
    */
-  it('★ 两页：必须按 projectId 订阅 tasks（收窄的「任务支」唯一输入）', () => {
-    for (const file of ['SchedulePrintPage.tsx', 'CalendarPrintPage.tsx']) {
-      const code = readCode(file);
+  it('★ 两链路：必须按 projectId 订阅 tasks（收窄的「任务支」唯一输入）（0.8.4 改锁 hook）', () => {
+    // v0.8.4：日程表的订阅随 hook 迁走；readCode 按 (展示文件名 → 实际源码文件) 解析
+    const fileMap: Record<string, string> = {
+      'SchedulePrintPage.tsx': '../components/print/useSchedulePaperData.ts',
+      'CalendarPrintPage.tsx': 'CalendarPrintPage.tsx',
+    };
+    for (const [file, src] of Object.entries(fileMap)) {
+      // src = 实际源码文件（锁的落点）；file 仅用于报错文案（展示名保持人类可读）
+      const code = readCode(src);
       /*
        * ⚠️ v0.8 同批更新（设计 §9.1「会被本版改动的现有测试必须与源码同批改」）：
        *   本用例原先锁的是**订阅的写法** `useProjectsStore((s) => s.tasks.filter((t) => t.projectId === id))`。
@@ -1137,9 +1146,13 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
     }
   });
 
-  it('★ 两页：「委托方」必须被 role === "admin" 门控（不得无条件渲染）', () => {
-    for (const file of ['SchedulePrintPage.tsx', 'CalendarPrintPage.tsx']) {
-      const code = readCode(file);
+  it('★ 两链路：「委托方」必须被 role === "admin" 门控（不得无条件渲染）（0.8.4 改锁纸面组件）', () => {
+    const fileMap: Record<string, string> = {
+      'SchedulePrintPage.tsx': '../components/print/SchedulePaper.tsx',
+      'CalendarPrintPage.tsx': 'CalendarPrintPage.tsx',
+    };
+    for (const [file, src] of Object.entries(fileMap)) {
+      const code = readCode(src);
       // 前提：该文件确实渲染了委托方（否则下面的「全部有门控」是空过）
       expect(code, `${file} 应包含「委托方」`).toContain('委托方');
       expect(ungatedClientNameSpots(code), `${file} 存在无门控的「委托方：」`).toEqual([]);
