@@ -583,6 +583,14 @@ class RemoteAdminRepository implements IAdminRepository {
 
 /* --------------------------------- 工厂出口 --------------------------------- */
 
+/**
+ * NAS 服务端令牌的 localStorage 键（0.8.2.0002 备份事故修复）。
+ * 与 Agent 令牌（`idplan.agentToken`）是两套东西：那个守 loopback/agent 四端点，
+ * 这个守 remote 形态的 `/api/backup`（同头不同命——服务端都用 IDPLAN_AGENT_TOKEN 一个
+ * env 校验，但入口分 Agent 面板与备份两条）。UI 入口：设置 → NAS 服务。
+ */
+export const API_TOKEN_KEY = 'idplan.apiToken';
+
 /** remote bundle 装配（rest.client 同时承担 createRemoteRepositories 职责） */
 export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle {
   if (!apiBaseUrl) {
@@ -593,8 +601,19 @@ export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle 
   }
   // v0.6：VITE_API_TOKEN 预留位启用——Docker 化局域网部署时可配简单 Bearer token；
   // 未配置时空串，与改造前行为完全一致（不发送 Authorization header）。
+  //
+  // ★ 0.8.2.0002（备份不可用事故的修复）：token 来源改为**运行时三级**——
+  //   ① localStorage `idplan.apiToken`（用户在设置「NAS 服务」区手填，最高优先）
+  //   ② 构建期 env VITE_API_TOKEN（部署方烤进包的默认值，UPK 形态通常为空）
+  //   ③ 空串（不带头，与服务端 fail-closed 相撞 = 备份 401——即本次事故形态）
+  // 为什么必须让用户在界面上改：UPK 的前端是构建期烤死的静态包，终端用户改不了
+  // env；服务端 IDPLAN_AGENT_TOKEN 是运行期 env。两侧只能靠「界面填同一串值」
+  // 对齐（compose 模板同步补了该环境位，UGOS 编排界面可填）。
   const env = import.meta.env as Record<string, string | undefined>;
-  const api = new RestClient(apiBaseUrl.replace(/\/+$/, ''), env.VITE_API_TOKEN ?? '');
+  const stored =
+    typeof localStorage !== 'undefined' ? (localStorage.getItem(API_TOKEN_KEY) ?? '').trim() : '';
+  const apiToken = stored || (env.VITE_API_TOKEN ?? '').trim();
+  const api = new RestClient(apiBaseUrl.replace(/\/+$/, ''), apiToken);
   return {
     projects: new RemoteProjectsRepository(api),
     stages: new RemoteStagesRepository(api),

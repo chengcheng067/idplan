@@ -14,6 +14,7 @@ import { BUILD_VERSION, FRONTEND_STACK, REPO_URL } from '../../constants/version
 import { isDesktop } from '../../lib/desktopBridge';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
+import { NasServiceSection } from '../settings/NasServiceSection';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import { useMembersStore } from '../../store/useMembersStore';
@@ -320,8 +321,11 @@ export function SettingsDialog({
 
             {/*
               授权区已于 0.8.1 移除（MIT 开源：commit 20c9183）——此处不留空壳组件，
-              入口注释一并归档。人类侧设置区依次为：成员 / 休息制度 / （原授权区）/ 关于。
+              入口注释一并归档。人类侧设置区依次为：成员 / 休息制度 / NAS 服务 / 关于。
             */}
+            {/* NAS 服务区（0.8.2.0002 备份事故修复）：仅 remote 数据源渲染，local/桌面整块不出现 */}
+            <NasServiceSection />
+
             {/* 关于区 */}
             <section>
               <div className="mb-2 flex items-center gap-1.5">

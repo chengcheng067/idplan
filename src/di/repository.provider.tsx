@@ -10,6 +10,13 @@ import { recoverZombieExecutions } from '../core/execution/execution-recovery';
 import { exportPreMigrationBackupToFile } from '../components/layout/useBackupIo';
 
 /**
+ * NAS 令牌变更事件名（0.8.2.0002）。设置「NAS 服务」区保存令牌后由 UI 派发，
+ * 本 provider 监听后重建 remote bundle（否则新令牌要等下次刷新页面才生效——
+ * 用户保存完立刻点备份又 401，会以为没保存上）。
+ */
+export const API_TOKEN_EVENT = 'idplan:api-token-changed';
+
+/**
  * DI 注入点：启动时经工厂创建一次 IRepositoryBundle，Context 下发。
  * 业务代码统一通过 useRepos() 取用（铁律 4 的唯一合法取数入口）。
  *
@@ -61,6 +68,20 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     }
   }, []);
 
+  /**
+   * remote 重建纪元（0.8.2.0002 备份令牌热修）：设置「NAS 服务」区改令牌后
+   * +1 → 本 effect 重跑 → createRepositories 重读 localStorage 重建 bundle。
+   * 只对 remote 有意义（local 无 token 概念）；local 模式重建会白白重开
+   * 一次 IndexedDB，故监听里直接对 dataSource 短路。
+   */
+  const [repoEpoch, setRepoEpoch] = useState(0);
+  useEffect(() => {
+    if (appEnv.dataSource !== 'remote') return;
+    const onTokenChanged = (): void => setRepoEpoch((n) => n + 1);
+    window.addEventListener(API_TOKEN_EVENT, onTokenChanged);
+    return () => window.removeEventListener(API_TOKEN_EVENT, onTokenChanged);
+  }, []);
+
   useEffect(() => {
     cancelledRef.current = false;
     void (async () => {
@@ -83,7 +104,7 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     return () => {
       cancelledRef.current = true;
     };
-  }, [startRepositories]);
+  }, [startRepositories, repoEpoch]);
 
   /** 闸门唯一出口：导出成功才允许升级（无「跳过」选项） */
   const confirmMigrationBackup = useCallback(async (): Promise<void> => {
