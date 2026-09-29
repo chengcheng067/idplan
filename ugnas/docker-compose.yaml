@@ -61,7 +61,7 @@ services:
       #   UGOS 编排界面（Docker 套件 → idplan-backend → 编辑 → 环境变量）里给它
       #   填一串自选值；同一串值填进 ID Plan 设置 →「NAS 服务」。两侧同值即通。
       #   留空 = 服务端拒绝所有备份请求（事故形态：界面点一次 401 一次）。
-      - IDPLAN_AGENT_TOKEN=${IDPLAN_AGENT_TOKEN:-}
+      - IDPLAN_AGENT_TOKEN=${IDPLAN_AGENT_TOKEN}
     # 数据持久化（关键）：不声明卷时容器重建即丢库，团队数据全没。
     volumes:
       - idplan-data:/data

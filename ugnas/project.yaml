@@ -64,6 +64,17 @@ parameters:
       zh-CN:
         name: 后端 API 地址
         description: 仅 remote 数据源必填。保持 "/api" 即可——nginx 已反代到后端容器，无需填 NAS IP。
+  - key: IDPLAN_AGENT_TOKEN
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: Backup Token
+        description: Shared secret for in-app backup/restore. Set any random string here, then enter the SAME string in ID Plan Settings -> NAS Service. Leave empty = in-app backup refused (fail-closed); volume-level db copy still works.
+      zh-CN:
+        name: 备份令牌
+        description: 应用内「保存备份/从备份恢复」的共享密钥。在此填任意一串随机字符，并在 ID Plan 设置 →「NAS 服务」填入同一串值。留空 = 应用内备份被拒（安全设计）；卷级拷贝数据库文件不受影响。
 
 # 合规与技术支持链接（使用开源代码时必须配置 license + source）
 privacy_policy_link:
