@@ -476,10 +476,50 @@ describe('artifact id 稳定化（2026-09-29 走查 #3 / 0.8.2 条目8）', () =
     // 且 id 确实是确定性形状（art_ + 24 hex），不是 randomUUID（36 字符带连字符）
     for (const t of rows2) {
       for (const a of t.artifacts) {
-        expect(a.id).toMatch(/^art_[0-9a-f]{24}$/);
+        expect(a.id).toMatch(/^art_[0-9a-z_\-]+_[0-9a-f]{8}$/);
       }
     }
     // 同任务两个附件 id 互异（序号进键的判别力）
     expect(rows2[0]!.artifacts[0]!.id).not.toBe(rows2[0]!.artifacts[1]!.id);
+  });
+});
+
+describe('runId 批次追溯落库（2026-09-29 / 0.8.2 条目7）', () => {
+  it('★ runId 落库 = 最近一次导入的运行 id；重复导入更新为最新（不新建行）', async () => {
+    const projectId = await seedProject();
+    const mk = (runId: string) =>
+      makePayload(projectId, [{ title: '可溯源任务' }], {
+        producedBy: {
+          actorKind: 'agent',
+          agentKind: 'workbuddy',
+          agentName: 'WorkBuddy 编排器',
+          runId,
+        },
+      });
+
+    const r1 = await applyAgentPayload(bundle, mk('run-A'), { projectId });
+    expect(r1.created).toBe(1);
+    const rowsA = await bundle.tasks.listByProject(projectId);
+    expect(rowsA[0]!.runId).toBe('run-A');
+
+    // 第二批次不同 runId 重发同一批任务：幂等（行数不变）+ runId 更新为最新
+    const r2 = await applyAgentPayload(bundle, mk('run-B'), { projectId });
+    expect(r2.created).toBe(0);
+    const rowsB = await bundle.tasks.listByProject(projectId);
+    expect(rowsB).toHaveLength(1);
+    expect(rowsB[0]!.runId).toBe('run-B');
+    // 溯源只改元数据：幂等键 externalId 不动（铁律重申：runId 绝不进键）
+    expect(rowsB[0]!.externalId).toBe(rowsA[0]!.externalId);
+  });
+
+  it('人类路径（建档默认任务）runId 为 null；producedBy 缺省时不炸', async () => {
+    const projectId = await seedProject();
+    const payload = makePayload(projectId, [{ title: 't' }]);
+    // 制造无 runId 的 producedBy（老写入方/缺省形状）
+    (payload.producedBy as { runId?: string }).runId = undefined;
+    const result = await applyAgentPayload(bundle, payload, { projectId });
+    expect(result.rejected).toEqual([]);
+    const rows = await bundle.tasks.listByProject(projectId);
+    expect(rows[0]!.runId).toBeNull();
   });
 });

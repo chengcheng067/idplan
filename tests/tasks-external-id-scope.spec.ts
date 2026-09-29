@@ -44,6 +44,7 @@ function upsertRow(externalId: string, overrides: Partial<TaskUpsertRow> = {}): 
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null,
     orderIndex: 1,
     ...overrides,
   };

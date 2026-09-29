@@ -157,6 +157,7 @@ export interface TaskRowInput {
   artifacts: TaskArtifact[];
   startAt: string | null;
   claimedAt: string | null;
+  runId: string | null;
   orderIndex: number;
   revision: number;
   updatedAt: string;
@@ -212,6 +213,8 @@ const taskSchema = z
     artifacts: z.array(artifactSchema).default([]),
     startAt: z.string().nullable().default(null),
     claimedAt: z.string().nullable().default(null),
+    // v0.8.2：runId 溯源元数据（老备份缺 → null；绝不进幂等键）
+    runId: z.string().nullable().default(null),
     // ↑↑↑ v0.6 Agent 新增 ↑↑↑
     orderIndex: z.number().int(),
     revision: z.number().int().nonnegative(),
@@ -247,6 +250,7 @@ export function normalizeTaskRow(t: TaskRowInput): import('../types/entities').T
     artifacts: t.artifacts,
     startAt: t.startAt,
     claimedAt: t.claimedAt,
+    runId: t.runId,
     orderIndex: t.orderIndex,
     revision: t.revision,
     updatedAt: t.updatedAt,

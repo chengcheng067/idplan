@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   artifacts TEXT NOT NULL DEFAULT '[]',
   start_at TEXT,
   claimed_at TEXT,
+  run_id TEXT, -- v0.8.2：Agent 写入批次追溯（payload.producedBy.runId；人类任务 null）
   order_index INTEGER NOT NULL DEFAULT 1,
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL

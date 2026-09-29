@@ -351,6 +351,7 @@ describe('真·升级链路（fake-indexeddb）', () => {
       artifacts: [],
       startAt: null,
       claimedAt: null,
+      runId: null,
       orderIndex: 1,
       revision: 1,
       updatedAt: '2026-08-01T00:00:00.000Z',
@@ -542,6 +543,7 @@ describe('真·升级链路（fake-indexeddb）', () => {
       artifacts: [],
       startAt: null,
       claimedAt: null,
+      runId: null,
     };
     await db.tasks.bulkAdd([{ ...base, id: 'tsk_u1', externalId: 'codex:run-1:t1' }]);
     let conflictName: string | null = null;

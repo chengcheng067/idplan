@@ -113,6 +113,7 @@ function taskOf(over: Partial<Task> & { id: string }): Task {
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null,
     orderIndex: 1,
     revision: 1,
     updatedAt: NOW,

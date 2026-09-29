@@ -121,6 +121,7 @@ function makeTask(partial: Partial<Task> & { title: string }): Task {
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null,
     orderIndex: seq,
     revision: 1,
     updatedAt: '2026-09-01T00:00:00.000Z',

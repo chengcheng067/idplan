@@ -670,6 +670,7 @@ describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真�
       artifacts: [],
       startAt: null,
       claimedAt: null,
+      runId: null,
       orderIndex: i,
       revision: 1,
       updatedAt: NOW_ISO,

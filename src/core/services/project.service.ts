@@ -189,6 +189,7 @@ export class ProjectService {
             artifacts: [],
             startAt: null,
             claimedAt: null,
+          runId: null, // v0.8.2：建档默认任务的溯源批次为空（人类路径）
             orderIndex: idx + 1,
             revision: 1,
             updatedAt: new Date().toISOString(),

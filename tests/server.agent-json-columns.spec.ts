@@ -204,6 +204,7 @@ describe('server 三件套③：JSON 列 + 幂等 upsert + claim', () => {
               artifacts: [],
               startAt: null,
               claimedAt: null,
+              runId: null,
               assigneeId: null,
               assigneeIds: ['m1', 'm2'],
               dueDate: null,

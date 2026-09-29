@@ -132,6 +132,7 @@ function upsertRow(
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null,
     orderIndex: 1,
   };
 }

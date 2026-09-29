@@ -109,6 +109,7 @@ function taskRow(id: string, taskNo: number | null, orderIndex = 1): Task {
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null, // v0.8.2 溯源批次（人类路径；Agent 路径由 upsert 提供）
     orderIndex,
     revision: 1,
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -165,6 +166,7 @@ const CANONICAL_TASK_KEYS = [
   'artifacts',
   'startAt',
   'claimedAt',
+  'runId', // v0.8.2 条目7：runId 溯源元数据（claimedAt 后、orderIndex 前）
   'orderIndex',
   'revision',
   'updatedAt',

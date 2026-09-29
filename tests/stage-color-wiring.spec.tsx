@@ -1096,6 +1096,7 @@ function makeTask(id: string, stageId: string, over: Partial<Task> = {}): Task {
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null,
     orderIndex: 1,
     revision: 1,
     updatedAt: '2026-06-01T00:00:00Z',

@@ -196,6 +196,7 @@ function makeTasks(
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null,
     orderIndex: i,
     revision: 1,
     updatedAt: '2026-09-01T00:00:00.000Z',

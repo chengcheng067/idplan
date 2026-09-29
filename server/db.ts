@@ -94,6 +94,8 @@ const V3_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
   },
   { table: 'tasks', column: 'start_at', ddl: 'ALTER TABLE tasks ADD COLUMN start_at TEXT' },
   { table: 'tasks', column: 'claimed_at', ddl: 'ALTER TABLE tasks ADD COLUMN claimed_at TEXT' },
+  // v0.8.2：runId 溯源列（老库 ALTER 补列；新库由 schema.sql 声明）
+  { table: 'tasks', column: 'run_id', ddl: 'ALTER TABLE tasks ADD COLUMN run_id TEXT' },
   {
     table: 'members',
     column: 'actor_kind',

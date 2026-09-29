@@ -98,8 +98,9 @@ export interface Task {
   /**
    * 任务来源。键序铁律：下面 9 个字段在 entities / backup taskSchema /
    * local.tasks.repo.insert / project.service.taskRows **四处必须逐字同序**
-   * （顺序即 §3.1 序 9–17：source → externalId → agentId → status → description →
-   *   dependsOn → artifacts → startAt → claimedAt，位于 dueDate 后、orderIndex 前）。
+   * （顺序即 §3.1 序 9–18：source → externalId → agentId → status → description →
+   *   dependsOn → artifacts → startAt → claimedAt → runId，位于 dueDate 后、
+   *   orderIndex 前）。
    */
   source: TaskSource;
   /**
@@ -150,6 +151,20 @@ export interface Task {
    * 不改两个消费方语义的原因：改它们会破坏 claim 的并发互斥地基。
    */
   claimedAt: string | null;
+  /**
+   * 产出批次追溯（v0.8.2 新增）：**写入该行的那一次 Agent 运行** 标识。
+   *
+   * 取值来源 = payload 的 `producedBy.runId`（人类任务为 null）。答的是
+   * 「这批任务是哪次导入进来的」——排查「谁把这行写进来的」时不用猜。
+   *
+   * ⚠️ 与 externalId 的分工（铁律重申）：externalId 是**幂等键**（稳定描述
+   * 任务本身），runId 只是**溯源元数据**；runId 每跑必变，绝不进幂等键
+   * （主 PRD §4.2.2-①：重跑换 runId → 新键 → 幂等失效 → 每跑多一条重复任务）。
+   * 重复导入同一批任务时 runId 随 upsert 更新为**最新一次**运行的 id——
+   * 追溯语义问的是「最近谁写的」，不是「历史上谁先写的」。
+   * 老数据/老备份无该字段 → zod `.nullable().default(null)` 归一 → null。
+   */
+  runId: string | null;
   /* ------------------------------- v0.6 新增块结束 ------------------------------ */
   orderIndex: number;
   revision: number;

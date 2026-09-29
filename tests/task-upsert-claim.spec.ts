@@ -58,6 +58,7 @@ function legacyDirtyRow(id: string, title: string, status: TaskStatus): Task {
     artifacts: [],
     startAt: null,
     claimedAt: DIRTY_CLAIMED_AT,
+    runId: null,
     orderIndex: 1,
     revision: 1,
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -82,6 +83,7 @@ function upsertRow(externalId: string, overrides: Partial<TaskUpsertRow> = {}): 
     artifacts: [],
     startAt: null,
     claimedAt: null,
+    runId: null, // v0.8.2 溯源批次（人类路径；Agent 路径由 upsert 提供）
     orderIndex: 1,
     ...overrides,
   };

@@ -167,6 +167,7 @@ export class LocalTasksRepository implements ITasksRepository {
         artifacts: cmd.artifacts ?? [],
         startAt: cmd.startAt ?? null,
         claimedAt: null, // §3.1 序 17：缺省 null（非 undefined）——claim 校验 `claimedAt === null` 依赖显式键
+        runId: null, // v0.8.2：人工任务无批次来源；Agent 路径由 upsert 提供
         orderIndex: siblings.reduce((max, t) => Math.max(max, t.orderIndex), 0) + 1,
         revision: 1,
         updatedAt: now,

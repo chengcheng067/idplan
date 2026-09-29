@@ -279,6 +279,7 @@ describe('L1 回滚凭据真的可用（闸门的下游）', () => {
             artifacts: [],
             startAt: null,
             claimedAt: null,
+            runId: null,
             orderIndex: 1,
             revision: 1,
             updatedAt: now,

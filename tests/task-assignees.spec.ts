@@ -106,7 +106,7 @@ describe('computeRelatedStageIds：多人任务相关阶段可见', () => {
 
   it('成员仅因参与某任务（assigneeIds 含 me，assigneeId 是他人）而看到该阶段', () => {
     const tasks: Task[] = [
-      { id: 'tsk_m', taskNo: null, projectId: 'proj_1', stageId: 'stg_2', title: '放线', done: false, assigneeId: 'mem_other', assigneeIds: ['mem_other', 'mem_me'], dueDate: '2026-08-13', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
+      { id: 'tsk_m', taskNo: null, projectId: 'proj_1', stageId: 'stg_2', title: '放线', done: false, assigneeId: 'mem_other', assigneeIds: ['mem_other', 'mem_me'], dueDate: '2026-08-13', source: 'human', externalId: null, agentId: null, status: TaskStatus.Draft, description: null, dependsOn: [], artifacts: [], startAt: null, claimedAt: null, runId: null, orderIndex: 1, revision: 1, updatedAt: '2026-08-01T00:00:00.000Z' },
     ];
     const ids = computeRelatedStageIds({
       memberView: true,

@@ -57,6 +57,7 @@ interface TaskRow {
   artifacts: string;
   start_at: string | null;
   claimed_at: string | null;
+  run_id: string | null;
   order_index: number;
   revision: number;
   updated_at: string;
@@ -132,6 +133,7 @@ function rowToTask(r: TaskRow): Record<string, unknown> {
     artifacts: parseJsonArray<TaskArtifact>(r.artifacts),
     startAt: r.start_at,
     claimedAt: r.claimed_at,
+    runId: r.run_id ?? null,
     orderIndex: r.order_index,
     revision: r.revision,
     updatedAt: r.updated_at,
@@ -148,8 +150,8 @@ function rowToTask(r: TaskRow): Record<string, unknown> {
 const TASK_INSERT_COLUMNS = `(
   id, task_no, project_id, stage_id, title, done, assignee_id, assignee_ids, due_date, itinerary_date,
   source, external_id, agent_id, status, description, depends_on, artifacts,
-  start_at, claimed_at, order_index, revision, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  start_at, claimed_at, run_id, order_index, revision, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 interface TaskInsertValues {
   id: string;
@@ -171,6 +173,8 @@ interface TaskInsertValues {
   artifacts: unknown;
   startAt: string | null;
   claimedAt: string | null;
+  /** v0.8.2：Agent 写入批次追溯（payload.producedBy.runId；null=人类路径） */
+  runId: string | null;
   orderIndex: number;
   revision: number;
   updatedAt: string;
@@ -209,6 +213,8 @@ function insertValues(v: TaskInsertValues): unknown[] {
     serializeJson(v.artifacts),
     v.startAt,
     normalizeClaimedAt(v.status, v.claimedAt),
+    // v0.8.2：runId 溯源（claimedAt 后、orderIndex 前，与列清单/键序铁律同位）
+    v.runId ?? null,
     v.orderIndex,
     v.revision,
     v.updatedAt,
@@ -354,6 +360,7 @@ export function runTaskUpsert(
             artifacts: t.artifacts ?? [],
             startAt: (t.startAt as string | null) ?? null,
             claimedAt: (t.claimedAt as string | null) ?? null,
+            runId: (t.runId as string | null) ?? null,
             orderIndex: Number(t.orderIndex ?? 1),
             revision: 1,
             updatedAt: nowIso(),
@@ -455,6 +462,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
             artifacts: t.artifacts ?? [],
             startAt: (t.startAt as string | null) ?? null,
             claimedAt: (t.claimedAt as string | null) ?? null,
+            runId: (t.runId as string | null) ?? null,
             orderIndex: Number(t.orderIndex ?? 1),
             revision: Number(t.revision ?? 1),
             updatedAt: String(t.updatedAt ?? nowIso()),
@@ -512,6 +520,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
           artifacts: b.artifacts ?? [],
           startAt: (b.startAt as string | null) ?? null,
           claimedAt: (b.claimedAt as string | null) ?? null,
+          runId: (b.runId as string | null) ?? null,
           orderIndex: (maxRow.m ?? 0) + 1,
           revision: 1,
           updatedAt: nowIso(),

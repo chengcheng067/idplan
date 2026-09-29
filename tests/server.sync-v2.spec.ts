@@ -119,6 +119,7 @@ function samplePackage() {
           ],
           startAt: null,
           claimedAt: null,
+          runId: null,
           orderIndex: 1,
           revision: 1,
           updatedAt: now,

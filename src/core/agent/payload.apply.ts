@@ -37,7 +37,6 @@
  *     把这个功能当 bug 删掉。
  */
 
-import { createHash } from 'node:crypto';
 import {
   ChangxiaError,
   ChangxiaErrorCode,
@@ -46,6 +45,7 @@ import {
   projectKindOf,
   TaskStatus,
 } from '../types/enums';
+import { stableId } from '../../lib/stableHash';
 import type { Stage, Task, TaskArtifact } from '../types/entities';
 import type {
   AgentPayloadV1,
@@ -516,12 +516,11 @@ async function resolve(
       // ★ 2026-09-29 走查 #3（0.8.2 条目8）：artifact id 确定性生成。
       //   旧码 `art_${randomUUID()}` 每次 resolve 都换 id ⇒ 同一 externalId 重复导入
       //   后引用漂移（下游拿着旧 id 找不到行）。键 = (externalId, 序号, kind, title)：
-      //   序号进键是为了容忍「同题多附件」；title 进键让「换标题=换附件」。
-      //   碰撞面：sha256 前 24 hex ≈ 2^96，同板同任务同序号同标题同时不同内容才撞。
-      id: `art_${createHash('sha256')
-        .update(`${t.externalId}|${i}|${a.kind}|${a.title ?? ''}`)
-        .digest('hex')
-        .slice(0, 24)}`,
+      //   序号进键容忍「同题多附件」；title 进键让「换标题=换附件」。
+      //   哈希必须双环境通用（本模块同时跑桌面渲染进程/NAS Node 两端）——用 stableHash
+      //   的 FNV-1a：node:crypto 在 vite 浏览器构建里被 externalize，import 即炸构建
+      //   （2026-09-29 本条开发实测，勿回退）。
+      id: stableId('art', [t.externalId ?? '', i, a.kind, a.title ?? '']),
       kind: a.kind,
       title: a.title,
       path: a.path,
@@ -548,6 +547,9 @@ async function resolve(
       artifacts,
       startAt: t.startAt,
       claimedAt: null,
+      // v0.8.2 条目7：runId 溯源（最新一次导入的运行 id；upsert 更新语义）。
+      // 注意绝不进幂等键——externalId 才是键，见 entities.Task.runId 注释铁律。
+      runId: payload.producedBy?.runId ?? null,
       orderIndex: stageBaseOrder + rows.length + 1,
     });
     rowExternalIds.push(t.externalId);
