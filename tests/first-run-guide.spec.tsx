@@ -39,6 +39,9 @@ describe('FirstRunGuide（0.8.3 首启三幕·第二幕）', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    // 身份流完成态（currentMemberId 落定）——0.8.3 起欢迎卡等 IdentityDialog
+    // 走完才出现（双卡叠弹修复），默认用例在这个前提下测欢迎卡本身
+    localStorage.setItem('changxia.currentMemberId', 'm-spec');
     loadDemoSpy.mockClear();
     projectsState.value = [];
     // 上一用例 render 的 Modal portal 还挂在 body（未 unmount）——先清场，
@@ -80,6 +83,13 @@ describe('FirstRunGuide（0.8.3 首启三幕·第二幕）', () => {
 
   it('③ 有过项目（老用户/已载示例）：卡不出现', async () => {
     projectsState.value = [{ id: 'p1' }];
+    await renderInto(container);
+    expect(document.body.textContent).not.toContain('欢迎使用 ID Plan');
+  });
+
+
+  it('③c 身份流未完成（currentMemberId 未落定）：卡不出现（等 IdentityDialog，防双卡叠弹）', async () => {
+    localStorage.removeItem('changxia.currentMemberId');
     await renderInto(container);
     expect(document.body.textContent).not.toContain('欢迎使用 ID Plan');
   });

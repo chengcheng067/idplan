@@ -230,6 +230,15 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       b?.click();
     });
     await page.waitForTimeout(1000);
+
+    // 0.8.3：身份流走完后 FirstRunGuide 欢迎卡紧接出现（空库环境必弹）——
+    // 不消掉会遮住后续所有点击。本族测的是控件几何，走「从空库开始」线；
+    // 示例分支由 first-run-guide.spec.tsx / demo-data.spec.ts 覆盖。
+    const guideSkip = page.locator('button', { hasText: '从空库开始' });
+    if (await guideSkip.count()) {
+      await guideSkip.first().click();
+      await page.waitForTimeout(500);
+    }
   }
 
   /** 走真实建档 UI 建一个 9 段室内项目，返回第一阶段彩条的几何中心 */

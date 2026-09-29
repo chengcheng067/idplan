@@ -440,6 +440,9 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await ctx.addInitScript((id: string) => {
         try {
           localStorage.setItem('changxia.currentMemberId', id);
+          // 0.8.3：同步压首启欢迎卡 flag（FirstRunGuide 与 IdentityDialog 同属首启两卡，
+          // 空库+未见过就弹遮罩会挡住全部点击——探针环境两卡都抑制）
+          localStorage.setItem('idplan.firstRunGuideSeen', '1');
         } catch {
           /* 隐私模式：种子导入会随之失败并给出清晰报错 */
         }
@@ -501,6 +504,9 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await ctx.addInitScript(() => {
         try {
           localStorage.setItem('changxia.currentMemberId', 'm-probe');
+          // 0.8.3：同步压首启欢迎卡 flag（FirstRunGuide 与 IdentityDialog 同属首启两卡，
+          // 空库+未见过就弹遮罩会挡住全部点击——探针环境两卡都抑制）
+          localStorage.setItem('idplan.firstRunGuideSeen', '1');
         } catch {
           /* ignore */
         }

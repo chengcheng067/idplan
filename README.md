@@ -10,11 +10,13 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-0.8.2.0002-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-1825%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-0.8.3.0001-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-1836%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
+
+> 🌐 [English](./README.en.md) · 中文
 
 > 从室内设计场景起步，现已覆盖 **9 个主板块 / 21 套阶段套餐**。把项目的金额、类型、阶段节点、参与成员整理成一条时间轴，用看板、月历、甘特随时掌握进度，并把排期导成能直接发给甲方的交付页。
 > **还能让外部 AI 写方（WorkBuddy / Codex 等）读一个文件就完成接入，把任务直接写进你的看板**——见 [🤖 Agent 接入](#-agent-接入)。
@@ -50,9 +52,6 @@
 - **成员看板** —— 每位成员登录后看到的是自己相关的项目进度。
 - **密码登录** —— 管理员可为成员单独设置 / 清除密码。
 
-### 🔒 授权
-- **当前只显示授权状态，不拦截功能**（MVP）。
-
 ### 💾 数据
 - **备份恢复** —— 一键导出 / 导入 JSON 备份，格式全量校验；旧版本备份可安全导入。
 - **离线优先** —— 桌面版数据存本机 IndexedDB，不依赖网络。
@@ -86,7 +85,7 @@ npm run dev            # 前端 http://localhost:5173
 ```
 
 ```bash
-npm test               # 全量单测（1846 用例，vitest）
+npm test               # 全量单测（1836 用例，vitest）
 npm run typecheck      # 前端 / 服务端类型检查
 npm run build          # 类型检查 + 构建
 npm run electron:build # 构建 + 打 Windows NSIS 安装包
@@ -167,7 +166,6 @@ ghcr.io/chengcheng067/idplan-backend:<版本>  # 后端（Fastify + SQLite）
 | 多行业建档、排期、看板 / 月历 / 甘特、打印导出 | ✅ 可用 |
 | 旅游每日行程与客户行程单 | ✅ 可用 |
 | Agent loopback 自动导入、手动粘贴导入 | ✅ 可用 |
-| 离线授权验签 | 🟡 MVP，仅显示状态，不拦功能 |
 | Agent 执行控制台界面 | 🔴 未接（数据层已就绪） |
 | 从 ID Plan 发起并追踪 Agent 执行 | 🔴 未接（目前只有外部写入通道） |
 | NAS 远程自动写入 | 🔴 未启用（仅连通探测） |

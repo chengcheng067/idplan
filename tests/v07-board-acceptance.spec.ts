@@ -714,6 +714,9 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     await c.addInitScript(() => {
       try {
         localStorage.setItem('changxia.currentMemberId', 'm-admin');
+        // 0.8.3：同步压首启欢迎卡 flag（FirstRunGuide 与 IdentityDialog 同属首启两卡，
+        // 空库+未见过就弹遮罩会挡住全部点击——探针环境两卡都抑制）
+        localStorage.setItem('idplan.firstRunGuideSeen', '1');
       } catch {
         /* 隐私模式下 localStorage 不可写——种子导入随后会失败并给出清晰报错 */
       }

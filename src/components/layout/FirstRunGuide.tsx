@@ -13,7 +13,7 @@
  *   ·「从空库开始」→ 直接关卡，回到既有首页空态流程
  * 「跳过」语义即右上角关闭 / Esc（Modal 基建自带）。
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Sparkles } from 'lucide-react';
 
@@ -30,6 +30,28 @@ export function FirstRunGuide(): JSX.Element | null {
   const [dismissed, setDismissed] = useState(
     () => (typeof localStorage !== 'undefined' ? localStorage.getItem(GUIDE_SEEN_KEY) === '1' : false),
   );
+  /**
+   * 身份流完成判据（0.8.3 双卡叠弹修复）：欢迎卡**必须等 IdentityDialog 走完再出现**，
+   * 否则陌生人首次启动会看到两张模态叠在一起（身份卡在上、欢迎卡在下，都带遮罩）。
+   * 信号 = `changxia.currentMemberId`（useSettingsStore/useFirstRunGate 同一个键：
+   * IdentityDialog 选完管理员/成员即写入；探针环境由 spec 预置）。
+   * 用 state + effect 而非纯 render 期读：写入发生在对话框关闭时，要能触发重渲染。
+   */
+  const [identityDone, setIdentityDone] = useState(
+    () =>
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('changxia.currentMemberId') !== null,
+  );
+  useEffect(() => {
+    if (identityDone) return;
+    const t = window.setInterval(() => {
+      if (localStorage.getItem('changxia.currentMemberId') !== null) {
+        setIdentityDone(true);
+        window.clearInterval(t);
+      }
+    }, 400);
+    return () => window.clearInterval(t);
+  }, [identityDone]);
 
   const close = useCallback(() => {
     try {
@@ -42,7 +64,7 @@ export function FirstRunGuide(): JSX.Element | null {
   }, []);
 
   // 有项目（老用户 / 已载入示例）或已看过 → 不出现
-  if (projects.length > 0 || dismissed) {
+  if (projects.length > 0 || dismissed || !identityDone) {
     return (
       <>
         {fileInput}
