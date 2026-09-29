@@ -389,10 +389,14 @@ describe('StageSelectPanel：可见分组（A1/A6）', () => {
 });
 
 describe('StageSelectPanel：快捷套餐只列主板块（A5）', () => {
-  it('主板块＝室内 → 恰 4 个套餐；＝婚礼 → 恰 2 个；＝景观 → 恰 2 个', async () => {
+  it('主板块＝室内 → 恰 4 个套餐；＝婚礼 → 恰 3 个；＝景观 → 恰 2 个', async () => {
     expect(getPresetsByDomain('indoor')).toHaveLength(4);
-    expect(getPresetsByDomain('wedding')).toHaveLength(2);
+    // v3 扩展后：wedding 3（+目的地婚礼）；software/marketing/film 各 4（各 +2）
+    expect(getPresetsByDomain('wedding')).toHaveLength(3);
     expect(getPresetsByDomain('landscape')).toHaveLength(2);
+    expect(getPresetsByDomain('software')).toHaveLength(4);
+    expect(getPresetsByDomain('marketing')).toHaveLength(4);
+    expect(getPresetsByDomain('film')).toHaveLength(4);
 
     await act(async () =>
       root.render(<PanelHarness initialSelected={[]} domain="indoor" visibleDomains={SPACE_DOMAINS} />),
@@ -402,7 +406,8 @@ describe('StageSelectPanel：快捷套餐只列主板块（A5）', () => {
     await act(async () =>
       root.render(<PanelHarness initialSelected={[]} domain="wedding" visibleDomains={['wedding']} />),
     );
-    expect(presetCount()).toBe(2);
+    // v3：婚礼套餐 2→3（+目的地婚礼）
+    expect(presetCount()).toBe(3);
   });
 
   it('切换主板块后**已选阶段不丢**（池子换了、已选顺序原样保留）', async () => {
@@ -416,7 +421,8 @@ describe('StageSelectPanel：快捷套餐只列主板块（A5）', () => {
       root.render(<PanelHarness initialSelected={indoorFull} domain="wedding" visibleDomains={['wedding']} />),
     );
     expect(container.querySelectorAll('[data-testid^="selected-row-"]')).toHaveLength(indoorFull.length);
-    expect(presetCount()).toBe(2);
+    // v3：婚礼套餐 2→3（+目的地婚礼）
+    expect(presetCount()).toBe(3);
     // 已选（室内）阶段即便不在可见池里也仍可见 —— 用户有办法看到并取消
     expect(container.textContent).toContain(indoorFull[0]!.name);
   });

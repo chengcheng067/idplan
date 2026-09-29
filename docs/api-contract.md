@@ -191,7 +191,7 @@ env 为 **`IDPLAN_AGENT_API_TOKEN`**（`AGENT_API_TOKEN_ENV`，`agent-auth.ts:10
 - 校验顺序（fail fast，全部通过才开始写，失败路径零残留）：token → 401；`name` 缺失/空白 → 400；
   起止日期缺失/空白 → 400（**绝不替你猜一个日期**）；`presetKey` 与 `stageNames` 都没给或都为空 → 400；
   `presetKey` 库里查不到 → 400；展开后阶段数 > `MAX_STAGE_COUNT`（**20**）→ 400。
-- 阶段来源的**唯一数据源** = `templates/stage-library.json`（当前 version 2，**21 套套餐 / 63 个阶段项**，
+- 阶段来源的**唯一数据源** = `templates/stage-library.json`（当前 version 3，**29 套套餐 / 74 个阶段项**，
   另有 9 个 domain、7 个 industryGroup）。`presetKey` 先展开套餐骨架（并以套餐声明的 `domain` 作为项目主板块），
   再追加 `stageNames` 声明的名字；名字不在库 → 自定义阶段（`templateKey` 落 `null`，**不伪造 key**）；
   请求内按 `normalizeStageName` 去重，保留首次出现（归一值**只用于判重、绝不入库**）。
@@ -205,7 +205,7 @@ env 为 **`IDPLAN_AGENT_API_TOKEN`**（`AGENT_API_TOKEN_ENV`，`agent-auth.ts:10
 ## 备注
 
 1. 服务端不实现"切分算法"端点——切分是纯函数驻留前端。**建档（含 Agent 建板）的阶段数据源**是
-   `templates/stage-library.json`（version 2：**21 套套餐 / 63 个阶段项**，另含 9 个 domain 与 7 个 industryGroup），
+   `templates/stage-library.json`（version 3：**29 套套餐 / 74 个阶段项**，另含 9 个 domain 与 7 个 industryGroup），
    服务端消费点 `agent.routes.ts:69-74`（`getPreset` / `getPresetItems` / `getStageLibraryItems` / `getStageLibraryVersion`）。
    同包的 `templates/nine-stages.default.json` **仍保留**，但只作为老数据 `templateKey` 的反查源
    （`src/core/template/stage-fallback.ts:48`），**不再是建档主力数据源**。

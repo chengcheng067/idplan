@@ -18,7 +18,7 @@
 
 <p align="center"><a href="./README.md">中文</a> · <strong>English</strong></p>
 
-> Born in the interior-design workflow, now covering **9 domains / 21 stage presets**. Turn budget, project type, stage milestones and members into one timeline — read it as a kanban, calendar or gantt, and export a schedule page you can hand straight to a client.
+> Born in the interior-design workflow, now covering **9 domains / 29 stage presets**. Turn budget, project type, stage milestones and members into one timeline — read it as a kanban, calendar or gantt, and export a schedule page you can hand straight to a client.
 > **It also lets external AI writers (WorkBuddy / Codex, etc.) onboard by reading a single file and write tasks directly into your board** — see [🤖 Agent Access](#-agent-access).
 
 ---
@@ -36,7 +36,7 @@ It ships in three forms: **Windows desktop** (data on your machine), **UGREEN NA
 ### 🧭 Project setup: pick the domain, get the stages
 - **Three-level cascading setup** — domain → sub-domain → stage preset. Nothing is pre-selected on first open; the presets and stages only appear after you pick a sub-domain.
 - **9 domains** — interior / landscape / architecture / software / marketing / film production / weddings / consulting delivery / travel.
-- **21 stage presets** — each domain has stages that fit its own workflow (not the interior nine stages renamed). Travel runs "Planning → Itinerary Design → Resource Booking → Pre-departure → Execution → Settlement → Review"; software runs "Planning → Design → Development → Testing → Release".
+- **29 stage presets** — each domain has stages that fit its own workflow (not the interior nine stages renamed). Travel runs "Planning → Itinerary Design → Resource Booking → Pre-departure → Execution → Settlement → Review"; software runs "Planning → Design → Development → Testing → Release".
 - **Board columns follow the domain** — interior gets design / detailing / construction; film gets pre-production / shooting / post-production / delivery.
 
 ### 📐 Scheduling & delivery
