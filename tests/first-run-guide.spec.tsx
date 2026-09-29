@@ -1,0 +1,92 @@
+// @vitest-environment jsdom
+/**
+ * 0.8.3 条目2 · 首启三幕第二幕（FirstRunGuide）行为钉。
+ *
+ * 三态：
+ *   ① 空库 + 未见过 → 卡出现，两出口（示例/空库）都在；
+ *   ② 任一出口后写 flag → 卡不再出现（会话内 + 刷新后都不弹）；
+ *   ③ 有项目（老用户/已载示例）→ 不出现。
+ * 另钉：示例按钮与侧栏同链（loadDemo 调用）。
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act } from 'react';
+
+const projectsState = { value: [] as unknown[] };
+vi.mock('../src/core/project/visibility', () => ({
+  useHumanProjects: () => projectsState.value,
+}));
+
+import { FirstRunGuide } from '../src/components/layout/FirstRunGuide';
+
+const loadDemoSpy = vi.fn();
+vi.mock('../src/components/layout/useBackupIo', () => ({
+  useBackupIo: () => ({
+    loadDemo: loadDemoSpy,
+    fileInput: null,
+    confirmDialog: null,
+  }),
+}));
+
+async function renderInto(el: HTMLElement): Promise<void> {
+  await act(async () => {
+    const { createRoot } = await import('react-dom/client');
+    createRoot(el).render(<FirstRunGuide />);
+  });
+}
+
+describe('FirstRunGuide（0.8.3 首启三幕·第二幕）', () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    localStorage.clear();
+    loadDemoSpy.mockClear();
+    projectsState.value = [];
+    // 上一用例 render 的 Modal portal 还挂在 body（未 unmount）——先清场，
+    // 否则「卡不出现」的断言读到的是上一条用例的残留 DOM。
+    document.body.innerHTML = '';
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  it('① 空库 + 未见过：欢迎卡出现，示例入口与空库入口都在', async () => {
+    await renderInto(container);
+    expect(document.body.textContent).toContain('欢迎使用 ID Plan');
+    expect(document.body.textContent).toContain('载入示例项目看看');
+    expect(document.body.textContent).toContain('从空库开始');
+  });
+
+  it('② 示例按钮 → loadDemo + flag 落盘（确认弹窗无论确认与否都不再重弹）', async () => {
+    await renderInto(container);
+    const demoBtn = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      /载入示例项目看看/.test(b.textContent ?? ''),
+    );
+    await act(async () => {
+      demoBtn?.click();
+    });
+    expect(loadDemoSpy).toHaveBeenCalled();
+    expect(localStorage.getItem('idplan.firstRunGuideSeen')).toBe('1');
+  });
+
+  it('②b 「从空库开始」也写 flag（关卡=看过，不扰老用户）', async () => {
+    await renderInto(container);
+    const skipBtn = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      /从空库开始/.test(b.textContent ?? ''),
+    );
+    await act(async () => {
+      skipBtn?.click();
+    });
+    expect(localStorage.getItem('idplan.firstRunGuideSeen')).toBe('1');
+  });
+
+  it('③ 有过项目（老用户/已载示例）：卡不出现', async () => {
+    projectsState.value = [{ id: 'p1' }];
+    await renderInto(container);
+    expect(document.body.textContent).not.toContain('欢迎使用 ID Plan');
+  });
+
+  it('③b 已看过（刷新后）：卡不出现', async () => {
+    localStorage.setItem('idplan.firstRunGuideSeen', '1');
+    await renderInto(container);
+    expect(document.body.textContent).not.toContain('欢迎使用 ID Plan');
+  });
+});

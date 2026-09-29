@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { TopBar } from './TopBar';
 import { Sidebar } from './Sidebar';
 import { IdentityDialog } from './IdentityDialog';
+import { FirstRunGuide } from './FirstRunGuide';
 import { ManualFallbackForm } from '../contract-wizard/ManualFallbackForm';
 import { useProjectsBootstrap } from '../../hooks/useProjectsBootstrap';
 import { useFirstRunGate } from '../../hooks/useFirstRunGate';
@@ -72,6 +73,8 @@ export function AppShell(): JSX.Element {
 
       {/* 身份进入对话框（first-run 管理员确立 / 成员姓名进入 / 未命中提示） */}
       <IdentityDialog />
+      {/* 首启三幕·第二幕（0.8.3）：空库欢迎卡 + 示例项目可选（身份确立后出现） */}
+      <FirstRunGuide />
       {/* 手动建档兜底：全局挂载，「新建项目」直接打开（v0.3 移除导入合同建档入口后） */}
       <ManualFallbackForm open={manualFormOpen} onClose={closeManualForm} />
       {/*
