@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-0.8.3.0001-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-1836%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-0.8.4.0001-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-1841%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
@@ -85,7 +85,7 @@ npm run dev            # 前端 http://localhost:5173
 ```
 
 ```bash
-npm test               # 全量单测（1836 用例，vitest）
+npm test               # 全量单测（1841 用例，vitest）
 npm run typecheck      # 前端 / 服务端类型检查
 npm run build          # 类型检查 + 构建
 npm run electron:build # 构建 + 打 Windows NSIS 安装包
