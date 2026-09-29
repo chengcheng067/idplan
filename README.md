@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-0.8.0.0010-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-1846%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-0.8.1.0001-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-1815%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
@@ -156,6 +156,7 @@ ghcr.io/chengcheng067/idplan-backend:<版本>  # 后端（Fastify + SQLite）
 
 - 🪧 [Windows 安装](docs/install/windows-install.md) · 📦 [NAS · UPK](docs/install/upk-install-tutorial.md) · ⚙️ [NAS · Docker](docs/install/nas-deploy-tutorial.md)
 - 🔌 [接口契约（Agent 四端点）](docs/api-contract.md) · 🗂️ [备份格式](docs/backup-format.md) · 🧪 [迁移演练](docs/migration-drill.md)
+- 🗺️ [路线图（含「明确不做」清单）](docs/roadmap.md)
 
 ---
 

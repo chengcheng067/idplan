@@ -1,0 +1,28 @@
+name: 💡 功能建议
+description: 想用 ID Plan 解决什么问题？从场景出发描述，不要从方案出发
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        好建议的写法：**「我在什么场景下卡在哪」**，而不是「你们应该加某个按钮」。
+        本项目「明确不做」清单见 [Roadmap](docs/roadmap.md)——提之前先看一眼，不撞重复轮子。
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 你的使用场景
+      description: 行业 / 项目类型 / 团队规模 / 现在怎么解决的、卡在哪
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: 解决了什么
+      description: 这个功能成立后，你的工作流哪一步会变简单
+  - type: dropdown
+    id: willing
+    attributes:
+      label: 是否愿意参与测试
+      options:
+        - 愿意（功能出来后我愿意第一时间试并反馈）
+        - 看看再说

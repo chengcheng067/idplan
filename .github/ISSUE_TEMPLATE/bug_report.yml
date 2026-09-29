@@ -1,0 +1,43 @@
+name: 🐛 Bug 报告
+description: 安装失败、功能异常、数据问题——请按字段填写（字段即分诊）
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请确认：① 已升级到 [最新 Release](https://github.com/chengcheng067/idplan/releases/latest)；
+        ② 已搜索现有 Issue 无重复。安装包无代码签名，SmartScreen 提示属预期（见安装文档）。
+  - type: input
+    id: version
+    attributes:
+      label: 版本号
+      description: 设置 → 关于 里的四段版本号（如 0.8.1.0001）
+    validations:
+      required: true
+  - type: dropdown
+    id: form
+    attributes:
+      label: 使用形态
+      options:
+        - Windows 桌面版
+        - NAS（UGREEN UPK）
+        - NAS（Docker / docker-compose）
+        - 源码运行（npm run dev）
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 越具体越好；涉及 Agent 接入的请附接入配置（**令牌请打码**）
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+  - type: textarea
+    id: extra
+    attributes:
+      label: 截图 / 日志
+      description: NAS 用户可附容器日志（UGREEN 应用中心 → 日志导出）
