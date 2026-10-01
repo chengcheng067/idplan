@@ -18,6 +18,12 @@ vi.mock('../src/core/project/visibility', () => ({
 
 import { FirstRunGuide } from '../src/components/layout/FirstRunGuide';
 
+/** 0.8.5 P0：欢迎卡示例按钮的 isAdmin 门控（产品官评审发现口径洞，spec 钉死） */
+const roleState = { isAdmin: true };
+vi.mock('../src/hooks/useRoleGuard', () => ({
+  useRoleGuard: () => roleState,
+}));
+
 const loadDemoSpy = vi.fn();
 vi.mock('../src/components/layout/useBackupIo', () => ({
   useBackupIo: () => ({
@@ -87,6 +93,28 @@ describe('FirstRunGuide（0.8.3 首启三幕·第二幕）', () => {
     expect(document.body.textContent).not.toContain('欢迎使用 ID Plan');
   });
 
+
+  it('②c ★ 成员身份：示例按钮不渲染（覆盖式导入=全库替换，与侧栏版同口径，0.8.5 P0）', async () => {
+    roleState.isAdmin = false;
+    await renderInto(container);
+    expect(document.body.textContent).toContain('欢迎使用 ID Plan');
+    const demoBtn = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      /载入示例项目看看/.test(b.textContent ?? ''),
+    );
+    expect(demoBtn, '成员身份下示例按钮必须不渲染').toBeUndefined();
+    // 「从空库开始」不受影响
+    expect(document.body.textContent).toContain('从空库开始');
+    roleState.isAdmin = true;
+  });
+
+  it('②d 管理员身份：示例按钮在（对照组，防门控加秃）', async () => {
+    roleState.isAdmin = true;
+    await renderInto(container);
+    const demoBtn = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      /载入示例项目看看/.test(b.textContent ?? ''),
+    );
+    expect(demoBtn).toBeTruthy();
+  });
 
   it('③c 身份流未完成（currentMemberId 未落定）：卡不出现（等 IdentityDialog，防双卡叠弹）', async () => {
     localStorage.removeItem('changxia.currentMemberId');

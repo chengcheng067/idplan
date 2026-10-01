@@ -62,6 +62,8 @@ services:
       #   填一串自选值；同一串值填进 ID Plan 设置 →「NAS 服务」。两侧同值即通。
       #   留空 = 服务端拒绝所有备份请求（事故形态：界面点一次 401 一次）。
       - IDPLAN_AGENT_TOKEN=${IDPLAN_AGENT_TOKEN}
+      # ★ 0.8.5（安全官 P0-2）：Agent 导入通道令牌（与备份通道分权，建议不同值）
+      - IDPLAN_AGENT_API_TOKEN=${IDPLAN_AGENT_API_TOKEN}
     # 数据持久化（关键）：不声明卷时容器重建即丢库，团队数据全没。
     volumes:
       - idplan-data:/data

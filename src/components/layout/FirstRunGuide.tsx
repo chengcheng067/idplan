@@ -19,6 +19,7 @@ import { Sparkles } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { useBackupIo } from './useBackupIo';
+import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useHumanProjects } from '../../core/project/visibility';
 import { logUser } from '../../core/services/log.service';
 
@@ -30,6 +31,10 @@ export function FirstRunGuide(): JSX.Element | null {
   const [dismissed, setDismissed] = useState(
     () => (typeof localStorage !== 'undefined' ? localStorage.getItem(GUIDE_SEEN_KEY) === '1' : false),
   );
+  // ★ 0.8.5 P0（产品官评审发现）：欢迎卡的示例按钮与侧栏/移动端入口必须同一权限口径——
+  //   loadDemo 是覆盖式全量导入，成员身份点一次会把全库顶掉。侧栏版有 isAdmin 门控，
+  //   这里漏了=口径洞。无管理员可用时按钮不渲染（卡仍显示，「从空库开始」不受影响）。
+  const { isAdmin } = useRoleGuard();
   /**
    * 身份流完成判据（0.8.3 双卡叠弹修复）：欢迎卡**必须等 IdentityDialog 走完再出现**，
    * 否则陌生人首次启动会看到两张模态叠在一起（身份卡在上、欢迎卡在下，都带遮罩）。
@@ -93,22 +98,24 @@ export function FirstRunGuide(): JSX.Element | null {
             <p>数据存在你自己机器上，离线可用，不上传。</p>
           </div>
           <div className="space-y-2 pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                // 看过 flag 立即落（确认弹窗无论确认与否都不再重弹首启卡）
-                try {
-                  localStorage.setItem(GUIDE_SEEN_KEY, '1');
-                } catch {
-                  /* 同上 */
-                }
-                void loadDemo();
-              }}
-              className="btn-aura flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
-            >
-              <Sparkles size={15} />
-              载入示例项目看看（5 个演示项目）
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  // 看过 flag 立即落（确认弹窗无论确认与否都不再重弹首启卡）
+                  try {
+                    localStorage.setItem(GUIDE_SEEN_KEY, '1');
+                  } catch {
+                    /* 同上 */
+                  }
+                  void loadDemo();
+                }}
+                className="btn-aura flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
+              >
+                <Sparkles size={15} />
+                载入示例项目看看（5 个演示项目）
+              </button>
+            )}
             <button
               type="button"
               onClick={close}
