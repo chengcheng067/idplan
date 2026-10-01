@@ -165,7 +165,7 @@ function StatusRow({ stage }: { stage: Stage; projectId: string }): JSX.Element 
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
-  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '设计师本人';
+  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
 
   const set = async (next: StageStatus): Promise<void> => {
     const actions = createProjectActions(repos);
@@ -198,7 +198,7 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
-  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '设计师本人';
+  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
 
   const applyRange = async (newStart: string, newEnd: string): Promise<void> => {
     const postponed =

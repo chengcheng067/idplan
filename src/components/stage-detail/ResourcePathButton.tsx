@@ -107,7 +107,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
             autoFocus
             value={pathText}
             onChange={(e) => setPathText(e.target.value)}
-            placeholder="如 D:\长夏项目\某茶空间\03-施工图 或 file://D:/…"
+            placeholder="如 D:\项目资料\03-方案 或 file://D:/…"
             className="flex-1 rounded-md border border-pine px-2 py-1.5 text-sm outline-none"
             onKeyDown={(e) => {
               if (e.key === 'Enter') void save();

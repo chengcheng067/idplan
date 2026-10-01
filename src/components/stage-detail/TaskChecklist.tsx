@@ -61,7 +61,7 @@ export function TaskChecklist({
    */
   const isRestricted = isRestrictedView(role);
   const meId = currentMember?.id ?? null;
-  const operatorName = currentMember?.name ?? '设计师本人';
+  const operatorName = currentMember?.name ?? '当前用户';
 
   const actions = createTaskActions(repos);
   const [newTitle, setNewTitle] = useState('');

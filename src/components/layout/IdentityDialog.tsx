@@ -16,7 +16,7 @@ import { logError, logUser } from '../../core/services/log.service';
 
 /**
  * 身份进入对话框（增量架构 3.3 状态机 UI 承载）：
- *   admin_prompt  「你是管理员（设计师本人）吗？」→ 我是管理员 / 我不是管理员
+ *   admin_prompt  「你是管理员（项目负责人）吗？」→ 我是管理员 / 我不是管理员
  *   name_input    姓名输入框（不是下拉——下拉会暴露成员名单）：
  *                   - adminIntent=true  → 管理员确立（命中→提权；未命中→新建 admin）
  *                   - adminIntent=false → 成员进入（命中→锁定；未命中→mismatch）
@@ -109,7 +109,7 @@ export function IdentityDialog(): JSX.Element | null {
         } else {
           const created = await repos.members.insert({
             name: trimmed,
-            role: '设计师',
+            role: '负责人',
             contact: null,
             avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
             roleKind: MemberRoleKind.Admin,
@@ -180,7 +180,7 @@ export function IdentityDialog(): JSX.Element | null {
       return (
         <div className="space-y-4">
           <p className="text-sm leading-6 text-ink/80">
-            首次使用需要先确定管理员身份（设计师本人）。
+            首次使用需要先确定管理员身份（项目负责人）。
             <br />
             管理员可以看到全部项目、成员与备份；成员只能看到分派给自己的任务。
           </p>
@@ -341,7 +341,7 @@ export function IdentityDialog(): JSX.Element | null {
         <div className="mb-3 flex items-start justify-between gap-4">
           <h2 className="font-display text-display-md">
             {flow === 'admin_prompt'
-              ? '你是管理员（设计师本人）吗？'
+              ? '你是管理员（项目负责人）吗？'
               : flow === 'name_input'
                 ? adminIntent
                   ? '设置管理员身份'

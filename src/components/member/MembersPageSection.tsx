@@ -164,7 +164,7 @@ export function MembersPageSection(): JSX.Element | null {
           <ImeInput
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            placeholder="角色（如绘图员）"
+            placeholder="角色（角色（如负责人））"
             className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
           <ImeInput

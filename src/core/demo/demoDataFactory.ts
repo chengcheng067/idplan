@@ -38,7 +38,7 @@ export const DEMO_PRESETS: ReadonlyArray<{ presetKey: string; label: string }> =
 
 /** 演示成员（脱敏：中性姓氏+工种、demo.local 域；admin=「设计师本人」） */
 const DEMO_MEMBERS: ReadonlyArray<Pick<Member, 'id' | 'name' | 'role' | 'contact' | 'avatarColor' | 'roleKind'>> = [
-  { id: 'demo_admin', name: '设计师本人', role: '主案负责人', contact: 'admin@demo.local', avatarColor: '#5B8C5A', roleKind: MemberRoleKind.Admin },
+  { id: 'demo_admin', name: '演示负责人', role: '主案负责人', contact: 'admin@demo.local', avatarColor: '#5B8C5A', roleKind: MemberRoleKind.Admin },
   { id: 'demo_m1', name: '陈工', role: '方案设计', contact: 'chen@demo.local', avatarColor: '#B25C5C', roleKind: MemberRoleKind.Member },
   { id: 'demo_m2', name: '周工', role: '深化设计', contact: 'zhou@demo.local', avatarColor: '#5C7A9E', roleKind: MemberRoleKind.Member },
   { id: 'demo_m3', name: '吴工', role: '执行统筹', contact: 'wu@demo.local', avatarColor: '#C98D5B', roleKind: MemberRoleKind.Member },

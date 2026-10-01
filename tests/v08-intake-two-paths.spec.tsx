@@ -172,7 +172,7 @@ async function renderForm(): Promise<void> {
 /** 填最小必填项：项目名称 ＋ 竣工日（开始日已默认今天） */
 async function fillRequired(name: string, endAt: string): Promise<void> {
   const nameInput = document.querySelector(
-    'input[placeholder="如「XX餐饮·室内设计」"]',
+    'input[placeholder="如「某某项目・第一阶段」"]',
   ) as HTMLInputElement;
   expect(nameInput).toBeTruthy();
   await setInputValue(nameInput, name);

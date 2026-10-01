@@ -108,8 +108,10 @@ export function ManualFallbackForm({
       setStageItems([]);
       return;
     }
+    // v0.8.5：无默认套餐的板块（展陈）→ null → 空预选，用户从阶段池自选（C4 #9）
+    const presetKey = defaultPresetKeyForDomain(cascade.domain);
     setStageItems((prev) => [
-      ...getPresetItems(defaultPresetKeyForDomain(cascade.domain)),
+      ...(presetKey ? getPresetItems(presetKey) : []),
       ...prev.filter((it) => isCustomStageKey(it.key)),
     ]);
   }, [cascade.domain]);
@@ -265,7 +267,7 @@ export function ManualFallbackForm({
             <ImeInput
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如「XX餐饮·室内设计」"
+              placeholder="如「某某项目・第一阶段」"
               className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             />
           </label>

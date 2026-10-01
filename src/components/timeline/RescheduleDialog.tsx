@@ -27,7 +27,7 @@ export function RescheduleDialog({
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
   const operatorName =
-    members.find((m) => m.id === currentMemberId)?.name ?? '设计师本人';
+    members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
 
   const primary = batch.items[batch.primaryIndex];
   const postponed = useMemo(
@@ -112,7 +112,7 @@ export function RescheduleDialog({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
-                placeholder="如：业主确认图纸延迟 / 消防验收排队…"
+                placeholder="如：甲方确认延迟 / 审批排队…"
                 className="w-full resize-y rounded-md border border-line p-2 text-sm leading-6 outline-none focus:border-pine"
                 autoFocus
               />

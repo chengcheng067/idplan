@@ -548,11 +548,18 @@ export const LONG_STAGE_LIST_HINT_FROM = 13;
  * 主板块 → 默认预选套餐 key（迁移「类型」的唯一真实职能：主板块决定初始阶段池）。
  * 与 PRD §3.4 同口径：indoor→indoor_full、landscape→landscape_full、architecture→architecture_full、
  * software→software_full、marketing→marketing_full、film→film_full、wedding→wedding_full、
- * consulting→consulting_full；exhibition 暂无预设（P1 预留）→ 回落 indoor_full；
- * null/undefined 同样回落 indoor_full（与改造前「默认室内」一致）。
+ * consulting→consulting_full、travel→travel_fit。
+ *
+ * ★ v0.8.5 C4（排障手遗留清单 #9，高严重度——她 feedback「全行业软件」的实例）：
+ *   **exhibition（展陈）暂无预设套餐 → 返回 null（不预选）**。旧行为是静默回落
+ *   `indoor_full`：用户选「展陈」，表单带出的却是室内九段（提案/测量/SU 建模/
+ *   效果图/施工图深化…）——选 A 得 B 的静默错配，比没有默认更糟。
+ *   返回 null 时消费方（ManualFallbackForm）保持空池、把提示语交给 UI，用户从
+ *   阶段池自选（既有路径，勿新造）。待展陈补了自己的 preset，这里加一行 case 即可。
+ *
  * 确切的 preset key 以 templates/stage-library.json 的 presets[] 为准（禁止臆造）。
  */
-export function defaultPresetKeyForDomain(domain: StageTemplateDomain | null | undefined): string {
+export function defaultPresetKeyForDomain(domain: StageTemplateDomain | null | undefined): string | null {
   switch (domain) {
     case 'landscape':
       return 'landscape_full';
@@ -571,8 +578,11 @@ export function defaultPresetKeyForDomain(domain: StageTemplateDomain | null | u
     // v0.9 旅游二期：主板块选「旅游」→ 默认自由行套餐
     case 'travel':
       return 'travel_fit';
-    case 'indoor':
+    // ★ v0.8.5：展陈暂无自己的套餐 → null（不预选）。消费方空池+UI 提示，
+    //   不再静默给室内九段。null/undefined 分支同理交回流落链。
     case 'exhibition':
+      return null;
+    case 'indoor':
     case null:
     case undefined:
     default:

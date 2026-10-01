@@ -37,16 +37,18 @@ import { useProjectsStore } from '../src/store/useProjectsStore';
 /* ------------------------------ 纯函数契约 ------------------------------ */
 
 describe('defaultPresetKeyForDomain：主板块 → 默认套餐（迁移「类型」职能，PRD §3.4）', () => {
-  it('室内 / 展陈 / 未指定 → indoor_full', () => {
-    const indoorLike: Array<StageTemplateDomain | null | undefined> = [
-      'indoor',
-      'exhibition',
-      null,
-      undefined,
-    ];
+  it('室内 / 未指定 → indoor_full', () => {
+    const indoorLike: Array<StageTemplateDomain | null | undefined> = ['indoor', null, undefined];
     for (const d of indoorLike) {
       expect(defaultPresetKeyForDomain(d)).toBe('indoor_full');
     }
+  });
+
+  // ★ v0.8.5 C4 #9（高严重度：她 feedback「全行业软件」实例）：展陈选 A 不再得 B。
+  //   旧断言钉的是「exhibition → indoor_full」（选展陈带出室内九段=静默错配）。
+  //   现行为：null=不预选，消费方空池+UI 提示。展陈补自己的 preset 后改回字符串断言。
+  it('展陈 → null（不预选，不再静默回落室内九段）', () => {
+    expect(defaultPresetKeyForDomain('exhibition')).toBeNull();
   });
 
   it('景观 → landscape_full；建筑 → architecture_full；软件 → software_full；活动 → marketing_full；影视 → film_full；婚礼 → wedding_full；咨询 → consulting_full', () => {

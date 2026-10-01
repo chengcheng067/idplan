@@ -18,7 +18,7 @@
 
 <p align="center"><a href="./README.md">中文</a> · <strong>English</strong></p>
 
-> Born in the interior-design workflow, now covering **9 domains / 29 stage presets**. Turn budget, project type, stage milestones and members into one timeline — read it as a kanban, calendar or gantt, and export a schedule page you can hand straight to a client.
+> Covering **9 domains / 29 stage presets** (interior / landscape / architecture / software / marketing / film / weddings / consulting / travel). Turn budget, project type, stage milestones and members into one timeline — read it as a kanban, calendar or gantt, and export a schedule page you can hand straight to a client.
 > **It also lets external AI writers (WorkBuddy / Codex, etc.) onboard by reading a single file and write tasks directly into your board** — see [🤖 Agent Access](#-agent-access).
 
 ---

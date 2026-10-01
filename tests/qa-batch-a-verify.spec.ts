@@ -253,7 +253,7 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       b?.click();
     });
     await page.waitForTimeout(500);
-    await page.locator('input[placeholder*="XX餐饮"]').fill(name);
+    await page.locator('input[placeholder*="某某项目"]').fill(name);
     /*
       ★ 反馈 #5 之后的新口径：手动建档**首开不预选主板块**，套餐/阶段随主板块带出。
         不先选板块 ⇒ 「建档」按钮保持 disabled（0 段 < 最少段数）⇒ 建档静默失败、
@@ -384,7 +384,7 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       .first()
       .click();
     await page.waitForTimeout(500);
-    await page.locator('input[placeholder*="XX餐饮"]').fill(name);
+    await page.locator('input[placeholder*="某某项目"]').fill(name);
     await page.selectOption('select[aria-label="主板块"]', 'indoor');
     await page.waitForTimeout(200);
     const dates = await page.$$('input[type="date"]');
