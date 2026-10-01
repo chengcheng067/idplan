@@ -11,6 +11,7 @@ import { logError, logUser } from '../../core/services/log.service';
 import { ChangxiaError } from '../../core/types/enums';
 import type { BackupPackage } from '../../core/types/dto';
 import type { IRepositoryBundle } from '../../core/repositories/interfaces';
+import { buildDemoBackup } from '../../core/demo/demoDataFactory';
 import { DB_NAME } from '../../core/schema/current';
 import { dumpLegacyTables } from '../../core/repositories/local/dexie.database';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -29,7 +30,7 @@ export interface BackupIo {
   /** 导出全量数据并触发浏览器下载 */
   save(): Promise<void>;
   /**
-   * 载入示例项目（0.8.3）：fetch 随包分发的 public/demo-backup.json，
+   * 载入示例项目（0.8.3）：fetch 随包分发的 public/静态示例包，
    * 过 zod 校验后走与「从备份恢复」完全相同的覆盖式导入链路
    * （含二次确认弹窗）。设计意图：陌生人第一小时不用先造数据就能看懂产品。
    */
@@ -103,19 +104,20 @@ export function useBackupIo(): BackupIo {
   const pick = (): void => fileRef.current?.click();
 
   /**
-   * 载入示例项目（0.8.3 条目1）。
+   * 载入示例项目（0.8.3 条目1 / 0.8.5 路线 A：运行时工厂）。
    *
-   * 为什么不单独写导入逻辑：示例数据就是一份标准备份包（schema 现版本、
-   * 5 项目 45 阶段 190 任务），复用 validateBackupJson + importAndReplace
+   * 为什么不单独写导入逻辑：示例数据就是一份标准备份包（5 项目覆盖
+   * 五种行业看板列形态），复用 validateBackupJson + importAndReplace
    * 意味着「演示数据的导入路径 == 真实备份的导入路径」——后者被
-   * roundtrip spec 钉死，前者因此自动获得同等保证，零新增数据面代码。
-   * 失败分支全部既有：fetch 失败 / 校验失败 → toast + 日志，零写入。
+   * roundtrip spec 钉死，零新增数据面代码。
+   *
+   * 0.8.5 改造：静态示例包（全室内、日期写死会过期）换成
+   * `buildDemoBackup()` 运行时工厂——从阶段库动态生成，行业中立、
+   * today 为锚永不过期、与行业库永不脱节。
    */
   const loadDemo = async (): Promise<void> => {
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}demo-backup.json`);
-      if (!res.ok) throw new Error(`demo fetch ${res.status}`);
-      const json: unknown = await res.json();
+      const json: unknown = buildDemoBackup();
       validateBackupJson(json);
       setPendingPkg(json as BackupPackage);
       setPendingSource('demo');
