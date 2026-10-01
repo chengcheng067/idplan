@@ -39,3 +39,26 @@ ID Plan 是离线优先的项目排程工具（看板 / 月历 / 甘特 / 打印
 | v0.8.0 | Agent 接入正式版：一键接入 / 自助建板 / 幂等导入 / 读回核对 / 人类项目结构性隔离 |
 
 完整设计文档见 `deliverables/research/`（研究文档，非本仓库内容）。
+
+---
+
+## 🚨 0.8.6 必做清单（2026-10-01 她拍板记账，安全官红牌项）
+
+> 来源：`deliverables/gstack/security-review-idplan-v085-2026-10-01.md` P0-1。
+> **这一条是她明确「一定要记得修」的债，0.8.6 排期不可绕过。**
+
+### P0-1 · NAS 写端点无鉴权（OWASP A01）
+- 现状：`server/routes/meta.routes.ts` 的 `PUT /api/settings/:key`（:294）、
+  `POST /api/settings/replace-all`（:304）、`POST /api/logs/stage`（:121）、
+  `POST /api/contracts`（:210）均无 token 校验；`server/index.ts` 无全局 hook。
+- 危害：LAN 任意方可覆写 `taskNoSeq` 制造任务重号、伪造审计流水；
+  **自定义行业一旦落 settings KV（custom-stage.service.ts:49 先例）= 向所有
+  LAN 用户的建档 UI 远程投递内容**——这是自定义行业功能上线的硬前置。
+- 修法（安全官已定稿）：Bearer 校验写端点；`PUT /api/settings/:key` 加
+  值大小与形状校验；`settings/logs/contracts` 的 exempt keep 清单需与
+  api-contract 逐端点核对后定稿；补两个测试（无 token 拒/带 token 过）。
+- 预估 1-2 人日。**未修前，自定义行业功能不得上线。**
+
+### 同源记录
+- 0.8.5 调研轮附带已修：FirstRunGuide isAdmin 门控、IDPLAN_AGENT_API_TOKEN 部署链补齐（commit 2eb8f34）。
+- 待她拍板的 0.8.5 其余项：IA 切片节奏（C→A→B）、遗留 16 条批修范围、AI 接口方案 3 详细说明（2026-10-01 已讲，等她确认）。
