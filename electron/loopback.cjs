@@ -409,6 +409,62 @@ async function handleImport(req, res, url) {
 }
 
 /**
+ * POST /api/agent/commands（v0.8.5 方案 3：结构化意图 API 的桌面形态）。
+ *
+ * 当前命令：`reschedule_stages`（把某 Agent 看板的未完成阶段整体平移 N 天）。
+ *
+ * 主进程**不校验、不写库**：schema 校验 / 归属门 / 平移 / 留痕全在渲染侧
+ * （`core/agent/commands.ts` + 既有 StageService.reschedule）——与服务端
+ * commands 路由同源。主进程只做内容类型 + token 门 + 转发，与全通道一致。
+ * dryRun = query `?dryRun=1`（与 import 端点同 query 范式）：只预览零写入。
+ */
+async function handleCommands(req, res, url) {
+  const ct = req.headers['content-type'] || '';
+  if (!ct.toLowerCase().includes('application/json')) {
+    return sendJson(res, 415, {
+      error: { code: 'invalid_content_type', userMessage: '仅接受 application/json。' },
+    });
+  }
+  if (!checkBearerToken(req, res)) return;
+
+  let body;
+  try {
+    body = JSON.parse(await readBody(req, MAX_BODY_BYTES));
+  } catch (e) {
+    const err = e;
+    if (err.httpStatus) {
+      return sendJson(res, err.httpStatus, {
+        error: { code: err.code || 'bad_request', userMessage: err.userMessage || '读取请求体失败。' },
+      });
+    }
+    return sendJson(res, 400, {
+      error: { code: 'invalid_json', userMessage: 'payload 不是合法 JSON。' },
+    });
+  }
+  const dryRun = url.searchParams.get('dryRun') === '1';
+
+  let forwarded;
+  try {
+    forwarded = await forwardToRenderer(
+      { requestId: crypto.randomUUID(), kind: 'command', body, dryRun },
+      'agent:command-request',
+    );
+  } catch (e) {
+    const err = e;
+    return sendJson(res, err.httpStatus || 504, {
+      error: { code: err.code || 'gateway', userMessage: err.userMessage || '转发失败。' },
+    });
+  }
+  if (forwarded && forwarded.error) {
+    const fe = forwarded.error;
+    return sendJson(res, typeof fe.httpStatus === 'number' ? fe.httpStatus : 400, {
+      error: { code: fe.code || 'apply_failed', userMessage: fe.userMessage || '命令执行失败。' },
+    });
+  }
+  sendJson(res, 200, forwarded.result);
+}
+
+/**
  * POST /api/agent/boards（2026-09-24 补齐；实测报告：承诺四端点、桌面只通两个）。
  *
  * ★ 主进程**不校验、不写库**：建板的全部校验（name / 起止日期 / 阶段集合，
@@ -533,6 +589,9 @@ function handle(req, res) {
   }
   if (req.method === 'POST' && url.pathname === '/api/agent/boards') {
     return handleBoards(req, res);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/agent/commands') {
+    return handleCommands(req, res, url);
   }
   if (req.method === 'GET' && url.pathname === '/api/agent/tasks') {
     return handleTasks(req, res, url);

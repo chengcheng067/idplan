@@ -15,7 +15,7 @@
  * 端点路径、schema 名、鉴权头格式错一个，写入方就接不上，且现象是远端 401/404，
  * 极难回头查。IO（落盘 / 剪贴板）在调用方（页面 + 主进程），此处只算内容。
  *
- * 端点清单的单一出处就在本文件：它们镜像 `server/routes/agent.routes.ts` 的四个
+ * 端点清单的单一出处就在本文件：它们镜像 `server/routes/agent.routes.ts` 的五个
  * 端点。改路由必须同批改这里——否则接入文件会指向不存在的端点（静默 404）。
  */
 
@@ -46,6 +46,13 @@ export const INGRESS_ENDPOINTS: ReadonlyArray<{
     method: 'GET',
     path: '/api/agent/tasks',
     summary: '任务流：显式 projectId 须为 Agent 看板',
+  },
+  {
+    method: 'POST',
+    path: '/api/agent/commands',
+    summary:
+      '结构化命令（v0.8.5 方案 3）：当前 reschedule_stages 调期' +
+      '（自然语言由你方解析成本命令；?dryRun=1 只预览零写入；completed 段永不平移；非幂等勿重放）',
   },
 ];
 

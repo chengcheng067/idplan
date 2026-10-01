@@ -54,6 +54,8 @@ import type Database from 'better-sqlite3';
 import { AGENT_SEAT_LIMIT } from '../../src/constants/agentTerms';
 // ★ 落库编排与落点解析**都是共享内核**：NAS 形态与本地手动粘贴通道跑的是同一份函数。
 import { applyAgentPayload, previewAgentPayload, resolveAgentProjectId } from '../../src/core/agent/payload.apply';
+import { runRescheduleStages, validateAgentCommand } from '../../src/core/agent/commands';
+import { StageService } from '../../src/core/services/stage.service';
 import type { ApplyOptions } from '../../src/core/agent/payload.apply';
 // ★ v0.8 建板：**自定义阶段**的属性表只有一份（`buildCreatedStage`，§4.3 逐字段定死）
 import { buildCreatedStage } from '../../src/core/agent/stage-resolve';
@@ -445,6 +447,83 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         projects: listProjectCandidates(),
         agentSeats: { used: used.n, limit: AGENT_SEAT_LIMIT },
       };
+    });
+
+    /* ======================================================================================
+     * ②-b POST /api/agent/commands（v0.8.5 方案 3：结构化意图 API）
+     *
+     * 当前命令：`reschedule_stages`（把某 Agent 看板的未完成阶段整体平移 N 天）。
+     *
+     * ── 为什么这是「结构化命令」而不是自然语言端点 ──
+     * 雯丞 2026-10-01 拍板方案 3：AI 方自己把自然语言解析成结构化命令调我们；
+     * 服务端永不解析自然语言、永不调 LLM（零 key 托管 / 零 prompt injection /
+     * 零用户数据出机器）。真实缺口只有「调期」——建档已被本文件 boards 端点覆盖。
+     *
+     * ── 判序（fail fast，与 import 通道同门同范式）──
+     *   ① token 无效 → 401（fail-closed）
+     *   ② 命令 schema 校验失败 → 400
+     *   ③ 归属门（共享核心 assertAgentWritableProject）：人类项目/不存在 → 400 project_unresolved
+     *   ④ dryRun（query `?dryRun=` 非 '0'/''/'false' 即预览，与 import 端点同保守语义）
+     *   ⑤ 实写：逐段走既有 StageService.reschedule（留痕 + 任务连带 + reason 闸门全继承）
+     *
+     * ⚠️ 已知边界（记账，勿静默扩大）：reschedule **非幂等**（重放=二次平移）。
+     *   防重放靠 dryRun 先行 + 接入文档明示「写入方自行保证不重放」；完备的
+     *   operationId 去重表排 0.8.6（与 NAS 写端点鉴权同批——去重记录要先有安全落点）。
+     * ==================================================================================== */
+    scope.post('/api/agent/commands', async (req, reply) => {
+      if (!requireAgentToken(req)) {
+        void reply.status(401);
+        return agentUnauthorizedBody();
+      }
+      const body = (req.body ?? {}) as Record<string, unknown>;
+
+      let cmd;
+      try {
+        cmd = validateAgentCommand(body);
+      } catch (err) {
+        if (err instanceof ChangxiaError && err.code === ChangxiaErrorCode.Validation) {
+          void reply.status(400);
+          return { error: { code: 'Validation', userMessage: err.userMessage } };
+        }
+        throw err;
+      }
+
+      const q = (req.query ?? {}) as Record<string, unknown>;
+      const dryRunRaw = q.dryRun;
+      const dryRun =
+        dryRunRaw !== undefined && dryRunRaw !== '' && dryRunRaw !== '0' && dryRunRaw !== 'false';
+
+      try {
+        // ★ 与桌面 loopback 同源调用：校验/归属门/平移全在共享核心 commands.ts，
+        //   本路由只组 deps（bundle + 既有 StageService）并原样转发结果。
+        const stageService = new StageService({ stages: bundle.stages, logs: bundle.logs });
+        return await runRescheduleStages(
+          {
+            repos: bundle,
+            rescheduleStage: (stageId, c) => stageService.reschedule(stageId, c),
+          },
+          cmd,
+          { dryRun },
+        );
+      } catch (err) {
+        if (err instanceof ChangxiaError) {
+          if (err.code === ChangxiaErrorCode.Validation) {
+            void reply.status(400);
+            return { error: { code: 'Validation', userMessage: err.userMessage } };
+          }
+          if (err.code === ChangxiaErrorCode.ProjectUnresolved) {
+            void reply.status(400);
+            return {
+              error: {
+                code: 'project_unresolved',
+                userMessage: err.userMessage,
+                projects: listProjectCandidates(),
+              },
+            };
+          }
+        }
+        throw err;
+      }
     });
 
     /* ======================================================================================

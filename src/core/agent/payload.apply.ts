@@ -46,7 +46,7 @@ import {
   TaskStatus,
 } from '../types/enums';
 import { stableId } from '../../lib/stableHash';
-import type { Stage, Task, TaskArtifact } from '../types/entities';
+import type { Project, Stage, Task, TaskArtifact } from '../types/entities';
 import type {
   AgentPayloadV1,
   ApplyResult,
@@ -169,6 +169,35 @@ export function resolveAgentProjectId(params: {
   return p ?? e;
 }
 
+/**
+ * ★ v0.8.5 共享归属门（方案 3·命令通道复用）：目标项目必须存在且 kind=agent。
+ *
+ * 从 resolve() 内联段**逐字抽出**（2026-09-24 实测报告 9.2/9.4 的修复原样保留）：
+ * 存在性与归属两道判定、同一个错误码、同一组文案。抽出的动机：Agent 命令通道
+ * （reschedule_stages 等）与导入通道必须**同一道门**——各写一份必然漂移，
+ * 「结构性隔离」变成两张皮。错误码 ProjectUnresolved 是对外契约码（接入文件承诺过）。
+ */
+export async function assertAgentWritableProject(
+  repos: IRepositoryBundle,
+  projectId: string,
+): Promise<Project> {
+  const project = await repos.projects.get(projectId);
+  if (!project) {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.ProjectUnresolved,
+      `目标项目（id=${projectId}）不存在，可能已被删除，请重新选择。`,
+    );
+  }
+  if (projectKindOf(project) !== 'agent') {
+    throw new ChangxiaError(
+      ChangxiaErrorCode.ProjectUnresolved,
+      `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道不能往里写任务。` +
+        ' 人类项目只能由你主动发起（界面手动粘贴 / 显式接管），Agent token 无法触碰。',
+    );
+  }
+  return project;
+}
+
 /** 去除首尾空白后非空 → 返回已 trim 的字符串，否则 null（仅空白 / 非字符串一律视为未提供） */
 function nonBlankId(v: string | null | undefined): string | null {
   if (typeof v !== 'string') return null;
@@ -196,33 +225,9 @@ async function resolve(
       'payload 未指定目标项目，请先选择项目后再导入。',
     );
   }
-  const project = await repos.projects.get(projectId);
-  if (!project) {
-    /*
-     * ★ 2026-09-24（实测报告 9.2/9.4）：存在性与归属**两道判定、同一个错误码**，
-     * 且**落在共享核心**——此前服务端路由有一份 kind 门、桌面 loopback 通道
-     * 完全没有（dryRun 打人类项目全放行，「结构性隔离」在本机只是一句文案）。
-     * preview/apply 共用本 resolve()，故补在这里 = 两通道、预览/实写四处同源。
-     *
-     * 错误码 `ProjectUnresolved`（对外契约码，接入文件/指令块向写入方承诺过）；
-     * 文案分工与服务端历史口径逐字一致：不存在 → 指明「不存在」；存在但非
-     * agent → 指明「不是 Agent 看板」+ id（服务端 spec 断言这两组子串）。
-     *
-     * kind 判定**只准** `projectKindOf`（enums 的唯一出处；老库/脏值按 human）——
-     * 就地写 `kind === 'agent'` 会制造第二份判定口径（enums/visibility 都警告过）。
-     */
-    throw new ChangxiaError(
-      ChangxiaErrorCode.ProjectUnresolved,
-      `目标项目（id=${projectId}）不存在，可能已被删除，请重新选择。`,
-    );
-  }
-  if (projectKindOf(project) !== 'agent') {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.ProjectUnresolved,
-      `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道不能往里写任务。` +
-        ' 人类项目只能由你主动发起（界面手动粘贴 / 显式接管），Agent token 无法触碰。',
-    );
-  }
+  // ★ v0.8.5：存在性 + kind 归属门抽取为共享函数 assertAgentWritableProject
+  //   （命令通道复用同一道门；门内注释保留完整判据史）。行为与本文件历史逐字一致。
+  const project = await assertAgentWritableProject(repos, projectId);
 
   const rejected: ApplyRejection[] = [];
 

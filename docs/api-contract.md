@@ -158,6 +158,7 @@ env 为 **`IDPLAN_AGENT_API_TOKEN`**（`AGENT_API_TOKEN_ENV`，`agent-auth.ts:10
 | GET | `/api/agent/health` | 探活（`agent.routes.ts:419`）：`{ ok:true, version, projects, agentSeats: {used, limit} }`。`version` 读 **`version.json` 的四段号**（不取 `package.json` 的 semver；读失败回落 `'unknown'` 而不 500）；`projects` **只列 `kind='human'`**；`agentSeats.limit` = `AGENT_SEAT_LIMIT`（当前 **3**） |
 | GET | `/api/agent/tasks` | 只读任务流（`agent.routes.ts:438`）：query `?projectId=&source=`；响应 `{ tasks: [{ externalId, taskNo, title, status, dueDate, dependsOnExternal }] }`。详见下 |
 | POST | `/api/agent/boards` | 建 Agent 看板（`kind='agent'`）含阶段骨架（`agent.routes.ts:530`），**只新建**；成功 → **201**。详见下 |
+| POST | `/api/agent/commands?dryRun=1` | 结构化命令通道（v0.8.5 方案 3）：当前 `reschedule_stages` 调期。详见下 |
 
 ### `POST /api/agent/import` —— query 契约与错误码
 
@@ -345,3 +346,53 @@ backup 是「人→机器」的全量恢复（形状已定、严格保真）。�
 | 本仓库契约权威文档 | 本文档（api-contract.md）+ `src/core/agent/ingress-file.ts` 的 `INGRESS_ENDPOINTS` / 指令块构造函数 |
 | 纪律 | 发版 checklist 增加一行「skill 口径 vs 本文档逐条过」；若将来 skill 收编进仓库源管理，此节作废 |
 
+
+### `POST /api/agent/commands` —— 结构化命令通道（v0.8.5 · 方案 3）
+
+**设计动机**：雯丞 2026-10-01 拍板「AI/agent 用自然语言建档、调期」的落地形态 =
+**结构化意图 API（方案 3，零 LLM）**：AI 方自己把自然语言解析成带类型的结构化命令
+调我们；服务端永不解析自然语言、永不调 LLM（零 key 托管 / 零 prompt injection /
+用户数据不出机器）。MCP 与服务端 LLM 两条路经比选否决（供应链信任模型 / key 与
+injection / 数据出境），详见 `deliverables/gstack/security-review-idplan-v085-2026-10-01.md`。
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| POST | `/api/agent/commands?dryRun=1` | 执行结构化命令；query `dryRun` 与 import 同保守语义（非 `0`/空/`false` 即预览）。`requireAgentToken`（fail-closed） |
+
+**当前命令（唯一）：`reschedule_stages`（调期）**
+
+```json
+{
+  "command": "reschedule_stages",
+  "projectId": "proj_xxx",
+  "shiftDays": 14,
+  "stageKeys": ["software.dev", "software.qa"],
+  "reason": "甲方确认延迟"
+}
+```
+
+| 字段 | 类型 | 约束 |
+| --- | --- | --- |
+| `command` | 字面 `"reschedule_stages"` | 必填 |
+| `projectId` | string | 必填。**归属门**：目标必须 `kind='agent'`；人类项目/不存在 → 400 `project_unresolved`（附候选清单） |
+| `shiftDays` | int | ±365 封顶（超出视为笔误拒绝，不替调用方猜） |
+| `stageKeys` | string[]? | 按 `templateKey` 过滤；未知 key 进响应 `unmatchedKeys` 反馈（不静默）。缺省 = 全部可见且未完成段 |
+| `reason` | string? | 写入留痕日志（截止日后移时必填的闸门由既有 reschedule 承担） |
+
+**响应（两态）**：
+
+```json
+{ "mode": "dry_run", "projectId": "proj_xxx", "shiftDays": 14,
+  "wouldShift": [{ "stageId": "stg_x", "name": "开发", "from": {"startAt":"2026-10-05","endAt":"2026-10-11"}, "to": {"startAt":"2026-10-19","endAt":"2026-10-25"} }],
+  "skippedCompleted": 1, "unmatchedKeys": [] }
+{ "mode": "applied", "projectId": "prox_xxx", "shiftDays": 14, "shifted": 2, "skippedCompleted": 1, "unmatchedKeys": [] }
+```
+
+**硬语义**：
+- **completed 阶段永不平移**（历史不篡改：施工完的段日期变了=改账），计入 `skippedCompleted`；
+- `visible=false` 的段不参与（隐藏段不被命令翻出来）；
+- 实写逐段走既有 `StageService.reschedule`：留痕流水（`type=rescheduled`）+ 任务 `dueDate`
+  连带平移 + 「截止日后移必填 reason」闸门全继承；
+- ⚠️ **非幂等**：重放 = 二次平移。写入方须自行保证不重放（先用 `dryRun=1` 确认）。
+  完备的 `operationId` 去重表排 0.8.6（与 NAS 写端点鉴权同批——去重记录要先有安全落点）；
+- 桌面（loopback `127.0.0.1:17788`）与 NAS（本端点）**同核心同码**（`src/core/agent/commands.ts`）。

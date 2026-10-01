@@ -36,6 +36,8 @@ import { useEffect } from 'react';
 
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { previewAgentPayload, applyAgentPayload } from '../core/agent/payload.apply';
+import { runRescheduleStages, validateAgentCommand } from '../core/agent/commands';
+import { StageService } from '../core/services/stage.service';
 import { validateAgentPayload } from '../core/types/agent-payload';
 import { ChangxiaError, ChangxiaErrorCode, projectKindOf } from '../core/types/enums';
 import { createProjectActions } from '../store/useProjectsStore';
@@ -57,6 +59,15 @@ export interface AgentCreateBoardRequest {
   body: Record<string, unknown>;
 }
 
+/** 主进程转来的结构化命令请求（POST /api/agent/commands 的桌面形态 · v0.8.5 方案 3） */
+export interface AgentCommandRequest {
+  requestId: string;
+  kind: 'command';
+  body: Record<string, unknown>;
+  /** dryRun（预览）标志：与导入通道同 query 范式 */
+  dryRun?: boolean;
+}
+
 /** 主进程转来的任务流读取请求（GET /api/agent/tasks 的桌面形态） */
 export interface AgentListTasksRequest {
   requestId: string;
@@ -72,6 +83,7 @@ export interface LoopbackReceiverBridge {
   onAgentPing?: (cb: (payload: AgentPingRequest) => void) => () => void;
   onCreateBoard?: (cb: (payload: AgentCreateBoardRequest) => void) => () => void;
   onListTasks?: (cb: (payload: AgentListTasksRequest) => void) => () => void;
+  onCommand?: (cb: (payload: AgentCommandRequest) => void) => () => void;
   sendAgentImportResult?: (payload: AgentImportResult) => void;
   sendAgentPong?: (payload: { requestId: string }) => void;
   setAgentToken?: (token: string) => void;
@@ -126,6 +138,10 @@ export function isCreateBoardRequest(req: unknown): req is AgentCreateBoardReque
 
 export function isListTasksRequest(req: unknown): req is AgentListTasksRequest {
   return !!req && typeof req === 'object' && (req as { kind?: unknown }).kind === 'list-tasks';
+}
+
+export function isCommandRequest(req: unknown): req is AgentCommandRequest {
+  return !!req && typeof req === 'object' && (req as { kind?: unknown }).kind === 'command';
 }
 
 /**
@@ -247,12 +263,43 @@ export async function runAgentListTasks(
 }
 
 /**
+ * 结构化命令执行（v0.8.5 方案 3 的渲染侧一半）。
+ *
+ * ★ 校验/归属门/平移逻辑全在 `core/agent/commands.ts`（与服务端同源调用）；
+ *   本函数只做「校验 → 组 deps → 执行」的桥接。
+ * ★ reschedule 走**既有** `StageService.reschedule`（留痕流水 + 任务连带 +
+ *   截止日必填 reason 闸门全继承）——不碰 repos.stages.update 的裸写。
+ */
+export async function runAgentCommand(
+  repos: IRepositoryBundle,
+  req: AgentCommandRequest,
+): Promise<AgentImportResult> {
+  try {
+    const cmd = validateAgentCommand(req.body);
+    const stageService = new StageService({ stages: repos.stages, logs: repos.logs });
+    const result = await runRescheduleStages(
+      {
+        repos,
+        rescheduleStage: (stageId, c) => stageService.reschedule(stageId, c),
+      },
+      cmd,
+      { dryRun: req.dryRun === true },
+    );
+    return { requestId: req.requestId, result };
+  } catch (err) {
+    const message = err instanceof ChangxiaError ? err.userMessage : '命令执行失败。';
+    const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
+    return { requestId: req.requestId, error: { code, httpStatus: 400, userMessage: message } };
+  }
+}
+
+/**
  * 把一条主进程转来的请求（落库 / 建板 / 读任务 / ping）桥接到渲染侧落库点。
  * ★ ping **短路**：立即 `sendPong`，绝不走落库（不读写数据库）。
  */
 export async function handleAgentLoopbackMessage(opts: {
   repos: IRepositoryBundle;
-  req: AgentImportRequest | AgentPingRequest | AgentCreateBoardRequest | AgentListTasksRequest;
+  req: AgentImportRequest | AgentPingRequest | AgentCreateBoardRequest | AgentListTasksRequest | AgentCommandRequest;
   sendImportResult: (r: AgentImportResult) => void;
   sendPong: (p: { requestId: string }) => void;
 }): Promise<void> {
@@ -266,6 +313,10 @@ export async function handleAgentLoopbackMessage(opts: {
   }
   if (isListTasksRequest(opts.req)) {
     opts.sendImportResult(await runAgentListTasks(opts.repos, opts.req));
+    return;
+  }
+  if (isCommandRequest(opts.req)) {
+    opts.sendImportResult(await runAgentCommand(opts.repos, opts.req));
     return;
   }
   const result = await runAgentImport(opts.repos, opts.req);
@@ -295,7 +346,8 @@ export function wireLoopbackReceiver(opts: {
     | AgentImportRequest
     | AgentPingRequest
     | AgentCreateBoardRequest
-    | AgentListTasksRequest;
+    | AgentListTasksRequest
+    | AgentCommandRequest;
   const handler = (req: LoopbackRequest): void => {
     void handleAgentLoopbackMessage({
       repos,
@@ -311,12 +363,15 @@ export function wireLoopbackReceiver(opts: {
   // 老 preload 没有这两个订阅方法 → 可选链自然跳过（import/ping 不受影响）。
   const offCreateBoard = onCreateBoard?.(handler as (payload: AgentCreateBoardRequest) => void);
   const offListTasks = onListTasks?.(handler as (payload: AgentListTasksRequest) => void);
+  // v0.8.5 方案 3：结构化命令通道（reschedule_stages）；老 preload 无此订阅 → 可选链跳过
+  const offCommand = bridge?.onCommand?.(handler as (payload: AgentCommandRequest) => void);
   return {
     dispose: () => {
       offImport?.();
       offPing?.();
       offCreateBoard?.();
       offListTasks?.();
+      offCommand?.();
     },
   };
 }

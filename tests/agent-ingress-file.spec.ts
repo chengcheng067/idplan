@@ -50,6 +50,8 @@ describe('buildIngressPayload：接入文件形状（写入方按它接入）', 
       'POST /api/agent/boards',
       'POST /api/agent/import',
       'GET /api/agent/tasks',
+      // v0.8.5 方案 3：结构化命令端点（reschedule_stages）
+      'POST /api/agent/commands',
     ]);
     for (const e of payload.endpoints) expect(e.summary.length).toBeGreaterThan(0);
 

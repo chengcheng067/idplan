@@ -368,13 +368,14 @@ describe('loopback · query 契约（2026-09-28 修复回归）', () => {
  * 本用例精确转红。
  * ================================================================================================ */
 describe('ingress 承诺清单 ⊆ loopback 路由集（承诺 = 能力，集合版）', () => {
-  it('★ INGRESS_ENDPOINTS 四条端点逐一命中 loopback（无 404、鉴权门一致）', async () => {
+  it('★ INGRESS_ENDPOINTS 承诺端点逐一命中 loopback（无 404、鉴权门一致）', async () => {
     // INGRESS_ENDPOINTS 是渲染侧纯模块（ingress-file.ts）——ESM import 直取
     const { INGRESS_ENDPOINTS } = await import('../src/core/agent/ingress-file');
-    expect(INGRESS_ENDPOINTS).toHaveLength(4);
+    // v0.8.5 方案 3：health / boards / import / tasks / commands 五端点
+    expect(INGRESS_ENDPOINTS).toHaveLength(5);
 
     for (const ep of INGRESS_ENDPOINTS) {
-      // health 免令牌（桌面通道口径）；其余三条必须过 Bearer 门
+      // health 免令牌（桌面通道口径）；其余四条必须过 Bearer 门
       const needsAuth = ep.path !== '/api/agent/health';
       const headers: Record<string, string> = {};
       if (needsAuth) headers.authorization = `Bearer ${TOKEN}`;
@@ -386,7 +387,9 @@ describe('ingress 承诺清单 ⊆ loopback 路由集（承诺 = 能力，集合
         ep.method === 'POST'
           ? { headers, body: ep.path.endsWith('boards')
               ? { name: '能力探针板', plannedStartAt: '2026-10-01', plannedEndAt: '2026-10-31', presetKey: 'indoor_full' }
-              : validBody }
+              : ep.path.endsWith('commands')
+                ? { command: 'reschedule_stages', projectId: 'p_agent', shiftDays: 1 }
+                : validBody }
           : { headers },
       );
       expect(res.status, `${ep.method} ${ep.path} 不应 404：承诺清单里有、路由集里也必须真有`).not.toBe(404);

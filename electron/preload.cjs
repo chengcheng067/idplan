@@ -98,6 +98,15 @@ contextBridge.exposeInMainWorld('idplan', {
     return () => ipcRenderer.removeListener('agent:list-tasks-request', handler);
   },
   /**
+   * 结构化命令（v0.8.5 方案 3：POST /api/agent/commands 的桌面形态，
+   * 当前命令=reschedule_stages 调期）。与上两条同形：订阅转发、按 kind 分发。
+   */
+  onCommand: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on('agent:command-request', handler);
+    return () => ipcRenderer.removeListener('agent:command-request', handler);
+  },
+  /**
    * 订阅主进程 `health` 探活的 ping（`dataLayer` 真实判定的渲染侧一半）。
    *
    * ★ 收到 ping **只回 pong，不碰数据库** —— 探活每天会被打很多次，若让它走落库

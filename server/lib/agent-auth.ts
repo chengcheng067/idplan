@@ -122,7 +122,7 @@ if (typeof process !== 'undefined' && !(process.env[AGENT_API_TOKEN_ENV] ?? '').
   // eslint-disable-next-line no-console -- 启动告警必须走 stdout，不走 app logger（模块加载早于 app 创建）
   console.warn(
     `[IDPLAN-SECURITY] 环境变量 ${AGENT_API_TOKEN_ENV} 未配置：` +
-      '/api/agent/import、/api/agent/health、/api/agent/tasks、/api/agent/boards 将拒绝所有请求（fail-closed）。' +
+      '/api/agent/import、/api/agent/health、/api/agent/commands、/api/agent/tasks、/api/agent/boards 将拒绝所有请求（fail-closed）。' +
       `WorkBuddy 侧的 Agent 同步功能需在服务端配置该共享密钥后重启（与备份用的 ${AGENT_TOKEN_ENV} 相互独立）。`,
   );
 }
