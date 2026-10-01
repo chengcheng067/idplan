@@ -44,7 +44,7 @@ export function Modal({
    *   right-float 右侧悬浮圆角卡片（长内容、无锚点的设置类面板）
    *   float       锚定浮动卡 —— 出现在**触发元素/点击点附近**，空间不足自动翻转（反馈 #3）
    */
-  placement?: 'center' | 'right' | 'right-float' | 'float' | 'fullscreen';
+  placement?: 'center' | 'right' | 'left' | 'right-float' | 'float' | 'fullscreen';
   /** 无障碍标签，读屏用 */
   ariaLabel?: string;
   /**
@@ -246,6 +246,9 @@ export function Modal({
             : placement === 'fullscreen'
               ? // 打印预览：全屏、无点击缓冲区（面板不透明，遮罩仅入场动画期可见）
                 'p-0'
+              : placement === 'left'
+                ? // v0.8.5 C1：左侧抽屉（right 的镜像）——触发侧感知：汉堡在左上，抽屉同侧滑出
+                  'items-start justify-start pt-[max(env(safe-area-inset-top),3rem)] sm:justify-start sm:pt-12'
               : placement === 'float'
               ? // 锚定浮动卡：面板由内层 fixed 容器自行定位，外层只当点击捕获层
                 'items-start justify-start p-0'

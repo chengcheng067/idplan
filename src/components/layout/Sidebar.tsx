@@ -723,17 +723,20 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         <div className="flex h-full w-full min-w-0 flex-col">{body({ inDrawer: false })}</div>
       </aside>
 
-      {/* ── 抽屉（<xl）：复用 Modal placement="right"（§3.3.4）──
-          画板 10：宽 264、内 padding 16、导航项高 44；手机（<768）全屏（w-full） */}
+      {/* ── 抽屉（<xl）：Modal placement="left"（v0.8.5 C1 修方向）──
+          画板 10：宽 264、内 padding 16、导航项高 44；手机（<768）全屏（w-full）
+          ★ 左因：触发器是左上角汉堡（TopBar），抽屉必须**同侧**滑出；旧代码用
+          right（为触屏右手手势设计的档），桌面窄窗口下变成「点左边、右边出」，
+          且右抽屉会盖住系统三键。详见排障手 debug 报告 Bug 2。 */}
       <Modal
         open={!xl && drawerOpen}
         onClose={closeDrawer}
-        placement="right"
+        placement="left"
         ariaLabel="导航菜单"
       >
         <div
           data-app-sidebar=""
-          className="glass-strong h-full w-[264px] max-w-[100vw] overflow-hidden rounded-l-[20px] border-0 p-4 print:hidden max-md:w-full"
+          className="glass-strong h-full w-[264px] max-w-[100vw] overflow-hidden rounded-r-[20px] border-0 p-4 print:hidden max-md:w-full"
         >
           {body({ inDrawer: true })}
         </div>

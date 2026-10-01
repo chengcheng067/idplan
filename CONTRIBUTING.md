@@ -146,3 +146,14 @@ Harness 迭代极快，封闭结构 = 每接一个新 Agent 都要发版。UI �
   禁止单独写 `done`；
 - UI 手动流转走 `task.service.assertTransition`（严格通道白名单）；
 - payload 导入走宽松通道（直落 Agent 给定 status），此例外已在代码注释写明。
+
+## 铁律：布局容器禁 `transition-all`（v0.8.5 立，排障手实测教训）
+
+`transition-all` 会把 **width / height / margin / padding 全部纳入过渡**。定尺寸小控件
+（按钮、色点）用它无害；但**布局容器**（随断点/内容变宽的卡片、面板）用它 = 跨断点
+缩放时容器尺寸动画滞后于窗口，实测观感即「UI 挤在一起再回弹」（v0.8.5 她截图反馈）。
+
+- 布局容器的过渡一律**显式列属性**：`transition-[transform,box-shadow]`（hover 悬浮载体）
+  或 `transition-colors`（只变色的条带）。
+- 2026-10-01 首个实例：`ProjectCard.tsx:287` 卡片本体（xl:flex-[1_1_340px] 变宽）。
+  全仓其余 7 处 `transition-all` 经普查均为定尺寸小控件，保留。

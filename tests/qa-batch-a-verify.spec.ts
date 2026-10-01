@@ -653,9 +653,18 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       });
       expect(clickableBefore).toBe(true);
 
-      // ② 打开设置面板（遮罩型 Modal）→ 三键被遮罩整体盖住。
-      //    elementFromPoint 落在遮罩（z-[70]）而非按钮（header z-40）——
-      //    这正是用户投诉的结构性修复：原生叠加层在网页之上，遮罩永远盖不住。
+      // ② 打开设置面板（遮罩型 Modal）→ ★ 2026-10-01（v0.8.5 C2）断言**反转**：
+      //    遮罩打开时三键**仍可命中**（portal body + z-[85] > 遮罩 z-[70]）。
+      //
+      //    为什么反转（两代诉求的合成点，不是倒退）：
+      //      · 2026-09-23 诉求：原生叠加层在网页之上「浮亮」、遮罩压不暗它 → 解法=自绘
+      //        （DOM 控件、与内容同层同源随主题变暗）——当年断言「被盖住」即验收此点；
+      //      · 2026-10-01 实测（她 feedback #4 连带头一项）：自绘三键留在 header z-40，
+      //        遮罩 z-60/70/75 把它**吞了**——弹窗一开连「点关闭最小化」都做不到。
+      //        elementFromPoint 在三键位置命中的是遮罩（排障手 debug 报告 Bug 2 连带实锤）。
+      //    合成解 = portal 到 body + z-[85]：**仍是 DOM 控件**（继承自绘的全部收益：
+      //    随主题变色、无系统叠加层），但**功能上浮回顶层**（遮罩期间可点，对齐原生
+      //    titleBar 语义）。几何由 Q-A1-4（56/64、138 宽）单独钉，两轴分开验收。
       await page.evaluate(() => {
         const s = Array.from(document.querySelectorAll('header')).length;
         const btn = Array.from(
@@ -672,7 +681,10 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
         const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
         return top === closeBtn || (top ? closeBtn.contains(top) : false);
       });
-      expect(covered, '遮罩打开时三键仍可命中 ⇒ 未随遮罩压暗（投诉复现）').toBe(false);
+      // 反转后的断言：遮罩打开期间三键**必须仍可命中**（可点=窗口控制不失效）
+      expect(covered, '遮罩打开时三键不可命中 ⇒ 弹窗期间窗口控制被吞（v0.8.5 C2 修复点）').toBe(
+        true,
+      );
 
       // ③ 关掉遮罩 → 三键恢复可命中（压暗/覆盖不粘住）
       await page.keyboard.press('Escape');

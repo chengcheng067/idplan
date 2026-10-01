@@ -284,7 +284,15 @@ export function ProjectCard({
         // 所以 1440 下恰好是 3 列 × 365。若写成 flex-1（= flex: 1 1 0%），
         // 基准宽度变 0、四张卡全挤进一行各 279px，与规格差一整列 —— 这是曾经的实现。
         'xl:w-auto xl:flex-[1_1_340px] xl:h-[185px] xl:rounded-3xl xl:p-6 xl:gap-3',
-        'transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
+        /*
+         * ★ v0.8.5 C3（排障手实测 Bug 1）：transition-all → 只过渡 transform/box-shadow。
+         *   根因：卡片是**布局容器**（xl:flex-[1_1_340px] 随断点变宽），transition-all
+         *   把 width 也纳入过渡——跨断点缩放时卡片宽度动画滞后于窗口（实测拖拽
+         *   1000→700：83 帧中 53 帧卡片宽度≠应有值，视觉即「挤压回弹」）。
+         *   hover 只动 translate + shadow，显式列属性后 width 即时跟随，拖影消失。
+         *   全仓其余 7 处 transition-all 是定尺寸小控件（width 不变），无害保留。
+         */
+        'transition-[transform,box-shadow] duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/50',
         /*
          * 菜单已改为 `createPortal` 送到 `document.body`（见 `renderMenu`），

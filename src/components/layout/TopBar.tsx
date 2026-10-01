@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Maximize2, Menu, Minus, Minimize2, Search, X } from 'lucide-react';
 import type { RefObject } from 'react';
@@ -370,9 +371,16 @@ export function TopBar(): JSX.Element {
         {/* 自绘窗口三键（仅 Windows 桌面端渲染）。
             DOM 按钮、总宽 138px——与旧「原生叠加层避让位」同宽，右组元素零位移。
             三键是 button，被 global.css 的 `.app-titlebar-drag button` 规则自动
-            回退为 no-drag，点它们不会误拖窗口。 */}
+            回退为 no-drag，点它们不会误拖窗口。
+            ★ v0.8.5 C2：真身 portal 到 body + z-[85]（排障手实测：遮罩 z-60/70/75
+            高过 header z-40，任何 modal 打开期间三键被吞、点不动——自绘三键的本意
+            「与内容同层同源」反被灭。portal 后高于一切 modal 与 toast，遮罩期间照样
+            可点，与原生 titleBar 行为对齐）。原位留同宽 spacer 撑住右组布局。 */}
         {usesSelfDrawnWindowControls() && (
-          <WindowControls width={WINDOW_CONTROLS_WIDTH} />
+          <>
+            <div aria-hidden className="shrink-0" style={{ width: WINDOW_CONTROLS_WIDTH }} />
+            <WindowControls width={WINDOW_CONTROLS_WIDTH} />
+          </>
         )}
       </div>
 
@@ -426,20 +434,26 @@ function WindowControls({ width }: { width: number }): JSX.Element {
 
   const btnBase = 'flex h-full w-[46px] items-center justify-center text-mist transition-colors';
 
-  return (
+  /*
+   * ★ v0.8.5 C2：portal 到 body（fixed top-0 right-0, z-[85]）。
+   *
+   * 为什么不留在 header 流内：header 是 z-40，而 modal 遮罩 z-60/70/75 ——
+   * 排障手实测 elementFromPoint 在三键位置命中的是遮罩：任何弹窗打开期间
+   * 三键不可点（连点关闭都做不到）。portal+85 让它高于一切 modal 与 toast，
+   * 恢复「窗口控制永远可点」的原生语义。
+   *
+   * 几何不变（QA Q-A1-4/5 钉的 64/56）：fixed top-0 + right-0 恰落在原生标题栏
+   * 同样的右上角；高 calc(56/64px + 1px) + border-b 复刻 header 的 1px 底边框段
+   * （portal 后脱离了 header 的 flex 流，边框要自带）；bg-paper 与 header 同色，
+   * 遮罩期间视觉与原生 titleBar 一样「浮」在压暗层上。
+   */
+  return createPortal(
     <div
       data-window-controls=""
       role="group"
       aria-label="窗口控制"
-      /*
-       * `bg-paper` + 高 calc(100% + 1px)：顶栏 h-14/h-16 含 1px 底边框，行内容盒
-       * 因此是 55/63——若只拿 h-full，三键比原生标题栏矮 1px，且边框线会从按钮
-       * 底下穿过（原生叠加层时代系统按 64 高绘制、连边框段一起覆盖，观感无分割）。
-       * 这里把按钮组向下多绘 1px 并以纸面底色盖住边框段：悬停高亮也随之覆盖整段，
-       * 与 Windows 原生Caption 观感一致。QA 几何验收（Q-A1-4/5）钉 64/56 两个值。
-       */
-      className="flex shrink-0 items-stretch bg-paper"
-      style={{ width, height: 'calc(100% + 1px)' }}
+      className="fixed right-0 top-0 z-[85] flex h-[calc(56px+1px)] items-stretch border-b border-line bg-paper xl:h-[calc(64px+1px)]"
+      style={{ width }}
     >
       <button
         type="button"
@@ -471,6 +485,7 @@ function WindowControls({ width }: { width: number }): JSX.Element {
       >
         <X size={16} aria-hidden />
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
