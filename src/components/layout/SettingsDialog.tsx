@@ -15,6 +15,7 @@ import { isDesktop } from '../../lib/desktopBridge';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { NasServiceSection } from '../settings/NasServiceSection';
+import { CustomLibrarySection } from '../settings/CustomLibrarySection';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import { useMembersStore } from '../../store/useMembersStore';
@@ -268,6 +269,9 @@ export function SettingsDialog({
                 </p>
               </div>
             </section>
+
+            {/* 行业库区（v0.8.6 · 她反馈 #9：行业允许增加自定义） */}
+            <CustomLibrarySection />
 
             {/* 主题区 */}
             <section>

@@ -50,6 +50,7 @@ export function StageSelectPanel({
   visibleDomains,
   customStages,
   onCustomStageSubmit,
+  customPresetGroups,
 }: {
   selected: StageSelectionItem[];
   onChange(next: StageSelectionItem[]): void;
@@ -75,6 +76,17 @@ export function StageSelectPanel({
   customStages?: StageSelectionItem[];
   /** v0.8：传了才渲染「＋ 自定义阶段」入口（即**仅建档路径**，TBD-1） */
   onCustomStageSubmit?(draft: CustomStageDraft): void;
+  /**
+   * v0.8.6（她反馈 #9「行业允许增加自定义」）：自定义行业包的套餐组
+   * （父组件从 settings customLibraries 读出、过滤 domain、展开 items 后传入——
+   * 本组件零业务逻辑：只渲染胶囊 + onClick 交回展开好的 items）。
+   */
+  customPresetGroups?: ReadonlyArray<{
+    key: string;
+    name: string;
+    libraryName: string;
+    items: StageSelectionItem[];
+  }>;
 }): JSX.Element {
   /*
    * ⚠️ 这里**刻意没有**「主板块一变就自动重选套餐」的 effect（2026-09-17 删，勿加回）。
@@ -275,6 +287,24 @@ export function StageSelectPanel({
               </button>
             );
           })}
+          {/* v0.8.6（她反馈 #9）：自定义行业包套餐（导入的设置→行业库，挂当前主板块） */}
+          {customPresetGroups?.map((g) => (
+            <button
+              key={g.key}
+              type="button"
+              aria-label={`自定义套餐 ${g.name}（${g.libraryName}）`}
+              data-custom-preset={g.key}
+              onClick={() => onChange(g.items)}
+              className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                selected.length > 0 && selected.every((it) => g.items.some((gi) => gi.key === it.key))
+                  ? 'border-pine bg-pine-soft/50 text-pine'
+                  : 'border-dashed border-line bg-paper text-mist hover:bg-sand'
+              }`}
+              title={`自定义行业包「${g.libraryName}」`}
+            >
+              ✚ {g.name}
+            </button>
+          ))}
         </div>
       </div>
 

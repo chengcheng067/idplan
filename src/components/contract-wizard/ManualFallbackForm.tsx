@@ -38,6 +38,11 @@ import {
   type DomainCascadeValue,
 } from './DomainCascade';
 import { domainLabel } from '../../core/template/stage-library';
+import {
+  normalizeCustomLibraries,
+  buildCustomPresetItems,
+  CUSTOM_LIBRARIES_SETTING_KEY,
+} from '../../core/template/custom-library.service';
 import type { CustomStageDraft } from './CustomStageDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
@@ -100,6 +105,41 @@ export function ManualFallbackForm({
    * 自定义阶段（`templateKey === null`）不因切板块被丢掉：它们是用户刚加的，
    * 只换预设部分、保留自选项并追加到末尾，避免「换了个板块我加的段没了」。
    */
+  /**
+   * v0.8.6（她反馈 #9）：自定义行业包套餐组。
+   * 从 settings customLibraries 读出 → 过滤**当前主板块**的包 → 每包每个 preset
+   * 展开成 items（共享核心 buildCustomPresetItems）→ 传给 StageSelectPanel。
+   * 读侧归一（normalizeCustomLibraries 绝不抛错）——坏包静静跳过。
+   */
+  const [customPresetGroups, setCustomPresetGroups] = useState<
+    Array<{ key: string; name: string; libraryName: string; items: ReturnType<typeof buildCustomPresetItems> }>
+  >([]);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const libs = normalizeCustomLibraries(
+        await repos.settings.get<unknown>(CUSTOM_LIBRARIES_SETTING_KEY),
+      );
+      const domain = cascade.domain;
+      const groups: typeof customPresetGroups = [];
+      for (const lib of libs) {
+        if (domain && lib.domain !== domain) continue;
+        for (const p of lib.presets) {
+          groups.push({
+            key: p.key,
+            name: p.name,
+            libraryName: lib.name,
+            items: buildCustomPresetItems(lib, p.key),
+          });
+        }
+      }
+      if (alive) setCustomPresetGroups(groups);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [repos, cascade.domain]);
+
   const presetDomainRef = useRef<StageTemplateDomain | null>(null);
   useEffect(() => {
     if (presetDomainRef.current === cascade.domain) return;
@@ -359,6 +399,7 @@ export function ManualFallbackForm({
                 onDurationChange={handleDurationChange}
                 domain={cascade.domain}
                 visibleDomains={visibleDomainsOf(cascade)}
+                customPresetGroups={customPresetGroups}
                 customStages={customStages}
                 onCustomStageSubmit={handleAddCustomStage}
               />
