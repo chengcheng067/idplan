@@ -62,3 +62,26 @@ ID Plan 是离线优先的项目排程工具（看板 / 月历 / 甘特 / 打印
 ### 同源记录
 - 0.8.5 调研轮附带已修：FirstRunGuide isAdmin 门控、IDPLAN_AGENT_API_TOKEN 部署链补齐（commit 2eb8f34）。
 - 待她拍板的 0.8.5 其余项：IA 切片节奏（C→A→B）、遗留 16 条批修范围、AI 接口方案 3 详细说明（2026-10-01 已讲，等她确认）。
+
+---
+
+## 0.8.6.0001 已发布（2026-10-02，tag v0.8.6.0001 + Release）
+
+内容：0.8.5 六件（三个 UI bug / 行业遗留 16 条+五锁 / demo 工厂 / AI 双轨 /
+UI 三件套）+ 0.8.6 四件（P0-1 写端点鉴权 / 幂等去重 / 行业自定义 / 活动流）。
+验收：全量 1895 passed 0 failed；tc 64。Release 附件：ID-Plan-Setup-0.8.6.0001.exe。
+
+### 下一步（未完结项，按优先级）
+
+1. **UPK 0.8.6 重打**：本机无 docker/ugcli，需在 NAS 机器跑
+   `ugnas/scripts/pack.sh`（版本号 0.8.6 已就绪）；跑完找 QA 做层可达性+
+   包内校验（对齐 0.8.4.0001 的 25/25 认证标准）
+2. **提案理由+置信度+批量审批**（竞品三件套之二）：ApplyPayloadPanel 已有
+   diff，补「写回提案每条带理由+置信度+批量接受」（1.5 人日）
+3. **AI 规划向导**（竞品三件套之三）：贴描述 → 分阶段任务卡 → 一键建板，
+   复用 PROMPT_TEMPLATE（2 人日）
+4. **侧栏 IA 收官**：备份三件套收进设置·数据中心（产品官定型，2 人日）
+5. **Agent 侧 presetKey 解析自定义行业包**（9c 下半场）+ domain 枚举扩展
+6. 遗留待办：print-light-lock 偶发 flaky（单跑绿全量偶挂，未根因）；
+   useIsNarrowViewport 1023 vs xl:1280 口径收敛；/api/bootstrap 鉴权、
+   /api/agent/* 限流（安全官 P1）
