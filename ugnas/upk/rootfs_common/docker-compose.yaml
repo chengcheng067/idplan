@@ -64,6 +64,10 @@ services:
       - IDPLAN_AGENT_TOKEN=${IDPLAN_AGENT_TOKEN}
       # ★ 0.8.5（安全官 P0-2）：Agent 导入通道令牌（与备份通道分权，建议不同值）
       - IDPLAN_AGENT_API_TOKEN=${IDPLAN_AGENT_API_TOKEN}
+      # 0.8.5 方案 2：自然语言通道（三件套缺一即 fail-closed 403；可指向自架 Ollama）
+      - IDPLAN_NL_LLM_BASE_URL=${IDPLAN_NL_LLM_BASE_URL}
+      - IDPLAN_NL_LLM_API_KEY=${IDPLAN_NL_LLM_API_KEY}
+      - IDPLAN_NL_LLM_MODEL=${IDPLAN_NL_LLM_MODEL}
     # 数据持久化（关键）：不声明卷时容器重建即丢库，团队数据全没。
     volumes:
       - idplan-data:/data

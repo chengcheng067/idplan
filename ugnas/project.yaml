@@ -86,6 +86,39 @@ parameters:
       zh-CN:
         name: Agent 接入令牌
         description: Agent 四端点（health / boards / import / tasks）的共享密钥。建议与「备份令牌」填不同的值（职责分离）。在 ID Plan 的 Agent 接入面板（NAS 档）填入同一串值即通。留空 = Agent 端点被拒（安全设计）。
+  - key: IDPLAN_NL_LLM_BASE_URL
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: NL Channel - LLM Endpoint
+        description: Base URL of an OpenAI-compatible endpoint for the optional natural-language command channel (e.g. your own Ollama). All three NL_LLM_* values must be set or the channel stays refused (fail-closed). Leaving unset = natural language not enabled (safer default).
+      zh-CN:
+        name: 自然语言通道 - LLM 地址
+        description: 可选的「自然语言调期」通道所用的 OpenAI 兼容端点（可填你自己的 Ollama）。三个 NL_LLM_* 必须全部填写，否则该通道保持拒绝（fail-closed）。留空 = 不启用自然语言（更安全的默认）。
+  - key: IDPLAN_NL_LLM_API_KEY
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: NL Channel - API Key
+        description: API key for the LLM endpoint above. Self-hosted (your own Ollama) may accept any non-empty value. Never committed to the repo — you configure it here only.
+      zh-CN:
+        name: 自然语言通道 - API Key
+        description: 上面 LLM 端点的密钥。自架（自己的 Ollama）可填任意非空值。绝不入仓库——只在此处配置。
+  - key: IDPLAN_NL_LLM_MODEL
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: NL Channel - Model
+        description: Model name passed to the endpoint (e.g. qwen2.5:7b / deepseek-chat).
+      zh-CN:
+        name: 自然语言通道 - 模型名
+        description: 传给端点的模型名（如 qwen2.5:7b / deepseek-chat）。
 
 # 合规与技术支持链接（使用开源代码时必须配置 license + source）
 privacy_policy_link:

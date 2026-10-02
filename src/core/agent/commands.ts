@@ -45,8 +45,13 @@ export const AGENT_COMMAND_SCHEMA_ID = 'idplan-agent-command/v1' as const;
 
 export const rescheduleStagesCommandSchema = z.object({
   command: z.literal('reschedule_stages'),
-  /** 目标看板（必须 kind=agent；人类项目被门拒绝） */
-  projectId: z.string().min(1),
+  /**
+   * 目标看板（必须 kind=agent；人类项目被门拒绝）。
+   * ★ 空串**合法过 schema**（v0.8.5 方案 2 修正）：自然语言解析不出项目时模型
+   *   按系统提示输出空串——若 schema 用 min(1)，它会被判成「形状不符」，
+   *   用户看到的是 zod 报错而不是「没提项目」的人话。空值拒绝在路由层。
+   */
+  projectId: z.string().default(''),
   /**
    * 平移天数：正=整体推后，负=整体提前。±365 封顶（超过即疑似笔误，
    * 如把 14 写成 1400——拒绝并提示，不替用户猜）。

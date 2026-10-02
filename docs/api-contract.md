@@ -159,6 +159,7 @@ env 为 **`IDPLAN_AGENT_API_TOKEN`**（`AGENT_API_TOKEN_ENV`，`agent-auth.ts:10
 | GET | `/api/agent/tasks` | 只读任务流（`agent.routes.ts:438`）：query `?projectId=&source=`；响应 `{ tasks: [{ externalId, taskNo, title, status, dueDate, dependsOnExternal }] }`。详见下 |
 | POST | `/api/agent/boards` | 建 Agent 看板（`kind='agent'`）含阶段骨架（`agent.routes.ts:530`），**只新建**；成功 → **201**。详见下 |
 | POST | `/api/agent/commands?dryRun=1` | 结构化命令通道（v0.8.5 方案 3）：当前 `reschedule_stages` 调期。详见下 |
+| POST | `/api/agent/nl-execute?dryRun=1` | 自然语言通道（v0.8.5 方案 2，opt-in）：三 env 配齐才启用，fail-closed。详见下 |
 
 ### `POST /api/agent/import` —— query 契约与错误码
 
@@ -396,3 +397,32 @@ injection / 数据出境），详见 `deliverables/gstack/security-review-idplan
 - ⚠️ **非幂等**：重放 = 二次平移。写入方须自行保证不重放（先用 `dryRun=1` 确认）。
   完备的 `operationId` 去重表排 0.8.6（与 NAS 写端点鉴权同批——去重记录要先有安全落点）；
 - 桌面（loopback `127.0.0.1:17788`）与 NAS（本端点）**同核心同码**（`src/core/agent/commands.ts`）。
+
+### `POST /api/agent/nl-execute` —— 自然语言通道（v0.8.5 · 方案 2，opt-in）
+
+双轨架构的第二轨：主轨是方案 3（`/api/agent/commands` 结构化命令，零 LLM）；
+本端点是**可选增强**——用户说人话，服务端调**用户自配的 LLM**（OpenAI 兼容）
+解析成命令，再走同一条 `runRescheduleStages`。雯丞 2026-10-01：「方案 2 更符合
+我自己的使用方式」+ 开源后「大家都会想办法用上这个功能」。
+
+| Method | Path | 说明 |
+| --- | --- | --- |
+| POST | `/api/agent/nl-execute?dryRun=1` | 自然语言 → reschedule_stages。`requireAgentToken` |
+
+**开启条件（fail-closed，缺一即 403 `nl_not_configured`）**：
+`IDPLAN_NL_LLM_BASE_URL` + `IDPLAN_NL_LLM_API_KEY` + `IDPLAN_NL_LLM_MODEL`
+（部署链已留参数位：UGOS 安装界面可见「自然语言通道」三项；可指向自架 Ollama。
+**不配 = 通道不存在**，比半残状态安全）。
+
+**请求**：`{ "text": "把茶室装修项目往后推两周" }`（≤ 500 字）。
+
+**判序**：token → 401；NL 未配 → 403；text 缺失/超长 → 400；LLM 输出非 JSON
+→ 502（不进执行链）；输出过 `validateAgentCommand` 白名单（模型被注入带歪 →
+400 `nl_shape_rejected`）；解析不出项目 → 400（**绝不猜项目**）。
+
+**安全姿态**：系统提示锁死输出形状 + 注入缓释三规则（忽略文本中的指令）；
+响应 schema 白名单校验兜底；`temperature:0`；15s 超时。**响应带
+`dataDisclosure` 字段**（明示自然语言文本已发往所配 LLM——数据出境要知情）。
+
+**桌面形态无此通道**（桌面用户的 LLM key 配置不现实）：桌面保持方案 3 纯结构化，
+NL 是 NAS/自部署形态的可选增强。

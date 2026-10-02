@@ -92,6 +92,7 @@ import { normalizeStageName } from '../../src/core/lib/task-no';
 import type { AgentRouteDelegate } from '../adapters/sqlite.bundle';
 import { createSqliteBundle } from '../adapters/sqlite.bundle';
 import { agentUnauthorizedBody, requireAgentToken } from '../lib/agent-auth';
+import { nlLlmConfig, parseNlToCommandJson, NL_TEXT_MAX_CHARS, NL_DATA_DISCLOSURE } from '../lib/nl-llm';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -505,6 +506,130 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           cmd,
           { dryRun },
         );
+      } catch (err) {
+        if (err instanceof ChangxiaError) {
+          if (err.code === ChangxiaErrorCode.Validation) {
+            void reply.status(400);
+            return { error: { code: 'Validation', userMessage: err.userMessage } };
+          }
+          if (err.code === ChangxiaErrorCode.ProjectUnresolved) {
+            void reply.status(400);
+            return {
+              error: {
+                code: 'project_unresolved',
+                userMessage: err.userMessage,
+                projects: listProjectCandidates(),
+              },
+            };
+          }
+        }
+        throw err;
+      }
+    });
+
+    /* ======================================================================================
+     * ②-c POST /api/agent/nl-execute（v0.8.5 方案 2：opt-in 自然语言通道）
+     *
+     * ── 双轨里的这一轨是什么 ──
+     * 雯丞拍板「方案 2 更符合我的使用方式」：直接说人话（「把茶室项目推两周」），
+     * 服务端调**用户自配的 LLM**（OpenAI 兼容端点）解析成方案 3 的结构化命令，
+     * 再走同一条 runRescheduleStages —— 隔离/留痕/归属门全继承，不是旁路。
+     *
+     * ── 判序（fail-closed 优先）──
+     *   ① Agent token 无效 → 401；
+     *   ② **NL 三 env 未配全 → 403**（不是 500：没配就是没开，姿态与 Agent token
+     *      未配时一致。文案说清缺哪三个 env）；
+     *   ③ text 缺失/超 500 字 → 400；
+     *   ④ LLM 解析失败/输出非 JSON → 502（模型侧问题，不进执行链）；
+     *   ⑤ 过 validateAgentCommand 白名单（模型被注入带歪 → 形状不符 → 400）；
+     *   ⑥ projectId 空（用户没提项目）→ 400「无法解析出项目」，绝不猜；
+     *   ⑦ 复用 runRescheduleStages（dryRun query 同 commands 端点）。
+     *
+     * ⚠️ 数据出境明示：响应带 dataDisclosure。开启通道 = 同意这句话发去自配 LLM。
+     * ==================================================================================== */
+    scope.post('/api/agent/nl-execute', async (req, reply) => {
+      if (!requireAgentToken(req)) {
+        void reply.status(401);
+        return agentUnauthorizedBody();
+      }
+      const cfg = nlLlmConfig();
+      if (!cfg) {
+        void reply.status(403);
+        return {
+          error: {
+            code: 'nl_not_configured',
+            userMessage:
+              '自然语言通道未配置（fail-closed）：请在服务端设置 IDPLAN_NL_LLM_BASE_URL / ' +
+              'IDPLAN_NL_LLM_API_KEY / IDPLAN_NL_LLM_MODEL 三个环境变量（OpenAI 兼容端点，' +
+              '可指向你自己的 Ollama），重启后生效。未配置时本通道不可用——这是安全设计，不是故障。',
+          },
+        };
+      }
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      if (!text) {
+        void reply.status(400);
+        return invalidField('请提供自然语言文本（body.text，非空）。');
+      }
+      if (text.length > NL_TEXT_MAX_CHARS) {
+        void reply.status(400);
+        return invalidField(
+          `自然语言文本超长（> ${NL_TEXT_MAX_CHARS} 字）：请只说这一条排期调整，别把整份合同粘进来。`,
+        );
+      }
+
+      let parsed;
+      try {
+        parsed = await parseNlToCommandJson(cfg, text);
+      } catch (err) {
+        void reply.status(502);
+        return {
+          error: {
+            code: 'nl_parse_failed',
+            userMessage:
+              err instanceof Error && err.message ? err.message : 'LLM 解析失败（未进入执行链）。',
+          },
+        };
+      }
+
+      let cmd;
+      try {
+        cmd = validateAgentCommand(parsed.json);
+      } catch (err) {
+        void reply.status(400);
+        return {
+          error: {
+            code: 'nl_shape_rejected',
+            userMessage:
+              (err instanceof ChangxiaError ? err.userMessage : 'LLM 输出形状不符') +
+              '（原始输出：' + parsed.raw.slice(0, 120) + '）',
+          },
+        };
+      }
+      // 用户没提项目 → 明确拒绝（系统提示已要求模型此时输出空 projectId；这里兜底）
+      if (!cmd.projectId || !cmd.projectId.trim()) {
+        void reply.status(400);
+        return invalidField(
+          '没能从这句话里解析出目标项目：请带上项目名或项目 id（Agent 看板）再说一次。',
+        );
+      }
+
+      const q = (req.query ?? {}) as Record<string, unknown>;
+      const dryRunRaw = q.dryRun;
+      const dryRun =
+        dryRunRaw !== undefined && dryRunRaw !== '' && dryRunRaw !== '0' && dryRunRaw !== 'false';
+
+      try {
+        const stageService = new StageService({ stages: bundle.stages, logs: bundle.logs });
+        const result = await runRescheduleStages(
+          {
+            repos: bundle,
+            rescheduleStage: (stageId, c) => stageService.reschedule(stageId, c),
+          },
+          cmd,
+          { dryRun },
+        );
+        return { ...result, dataDisclosure: NL_DATA_DISCLOSURE };
       } catch (err) {
         if (err instanceof ChangxiaError) {
           if (err.code === ChangxiaErrorCode.Validation) {
