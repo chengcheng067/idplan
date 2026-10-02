@@ -281,6 +281,8 @@ export async function runAgentCommand(
       {
         repos,
         rescheduleStage: (stageId, c) => stageService.reschedule(stageId, c),
+        // v0.8.6：幂等去重表（settings KV，local Dexie 形态）落点
+        settings: repos.settings,
       },
       cmd,
       { dryRun: req.dryRun === true },

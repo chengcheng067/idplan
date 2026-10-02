@@ -19,7 +19,7 @@ import Database from 'better-sqlite3';
 import { createDb } from '../server/db';
 import { registerAgentRoutes } from '../server/routes/agent.routes';
 import { AGENT_TOKEN_ENV, AGENT_API_TOKEN_ENV } from '../server/lib/agent-auth';
-import type { Db } from 'better-sqlite3';
+
 import type { FastifyInstance } from 'fastify';
 
 const TOKEN = 'test-agent-token';
@@ -29,7 +29,7 @@ let savedApiToken: string | undefined;
 let savedNlBase: string | undefined;
 let savedNlKey: string | undefined;
 let savedNlModel: string | undefined;
-let db: Db;
+let db: import('better-sqlite3').Database;
 
 async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });

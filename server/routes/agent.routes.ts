@@ -502,6 +502,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           {
             repos: bundle,
             rescheduleStage: (stageId, c) => stageService.reschedule(stageId, c),
+            settings: bundle.settings, // v0.8.6 幂等去重表
           },
           cmd,
           { dryRun },
@@ -625,6 +626,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           {
             repos: bundle,
             rescheduleStage: (stageId, c) => stageService.reschedule(stageId, c),
+            settings: bundle.settings, // v0.8.6 幂等去重表（remote settings HTTP）
           },
           cmd,
           { dryRun },

@@ -17,8 +17,8 @@ import { describe, it, expect } from 'vitest';
 import { runRescheduleStages, validateAgentCommand } from '../src/core/agent/commands';
 import type { RescheduleResult, RescheduleDryRun } from '../src/core/agent/commands';
 import { ChangxiaErrorCode, StageStatus } from '../src/core/types/enums';
-import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
-import type { Project, Stage } from '../src/core/types/entities';
+import type { IRepositoryBundle, ISettingsRepository } from '../src/core/repositories/interfaces';
+import type { Project, Stage, Setting } from '../src/core/types/entities';
 
 function fakeRepos(opts: {
   project?: Project | null;
@@ -75,6 +75,29 @@ const base = { command: 'reschedule_stages', projectId: 'proj_agent' } as const;
 function asDry(r: RescheduleResult): RescheduleDryRun {
   if (r.mode !== 'dry_run') throw new Error('expected dry_run mode');
   return r;
+}
+
+/** 内存 settings KV（幂等去重表的 fake 落点） */
+function fakeSettings(): {
+  repo: ISettingsRepository;
+  store: Map<string, unknown>;
+} {
+  const store = new Map<string, unknown>();
+  const repo: ISettingsRepository = {
+    async get<T>(k: string) {
+      return (store.get(k) as T) ?? null;
+    },
+    async set(k, v) {
+      store.set(k, v);
+    },
+    async all() {
+      return [] as Setting[];
+    },
+    async replaceAll() {
+      /* 夹具不需要 */
+    },
+  };
+  return { store, repo };
 }
 
 describe('reschedule_stages 命令（方案 3 第一命令）', () => {
@@ -202,5 +225,63 @@ describe('reschedule_stages 命令（方案 3 第一命令）', () => {
       ),
     );
     expect(r.wouldShift.map((x) => x.stageId)).toEqual(['s1']);
+  });
+});
+
+describe('幂等去重（v0.8.6 · 非幂等命令的重放保险）', () => {
+  const A = ['2026-10-05', '2026-10-11'] as const;
+
+  it('⑥ 带 operationId：首次执行落记录 + replay:false', async () => {
+    const settings = fakeSettings();
+    const repos = fakeRepos({
+      project: agentProject,
+      stages: [stage('s1', 1, StageStatus.InProgress, 'k1', A[0], A[1])],
+    });
+    const r = await runRescheduleStages(
+      { repos, rescheduleStage: async () => ({}), settings: settings.repo },
+      { ...base, shiftDays: 7, operationId: 'claude:run1:1' },
+    );
+    if (r.mode !== 'applied') throw new Error('applied expected');
+    expect(r.replay).toBe(false);
+    expect(r.shifted).toBe(1);
+    // 去重记录落 settings KV
+    expect(settings.store.has('idplan.agentCmd.claude:run1:1')).toBe(true);
+  });
+
+  it('⑦ 同 operationId 重放：零执行 + replay:true + 回放上次结果', async () => {
+    const settings = fakeSettings();
+    const calls: string[] = [];
+    const repos = fakeRepos({
+      project: agentProject,
+      stages: [stage('s1', 1, StageStatus.InProgress, 'k1', A[0], A[1])],
+    });
+    const deps = {
+      repos,
+      rescheduleStage: async (id: string) => {
+        calls.push(id);
+      },
+      settings: settings.repo,
+    };
+    const cmd = { ...base, shiftDays: 7, operationId: 'claude:run1:2' } as const;
+    await runRescheduleStages(deps, cmd);
+    const second = await runRescheduleStages(deps, cmd);
+    if (second.mode !== 'applied') throw new Error('applied expected');
+    expect(second.replay).toBe(true);
+    expect(second.shifted).toBe(1);
+    expect(calls, '重放不得二次平移（只调了一次 reschedule）').toEqual(['s1']);
+  });
+
+  it('⑧ dryRun 不写去重表（预览不属于「已执行」）', async () => {
+    const settings = fakeSettings();
+    const repos = fakeRepos({
+      project: agentProject,
+      stages: [stage('s1', 1, StageStatus.InProgress, 'k1', A[0], A[1])],
+    });
+    await runRescheduleStages(
+      { repos, rescheduleStage: async () => ({}), settings: settings.repo },
+      { ...base, shiftDays: 7, operationId: 'dry:1' },
+      { dryRun: true },
+    );
+    expect(settings.store.size).toBe(0);
   });
 });

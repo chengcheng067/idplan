@@ -33,7 +33,7 @@
 import { z } from 'zod';
 
 import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../types/enums';
-import type { IRepositoryBundle } from '../repositories/interfaces';
+import type { IRepositoryBundle, ISettingsRepository } from '../repositories/interfaces';
 import type { Stage } from '../types/entities';
 import { assertAgentWritableProject } from './payload.apply';
 import { isIsoDate } from '../../lib/date';
@@ -64,6 +64,15 @@ export const rescheduleStagesCommandSchema = z.object({
   stageKeys: z.array(z.string().min(1)).max(50).optional(),
   /** 改期原因（写入留痕日志的 reason；非必填，但建议 AI 带上人类可读理由） */
   reason: z.string().max(200).nullable().default(null),
+  /**
+   * 可选幂等键（v0.8.6 · 她这条命令「非幂等」的补救）：
+   * 给了它 → 服务端/本地按它去重（同 operationId 重放不执行、直接回放上次
+   * 结果，`replay:true`）；不给 → 语义同 0.8.5（每次调用都平移，调用方
+   * 自行负责不重放）。建议格式：`${agentKind}:${runId}:${seq}`。
+   * 落点 = settings KV（`idplan.agentCmd.<operationId>`）——与备份导入
+   * 同库同事务视野；dryRun 不写。
+   */
+  operationId: z.string().max(100).optional(),
 });
 
 export type RescheduleStagesCommand = z.infer<typeof rescheduleStagesCommandSchema>;
@@ -96,6 +105,8 @@ export interface RescheduleApplied {
   shifted: number;
   skippedCompleted: number;
   unmatchedKeys: string[];
+  /** v0.8.6 幂等：true = 命中 operationId 去重（未执行，回放上次结果） */
+  replay: boolean;
 }
 
 export type RescheduleResult = RescheduleDryRun | RescheduleApplied;
@@ -111,6 +122,7 @@ function shiftIsoDate(iso: string, days: number): string {
 
 export interface RescheduleDeps {
   repos: IRepositoryBundle;
+  /** settings KV（幂等去重表的落点；ISettingsRepository，local/remote 双形态同接口） */
   /** 单段改期 service（既有实现：写流水 + 连带任务 dueDate + 状态校验） */
   rescheduleStage: (
     stageId: string,
@@ -118,6 +130,8 @@ export interface RescheduleDeps {
   ) => Promise<unknown>;
   /** 留痕操作人名（Agent 通道固定口径） */
   operatorName?: string;
+  /** settings KV（幂等去重表；可选——老调用方不传=无去重，语义同 0.8.5） */
+  settings?: ISettingsRepository;
 }
 
 /**
@@ -186,9 +200,19 @@ export async function runRescheduleStages(
     };
   });
 
-  // ④ dryRun：零写入
+  // ④ dryRun：零写入（也不碰去重表）
   if (opts?.dryRun) {
     return { mode: 'dry_run', projectId: c.projectId, shiftDays: c.shiftDays, wouldShift: preview, skippedCompleted, unmatchedKeys };
+  }
+
+  // ⑤ 幂等去重（v0.8.6）：带 operationId 且去重表有记录 → 回放、零执行。
+  //    reschedule 是**非幂等**命令（重放=二次平移），这是重放保险。
+  const idemKey = c.operationId ? `idplan.agentCmd.${c.operationId}` : null;
+  if (idemKey && deps.settings) {
+    const prev = await deps.settings.get<RescheduleResult>(idemKey);
+    if (prev && prev.mode === 'applied') {
+      return { ...prev, replay: true };
+    }
   }
 
   for (const item of preview) {
@@ -199,14 +223,19 @@ export async function runRescheduleStages(
       operatorName: deps.operatorName ?? 'Agent 通道',
     });
   }
-  return {
+  const applied: RescheduleApplied = {
     mode: 'applied',
     projectId: c.projectId,
     shiftDays: c.shiftDays,
     shifted: preview.length,
     skippedCompleted,
     unmatchedKeys,
+    replay: false,
   };
+  if (idemKey && deps.settings) {
+    await deps.settings.set(idemKey, applied);
+  }
+  return applied;
 }
 
 /** 命令校验入口（UI/路由共用；错误文案口径与 validateAgentPayload 对齐） */

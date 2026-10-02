@@ -25,12 +25,12 @@ import { join } from 'node:path';
 import { createDb } from '../server/db';
 import { registerMetaRoutes } from '../server/routes/meta.routes';
 import { AGENT_TOKEN_ENV } from '../server/lib/agent-auth';
-import type { Db } from 'better-sqlite3';
+
 import type { FastifyInstance } from 'fastify';
 
 const TOKEN = 'write-gate-token';
 let saved: string | undefined;
-let db: Db;
+let db: import('better-sqlite3').Database;
 
 async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -72,7 +72,7 @@ describe('P0-1 · 业务写端点鉴权（settings/logs/contracts）', () => {
         method: ep.method,
         url: ep.path,
         headers: { 'content-type': 'application/json' },
-        payload: ep.body,
+        payload: JSON.stringify(ep.body),
       });
       expect(res.statusCode, `${ep.method} ${ep.path} 无 token 必须 401`).toBe(401);
     }
@@ -85,7 +85,7 @@ describe('P0-1 · 业务写端点鉴权（settings/logs/contracts）', () => {
         method: ep.method,
         url: ep.path,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-        payload: ep.body,
+        payload: JSON.stringify(ep.body),
       });
       expect(res.statusCode, `${ep.method} ${ep.path} 带 token 不得 401`).not.toBe(401);
     }
