@@ -53,6 +53,12 @@ const V2_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
     column: 'schedule_basis',
     ddl: "ALTER TABLE projects ADD COLUMN schedule_basis TEXT NOT NULL DEFAULT 'calendar'",
   },
+  { table: 'writeback_proposals', column: 'reason', ddl: 'ALTER TABLE writeback_proposals ADD COLUMN reason TEXT' },
+  {
+    table: 'writeback_proposals',
+    column: 'confidence',
+    ddl: 'ALTER TABLE writeback_proposals ADD COLUMN confidence REAL',
+  },
   { table: 'stages', column: 'template_key', ddl: 'ALTER TABLE stages ADD COLUMN template_key TEXT' },
   { table: 'stages', column: 'color_index', ddl: 'ALTER TABLE stages ADD COLUMN color_index INTEGER' },
   {

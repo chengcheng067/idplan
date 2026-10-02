@@ -269,6 +269,10 @@ export interface CreateProposalCmd {
   /** 幂等键（必填，由 makeWritebackIdempotencyKey 生成） */
   idempotencyKey: string;
   status?: WritebackProposalStatus;
+  /** v0.8.6：提案理由（≤200 字，写入侧校验；可空） */
+  reason?: string | null;
+  /** v0.8.6：Agent 自报置信度 0..1（可空；UI 只展示不据此自动决策） */
+  confidence?: number | null;
 }
 
 /** 更新写回提案的输入 */
@@ -277,6 +281,10 @@ export interface UpdateProposalCmd {
   status?: WritebackProposalStatus;
   decidedBy?: string | null;
   decidedAt?: string | null;
+  /** v0.8.6：补填/修订提案理由（≤200 字，可空） */
+  reason?: string | null;
+  /** v0.8.6：补填/修订置信度 0..1（可空） */
+  confidence?: number | null;
 }
 
 /**

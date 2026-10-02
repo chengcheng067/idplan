@@ -114,6 +114,7 @@ import {
   ExecutionStatus,
   WritebackProposalStatus,
 } from '../../src/core/types/agent-execution';
+import { normalizeProposalReason, normalizeProposalConfidence } from '../../src/core/agent-execution/proposal-fields';
 import type {
   ExecutionEventActor,
   ExecutionEventType,
@@ -214,6 +215,10 @@ interface ProposalRow {
   idempotency_key: string;
   decided_by: string | null;
   decided_at: string | null;
+  /** v0.8.6：提案理由（老库迁移后为 NULL） */
+  reason: string | null;
+  /** v0.8.6：置信度 0..1（老库迁移后为 NULL） */
+  confidence: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -330,6 +335,9 @@ const rowToProposal = (r: ProposalRow): WritebackProposal => ({
   operations: parseJsonArray<WritebackOperation>(r.operations),
   status: r.status,
   idempotencyKey: r.idempotency_key,
+  // v0.8.6：老库（迁移前）这两列为 undefined → 归一 null（读侧不抛）
+  reason: r.reason ?? null,
+  confidence: typeof r.confidence === 'number' && Number.isFinite(r.confidence) ? r.confidence : null,
   decidedBy: r.decided_by,
   decidedAt: r.decided_at,
   createdAt: r.created_at,
@@ -1276,6 +1284,9 @@ export function createSqliteBundle(
           operations: cmd.operations,
           status: cmd.status ?? WritebackProposalStatus.Draft,
           idempotencyKey: cmd.idempotencyKey,
+          // v0.8.6：理由/置信度（写入侧校验；可空）
+          reason: normalizeProposalReason(cmd.reason),
+          confidence: normalizeProposalConfidence(cmd.confidence),
           decidedBy: null,
           decidedAt: null,
           createdAt: now,
@@ -1285,8 +1296,8 @@ export function createSqliteBundle(
           db.prepare(
             `INSERT INTO writeback_proposals
                (id, execution_id, attempt_id, project_id, task_id, operations, status,
-                idempotency_key, decided_by, decided_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                idempotency_key, reason, confidence, decided_by, decided_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
             row.id,
             row.executionId,
@@ -1296,6 +1307,8 @@ export function createSqliteBundle(
             serializeJson(row.operations),
             row.status,
             row.idempotencyKey,
+            row.reason,
+            row.confidence,
             row.decidedBy,
             row.decidedAt,
             row.createdAt,
@@ -1349,6 +1362,11 @@ export function createSqliteBundle(
         const next: WritebackProposal = {
           ...existing,
           ...pickDefined(cmd),
+          // v0.8.6：pickDefined 会把 reason/confidence 直通，这里补写入侧校验
+          //   （与 create 同款口径：理由 ≤200、置信度有限数 0..1）
+          reason: cmd.reason === undefined ? existing.reason : normalizeProposalReason(cmd.reason),
+          confidence:
+            cmd.confidence === undefined ? existing.confidence : normalizeProposalConfidence(cmd.confidence),
           updatedAt: now,
         };
         if (toTerminal) {
@@ -1357,11 +1375,14 @@ export function createSqliteBundle(
         }
         db.prepare(
           `UPDATE writeback_proposals SET
-             operations = ?, status = ?, decided_by = ?, decided_at = ?, updated_at = ?
+             operations = ?, status = ?, reason = ?, confidence = ?,
+             decided_by = ?, decided_at = ?, updated_at = ?
            WHERE id = ?`,
         ).run(
           serializeJson(next.operations),
           next.status,
+          next.reason,
+          next.confidence,
           next.decidedBy,
           next.decidedAt,
           next.updatedAt,

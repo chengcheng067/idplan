@@ -250,6 +250,9 @@ CREATE TABLE IF NOT EXISTS writeback_proposals (
   idempotency_key TEXT NOT NULL,
   decided_by TEXT,
   decided_at TEXT,
+  -- v0.8.6 竞品三件套之二：提案理由 + Agent 自报置信度（0..1 REAL；均可空）
+  reason TEXT,
+  confidence REAL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

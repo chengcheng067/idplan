@@ -407,6 +407,10 @@ const writebackProposalSchema = z.object({
   operations: z.array(z.any()),
   status: z.string(),
   idempotencyKey: z.string(),
+  // v0.8.6：提案理由/置信度进备份格式（nullable + default 兜老备份包——
+  // 缺键的旧包导入后为 null，不因新字段拒掉用户的整库备份）
+  reason: z.string().nullable().default(null),
+  confidence: z.number().nullable().default(null),
   decidedBy: z.string().nullable(),
   decidedAt: nullableIso,
   createdAt: isoString,

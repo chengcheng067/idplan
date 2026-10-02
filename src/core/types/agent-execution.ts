@@ -312,6 +312,17 @@ export interface WritebackProposal {
   status: WritebackProposalStatus;
   /** 幂等键（由 makeWritebackIdempotencyKey 生成） */
   idempotencyKey: string;
+  /**
+   * v0.8.6（竞品三件套之二 · GitHub 审批流）：提案理由。
+   * 为什么必须有：「为什么改」与「改成什么」同权——审批人看不到理由就只是在
+   * 盲批 diff。**可空**（老数据与无理由提案不因此失效），≤200 字由写入侧校验。
+   */
+  reason: string | null;
+  /**
+   * v0.8.6：Agent 自报置信度（0..1，可空）。UI 只**展示**、绝不据此自动决策
+   * （低置信度不等于错提案；自动阈值=替人做审批决定，越权）。
+   */
+  confidence: number | null;
   /** 决策人（approved/rejected 时），可空 */
   decidedBy: string | null;
   /** 决策时刻（可空） */

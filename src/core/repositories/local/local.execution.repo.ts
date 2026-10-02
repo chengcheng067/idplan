@@ -33,6 +33,7 @@ import {
 } from '../../execution/execution-state';
 import type { ChangxiaDatabase } from './dexie.database';
 import { pickDefined } from './local.projects.repo';
+import { normalizeProposalReason, normalizeProposalConfidence } from '../../agent-execution/proposal-fields';
 
 /**
  * 本地 Agent 执行域仓储（Dexie 适配器）。
@@ -445,6 +446,9 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
             operations: cmd.operations,
             status: cmd.status ?? WritebackProposalStatus.Draft,
             idempotencyKey: cmd.idempotencyKey,
+            // v0.8.6：理由/置信度（共享校验，两端同口径）
+            reason: normalizeProposalReason(cmd.reason),
+            confidence: normalizeProposalConfidence(cmd.confidence),
             decidedBy: null,
             decidedAt: null,
             createdAt: now,
@@ -493,6 +497,10 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         const next: WritebackProposal = {
           ...existing,
           ...pickDefined(cmd),
+          // v0.8.6：pickDefined 直通 reason/confidence 会绕过校验，这里补共享口径
+          reason: cmd.reason === undefined ? existing.reason : normalizeProposalReason(cmd.reason),
+          confidence:
+            cmd.confidence === undefined ? existing.confidence : normalizeProposalConfidence(cmd.confidence),
           updatedAt: now,
         };
         // 落定时由仓储盖上 decidedAt（调用方没给就填当前时间，给了就以调用方为准）。

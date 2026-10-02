@@ -98,6 +98,7 @@ import {
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
 import { AgentBoardList } from '../components/agent/AgentBoardList';
 import { AgentActivityStream, type ActivityExecutionGroup } from '../components/agent/AgentActivityStream';
+import { ProposalReviewPanel } from '../components/agent/ProposalReviewPanel';
 import { CreateAgentBoardDialog } from '../components/agent/CreateAgentBoardDialog';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import {
@@ -784,6 +785,60 @@ export function AgentBoardPage(): JSX.Element {
   const agentSeatUsed = members.filter((m) => m.actorKind === 'agent').length;
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
 
+  /**
+   * v0.8.6（竞品三件套之二）：写回提案落定（单条 + 批量）。
+   *
+   * 纪律：① decidedBy 取当前成员名（仓储层 P0 闸门：终态必填决策人）；
+   *   ② 逐条独立落库——批量不是事务（一条失败不影响其余，失败条目在 toast 里点名）；
+   *   ③ 落定后重读活动流数据（事件时间线/提案 chip 同步更新）。
+   */
+  const [proposalBusy, setProposalBusy] = useState(false);
+  const decideProposals = useCallback(
+    async (ids: readonly string[], status: 'applied' | 'rejected') => {
+      if (ids.length === 0) return;
+      setProposalBusy(true);
+      const actor = members.find((m) => m.id === currentMemberId)?.name ?? '未署名';
+      let ok = 0;
+      const failed: string[] = [];
+      for (const id of ids) {
+        try {
+          await repos.executions.updateProposal(id, {
+            status,
+            decidedBy: actor,
+            decidedAt: new Date().toISOString(),
+          });
+          ok += 1;
+        } catch {
+          failed.push(id);
+        }
+      }
+      setProposalBusy(false);
+      // 重读（活动流 + 提案列表）
+      const pid = currentProjectId;
+      if (pid) {
+        const executions = await repos.executions.listExecutionsByProject(pid);
+        const groups: ActivityExecutionGroup[] = [];
+        for (const ex of executions) {
+          const [events, proposals] = await Promise.all([
+            repos.executions.listEvents(ex.id),
+            repos.executions.listProposals(ex.id),
+          ]);
+          groups.push({ execution: ex, events, proposals });
+        }
+        groups.sort((a, b) => (a.execution.createdAt < b.execution.createdAt ? 1 : -1));
+        setActivityGroups(groups);
+      }
+      if (ok > 0) {
+        pushToast('success', `${status === 'applied' ? '已通过' : '已拒绝'} ${ok} 条提案`);
+      }
+      if (failed.length > 0) {
+        pushToast('error', `${failed.length} 条提案落定失败（可能已被他人处理）`);
+      }
+    },
+    [repos, members, currentMemberId, currentProjectId, pushToast],
+  );
+
+
   /** 任务 id → 任务（受阻标题解析用） */
   const taskById = useMemo(
     () => new Map(projectTasks.map((t) => [t.id, t] as const)),
@@ -1025,6 +1080,13 @@ export function AgentBoardPage(): JSX.Element {
         )}
         {/* v0.8.6：Agent 活动流（Linear Coding Session 范式；有数据才渲染） */}
         <AgentActivityStream groups={activityGroups} />
+        {/* v0.8.6 竞品三件套之二：写回提案审批（理由+置信度+批量；GitHub 范式） */}
+        <ProposalReviewPanel
+          proposals={activityGroups.flatMap((g) => g.proposals)}
+          onDecide={(id, status) => void decideProposals([id], status)}
+          onDecideMany={(ids, status) => void decideProposals(ids, status)}
+          busy={proposalBusy}
+        />
 
         {agentBoardMode === 'human' ? (
           <>
