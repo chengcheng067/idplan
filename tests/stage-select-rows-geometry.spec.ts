@@ -241,9 +241,9 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.8 · 已选顺序行内控件真几何（真
       await page.waitForTimeout(800);
     }
     // 0.8.3：身份流走完后 FirstRunGuide 欢迎卡紧接出现（空库环境必弹）——
-    // 不消掉会遮住后续所有点击。本族测的是控件几何，走「从空库开始」线；
+    // 不消掉会遮住后续所有点击。本族测的是控件几何，走「先四处看看」线；
     // 示例分支由 first-run-guide.spec.tsx / demo-data.spec.ts 覆盖。
-    const guideSkip = page.locator('button', { hasText: '从空库开始' });
+    const guideSkip = page.locator('button', { hasText: '先四处看看' });
     if (await guideSkip.count()) {
       await guideSkip.first().click();
       await page.waitForTimeout(500);
