@@ -97,6 +97,7 @@ import {
 } from '../constants/agentTerms';
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
 import { AgentBoardList } from '../components/agent/AgentBoardList';
+import { AgentActivityStream, type ActivityExecutionGroup } from '../components/agent/AgentActivityStream';
 import { CreateAgentBoardDialog } from '../components/agent/CreateAgentBoardDialog';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import {
@@ -325,6 +326,42 @@ export function AgentBoardPage(): JSX.Element {
   const openDrawer = useAgentStore((s) => s.openDrawer);
   const claimTask = useAgentStore((s) => s.claimTask);
   const transitionTask = useAgentStore((s) => s.transitionTask);
+
+  /**
+   * v0.8.6（她反馈 #1「粗糙」的竞品对策）：Agent 活动流数据。
+   * 当前看板下全部执行单 + 每单事件 + 提案（三张表一次读平；页面读、组件纯展示）。
+   * 切换看板 / 落库后由下方 effect 重读（依赖 currentProjectId）。
+   */
+  const [activityGroups, setActivityGroups] = useState<readonly ActivityExecutionGroup[]>([]);
+  useEffect(() => {
+    const pid = currentProjectId;
+    if (!pid) {
+      setActivityGroups([]);
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      try {
+        const executions = await repos.executions.listExecutionsByProject(pid);
+        const groups: ActivityExecutionGroup[] = [];
+        for (const ex of executions) {
+          const [events, proposals] = await Promise.all([
+            repos.executions.listEvents(ex.id),
+            repos.executions.listProposals(ex.id),
+          ]);
+          groups.push({ execution: ex, events, proposals });
+        }
+        // 新的在前（createdAt 倒序）
+        groups.sort((a, b) => (a.execution.createdAt < b.execution.createdAt ? 1 : -1));
+        if (alive) setActivityGroups(groups);
+      } catch {
+        if (alive) setActivityGroups([]); // 读失败=不显示活动流，不阻断看板本身
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [repos, currentProjectId]);
 
   // v0.7 T04：看板模式（human/tech）——store 是唯一真相源，供全部 termFor 调用点传参
   const agentBoardMode = useLayoutStore((s) => s.agentBoardMode);
@@ -986,6 +1023,8 @@ export function AgentBoardPage(): JSX.Element {
             agentSeatLimit={AGENT_SEAT_LIMIT}
           />
         )}
+        {/* v0.8.6：Agent 活动流（Linear Coding Session 范式；有数据才渲染） */}
+        <AgentActivityStream groups={activityGroups} />
 
         {agentBoardMode === 'human' ? (
           <>
