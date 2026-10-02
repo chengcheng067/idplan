@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 
-import {
+import { domainLabel, 
   getItemsByDomains,
   getPresetItems,
   getPresets,
   getPresetsByDomain,
   getUsableDomains,
-} from '../../core/template/stage-library';
+ } from '../../core/template/stage-library';
 import { CUSTOM_STAGE_PRESET_KEY, INTERIOR_FULL_PRESET_KEY } from '../../core/template/stage-fallback';
 import { MAX_STAGE_COUNT, MIN_STAGE_COUNT } from '../../core/template/split';
 import {
@@ -22,7 +22,6 @@ import {
 } from '../../core/types/enums';
 import type { StageSelectionItem, StageTemplateDomain, StageTemplateItem } from '../../core/types/dto';
 import { useProjectsStore } from '../../store/useProjectsStore';
-import { domainLabel } from './DomainCascade';
 import { CustomStageDialog, type CustomStageDraft } from './CustomStageDialog';
 import { stageColorPaint } from './stage-color-bridge';
 

@@ -140,6 +140,29 @@ export function getDomainsOfGroups(groupKeys: string[]): StageTemplateDomain[] {
  *     留下一个选了没东西可挑的选项。
  * 结果恒为 9 个（见 §2.3），顺序＝大类声明顺序。
  */
+/**
+ * 主板块显示名（唯一出处；v0.8.5 从 DomainCascade 上移——
+ * 消除 IndustrySelect ↔ DomainCascade 循环 import，口径只留一份）。
+ * 未覆盖的领域（将来 JSON 新增）→ 原样显示，不崩。
+ */
+export const DOMAIN_LABELS: Record<StageTemplateDomain, string> = {
+  indoor: '室内',
+  landscape: '景观',
+  architecture: '建筑',
+  exhibition: '展陈',
+  // v2 跨行业
+  software: '软件',
+  marketing: '活动',
+  film: '影视',
+  wedding: '婚礼',
+  consulting: '咨询',
+  travel: '旅游',
+};
+
+export function domainLabel(domain: StageTemplateDomain): string {
+  return DOMAIN_LABELS[domain] ?? String(domain);
+}
+
 export function getUsableDomains(): StageTemplateDomain[] {
   const withItems = new Set(library.items.map((item) => item.domain));
   const out: StageTemplateDomain[] = [];

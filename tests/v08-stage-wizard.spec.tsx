@@ -191,19 +191,30 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
   it('A2：不点第 1 层也能在第 2 层直接选到「室内」（下拉恒列全部 9 个板块，按大类 optgroup 分组）', async () => {
     // 未点任何第 1 层：级联值为空，第 2 层仍需可达 → 用「已选大类但未选主板块」的真实入口验证
     await act(async () => root.render(<CascadeHarness initial={{ groupKey: 'space', domain: null, relatedDomains: [] }} />));
-    const select = container.querySelector('select[aria-label="主板块"]') as HTMLSelectElement;
-    expect(select).not.toBeNull();
-    const options = [...select.querySelectorAll('option')].map((o) => o.getAttribute('value'));
-    // 空值项（不指定板块）+ 全部 9 个可用板块
-    expect(options).toEqual(['', ...getUsableDomains()]);
-    // optgroup：7 个大类分组（每个大类只挂自己的板块）
-    const groups = [...select.querySelectorAll('optgroup')].map((g) => g.getAttribute('label'));
-    expect(groups).toEqual(['建筑设计行业', '软件开发', '市场活动', '影视制作', '婚礼策划', '咨询交付', '旅游出行']);
+    // v0.8.5：原生 select → IndustrySelect 自定义下拉（她截图 #8）——
+    //   option/optgroup 断言改为「点开面板后」的选项与分组断言（合同不变）。
+    const trigger = container.querySelector('[data-industry-select-trigger]');
+    expect(trigger, 'IndustrySelect 触发钮').not.toBeNull();
+    await act(async () => {
+      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const panel = document.querySelector('[data-industry-select-panel]');
+    expect(panel, '下拉面板').not.toBeNull();
+    // 「不指定」项（空 value 语义保留）+ 全部 9 个可用板块
+    const optionValues = [...panel!.querySelectorAll('[data-industry-select-option]')].map((o) =>
+      o.getAttribute('data-industry-select-option') ?? '',
+    );
+    expect(optionValues).toEqual(['', ...getUsableDomains()]);
+    // 分组头：7 个大类（「不指定」不属于任何组）
+    const groups = [...panel!.querySelectorAll('[data-industry-select-group]')].map((g) =>
+      g.getAttribute('data-industry-select-group'),
+    );
+    expect(groups).toEqual(['space', 'software', 'marketing', 'film', 'wedding', 'consulting', 'travel']);
 
     // 直接选「室内」→ 生效（不依赖第 1 层先点过）
+    const indoor = panel!.querySelector('[data-industry-select-option="indoor"]');
     await act(async () => {
-      select.value = 'indoor';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      indoor!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(container.querySelector('[data-testid="domain-cascade-visible-domains"]')?.textContent).toContain(
       '室内',
@@ -214,10 +225,15 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
     await act(async () => root.render(<CascadeHarness initial={{ groupKey: 'wedding', domain: 'wedding', relatedDomains: [] }} />));
     // 婚礼是一级平铺 → 无第 2 层；改回伞形大类再验证同步
     await click(btn('行业 建筑设计行业'));
-    const select = container.querySelector('select[aria-label="主板块"]') as HTMLSelectElement;
+    const trigger2 = container.querySelector('[data-industry-select-trigger]');
+    expect(trigger2, 'IndustrySelect 触发钮').not.toBeNull();
     await act(async () => {
-      select.value = 'landscape';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      trigger2!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const landscape = document.querySelector('[data-industry-select-option="landscape"]');
+    expect(landscape, '景观选项').not.toBeNull();
+    await act(async () => {
+      landscape!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(groupKeyOfDomain('landscape')).toBe('space');
     expect(container.querySelector('[data-testid="domain-cascade-visible-domains"]')?.textContent).toContain(

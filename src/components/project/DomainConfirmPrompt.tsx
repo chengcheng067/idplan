@@ -41,7 +41,8 @@ import { useMemo, useState } from 'react';
 import { Info } from 'lucide-react';
 
 import { Button } from '../ui/Button';
-import { DomainCascade, domainLabel } from '../contract-wizard/DomainCascade';
+import { domainLabel } from '../../core/template/stage-library';
+import { DomainCascade } from '../contract-wizard/DomainCascade';
 import type { DomainCascadeValue } from '../contract-wizard/DomainCascade';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useRepos } from '../../hooks/useRepos';

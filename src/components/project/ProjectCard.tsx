@@ -3,10 +3,9 @@ import { createPortal } from 'react-dom';
 import { CalendarRange, MoreHorizontal, Archive, Palette, Trash2 } from 'lucide-react';
 
 import type { Member, Project, Stage, Task } from '../../core/types/entities';
+import { domainLabel } from '../../core/template/stage-library';
 import { taskIsDone } from '../../core/types/entities';
 import { effectiveDomainOf } from '../../core/project/visibility';
-import { domainLabel } from '../contract-wizard/DomainCascade';
-import { DOMAIN_LABELS } from '../contract-wizard/DomainCascade';
 import { useRoleGuard, isRestrictedView, taskAssigneeIds } from '../../hooks/useRoleGuard';
 import { currentStageOf, computeProjectPercent, computeProjectStatus } from '../../lib/progress';
 import { useRepos } from '../../hooks/useRepos';

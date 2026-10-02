@@ -32,12 +32,12 @@ import {
   StageSelectPanel,
 } from './StageSelectPanel';
 import {
-  domainLabel,
   EMPTY_DOMAIN_CASCADE,
   DomainCascade,
   visibleDomainsOf,
   type DomainCascadeValue,
 } from './DomainCascade';
+import { domainLabel } from '../../core/template/stage-library';
 import type { CustomStageDraft } from './CustomStageDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';

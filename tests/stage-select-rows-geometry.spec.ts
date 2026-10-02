@@ -277,7 +277,9 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.8 · 已选顺序行内控件真几何（真
       「主板块 → 套餐」联动（自动带出该板块默认套餐），行才会渲染出来。
       这也是用户真实操作路径：先点行业/板块，再展开阶段折叠区挑阶段。
     */
-    await page.selectOption('select[aria-label="主板块"]', 'indoor');
+    // v0.8.5：IndustrySelect 自定义下拉替换原生 select（她截图 #8）——改点击流程
+await page.click('[data-industry-select-trigger]');
+await page.click('[data-industry-select-option="indoor"]');
     await page.waitForTimeout(300);
 
     // 展开「本次服务阶段」折叠区 → StageSelectPanel 可见

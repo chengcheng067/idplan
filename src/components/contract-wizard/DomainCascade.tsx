@@ -20,9 +20,11 @@
  * 「主板块＝室内但池子只有一个分组」这种自相矛盾的状态（A6 要求恰 3 个）。
  */
 
+import { IndustrySelect } from './IndustrySelect';
 import { Check, ChevronDown } from 'lucide-react';
 
 import {
+  domainLabel,
   getGroupDomains,
   getIndustryGroups,
   getUsableDomains,
@@ -31,24 +33,8 @@ import {
 import type { StageTemplateDomain } from '../../core/types/dto';
 
 /** 板块中文标签（UI 文案唯一出处；阶段池分组标题也从这里取，避免两处各写一份） */
-export const DOMAIN_LABELS: Record<StageTemplateDomain, string> = {
-  indoor: '室内',
-  landscape: '景观',
-  architecture: '建筑',
-  exhibition: '展陈',
-  // v2 跨行业
-  software: '软件',
-  marketing: '活动',
-  film: '影视',
-  wedding: '婚礼',
-  consulting: '咨询',
-  travel: '旅游',
-};
 
 /** 未在 `DOMAIN_LABELS` 覆盖的领域（将来 JSON 新增）→ 原样显示，不崩 */
-export function domainLabel(domain: StageTemplateDomain): string {
-  return DOMAIN_LABELS[domain] ?? String(domain);
-}
 
 /** 三层级联的受控值 */
 export interface DomainCascadeValue {
@@ -212,32 +198,19 @@ export function DomainCascade({
           <label className="mb-1.5 block text-xs font-medium text-mist" htmlFor={`${testId}-domain`}>
             ② 主板块（决定快捷套餐与看板归属）
           </label>
-          <select
+          {/*
+            ★ v0.8.5（她截图 #8：「选行业弹出的选项没有统一的 ui 设计」）：
+            原生 <select>（系统菜单 + optgroup 拍平 + 占位项无区分）整块替换为
+            IndustrySelect（自定义下拉：分组头/图标/搜索/键盘 combobox）。
+            设计规范：deliverables/research/v0.8.5-选择器与引导与二级侧栏-视觉规范.md §A。
+            value/onChange 契约不变（StageTemplateDomain | null；null=不指定，A7 保留）。
+            label[for] 的 id 语义保留（${testId}-domain），测试锚点不破。
+          */}
+          <IndustrySelect
             id={`${testId}-domain`}
-            aria-label="主板块"
-            value={value.domain ?? ''}
-            onChange={(e) => {
-              const raw = e.target.value;
-              pickDomain(raw === '' ? null : (raw as StageTemplateDomain));
-            }}
-            className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
-          >
-            {/* 允许留空：标签/板块为空也能建档（A7），落库 null 后由读时回落兜住 */}
-            <option value="">（不指定板块）</option>
-            {groups.map((g) => {
-              const options = usableDomains.filter((d) => g.domains.includes(d));
-              if (options.length === 0) return null;
-              return (
-                <optgroup key={g.key} label={g.name}>
-                  {options.map((d) => (
-                    <option key={d} value={d} className="bg-cream text-ink">
-                      {domainLabel(d)}
-                    </option>
-                  ))}
-                </optgroup>
-              );
-            })}
-          </select>
+            value={value.domain}
+            onChange={(d) => pickDomain(d)}
+          />
         </div>
       )}
 

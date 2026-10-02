@@ -44,7 +44,7 @@ export function Modal({
    *   right-float 右侧悬浮圆角卡片（长内容、无锚点的设置类面板）
    *   float       锚定浮动卡 —— 出现在**触发元素/点击点附近**，空间不足自动翻转（反馈 #3）
    */
-  placement?: 'center' | 'right' | 'left' | 'right-float' | 'float' | 'fullscreen';
+  placement?: 'center' | 'right' | 'left' | 'right-float' | 'float' | 'dropdown' | 'fullscreen';
   /** 无障碍标签，读屏用 */
   ariaLabel?: string;
   /**
@@ -210,7 +210,12 @@ export function Modal({
           : placement === 'fullscreen'
             ? // 0.8.4 打印预览：层级压过一切 Modal、低于 Toast 反馈层（数字见本行类名），遮罩同 center 浓度
               'z-[75] bg-ink/45'
-            : 'z-[60] bg-ink/25'
+            : placement === 'dropdown'
+              ? // v0.8.5 A 规范 §A.4：锚定下拉浮层。z-[75] 盖得住 center 建档弹窗
+                // （z-[70]；原生 select 本来就能盖），**无底色**——下拉不该把背后弹窗压暗。
+                // 与打印预览同值但场景互斥（下拉只出现在建档弹窗内，打印路由独立）。
+                'z-[75] bg-transparent'
+              : 'z-[60] bg-ink/25'
       }`}
     >
       {/* 点击关闭判定放在锚点面板（e.currentTarget）上而非遮罩：因为面板是 flex 容器且覆盖内容区，
@@ -249,6 +254,9 @@ export function Modal({
               : placement === 'left'
                 ? // v0.8.5 C1：左侧抽屉（right 的镜像）——触发侧感知：汉堡在左上，抽屉同侧滑出
                   'items-start justify-start pt-[max(env(safe-area-inset-top),3rem)] sm:justify-start sm:pt-12'
+                : placement === 'dropdown'
+                  ? // v0.8.5 A 规范 §A.4：锚定下拉。外层只当点击捕获层，面板 fixed 自行定位
+                    'p-0'
               : placement === 'float'
               ? // 锚定浮动卡：面板由内层 fixed 容器自行定位，外层只当点击捕获层
                 'items-start justify-start p-0'

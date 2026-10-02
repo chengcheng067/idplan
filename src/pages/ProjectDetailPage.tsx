@@ -21,7 +21,7 @@ import {
   useHumanTasks,
 } from '../core/project/visibility';
 import { PrintPreviewDialog } from '../components/print/PrintPreviewDialog';
-import { domainLabel } from '../components/contract-wizard/DomainCascade';
+import { domainLabel } from '../core/template/stage-library';
 import { TravelItineraryPanel } from '../components/travel/TravelItineraryPanel';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';

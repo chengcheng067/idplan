@@ -260,7 +260,9 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
         用例后续全部假红（URL 停在首页、找不到彩条）。
         这里显式选「室内」，与用例名里「9 段室内项目」的前提对齐。
     */
-    await page.selectOption('select[aria-label="主板块"]', 'indoor');
+    // v0.8.5：IndustrySelect 自定义下拉替换原生 select（她截图 #8）——改点击流程
+await page.click('[data-industry-select-trigger]');
+await page.click('[data-industry-select-option="indoor"]');
     await page.waitForTimeout(200);
     const dates = await page.$$('input[type="date"]');
     if (dates[0]) await dates[0].fill('2026-01-05');
@@ -385,7 +387,9 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       .click();
     await page.waitForTimeout(500);
     await page.locator('input[placeholder*="某某项目"]').fill(name);
-    await page.selectOption('select[aria-label="主板块"]', 'indoor');
+    // v0.8.5：IndustrySelect 自定义下拉替换原生 select（她截图 #8）——改点击流程
+await page.click('[data-industry-select-trigger]');
+await page.click('[data-industry-select-option="indoor"]');
     await page.waitForTimeout(200);
     const dates = await page.$$('input[type="date"]');
     if (dates[0]) await dates[0].fill('2026-01-05');

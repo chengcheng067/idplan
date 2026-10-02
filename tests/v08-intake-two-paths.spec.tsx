@@ -144,13 +144,21 @@ function submitButton(): HTMLButtonElement {
   return btnByText('建档（按所选');
 }
 
-/** 第 2 层「主板块」下拉（未选行业时也渲染 —— 反馈 #5 改了起始态，A2 的直达路径必须仍在） */
+/**
+ * 第 2 层「主板块」选择器（v0.8.5 起是 IndustrySelect 自定义下拉——
+ * 她截图 #8 的替换；原 select[aria-label] 已不存在，改走点击流程）。
+ * 契约不变：选中后 pickDomain 收到 StageTemplateDomain。
+ */
 async function pickDomain(domain: string): Promise<void> {
-  const sel = document.querySelector('select[aria-label="主板块"]') as HTMLSelectElement | null;
-  expect(sel).toBeTruthy();
+  const trigger = document.querySelector('[data-industry-select-trigger]');
+  expect(trigger, 'IndustrySelect 触发钮必须渲染').toBeTruthy();
   await act(async () => {
-    sel!.value = domain;
-    sel!.dispatchEvent(new Event('change', { bubbles: true }));
+    trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  const opt = document.querySelector(`[data-industry-select-option="${domain}"]`);
+  expect(opt, `选项 ${domain} 必须在下拉里`).toBeTruthy();
+  await act(async () => {
+    opt!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
 }
 
