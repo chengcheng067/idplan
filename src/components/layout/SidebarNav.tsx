@@ -1,31 +1,28 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Bot, CalendarRange, History, LayoutGrid } from 'lucide-react';
+import { Bot, CalendarRange, ChevronRight, History, LayoutGrid } from 'lucide-react';
+import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { cn } from '../../lib/cn';
 
 /**
- * 侧栏主导航项列表（v0.7 · 子系统 ① · N02 / T20）。
+ * 侧栏主导航项列表（v0.7 · N02/T20 起；v0.8.5 按雯丞设想重构 Agent 区）。
  *
- * ── R15「功能入口不能丢」的落点 ──
- * 本组三项 = 原 `TopBar.tsx:213-232` 的导航块**逐项迁移**，语义一字不改：
- *   isAdmin ? 「项目」→ `/`      : 「看板」→ `/member-board`
- *            「我的任务」→ `/my-tasks`
- *            「Agent」  → `/agent`
+ * ── v0.8.5 重构（她 10-01 截图反馈 #5：「agent 在边栏上只给一个按钮，
+ *    点击以后显示工作区和执行记录的二级侧边栏」）──
+ * 一级 4 项收窄为 3 项：Agent 区合并为一个**父项**（Bot 图标 + chevron），
+ * 展开显示二级子组（工作区 / 执行记录）。设计规范见
+ * `deliverables/research/v0.8.5-选择器与引导与二级侧栏-视觉规范.md` §C。
  *
- * `isAdmin` 决定首项（同 `TopBar.tsx:214-222` 规则）——**不是**新增逻辑，
- * 是原规则原样搬移，避免「迁移顺手改了权限口径」。
+ * 行为契约（规范 C.5）：
+ *   · 点父项 = 展开/收起子组（**不导航**），aria-expanded 同步；
+ *   · 路由进入 `/agent*` → 自动展开；离开 Agent 区 → 自动收起；
+ *   · 收起态（64px）父项仍是 40×40 图标键，点击 = 导航到 /agent（原行为不变）；
+ *   · 子项 = Link 导航 + 精确高亮；抽屉态点完子项由 Sidebar 关抽屉（现成机制）。
  *
- * ── 收起态可访问性 ──
- * 收起（64px 图标条）时文字被隐藏，但：
- *   · `aria-label` 始终携带文字（读屏可读）；
- *   · `title` 提供鼠标悬停提示（视觉用户可发现）；
- *   · 图标保留 `aria-hidden`，避免读屏读两遍（图标无语义，文字才是语义）。
- * 焦点环用既有 `--focus-ring` 语义（`focus-visible:ring`），键盘 Tab 可达。
- *
- * 高亮复用既有 `navClass` 视觉规范（text-pine 选中 / text-mist 未选中 +
- * hover:bg-sand），与迁移前的 TopBar 完全一致——只改容器，不改观感。
+ * 高亮口径**零改动**（pine-soft / 暗色 sunken）；`navItemClass` 加第 4 参
+ * size（默认 'md'，既有调用点不受影响）；Sidebar.tsx 主体零改动。
  */
 
 interface NavEntry {
@@ -36,17 +33,15 @@ interface NavEntry {
   match(pathname: string): boolean;
 }
 
-/**
- * ── 有意偏离规格画板的导航项数（v0.7 · 子系统 ① · N02 / T20）──
- * 规格画板（画板 02/10）画了 4 项导航（项目 / 看板 / 我的任务 / Agent）。
- * 但「看板」( `/member-board` ) 仅管理员可见、「项目」( `/` ) 仅管理员可见；
- * 普通成员两项都不该出现。故本组**按角色动态生成**项数：
- *   admin ：项目 / 我的任务 / Agent（3 项）
- *   member：看板 / 我的任务 / Agent（3 项）
- * **保留这个角色逻辑，不为了凑画板的 4 项而给成员显示无权限入口**——
- * 否则成员点「项目」会被权限拦截或跳空白，违反「功能入口不能丢，但也别给无权限的」原则。
- * 此项偏离已在代码注释中显式记录（team-lead 拍板：保留角色逻辑）。
- */
+/** Agent 二级子项（工作区 / 执行记录） */
+const AGENT_CHILDREN: ReadonlyArray<{ to: string; label: string; Icon: LucideIcon }> = [
+  { to: '/agent', label: '工作区', Icon: LayoutGrid },
+  { to: '/agent/executions', label: '执行记录', Icon: History },
+];
+
+/** 是否处于 Agent 区（自动展开/收起的路由判据） */
+const inAgentArea = (p: string): boolean => p.startsWith('/agent');
+
 export function SidebarNav({
   collapsed,
   drawer = false,
@@ -57,8 +52,12 @@ export function SidebarNav({
 }): JSX.Element {
   const { isAdmin } = useRoleGuard();
   const { pathname } = useLocation();
+  // 展开态：组件内 state，不持久化；挂载时按路由判据定初值（进 Agent 区即展开）。
+  // 切页若整栏重渲染，此 state 重置——按同一路由判据重算，行为一致（规范 C.5）。
+  const [agentOpen, setAgentOpen] = useState<boolean>(() => inAgentArea(pathname));
+  const agentActive = inAgentArea(pathname);
 
-  const entries: NavEntry[] = [
+  const entries: Array<NavEntry | { group: 'agent' }> = [
     isAdmin
       ? {
           to: '/',
@@ -78,51 +77,83 @@ export function SidebarNav({
       Icon: CalendarRange,
       match: (p) => p === '/my-tasks',
     },
-    /*
-     * v0.6：Agent 工作区独立入口（所有角色可见，沿用既有 nav 规则不自创）。
-     * v0.8 · TBD-7：一级项文案 `Agent` → 「工作区」。
-     *   为什么改：v0.8 把 Agent 侧做成与人类项目**完全隔离**的独立工作区，导航项叫「Agent」
-     *   会被读成"某个叫 Agent 的功能"，而它其实是**另一个工作区**（点击后整屏内容都换一套数据）。
-     *   页面标题（AgentBoardPage 的 h1）落地为「Agent 看板」，与本项的「工作区」构成
-     *   「工作区 → 里面的看板」两级语义，不再与人类侧「项目」混淆。
-     *
-     * v0.8 执行控制台：`/agent` 之下新增 `/agent/executions`（只读执行控制台）。
-     *   `match` 从 `p.startsWith('/agent')` 收紧为**精确匹配** `p === '/agent'`——
-     *   否则进入 `/agent/executions` 时两个导航项会同时点亮（该项 + 控制台项），
-     *   用户无法判断当前在哪一层。其余各项本就是精确匹配 / 前缀专属，故此改动只影响本项。
-     */
-    {
-      to: '/agent',
-      label: '工作区',
-      Icon: Bot,
-      match: (p) => p === '/agent',
-    },
-    /*
-     * v0.8：执行控制台（只读）。命名「执行记录」而非「控制台」——
-     * 该页**不做任何控制**（不派活、不改状态、不确认），叫「控制台」会让用户
-     * 期待可操作性；「执行记录」如实描述「这里能看到什么」，与只读定位一致。
-     */
-    {
-      to: '/agent/executions',
-      label: '执行记录',
-      Icon: History,
-      match: (p) => p === '/agent/executions',
-    },
+    { group: 'agent' },
   ];
 
   return (
     <nav aria-label="主导航" className="flex flex-col gap-1 px-2">
-      {entries.map(({ to, label, Icon, match }) => (
-        <SidebarNavItem
-          key={to}
-          to={to}
-          label={label}
-          Icon={Icon}
-          active={match(pathname)}
-          collapsed={collapsed}
-          drawer={drawer}
-        />
-      ))}
+      {entries.map((entry) =>
+        'group' in entry ? (
+          <div key="agent" data-sidebar-nav-sub="">
+            {/* 父项：展开态 = button（只展开不导航）；收起态 = 图标键 Link 到 /agent（原行为） */}
+            {collapsed ? (
+              <Link
+                to="/agent"
+                aria-label="Agent 工作区"
+                aria-current={agentActive ? 'page' : undefined}
+                title="Agent 工作区"
+                className={cn(navItemClass(agentActive, collapsed, drawer))}
+              >
+                <Bot size={18} className="shrink-0" aria-hidden />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                data-sidebar-nav-parent=""
+                aria-expanded={agentOpen}
+                onClick={() => setAgentOpen((v) => !v)}
+                className={cn(navItemClass(agentActive, collapsed, drawer), 'w-full')}
+              >
+                <Bot size={18} className="shrink-0" aria-hidden />
+                <span className="truncate">Agent</span>
+                <ChevronRight
+                  size={14}
+                  aria-hidden
+                  className={cn(
+                    'ml-auto shrink-0 transition-transform duration-[120ms]',
+                    agentOpen && 'rotate-90',
+                  )}
+                />
+              </button>
+            )}
+            {/* 子组：展开且非收起态才渲染（规范 C.5：直接卸载，不做淡出竞态） */}
+            {!collapsed && agentOpen && (
+              <div className="sidebar-sub-in ml-[26px] border-l border-line pl-2">
+                <div className="flex flex-col gap-0.5 pt-0.5">
+                  {AGENT_CHILDREN.map((child) => {
+                    const childActive =
+                      child.to === '/agent'
+                        ? pathname === '/agent'
+                        : pathname.startsWith(child.to);
+                    return (
+                      <Link
+                        key={child.to}
+                        to={child.to}
+                        data-sidebar-nav-sub-item={child.to}
+                        aria-current={childActive ? 'page' : undefined}
+                        className={cn(navItemClass(childActive, false, drawer, 'sm'))}
+                      >
+                        <child.Icon size={16} className="shrink-0" aria-hidden />
+                        <span className="truncate">{child.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <SidebarNavItem
+            key={entry.to}
+            to={entry.to}
+            label={entry.label}
+            Icon={entry.Icon}
+            active={entry.match(pathname)}
+            collapsed={collapsed}
+            drawer={drawer}
+          />
+        ),
+      )}
     </nav>
   );
 }
@@ -167,33 +198,32 @@ export function SidebarNavItem({
 /**
  * 导航项视觉规范（唯一出处）。
  * 迁移纪律：与 `TopBar.tsx` 原 `navClass` 的选中/未选中色**逐字对齐**
- * （text-pine 选中、text-mist 未选中、hover:bg-sand），
- * 只把形状从 `px-3 py-1.5` 的胶囊换成侧栏整行条目（`px-3 py-2` + `rounded-lg`）。
- * 收起态改为正方形容器（`h-10 w-10` 居中），保证 64px 栏内点击区不塌陷。
+ * （text-pine 选中、text-mist 未选中、hover:bg-sand）。
+ * 抽屉态（`drawer=true`）：点击区放大到 h44 / px-4 / rounded-md。
  *
- * 抽屉态（`drawer=true`，即 <xl 的 Modal 抽屉，画板 10）：点击区放大到
- *   高 44（py-2.5）、横向 padding 16（px-4）、圆角 8（rounded-md），
- * 便于触屏点按。仅影响展开态的尺寸，收起态恒为图标键、不受 drawer 影响。
+ * ★ v0.8.5：加第 4 参 `size`（规范 C.4）——二级子项用 'sm' 小一档
+ *   （h-8 px-2.5 rounded-sm）。**默认 'md'**：既有三处调用点（Sidebar.tsx /
+ *   SidebarNavItem / 父项 button）逐字复用旧视觉，零回归。
  */
-export function navItemClass(active: boolean, collapsed: boolean, drawer = false): string {
+export function navItemClass(
+  active: boolean,
+  collapsed: boolean,
+  drawer = false,
+  size: 'md' | 'sm' = 'md',
+): string {
   return cn(
     'flex items-center text-sm transition-colors outline-none',
     'focus-visible:ring-2 focus-visible:ring-pine/40',
     // 暗色差异（规格 §2.2）：内边距 12→16、gap 10→8（暗色板更松一档）。
-    // 这两项是**非颜色**属性，无法靠 CSS 变量自动换肤，必须显式写 dark:。
-    // 此前 Tailwind 的 dark 变体被绑在 prefers-color-scheme 上（跟随系统而非应用开关），
-    // 且调用点用的是自创的祖先属性变体、其中几处还写坏了 —— 所以这两档一直没生效。
-    // 现已在 tailwind.config.ts 用 darkMode:['variant','html[data-theme="dark"] &'] 修好。
     'gap-2.5 dark:gap-2',
     collapsed
       ? 'h-10 w-10 justify-center self-center rounded-[10px]'
-      : drawer
-        ? 'w-full px-4 py-2.5 rounded-md'
-        : 'w-full px-3 py-2 rounded-[10px] dark:px-4',
-    // 激活态（§5 亮暗对照表第 697 行）：亮色用浅靛 pine-soft #EFF0FE，
-    // **暗色改用凹陷 sunken #0F1217 而非浅靛** —— 这是规格里明确点出「用凹陷而非浅靛」
-    // 的一处刻意设计（暗底上再叠一层浅靛会发灰、且与卡片底 #1F2126 拉不开层次）。
-    // 文字仍是 pine：暗色下解析为 #828CF7，压在 #0F1217 上对比度 6.36，达标。
+      : size === 'sm'
+        ? 'h-8 px-2.5 py-1 rounded-sm'
+        : drawer
+          ? 'w-full px-4 py-2.5 rounded-md'
+          : 'w-full px-3 py-2 rounded-[10px] dark:px-4',
+    // 激活态：亮色浅靛 pine-soft；暗色改凹陷 sunken（规格明确的刻意设计）。
     active
       ? 'bg-pine-soft text-pine dark:bg-sunken'
       : 'text-mist hover:bg-sand hover:text-ink',

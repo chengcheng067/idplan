@@ -648,9 +648,18 @@ describe.skipIf(!CAN_RUN_FRESH)(
           const drawer = page.locator('[role="dialog"][aria-label="导航菜单"]');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
-          for (const label of ['看板', '我的任务', '工作区', '设置']) {
+          for (const label of ['看板', '我的任务', 'Agent', '设置']) {
             expect(text, `member：⋮ 的等价入口「${label}」必须仍在侧栏抽屉里`).toContain(label);
           }
+          // ★ v0.8.5（她反馈 #5）：⋮ 的「工作区」入口合并进 Agent 父项的二级子组——
+          //   从「直接可见」变「展开后可见」。可达性不丢：点父项展开，子项在 DOM 里。
+          //   本用例锁的不是文案位置而是**可达性**（展开即达）。
+          const agentParent = drawer.locator('[data-sidebar-nav-parent]');
+          expect(await agentParent.getAttribute('aria-expanded'), '父项初始应为收起').toBe('false');
+          await agentParent.click();
+          const drawer2 = (await drawer.innerText()).replace(/\s+/g, '');
+          expect(drawer2, 'Agent 展开后「工作区 / 执行记录」必须可达').toContain('工作区');
+          expect(drawer2).toContain('执行记录');
           // ⋮ 菜单在平板档**不可见**，但仍不可少任何入口 —— 这条与 ①-a 一起构成完整语义
           expect((await readMore(page)).visible).toBe(false);
           await shot(page, '04-tablet-drawer-member.png');
@@ -671,7 +680,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
           // v0.8（T04-B）：同 ①，`Agent` → `工作区`（设计 §4.1 ⑦ 导航文案）
-          for (const label of ['项目', '我的任务', '工作区', '设置', '保存备份', '加载备份', '新建项目']) {
+          for (const label of ['项目', '我的任务', 'Agent', '设置', '保存备份', '加载备份', '新建项目']) {
             expect(text, `admin：⋮ 的等价入口「${label}」必须仍在侧栏抽屉里`).toContain(label);
           }
           // 设置项在抽屉里恰有一个（防止「⋮ 与侧栏两份设置」在平板档同时出现）

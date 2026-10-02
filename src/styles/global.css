@@ -35,6 +35,13 @@
     transform: none;
   }
 }
+/* v0.8.5 规范 C.5：Agent 二级侧边栏子组入场（150ms 快速档） */
+@keyframes sidebar-sub-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
 
 
 /* ---------------------------------------------------------------------------
@@ -865,6 +872,9 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   .toast-enter,
   /* v0.8.4：打印预览入场动效同样进关停清单（规范 §3.5：漏了就是无障碍回归） */
   .print-preview {
+    animation: none;
+  }
+  .sidebar-sub-in {
     animation: none;
   }
   /* v0.8.4：预览缩放 wrapper 的 transform 过渡一并关 */
