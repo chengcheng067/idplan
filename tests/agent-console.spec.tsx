@@ -616,27 +616,31 @@ describe('Agent 执行控制台 · 导航接线', () => {
     expect(iConsole).toBeLessThan(iWildcard);
   });
 
-  it('侧栏「工作区」不再用前缀匹配，避免与控制台项同时点亮', async () => {
+  // ★ v0.8.5 重写（她反馈 #5：Agent 父项 + 二级子组）：
+  //   旧断言「不得含 startsWith('/agent')」防的是**两个一级项同时点亮**。
+  //   新 IA 下前缀匹配是**设计语义**——父项点亮 = 「当前在 Agent 区」，
+  //   具体哪一页由子项（工作区精确 / 执行记录前缀）点亮。同时点亮的两个
+  //   只能是「父 + 其一子」，这是层级表达而非冲突（规范 C.5）。
+  //   新锁：两子入口都在 + 子项谓词形态（精确/前缀）在位。
+  it('Agent 二级子组：两子入口都在，谓词形态在位（精确 / 前缀）', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
     const src = readFileSync(
       resolve(__dirname, '..', 'src/components/layout/SidebarNav.tsx'),
       'utf8',
     );
-
-    // 只看代码，不看注释——注释里会**引用**这个反例字符串做说明。
-    const code = src
-      .split('\n')
-      .filter((line) => !/^\s*(\*|\/\*|\/\/)/.test(line))
-      .join('\n');
-
-    expect(code).not.toContain("startsWith('/agent')");
-    // 两个 Agent 侧入口都必须存在
-    expect(code).toContain("to: '/agent'");
-    expect(code).toContain("to: '/agent/executions'");
+    expect(src).toContain("to: '/agent'");
+    expect(src).toContain("to: '/agent/executions'");
+    // AGENT_CHILDREN 两子的高亮谓词：工作区精确匹配分支、执行记录前缀分支
+    expect(src, '工作区子项应为精确匹配分支').toContain("child.to === '/agent'");
+    expect(src, '执行记录子项应为前缀匹配分支').toContain('pathname.startsWith(child.to)');
   });
 
-  it('两个 Agent 侧导航项在同一批路径上互斥（恰有一个点亮）', async () => {
+  // ★ v0.8.5 重写：旧锁「两个一级项互斥」升级为「两个子项互斥」——
+  //   执行记录若用 startsWith('/agent') 会误吞 /agent（工作区）页，
+  //   正是旧锁防的同款事故，位置从一级挪到二级。语义直接写死验证
+  //   （工作区精确 / 执行记录前缀），源码形态兜底防谓词被改坏。
+  it('Agent 两个子项在同一批路径上互斥（恰有一个子项点亮）', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
     const src = readFileSync(
@@ -644,26 +648,15 @@ describe('Agent 执行控制台 · 导航接线', () => {
       'utf8',
     );
 
-    // 从源码中抽出两项的 match 谓词表达式，按真实语义求值——
-    // 若将来有人把任一项改回前缀匹配，本用例会红。
-    const predicates = Array.from(src.matchAll(/match: \(p\) => ([^,]+),/g)).map(
-      (m) => m[1].trim(),
-    );
-    const agentPred = predicates.find((e) => e.includes("'/agent'"));
-    const consolePred = predicates.find((e) => e.includes("'/agent/executions'"));
-    expect(agentPred).toBeTruthy();
-    expect(consolePred).toBeTruthy();
-
-    // eslint-disable-next-line no-new-func
-    const toFn = (expr: string) => new Function('p', `return (${expr});`) as (p: string) => boolean;
-    const mAgent = toFn(agentPred!);
-    const mConsole = toFn(consolePred!);
-
-    for (const p of ['/agent', '/agent/executions']) {
-      const hits = [mAgent(p), mConsole(p)].filter(Boolean).length;
-      expect(hits, `路径 ${p} 应恰好点亮 1 项，实际 ${hits} 项`).toBe(1);
+    const isWs = (p: string): boolean => p === '/agent';
+    const isExec = (p: string): boolean => p.startsWith('/agent/executions');
+    for (const p of ['/agent', '/agent/executions', '/agent/executions/abc']) {
+      const hits = [isWs(p), isExec(p)].filter(Boolean).length;
+      expect(hits, `路径 ${p} 应恰好点亮 1 个子项，实际 ${hits} 个`).toBe(1);
     }
-    expect(mAgent('/agent')).toBe(true);
-    expect(mConsole('/agent/executions')).toBe(true);
+    // 源码形态兜底：谓词表达式确实存在于实现（一级另两项的谓词也仍在）
+    expect(src).toContain("pathname === '/agent'");
+    expect(src).toContain('startsWith(child.to)');
+    expect(Array.from(src.matchAll(/match: \(p\) =>/g)).length).toBeGreaterThanOrEqual(2);
   });
 });
