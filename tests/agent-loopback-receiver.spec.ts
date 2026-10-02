@@ -25,7 +25,7 @@ import {
   pushStoredTokenToMainProcess,
   type LoopbackReceiverBridge,
 } from '../src/hooks/useAgentLoopbackReceiver';
-import type { AgentImportRequest } from '../src/hooks/useAgentLoopbackReceiver';
+
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 
 /** 假仓储：只记录「被调用了几次」，不真落库 */

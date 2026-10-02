@@ -31,6 +31,7 @@ function makeTask(partial: Partial<Task> & { title: string }): Task {
     id,
     projectId: 'p1',
     stageId: 's1',
+    taskNo: null,
     done: false,
     assigneeId: null,
     assigneeIds: [],
