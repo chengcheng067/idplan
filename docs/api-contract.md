@@ -426,3 +426,31 @@ injection / 数据出境），详见 `deliverables/gstack/security-review-idplan
 
 **桌面形态无此通道**（桌面用户的 LLM key 配置不现实）：桌面保持方案 3 纯结构化，
 NL 是 NAS/自部署形态的可选增强。
+
+### 写端点鉴权（v0.8.6 P0-1 · 她 10-01 拍板「一定要记得修」）
+
+**问题（安全官红牌，OWASP A01）**：`settings` / `logs` / `contracts` 全族写端点
+零鉴权——LAN 任意方可覆写 `taskNoSeq` 制造任务重号、伪造审计流水；**自定义行业
+一旦落 settings KV = 向所有 LAN 用户的建档 UI 远程投递内容**（自定义行业功能
+的硬前置）。
+
+**门（条件式，`server/lib/agent-auth.ts` `requireWriteToken`）**：
+
+| `IDPLAN_AGENT_TOKEN` | 行为 |
+|---|---|
+| 已配置 | 七个写端点必须带 `Authorization: Bearer <同值>`（常量时间比较） |
+| 未配置 | 放行 + 响应带 `x-idplan-write-auth: open` 告警头（Network 面板可见） |
+
+受门端点：`PUT /api/settings/:key`、`POST /api/settings/replace-all`、
+`POST /api/logs/stage`、`POST /api/logs/assignments`、`POST /api/contracts`、
+`POST /api/contracts/:id/link-project`、`POST /api/contracts/:id/confirmed-payload`。
+
+**为什么不是 fail-closed 硬拒**：这些是高频前端调用（阶段流转每次都写
+log）——硬拒=重演 0.8.2 备份事故「点一次 401 一次」且天天发生。备份通道
+（偶发）可以 fail-closed；日常写通道用条件门 + 明示。
+
+**前端零改动的原因**：remote 仓储的所有 fetch 已在 0.8.2.0002 备份修复中
+带上 `Authorization: Bearer`（用户在设置 → NAS 服务填的 `idplan.apiToken`，
+与服务端同一 env）——配了 token 的用户自动全覆盖；没配的用户行为不变。
+
+**收紧路径**：自定义行业（9c）以「token 已配」为上线门槛。

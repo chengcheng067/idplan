@@ -27,7 +27,9 @@ if (
   console.warn(
     `[IDPLAN-SECURITY] 环境变量 ${AGENT_TOKEN_ENV} 未配置：` +
       '/api/backup 与 /api/backup/import 将拒绝所有请求（fail-closed）。' +
-      '局域网备份/迁移功能需在服务端环境配置该共享密钥后重启。',
+      '局域网备份/迁移功能需在服务端环境配置该共享密钥后重启。' +
+      '同时：settings/logs/contracts 七个业务写端点以「open」模式运行' +
+      '（响应带 x-idplan-write-auth: open）——配置本 token 后它们自动切换为强制 Bearer。',
   );
 }
 
@@ -67,6 +69,36 @@ export function requireToken(req: FastifyRequest): boolean {
   if (!provided) return false;
   return timingSafeEqualStr(provided, expected);
 }
+
+/**
+ * ★ v0.8.6 P0-1（安全官红牌 · 她 10-01 拍板「一定要记得修」）：
+ * **业务写端点条件门**（settings / logs / contracts 家族）。
+ *
+ * ── 为什么不是照搬 requireToken 的 fail-closed ──
+ * 这些端点是**高频前端调用**（每次阶段流转写 stage log、每次交互写 assignment
+ * log）——硬 fail-closed 会重演 0.8.2 备份事故的形态「界面点一次 401 一次」，
+ * 且是天天 401。备份通道可以 fail-closed（偶发操作），日常写通道不行。
+ *
+ * ── 门的设计（渐进加固，两个世界都正确）──
+ *   · env 配了 token → **必须 Bearer**（常量时间比较，与备份/Agent 同口径）；
+ *   · env 未配 → 放行，但响应带 `x-idplan-write-auth: open` 告警头 +
+ *     启动告警里点名（不破坏任何现存部署，同时把「裸奔」变成明示状态）。
+ *
+ * 收紧路径：自定义行业（9c）上线时以「token 已配」为功能门槛——那时 LAN
+ * 投递面必须已经关闭。见 docs/api-contract.md §写端点鉴权。
+ */
+export function writeAuthMode(): 'enforce' | 'open' {
+  return (process.env[AGENT_TOKEN_ENV] ?? '').trim() ? 'enforce' : 'open';
+}
+
+export function requireWriteToken(req: FastifyRequest): boolean {
+  if (writeAuthMode() === 'open') return true; // 未配 = 放行（告警头提示）
+  return requireToken(req);
+}
+
+/** 写端点未配 token 时的告警响应头（让「裸奔」在浏览器 Network 里可见） */
+export const WRITE_AUTH_OPEN_HEADER = 'x-idplan-write-auth';
+export const WRITE_AUTH_OPEN_VALUE = 'open';
 
 /** 统一 401 错误体（与全局 {error:{code,userMessage}} 形状一致） */
 export function unauthorizedBody(): {

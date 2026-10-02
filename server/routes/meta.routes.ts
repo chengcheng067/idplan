@@ -10,7 +10,7 @@ import type Database from 'better-sqlite3';
 // ★ 旧的本地实现内含 `filter(x => typeof x === 'string')`——对 artifacts（对象数组）
 //   会把对象元素全部滤掉、静默清空，必须换成 server/lib/json-columns.ts 的版本。
 import { parseJson, parseJsonArray } from '../lib/json-columns';
-import { requireToken, unauthorizedBody } from '../lib/agent-auth';
+import { requireToken, requireWriteToken, writeAuthMode, unauthorizedBody, WRITE_AUTH_OPEN_HEADER, WRITE_AUTH_OPEN_VALUE } from '../lib/agent-auth';
 
 // ★ v0.7（T01-b）：备份导入的号段归一走**前后端共享的同一份纯函数** —— 与 local
 //   适配器的 `local.admin.repo.replaceAllImport` **逐字同义**（硬约束见 interfaces.ts）。
@@ -116,9 +116,34 @@ function rowToStageLog(r: StageLogRow): Record<string, unknown> {
 }
 
 export function registerMetaRoutes(app: FastifyInstance, db: Database.Database): void {
+  /*
+   * ★ v0.8.6 P0-1（安全官红牌 · 她 10-01 拍板「一定要记得修」）：业务写端点条件门。
+   * 原状：settings / logs / contracts 全族**零鉴权**——LAN 任意方可覆写
+   * taskNoSeq 制造重号、伪造审计流水；自定义行业一旦落 settings KV 即
+   * 远程投递面（9c 上线的硬前置）。
+   * 门：env 配了 token → 必须 Bearer（常量时间比较，与备份通道同口径）；
+   * 未配 → 放行但响应带 x-idplan-write-auth: open 告警头。
+   * 为什么不是 fail-closed 硬拒：这些是高频前端调用（阶段流转每次都写
+   * log），硬拒=重演 0.8.2「点一次 401 一次」且天天发生。详见 agent-auth.ts。
+   */
+  const guardWrite = (
+    req: import('fastify').FastifyRequest,
+    reply: import('fastify').FastifyReply,
+  ): boolean => {
+    if (writeAuthMode() === 'open') {
+      reply.header(WRITE_AUTH_OPEN_HEADER, WRITE_AUTH_OPEN_VALUE);
+      return true;
+    }
+    if (!requireWriteToken(req)) {
+      void reply.status(401).type('application/json').send(unauthorizedBody());
+      return false;
+    }
+    return true;
+  };
   /* ------------------------------ 流水 append-only ----------------------------- */
 
-  app.post('/api/logs/stage', async (req) => {
+  app.post('/api/logs/stage', async (req, reply) => {
+    if (!guardWrite(req, reply)) return;
     const b = req.body as StageLogInput;
     const id = crypto.randomUUID();
     db.prepare(
@@ -161,7 +186,8 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     return rows.map(rowToStageLog);
   });
 
-  app.post('/api/logs/assignments', async (req) => {
+  app.post('/api/logs/assignments', async (req, reply) => {
+    if (!guardWrite(req, reply)) return;
     const b = req.body as AssignmentInput;
     const id = crypto.randomUUID();
     db.prepare(
@@ -207,7 +233,8 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
 
   /* --------------------------------- 合同存证 --------------------------------- */
 
-  app.post('/api/contracts', async (req) => {
+  app.post('/api/contracts', async (req, reply) => {
+    if (!guardWrite(req, reply)) return;
     const b = req.body as ContractInput;
     const id = b.id ?? crypto.randomUUID();
     db.prepare(
@@ -239,14 +266,16 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     return contractToDto(row);
   });
 
-  app.post('/api/contracts/:id/link-project', async (req) => {
+  app.post('/api/contracts/:id/link-project', async (req, reply) => {
+    if (!guardWrite(req, reply)) return;
     const { id } = req.params as { id: string };
     const { projectId } = req.body as { projectId: string };
     db.prepare('UPDATE contracts SET project_id=? WHERE id=?').run(projectId, id);
     return { ok: true };
   });
 
-  app.post('/api/contracts/:id/confirmed-payload', async (req) => {
+  app.post('/api/contracts/:id/confirmed-payload', async (req, reply) => {
+    if (!guardWrite(req, reply)) return;
     const { id } = req.params as { id: string };
     const { confirmedJson } = req.body as { confirmedJson: string };
     db.prepare('UPDATE contracts SET confirmed_payload_json=? WHERE id=?').run(confirmedJson, id);
@@ -291,7 +320,8 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     return { key: row.key, valueJson: row.value_json, updatedAt: row.updated_at };
   });
 
-  app.put('/api/settings/:key', async (req) => {
+  app.put('/api/settings/:key', async (req, reply) => {
+    if (!guardWrite(req, reply)) return;
     const { key } = req.params as { key: string };
     const { valueJson } = req.body as { valueJson: unknown };
     db.prepare(
@@ -301,7 +331,8 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     return { ok: true };
   });
 
-  app.post('/api/settings/replace-all', async (req) => {
+  app.post('/api/settings/replace-all', async (req, reply) => {
+    if (!guardWrite(req, reply)) return;
     const { rows } = req.body as { rows: Array<{ key: string; valueJson: string; updatedAt: string }> };
     const tx = db.transaction(() => {
       db.prepare('DELETE FROM settings').run();
