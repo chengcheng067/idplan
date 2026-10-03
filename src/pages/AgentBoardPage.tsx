@@ -99,6 +99,7 @@ import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';
 import { AgentBoardList } from '../components/agent/AgentBoardList';
 import { AgentActivityStream, type ActivityExecutionGroup } from '../components/agent/AgentActivityStream';
 import { ProposalReviewPanel } from '../components/agent/ProposalReviewPanel';
+import { PlanningWizardDialog } from '../components/agent/PlanningWizardDialog';
 import { CreateAgentBoardDialog } from '../components/agent/CreateAgentBoardDialog';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import {
@@ -390,6 +391,8 @@ export function AgentBoardPage(): JSX.Element {
    * （那个在 `TransferDialog` 里判 admin）。在这里加门控会造出一个设计上不存在的限制。
    */
   const [createOpen, setCreateOpen] = useState(false);
+  /** v0.8.6 竞品三件套之三：AI 规划向导开关 */
+  const [wizardOpen, setWizardOpen] = useState(false);
   /**
    * ★ §7.5：**本页自己的 Agent 看板集合**（局部 state），由 `loadAll` 直读 repo 后就地收窄填充。
    *
@@ -1350,6 +1353,24 @@ export function AgentBoardPage(): JSX.Element {
         「新建 Agent 看板」弹窗（§6.1 时序图第 1–3 步）。
         ★ **无角色门控**（与下面的接入面板正相反）：§7.4 明定创建对 member 也可。
       */}
+      {/* v0.8.6：AI 规划向导（贴想法 → 给 AI → 粘回 JSON 一键建板）
+          —— 与 CreateAgentBoardDialog 同款**条件渲染**（常驻挂载会让关闭态
+          的 Modal 仍在 DOM 里留 role=dialog，撞其它 spec 的「无弹窗」断言）。 */}
+      {wizardOpen && (
+        <PlanningWizardDialog open onClose={() => setWizardOpen(false)} />
+      )}
+      {/* 规划向导入口：空态与列表区都能进（空态那行下方另有「新建空看板」） */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setWizardOpen(true)}
+          data-planning-wizard-open=""
+          className="mb-1 flex items-center gap-1.5 rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-[12px] text-ink transition-colors hover:bg-cream"
+        >
+          用 AI 规划建板
+        </button>
+      </div>
+
       {createOpen && (
         <CreateAgentBoardDialog
           open={createOpen}

@@ -7,7 +7,6 @@
  */
 import { describe, it, expect } from 'vitest';
 import { normalizeProposalReason, normalizeProposalConfidence } from '../src/core/agent-execution/proposal-fields';
-import { ChangxiaErrorCode } from '../src/core/types/enums';
 
 describe('提案字段校验（两端共享口径）', () => {
   it('① reason：去空白归一', () => {

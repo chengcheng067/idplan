@@ -8,6 +8,7 @@
  */
 
 import { indexedDB as fakeIndexedDB, IDBKeyRange as FakeIDBKeyRange } from 'fake-indexeddb';
+import { afterEach } from 'vitest';
 
 const g = globalThis as unknown as Record<string, unknown>;
 if (g.indexedDB === undefined) {
@@ -42,6 +43,30 @@ if (g.IDBKeyRange === undefined) {
  */
 if (g.IS_REACT_ACT_ENVIRONMENT !== true) {
   g.IS_REACT_ACT_ENVIRONMENT = true;
+}
+
+/**
+ * ★ v0.8.6：jsdom DOM 全局清理（治「单跑绿 / 全量红」这类 flaky 的**根**）。
+ *
+ * 病灶（实测第三次同类事故）：`pool: 'threads'` + `singleThread: true` 让
+ * 全部 spec 跑在**同一个进程**（配置注释里已写明这一点），而 jsdom 的
+ * `document` 是**进程级单例**——某个 spec 渲染出的节点若没被卸载，会一路
+ * 留在 `document.body` 上，撞掉后续 spec 的「页面里没有弹窗」类断言。
+ * 本轮实测：`planning-wizard.spec.tsx` 的向导 Modal（createPortal 到 body）
+ * 在自己的用例结束后仍在 DOM 里 → 紧随其后的 `stage-drawer-hook-order`
+ * 断言 `document.querySelector('[role="dialog"]')` 为 null 必然红，
+ * **而它单跑是绿的**。同类历史事故：print-light-lock、qa-batch-a-verify。
+ *
+ * 为什么收口到这里而不是让每个 spec 自己清：
+ *   ① 依赖「每个 spec 作者记得清理」= 迟早复发，且**下次复发仍难查**
+ *     （报错指向无辜的下游 spec）；
+ *   ② 清理本身零成本、零副作用（每个 spec 的 beforeEach 本来就在建新容器），
+ *     在这里做等于给全仓库买一道保险。
+ */
+if (typeof afterEach === 'function' && typeof document !== 'undefined') {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 }
 
 /** 兼容保留：补丁已在模块加载时生效，此函数仅作幂等确认。 */
