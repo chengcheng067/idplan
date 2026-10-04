@@ -56,24 +56,47 @@ let app: App;
  * 原因（本 spec 是全仓第一个踩到它的，故必须写下来防后人重犯）：
  *   `vite.config.ts` 的 test 段是 `pool:'threads'` + `singleThread:true`
  *   ⇒ **全部 spec 跑在同一个进程**，`process.env` 是**进程级共享**的。
- *   而 `tests/server.agent-json-columns.spec.ts:19` /
- *   `tests/server.backup-executions.spec.ts:28` /
- *   `tests/server.sync-v2.spec.ts:19` 三处都在**模块顶层**写
- *   `process.env.IDPLAN_AGENT_TOKEN = 'test-token'`，且**没有任何 afterAll 清理**
- *   （它们各自的注释都写着「vitest 每文件独立进程，不外泄」——这个前提在
- *   `singleThread:true` 下**不成立**）。
+ *   而 `tests/server.agent-json-columns.spec.ts` /
+ *   `tests/server.backup-executions.spec.ts` / `tests/server.sync-v2.spec.ts`
+ *   三处曾在**模块顶层**写 `process.env.IDPLAN_AGENT_TOKEN = 'test-token'`
+ *   且**无 afterAll 清理**（它们当时的注释写着「vitest 每文件独立进程，不外泄」
+ *   ——该前提在 `singleThread:true` 下**不成立**）。
  *
- *   后果：谁在它们之后 import `server/lib/agent-auth`，谁就会看到
- *   `writeAuthMode() === 'enforce'` 而不是 `'open'`。
- *   本 spec 要验的恰恰是 **open 模式下的洞**，所以必须显式清掉该变量。
+ *   ⇒ 谁在它们之后 import `server/lib/agent-auth`，谁就会看到
+ *      `writeAuthMode() === 'enforce'` 而不是 `'open'`。
  *
- * 顺带记录：本条本身就是一个**待修的测试基建缺陷**（见交付消息），
- * 修法是给那三处补 `afterAll(() => { delete process.env.IDPLAN_AGENT_TOKEN })`。
+ * ✅ **该根因已修**（2026-10-04，安全官按本发现补了三处 `afterAll` 清理，
+ *    `git diff` 可见；实测全量 125 文件 / 1934 用例全绿）。
+ *
+ *   但本 spec **仍保留自清**，理由不是「修好了就不需要」，而是**防御性**：
+ *   ① `writeAuthMode()` / `requireToken()` 是**每次调用现读 env**
+ *      （`server/lib/agent-auth.ts:66` / `:91` / `:171`），不是模块加载时快照
+ *      ⇒ 任何**未来**新增的顶层写 env 的 spec 都会再次污染它；
+ *   ② 守卫测试自己必须对环境免疫，否则它会变成下一个受害者；
+ *   ③ 一旦全仓改成 `pool:'forks'`（真多进程），本文件的自清无害可保留。
+ *
+ * ── ⚠️ 污染对本 spec 的影响方向：**假红（安全方向），不是假绿** ──
+ *   本组断言的是「**洞存在**」（`statusCode === 200` + `x-idplan-write-auth: open`
+ *   ⇒ 未鉴权即可写 settings）。被污染时 `writeAuthMode()` 返回 `'enforce'`
+ *   ⇒ `requireWriteToken` 走 `requireToken` ⇒ 返回 **401**
+ *   ⇒ `expect(200)` **失败 ⇒ 变红**。
+ *
+ *   实测复核（2026-10-04，模拟 pre-fix 污染：把本文件 `beforeAll` 的
+ *   `delete` 换成写入一个假 token）：
+ *     × PUT /api/settings/taskNoSeq … → expected 401 to be 200
+ *     Tests  1 failed | 6 passed (7)
+ *
+ *   ⇒ **「证明洞存在」的 spec 被污染 ⇒ 假红，会被人看见并处理。**
+ *   ⚠️ 反之「证明洞**已堵住**」的 spec（断言「必须被拒」）才是**假绿高危**：
+ *      若它期望的拒绝被一个**不相关原因**（如鉴权 401）达成，测试会绿，
+ *      但守卫效力被掩盖。**写这类 spec 时必须断言拒绝的「原因」，不能只断言「被拒」。**
+ *      （本 spec 的验收组已按此写：断言的是 `SQLITE_CONSTRAINT` 而非「抛错即可」，
+ *        见下方 ② 号用例。）
  */
 const ENV_KEY = 'IDPLAN_AGENT_TOKEN';
 
 beforeAll(() => {
-  // SELF-CLEAR REMOVED FOR EXPERIMENT
+  delete process.env[ENV_KEY];
 });
 
 afterAll(() => {

@@ -24,7 +24,14 @@ vi.mock('../src/hooks/useRoleGuard', () => ({
   useRoleGuard: () => roleState,
 }));
 
-const loadDemoSpy = vi.fn();
+// ★ 必须 async：组件里是 `void loadDemo().finally(...)`，即**契约要求它返回 Promise**。
+//   原先 `vi.fn()` 返回 undefined ⇒ `undefined.finally` 抛 unhandled TypeError，
+//   长期挂在全量输出的「Errors 1」里（vitest 自己警告「might cause false
+//   positive tests」——它会掩盖真实错误）。真实 useBackupIo.loadDemo 就是
+//   `() => Promise<void>`，所以修 mock 兑现契约，**不改组件**。
+const loadDemoSpy = vi.fn(async () => {
+  /* 覆盖式导入的副作用不在本 spec 范围 */
+});
 vi.mock('../src/components/layout/useBackupIo', () => ({
   useBackupIo: () => ({
     loadDemo: loadDemoSpy,
