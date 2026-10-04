@@ -92,6 +92,11 @@ let app: App;
  *      但守卫效力被掩盖。**写这类 spec 时必须断言拒绝的「原因」，不能只断言「被拒」。**
  *      （本 spec 的验收组已按此写：断言的是 `SQLITE_CONSTRAINT` 而非「抛错即可」，
  *        见下方 ② 号用例。）
+ *
+ * ── 本 spec 自清与元守卫的分工（v0.8.6）──
+ * 元守卫 `tests/test-env-isolation.spec.ts` 守的是**写法**（顶层写必须配清理），
+ * **守不住「运行序」**（谁先跑、env 已被谁设过）。两者互补，不重复——所以
+ * 本 spec 的自清**仍然保留**，不因元守卫落地而删。
  */
 const ENV_KEY = 'IDPLAN_AGENT_TOKEN';
 
