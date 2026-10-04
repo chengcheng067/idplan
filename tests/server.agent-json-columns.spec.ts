@@ -10,13 +10,22 @@
  *     且一次性数据迁移把 done=1 归一为 status='done'。
  */
 
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 
 // T14：备份通道已 fail-closed——本 spec 全部 backup 请求需带 token。
-// 模块级设置（vitest 每文件独立进程/环境，不外泄）。
+//
+// ★ v0.8.6 修正（调查员发现）：原注释写「vitest 每文件独立进程/环境，不外泄」——
+//   **该前提在 `pool:'threads'` + `singleThread:true` 下不成立**（见 vite.config.ts:
+//   配置注释自己写明「全部 spec 共用一个进程」）。`process.env` 是**进程级共享**，
+//   「清库重建」只覆盖 Dexie，覆盖不到 env ⇒ 谁先跑谁决定 `writeAuthMode` 的结果，
+//   后跑的文件可能拿到别人设的 token（这正是 flaky 的随机来源之一）。
+//   同源修复：tests/setup.ts 已加全局 DOM 清理；此处补 env 清理。
 process.env.IDPLAN_AGENT_TOKEN = 'test-token';
+afterAll(() => {
+  delete process.env.IDPLAN_AGENT_TOKEN;
+});
 
 import { createDb, sectionOf, openDb } from '../server/db';
 import { registerTaskRoutes } from '../server/routes/tasks.routes';

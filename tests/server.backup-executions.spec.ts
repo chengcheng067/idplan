@@ -19,13 +19,18 @@
  *   ⑤ 旧包（无四键）导入不报错、四表清空（清库重建语义）。
  */
 
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
 
 // T14：备份通道 fail-closed，本 spec 的 backup 请求必须带 token（模块级设置）
+// ★ v0.8.6 补 afterAll 清理：`singleThread` 下 `process.env` 进程级共享，不清理会外泄给后续 spec
+//   （详见 tests/server.agent-json-columns.spec.ts 同处修正的长注释）
 process.env.IDPLAN_AGENT_TOKEN = 'test-token';
+afterAll(() => {
+  delete process.env.IDPLAN_AGENT_TOKEN;
+});
 
 import { createDb } from '../server/db';
 import { registerProjectRoutes } from '../server/routes/projects.routes';

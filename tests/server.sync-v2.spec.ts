@@ -10,13 +10,18 @@
  *
  * 用内存 SQLite + Fastify inject，不起端口、不依赖网络。
  */
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 
 // T14：备份通道已 fail-closed——本 spec 全部 backup 请求需带 token。
-// 模块级设置（vitest 每文件独立进程/环境，不外泄）。
+// ★ v0.8.6 修正（调查员发现）：原注释「vitest 每文件独立进程/环境，不外泄」在
+//   `singleThread:true` 下不成立——`process.env` 进程级共享，须清理（长注释见
+//   tests/server.agent-json-columns.spec.ts 同处修正）
 process.env.IDPLAN_AGENT_TOKEN = 'test-token';
+afterAll(() => {
+  delete process.env.IDPLAN_AGENT_TOKEN;
+});
 
 import { createDb } from '../server/db';
 import { registerProjectRoutes } from '../server/routes/projects.routes';
