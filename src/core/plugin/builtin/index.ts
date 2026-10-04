@@ -10,7 +10,10 @@
  */
 
 import type { PluginManifest } from '../types';
+import { agentBoardManifest } from '../../../plugins/agent-board/manifest';
 
 export const PLUGIN_MANIFESTS: readonly PluginManifest[] = [
-  // 阶段 1 只放标本插件（示例项目）。Agent 看板拆包是阶段 2——宿主骨架先立住。
+  // 阶段 2：Agent 看板是第一个真插件（她 10-04 拍板「Agent 功能独立成插件」）。
+  // ⚠️ 顺序即侧栏/设置的展示序；agent-board 是真功能故排第一。
+  agentBoardManifest,
 ];

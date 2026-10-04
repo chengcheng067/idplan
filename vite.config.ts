@@ -33,6 +33,11 @@ export default defineConfig({
     // 稳定单 worker：本机默认 forks 多 worker 并行时偶发静默崩溃（无输出退出码 1），
     // 单线程串行可复现全绿（9 spec / 106 用例）；fake-indexeddb 为 node_modules 级单例，
     // 各 spec 内已通过「清库重建」自隔离，串行无状态污染。
+    // v0.8.6：显式 testTimeout。既有真 Chromium 用例一直在**默认 5s** 上压线跑；
+    // 插件注册表为等 settings KV 多了一帧启动读（AppRouter 的 registryReady 门），
+    // 把压线的用例推爆。给浏览器用例应有的预算，而不是把启动门拆掉——
+    // 深链首帧保护（不建错路由）比省那 20ms 重要得多。
+    testTimeout: 30_000,
     pool: 'threads',
     poolOptions: {
       threads: { singleThread: true },

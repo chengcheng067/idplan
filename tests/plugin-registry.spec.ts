@@ -40,10 +40,26 @@ function manifest(id: string, over: Partial<PluginManifest> = {}): PluginManifes
   };
 }
 
+/**
+ * 宿主根路由（两层结构：根 → AppShell → children）。
+ * children 里**必须有** `path:'*'` 通配（与真实 buildHostRoutes 一致）——
+ * 插件路由要插在它前面，否则永远走不到。
+ */
 const HOST: RouteObject[] = [
-  { path: '/', element: null as never },
-  { path: '*', element: null as never },
+  {
+    path: '/',
+    element: null as never,
+    children: [
+      { path: 'my-tasks', element: null as never },
+      { path: '*', element: null as never },
+    ],
+  },
 ];
+
+/** 取 AppShell 的 children（断言都落在这一层——插件是子页面不是平铺路由） */
+function childrenOf(routes: RouteObject[]): Array<string | undefined> {
+  return (routes[0]?.children ?? []).map((c) => c.path);
+}
 
 describe('插件注册表 · 停用语义', () => {
   const state: PluginRegistryState = {
@@ -54,20 +70,22 @@ describe('插件注册表 · 停用语义', () => {
     enabled: {},
   };
 
-  it('① 启用中的插件路由进数组', () => {
-    const out = resolveRoutes(HOST, state);
-    expect(out.map((r) => r.path)).toContain('on-page');
+  it('① 启用中的插件路由进宿主 children（**子页面**，不是平铺路由）', () => {
+    const paths = childrenOf(resolveRoutes(HOST, state));
+    expect(paths).toContain('on-page');
+    // 顶层仍是宿主那一条根路由（未被插件摊平）
+    expect(resolveRoutes(HOST, state)).toHaveLength(1);
   });
 
   it('② 停用的插件路由**不在数组里**（不是重定向/null 渲染）', () => {
-    const out = resolveRoutes(HOST, state);
-    expect(out.map((r) => r.path)).not.toContain('off-page');
+    const paths = childrenOf(resolveRoutes(HOST, state));
+    expect(paths).not.toContain('off-page');
   });
 
-  it('③ 通配符仍排在最后（插件路由插在它前面）', () => {
-    const out = resolveRoutes(HOST, state);
-    expect(out[out.length - 1]!.path).toBe('*');
-    expect(out.map((r) => r.path)).toEqual(['/', 'on-page', '*']);
+  it('③ 通配符仍排在最后（插件路由插在它前面，否则永远走不到）', () => {
+    const paths = childrenOf(resolveRoutes(HOST, state));
+    expect(paths[paths.length - 1]).toBe('*');
+    expect(paths).toEqual(['my-tasks', 'on-page', '*']);
   });
 
   it('④ 侧栏入口同样只取启用中的', () => {

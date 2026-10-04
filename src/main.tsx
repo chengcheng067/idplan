@@ -21,8 +21,6 @@ import { AppShell } from './components/layout/AppShell';
 import { HomeRouteGuard } from './components/layout/HomeRouteGuard';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { MemberBoardPage } from './pages/MemberBoardPage';
-import { AgentBoardPage } from './pages/AgentBoardPage';
-import { AgentExecutionConsolePage } from './pages/AgentExecutionConsolePage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { SchedulePrintPage } from './pages/SchedulePrintPage';
 import { ItineraryPrintPage } from './pages/ItineraryPrintPage';
@@ -67,10 +65,11 @@ export function buildHostRoutes(): RouteObject[] {
         { path: 'project/:id/itinerary-print', element: <ItineraryPrintPage /> },
         { path: 'project/:id/calendar-print', element: <CalendarPrintPage /> },
         { path: 'my-tasks', element: <MyTasksPage /> },
-        // Agent Board：放在 my-tasks 之后、* 通配之前（设计文档 T10 要点 7）
-        { path: 'agent', element: <AgentBoardPage /> },
-        // Agent 执行控制台（只读）：嵌套在 /agent 之下，故必须排在 'agent' 之后
-        { path: 'agent/executions', element: <AgentExecutionConsolePage /> },
+        // ⚠️ v0.8.6 阶段 2：/agent 与 /agent/executions 已从宿主摘除，改由
+        //   agent-board 插件贡献（见 src/plugins/agent-board/manifest.tsx）。
+        //   宿主此刻**不再** import Agent 页面——边界由 arch-boundary 守卫钉死。
+        //   停用插件时这两条路由不存在 ⇒ 深链 /agent 会落到下面的 '*' 通配
+        //   （Navigate to '/'），表现为「回到首页」而非白屏——这是有意的降级。
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
@@ -86,12 +85,25 @@ export function buildHostRoutes(): RouteObject[] {
  */
 function AppRouter(): JSX.Element {
   const reg = usePluginRegistry();
-  const [router, setRouter] = useState(() => createBrowserRouter(buildHostRoutes()));
+  const [router, setRouter] = useState<ReturnType<typeof createBrowserRouter> | null>(null);
 
   useEffect(() => {
+    // 未 ready 不建 router：插件路由来自 settings KV（异步）。若用默认路由先建，
+    // 首帧的 /agent 会因「插件路由还没进表」落到 '*' 通配回首页——深链丢一次跳转，
+    // 且真 Chromium 验收（page.goto('/agent') 在首帧断言）会红。
+    if (!reg.registryReady) return;
     setRouter(createBrowserRouter(reg.routesFor(buildHostRoutes())));
   }, [reg]);
 
+  if (!router) {
+    // 最小占位：离线应用 KV 读取是毫秒级，这里刻意不做花哨的 loading 视觉
+    // （首屏白一下比「跳错页再跳回」好——后者会被用户当成 bug 截图）。
+    return (
+      <div className="flex h-screen items-center justify-center bg-cream">
+        <span className="text-[13px] text-mist">正在加载…</span>
+      </div>
+    );
+  }
   return <RouterProvider router={router} />;
 }
 

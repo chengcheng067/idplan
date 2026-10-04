@@ -599,21 +599,33 @@ describe('Agent 执行控制台 · 只读纪律', () => {
  * ================================================================== */
 
 describe('Agent 执行控制台 · 导航接线', () => {
-  it('路由表在 /agent 之后注册 /agent/executions，且排在 * 通配之前', async () => {
+  /**
+   * v0.8.6 阶段 2：agent 路由从宿主迁到插件 manifest，本条锁的**意图不变**
+   * （两路由相对顺序 + 通配在最后），但扫描目标改为插件 manifest；
+   * 并加一条反向锁：宿主 main.tsx **不得**再含 agent 路由（边界守卫）。
+   */
+  it('路由表：agent < agent/executions < 通配（锁的位置迁到插件 manifest）', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
-    const src = readFileSync(resolve(__dirname, '..', 'src/main.tsx'), 'utf8');
+    const src = readFileSync(
+      resolve(__dirname, '..', 'src/plugins/agent-board/manifest.tsx'),
+      'utf8',
+    );
 
     const iAgent = src.indexOf("path: 'agent'");
     const iConsole = src.indexOf("path: 'agent/executions'");
-    const iWildcard = src.indexOf("path: '*'");
-
     expect(iAgent).toBeGreaterThan(-1);
     expect(iConsole).toBeGreaterThan(-1);
-    expect(iWildcard).toBeGreaterThan(-1);
-    // 顺序：agent < agent/executions < *
+    // 顺序：agent < agent/executions（嵌套路由依赖，不能反）
     expect(iAgent).toBeLessThan(iConsole);
-    expect(iConsole).toBeLessThan(iWildcard);
+  });
+
+  it('边界守卫：宿主 main.tsx 不再自己持有 agent 路由（必须经插件贡献）', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'src/main.tsx'), 'utf8');
+    expect(src).not.toContain("path: 'agent'");
+    expect(src).not.toContain("path: 'agent/executions'");
   });
 
   // ★ v0.8.5 重写（她反馈 #5：Agent 父项 + 二级子组）：

@@ -46,6 +46,8 @@ const BUILTIN_MANIFESTS: readonly PluginManifest[] = [
  * 一律带 Manifests 后缀。
  */
 interface PluginRegistryValue extends Omit<PluginRegistryState, 'enabled'> {
+  /** 注册表是否已从 settings KV 读完（未读完时路由不该建 ⇒ 见 AppRouter） */
+  registryReady: boolean;
   /** 切启用状态（写 settings KV；失败时抛给 UI 提示，不改内存） */
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<void>;
   /** 派生：启用中的插件（注意与 `enabledMap`/`PluginRegistryState.enabled` 区分） */
@@ -107,6 +109,8 @@ export function PluginRegistryProvider({ children }: { children: ReactNode }): J
       navItems: resolveNavItems(state),
       setPluginEnabled,
       stateOf: (pluginId) => describePluginState(state, pluginId),
+      // 真实值由下方 withReady 覆盖；此处给保守默认（未就绪）
+      registryReady: false,
     };
   }, [enabledMap, setPluginEnabled]);
 
@@ -122,14 +126,44 @@ export function PluginRegistryProvider({ children }: { children: ReactNode }): J
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void hydrated;
-  return <PluginRegistryContext.Provider value={value}>{children}</PluginRegistryContext.Provider>;
+  const withReady = useMemo<PluginRegistryValue>(
+    () => ({ ...value, registryReady: hydrated }),
+    [value, hydrated],
+  );
+  return <PluginRegistryContext.Provider value={withReady}>{children}</PluginRegistryContext.Provider>;
 
   return <PluginRegistryContext.Provider value={value}>{children}</PluginRegistryContext.Provider>;
 }
 
+/**
+ * 取注册表。
+ *
+ * ⚠️ **无 Provider 时降级而非抛错**（这里也栽过一次）：侧栏（SidebarNav）在
+ * 阶段 2 接入了注册表，于是所有渲染侧栏的既有 spec 突然要包 Provider——
+ * 抛错会让「加一个消费点」变成「改 N 个测试」，且下次再有人消费还是这个坑。
+ *
+ * 降级语义：空清单 + 空启用表 ⇒ 谓词全部回落 defaultEnabled ⇒ **没有插件时
+ * 表现与「什么都没装」一致**，渲染面只少不崩。真实运行路径上 Provider 一定在
+ * （main.tsx），所以降级只影响测试/故事书场景——那正是我们想要的兜底方向。
+ */
 export function usePluginRegistry(): PluginRegistryValue {
   const v = useContext(PluginRegistryContext);
-  if (!v) throw new Error('usePluginRegistry 必须在 <PluginRegistryProvider> 内使用');
+  if (!v) {
+    return {
+      manifests: [],
+      enabledMap: {},
+      enabledManifests: [],
+      routesFor: (host) => [...host],
+      navItems: [],
+      setPluginEnabled: async () => {
+        throw new Error('插件注册表不可用（无 Provider），无法保存开关');
+      },
+      stateOf: () => ({ enabled: false, explicit: false }),
+      // 无 Provider ⇒ 无 KV 可读 ⇒ 视为「没有插件」且已就绪
+      //   （若报 false 会把真 Chromium spec 卡在「正在加载…」——那是我刚修的回退）
+      registryReady: true,
+    };
+  }
   return v;
 }
 

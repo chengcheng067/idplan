@@ -34,27 +34,43 @@ export function enabledPlugins(state: PluginRegistryState): PluginManifest[] {
 }
 
 /**
- * 合并插件路由进宿主子路由数组。
+ * 合并插件路由进**宿主的 children 数组**（不是顶层数组！）。
+ *
+ * ⚠️ 这里栽过一次（阶段 2 实测）：最初把插件 route 直接 `[...hostRoutes,
+ * ...pluginRoutes]` 追加到**顶层**。宿主的路由是「一层根 + AppShell + children」
+ * 两层结构，顶层追加 ⇒ `/agent` 变成**没有 AppShell 外壳**的裸页：侧栏没有、
+ * `<main>` 没有（AppShell 是 `<main>` 的唯一出处），真 Chromium 验收的
+ * `waitForSelector('main')` 全挂。**插件的页面是宿主的子页面，不是平铺路由。**
  *
  * 三条纪律：
  *   ① **只合并启用中的**——停用的插件路由**不存在**（不是重定向、不是 null
- *      渲染；是 createBrowserRouter 的数组里没有这一项）；
- *   ② **不改写宿主路由**——宿主路由原样在前，插件路由追加在后；
- *   ③ **通配符留最后**——若宿主已有 `path:'*'`，插件路由必须插在它前面，
- *      否则永远走不到（这条是路由注册的经典坑，写成注释防回归）。
+ *      渲染；是数组里没有这一项）；
+ *   ② **不改写宿主路由**——宿主持有 routes 树，插件只往里塞 children；
+ *   ③ **通配符留最后**——宿主已有 `path:'*'` 时插件路由必须插它前面，否则永远
+ *      走不到（路由注册经典坑）。
+ *
+ * @param hostRootRoutes 根级路由数组（应恰含一条 AppShell 路由）
  */
 export function resolveRoutes(
-  hostRoutes: readonly RouteObject[],
+  hostRootRoutes: readonly RouteObject[],
   state: PluginRegistryState,
 ): RouteObject[] {
-  const wildcardIndex = hostRoutes.findIndex((r) => r.path === '*');
-  const pluginRoutes = enabledPlugins(state).flatMap((m) => m.routes ?? []);
-  if (wildcardIndex === -1) return [...hostRoutes, ...pluginRoutes];
-  return [
-    ...hostRoutes.slice(0, wildcardIndex),
-    ...pluginRoutes,
-    ...hostRoutes.slice(wildcardIndex),
-  ];
+  return hostRootRoutes.map((route) => {
+    // 只往「有 children 的路由」（= AppShell 那条）里塞；其余原样返回
+    if (!route.children) return route;
+    const children = [...route.children];
+    const wildcardIndex = children.findIndex((r) => r.path === '*');
+    const pluginRoutes = enabledPlugins(state).flatMap((m) => m.routes ?? []);
+    if (wildcardIndex === -1) return { ...route, children: [...children, ...pluginRoutes] };
+    return {
+      ...route,
+      children: [
+        ...children.slice(0, wildcardIndex),
+        ...pluginRoutes,
+        ...children.slice(wildcardIndex),
+      ],
+    };
+  });
 }
 
 /** 合并侧栏入口（同样只取启用中的；`group` 由宿主分区渲染）。 */

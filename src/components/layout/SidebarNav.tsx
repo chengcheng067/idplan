@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
+import { usePluginRegistry } from '../../core/plugin/PluginRegistryProvider';
 import { cn } from '../../lib/cn';
 
 /**
@@ -57,6 +58,19 @@ export function SidebarNav({
   const [agentOpen, setAgentOpen] = useState<boolean>(() => inAgentArea(pathname));
   const agentActive = inAgentArea(pathname);
 
+  /**
+   * v0.8.6 阶段 2：Agent 段改为**从插件注册表派生**。
+   *
+   * 她 10-04：「插件要能手动在设置里面去开关」——侧栏入口是开关最直接的
+   * 可见面。所以这里不再无条件渲染 `{ group: 'agent' }`：只有当注册表里存在
+   * **启用中的、group==='agent' 的导航项**时才占位。
+   *
+   *  ⇒ 停用 agent-board 插件 = 侧栏 Agent 段整段消失（不是禁用样式、不是
+   *     空标题），与「路由不进 router 数组」是同一个停用语义。
+   */
+  const agentNav = usePluginRegistry().navItems.filter((n) => n.group === 'agent');
+  const agentNavActive = agentNav.length > 0;
+
   const entries: Array<NavEntry | { group: 'agent' }> = [
     isAdmin
       ? {
@@ -77,7 +91,8 @@ export function SidebarNav({
       Icon: CalendarRange,
       match: (p) => p === '/my-tasks',
     },
-    { group: 'agent' },
+    // 插件停用 ⇒ 不占位 ⇒ Agent 段不渲染（与路由摘除同一个开关）
+    ...(agentNavActive ? ([{ group: 'agent' }] as const) : []),
   ];
 
   return (
