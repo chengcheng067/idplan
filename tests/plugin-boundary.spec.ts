@@ -71,6 +71,8 @@ function project(id: string, kind: 'human' | 'agent') {
     scheduleBasis: ScheduleBasis.Calendar,
     domain: null,
     kind,
+    // v0.8.6 归属人（null = 公共板）
+    ownerMemberId: null,
     status: ProjectStatus.Active,
     revision: 1,
     updatedAt: NOW,

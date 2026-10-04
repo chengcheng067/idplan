@@ -195,6 +195,8 @@ function makeProject(over: Partial<Project> = {}): Project {
     status: ProjectStatus.Active,
     revision: 1,
     updatedAt: '2026-06-01T00:00:00Z',
+    // v0.8.6 归属人（null = 公共板）
+    ownerMemberId: null,
     ...over,
   };
 }

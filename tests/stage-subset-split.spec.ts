@@ -368,6 +368,8 @@ describe('stage-subset：落库后 Stage 行的 templateKey / colorIndex 正确�
       // v0.8：Project 链新增两列（scheduleBasis 之后、status 之前）
       'domain',
       'kind',
+      // v0.8.6 ownerMemberId（五处铁律之一；本期望清单 = 第六处）
+      'ownerMemberId',
       'status',
       'revision',
       'updatedAt',

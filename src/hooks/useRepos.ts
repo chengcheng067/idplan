@@ -40,9 +40,21 @@ export async function bootstrapAllStores(repos: IRepositoryBundle): Promise<void
     repos.settings.all(),
   ]);
 
+  /**
+   * v0.8.6 身份来源优先级**反转**（她 10-04 授权重新设计 NAS 使用逻辑）。
+   *
+   * 原顺序：`settings.currentMemberId ?? localStorage` —— **共享 KV 优先于个人选择**。
+   * 在 NAS 形态下这是「A 改身份影响 B」的机制：settings 表全员共享，里面只要有值，
+   * 每个浏览器打开都会被它盖掉自己选过的身份 ⇒ 多人共用时身份串味。
+   *
+   * 新顺序：`localStorage ?? settings` —— **个人选择优先**，共享 KV 只在
+   * 「本浏览器从未选过身份」时兜底一次（老库/备份导入带进来的遗留值）。
+   * remote 形态下 localStorage 天然按浏览器隔离 ⇒ NAS 上「每人一个身份」成立，
+   * 且不需要新表、不需要服务端会话（她明确说可以不沿用旧单机逻辑重设计）。
+   */
   const currentMemberId =
-    readCurrentMemberFromSettings(settings) ??
     localStorage.getItem('changxia.currentMemberId') ??
+    readCurrentMemberFromSettings(settings) ??
     null;
   const restPolicy = readRestPolicyFromSettings(settings);
 

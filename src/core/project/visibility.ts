@@ -45,6 +45,7 @@
 import { useMemo } from 'react';
 
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
 import type { Project, Stage, Task } from '../types/entities';
 import { DEFAULT_PROJECT_KIND, projectKindOf, type ProjectKind } from '../types/enums';
 
@@ -79,12 +80,30 @@ export function visibleProjectIds(
   return ids;
 }
 
-/** 给定 kind，筛出该 kind 的项目（保持入参顺序）。 */
+/**
+ * 给定 kind，筛出该 kind 的项目（保持入参顺序）。
+ *
+ * v0.8.6 起第三个参数 `viewerMemberId` = **归属收窄**（她 10-04 拍板「成员每个人
+ * 都能有自己的 Agent 看板」的落地处）。三条口径：
+ *   ① **不传 / 传 null ⇒ 不收窄**——既有全部消费方（首页、侧栏、统计卡）零改动；
+ *   ② `ownerMemberId == null` 的板 = **公共板**，人人可见（存量数据/历史板）；
+ *   ③ 只有「有主的板」才按人收窄 ⇒ **老库读起来与今天逐字一致**（零回归）。
+ *
+ * 为什么收窄放在这个纯函数里而不是各页面自己 filter：漏斗必须是**单一出口**——
+ * 页面各写一份必然漂移，漂移的表现就是「同一个成员在 A 页看到自己的板、B 页看不到」。
+ */
 export function visibleProjectsFor(
   kind: ProjectKind,
   all: readonly Project[],
+  viewerMemberId?: string | null,
 ): Project[] {
-  return all.filter((p) => projectKindOf(p) === kind);
+  return all.filter((p) => {
+    if (projectKindOf(p) !== kind) return false;
+    // viewerMemberId 缺省（undefined）⇒ 完全不看 owner 字段（纯 kind 行为）
+    if (viewerMemberId === undefined) return true;
+    if (viewerMemberId === null) return true; // 未登录态：只按 kind（与今天一致）
+    return p.ownerMemberId == null || p.ownerMemberId === viewerMemberId;
+  });
 }
 
 /**
@@ -169,9 +188,22 @@ export function useHumanProjects(): Project[] {
   return useProjectsOfKind('human');
 }
 
-/** Agent 侧看板列表（#20 项目下拉 / #21 统计卡）。 */
+/**
+ * Agent 侧看板列表（#20 项目下拉 / #21 统计卡 / AgentBoardPage / 侧栏）。
+ *
+ * v0.8.6：从本 hook 起**按归属收窄**——「成员每个人都能有自己的 Agent 看板」
+ * （她 10-04 拍板）。因为侧栏与 Agent 页都走这一个出口，收窄做在这里 ⇒
+ * 两边口径**不可能不一致**（若在各页面各收一份，漂移是必然的）。
+ *
+ * 未登录 ⇒ `currentMemberId` 为空 ⇒ 谓词回落纯 kind（与改造前观感逐字一致）。
+ */
 export function useAgentProjects(): Project[] {
-  return useProjectsOfKind('agent');
+  const projects = useProjectsStore(pickProjects);
+  const currentMemberId = useSettingsStore((s) => s.currentMemberId);
+  return useMemo(
+    () => visibleProjectsFor('agent', projects, currentMemberId || null),
+    [projects, currentMemberId],
+  );
 }
 
 /**

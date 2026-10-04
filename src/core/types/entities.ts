@@ -308,6 +308,25 @@ export interface Project {
    * 老库读不到该列 → 回落 DEFAULT_PROJECT_KIND（'human'），全部项目仍显示在人类侧。
    */
   kind: ProjectKind;
+  /**
+   * v0.8.6 归属人（memberId；可空 = 公共板，向后兼容）。
+   *
+   * 存在的理由（她 10-04 拍板「成员每个人都能有自己的 agent 看板」的地基）：
+   * 在这之前 Agent 看板是**无主公共池**——任何成员能看到并修改任何一块板，
+   * 「我的看板」这个说法没有落点。本字段就是那个落点。
+   *
+   * 三条设计口径：
+   *   ① **可空**——老数据/历史公共板一律 null ⇒ 「删掉过滤逻辑即回退到旧行为」；
+   *   ② **只用 memberId，不冗余存成员名/角色**（Member 是唯一事实源，同
+   *      `assigneeIds` / `stagePresetKey` 手法）；
+   *   ③ 与 `kind` 正交：kind 管「这是谁的活（人/AI）」，本字段管「这块板归谁」。
+   *
+   * 键序铁律（五处同步，漏一处 backup roundtrip 逐表 diff 即挂）：
+   *   entities.Project / backup.service projectSchema /
+   *   local.projects.repo insert 字面量 / stage-fallback.normalizeProjectRow /
+   *   server/schema.sql（+ db.ts 幂等 ALTER）
+   */
+  ownerMemberId: string | null;
   status: ProjectStatus;
   revision: number;
   updatedAt: string;

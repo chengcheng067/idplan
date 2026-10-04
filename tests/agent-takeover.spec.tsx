@@ -65,6 +65,10 @@ function projectOf(over: Partial<Project> & { id: string; kind: 'human' | 'agent
     stageTemplateVersion: 0,
     scheduleBasis: ScheduleBasis.Calendar,
     domain: null,
+    // v0.8.6 归属人：缺省 null（公共板）—— `...over` 展开会让 Partial 的
+    // `ownerMemberId?: string | null` 覆盖成 undefined，与 Project 必填不符，
+    // 故显式给默认值并置于 ...over **之前**
+    ownerMemberId: null,
     status: ProjectStatus.Active,
     revision: 1,
     updatedAt: NOW,
@@ -619,7 +623,9 @@ describe('接管/删除入口的宿主接线（源码级断言）', () => {
 
   it('AgentBoardPage 的看板集合对局部快照也做**当前态**谓词过滤（接管转正后不残留）', () => {
     const src = read('pages/AgentBoardPage.tsx');
-    expect(src).toMatch(/visibleProjectsFor\('agent', merged\)/);
+    // v0.8.6：锁的形态随「kind+归属双漏斗」升级（kind 收窄之外还要按当前身份收窄）。
+    // 锁的意图不变：**禁止绕过谓词自己写 filter**。
+    expect(src).toMatch(/visibleProjectsFor\('agent', merged, currentMemberId \|\| null\)/);
   });
 
   it('★ B14：侧栏在 Agent 路由显示独立的「Agent 看板」列表（漏斗取数 + 路由门控）', () => {

@@ -658,7 +658,11 @@ export function AgentBoardPage(): JSX.Element {
        * 不自己写 `p.kind === 'agent'`，避免出现第二份 kind 判定），只进本页局部 state。
        * `stages` / `tasks` 也不再自赋自（原来那两行是 `st.stages`/`st.tasks` 原样写回 = no-op）。
        */
-      setLoadedAgentBoards(visibleProjectsFor('agent', projectRows));
+      // v0.8.6：kind + 归属双漏斗——「每人一个自己的 Agent 看板」的消费侧落点。
+      // 未登录（currentMemberId 为 null/空）⇒ 谓词内部回落纯 kind（与今天一致）。
+      setLoadedAgentBoards(
+        visibleProjectsFor('agent', projectRows, currentMemberIdRef.current || null),
+      );
       useMembersStore.getState().setAll(memberRows);
       setLoaded(true);
     },
@@ -717,13 +721,25 @@ export function AgentBoardPage(): JSX.Element {
    * 不这道过滤的话被接管的看板会继续显示在 Agent 页（且选中它渲染出人类项目内容，
    * 正是 #20/#21 要堵的反向泄漏）。两道来源都过谓词，故过滤不可能误伤。
    */
+  const currentMemberId = useSettingsStore((s) => s.currentMemberId);
+  /**
+   * v0.8.6：currentMemberId 的 ref 影子。
+   * 为什么需要：上面的装载 effect 先于 store 选择器求值顺序执行，直接读
+   * `currentMemberId` 会拿到 undefined（hook 顺序变量提升问题）。ref 让
+   * effect 随时读到**最新**身份，且不引入新的渲染依赖。
+   */
+  const currentMemberIdRef = useRef<string | null>(currentMemberId ?? null);
+  useEffect(() => {
+    currentMemberIdRef.current = currentMemberId ?? null;
+  }, [currentMemberId]);
+
   const agentBoards = useMemo(() => {
     const seen = new Set(funnelAgentBoards.map((p) => p.id));
     const merged = [
       ...funnelAgentBoards,
       ...loadedAgentBoards.filter((p) => !seen.has(p.id)),
     ];
-    return visibleProjectsFor('agent', merged);
+    return visibleProjectsFor('agent', merged, currentMemberId || null);
   }, [funnelAgentBoards, loadedAgentBoards]);
 
   // 选中看板（URL 无状态；首次进入取第一块 Agent 看板）
@@ -786,7 +802,6 @@ export function AgentBoardPage(): JSX.Element {
   }, [members]);
 
   const agentSeatUsed = members.filter((m) => m.actorKind === 'agent').length;
-  const currentMemberId = useSettingsStore((s) => s.currentMemberId);
 
   /**
    * v0.8.6（竞品三件套之二）：写回提案落定（单条 + 批量）。

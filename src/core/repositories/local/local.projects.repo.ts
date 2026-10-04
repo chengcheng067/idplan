@@ -75,6 +75,9 @@ export class LocalProjectsRepository implements IProjectsRepository {
       // 人类侧建档（唯一的常规建档路径）不传 kind ⇒ 落 DEFAULT_PROJECT_KIND；
       // Agent 通道建板传 'agent'（T04）。
       kind: cmd.kind ?? DEFAULT_PROJECT_KIND,
+      // v0.8.6 归属人（键序铁律五处同步之三：紧随 kind 之后、status 之前）。
+      // 可空：老建档路径不传 ⇒ null（公共板），删字段即回退旧行为。
+      ownerMemberId: cmd.ownerMemberId ?? null,
       status: ProjectStatus.Active,
       revision: 1,
       updatedAt: now,

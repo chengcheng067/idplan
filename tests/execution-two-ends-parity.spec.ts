@@ -126,6 +126,8 @@ async function seedRemoteProject(app: FastifyInstance): Promise<void> {
       name: '两端一致性项目',
       // ★ v0.8 隔离补齐（2026-09-20）：执行域只属于 Agent 看板，两端夹具都建 agent 板
       kind: 'agent',
+      // v0.8.6 归属人（null = 公共板；这些 spec 不测归属）
+      ownerMemberId: null,
       address: '',
       clientName: '',
       contractAmount: null,
@@ -172,6 +174,8 @@ async function resetLocal(): Promise<void> {
           scheduleBasis: ScheduleBasis.Calendar,
           domain: 'indoor',
           kind: 'agent',
+          // v0.8.6 归属人（null = 公共板；这些 spec 不测归属）
+          ownerMemberId: null,
           status: ProjectStatus.Active,
           revision: 1,
           updatedAt: '2026-08-01T00:00:00.000Z',

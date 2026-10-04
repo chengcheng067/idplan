@@ -59,6 +59,11 @@ const V2_COLUMN_MIGRATIONS: ReadonlyArray<{ table: string; column: string; ddl: 
     column: 'confidence',
     ddl: 'ALTER TABLE writeback_proposals ADD COLUMN confidence REAL',
   },
+  {
+    table: 'projects',
+    column: 'owner_member_id',
+    ddl: 'ALTER TABLE projects ADD COLUMN owner_member_id TEXT',
+  },
   { table: 'stages', column: 'template_key', ddl: 'ALTER TABLE stages ADD COLUMN template_key TEXT' },
   { table: 'stages', column: 'color_index', ddl: 'ALTER TABLE stages ADD COLUMN color_index INTEGER' },
   {

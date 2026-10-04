@@ -132,6 +132,8 @@ function makeProject(
     status: ProjectStatus.Active,
     revision: 1,
     updatedAt: '2026-09-01T00:00:00.000Z',
+    // v0.8.6 归属人（null = 公共板）
+    ownerMemberId: null,
     ...over,
   };
 }

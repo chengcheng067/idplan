@@ -82,6 +82,8 @@ function projectRow(id: string): Project {
     scheduleBasis: ScheduleBasis.Calendar,
     domain: null,
     kind: 'human',
+    // v0.8.6 归属人（null = 公共板；这些 spec 不测归属）
+    ownerMemberId: null,
     status: ProjectStatus.Active,
     revision: 1,
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -191,6 +193,8 @@ const CANONICAL_PROJECT_KEYS = [
   // v0.8：Project 链新增两列，插在 scheduleBasis 之后、status 之前（§3.3 Project 链插入位置）
   'domain',
   'kind',
+  // v0.8.6 ownerMemberId —— 五处键序铁律之一（本清单 = 第六处，漏登记则本 spec 红）
+  'ownerMemberId',
   'status',
   'revision',
   'updatedAt',

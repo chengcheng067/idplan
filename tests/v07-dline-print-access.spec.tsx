@@ -162,6 +162,8 @@ const PROJECT: Project = {
   scheduleBasis: ScheduleBasis.Calendar,
   domain: null,
   kind: 'human',
+  // v0.8.6：归属人（null = 公共板，与该 spec 的多成员可见性断言无关）
+  ownerMemberId: null,
   status: ProjectStatus.Active,
   revision: 1,
   updatedAt: '2026-01-01T00:00:00Z',

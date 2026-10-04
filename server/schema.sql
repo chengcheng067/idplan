@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS projects (
   -- ② 前端读侧另有 `?? 'human'` 兜底（未跑 createDb 的极老实例）。
   -- **绝不改为 'agent'** —— 老数据必须显示在人类侧。
   kind TEXT NOT NULL DEFAULT 'human',
+  -- v0.8.6 归属人（memberId）。NULL = 公共板（老数据/历史板）——
+  -- 「删掉过滤即回退旧行为」的回退点；不建索引（同 kind：隔离在内存谓词单一出口）
+  owner_member_id TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL

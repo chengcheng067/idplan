@@ -50,6 +50,8 @@ beforeEach(async () => {
           scheduleBasis: ScheduleBasis.Calendar,
           domain: null,
           kind: 'agent',
+          // v0.8.6 归属人（null = 公共板；这些 spec 不测归属）
+          ownerMemberId: null,
           status: ProjectStatus.Active,
           revision: 1,
           updatedAt: '2026-08-01T00:00:00.000Z',
@@ -70,6 +72,8 @@ beforeEach(async () => {
           scheduleBasis: ScheduleBasis.Calendar,
           domain: null,
           kind: 'agent',
+          // v0.8.6 归属人（null = 公共板；这些 spec 不测归属）
+          ownerMemberId: null,
           status: ProjectStatus.Active,
           revision: 1,
           updatedAt: '2026-08-01T00:00:00.000Z',

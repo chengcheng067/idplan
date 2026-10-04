@@ -164,6 +164,7 @@ export type ProjectRowInput = Omit<
   | 'shortLabel'
   | 'domain'
   | 'kind'
+  | 'ownerMemberId'
 > & {
   status: string;
   /**
@@ -189,6 +190,10 @@ export type ProjectRowInput = Omit<
    * 归一保证产出的 `Project.kind` 恒有值（回落 DEFAULT_PROJECT_KIND）。
    */
   kind?: string | null;
+  /**
+   * v0.8.6 归属人：老备份无此键 → 可选。归一出 null（公共板）。
+   */
+  ownerMemberId?: string | null;
 };
 
 export type StageRowInput = Omit<Stage, 'status' | 'templateKey' | 'colorIndex' | 'customColor'> & {
@@ -274,6 +279,9 @@ export function normalizeProjectRow(row: ProjectRowInput): Project {
      */
     domain: (row.domain as StageTemplateDomain | null | undefined) ?? null,
     kind: (row.kind as ProjectKind | null | undefined) ?? DEFAULT_PROJECT_KIND,
+    // v0.8.6 归属人：缺键/空值一律 null（公共板）——不推断、不改写（同 domain 的
+    // 「null = 不知道」语义：把别人的板猜成某个人的，比留空危险得多）
+    ownerMemberId: row.ownerMemberId ?? null,
     status: row.status as Project['status'],
     revision: row.revision,
     updatedAt: row.updatedAt,

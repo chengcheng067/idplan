@@ -61,6 +61,11 @@ export interface CreateProjectCmd {
    */
   domain?: StageTemplateDomain | null;
   /**
+   * v0.8.6 归属人（memberId）。可空 = 公共板（老建档路径不传）。
+   * Agent 通道建板时由宿主填当前操作人 —— **不接受调用方传别人**。
+   */
+  ownerMemberId?: string | null;
+  /**
    * 归属侧（v0.8 新增）。人类建档路径**不传**（落 DEFAULT_PROJECT_KIND）；
    * Agent 通道建板传 'agent'（T04 §7.6）。
    */

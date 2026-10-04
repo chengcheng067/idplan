@@ -72,6 +72,8 @@ beforeEach(async () => {
           scheduleBasis: ScheduleBasis.Calendar,
           domain: 'indoor',
           kind: 'agent',
+          // v0.8.6 归属人（null = 公共板；这些 spec 不测归属）
+          ownerMemberId: null,
           status: ProjectStatus.Active,
           revision: 1,
           updatedAt: '2026-08-01T00:00:00.000Z',
@@ -821,6 +823,8 @@ describe('执行域归属关卡：本地存储边界（只属于 Agent 看板）
       scheduleBasis: ScheduleBasis.Calendar,
       domain: 'indoor',
       kind: 'human',
+      // v0.8.6 归属人（null = 公共板；这些 spec 不测归属）
+      ownerMemberId: null,
     });
   }
 

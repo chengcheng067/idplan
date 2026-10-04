@@ -73,6 +73,8 @@ function makeProject(p: Partial<Project>): Project {
     scheduleBasis: ScheduleBasis.Calendar,
     domain: 'indoor',
     kind: 'human',
+    // v0.8.6 归属人（null = 公共板；置于 ...p 之前，Partial 展开不致缺字段）
+    ownerMemberId: null,
     status: ProjectStatus.Active,
     revision: 1,
     updatedAt: '2026-09-01T00:00:00.000Z',

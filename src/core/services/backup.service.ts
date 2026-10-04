@@ -81,6 +81,11 @@ const projectSchema = z
      */
     domain: z.string().nullable().optional(),
     /**
+     * v0.8.6 归属人（可空 = 公共板）。老备份无此键 → `.optional()` + transform 补 null，
+     * 与 shortLabel / stagePresetKey 同一手法（读时回落，不做导入期数据改写）。
+     */
+    ownerMemberId: z.string().nullable().optional(),
+    /**
      * v0.8 归属侧。同上用 `z.string()`：`ProjectKind` 是字面量联合（承载对外契约的
      * Agent 通道标记，刻意**不封闭**，与 `Member.agentKind` 同策略）。
      * 归一后恒有值（回落 DEFAULT_PROJECT_KIND）——故实体侧 `kind` 是必填。
