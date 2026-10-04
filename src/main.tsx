@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import {
   Navigate,
@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom';
 
 import { RepoProvider } from './di/repository.provider';
+import { PluginRegistryProvider, usePluginRegistry } from './core/plugin/PluginRegistryProvider';
 // 组合根接线（副作用导入）：Electron 桥存在时把本机 loopback 通道注册进注册表。
 // ★ 必须在**应用启动**时就注册，不能等用户打开 Agent 看板页 —— 否则「用户在首页时
 //   外部写入」会走不到 loopback 通道。
@@ -41,8 +42,19 @@ import { CalendarPrintPage } from './pages/CalendarPrintPage';
  * 底座：绿联 Docker 应用是 IP:端口直连（根路径 /），不走系统网关、无 /<proxy_path>/ 前缀
  * （proxy_path 是原生应用专用字段）。故无需 basename，路由直接挂根路径。
  */
-export const router = createBrowserRouter(
-  [
+/**
+ * 宿主路由（v0.8.6 起改为**工厂函数**，插件骨架的第一块）。
+ *
+ * 为什么不再是模块级 `const router = createBrowserRouter(...)`：
+ * 插件的启停是**运行时**状态（settings KV，异步读）。模块级构造意味着路由表在
+ * 第一次 import 时就冻结，插件永远是「全局开机自启」——那与「手动开关」直接矛盾。
+ *
+ * 改成工厂后：AppRouter 组件在注册表 hydrate 完才调一次 createBrowserRouter，
+ * 插件路由由 `routesFor(hostRoutes)` 派生（见 core/plugin/registry.ts）。
+ * **停用的插件路由从不进入数组**（不是重定向、不是条件渲染 null）。
+ */
+export function buildHostRoutes(): RouteObject[] {
+  return [
     {
       path: '/',
       element: <AppShell />,
@@ -60,10 +72,28 @@ export const router = createBrowserRouter(
         // Agent 执行控制台（只读）：嵌套在 /agent 之下，故必须排在 'agent' 之后
         { path: 'agent/executions', element: <AgentExecutionConsolePage /> },
         { path: '*', element: <Navigate to="/" replace /> },
-      ] satisfies RouteObject[],
+      ],
     },
-  ],
-);
+  ];
+}
+
+/**
+ * 应用外壳：注册表 hydrate 后才建 router。
+ *
+ * 为什么用 `key`：`createBrowserRouter` 创建的实例**不可中途改路由表**，
+ * 所以启用状态变化时必须是「换一个 router 实例」。用 key 强制重建是最简做法
+ * （代价是整棵树重挂——离线应用首屏装载本就幂等，且启停是极低频操作）。
+ */
+function AppRouter(): JSX.Element {
+  const reg = usePluginRegistry();
+  const [router, setRouter] = useState(() => createBrowserRouter(buildHostRoutes()));
+
+  useEffect(() => {
+    setRouter(createBrowserRouter(reg.routesFor(buildHostRoutes())));
+  }, [reg]);
+
+  return <RouterProvider router={router} />;
+}
 
 /**
  * 应用装配点：
@@ -95,7 +125,10 @@ logInfo('应用', '页面加载完成');
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <RepoProvider>
-      <RouterProvider router={router} />
+      {/* 插件注册表：读 settings KV 还原各插件的启用/停用（她：设置里手动开关） */}
+      <PluginRegistryProvider>
+        <AppRouter />
+      </PluginRegistryProvider>
     </RepoProvider>
   </React.StrictMode>,
 );

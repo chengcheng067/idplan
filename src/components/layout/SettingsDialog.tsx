@@ -16,6 +16,7 @@ import { titleBarHeight } from '../../lib/topbarMetrics';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { NasServiceSection } from '../settings/NasServiceSection';
 import { CustomLibrarySection } from '../settings/CustomLibrarySection';
+import { PluginsSection } from '../settings/PluginsSection';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import { useMembersStore } from '../../store/useMembersStore';
@@ -272,6 +273,9 @@ export function SettingsDialog({
 
             {/* 行业库区（v0.8.6 · 她反馈 #9：行业允许增加自定义） */}
             <CustomLibrarySection />
+
+            {/* 插件区（v0.8.6 阶段 1 · 她要求「插件要能手动在设置里面去开关」） */}
+            <PluginsSection />
 
             {/* 主题区 */}
             <section>
