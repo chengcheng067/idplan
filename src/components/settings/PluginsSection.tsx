@@ -28,6 +28,17 @@ function contributionText(m: PluginManifest): string {
   return parts.length > 0 ? parts.join(' · ') : '无界面贡献（数据/工具类）';
 }
 
+/**
+ * 能力行（v0.8.6 阶段 3）。**这一行是用户判断「能不能信这个插件」的关键**：
+ * 只读插件写不了你的数据，第三方插件若有一天声明了写能力，会在这里显形。
+ * v1 只存在 data.read 一种（写/网/文件保存都不在 v1，见 types.ts 的论证）。
+ */
+function capabilityText(m: PluginManifest): string {
+  const caps = m.capabilities ?? [];
+  if (caps.length === 0) return '无需任何数据能力';
+  return caps.includes('data.read') ? '只读你的项目数据（不可写入）' : String(caps.join('、'));
+}
+
 function sourceLabel(m: PluginManifest): string {
   return m.source === 'builtin' ? '随包分发' : '成员自装';
 }
@@ -104,6 +115,9 @@ export function PluginsSection(): JSX.Element {
                     </span>
                   </div>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-mist">{manifest.summary}</p>
+                  <p className="mt-0.5 text-[10px] text-mist">
+                    能力：{capabilityText(manifest)}
+                  </p>
                   <p className="mt-0.5 text-[10px] text-mist">
                     贡献：{contributionText(manifest)}
                     {!explicit && (

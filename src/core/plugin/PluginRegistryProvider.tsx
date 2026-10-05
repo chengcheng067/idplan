@@ -32,11 +32,21 @@ import type { PluginManifest, PluginNavItem, PluginRegistryState } from './types
  * 不由用户上传决定，这是 v1 的安全边界。
  */
 import { sampleProjectsManifest } from './builtin/sample-projects.manifest';
+import { weeklyReportManifest } from '../../plugins/weekly-report/manifest';
 import { PLUGIN_MANIFESTS } from './builtin/index';
 
+/**
+ * 本构建附带的全部插件（**编译期固定**——这是 v1 的安全边界：「能装什么」由
+ * 构建决定，不由用户上传决定；安全官红线：v1 无远程加载、无动态 import）。
+ *
+ * `PLUGIN_MANIFESTS`（随包分发，source:'builtin'）在前、`sampleProjectsManifest`
+ * （标本，builtin）随后、第三方样板（source:'member'）最后——顺序即设置里与
+ * 侧栏的展示序：随包的在前、第三方在后，与来源分层的视觉权重一致。
+ */
 const BUILTIN_MANIFESTS: readonly PluginManifest[] = [
   ...PLUGIN_MANIFESTS,
   sampleProjectsManifest,
+  weeklyReportManifest,
 ];
 
 /**

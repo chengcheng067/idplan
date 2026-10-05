@@ -23,6 +23,19 @@
 import type { ComponentType } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
+/**
+ * 能力声明（v1 只开 `data.read`）。
+ *
+ * 为什么 v1 只开只读：写能力需要两件事都到位后才能开——① 归属门下沉到仓储层
+ * （F8，否则插件可绕门直写人类项目）；② capability 模型（代管桥，逐调用强制
+ * 归属过滤）。那之前任何「能写数据的第三方插件」等于在没有边界的沙箱里跑别人
+ * 的代码。安全官红线，产品官已写进 D7/D11。
+ *
+ * 注意：这是**声明**，不是授权。宿主仍可不给（管理员策略 cap），见
+ * `capabilities` 字段注释。
+ */
+export type PluginCapability = 'data.read';
+
 /** 插件来源。分层的唯一目的是**可信度视觉区分**（设计师：来源轴与能力轴正交）。 */
 export type PluginSource = 'builtin' | 'member';
 
@@ -57,6 +70,13 @@ export interface PluginManifest {
   source: PluginSource;
   /** 默认是否启用。新装的插件默认关还是开，**在这里说清**，不靠用户猜 */
   defaultEnabled: boolean;
+  /**
+   * 插件**声明**需要的能力（v1 只有 `data.read`）。
+   *
+   * ⚠️ 声明 ≠ 授权：管理员可用「能力上限策略（cap）」把某能力整体关掉——
+   * 声明是上限请求，cap 是实际上限。缺省 = 不声明任何能力（纯展示/工具类）。
+   */
+  capabilities?: readonly PluginCapability[];
   /** 贡献的路由（相对 AppShell children 的 path） */
   routes?: RouteObject[];
   /** 贡献的侧栏入口 */
