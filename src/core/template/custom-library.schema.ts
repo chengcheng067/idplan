@@ -52,7 +52,15 @@ export const KANBAN_COLUMN_ENUM = z.enum([
   'shoot', 'testing',
 ] as const);
 
-/** 24 个看板列键（prompt 字段表与 UI 展示用；与 KANBAN_COLUMN_ENUM 同源） */
+/**
+ * 看板列键清单（prompt 字段表与 UI 展示用；与 KANBAN_COLUMN_ENUM 同源）。
+ *
+ * ⚠️ 数量**不写死**在注释里（2026-10-06 修：原注释写「24 个」而枚举实际 23 个，
+ * 同期 stage-library.json 的**中文列名**去重后是 30 个 ——「列键」是英文规范键、
+ * 「列名」是各领域的中文展示名，两者本就不是一一对应，如 designing/deepen/build
+ * 覆盖「设计中/深化中/施工中」三个中文名）。**以 KANBAN_COLUMN_ENUM.options
+ * 为唯一事实源**，这里只做同源转发。
+ */
 export const KANBAN_COLUMN_VALUES = KANBAN_COLUMN_ENUM.options;
 
 /** ratioPercent：有限数、开区间 (0,100] */
