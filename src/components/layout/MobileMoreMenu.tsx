@@ -81,8 +81,6 @@ export function MobileMoreMenu(): JSX.Element {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  /** 设置面板触发锚点（反馈 #3）：在点击处附近展开，而非固定右侧 */
-  const [settingsAnchor, setSettingsAnchor] = useState<{ x: number; y: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const onProjectPage = location.pathname === '/' || location.pathname.startsWith('/project');
@@ -241,9 +239,9 @@ export function MobileMoreMenu(): JSX.Element {
             type="button"
             role="menuitem"
             className={ITEM}
-            onClick={(e) => {
+            onClick={() => {
               setMenuOpen(false);
-              setSettingsAnchor({ x: e.clientX, y: e.clientY });
+              // v0.8.6 反馈 #4：左缘抽屉，与点击位置无关（anchor 链路已删）
               setSettingsOpen(true);
             }}
           >
@@ -260,7 +258,7 @@ export function MobileMoreMenu(): JSX.Element {
 
       {fileInput}
       {confirmDialog}
-      <SettingsDialog open={settingsOpen} anchor={settingsAnchor} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

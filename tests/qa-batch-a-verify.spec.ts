@@ -295,19 +295,15 @@ await page.click('[data-industry-select-option="indoor"]');
   }
 
   /**
-   * 真鼠标点侧栏「设置」——反馈 #3 的锚定入口，返回**真实点击坐标**（= 传给
-   * `SettingsDialog` 的 anchor）。
+   * 真鼠标点侧栏「设置」（反馈 #4 的入口）。
    *
-   * ⚠️ 必须用 `page.mouse.click` 而不是 `evaluate(() => btn.click())`：
-   *   合成 click 的 `clientX/clientY` 恒为 0，而侧栏正是把 `e.clientX/Y` 当锚点
-   *   传给 SettingsDialog（`Sidebar.tsx` 的 `setSettingsAnchor({x:e.clientX,y:e.clientY})`）。
-   *   用合成点击 ⇒ 锚点变 (0,0) ⇒ 面板被夹到左上角，测到的是「空锚点降级路径」，
-   *   而不是用户真实遇到的「在我点的地方弹出来」（反馈 #3 的原话）。
+   * v0.8.6 起设置是从侧栏左缘滑出的抽屉，与点击位置无关（anchor 链路已删），
+   * 不再需要取点击坐标；但仍坚持 `page.mouse.click` 真手势——焦点管理契约
+   * （打开入抽屉 / 关闭焦点回触发钮）依赖真实聚焦行为。
    *
-   * 侧栏展开/收起两态各有一个 `[aria-label="设置"]`，取**可见**那个（收起态是 DOM 里
-   * display:none 的 40×40 图标钮，点到它会落在 (0,0)）。
+   * 侧栏展开/收起两态各有一个 `[aria-label="设置"]`，取**可见**那个。
    */
-  async function clickSidebarSettings(page: Page): Promise<{ x: number; y: number }> {
+  async function clickSidebarSettings(page: Page): Promise<void> {
     const point = await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('[data-app-sidebar] button')).find((x) => {
         if (x.getAttribute('aria-label') !== '设置') return false;
@@ -318,18 +314,22 @@ await page.click('[data-industry-select-option="indoor"]');
       const r = b.getBoundingClientRect();
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     });
-    if (!point) throw new Error('侧栏「设置」入口不可见——无法取得锚点');
+    if (!point) throw new Error('侧栁「设置」入口不可见');
     await page.mouse.click(point.x, point.y);
-    await page.waitForTimeout(700);
-    return point;
+    await page.waitForTimeout(500);
   }
 
-  /** 等锚定定位算完：`floatPos` 未算好前浮动卡是 `visibility:hidden`（防首帧闪在 (0,0)） */
-  async function waitFloatVisible(page: Page): Promise<void> {
+  /**
+   * 等设置抽屉就绪：面板出现 + 左滑入场动画（drawer-in-left 200ms）播完。
+   * 动画期间 transform 未归零，量到的是中间帧几何（translateX(-24px) 起），
+   * 必须等 playState === 'finished'——这是「量真几何」的前件。
+   */
+  async function waitSettingsDrawer(page: Page): Promise<void> {
     await page.waitForFunction(
       () => {
-        const w = document.querySelector('[data-anchored-float]');
-        return !!w && getComputedStyle(w).visibility === 'visible';
+        const p = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
+        if (!p) return false;
+        return p.getAnimations().every((a) => a.playState === 'finished');
       },
       undefined,
       { timeout: 8000 },
@@ -337,33 +337,39 @@ await page.click('[data-industry-select-option="indoor"]');
   }
 
   /**
-   * 量设置面板的真几何。
-   * ⚠️ DOM 层次：`[role=dialog]` → 点击捕获层 → **`div[data-anchored-float]`（定位壳）**
-   *   → 设置卡片本体（`glass-strong rounded-2xl`）。
-   *   量圆角/高度必须取**卡片本体**；量到定位壳会恒得 `0px` / `p-0`，
-   *   断言就变成了「测一个跟视觉无关的容器」（旧用例踩过这个坑）。
+   * 量设置抽屉的真几何（反馈 #4 形态：窗口左缘 → 右，盖住侧栏，贴顶栏全高）。
+   * DOM 层次：`[role="dialog"]`（遮罩）→ 点击捕获层 →
+   *   `div[data-settings-drawer]`（抽屉本体）。几何/圆角都量抽屉本体。
    */
-  function probeFloatSettings(page: Page) {
+  function probeSettingsDrawer(page: Page) {
     return page.evaluate(() => {
-      const dlg = document.querySelector('[role="dialog"][aria-label="设置"]');
-      if (!dlg) return null;
-      const wrap = dlg.querySelector('[data-anchored-float]') as HTMLElement | null;
-      const panel = (wrap?.firstElementChild ?? null) as HTMLElement | null;
-      if (!wrap || !panel) return null;
+      const dlg = document.querySelector('[role="dialog"][aria-label="设置"]') as HTMLElement | null;
+      const panel = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
+      if (!dlg || !panel) return null;
+      const dr = dlg.getBoundingClientRect();
       const pr = panel.getBoundingClientRect();
       const cs = getComputedStyle(panel);
+      const header = document.querySelector('header')!.getBoundingClientRect();
+      const sidebar = document.querySelector('[data-app-sidebar]')!.getBoundingClientRect();
+      // 「盖住侧栏」的诚实判据：点在侧栏中心，命中的必须是抽屉而不是侧栏
+      const atSidebar = document.elementFromPoint(
+        sidebar.x + sidebar.width / 2,
+        sidebar.y + sidebar.height / 2,
+      );
       return {
         vw: window.innerWidth,
         vh: window.innerHeight,
-        visibility: getComputedStyle(wrap).visibility,
-        left: pr.left,
-        top: pr.top,
-        right: pr.right,
-        bottom: pr.bottom,
-        width: pr.width,
-        height: pr.height,
+        overlayTop: dr.top,
+        drawerLeft: pr.left,
+        drawerTop: pr.top,
+        drawerRight: pr.right,
+        drawerBottom: pr.bottom,
+        drawerWidth: pr.width,
+        drawerHeight: pr.height,
+        topbarH: Math.round(header.height),
         blRadius: cs.borderBottomLeftRadius,
         brRadius: cs.borderBottomRightRadius,
+        coversSidebar: !!atSidebar && panel.contains(atSidebar),
         theme: document.documentElement.getAttribute('data-theme'),
       };
     });
@@ -882,157 +888,166 @@ await page.click('[data-industry-select-option="indoor"]');
     }
   }, HEAVY);
 
-  /* ================= A2 · 设置面板：锚定在点击处 + 完整落视口 + 让开原生三键 ================= */
+  /* ================= A2 · 设置抽屉：从窗口左缘滑出 + 盖住侧栏 + 贴顶栏全高 ================= */
 
   /**
-   * ★ 契约变更（反馈 #2 / #3）——本组用例的口径与旧版**完全不同**，不是简单改阈值：
+   * ★ 契约变更（v0.8.6 · 反馈 #4）——本组用例的口径与前两代**完全不同**：
    *
-   *   旧版：设置是「右侧全高抽屉」，断言「面板顶 ≥ 三键底、上下内边距对称、
-   *         底边贴容器下内边距」。那些断言全部以 `Modal` 的 right-float 容器 padding 为前提。
-   *   新版：设置改为 `placement="float"` —— 面板**在触发点旁边**弹出一张浮动卡，
-   *         纵向位置连 `insetTop` 一起由 `src/lib/anchoredPosition.ts` 算好，
-   *         容器沦为「只负责点击捕获」的 `p-0` 层（不再有 padding 可言）。
+   *   旧版（反馈 #2/#3 时代）：设置是 `placement="float"` 锚定浮动卡，面板在
+   *   **鼠标点击处**展开（anchor={clientX,clientY}）。她的原话：「应该是从这个
+   *   边栏从左往右滑出，而不是鼠标在哪里点击弹出设置窗口，它就从哪里生成」。
    *
-   *   故旧断言里「容器 padding / 容器下内边距」这两条基准**已经不存在**，
-   *   继续写只会：
-   *     · 量到定位壳（`div[data-anchored-float]`）→ 圆角恒 `0px`、padding 恒 `0px`；
-   *     · 把「恒真/恒假」当成验收 —— 正是本文件开头警告过的假绿来源。
+   *   新版：`placement="left"` 全高抽屉——**窗口左缘**起、盖住侧栏、贴顶栏
+   *   底缘（遮罩让位 top-14 xl:top-16，见 Q-A1-6）。anchor 链路整个删除。
    *
-   *   新口径守住三件用户能看见的事（不碰任何已消失的容器基准）：
-   *     ① 面板完整落在视口内，且顶边让开 Windows 原生三键（否则三键压住面板头部）；
-   *     ② 面板**锚定在点击处**：横向从点击点展开（不再固定贴右边缘）；
-   *     ③ 底圆角非 0 —— 用户原始投诉「底部圆角被推出视口裁掉」的回归位。
+   *   本组守住四件用户能看见的事：
+   *     ① 抽屉从窗口左缘滑出（left ≈ 0），宽 640（<xl 全屏）；
+   *     ② 盖住侧栏（elementFromPoint 诚实判据），贴顶栏底缘全高（无悬空带）；
+   *     ③ 设置项在抽屉内可见、可点（主题切换真路径）；
+   *     ④ 焦点管理：打开入抽屉、Esc 关、关闭焦点回触发钮（Q-A2-3）。
+   *   旧 float 口径（锚定在点击处 / 底圆角不被裁 / 让开三键）随形态废止：
+   *   全高抽屉贴边，底圆角被裁的结构性根因不复存在；让开三键由遮罩让位承担
+   *   （Q-A1-6），不在本组重复。
    */
 
-  it('Q-A2-1 · 管理员打开设置：从点击处展开、整体在视口内、让开原生三键、底圆角可见（亮/暗一致）', async () => {
+  it('Q-A2-1 · 管理员打开设置：抽屉从窗口左缘滑出、盖住侧栏、贴顶栏全高（亮/暗一致）', async () => {
     for (const theme of ['light', 'dark'] as const) {
       const { ctx, page } = await open(1600, 900);
       try {
         await becomeAdmin(page);
-        const anchor = await clickSidebarSettings(page);
+        await clickSidebarSettings(page);
+        await waitSettingsDrawer(page);
+
+        // ③ 设置项可见（亮色档先验文本，暗色档的真实切换路径在下面走）
+        const headText = await page.locator('[data-settings-drawer]').innerText();
+        expect(headText, '抽屉内应有「前端日志」区').toContain('前端日志');
+        expect(headText).toContain('插件');
+
         if (theme === 'dark') {
-          // 真实切换路径：设置面板内点「深色」→ useTheme.setMode → apply()
+          // 真实切换路径：抽屉内点「深色」→ useTheme.setMode → apply()
           await page.evaluate(() => {
-            const b = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] button')).find(
+            const b = Array.from(document.querySelectorAll<HTMLElement>('[data-settings-drawer] button')).find(
               (x) => (x.textContent ?? '').trim() === '深色',
             );
             b?.click();
           });
           await page.waitForTimeout(500);
         }
-        await waitFloatVisible(page);
 
-        const m = await probeFloatSettings(page);
+        const m = await probeSettingsDrawer(page);
         expect(m).not.toBeNull();
         expect(m!.theme).toBe(theme);
-        expect(m!.visibility).toBe('visible');
+        // eslint-disable-next-line no-console
+        console.log('[Q-A2-1] probe=', JSON.stringify(m));
 
-        // 基准值取**单一出处**：`titleBarHeightFor(vw)`（口径一改这里自动跟着改）
-        const expectedInset = titleBarHeightFor(m!.vw);
-
-        // ① 完整落在视口内，且顶边让开原生三键（三键浮在网页之上，不让位就压住面板头部）
-        expect(m!.top).toBeGreaterThanOrEqual(expectedInset - 0.5);
-        expect(m!.left).toBeGreaterThanOrEqual(VIEWPORT_MARGIN - 0.5);
-        // ② 底/右不越界：底圆角不得被裁（用户原始投诉），右侧留白 ≥ 视口留白口径
-        expect(m!.bottom).toBeLessThanOrEqual(m!.vh - VIEWPORT_MARGIN + 0.5);
-        expect(m!.right).toBeLessThanOrEqual(m!.vw - VIEWPORT_MARGIN + 0.5);
-
-        // ③ 锚定在点击处：横向左缘对齐点击点（1180+ px 的右侧空白 ⇒ 不是「固定右侧抽屉」）
-        expect(Math.abs(m!.left - anchor.x)).toBeLessThanOrEqual(2);
-        expect(m!.vw - m!.right).toBeGreaterThan(VIEWPORT_MARGIN + 2);
-
-        // ④ 纵向落位必须是锚定算法的三种结果之一（否则说明面板"漂"在无关位置）
-        //    注：夹取下界是 `margin + insetTop`（resolveAnchoredPosition 的 minY），
-        //    不是 insetTop 本身 —— 写 insetTop 会差 8px 而误红。
-        const anchorFloor = expectedInset + VIEWPORT_MARGIN;
-        const belowAnchor = Math.abs(m!.top - anchor.y) <= 2; // 下方展开
-        const flippedAbove = Math.abs(m!.bottom - (anchor.y - ANCHOR_GAP)) <= 2; // 空间不足翻到上方
-        const clampedToFloor = Math.abs(m!.top - anchorFloor) <= 2; // 面板高于可用空间 → 夹到避让线下沿
-        expect(
-          belowAnchor || flippedAbove || clampedToFloor,
-          `未按锚定算法落位：anchor.y=${anchor.y} top=${m!.top} bottom=${m!.bottom} floor=${anchorFloor}`,
-        ).toBe(true);
-
-        // ⑤ 底圆角非 0（量的是卡片本体，不是 `p-0` 的定位壳）
-        expect(m!.blRadius).toBe('16px');
+        // ① 左缘滑出：贴窗口左缘（±1px 抗亚像素）
+        expect(Math.abs(m!.drawerLeft)).toBeLessThanOrEqual(1);
+        // ② 宽 640（≥xl 分栏预留）；<xl 全屏由 Q-A2-2 覆盖
+        expect(Math.round(m!.drawerWidth)).toBe(640);
+        // 盖住侧栏（诚实判据：侧栏中心的命中点是抽屉，不是侧栏）
+        expect(m!.coversSidebar, '抽屉没有盖住侧栏（反馈 #4 的形态要件）').toBe(true);
+        // ② 贴顶栏底缘全高：抽屉顶 = 顶栏高、底 = 视口底（无悬空带、无裁切）
+        expect(Math.abs(m!.drawerTop - m!.topbarH)).toBeLessThanOrEqual(1);
+        expect(Math.abs(m!.vh - m!.drawerBottom)).toBeLessThanOrEqual(1);
+        expect(Math.round(m!.drawerHeight)).toBe(m!.vh - m!.topbarH);
+        // 遮罩与抽屉同缘让出顶栏（与 Q-A1-6 同口径）
+        expect(Math.round(m!.overlayTop)).toBe(m!.topbarH);
+        // 右缘圆角 = 抽屉的「出来」方向；左缘贴边不修圆角
         expect(m!.brRadius).toBe('16px');
+        expect(m!.blRadius).toBe('0px');
+        // 完整落在视口内（右不越界）
+        expect(m!.drawerRight).toBeLessThanOrEqual(m!.vw + 0.5);
       } finally {
         await ctx.close();
       }
     }
   }, HEAVY);
 
-  it('Q-A2-2 · 换一个触发点（<md 的「⋮ 更多」菜单）：面板跟着新触发点走 + 进场动画真实存在', async () => {
+  it('Q-A2-2 · <md 走「⋮ 更多」入口：同一抽屉全屏化 + 左滑进场动画真实存在', async () => {
     /*
-      ★ 为什么把旧用例（「未知身份 → 内容较短 → 底部圆角仍可见」）换成这一条：
-        旧场景在锚定形态下**已经不可构造**——首次身份引导弹窗是 center 档（z-70），
-        设置浮动卡是非 center 档（z-60），真鼠标点击会被引导遮罩吃掉、设置根本打不开；
-        即使用合成点击强行打开，面板也在遮罩之下，量到的几何没有用户可见性。
-        与其留一条靠合成点击绕开遮罩的"假场景"，不如换成**反馈 #3 真正要守的两件事**：
-          ① 面板锚定在**当前触发点**（换一个入口 → 面板必须换位置，而不是固定角落）；
-          ② 有进场动画（用户原话：「弹窗应在鼠标附近出现且有动画」）。
-        「底部圆角不被裁」已由 Q-A2-1 覆盖（那是长内容的极端档，更严）。
+      <md 没有持久侧栏，设置入口在顶栏「⋮ 更多」菜单（MobileMoreMenu 的第二个
+      调用点）。抽屉在该档全屏（w-full）——与 <xl 无侧栏的视野一致。
+      本用例同时守两件事：
+        ① 全屏几何（left≈0、宽=视口宽、顶=两行顶帽合计 100）；
+        ② 进场动画真实存在（drawer-in-left，200ms，reduced-motion 已关停）。
+      「第二调用点也能打开同一抽屉」本身就是适配面（settingsAnchor 删除后
+      MobileMoreMenu 的锚点 state 一并移除）。
     */
-    const { ctx, page } = await open(1600, 900);
+    const { ctx, page } = await open(767, 900);
     try {
       await becomeAdmin(page);
-      // <md(768) 才会渲染「⋮ 更多」菜单（MobileMoreMenu 的容器是 md:hidden）
       await page.setViewportSize({ width: 767, height: 900 });
       await page.waitForTimeout(500);
 
       const more = page.locator('button[aria-label="更多操作"]');
-      const mbox = await more.first().boundingBox();
-      expect(mbox).not.toBeNull();
-      await page.mouse.click(mbox!.x + mbox!.width / 2, mbox!.y + mbox!.height / 2);
+      await more.first().click();
       await page.waitForTimeout(400);
+      await page
+        .locator('[role="menu"] [role="menuitem"]', { hasText: '设置' })
+        .first()
+        .click();
+      await waitSettingsDrawer(page);
 
-      const item = page.locator('[role="menu"] [role="menuitem"]', { hasText: '设置' });
-      const ibox = await item.first().boundingBox();
-      expect(ibox).not.toBeNull();
-      const anchor = { x: ibox!.x + ibox!.width / 2, y: ibox!.y + ibox!.height / 2 };
-      await page.mouse.click(anchor.x, anchor.y);
-      await page.waitForTimeout(700);
-      await waitFloatVisible(page);
-
-      const m = await probeFloatSettings(page);
+      const m = await probeSettingsDrawer(page);
       expect(m).not.toBeNull();
-      const expectedInset = titleBarHeightFor(m!.vw);
       expect(m!.vw).toBe(767);
       // eslint-disable-next-line no-console
-      console.log('[Q-A2-2] anchor=', JSON.stringify(anchor), 'probe=', JSON.stringify(m));
+      console.log('[Q-A2-2] probe=', JSON.stringify(m));
 
-      // ① 仍完整落在视口内、仍让开原生三键（<xl 档三键高 56，口径随视口自动变）
-      expect(m!.top).toBeGreaterThanOrEqual(expectedInset - 0.5);
-      expect(m!.vh - m!.bottom).toBeGreaterThanOrEqual(VIEWPORT_MARGIN - 1);
-      // ② 底圆角可见
-      expect(m!.blRadius).toBe('16px');
-      expect(m!.brRadius).toBe('16px');
+      // ① 全屏化：left≈0、宽=视口宽、顶=两行顶帽（100）
+      expect(Math.abs(m!.drawerLeft)).toBeLessThanOrEqual(1);
+      expect(Math.round(m!.drawerWidth)).toBe(767);
+      expect(Math.round(m!.drawerTop)).toBe(100);
+      expect(Math.round(m!.drawerHeight)).toBe(900 - 100);
 
-      /*
-        ③ 触发点必须落在面板的横向区间内 —— 锚定结果不得把面板甩到与点击处无关的位置。
-           （必要非充分：本视口下触发点右侧只有 405px < 面板 400 + 两侧留白，
-             锚定算法会向左回退到贴左留白，此时左缘不再等于触发点。
-             「左缘精确对齐点击点」的强判别式证据由 Q-A2-1 承担 —— 那里面板右侧有 1000+px 余量。）
-      */
-      expect(anchor.x).toBeGreaterThanOrEqual(m!.left - 2);
-      expect(anchor.x).toBeLessThanOrEqual(m!.right + 2);
-
-      // ④ 进场动画真实存在（不是只挂了个类名——按 computed style 读回动画名与时长）
+      // ② 进场动画：面板带 drawer-in-left 且计算动画名匹配（不是凭感觉）
       const anim = await page.evaluate(() => {
-        const w = document.querySelector('[data-anchored-float]') as HTMLElement | null;
-        if (!w) return null;
-        const cs = getComputedStyle(w);
-        return { name: cs.animationName, duration: cs.animationDuration, fill: cs.animationFillMode };
+        const p = document.querySelector('[data-settings-drawer]')!;
+        const cs = getComputedStyle(p);
+        return { name: cs.animationName, dur: cs.animationDuration };
       });
-      expect(anim).not.toBeNull();
-      expect(anim!.name).toBe('float-pop-in');
-      expect(anim!.duration).toBe('0.16s');
-      expect(anim!.fill).toBe('both');
+      expect(anim.name).toBe('drawer-in-left');
+      expect(anim.dur).toBe('0.2s');
     } finally {
       await ctx.close();
     }
   }, HEAVY);
 
+  it('Q-A2-3 · 焦点管理：打开焦点入抽屉、Esc 关闭、焦点回触发钮（反馈 #4 硬约束）', async () => {
+    const { ctx, page } = await open(1600, 900);
+    try {
+      await becomeAdmin(page);
+      await clickSidebarSettings(page);
+      await waitSettingsDrawer(page);
+
+      // 打开后焦点进 dialog 子树（Modal 打开即聚焦点击捕获层 panelRef——
+      // 它是抽屉本体的父级；圈禁的起点在这个 wrapper 上，别把断言写成
+      // 「焦点必须在抽屉本体内」，那是量错了层次）
+      const inDrawer = await page.evaluate(() => {
+        const dlg = document.querySelector('[role="dialog"][aria-label="设置"]');
+        return !!dlg && dlg.contains(document.activeElement);
+      });
+      expect(inDrawer, '打开设置后焦点不在 dialog 子树内').toBe(true);
+
+      // Esc 关（Modal 既有契约）
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      expect(await page.locator('[role="dialog"][aria-label="设置"]').count()).toBe(0);
+
+      // 关闭后焦点回触发钮（侧栏那个「设置」——Modal lastFocusRef 还原）
+      const backToTrigger = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el) return false;
+        return (
+          el.getAttribute('aria-label') === '设置' &&
+          !!el.closest('[data-app-sidebar]')
+        );
+      });
+      expect(backToTrigger, '关闭设置后焦点没有回到侧栏触发钮').toBe(true);
+    } finally {
+      await ctx.close();
+    }
+  }, HEAVY);
   /* ================= A3 · 顶栏设置按钮已移除，侧栏入口仍在 ================= */
 
   it('Q-A3-1 · 顶栏无「设置」入口；侧栏「设置」可点开设置抽屉', async () => {

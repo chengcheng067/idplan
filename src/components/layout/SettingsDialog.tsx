@@ -12,7 +12,6 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useRepos } from '../../hooks/useRepos';
 import { BUILD_VERSION, FRONTEND_STACK, REPO_URL } from '../../constants/version';
 import { isDesktop } from '../../lib/desktopBridge';
-import { titleBarHeight } from '../../lib/topbarMetrics';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { NasServiceSection } from '../settings/NasServiceSection';
 import { CustomLibrarySection } from '../settings/CustomLibrarySection';
@@ -28,7 +27,7 @@ import {
 import { useEffect } from 'react';
 
 /**
- * 「设置」面板（顶栏右侧 · 所有角色可见）。
+ * 「设置」抽屉（侧栏底部入口 · 所有角色可见）。
  *
  * 用户反馈：导出日志按钮藏在顶栏一堆小图标里不明显，且第一次点总是提示「暂无日志」——
  * 因为日志系统是**被动记录**的，正常浏览不会有错误、日常操作也不会埋点，所以 0 条是常态。
@@ -38,35 +37,25 @@ import { useEffect } from 'react';
  *   - 后续设置项（主题、数据源等）可继续往这里收。
  *
  * 边界：所有角色可用（导出日志不限管理员，调试友好）。破坏性动作（清空日志）走二次确认。
+ *
+ * ── v0.8.6 · 反馈 #4：形态重构（跟随点击点 → 侧栏左缘抽屉）──
+ * 旧形态（v0.8.5 C 系列）：`Modal placement="float"`，面板在**鼠标点击处**展开
+ * （anchor={x: clientX, y: clientY}，键盘触发退化右下角）。她的原话：「应该是从
+ * 这个边栏从左往右滑出，而不是鼠标在哪里点击弹出设置窗口，它就从哪里生成」。
+ *
+ * 新形态：`Modal placement="left"`，抽屉从**窗口左缘**滑出、盖住侧栏、贴顶栏
+ * 底缘全高展开（遮罩让位见 Modal.tsx 的 top-14 xl:top-16）。宽 640（≥xl），
+ * <xl 近全屏（calc(100vw - 2rem)）——为后续分区重构（反馈 #7）留密度余地。
+ * `anchor` 形参整个删除：新形态下锚点无意义（Sidebar / MobileMoreMenu 两处
+ * 调用点的 settingsAnchor state 同步移除）。
  */
-/**
- * Modal `right-float` 锚点容器在 **≥sm** 档的上/下内边距（Modal.tsx 的 `sm:p-6` = 24px）。
- * 桌面端窗口最小宽 960（electron/main.cjs 的 `minWidth`）⇒ 恒 ≥sm(640) ⇒ 该档即桌面端实际生效档。
- * 这个数字只用于「面板还要再让多少」，即 titleBarHeight() − 24；Modal 一改就要跟着改。
- */
-const RIGHT_FLOAT_PADDING_SM = 24;
-
-/**
- * 需要避让的原生标题栏高度（px）。0 = 无需避让（浏览器 / NAS 端 / 非 Windows 平台）。
- * 三键由系统绘制并**浮在网页内容之上**，不避让就会盖住浮层头部。
- */
-function nativeTitleBarInset(): number {
-  if (!isDesktop() || window.idplan?.platform !== 'win32') return 0;
-  return titleBarHeight();
-}
 
 export function SettingsDialog({
   open,
   onClose,
-  anchor = null,
 }: {
   open: boolean;
   onClose(): void;
-  /**
-   * 触发点视口坐标（反馈 #3）：设置面板在**点击位置附近**展开，
-   * 而不是固定在屏幕右侧。由打开它的入口（侧栏齿轮 / 移动端更多）传入。
-   */
-  anchor?: { x: number; y: number } | null;
 }): JSX.Element | null {
   const io = useMemo(() => createLogExportIo(), []);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
@@ -113,25 +102,6 @@ export function SettingsDialog({
   // 打包日期（构建时静态快照，便于排查版本）
   const buildDate = new Date().toISOString().slice(0, 10);
 
-  /**
-   * 原生标题栏占位高度（px，0 = 无需避让）。
-   * 视口跨 xl 断点时 `titleBarHeight()` 会 56 ↔ 64 变（与 TopBar 的 h-14/xl:h-16 同口径），
-   * 故监听 resize 重算一次——否则用户把窗口拉过 1280 后面板会被三键压掉 8px。
-   */
-  const [titleBarInset, setTitleBarInset] = useState(0);
-  useEffect(() => {
-    const sync = (): void => setTitleBarInset(nativeTitleBarInset());
-    sync();
-    window.addEventListener('resize', sync);
-    return () => window.removeEventListener('resize', sync);
-  }, []);
-
-  /**
-   * ⚠️ 锚定形态下**不再计算下移量**：面板纵向位置由锚定算法连同 `insetTop` 一起算
-   * （见 Modal 的 float 分支），再叠一次 marginTop 会把面板推离点击处。
-   * 旧的 `avoidTitleBarTop` 因此删除；`RIGHT_FLOAT_PADDING_SM` 仍参与 maxHeight 计算。
-   */
-
   // 主题三选控件
   const themeOptions = [
     { key: 'light' as const, label: '浅色', icon: <Sun size={15} aria-hidden /> },
@@ -154,34 +124,20 @@ export function SettingsDialog({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} placement="float" anchor={anchor} ariaLabel="设置">
+      <Modal open={open} onClose={onClose} placement="left" ariaLabel="设置">
         {/*
-          max-h 口径必须与 Modal 容器的 padding 口径**一致**，否则面板总高超出容器，
-          底部圆角会被推出视口裁掉（v0.7 批次 A 修的「设置弹窗底部圆角丢失」）。
-          容器现为：<sm `pt-[max(env(safe-area-inset-top),3rem)]`，≥sm `sm:p-6`（上下各 24）。
-            · <sm  ：容器上下各占 3rem（48px）→ max-h 取 100dvh-1.5rem 的偏紧档
-                     （手机上本就近全屏，留一点呼吸即可）
-            · ≥sm  ：容器上下各 24px，共 3rem → `sm:max-h-[calc(100dvh-3rem)]` 恰好
-                     顶到容器可用高度，圆角完整可见
-          原实现把 `sm:mr-2 sm:mt-2` 叠在容器 sm:p-6 之上，等于又多让 8px 且只让右侧/顶部，
-          破坏了「对称」这一修复目标，故一并去掉——间距统一由容器 sm:p-6 控制。
+          v0.8.6 · 反馈 #4：从窗口左缘滑出的全高抽屉，盖住侧栏。
+          · 宽 640（≥xl 分栏预留）；<xl 全屏（该档无持久侧栏，抽屉即主视野）
+          · 贴顶栏底缘全高（Modal left 档几何：p-0 + items-stretch），不再有
+            max-h/圆角被裁的旧问题——高度就是遮罩可用高度
+          · 圆角只留右缘（左缘贴窗口边，滑出来源）；glass-strong 自带描边与底色
+          · 主体内容 flex-1 min-h-0 overflow-y-auto：头/底固定，中间滚动
+          · drawer-in-left：从左缘 24px 滑入，200ms ease-out（克制；reduced-motion 已关停）
+          · data-settings-drawer：真几何验收钩子（新增，不动任何既有 data-/aria 钩子）
         */}
         <div
-          className="glass-strong flex flex-col overflow-y-auto rounded-2xl border-white/40 max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-2rem)] max-w-[400px] sm:max-h-[calc(100dvh-3rem)]"
-          /*
-            ── 原生三键避让（仅 Windows 桌面端，其余环境 style 为 undefined）──
-            ⚠️ 锚定形态下**不再给 marginTop**：面板的纵向位置已由锚定算法连同
-              `insetTop` 一起算好（见 Modal 的 float 分支），再叠一次会把面板推离点击处。
-            maxHeight 仍要扣掉这段，否则「避让 + 原 max-h」会超出视口，
-              面板底部连圆角一起被裁出屏幕（批次 A 修过的同一个坑，不能重犯）。
-              这里用内联值而不加 Tailwind 类，是因为类名不能动态拼接（本仓库 BUG-05：
-              静态扫描的类名一旦拼接就整条不生成 CSS），而这里只有两个取值。
-          */
-          style={
-            titleBarInset > 0
-              ? { maxHeight: `calc(100dvh - ${titleBarInset + RIGHT_FLOAT_PADDING_SM}px)` }
-              : undefined
-          }
+          data-settings-drawer=""
+          className="drawer-in-left glass-strong flex h-full w-[640px] max-w-[100vw] flex-col rounded-r-2xl max-xl:w-full"
         >
           {/* 头部 */}
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -206,8 +162,8 @@ export function SettingsDialog({
             </button>
           </div>
 
-          {/* 内容 */}
-          <div className="flex-1 space-y-5 px-5 py-5">
+          {/* 内容（抽屉内滚动；分区重构=反馈 #7，另行拍板，本轮只换形态） */}
+          <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
             {/* 日志区 */}
             <section>
               <div className="mb-2 flex items-center justify-between">
@@ -413,8 +369,8 @@ export function SettingsDialog({
             </section>
           </div>
 
-          {/* 底部操作 */}
-          <div className="space-y-2.5 border-t border-line px-5 py-4">
+          {/* 底部操作（固定不滚） */}
+          <div className="shrink-0 space-y-2.5 border-t border-line px-5 py-4">
             <button
               type="button"
               onClick={onExport}

@@ -228,31 +228,20 @@ export function Modal({
     >
       {/* 点击关闭判定放在锚点面板（e.currentTarget）上而非遮罩：因为面板是 flex 容器且覆盖内容区，
           点面板自身的空白区域（子面板之外）即关闭，点子面板内部不关闭。这样居中/右侧抽屉一致生效，
-          且子面板用受限宽度时不吞掉外围点击。padding 也放这里，让 p-6 缓冲区的点击命中关闭。
-          注意必须加 h-full：父遮罩非 flex 容器，锚点面板高度默认=内容高，加 h-full 才能撑满视口，
-          否则 center 模式的垂直居中失效、right 抽屉的 h-full 子面板也撑不满视口。 */}
+          且子面板用受限宽度时不吞掉外围点击。注意必须加 h-full：父遮罩非 flex 容器，锚点面板高度默认=内容高，加 h-full 才能撑满视口，
+          否则 center 模式的垂直居中失效、right 抽屉的 h-full 子面板也撑不满视口。
+
+          ⚠️ v0.8.6 壳层常驻后的 padding 口径（重要，别改回）：
+          抽屉族（left / right）现在是 **p-0 + items-stretch**——遮罩从顶栏下缘起始
+          （overlay 的 top-14 xl:top-16），抽屉贴顶栏底缘全高展开。旧口径的
+          `pt-[max(env(safe-area-inset-top),3rem)] sm:pt-12` 是系统标题栏时代的避让，
+          在自绘标题栏 + 遮罩让位的双重结构下只会制造悬空带（顶栏与抽屉之间一条
+          遮罩沟），v0.8.6 已废。子面板的 max-h / 圆角口径随之以「全高」为准，
+          不再扣容器 padding。center 档保持 p-4 sm:p-6 不变（它不贴边）。
+          ⚠️ 仅改此处 padding / className，切勿触碰下方焦点 effect 的 [open] 依赖（IME 吞字根治）。 */}
       <div
         ref={panelRef}
         tabIndex={-1}
-        /*
-          移动端形态：right 抽屉在 <sm(640px) 时改为「从底部滑出、接近全屏」，符合单手操作习惯；
-          平板以上恢复右侧滑出。center 弹窗保持居中 + 收缩边距（p-4 → sm:p-6）。
-
-          ⚠️ 关于「距底不对称 / 底部圆角被推出屏幕」（v0.7 批次 A 修复）：
-          这里原先是 className 给 `sm:p-6`、另用**内联 style** 给
-          `paddingTop: max(env(safe-area-inset-top), 3rem)`。内联样式优先级高于类，
-          于是 ≥sm 时实际是「上 48 / 其他 24」——上下不对称；
-          而子面板（如 SettingsDialog）的 `max-h` 是按**容器上下对称 48** 的口径写的，
-          容器顶部多吃 24px 就把面板整体下推、底部（含圆角）溢出视口被裁掉。
-          修法：去掉内联 style，改由**响应式类**表达，让「手机安全区」只作用于 <sm：
-            · center      → p-4 sm:p-6（对称，原样不变）
-            · right-float → <sm 顶部安全区，≥sm 对称 sm:p-6（画板无此稿，按对称原则修）
-            · right 抽屉  → <sm 顶部安全区，≥sm `sm:pt-12`（=48px，与改造前桌面端
-                            视觉完全一致，避免引入非预期变更）
-          手机档仍需避让状态栏：用 Tailwind 任意值类承载 env()，
-          任意值内含逗号/括号是合法写法（JIT 静态提取到的是字面量类名）。
-          ⚠️ 仅改此处 padding / className，切勿触碰下方焦点 effect 的 [open] 依赖（IME 吞字根治）。
-        */
         className={`outline-none flex h-full w-full ${
           placement === 'center'
             ? 'items-center justify-center p-4 sm:p-6'
@@ -260,17 +249,24 @@ export function Modal({
               ? // 打印预览：全屏、无点击缓冲区（面板不透明，遮罩仅入场动画期可见）
                 'p-0'
               : placement === 'left'
-                ? // v0.8.5 C1：左侧抽屉（right 的镜像）——触发侧感知：汉堡在左上，抽屉同侧滑出
-                  'items-start justify-start pt-[max(env(safe-area-inset-top),3rem)] sm:justify-start sm:pt-12'
+                ? // v0.8.5 C1：左侧抽屉（right 的镜像）——触发侧感知：汉堡在左上，抽屉同侧滑出。
+                  // v0.8.6 壳层常驻后几何修正：原先 pt-[max(env(safe-area-inset-top),3rem)]
+                  // sm:pt-12 是系统标题栏时代的避让；现在遮罩已从顶栏下缘起始（top-14
+                  // xl:top-16，见本组件 overlay），抽屉贴顶栏底缘全高展开（p-0 +
+                  // items-stretch）——再留 48px 就是遮罩上的一条悬空带。
+                  // 消费者：侧栏导航抽屉（264px）+ 设置抽屉（640px，反馈 #4）。
+                  'items-stretch justify-start p-0'
                 : placement === 'dropdown'
                   ? // v0.8.5 A 规范 §A.4：锚定下拉。外层只当点击捕获层，面板 fixed 自行定位
                     'p-0'
-              : placement === 'float'
-              ? // 锚定浮动卡：面板由内层 fixed 容器自行定位，外层只当点击捕获层
-                'items-start justify-start p-0'
-              : placement === 'right-float'
-                ? 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:items-start sm:justify-end sm:p-6'
-                : 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:justify-end sm:pt-12'
+                  : placement === 'float'
+                  ? // 锚定浮动卡：面板由内层 fixed 容器自行定位，外层只当点击捕获层
+                    'items-start justify-start p-0'
+                  : placement === 'right-float'
+                    ? 'items-end justify-center pt-[max(env(safe-area-inset-top),3rem)] sm:items-start sm:justify-end sm:p-6'
+                    : // right 抽屉：同 'left' 的几何修正（p-0 + items-stretch），镜像到右缘。
+                      // v0.8.5 C1 时代的 pt-12 避让同样随壳层常驻作废。
+                      'items-stretch justify-end p-0'
         }`}
         // 拦截合成 click，阻止其沿 React 组件树冒泡到背后触发器的 onClick（如项目卡片 → 跳转）。
         // 关键：Modal 用 createPortal 只改 DOM 挂载点，React 树仍是调用方的子树，

@@ -158,12 +158,6 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   /**
-   * 设置面板的**触发锚点**（反馈 #3）：记录点击位置，让面板在点击处附近展开，
-   * 而不是固定从右侧滑出。点击事件里取 `clientX/clientY`（键盘触发时为 null，
-   * Modal 会退化为右下角，不会跑到 (0,0)）。
-   */
-  const [settingsAnchor, setSettingsAnchor] = useState<{ x: number; y: number } | null>(null);
-  /**
    * 项目列表是否已「展开全部」（v0.7 增量 · 用户反馈「还有 N 个项目…」点不到）。
    * 默认 false：仍按 SIDEBAR_PROJECT_LIMIT 截断（画板 02/04 的截断是**刻意设计**，
    * 不是 bug）；点一下截断提示即展开全量。状态在组件内，换页不重置——
@@ -444,8 +438,9 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         <div className="shrink-0 space-y-1 border-t border-line px-3 py-3">
           <button
             type="button"
-            onClick={(e) => {
-              setSettingsAnchor({ x: e.clientX, y: e.clientY });
+            onClick={() => {
+              // v0.8.6 反馈 #4：设置改为从侧栏左缘滑出的抽屉，与点击位置无关——
+              // anchor 链路（settingsAnchor / Modal float）已整个移除。
               setSettingsOpen(true);
             }}
             aria-label="设置"
@@ -673,8 +668,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         <div className="flex shrink-0 flex-col items-center gap-1 py-2">
           <button
             type="button"
-            onClick={(e) => {
-              setSettingsAnchor({ x: e.clientX, y: e.clientY });
+            onClick={() => {
+              // 同展开态：抽屉形态与点击位置无关（反馈 #4，anchor 链路已删）
               setSettingsOpen(true);
             }}
             aria-label="设置"
@@ -777,8 +772,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         </div>
       </Modal>
 
-      {/* 设置抽屉（侧栏底部入口） */}
-      <SettingsDialog open={settingsOpen} anchor={settingsAnchor} onClose={() => setSettingsOpen(false)} />
+      {/* 设置抽屉（侧栏底部入口；v0.8.6 反馈 #4：左缘滑出，盖住侧栏） */}
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* 备份 IO 的隐藏 file input + 确认对话框（与 useBackupIo 同一份逻辑） */}
       {fileInput}

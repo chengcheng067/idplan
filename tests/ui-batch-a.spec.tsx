@@ -213,7 +213,7 @@ describe('A2 · Modal 不得再用内联 paddingTop 覆盖 sm:p-6（距底不对
   });
 
   /** 取 Modal 的锚点面板：role=dialog 的第一个子元素，其下再取我们的内容面板 */
-  function panelOf(placement: 'center' | 'right' | 'right-float'): HTMLElement {
+  function panelOf(placement: 'center' | 'right' | 'left' | 'right-float'): HTMLElement {
     act(() => {
       root.render(
         <Modal open onClose={() => undefined} placement={placement} ariaLabel="测试">
@@ -233,11 +233,28 @@ describe('A2 · Modal 不得再用内联 paddingTop 覆盖 sm:p-6（距底不对
     expect(panel.className).toContain('sm:p-6');
   });
 
-  it('right 抽屉：桌面端口径保持 48px（sm:pt-12），不引入非预期视觉变更', () => {
+  /*
+   * v0.8.6 壳层常驻后的契约变更（不是放宽，是换钉的对象）：
+   * 遮罩从顶栏下缘起始（top-14 xl:top-16）后，抽屉贴顶栏底缘全高展开——
+   * 系统标题栏时代的 `pt-[...] sm:pt-12` 避让已废（留着就是顶栏与抽屉之间
+   * 一条遮罩悬空带）。新口径：**零 padding + items-stretch**，且旧值不得回潮。
+   */
+  it('right 抽屉：壳层常驻新口径 p-0 + items-stretch，旧 sm:pt-12 不得回潮', () => {
     const panel = panelOf('right');
     expect(panel.style.paddingTop).toBe('');
-    expect(panel.className).toContain('pt-[max(env(safe-area-inset-top),3rem)]');
-    expect(panel.className).toContain('sm:pt-12');
+    expect(panel.className).toContain('p-0');
+    expect(panel.className).toContain('items-stretch');
+    expect(panel.className).not.toContain('sm:pt-12');
+    expect(panel.className).not.toContain('env(safe-area-inset-top)');
+  });
+
+  it('left 抽屉：与 right 同族几何（p-0 + items-stretch， justify-start）', () => {
+    const panel = panelOf('left');
+    expect(panel.style.paddingTop).toBe('');
+    expect(panel.className).toContain('p-0');
+    expect(panel.className).toContain('items-stretch');
+    expect(panel.className).toContain('justify-start');
+    expect(panel.className).not.toContain('sm:pt-12');
   });
 
   it('center：保持 p-4 sm:p-6 对称，且不带右侧抽屉的安全区 padding', () => {
