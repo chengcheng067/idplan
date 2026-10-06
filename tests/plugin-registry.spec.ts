@@ -45,6 +45,9 @@ function manifest(id: string, over: Partial<PluginManifest> = {}): PluginManifes
  * children 里**必须有** `path:'*'` 通配（与真实 buildHostRoutes 一致）——
  * 插件路由要插在它前面，否则永远走不到。
  */
+/** 本构建附带的插件 id（与 PluginRegistryProvider 的清单一致；加插件时同步） */
+const BUILTIN_IDS = ['agent-board', 'sample-projects', 'weekly-report'] as const;
+
 const HOST: RouteObject[] = [
   {
     path: '/',
@@ -137,6 +140,42 @@ describe('插件注册表 · settings KV 往返', () => {
     expect(map).toEqual({});
     const s: PluginRegistryState = { manifests: [manifest('x', { defaultEnabled: true })], enabled: map };
     expect(enabledPlugins(s)).toHaveLength(1);
+  });
+
+  it('⑩ 每个内置插件的开关都有真实消费者（防再出现「死开关」）', () => {
+    // 产品官 10-06 走查发现：sample-projects 的 manifest 在、设置里有开关，但
+    // 全仓没有任何地方问过它 ⇒ 用户拨开关没有任何反应（死开关）。
+    // 锁法：扫 src/ 全部 ts/tsx，每个内置插件 id 必须以 usePluginEnabled('<id>')
+    // 的形态被显式消费至少一次。manifest 的 nav/routes 由 ①②③④ 条覆盖。
+    const { readFileSync, readdirSync, statSync } = require('node:fs') as typeof import('node:fs');
+    const { join, resolve } = require('node:path') as typeof import('node:path');
+    const srcFiles: string[] = [];
+    const walk = (dir: string): void => {
+      for (const e of readdirSync(dir)) {
+        const f = join(dir, e);
+        if (statSync(f).isDirectory()) walk(f);
+        else if (e.endsWith('.ts') || e.endsWith('.tsx')) srcFiles.push(f);
+      }
+    };
+    walk(join(resolve(__dirname, '..'), 'src'));
+    const allSrc = srcFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
+    // 每个插件必须落进下面**至少一类**（真实的两种合法消费形态）：
+    //   A. 显式 hook：`usePluginEnabled('<id>')`（入口型消费者，如侧栏的示例项目）
+    //   B. manifest 声明贡献：nav/routes（页面型消费者，注册表统一装配）
+    // 两类都没有 ⇒ 那枚开关拨过去没有任何反应 = 死开关。
+    const contributionRe = /(nav|routes|settingsSlot):/;
+    for (const id of BUILTIN_IDS) {
+      const byHook = allSrc.includes(`usePluginEnabled('${id}')`);
+      const manifestFile = srcFiles.find(
+        (f) => /manifest\.tsx?$/.test(f) && readFileSync(f, 'utf8').includes(`id: '${id}'`),
+      );
+      const byContribution =
+        manifestFile !== undefined && contributionRe.test(readFileSync(manifestFile!, 'utf8'));
+      expect(
+        byHook || byContribution,
+        `插件 ${id} 既没有显式消费者也没有 manifest 贡献（死开关）`,
+      ).toBe(true);
+    }
   });
 
   it('⑨ 键名单一出处（key 形如 plugin.enabled.<id>）', () => {

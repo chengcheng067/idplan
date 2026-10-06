@@ -141,8 +141,6 @@ export function PluginRegistryProvider({ children }: { children: ReactNode }): J
     [value, hydrated],
   );
   return <PluginRegistryContext.Provider value={withReady}>{children}</PluginRegistryContext.Provider>;
-
-  return <PluginRegistryContext.Provider value={value}>{children}</PluginRegistryContext.Provider>;
 }
 
 /**

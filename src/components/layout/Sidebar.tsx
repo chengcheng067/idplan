@@ -9,6 +9,7 @@ import { SidebarCollapseToggle } from './SidebarCollapseToggle';
 import { navItemClass, SidebarNav } from './SidebarNav';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useAgentProjects, useHumanProjects, useHumanStages } from '../../core/project/visibility';
+import { usePluginEnabled } from '../../core/plugin/PluginRegistryProvider';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore, isXlViewport } from '../../store/useLayoutStore';
@@ -120,6 +121,16 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
     "页面/组件禁止直接读 store"**（设计 §7.1 纪律 1）—— 而且这里正是最容易被
     复制粘贴出去当"坏样例"的地方（§7.5 的教训）。走漏斗是免费的。
   */
+  /**
+   * v0.8.6.0002 · 反馈 #3：「退出身份后，左侧的边栏就不应该显示项目了」。
+   * 根因：`useHumanProjects()` 只看 kind 不看待登录身份 ⇒ 退出身份后列表照常渲染。
+   * 修法：未进入身份时侧栏不渲染项目列表（连标题/展开全部/新建入口一起收），
+   * 并留一句提示说明「去哪进入身份」。
+   * 为什么不在 kind 漏斗里改：那漏斗被首页/月历/统计卡共用，塞身份条件会牵连一片。
+   */
+  const hasIdentity = currentMember != null;
+  /* 「示例项目」插件的启用态（设置 → 插件可切；关掉 ⇒ 下方入口消失） */
+  const sampleProjectsOn = usePluginEnabled('sample-projects').enabled;
   const projects = useHumanProjects();
   const stages = useHumanStages();
   /*
@@ -301,7 +312,18 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
 
           {/* 项目列表（§2.2）：容器 gap 2、padding 4；标题行高 28「我的项目」11/500 mist；
               条目高 36、padding 8、gap 8、圆角 12，含阶段色条 + 项目名 + 状态点 */}
-          {projects.length > 0 && (
+          {/*
+            v0.8.6.0002 · 反馈 #3：未进入身份时给一句提示，而不是让侧栏「莫名空一块」。
+          */}
+          {!hasIdentity && (
+            <div className="mx-3 mt-3 rounded-md border border-line bg-cream/60 px-2.5 py-2">
+              <p className="text-[11px] leading-relaxed text-mist">
+                还未进入身份。点顶栏的身份标识选择成员后，这里会显示你能看到与改动的项目。
+              </p>
+            </div>
+          )}
+
+          {hasIdentity && projects.length > 0 && (
             <div className="mt-3 px-3">
               {/*
                 标题行（画板 02 / 04「项目列表标题行」fill_container×28 [row pad=8]）：
@@ -454,44 +476,52 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             <span className="truncate text-[13px] text-ink">设置</span>
           </button>
 
-          {/* 备份族：**管理员专属**（与原 TopBar 一致，不放开权限口径） */}
-          {isAdmin && (
-            <>
-              {/* 载入示例项目（0.8.3）：放备份族首位——陌生人第一小时的入口，
-                  与首启三幕引导的示例选项同一个 loadDemo 链路
-                  （fetch 随包 demo-backup.json → zod 校验 → 覆盖式导入） */}
-              <button
-                type="button"
-                onClick={() => void loadDemo()}
-                aria-label="载入示例项目"
-                title="载入 5 个演示项目（覆盖式替换当前数据）——用来快速看懂产品"
-                className={cn(navItemClass(false, false, inDrawer))}
-              >
-                <Sparkles size={18} className="shrink-0 text-mist" aria-hidden />
-                <span className="truncate text-[13px] text-ink">载入示例项目</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => void save()}
-                aria-label="保存备份"
-                title="保存备份"
-                className={cn(navItemClass(false, false, inDrawer))}
-              >
-                <Save size={18} className="shrink-0 text-mist" aria-hidden />
-                <span className="truncate text-[13px] text-ink">保存备份</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => pick()}
-                aria-label="加载备份"
-                title="加载备份"
-                className={cn(navItemClass(false, false, inDrawer))}
-              >
-                <Upload size={18} className="shrink-0 text-mist" aria-hidden />
-                <span className="truncate text-[13px] text-ink">加载备份</span>
-              </button>
-            </>
+          {/*
+            v0.8.6.0002 · 反馈 #3 后半：「设置上面的'导入备份'也没有看到在哪里」。
+            根因两重叠：① 入口在设置里埋着（分区混乱=反馈 #7，另案处理）；
+                       ② 备份族原是管理员专属——成员连看见的资格都没有。
+            本版做两件（不碰设置分区，那要等她拍板）：
+              a) **备份两枚对全员开放**：备份=「用户自己数据的导出/恢复」，不是
+                 管理职能。桌面形态下成员同样需要导走/换机恢复；NAS 形态下
+                 全局数据的影响由服务端鉴权管（F8 之后），不在 UI 层假装守住。
+              b) tooltip 说人话：导出=本地 JSON；导入=替换当前全部数据。
+            「示例项目」**改为受插件开关控制**（阶段 1 那枚开关此前是死的，
+             全仓无人消费——产品官 10-06 走查发现；tests/plugin-registry.spec.ts
+             的 ⑩ 会替你记住每个插件都得有真消费者）。它覆盖式替换全库，
+             故保留管理员门槛。
+          */}
+          {sampleProjectsOn && isAdmin && (
+            <button
+              type="button"
+              onClick={() => void loadDemo()}
+              aria-label="载入示例项目"
+              title="载入 5 个演示项目（覆盖式替换当前数据）——用来快速看懂产品"
+              className={cn(navItemClass(false, false, inDrawer))}
+            >
+              <Sparkles size={18} className="shrink-0 text-mist" aria-hidden />
+              <span className="truncate text-[13px] text-ink">载入示例项目</span>
+            </button>
           )}
+          <button
+            type="button"
+            onClick={() => void save()}
+            aria-label="保存备份"
+            title="保存备份（导出为本地 JSON 文件）"
+            className={cn(navItemClass(false, false, inDrawer))}
+          >
+            <Save size={18} className="shrink-0 text-mist" aria-hidden />
+            <span className="truncate text-[13px] text-ink">保存备份</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => pick()}
+            aria-label="加载备份"
+            title="加载备份（从本地 JSON 文件恢复，会替换当前全部数据）"
+            className={cn(navItemClass(false, false, inDrawer))}
+          >
+            <Upload size={18} className="shrink-0 text-mist" aria-hidden />
+            <span className="truncate text-[13px] text-ink">加载备份</span>
+          </button>
 
           {/* 新建项目：管理员 + 项目相关页（沿用原 TopBar 的 isAdmin && onProjectPage 口径） */}
           {isAdmin && onProjectPage(pathname) && (
@@ -657,28 +687,25 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               />
             )}
           </button>
-          {isAdmin && (
-            <>
-              <button
-                type="button"
-                onClick={() => void save()}
-                aria-label="保存备份"
-                title="保存备份"
-                className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
-              >
-                <Save size={18} aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={() => pick()}
-                aria-label="加载备份"
-                title="加载备份"
-                className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
-              >
-                <Upload size={18} aria-hidden />
-              </button>
-            </>
-          )}
+          {/* 备份两枚：收起态同样对全员开放（与展开态同一口径，见上方长注释） */}
+          <button
+            type="button"
+            onClick={() => void save()}
+            aria-label="保存备份"
+            title="保存备份（导出为本地 JSON 文件）"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
+          >
+            <Save size={18} aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => pick()}
+            aria-label="加载备份"
+            title="加载备份（从本地 JSON 文件恢复，会替换当前全部数据）"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
+          >
+            <Upload size={18} aria-hidden />
+          </button>
           {isAdmin && onProjectPage(pathname) && (
             <button
               type="button"

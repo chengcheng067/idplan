@@ -1,0 +1,583 @@
+[
+  {
+    "label": "A.center-minimize",
+    "x": 1285,
+    "y": 33,
+    "hit": "svg",
+    "received": 3,
+    "kinds": [
+      "mousedown@1285,33",
+      "mouseup@1285,33",
+      "click@1285,33"
+    ],
+    "paths": [
+      "svg",
+      "button[minimize].flex.h-full.w-[46px]",
+      "div.fixed.right-0.top-0",
+      "body"
+    ],
+    "bounds": {
+      "w": 1400,
+      "h": 902,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.center-maximize",
+    "x": 1331,
+    "y": 33,
+    "hit": "svg",
+    "received": 3,
+    "kinds": [
+      "mousedown@1331,33",
+      "mouseup@1331,33",
+      "click@1331,33"
+    ],
+    "paths": [
+      "svg",
+      "button[maximize].flex.h-full.w-[46px]",
+      "div.fixed.right-0.top-0",
+      "body"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.center-close",
+    "x": 1377,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,33",
+      "mouseup@1377,33",
+      "click@1377,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.top0",
+    "x": 1377,
+    "y": 0,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,0",
+      "mouseup@1377,0",
+      "click@1377,0"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.top1",
+    "x": 1377,
+    "y": 1,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,1",
+      "mouseup@1377,1",
+      "click@1377,1"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.top2",
+    "x": 1377,
+    "y": 2,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,2",
+      "mouseup@1377,2",
+      "click@1377,2"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.top4",
+    "x": 1377,
+    "y": 4,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,4",
+      "mouseup@1377,4",
+      "click@1377,4"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.top6",
+    "x": 1377,
+    "y": 6,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,6",
+      "mouseup@1377,6",
+      "click@1377,6"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.top8",
+    "x": 1377,
+    "y": 8,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,8",
+      "mouseup@1377,8",
+      "click@1377,8"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.top12",
+    "x": 1377,
+    "y": 12,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,12",
+      "mouseup@1377,12",
+      "click@1377,12"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.right1",
+    "x": 1399,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1399,33",
+      "mouseup@1399,33",
+      "click@1399,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.right2",
+    "x": 1398,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1398,33",
+      "mouseup@1398,33",
+      "click@1398,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.close.right4",
+    "x": 1396,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1396,33",
+      "mouseup@1396,33",
+      "click@1396,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.min.top1",
+    "x": 1285,
+    "y": 1,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1285,1",
+      "mouseup@1285,1",
+      "click@1285,1"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.max.top1",
+    "x": 1331,
+    "y": 1,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1331,1",
+      "mouseup@1331,1",
+      "click@1331,1"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.corner1x1",
+    "x": 1399,
+    "y": 1,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1399,1",
+      "mouseup@1399,1",
+      "click@1399,1"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.corner2x2",
+    "x": 1398,
+    "y": 2,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1398,2",
+      "mouseup@1398,2",
+      "click@1398,2"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "A.corner4x4",
+    "x": 1396,
+    "y": 4,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1396,4",
+      "mouseup@1396,4",
+      "click@1396,4"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "B.center-close",
+    "x": 1377,
+    "y": 33,
+    "hit": "div.outline-none.flex.h-full.w-full",
+    "received": 2,
+    "kinds": [
+      "mousedown@1377,33",
+      "mouseup@1377,33"
+    ],
+    "paths": [
+      "div.outline-none.flex.h-full",
+      "div.fixed.inset-0.z-[60]",
+      "body",
+      "html"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "B.center-minimize",
+    "x": 1285,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1285,33",
+      "mouseup@1285,33",
+      "click@1285,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "B.close.top2",
+    "x": 1377,
+    "y": 2,
+    "hit": "div.flex.h-14.w-full.shrink-0",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,2",
+      "mouseup@1377,2",
+      "click@1377,2"
+    ],
+    "paths": [
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40",
+      "div.app-content-column.flex.min-w-0",
+      "div.flex.min-h-screen.bg-cream"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "C.center-close",
+    "x": 1377,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,33",
+      "mouseup@1377,33",
+      "click@1377,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "C.center-minimize",
+    "x": 1285,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1285,33",
+      "mouseup@1285,33",
+      "click@1285,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  },
+  {
+    "label": "D.maximize-broadcast",
+    "before": true,
+    "after": false,
+    "seen": []
+  },
+  {
+    "label": "E.after-restore.close",
+    "x": 1377,
+    "y": 33,
+    "hit": "div.hidden.min-w-0.md:flex.md:flex-1",
+    "received": 3,
+    "kinds": [
+      "mousedown@1377,33",
+      "mouseup@1377,33",
+      "click@1377,33"
+    ],
+    "paths": [
+      "div.hidden.min-w-0.md:flex",
+      "div.flex.min-w-0.flex-1",
+      "div.flex.h-14.w-full",
+      "header.app-titlebar-drag.relative.z-40"
+    ],
+    "bounds": {
+      "w": 2560,
+      "h": 1392,
+      "sw": 0,
+      "sy": 0
+    }
+  }
+]

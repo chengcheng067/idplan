@@ -1,0 +1,818 @@
+[
+  {
+    "label": "CTRL.controlBtn",
+    "clientX": 692,
+    "clientY": 580,
+    "screen": [
+      1265,
+      825
+    ],
+    "hit": "button#controlBtn",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "CTRL.header-drag",
+    "clientX": 600,
+    "clientY": 33,
+    "screen": [
+      1173,
+      278
+    ],
+    "hit": "div",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.center",
+    "clientX": 1362,
+    "clientY": 33,
+    "screen": [
+      1935,
+      278
+    ],
+    "hit": "WC[close]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.min.center",
+    "clientX": 1270,
+    "clientY": 33,
+    "screen": [
+      1843,
+      278
+    ],
+    "hit": "WC[minimize]",
+    "domEvents": 3,
+    "firstPath": [
+      "button",
+      "div",
+      "main"
+    ],
+    "wc": [
+      "CONTROL"
+    ],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.max.center",
+    "clientX": 1316,
+    "clientY": 33,
+    "screen": [
+      1889,
+      278
+    ],
+    "hit": "WC[maximize]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top0",
+    "clientX": 1362,
+    "clientY": 0,
+    "screen": [
+      1935,
+      245
+    ],
+    "hit": "WC[close]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top1",
+    "clientX": 1362,
+    "clientY": 1,
+    "screen": [
+      1935,
+      246
+    ],
+    "hit": "WC[close]",
+    "domEvents": 4,
+    "firstPath": [
+      "button",
+      "div",
+      "main"
+    ],
+    "wc": [
+      "CONTROL"
+    ],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top2",
+    "clientX": 1362,
+    "clientY": 2,
+    "screen": [
+      1935,
+      247
+    ],
+    "hit": "WC[close]",
+    "domEvents": 5,
+    "firstPath": [
+      "button",
+      "div",
+      "main"
+    ],
+    "wc": [
+      "CONTROL",
+      "CONTROL"
+    ],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top3",
+    "clientX": 1362,
+    "clientY": 3,
+    "screen": [
+      1935,
+      248
+    ],
+    "hit": "WC[close]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top4",
+    "clientX": 1362,
+    "clientY": 4,
+    "screen": [
+      1935,
+      249
+    ],
+    "hit": "WC[close]",
+    "domEvents": 4,
+    "firstPath": [
+      "button",
+      "div",
+      "main"
+    ],
+    "wc": [
+      "CONTROL"
+    ],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top6",
+    "clientX": 1362,
+    "clientY": 6,
+    "screen": [
+      1935,
+      251
+    ],
+    "hit": "WC[close]",
+    "domEvents": 8,
+    "firstPath": [
+      "button",
+      "div",
+      "main"
+    ],
+    "wc": [
+      "CONTROL",
+      "CONTROL",
+      "CONTROL"
+    ],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top8",
+    "clientX": 1362,
+    "clientY": 8,
+    "screen": [
+      1935,
+      253
+    ],
+    "hit": "WC[close]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.close.top10",
+    "clientX": 1362,
+    "clientY": 10,
+    "screen": [
+      1935,
+      255
+    ],
+    "hit": "WC[close]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.min.top1",
+    "clientX": 1270,
+    "clientY": 1,
+    "screen": [
+      1843,
+      246
+    ],
+    "hit": "WC[minimize]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.min.top4",
+    "clientX": 1270,
+    "clientY": 4,
+    "screen": [
+      1843,
+      249
+    ],
+    "hit": "WC[minimize]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "moved": false
+  },
+  {
+    "label": "A.max.top2",
+    "clientX": 1316,
+    "clientY": 2,
+    "screen": [
+      1889,
+      247
+    ],
+    "hit": "WC[maximize]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 573,
+      "sy": 245
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 600,
+      "sy": 240
+    },
+    "moved": true
+  },
+  {
+    "label": "A.close.right1",
+    "clientX": 1384,
+    "clientY": 33,
+    "screen": [
+      1984,
+      273
+    ],
+    "hit": "WC[close]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 600,
+      "sy": 240
+    },
+    "after": {
+      "ow": 1416,
+      "oh": 909,
+      "sx": 1141,
+      "sy": 214
+    },
+    "moved": true
+  },
+  {
+    "label": "A.close.right2",
+    "clientX": 1383,
+    "clientY": 33,
+    "screen": [
+      2524,
+      247
+    ],
+    "hit": "WC[close]",
+    "domEvents": 0,
+    "firstPath": null,
+    "wc": [],
+    "before": {
+      "ow": 1416,
+      "oh": 909,
+      "sx": 1141,
+      "sy": 214
+    },
+    "after": {
+      "ow": 1415,
+      "oh": 909,
+      "sx": 1562,
+      "sy": 218
+    },
+    "moved": true
+  },
+  {
+    "label": "A.close.right4",
+    "clientX": 1381,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1564,
+      "sy": 219,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "A.close.right8",
+    "clientX": 1377,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1564,
+      "sy": 219,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "A.corner1",
+    "clientX": 1384,
+    "clientY": 1,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1564,
+      "sy": 219,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "A.corner2",
+    "clientX": 1383,
+    "clientY": 2,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1564,
+      "sy": 219,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "A.corner4",
+    "clientX": 1381,
+    "clientY": 4,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1564,
+      "sy": 219,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "A.corner8",
+    "clientX": 1377,
+    "clientY": 8,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1564,
+      "sy": 219,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "A.above0",
+    "clientX": 1362,
+    "clientY": -1,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1564,
+      "sy": 219,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "B.close.center",
+    "clientX": 1362,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1807,
+      "sy": 411,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "B.min.center",
+    "clientX": 1270,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1807,
+      "sy": 411,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "B.max.center",
+    "clientX": 1316,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1807,
+      "sy": 411,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "B.close.top2",
+    "clientX": 1362,
+    "clientY": 2,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1807,
+      "sy": 411,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "C.close.center",
+    "clientX": 1362,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1494,
+      "sy": 891,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 910,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "C.min.center",
+    "clientX": 1270,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1494,
+      "sy": 891,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 910,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.close.center",
+    "clientX": 1362,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1285,
+      "sy": 351,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 910,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.close.top0",
+    "clientX": 1362,
+    "clientY": 0,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1285,
+      "sy": 351,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 910,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.close.top1",
+    "clientX": 1362,
+    "clientY": 1,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1285,
+      "sy": 351,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 910,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.close.top2",
+    "clientX": 1362,
+    "clientY": 2,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1383,
+      "sy": 357,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.close.top4",
+    "clientX": 1362,
+    "clientY": 4,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1383,
+      "sy": 357,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.close.top8",
+    "clientX": 1362,
+    "clientY": 8,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1383,
+      "sy": 357,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.close.right1",
+    "clientX": 1384,
+    "clientY": 33,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1383,
+      "sy": 357,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  },
+  {
+    "label": "D.corner2",
+    "clientX": 1383,
+    "clientY": 2,
+    "skipped": "offscreen",
+    "g": {
+      "sx": 1383,
+      "sy": 357,
+      "cw": 1385,
+      "iw": 1400,
+      "ow": 1415,
+      "oh": 909,
+      "availW": 2560
+    }
+  }
+]
