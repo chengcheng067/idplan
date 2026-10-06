@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Maximize2, Menu, Minus, Minimize2, Search, X } from 'lucide-react';
 import type { RefObject } from 'react';
@@ -372,16 +371,12 @@ export function TopBar(): JSX.Element {
             DOM 按钮、总宽 138px——与旧「原生叠加层避让位」同宽，右组元素零位移。
             三键是 button，被 global.css 的 `.app-titlebar-drag button` 规则自动
             回退为 no-drag，点它们不会误拖窗口。
-            ★ v0.8.5 C2：真身 portal 到 body + z-[85]（排障手实测：遮罩 z-60/70/75
-            高过 header z-40，任何 modal 打开期间三键被吞、点不动——自绘三键的本意
-            「与内容同层同源」反被灭。portal 后高于一切 modal 与 toast，遮罩期间照样
-            可点，与原生 titleBar 行为对齐）。原位留同宽 spacer 撑住右组布局。 */}
-        {usesSelfDrawnWindowControls() && (
-          <>
-            <div aria-hidden className="shrink-0" style={{ width: WINDOW_CONTROLS_WIDTH }} />
-            <WindowControls width={WINDOW_CONTROLS_WIDTH} />
-          </>
-        )}
+            ★ v0.8.6 壳层常驻重构：三键并回顶栏主行末格常规渲染（不再 portal 到
+              body + fixed 悬浮）。它们是 header 的最后一个 grid/flex 项，同一
+              底色、同一高度、同一条底边框线——「与顶栏绑定、下滑不分离」。
+              浮层遮罩相应让出顶栏（Modal.tsx：inset-0 → top-14 xl:top-16），
+              弹窗打开期间三键照样可点，与原生 titleBar 语义一致。 */}
+        {usesSelfDrawnWindowControls() && <WindowControls width={WINDOW_CONTROLS_WIDTH} />}
       </div>
 
       {/* 手机第⼆⾏（<768）：整宽搜索框，高 36 / 圆角 12 / pad 0 12 / gap 8。
@@ -402,8 +397,32 @@ export function TopBar(): JSX.Element {
  * 乘出来的灰 ≠ 遮罩合成的灰，仍是两块色。自绘后三键与内容同层同源，
  * 随主题/遮罩自然变暗，一类问题整类消失（文件头有完整说明）。
  *
- * ── 行为契约 ──
- *   · 每键 46×全高（Windows 10/11 标准命中宽），总宽 138px 由入参给定；
+ * ── v0.8.6 壳层常驻重构：从 portal 并回顶栏 ──
+ * 旧形态（v0.8.5 C2）：真身 portal 到 document.body，fixed top-0 right-0 z-[85]，
+ * 高于一切 modal 与 toast，换取「遮罩期间可点」。代价：三键永久悬浮在内容之上，
+ * 顶栏随页面滚走后三键孤立——用户投诉「和顶栏不是绑定关系、割裂感强」。
+ *
+ * 新形态：壳层常驻（AppShell h-screen + main 内部滚动）后顶栏永久在场，三键
+ * 作为顶栏主行的最后一个 flex 项常规渲染：
+ *   · 同一底色（header 的 bg-paper）、同一高度（h-full → 56/64 随顶栏）、
+ *     同一条底边框（header 的 border-b）——视觉上长在顶栏里；
+ *   · 遮罩让位（Modal.tsx：inset-0 → top-14 xl:top-16）保证弹窗打开期间
+ *     三键仍可点，不需要也不允许再用 z-index 军备竞赛（toast/三键关系会乱）；
+ *   · 几何不变（Q-A1-4/5 钉的 64/56 与 138 宽）：group 内联 width 138 = 3×46，
+ *     每键 w-[46px] h-full；原位同宽 spacer 已删（并回后三键自己占位）。
+ *
+ * ── 反馈 #5.2「三键偶发点击失效」的物理死区（v0.8.6.0002 排查记录）──
+ * main.cjs 只配 `titleBarStyle:'hidden'`、没配 `frame:false` ⇒ 原生的
+ * resize/drag 边框仍由系统盖在网页之上，会吞掉贴边区域的点击（点偏一两像素
+ * 就失效，点按钮中部正常——「难复现」的物理机制）。两代解法：
+ *   · v0.8.6.0002（当时）：容器 `right-[2px]` 右移，只解**右沿** 1-2px；
+ *   · v0.8.6（本轮）：并回顶栏后三键距右缘 = 顶栏内边距（xl 24 / <xl 16），
+ *     右沿死区**结构性消失**，`right-[2px]` 随之删除。
+ *   · 仍存：**顶部约 4-8px 死区**（按钮顶缘贴窗口顶缘）。解法只有
+ *     `frame:false`（牵连圆角/阴影/系统缩放行为，需单独一轮验证）——本版不碰，
+ *     已如实记录。Q-A1-4/Q-A1-5 的几何锁（高度跟顶栏）不动。
+ *
+ * 行为契约（不变）：
  *   · 最大化态图标联动：初值 `isMaximized()` 查询 + `onMaximizeChange` 订阅
  *     （双击标题栏 / 系统快捷键改态时同样走推送，图标不与实际状态漂移）；
  *   · 关闭键悬停用 clay 白字（Windows 惯例：唯一红色警示键），其余两键悬停 sand；
@@ -432,47 +451,28 @@ function WindowControls({ width }: { width: number }): JSX.Element {
     };
   }, [controls]);
 
-  const btnBase = 'flex h-full w-[46px] items-center justify-center text-mist transition-colors';
+  /*
+   * 高度口径：显式 h-14 xl:h-16（56/64），**不用 h-full**。
+   * 并回 header 后，header 是 border-box 64 + 1px border-b ⇒ 内容盒只有 63，
+   * h-full 会把按钮量成 63（Q-A1-4/5 钉的是 64，实测因此红过）。
+   * 显式高度下按钮底缘压住 header 的 border-b 线段（顶天立地贴齐），
+   * <md 两行档第一行同为 56，档位口径与 TopBar 行高一致。
+   */
+  const btnBase =
+    'flex h-14 w-[46px] items-center justify-center text-mist transition-colors xl:h-16';
 
   /*
-   * ★ v0.8.5 C2：portal 到 body（fixed top-0 right-0, z-[85]）。
-   *
-   * 为什么不留在 header 流内：header 是 z-40，而 modal 遮罩 z-60/70/75 ——
-   * 排障手实测 elementFromPoint 在三键位置命中的是遮罩：任何弹窗打开期间
-   * 三键不可点（连点关闭都做不到）。portal+85 让它高于一切 modal 与 toast，
-   * 恢复「窗口控制永远可点」的原生语义。
-   *
-   * 几何不变（QA Q-A1-4/5 钉的 64/56）：fixed top-0 + right-0 恰落在原生标题栏
-   * 同样的右上角；高 calc(56/64px + 1px) + border-b 复刻 header 的 1px 底边框段
-   * （portal 后脱离了 header 的 flex 流，边框要自带）；bg-paper 与 header 同色，
-   * 遮罩期间视觉与原生 titleBar 一样「浮」在压暗层上。
+   * 顶栏主行末格：flex + h-full（行高 = 顶栏高，xl 64 / <xl 56）+ shrink-0
+   * （窄窗下不被左组挤压）。底色/底边框由 header 提供，这里一概不带——
+   * 带了就和 header 的 border-b 叠成双线。group 自己是纯容器，落在拖拽区上
+   * 由其内部 button 的 no-drag 兜底命中（空白区拖窗口是预期行为）。
    */
-  return createPortal(
+  return (
     <div
       data-window-controls=""
       role="group"
       aria-label="窗口控制"
-      /*
-       * ★ v0.8.6.0002 · 反馈 #5.2「三键某些情况下点击失效」——右沿那一半的修复。
-       *
-       * 原写法 `right-0 top-0` 让三键**贴着窗口右上角**。而 main.cjs:340 只配了
-       * `titleBarStyle:'hidden'`、没配 `frame:false` ⇒ 原生的 resize/drag 边框仍由
-       * 系统盖在网页之上，吞掉三键**顶部约 4-8px、右沿约 1-2px** 的点击
-       * （真实 OS 输入探针两次实测：点在这些位置窗口被拖动/缩放，DOM 零事件）。
-       * 这就是「难复现」的物理机制——点偏一两像素就失效，点按钮中部完全正常。
-       *
-       * 本版只解**右沿**：容器右移 2px（`right-[2px]`），视觉差异为 0
-       * （2px 在 46px 宽的按钮上几乎看不出，且顶栏右端本来就有内边距）。
-       * **高度不动**——Q-A1-4/Q-A1-5 两条几何锁明确要求按钮高度跟顶栏
-       * （xl=64 / <xl=56），动高度必然红。
-       *
-       * ⚠️ 顶部那 4-8px 死区**本版不修**（已如实告知她）：解法只有两条，
-       *   ① `frame:false`——牵连圆角/阴影/系统缩放行为，要单独一轮验证；
-       *   ② 把三键从 fixed portal 改成顶栏的**子元素**——那是反馈 #5 的
-       *      「壳层常驻/三键与顶栏绑定」，属于设计稿画板 1/9 那件事，
-       *      **等她拍板后同批做**。两件都不该塞进一个 bugfix 里。
-       */
-      className="fixed right-[2px] top-0 z-[85] flex h-[calc(56px+1px)] items-stretch border-b border-line bg-paper xl:h-[calc(64px+1px)]"
+      className="flex h-full shrink-0 items-stretch"
       style={{ width }}
     >
       <button
@@ -505,7 +505,6 @@ function WindowControls({ width }: { width: number }): JSX.Element {
       >
         <X size={16} aria-hidden />
       </button>
-    </div>,
-    document.body,
+    </div>
   );
 }

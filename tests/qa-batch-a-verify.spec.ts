@@ -153,8 +153,9 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
  *
  * 2026-09-23：原桩记录 `setTitleBarTheme`（原生叠加层配色下发）——叠加层已退役
  * （系统合成器画在网页之上，DOM 遮罩盖不住它，用户投诉「弹窗一开三键像贴上去的」），
- * 改为记录 `windowControls` 调用。三键是 DOM：遮罩（fixed inset-0 z-[70]）打开时
- * 自然盖住 header（z-40）里的三键——"随遮罩变暗"不再需要任何近似机制。 */
+ * 改为记录 `windowControls` 调用。三键是 DOM 控件，与内容同层同源。
+ * 2026-10-06（v0.8.6 壳层常驻）：三键并回顶栏主行末格（不再是 body portal），
+ * 遮罩让出顶栏（inset-0 → top-14 xl:top-16）——遮罩态可点由让位保证，不再靠 z-[85]。 */
 const IDPLAN_STUB = `
 window.__wcCalls = [];
 window.idplan = {
@@ -606,9 +607,9 @@ await page.click('[data-industry-select-option="indoor"]');
    * 背景上」）：三键此前是 Windows 原生 titleBarOverlay——由系统合成器画在网页
    * **之上**，DOM 遮罩（fixed inset-0 z-[70]）永远盖不住它；0.55× 压暗近似修不好
    * （乘出来的灰 ≠ 遮罩实际合成的灰，仍是两块色）。现行方案：三键改为 **DOM 自绘**
-   * （TopBar.tsx 的 WindowControls），与内容同层同源——遮罩打开时自然盖住它们，
-   * 一类问题整类消失。本组验收随之从「配色下发 / 压暗系数」重构为
-   * 「存在性 / 几何 / 平台门控 / 遮罩覆盖 / 拖拽纪律 / 断点跟随」。
+   * （TopBar.tsx 的 WindowControls，v0.8.6 起并回顶栏主行末格），与内容同层同源。
+   * 遮罩态可点历经 portal+z-[85]（v0.8.5 C2）→ 遮罩让出顶栏（v0.8.6）两代，
+   * 本组验收口径：「存在性 / 几何 / 平台门控 / 遮罩态可点 / 拖拽纪律 / 断点跟随」。
    * ------------------------------------------------------------------------ */
 
   it('Q-A1-1 · 顶栏高度口径：<1280→56，≥1280→64（含临界 1279/1280）', async () => {
@@ -630,7 +631,7 @@ await page.click('[data-industry-select-option="indoor"]');
     }
   }, HEAVY);
 
-  it('Q-A1-2 · ★ 自绘三键：win32 桌面端渲染，且弹窗遮罩打开时被整体盖住（原生叠加层投诉的结构性修复）', async () => {
+  it('Q-A1-2 · ★ 自绘三键：win32 桌面端渲染，且弹窗遮罩打开时仍可命中（窗口控制不被吞）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
       await becomeAdmin(page);
@@ -657,18 +658,18 @@ await page.click('[data-industry-select-option="indoor"]');
       });
       expect(clickableBefore).toBe(true);
 
-      // ② 打开设置面板（遮罩型 Modal）→ ★ 2026-10-01（v0.8.5 C2）断言**反转**：
-      //    遮罩打开时三键**仍可命中**（portal body + z-[85] > 遮罩 z-[70]）。
+      // ② 打开设置面板（遮罩型 Modal）→ 断言：遮罩打开时三键**仍可命中**。
       //
-      //    为什么反转（两代诉求的合成点，不是倒退）：
+      //     机制沿革（三代解法，断言口径一直是「遮罩态可点」）：
       //      · 2026-09-23 诉求：原生叠加层在网页之上「浮亮」、遮罩压不暗它 → 解法=自绘
-      //        （DOM 控件、与内容同层同源随主题变暗）——当年断言「被盖住」即验收此点；
-      //      · 2026-10-01 实测（她 feedback #4 连带头一项）：自绘三键留在 header z-40，
-      //        遮罩 z-60/70/75 把它**吞了**——弹窗一开连「点关闭最小化」都做不到。
-      //        elementFromPoint 在三键位置命中的是遮罩（排障手 debug 报告 Bug 2 连带实锤）。
-      //    合成解 = portal 到 body + z-[85]：**仍是 DOM 控件**（继承自绘的全部收益：
-      //    随主题变色、无系统叠加层），但**功能上浮回顶层**（遮罩期间可点，对齐原生
-      //    titleBar 语义）。几何由 Q-A1-4（56/64、138 宽）单独钉，两轴分开验收。
+      //        （DOM 控件、与内容同层同源随主题变暗）；
+      //      · 2026-10-01 实测（她 feedback #4）：自绘三键留在 header z-40，遮罩
+      //        z-60/70/75 把它吞了——弹窗一开连点关闭都做不到。v0.8.5 C2 的解法是
+      //        portal 到 body + z-[85]（功能上浮回顶层，但三键永久悬浮脱群）；
+      //      · v0.8.6 壳层常驻（本轮）：三键并回顶栏主行末格 + 遮罩让出顶栏
+      //        （Modal.tsx：inset-0 → top-14 xl:top-16）。既保住「与顶栏绑定」，
+      //        又不需要 z-index 军备竞赛。几何由 Q-A1-4（56/64、138 宽）单独钉；
+      //        遮罩让位的三档口径由 Q-A1-6 钉。
       await page.evaluate(() => {
         const s = Array.from(document.querySelectorAll('header')).length;
         const btn = Array.from(
@@ -801,6 +802,83 @@ await page.click('[data-industry-select-option="indoor"]');
       expect(await btnH()).toBe(64);
     } finally {
       await ctx.close();
+    }
+  }, HEAVY);
+
+  /* ================= A1-6 · v0.8.6 壳层常驻：遮罩让出顶栏 ================= */
+
+  /**
+   * Q-A1-6 · v0.8.6 壳层常驻重构（她拍板的「三键与顶栏统一常驻」）：
+   * 三键从 body portal 并回顶栏主行末格后，header z-40 会被浮层遮罩
+   * （fixed z-60/70/75）重新吞掉——10-01 反馈 #4「弹窗一开三键点不动」原样复发。
+   * 解法不是再把三键 portal 回去（那是治症：三键又得悬浮脱群），而是
+   * **遮罩让出顶栏**：Modal.tsx 的 overlay 从 `inset-0` 改为
+   * `max-md:top-[100px] md:top-14 xl:top-16`——与 TopBar 行高同口径。
+   *
+   * 本用例守住三件用户能看见的事（真 Chromium，命中测试是唯一诚实判据）：
+   *   ① 遮罩顶边 = 当前档位顶栏高（xl 64 / md 56 / <md 两行合计 100），
+   *      且视口内所有浮层遮罩同口径（不止一处 overlay 时全部让位）；
+   *   ② 遮罩打开期间三键仍可点（elementFromPoint 命中按钮本体）；
+   *   ③ 顶栏带本身不被遮罩盖（点顶栏中点命中的是 header 一族，不是 dialog）。
+   */
+  it('Q-A1-6 · v0.8.6 壳层常驻：弹窗遮罩让出顶栏（三档高度口径），三键在遮罩态仍可点', async () => {
+    for (const [w, expectedTop] of [
+      [1600, 64],
+      [1200, 56],
+      [767, 100], // <md 两行顶帽（56 + 44 搜索行）合计 100
+    ] as const) {
+      const { ctx, page } = await open(w, 900);
+      try {
+        await becomeAdmin(page);
+        // <xl 侧栏是抽屉：先开汉堡，再从抽屉里点「设置」；≥xl 持久侧栏直接点
+        // （只点一次——合成 click 的 clientX/Y 是 0，重复点会把浮动面板锚到 (0,0)）
+        await page.evaluate(() => {
+          const direct = Array.from(
+            document.querySelectorAll<HTMLButtonElement>('[data-app-sidebar] button'),
+          ).find((x) => x.getAttribute('aria-label') === '设置');
+          if (direct) {
+            direct.click();
+            return;
+          }
+          document.querySelector<HTMLButtonElement>('button[aria-label="打开导航菜单"]')?.click();
+        });
+        if (w < 1280) {
+          await page.waitForTimeout(400);
+          await page.evaluate(() => {
+            Array.from(document.querySelectorAll<HTMLButtonElement>('[data-app-sidebar] button'))
+              .find((x) => x.getAttribute('aria-label') === '设置')
+              ?.click();
+          });
+        }
+        await page.waitForTimeout(600);
+        expect(await page.locator('[role="dialog"]').count()).toBeGreaterThan(0);
+
+        const probe = await page.evaluate(() => {
+          const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'));
+          const tops = dialogs.map((d) => Math.round(d.getBoundingClientRect().top));
+          const closeBtn = document.querySelector<HTMLElement>('[data-window-control="close"]')!;
+          const r = closeBtn.getBoundingClientRect();
+          const atClose = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+          const header = document.querySelector('header')!;
+          const hr = header.getBoundingClientRect();
+          const atBar = document.elementFromPoint(hr.x + hr.width * 0.35, hr.y + hr.height / 2);
+          return {
+            tops,
+            closeHittable: atClose === closeBtn || (atClose ? closeBtn.contains(atClose) : false),
+            barIsChrome:
+              atBar === header || (atBar ? header.contains(atBar) : false),
+          };
+        });
+        // ① 所有浮层遮罩同口径让出顶栏（0 个 dialog 越过顶栏下缘）
+        expect(probe.tops.length).toBeGreaterThan(0);
+        expect(probe.tops.every((t) => t === expectedTop), `遮罩顶边应为 ${expectedTop}，实测 ${JSON.stringify(probe.tops)}`).toBe(true);
+        // ② 遮罩态三键仍可点（窗口控制不失效——反馈 #4 修复点的结构性解）
+        expect(probe.closeHittable, `w=${w} 遮罩打开时三键不可命中`).toBe(true);
+        // ③ 顶栏带保持原色可交互（不被任何 dialog 盖住）
+        expect(probe.barIsChrome, `w=${w} 遮罩盖住了顶栏`).toBe(true);
+      } finally {
+        await ctx.close();
+      }
     }
   }, HEAVY);
 

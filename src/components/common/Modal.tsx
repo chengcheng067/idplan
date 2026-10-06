@@ -204,7 +204,15 @@ export function Modal({
       // 让其内部冒出的更浅层浮层（如指派弹层 z-[65]）能盖在抽屉之上。抽屉自身不参与 center 的顶层竞争。
       // Soft UI 不用 backdrop-blur（玻璃拟态）；层次靠统一的主色遮罩 + 面板外凸阴影表达。
       // 去掉模糊后遮罩要略实一点，否则背景噪点会穿透、压不住层级。
-      className={`fixed inset-0 ${
+      //
+      // ★ v0.8.6 壳层常驻重构：遮罩从**顶栏下缘**起始（inset-0 → top-14 xl:top-16），
+      //    让出自绘三键所在的顶栏带。三键并回 header（TopBar 的 WindowControls 不再是
+      //    body portal）后，若遮罩仍铺满视口，它（header z-40）会被 z-60/70/75 重新吞掉
+      //    ——弹窗一开连点关闭都做不到（10-01 反馈 #4 原样复发）。靠让位而非 z-index
+      //    解决：顶栏与三键在任何浮层打开期间保持原色、可点，对齐原生 titleBar 语义。
+      //    档位口径与 TopBar 的行高一致：<md 两行顶帽合计 100，md–xl 56，xl 64。
+      //    ⚠️ 不要改回 inset-0，也不要在遮罩上动 z-index（toast/三键层级会被搅乱）。
+      className={`fixed inset-x-0 bottom-0 max-md:top-[100px] md:top-14 xl:top-16 ${
         placement === 'center'
           ? 'z-[70] bg-ink/45'
           : placement === 'fullscreen'
