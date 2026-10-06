@@ -749,8 +749,10 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         className={cn(
           'app-sidebar hidden shrink-0 xl:flex',
           'glass-strong print:hidden',
+          // v0.8.6 壳层常驻重构：根容器已 h-screen + overflow-hidden，侧栏随 flex 链
+          // 撑满视口高（h-full），sticky top-0 不再需要，一并移除。
           // z-30（§3.3.4 分层）：低于 Modal(center z-70 / right z-60)，高于内容区
-          'sticky top-0 z-30 h-screen rounded-none border-y-0 border-l-0',
+          'z-30 h-full rounded-none border-y-0 border-l-0',
         )}
       >
         <div className="flex h-full w-full min-w-0 flex-col">{body({ inDrawer: false })}</div>
