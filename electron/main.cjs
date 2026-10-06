@@ -198,12 +198,6 @@ if (USE_SELF_DRAWN_WINDOW_CONTROLS) {
   const broadcastMaximize = (win) => {
     if (win && !win.isDestroyed()) win.webContents.send('window:maximize-change', win.isMaximized());
   };
-  app.whenReady().then(() => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.on('maximize', () => broadcastMaximize(win));
-      win.on('unmaximize', () => broadcastMaximize(win));
-    }
-  });
 }
 
 // ── 本机 Agent loopback 接线（v1.0 · P0） ──
@@ -368,6 +362,25 @@ function createWindow() {
   } else {
     win.loadURL(`${PROTOCOL}://-/index.html`);
   }
+
+  /*
+   * ★ v0.8.6.0002 · 反馈 #5.2 第二半：maximize/unmaximize 广播**从未挂载**。
+   *
+   * 原写法把监听注册放在 `app.whenReady().then(() => { for (const win of
+   * BrowserWindow.getAllWindows()) … })` 里——那个回调跑在 createWindow()
+   * **之前**（main.cjs 的 whenReady 链：先注册协议、再建窗口），此刻
+   * `getAllWindows()` 是**空数组** ⇒ for 循环零迭代 ⇒ 监听数为 0。
+   *
+   * 体感就是她说的「时灵时不灵」：其实**从来没灵过**——maximize 后渲染侧
+   * 收到的事件数实测为 0，最大化图标永久停在初始态；用户用 Win+↑ 最大化后
+   * 再点它，窗口竟被还原（图标与真实状态相反）。
+   *
+   * 修法：把两个监听挪到**窗口实体化之后**（本函数内、return 之前）。
+   * `broadcastMaximize` 仍是同一份实现，只是有着落了。
+   */
+  win.on('maximize', () => broadcastMaximize(win));
+  win.on('unmaximize', () => broadcastMaximize(win));
+
   return win;
 }
 

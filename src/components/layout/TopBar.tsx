@@ -452,7 +452,27 @@ function WindowControls({ width }: { width: number }): JSX.Element {
       data-window-controls=""
       role="group"
       aria-label="窗口控制"
-      className="fixed right-0 top-0 z-[85] flex h-[calc(56px+1px)] items-stretch border-b border-line bg-paper xl:h-[calc(64px+1px)]"
+      /*
+       * ★ v0.8.6.0002 · 反馈 #5.2「三键某些情况下点击失效」——右沿那一半的修复。
+       *
+       * 原写法 `right-0 top-0` 让三键**贴着窗口右上角**。而 main.cjs:340 只配了
+       * `titleBarStyle:'hidden'`、没配 `frame:false` ⇒ 原生的 resize/drag 边框仍由
+       * 系统盖在网页之上，吞掉三键**顶部约 4-8px、右沿约 1-2px** 的点击
+       * （真实 OS 输入探针两次实测：点在这些位置窗口被拖动/缩放，DOM 零事件）。
+       * 这就是「难复现」的物理机制——点偏一两像素就失效，点按钮中部完全正常。
+       *
+       * 本版只解**右沿**：容器右移 2px（`right-[2px]`），视觉差异为 0
+       * （2px 在 46px 宽的按钮上几乎看不出，且顶栏右端本来就有内边距）。
+       * **高度不动**——Q-A1-4/Q-A1-5 两条几何锁明确要求按钮高度跟顶栏
+       * （xl=64 / <xl=56），动高度必然红。
+       *
+       * ⚠️ 顶部那 4-8px 死区**本版不修**（已如实告知她）：解法只有两条，
+       *   ① `frame:false`——牵连圆角/阴影/系统缩放行为，要单独一轮验证；
+       *   ② 把三键从 fixed portal 改成顶栏的**子元素**——那是反馈 #5 的
+       *      「壳层常驻/三键与顶栏绑定」，属于设计稿画板 1/9 那件事，
+       *      **等她拍板后同批做**。两件都不该塞进一个 bugfix 里。
+       */
+      className="fixed right-[2px] top-0 z-[85] flex h-[calc(56px+1px)] items-stretch border-b border-line bg-paper xl:h-[calc(64px+1px)]"
       style={{ width }}
     >
       <button

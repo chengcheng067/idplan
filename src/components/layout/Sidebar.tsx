@@ -572,7 +572,13 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
  * 3 枚项目方块（竖条 + 简称）+ 占位 + 设置/新建/身份
  */
   const renderCollapsed = (): JSX.Element => {
-    const top3 = projects.slice(0, 3);
+  /*
+   * v0.8.6.0002 · 反馈 #3 的**收起态另一半**（调查员 10-06 走查发现漏门）：
+   * 展开态已用 hasIdentity 门控项目列表，但收起态那 3 枚 top3 项目方块
+   * 仍在未登录时渲染。退出身份后**收起态也必须是空的**——否则她反馈的
+   * 「退出身份还看到项目」在折叠侧栏后依旧复现。
+   */
+    const top3 = hasIdentity ? projects.slice(0, 3) : [];
     return (
       <>
         {/* Logo（真图 /logo.png，40×40 圆角 12） + 展开键（40×40 sunken 圆角 12） */}
