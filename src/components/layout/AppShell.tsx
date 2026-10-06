@@ -1,10 +1,11 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 
 import { TopBar } from './TopBar';
 import { Sidebar } from './Sidebar';
 import { IdentityDialog } from './IdentityDialog';
 import { FirstRunGuide } from './FirstRunGuide';
 import { ManualFallbackForm } from '../contract-wizard/ManualFallbackForm';
+import { PluginFrameHost, useActiveInstalledPlugin } from '../../core/plugin/PluginSandboxFrame';
 import { useProjectsBootstrap } from '../../hooks/useProjectsBootstrap';
 import { useFirstRunGate } from '../../hooks/useFirstRunGate';
 import { useAgentLoopbackReceiver } from '../../hooks/useAgentLoopbackReceiver';
@@ -43,6 +44,16 @@ import { useUiStore } from '../../store/useUiStore';
  *    潜在滚动路径（见 Modal.tsx 的 effect），不因壳层改动移除。
  * 7. 打印路由不受影响：@media print 下 overflow/y-auto 均被打印样式拉平，
  *    纸面输出仍取完整文档流。
+ *
+ * ── v0.8.6 · L2「从文件安装」：插件内容区 ──
+ * 8. 启用中的**已安装**插件（从文件安装 + manifest 声明 entry）由沙箱 iframe 全屏
+ *    承载：它**替代** `<Outlet/>`（不是覆盖层——插件整页自带 UI，不与宿主 React
+ *    树共享；退出靠插件顶条的「回到主界面」或去设置关开关）。插件宿主
+ *    （PluginFrameHost）**常驻不随停用卸载**——停用要先请插件 unmount 再摘
+ *    iframe，DOM 摘除权必须在宿主自己手里（React 卸组件时先摘 DOM 后跑 cleanup，
+ *    真机实测过：交给 React 就发不出 unmount 消息）。打印路由
+ *    （schedule/calendar/itinerary-print）刻意不让位——打印是宿主文档流，
+ *    不该被插件模式截走。
  */
 export function AppShell(): JSX.Element {
   useProjectsBootstrap();
@@ -57,6 +68,11 @@ export function AppShell(): JSX.Element {
   const dismissToast = useProjectsStore((s) => s.dismissToast);
   const manualFormOpen = useUiStore((s) => s.manualFormOpen);
   const closeManualForm = useUiStore((s) => s.closeManualForm);
+  // L2：启用中的已安装插件（沙箱 iframe 全屏承载，替代路由出口）
+  const activePlugin = useActiveInstalledPlugin();
+  const location = useLocation();
+  // 打印路由不让位给插件模式（打印是宿主文档流；/project/:id/{schedule,calendar,itinerary}-print）
+  const printRoute = /(schedule|calendar|itinerary)-print$/.test(location.pathname);
 
   return (
     <div className="flex h-screen overflow-hidden bg-cream font-body text-ink print:block print:h-auto print:overflow-visible">
@@ -91,7 +107,12 @@ export function AppShell(): JSX.Element {
           同步展平，双保险。iframe 隔离打印（print-frame.ts）不受影响。
         */}
         <main className="mx-auto w-full max-w-[1440px] flex-1 min-h-0 overflow-y-auto print:h-auto print:overflow-visible">
-          <Outlet />
+          {/*
+            插件宿主常驻（hidden 态不占布局）；有启用中的自装插件时它撑满内容区、
+            路由出口让位。active 传 null（含打印路由）= 宿主隐藏、Outlet 照常。
+          */}
+          <PluginFrameHost active={activePlugin && !printRoute ? activePlugin : null} />
+          {!(activePlugin && !printRoute) && <Outlet />}
         </main>
       </div>
 

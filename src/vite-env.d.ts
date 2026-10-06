@@ -111,6 +111,31 @@ interface IdPlanBridge {
   sendAgentPong?: (payload: { requestId: string }) => void;
   /** 把 token 告知主进程（主进程只比对，绝不回传原文） */
   setAgentToken?: (token: string) => void;
+  /**
+   * 插件「从文件安装」（L2 · v0.8.6 · 刻意最小四方法）。
+   * 老版本 preload 未暴露 ⇒ 可选；调用方（设置 → 插件面板）做存在性判断，
+   * 不存在时「从文件安装」入口整个不渲染（浏览器 / NAS 端同理）。
+   */
+  pluginInstall?: {
+    /** 打开文件选择器（只让选 manifest.json）；取消时 canceled=true */
+    pickManifestFile: () => Promise<{
+      ok: boolean;
+      canceled?: boolean;
+      filePath?: string;
+      reason?: string;
+    }>;
+    /** 校验 + 整目录落盘；成功返回归一 manifest 与文件数，失败带中文 reason */
+    installFromFile: (
+      filePath: string,
+    ) => Promise<
+      | { ok: true; manifest: import('./core/plugin/installed').InstalledPluginManifest; fileCount: number }
+      | { ok: false; reason: string }
+    >;
+    /** 启动扫描（登记入口唯一；坏 manifest fail-open 跳过并随 skipped 返回） */
+    listInstalled: () => Promise<import('./core/plugin/installed').PluginScanResult>;
+    /** 删除插件目录（幂等；KV 由渲染侧清） */
+    uninstall: (pluginId: string) => Promise<{ ok: boolean; reason?: string }>;
+  };
 }
 
 interface Window {

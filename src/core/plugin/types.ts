@@ -88,6 +88,18 @@ export interface PluginManifest {
    * 强制依赖会让「关掉一个插件」变成级联失效。
    */
   recommends?: string[];
+  /* ── 以下三个字段仅「从文件安装」的成员自装插件使用（编译期内置永远不填）──
+   * 与内置 manifest 并行两套契约：内置由构建期 import 代码，自装由磁盘 JSON 登记。
+   * 作者侧产物形态与写入规范见 docs/plugin-api/install.md。 */
+  /**
+   * 入口文件（`'index.js'` IIFE 或 `'index.html'` 整页）。**声明了才有沙箱 iframe**；
+   * 落盘 manifest 没有 entry 会被安装器拒绝（v1 自装插件的唯一界面出口就是它）。
+   */
+  entry?: string;
+  /** 安装器写入的版本标记（覆盖写后用户在设置里看得见装了哪版） */
+  installVersion?: string;
+  /** 宿主最低版本要求；宿主低于它 ⇒ 启动扫描时跳过不登记 */
+  minHostVersion?: string;
 }
 
 /** 设置 KV 里单个插件启用状态的键（单一出处，避免各处拼字符串漂移）。 */

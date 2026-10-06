@@ -7,8 +7,9 @@
  *      经 `IRepositoryBundle.settings`，所以备份/迁移自动继承）；
  *   ③ 派生**启用视图**：路由数组 + 侧栏入口 + 启用中的插件。
  *
- * **没有**在这里放任何动态 import / 远程加载 / 用户代码执行——那是后面的事
- * （安全官红线：v1 只做编译期内置）。
+ * v0.8.6 · L2「从文件安装」之后新增第 ④ 项：启动时经 IPC 扫 userData/plugins 下的
+ * 已安装插件，合并进注册表（默认关、只只读、内置同名优先）。扫描**只在启动做一次**
+ * ——运行期不热加载，所以「装完要重启」不是偷懒，是登记入口唯一（压安装/卸载竞态）。
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -25,11 +26,13 @@ import {
   resolveRoutes,
 } from './registry';
 import type { PluginManifest, PluginNavItem, PluginRegistryState } from './types';
+import { mergeInstalledManifests } from './installed';
+import type { InstalledPluginManifest, SkippedPlugin } from './installed';
 
 /* ── 内置插件清单（编译期）───────────────────────────────────────────────
- * 唯一一份「本构建带了哪些插件」的事实源。成员自装插件将来也从这里进
- * （同样走编译期清单，只是 source 标 'member'）——「能装什么」由构建决定，
- * 不由用户上传决定，这是 v1 的安全边界。
+ * 唯一一份「本构建带了哪些插件」的事实源。成员自装插件**不再**从这里进——
+ * v0.8.6 L2 起它们经启动扫描（userData/plugins）登记，与编译期清单**并行两套**，
+ * 由 mergeInstalledManifests 合并（内置同名优先、自装默认关）。
  */
 import { sampleProjectsManifest } from './builtin/sample-projects.manifest';
 import { weeklyReportManifest } from '../../plugins/weekly-report/manifest';
@@ -56,7 +59,10 @@ const BUILTIN_MANIFESTS: readonly PluginManifest[] = [
  * 一律带 Manifests 后缀。
  */
 interface PluginRegistryValue extends Omit<PluginRegistryState, 'enabled'> {
-  /** 注册表是否已从 settings KV 读完（未读完时路由不该建 ⇒ 见 AppRouter） */
+  /**
+   * settings KV 是否已读完（未读完时路由不该建 ⇒ 见 AppRouter）。
+   * 注意：**不含**启动扫描那一路——扫描允许晚上一帧（fail-open），路由正确性优先。
+   */
   registryReady: boolean;
   /** 切启用状态（写 settings KV；失败时抛给 UI 提示，不改内存） */
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<void>;
@@ -70,6 +76,10 @@ interface PluginRegistryValue extends Omit<PluginRegistryState, 'enabled'> {
   navItems: PluginNavItem[];
   /** 单插件状态（UI 开关用） */
   stateOf(pluginId: string): { enabled: boolean; explicit: boolean };
+  /** 已安装（从文件安装）插件的 id 集合——UI 据此显示「卸载」入口（内置无此键） */
+  installedIds: ReadonlySet<string>;
+  /** 扫描到但未登记的插件（坏 manifest / 版本不兼容）；非空时 UI 展示计数 */
+  skippedPlugins: readonly SkippedPlugin[];
 }
 
 const PluginRegistryContext = createContext<PluginRegistryValue | null>(null);
@@ -78,6 +88,9 @@ export function PluginRegistryProvider({ children }: { children: ReactNode }): J
   const repos = useRepos();
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({});
   const [hydrated, setHydrated] = useState(false);
+  /** L2：启动扫描回来的已安装插件（合并进注册表；非桌面/扫描失败 = 空） */
+  const [installed, setInstalled] = useState<readonly InstalledPluginManifest[]>([]);
+  const [skipped, setSkipped] = useState<readonly SkippedPlugin[]>([]);
 
   // 启动：从 settings KV 还原启用状态（与身份/休息制度同一批启动读）
   useEffect(() => {
@@ -98,6 +111,43 @@ export function PluginRegistryProvider({ children }: { children: ReactNode }): J
     };
   }, [repos]);
 
+  /**
+   * L2：启动扫描已安装插件（**只此一次**——运行期不热加载，装完要重启）。
+   *
+   * 与上面那路 KV 读并行发起、独立完成：扫描失败（老 preload / 浏览器端无桥）
+   * 绝不影响 KV 那一路 ⇒ 插件系统主体功能零依赖安装链路。`registryReady` 以
+   * KV 那一路为准（路由不建错比自装插件晚上一帧重要得多）。
+   */
+  useEffect(() => {
+    let alive = true;
+    const bridge = typeof window !== 'undefined' ? window.idplan?.pluginInstall : undefined;
+    if (!bridge) return; // 非桌面（浏览器 / NAS）：没有本地安装这回事
+    void (async () => {
+      try {
+        const scan = await bridge.listInstalled();
+        if (!alive) return;
+        if (scan && scan.ok) {
+          setInstalled(scan.installed ?? []);
+          setSkipped(scan.skipped ?? []);
+        }
+      } catch {
+        /* 扫描失败 = 当作什么都没装（fail-open；启动不该被它挡住） */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const manifests = useMemo(
+    () => mergeInstalledManifests(BUILTIN_MANIFESTS, installed),
+    [installed],
+  );
+  const installedIds = useMemo(
+    () => new Set(installed.map((m) => m.id)),
+    [installed],
+  );
+
   const setPluginEnabled = useCallback(
     async (pluginId: string, enabled: boolean) => {
       // 先落库后改内存：**关掉插件这个动作本身必须可持久化**，否则刷新就回来了
@@ -108,9 +158,9 @@ export function PluginRegistryProvider({ children }: { children: ReactNode }): J
   );
 
   const value = useMemo<PluginRegistryValue>(() => {
-    const state: PluginRegistryState = { manifests: BUILTIN_MANIFESTS, enabled: enabledMap };
+    const state: PluginRegistryState = { manifests, enabled: enabledMap };
     return {
-      manifests: BUILTIN_MANIFESTS,
+      manifests,
       // KV 原始布尔表（无记录 = 用 defaultEnabled）
       enabledMap: enabledMap,
       // 派生：启用中的插件
@@ -119,10 +169,12 @@ export function PluginRegistryProvider({ children }: { children: ReactNode }): J
       navItems: resolveNavItems(state),
       setPluginEnabled,
       stateOf: (pluginId) => describePluginState(state, pluginId),
+      installedIds,
+      skippedPlugins: skipped,
       // 真实值由下方 withReady 覆盖；此处给保守默认（未就绪）
       registryReady: false,
     };
-  }, [enabledMap, setPluginEnabled]);
+  }, [enabledMap, setPluginEnabled, manifests, installedIds, skipped]);
 
   /**
    * ⚠️ 未 hydrate 时**也必须**提供 context（这里栽过一次：早先写
@@ -167,6 +219,8 @@ export function usePluginRegistry(): PluginRegistryValue {
         throw new Error('插件注册表不可用（无 Provider），无法保存开关');
       },
       stateOf: () => ({ enabled: false, explicit: false }),
+      installedIds: new Set<string>(),
+      skippedPlugins: [],
       // 无 Provider ⇒ 无 KV 可读 ⇒ 视为「没有插件」且已就绪
       //   （若报 false 会把真 Chromium spec 卡在「正在加载…」——那是我刚修的回退）
       registryReady: true,

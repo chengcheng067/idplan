@@ -124,4 +124,23 @@ contextBridge.exposeInMainWorld('idplan', {
    * 持久化唯一出处（localStorage 的 `idplan.agentToken`），主进程仅内存持有。
    */
   setAgentToken: (token) => ipcRenderer.send('agent:token:set', token),
+
+  /**
+   * 插件「从文件安装」（L2 · v0.8.6）——刻意最小的四个方法，多一个都不给：
+   *
+   *   ① pickManifestFile  打开文件选择器（只让选 manifest.json）
+   *   ② installFromFile   校验 + 整目录落盘 userData/plugins/<id>/（同名覆盖写）
+   *   ③ listInstalled     启动扫描已安装插件（登记入口唯一，运行期不热加载）
+   *   ④ uninstall         删除插件目录（KV 由渲染侧清）
+   *
+   * 为什么不给「读任意文件 / 执行任意代码 / 打开目录」：渲染进程不碰 fs 是本仓
+   * 既有纪律（sandbox preload 也不能），插件的文件语义必须全部经主进程这三条
+   * 受控出口。返回值形状见 src/core/plugin/installed.ts 与 vite-env.d.ts。
+   */
+  pluginInstall: {
+    pickManifestFile: () => ipcRenderer.invoke('plugin:pick-file'),
+    installFromFile: (filePath) => ipcRenderer.invoke('plugin:install', filePath),
+    listInstalled: () => ipcRenderer.invoke('plugin:list'),
+    uninstall: (pluginId) => ipcRenderer.invoke('plugin:uninstall', pluginId),
+  },
 });

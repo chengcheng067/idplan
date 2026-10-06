@@ -35,6 +35,7 @@ npm install && npm run dev
 |---|---|
 | [**contract.md**](./contract.md) | manifest 字段总表、只读数据出口清单、三个贡献点写法、硬禁令、样式 token 表 |
 | [**example.md**](./example.md) | 完整示例「会议室占用看板」：manifest + 纯函数 + 面板 + 单测，可直接抄 |
+| [**install.md**](./install.md) | **从文件安装**（自装插件）：作者侧产物形态、IIFE 契约、message 协议、禁止事项 |
 | [**review-checklist.md**](./review-checklist.md) | 提交 PR 前的自检清单，以及我们审什么 |
 
 ## 当前状态（v1）
@@ -45,11 +46,12 @@ npm install && npm run dev
 | routes / nav / settingsSlot 三个贡献点 | ✅ 已实现（nav 的 `main` 组渲染于 2026-10-07 补齐） |
 | `data.write.proposal`（写提案，落库由人批） | 🚧 设计已定，等归属门下沉（F8） |
 | `file.pick` / `storage.kv` | 📋 规划中 |
-| 从文件安装（不重新构建） | 🚧 开发中 |
+| 从文件安装（不重新构建） | ✅ 已实现（沙箱 iframe + 启用前披露；**v1 未挡网络出口**） |
 | 远程市场 / 一键下载 | ❌ v1 不做（要签名体系，见架构决策文档） |
 
-> **想现在就能拿到别人的插件？** 目前插件的分发形态是「进 PR → 合并 → 随下个版本安装包分发」。
-> 「从文件安装」正在做（装前会把 manifest 与能力清单摊给你看，只读起步）。
+> **想现在就能拿到别人的插件？** 「从文件安装」已可用：设置 → 插件 → 从文件安装。装前会把
+> 权限摊给你看（只读项目数据、沙箱隔离、**可访问网络**——v1 实话），重启生效、默认关闭。
+> 作者侧怎么写产物见 [install.md](./install.md)。
 
 ## 参与方式
 

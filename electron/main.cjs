@@ -7,7 +7,7 @@
  *
  * 复用 ID Aura 的 Electron 打包思路：独立窗口 + NSIS 安装 + 数据落应用独立目录。
  */
-const { app, BrowserWindow, protocol, shell, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, protocol, shell, Menu, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const https = require('node:https');
@@ -215,6 +215,10 @@ ipcMain.on('agent:token:set', (_event, token) => {
 //   请求判死，且无任何测试覆盖得到；共享后有契约测试钉死。
 const { writeIngressFile, ingressFilePath } = require('./ingress-file.cjs');
 
+// 插件「从文件安装」（L2 · v0.8.6）：manifest 校验 / 启动扫描 / 安装落盘 / 卸载
+// 的文件语义全部在共享 CJS 模块（有单测钉死），本文件只做协议与 IPC 接线。
+const pluginInstall = require('./plugin-install.cjs');
+
 ipcMain.handle('agent-ingress:path', () => ingressFilePath(app.getPath('documents')));
 
 ipcMain.handle('agent-ingress:write', (_event, payload) =>
@@ -241,14 +245,30 @@ const useDevServer = process.argv.includes('--dev-server');
 const isDev = !app.isPackaged && useDevServer;
 const DIST = path.join(__dirname, '..', 'build-dist');
 const PROTOCOL = 'app';
+// 插件「从文件安装」（L2）：沙箱 iframe 加载 userData/plugins/<id>/ 产物的特权协议。
+// 与 app:// 同一机制、同一组 five privileges——差别只在服务目录与「404 不回落」
+// （插件文件找不到就是找不到，回退 index.html 会把 404 伪装成白屏）。
+const PLUGIN_PROTOCOL = 'plug';
 
 // 关键：必须在 app.whenReady() 之前注册 app:// 为 privileged scheme。
 // 前端用 <script type="module"> + createBrowserRouter，非 standard 协议下
 // Chromium 会以 CORS 拦截 module 脚本导致白屏；注册为 standard+secure+
 // corsEnabled+supportFetchAPI 后，module 脚本与 fetch 才能正常执行。
+// plug:// 同理（且更强）：插件产物可能是 ESM/IIFE/classic script 任一形态，
+// privileges 少一个就有形态加载失败（实测：非 standard 下 module 被 CORS 拦）。
 protocol.registerSchemesAsPrivileged([
   {
     scheme: PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+  {
+    scheme: PLUGIN_PROTOCOL,
     privileges: {
       standard: true,
       secure: true,
@@ -313,6 +333,57 @@ function mimeFor(ext) {
   };
   return map[ext.toLowerCase()] || 'application/octet-stream';
 }
+
+/**
+ * plug:// 协议处理器：服务 userData/plugins/<id>/ 下的插件产物。
+ *
+ * 路径解析与 MIME 全在共享模块（有单测）：防穿越 + 404 不回落 + .js 必须是
+ * text/javascript（坏 MIME 会让 import 静默失败——探路实测踩过）。
+ */
+function registerPlugProtocol() {
+  protocol.handle(PLUGIN_PROTOCOL, (request) => {
+    // 注意：resolvePlugFile 要的是 userData 路径（它自己拼 plugins 根），别把根传进去
+    const res = pluginInstall.resolvePlugFile(app.getPath('userData'), request.url);
+    if (res.status === 403) return new Response('Forbidden', { status: 403 });
+    if (res.status === 404) return new Response('Not Found', { status: 404 });
+    try {
+      const data = fs.readFileSync(res.filePath);
+      return new Response(data, { headers: { 'Content-Type': res.mime } });
+    } catch {
+      return new Response('Not Found', { status: 404 });
+    }
+  });
+}
+
+// ── 插件「从文件安装」IPC（渲染进程不碰 fs；选文件/校验/落盘/删除全在主进程）──
+// 暴露面刻意最小（四个），预加载侧只转这四条通道，别的不给。
+
+/** 选文件：只让选 manifest.json（插件目录的入口就是它；选中后整目录落盘） */
+ipcMain.handle('plugin:pick-file', async () => {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+  const result = await dialog.showOpenDialog(win, {
+    title: '选择插件的 manifest.json',
+    properties: ['openFile'],
+    filters: [{ name: '插件清单', extensions: ['json'] }],
+  });
+  if (result.canceled || result.filePaths.length === 0) return { ok: true, canceled: true };
+  return { ok: true, canceled: false, filePath: result.filePaths[0] };
+});
+
+/** 安装：校验 manifest ⇒ 整目录覆盖写 userData/plugins/<id>/ */
+ipcMain.handle('plugin:install', (_event, filePath) =>
+  pluginInstall.installPluginFromDirectory(app.getPath('userData'), filePath),
+);
+
+/** 卸载：删目录（KV 由渲染侧清——设置表在 Dexie，主进程不碰） */
+ipcMain.handle('plugin:uninstall', (_event, pluginId) =>
+  pluginInstall.uninstallPlugin(app.getPath('userData'), pluginId),
+);
+
+/** 启动扫描：登记入口唯一（运行期不热加载 ⇒ 装完要重启，诚实告知） */
+ipcMain.handle('plugin:list', () =>
+  pluginInstall.scanInstalledPlugins(app.getPath('userData'), APP_VERSION),
+);
 
 /** 创建主窗口 */
 function createWindow() {
@@ -401,6 +472,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     registerAppProtocol();
+    registerPlugProtocol();
     if (!isDev) Menu.setApplicationMenu(null);
     const win = createWindow();
     scheduleAutoUpdateCheck(win);
