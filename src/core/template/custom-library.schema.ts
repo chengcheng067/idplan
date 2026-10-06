@@ -41,13 +41,19 @@ export const CUSTOM_LIBRARY_MAX_BYTES = 256 * 1024;
  * 看板列白名单（安全官 C.4-5：枚举即白名单，杜绝任意字符串）。
  * = 内置库 items[].kanbanColumn 的全部取值（templates/stage-library.json v3，
  * 24 列；想要新列 = 改内置库走评审，不走用户输入）。
+ *
+ * 导出：prompt 生成器（custom-library.prompt.ts）要把这 24 个值原样写进给
+ * Agent 的字段表——白名单只有这一份出处，prompt 不允许手抄第二份。
  */
-const KANBAN_COLUMN_ENUM = z.enum([
+export const KANBAN_COLUMN_ENUM = z.enum([
   'booking', 'build', 'creative', 'deepen', 'delivery', 'design', 'designing',
   'developing', 'kickoff', 'live', 'ongoing', 'planning', 'post', 'prep',
   'preprod', 'promo', 'rehearsal', 'released', 'research', 'review', 'settle',
   'shoot', 'testing',
 ] as const);
+
+/** 24 个看板列键（prompt 字段表与 UI 展示用；与 KANBAN_COLUMN_ENUM 同源） */
+export const KANBAN_COLUMN_VALUES = KANBAN_COLUMN_ENUM.options;
 
 /** ratioPercent：有限数、开区间 (0,100] */
 const ratioSchema = z
