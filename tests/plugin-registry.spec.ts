@@ -142,6 +142,18 @@ describe('插件注册表 · settings KV 往返', () => {
     expect(enabledPlugins(s)).toHaveLength(1);
   });
 
+  it('⑪ nav 的 main 组必须有宿主消费者（产品官 10-07 走查发现的第二个死开关）', () => {
+    // 缺口：`PluginNavItem.group` 声明 'main' | 'agent'，但 SidebarNav 只 filter 了
+    // 'agent' ⇒ weekly-report 那类 main 组插件启用后侧栏无入口（路由仍可达），
+    // 表现就是「设置里开着、侧栏什么都没有」。
+    // 锁法：读 SidebarNav 源码，必须同时出现 main 与 agent 两族的 filter。
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { resolve } = require('node:path') as typeof import('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'src/components/layout/SidebarNav.tsx'), 'utf8');
+    expect(src).toContain("filter((n) => n.group === 'main')");
+    expect(src).toContain("filter((n) => n.group === 'agent')");
+  });
+
   it('⑩ 每个内置插件的开关都有真实消费者（防再出现「死开关」）', () => {
     // 产品官 10-06 走查发现：sample-projects 的 manifest 在、设置里有开关，但
     // 全仓没有任何地方问过它 ⇒ 用户拨开关没有任何反应（死开关）。

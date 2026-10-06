@@ -1,5 +1,15 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Bot, CalendarRange, ChevronRight, History, LayoutGrid } from 'lucide-react';
+import {
+  BarChart3,
+  Bot,
+  CalendarRange,
+  ChevronRight,
+  FileText,
+  History,
+  LayoutGrid,
+  Puzzle,
+  Table2,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -32,6 +42,31 @@ interface NavEntry {
   Icon: LucideIcon;
   /** 命中判定的 pathname 谓词（首页用精确匹配，避免 `/` 命中所有路径） */
   match(pathname: string): boolean;
+  /** 可选来源小标（插件贡献项用；真实绘成 10px mist 后缀，不抢标签视觉） */
+  badge?: string;
+}
+
+/**
+ * 插件 manifest 的图标名 → lucide 组件（**显式映射，不用 `import * as`**）。
+ *
+ * 为什么不用动态索引：`import * as icons from 'lucide-react'` 会把**整个图标库**
+ * 打进 bundle（实测量级以 MB 计），而 manifest 只是声明数据的字符串。
+ * 宿主层一张 6-8 个常用图标的映射表，换来 bundle 可控 + 「插件只能用白名单图标」
+ * 这条隐含约束（第三方不能塞任意 React 组件进来，只能报名字）。
+ *
+ * 未知图标 → 回落 Puzzle（拼图），不抛错：外部作者的规范外图标名不该让侧栏崩。
+ */
+const PLUGIN_NAV_ICONS: Record<string, LucideIcon> = {
+  fileText: FileText,
+  bot: Bot,
+  calendarRange: CalendarRange,
+  barChart: BarChart3,
+  table: Table2,
+  plug: Puzzle,
+};
+
+function fileNavIcon(name: string): LucideIcon {
+  return PLUGIN_NAV_ICONS[name] ?? Puzzle;
 }
 
 /** Agent 二级子项（工作区 / 执行记录） */
@@ -70,6 +105,28 @@ export function SidebarNav({
    */
   const agentNav = usePluginRegistry().navItems.filter((n) => n.group === 'agent');
   const agentNavActive = agentNav.length > 0;
+  /**
+   * v0.8.6.0002 · 补 main 组 nav 的渲染（产品官 10-07 走查发现的**真缺口**）。
+   *
+   * 缺口原貌：`PluginNavItem.group` 声明了 'main' | 'agent' 两族，但这里只
+   * filter 了 'agent' ⇒ 声明 main 组的插件（如 member 样板 weekly-report 的
+   * 「项目周报」入口）启用后**侧栏根本不出现**（路由 /weekly-report 仍可达）。
+   * 表现就是「死开关第二弹」——设置里明明开着，侧栏却什么都没有。
+   *
+   * 修法：main 组作为**普通导航项**插在「我的任务」之后、Agent 段之前
+   *（Agent 段保持独立分块，不与普通项混排）。图标走一张显式映射表
+   *（见 fileNavIcon）——manifest 只报图标名，宿主解析，避免把 lucide 塞进
+   * 声明数据、也避免 `import * as icons` 把整个图标库打进 bundle。
+   */
+  const mainNav = usePluginRegistry().navItems.filter((n) => n.group === 'main');
+  const pluginNavEntries: NavEntry[] = mainNav.map((n) => ({
+    to: n.to,
+    label: n.label,
+    Icon: fileNavIcon(n.icon),
+    match: (p: string) => p === n.to,
+    // 第三方入口显式标注来源（设计师规范：来源只用形态不用徽章 ⇒ 用小字后缀）
+    badge: '插件',
+  }));
 
   const entries: Array<NavEntry | { group: 'agent' }> = [
     isAdmin
@@ -91,6 +148,8 @@ export function SidebarNav({
       Icon: CalendarRange,
       match: (p) => p === '/my-tasks',
     },
+    // 插件贡献的普通导航项（停用插件 ⇒ 这里为空 ⇒ 入口消失）
+    ...pluginNavEntries,
     // 插件停用 ⇒ 不占位 ⇒ Agent 段不渲染（与路由摘除同一个开关）
     ...(agentNavActive ? ([{ group: 'agent' }] as const) : []),
   ];
@@ -163,6 +222,7 @@ export function SidebarNav({
             to={entry.to}
             label={entry.label}
             Icon={entry.Icon}
+            badge={entry.badge}
             active={entry.match(pathname)}
             collapsed={collapsed}
             drawer={drawer}
@@ -187,6 +247,7 @@ export function SidebarNavItem({
   active,
   collapsed,
   drawer = false,
+  badge,
 }: {
   to: string;
   label: string;
@@ -195,17 +256,29 @@ export function SidebarNavItem({
   collapsed: boolean;
   /** 抽屉态：放大点击区到 h44 / pad16（画板 10），便于触屏点按 */
   drawer?: boolean;
+  /** 来源小标（插件贡献项）；收起态并入 title，避免 64px 栏里塞不下 */
+  badge?: string;
 }): JSX.Element {
+  const ariaLabel = badge && !collapsed ? `${label}（${badge}）` : collapsed ? label : undefined;
   return (
     <Link
       to={to}
-      aria-label={collapsed ? label : undefined}
+      aria-label={ariaLabel}
       aria-current={active ? 'page' : undefined}
-      title={collapsed ? label : undefined}
+      title={badge ? `${label} · ${badge}` : collapsed ? label : undefined}
       className={cn(navItemClass(active, collapsed, drawer))}
     >
       <Icon size={18} className="shrink-0" aria-hidden />
-      {!collapsed && <span className="truncate">{label}</span>}
+      {!collapsed && (
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="truncate">{label}</span>
+          {badge && (
+            <span className="shrink-0 text-[10px] text-mist" data-plugin-nav-badge="">
+              {badge}
+            </span>
+          )}
+        </span>
+      )}
     </Link>
   );
 }
