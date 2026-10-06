@@ -903,7 +903,8 @@ await page.click('[data-industry-select-option="indoor"]');
    *   本组守住四件用户能看见的事：
    *     ① 抽屉从窗口左缘滑出（left ≈ 0），宽 640（<xl 全屏）；
    *     ② 盖住侧栏（elementFromPoint 诚实判据），贴顶栏底缘全高（无悬空带）；
-   *     ③ 设置项在抽屉内可见、可点（主题切换真路径）；
+   *     ③ 设置项在抽屉内可见、可点（主题切换真路径；v0.8.6 反馈 #7 起经
+   *        左导航分区可达——六区各渲染当前分区，不再是"一列到底"）；
    *     ④ 焦点管理：打开入抽屉、Esc 关、关闭焦点回触发钮（Q-A2-3）。
    *   旧 float 口径（锚定在点击处 / 底圆角不被裁 / 让开三键）随形态废止：
    *   全高抽屉贴边，底圆角被裁的结构性根因不复存在；让开三键由遮罩让位承担
@@ -918,10 +919,18 @@ await page.click('[data-industry-select-option="indoor"]');
         await clickSidebarSettings(page);
         await waitSettingsDrawer(page);
 
-        // ③ 设置项可见（亮色档先验文本，暗色档的真实切换路径在下面走）
-        const headText = await page.locator('[data-settings-drawer]').innerText();
-        expect(headText, '抽屉内应有「前端日志」区').toContain('前端日志');
-        expect(headText).toContain('插件');
+        // ③ 设置项可见、可点（v0.8.6 · 反馈 #7：六区化后抽屉只渲染当前分区，
+        //    内容可达性 = 左导航切换真路径，不再是"一列到底全在内"）
+        const drawer = page.locator('[data-settings-drawer]');
+        const headText = await drawer.innerText();
+        expect(headText, '默认应落在「外观」区（主题 + 侧栏）').toContain('主题');
+        expect(headText).toContain('侧栏');
+        await page.locator('[data-settings-zone="data"]').click();
+        expect(await drawer.innerText(), '「数据与备份」区应有日志区').toContain('前端日志');
+        expect(await drawer.innerText()).toContain('保存备份');
+        await page.locator('[data-settings-zone="agent"]').click();
+        expect(await drawer.innerText(), '「Agent 与自动化」区应有插件区').toContain('插件');
+        await page.locator('[data-settings-zone="appearance"]').click();
 
         if (theme === 'dark') {
           // 真实切换路径：抽屉内点「深色」→ useTheme.setMode → apply()
