@@ -24,8 +24,8 @@ import { listenOnSafePort } from './helpers/safe-listen';
  *   ③ 768–1279（<xl 非手机档）：六个导航按钮同屏可点，不依赖横滑；
  *   ④ ≥xl 贴缘几何（v0.8.6.0002 · 反馈 #1）：抽屉左缘 = 侧栏右缘（展开 240 /
  *      收起 64，折叠后随缘移动），遮罩不压侧栏（侧栏中心命中测试仍是侧栏自己）；
- *   ⑤ 按角色收分区（v0.8.6.0002 · 反馈 #11）：管理员看得到「行业与模板」，
- *      成员看不到（整分区消失，不是禁用；插件对成员保留）；
+ *   ⑤ 按角色收分区（v0.8.6.0002 · 反馈 #11 + 图 5 第 3 点）：管理员看得到
+ *      「排程」与「行业与模板」，成员看不到（整分区消失，不是禁用；插件对成员保留）；
  *   ⑥ 接缝同色（v0.8.6.0002 · 图 5 第 2 点）：抽屉贴着侧栏展开时，接缝带与
  *      侧栏底色逐像素一致（亮/暗双主题）——不靠描线与投影把两侧分成两块。
  *
@@ -574,26 +574,37 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     }
   }, HEAVY);
 
-  it('S-Z5 · 按角色收分区：管理员看得到「行业与模板」，成员看不到（插件保留）（反馈 #11）', async () => {
+  it('S-Z5 · 按角色收分区：成员看不到「排程」与「行业与模板」（插件保留）（反馈 #11 + 图 5 第 3 点）', async () => {
     /*
      * v0.8.6.0002 · 反馈 #11，她的原话：「成员看板的设置界面，是不是'行业与
      * 模板'这个位置就可以让它消失掉，不需要有吧」。
 
+     * v0.8.6.0002 · 图 5 第 3 点，她的原话：「成员的设置界面是看不到排程
+     * 这个按钮的。」
+     *
      * 规则（实现侧口径）：行业库是**管理职能**（导入的自定义阶段/套餐会进
-     * 所有人的建档器）⇒ 成员身份下「行业与模板」**整分区从左导航消失**
-     * （不是禁用占位）；插件**保留给成员**（她明确「插件给成员保留」），
-     * Agent 与自动化作为插件区的二级子段同样对成员可达（图 5 第 1 点）；
-     * 其余分区两角色均可见。对照组全走真 UI（becomeMember 走示例数据 +
-     * 姓名进入），管理员/成员各起一个 context。
+     * 所有人的建档器）；排程区实质内容「休息制度」本就是 admin-only，另一块
+     * 「排期基准」是项目级设置的落脚说明（新建项目仅管理员可操作）⇒ 两个
+     * 分区均**仅管理员可见**——成员身份下整分区从左导航**消失**（不是禁用
+     * 占位）；插件**保留给成员**（她明确「插件给成员保留」），Agent 与自动化
+     * 作为插件区的二级子段同样对成员可达（图 5 第 1 点）。对照组全走真 UI
+     * （becomeMember 走示例数据 + 姓名进入），管理员/成员各起一个 context。
      */
-    // ① 管理员：行业与模板在导航里，内容可点开
+    // ① 管理员：排程与行业与模板都在导航里，内容可点开（管理员导航键全集）
     {
       const { ctx, page } = await open(1600, 900);
       try {
         await becomeAdmin(page);
         await clickSidebarSettings(page);
         await waitSettingsDrawer(page);
-        expect(await page.locator('[data-settings-zone="industry"]').count()).toBe(1);
+        const adminKeys = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
+            b.getAttribute('data-settings-zone'),
+          ),
+        );
+        expect(adminKeys).toEqual(['appearance', 'schedule', 'data', 'plugins', 'industry', 'about']);
+        await page.locator('[data-settings-zone="schedule"]').click();
+        expect(await page.locator('[data-settings-drawer]').innerText()).toContain('休息制度');
         await page.locator('[data-settings-zone="industry"]').click();
         expect(await page.locator('[data-settings-drawer]').innerText()).toContain('行业库（自定义）');
       } finally {
@@ -601,7 +612,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       }
     }
 
-    // ② 成员：行业与模板整分区消失；插件区仍在
+    // ② 成员：排程与行业与模板整分区消失；插件区仍在
     {
       const { ctx, page } = await open(1600, 900);
       try {
@@ -613,6 +624,14 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
           await page.locator('[data-settings-zone="industry"]').count(),
           '成员身份下「行业与模板」应整分区消失（不是禁用）',
         ).toBe(0);
+        // 图 5 第 3 点：「成员的设置界面是看不到排程这个按钮的。」
+        expect(
+          await page.locator('[data-settings-zone="schedule"]').count(),
+          '成员身份下「排程」应整分区消失（不是禁用）',
+        ).toBe(0);
+        const drawerText = await page.locator('[data-settings-drawer]').innerText();
+        expect(drawerText, '成员看不到排程区内容（休息制度/排期基准）').not.toContain('休息制度');
+        expect(drawerText).not.toContain('排期基准');
         // 插件保留给成员（她明确「插件给成员保留」）；Agent 与自动化是插件区的
         // 二级子段（图 5 第 1 点），成员同样可达
         expect(await page.locator('[data-settings-zone="plugins"]').count()).toBe(1);
@@ -624,13 +643,13 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
         await page.locator('[data-plugins-subtab="agent"]').click();
         expect(await page.locator('[data-settings-drawer]').innerText()).toContain('Agent 与本地库');
 
-        // 导航键集合 = 六区减去行业与模板（顺序不变；无独立 Agent 一级分区）
+        // 导航键集合 = 六区减去排程与行业与模板（顺序不变；无独立 Agent 一级分区）
         const keys = await page.evaluate(() =>
           Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
             b.getAttribute('data-settings-zone'),
           ),
         );
-        expect(keys).toEqual(['appearance', 'schedule', 'data', 'plugins', 'about']);
+        expect(keys).toEqual(['appearance', 'data', 'plugins', 'about']);
       } finally {
         await ctx.close();
       }
