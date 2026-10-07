@@ -50,10 +50,23 @@ function storedMode(): ThemeMode {
 
 // —— 极小的外部 store：让任意多个组件共享同一份主题状态 ——
 // mode 是用户选择（含 system）；current 是该选择解析出的实际主题（light/dark），
-// 用于 <html data-theme> 与 useSyncExternalStore 快照（系统切换时 current 变、mode 不变）。
+// 用于 <html data-theme>。系统切换时 current 变、mode 不变；用户点「浅色」时
+// mode 变、current 可能不变（系统本就是浅色）——两者任一变化都必须让订阅方
+// 重渲染，故快照是 { mode, current } 的合并对象（仅任一变化时才换引用）。
+interface ThemeSnapshot {
+  mode: ThemeMode;
+  current: 'light' | 'dark';
+}
+const SERVER_SNAPSHOT: ThemeSnapshot = { mode: 'system', current: 'light' };
 let mode: ThemeMode = storedMode();
 let current: 'light' | 'dark' = resolveTheme(mode);
+let snapshot: ThemeSnapshot = { mode, current };
 const listeners = new Set<() => void>();
+
+function emit(): void {
+  snapshot = { mode, current };
+  listeners.forEach((l) => l());
+}
 
 function apply(next: ThemeMode): void {
   mode = next;
@@ -69,7 +82,7 @@ function apply(next: ThemeMode): void {
   } catch {
     /* 存储不可用：仅当前会话生效，忽略 */
   }
-  listeners.forEach((l) => l());
+  emit();
 }
 
 function subscribe(listener: () => void): () => void {
@@ -79,12 +92,12 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-function getSnapshot(): 'light' | 'dark' {
-  return current;
+function getSnapshot(): ThemeSnapshot {
+  return snapshot;
 }
 
-function getServerSnapshot(): 'light' | 'dark' {
-  return 'light';
+function getServerSnapshot(): ThemeSnapshot {
+  return SERVER_SNAPSHOT;
 }
 
 /**
@@ -100,7 +113,7 @@ export function initTheme(): void {
     if (readStoredTheme() !== null) return;
     current = e.matches ? 'dark' : 'light';
     document.documentElement.dataset.theme = current;
-    listeners.forEach((l) => l());
+    emit();
   });
 }
 
@@ -118,15 +131,15 @@ export interface UseThemeResult {
 }
 
 export function useTheme(): UseThemeResult {
-  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const { mode, current } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const toggleTheme = useCallback(() => {
     apply(current === 'dark' ? 'light' : 'dark');
-  }, []);
+  }, [current]);
   const setTheme = useCallback((m: ThemeMode) => {
     apply(m);
   }, []);
   const setMode = useCallback((m: ThemeMode) => {
     apply(m);
   }, []);
-  return { theme, mode, toggleTheme, setTheme, setMode };
+  return { theme: current, mode, toggleTheme, setTheme, setMode };
 }
