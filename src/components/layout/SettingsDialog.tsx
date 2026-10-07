@@ -12,8 +12,6 @@ import {
   MessageSquare,
   Monitor,
   Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
   Puzzle,
   Settings,
   Sun,
@@ -106,7 +104,7 @@ import {
  * （没有装任何插件它们也在），塞进插件区会把「插件生态」与「宿主能力」搅成
  * 一锅粥。她说的「Agent 只是二级」落在**导航心智**上：插件是一级入口，
  * Agent 是宿主自带的面。分区顺序：
- *   ① 外观        主题 / 侧栏默认形态
+ *   ① 外观        主题（侧栏展开/折叠选项已于 0.8.6.0002 反馈 #4 后半拿掉）
  *   ② 排程        休息制度（管理员）/ 排期口径说明（项目级）
  *   ③ 数据与备份  保存·导入备份 / 日志导出 / NAS 服务 / 检查更新 / 数据存放说明
  *   ④ 插件        插件开关 / 从文件安装 / 卸载 / 启用前披露
@@ -121,6 +119,14 @@ import {
  * 建档器）；插件**保留给成员**（她明确「插件给成员保留」）。其余分区两角色
  * 均可见（休息制度本就是 admin-only 内容级门控；排程区对成员仍有排期口径
  * 说明可看，不整区收；备份自 0.8.6.0002 起全员开放，数据与备份区同样保留）。
+ *
+ * ── v0.8.6.0002 · 反馈 #4 后半：拿掉外观区「侧栏 展开/折叠」选项 ──
+ * 她的原话：「至于侧栏的展开与折叠，你是不是想要实现：如果选择了展开，
+ * 外面的折叠按钮就会消失？我觉得这个地方和上面有一点点冲突，看有没有
+ * 必要。如果没必要的话，就把设置里的这个选项给拿掉」。
+ * 判定：拿掉——侧栏上本来就有折叠开关，设置里再放一份 = 两个真相源
+ * （改一处另一处不跟随的困惑）。`useLayoutStore.sidebarExpanded` 的持久化
+ * 与侧栏折叠开关本身不动（设置只是不再重复表达它）。
  *
  * 实现纪律（本轮只搬位置 + 补分区结构，不动设置项自身的 DOM/文案/钩子）：
  *   - 每个既有 Section 组件（CustomLibrary / Plugins / NasService / RestPolicyEditor）
@@ -227,8 +233,10 @@ export function SettingsDialog({
 
   // 侧栏展开态（v0.7 · D3 持久化偏好）：抽屉贴侧栏右缘展开的几何要用——
   // ≥xl 侧栏是持久左栏（宽 240/64），<xl 侧栏自身是 Modal 抽屉（无持久栏 ⇒ 全屏）。
+  // ⚠️ 本订阅**只为**抽屉贴缘几何存在：外观区不再放「侧栏 展开/折叠」选项
+  //（v0.8.6.0002 · 反馈 #4 后半已拿掉，避免与侧栏折叠开关两个真相源）；
+  // setSidebarExpanded 的设置入口随该选项一并删除，侧栏开关本身不动。
   const sidebarExpanded = useLayoutStore((s) => s.sidebarExpanded);
-  const setSidebarExpanded = useLayoutStore((s) => s.setSidebarExpanded);
   const xl = useXlViewport();
   /**
    * v0.8.6.0002 · 反馈 #1：遮罩（与抽屉）左缘让出的宽度 = 侧栏宽度。
@@ -246,12 +254,6 @@ export function SettingsDialog({
     { key: 'light' as const, label: '浅色', icon: <Sun size={15} aria-hidden /> },
     { key: 'dark' as const, label: '深色', icon: <Moon size={15} aria-hidden /> },
     { key: 'system' as const, label: '跟随系统', icon: <Monitor size={15} aria-hidden /> },
-  ];
-
-  // 侧栏默认形态两选控件（与主题三选同一形态语言：按压块 + pine 选中态）
-  const sidebarOptions = [
-    { key: true as const, label: '展开', icon: <PanelLeftOpen size={15} aria-hidden /> },
-    { key: false as const, label: '折叠', icon: <PanelLeftClose size={15} aria-hidden /> },
   ];
 
   const onExport = (): void => {
@@ -394,42 +396,13 @@ export function SettingsDialog({
                       选「跟随系统」后，应用随系统深色 / 浅色设置实时变化。
                     </p>
                   </section>
-
-                  {/* 侧栏默认形态（反馈 #7 盘点补收：此前只有侧栏上一枚折叠开关） */}
-                  <section>
-                    <div className="mb-2 flex items-center gap-1.5">
-                      <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                        <PanelLeftOpen size={14} className="text-mist" aria-hidden />
-                        侧栏
-                      </h3>
-                    </div>
-                    <div className="flex gap-2">
-                      {sidebarOptions.map((o) => {
-                        const active = sidebarExpanded === o.key;
-                        return (
-                          <button
-                            key={o.label}
-                            type="button"
-                            onClick={() => setSidebarExpanded(o.key)}
-                            aria-pressed={active}
-                            className={
-                              'flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border px-3 py-2 text-sm font-medium transition-colors ' +
-                              (active
-                                ? 'border-pine bg-pine text-cream shadow-accent'
-                                : 'border-line text-mist hover:bg-sand hover:text-ink')
-                            }
-                          >
-                            {o.icon}
-                            {o.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="mt-1.5 text-xs text-mist">
-                      宽屏（≥xl）下侧栏的默认形态；窄屏侧栏收在抽屉里，与本设置无关。
-                      侧栏上的折叠开关随时可改，改动立即生效并记住。
-                    </p>
-                  </section>
+                  {/*
+                    v0.8.6.0002 · 反馈 #4 后半：「侧栏 展开/折叠」两选已**整块拿掉**。
+                    她的原话：「如果没必要的话，就把设置里的这个选项给拿掉」——
+                    侧栏上本来就有折叠开关，设置里再放一份 = 两个真相源。
+                    侧栏折叠开关（SidebarCollapseToggle）与 sidebarExpanded 持久化
+                    均不动；抽屉贴侧栏右缘的几何仍订阅该 store（见 railLeftPx）。
+                  */}
                 </>
               )}
 

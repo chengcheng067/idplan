@@ -334,9 +334,14 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       const drawer = page.locator('[data-settings-drawer]');
       const panel = page.locator('[data-settings-zone-panel]');
 
-      // 默认区 = 外观：主题 + 侧栏默认形态在场
+      // 默认区 = 外观：主题三选在场（「侧栏 展开/折叠」选项已于 0.8.6.0002
+      // 反馈 #4 后半拿掉——侧栏上本来就有折叠开关，不设两个真相源）
       expect(await drawer.innerText(), '默认应落在「外观」区').toContain('主题');
-      expect(await drawer.innerText()).toContain('侧栏');
+      expect(await drawer.innerText()).toContain('跟随系统');
+      expect(
+        await drawer.innerText(),
+        '外观区不得再出现「侧栏 展开/折叠」两选（反馈 #4 后半）',
+      ).not.toContain('宽屏（≥xl）下侧栏的默认形态');
       expect(await panel.getAttribute('data-settings-zone-panel')).toBe('appearance');
       expect(
         await page.locator('[data-settings-zone="appearance"]').getAttribute('aria-current'),
