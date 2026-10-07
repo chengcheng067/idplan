@@ -175,6 +175,21 @@ function scheduleAutoUpdateCheck(win) {
 const USE_SELF_DRAWN_WINDOW_CONTROLS = process.platform === 'win32';
 
 /** 窗口控制 IPC（自绘三键的宿主）：三个动作 + 最大化态查询与变更推送。 */
+/**
+ * 最大化态变更推送：按钮图标要在「最大化 ⇄ 还原」之间切换（用户双击标题栏
+ * 或按系统快捷键时同样走这条推送，否则图标与实际状态不一致）。
+ *
+ * ⚠️ 作用域：**必须在 if 块外**（本行就是 2026-10-07 的教训）。原实现把它定义在
+ * 下面 `if (USE_SELF_DRAWN_WINDOW_CONTROLS)` 块内，而 createWindow() 里的
+ * `win.on('maximize', …)` 在块**外**引用它 ⇒ 打包后报
+ * "Cannot access 'Maximize' before initialization"，一最大化/还原就崩（她 0.8.6.0002
+ * 反馈 #6：「现在窗口最大化和窗口化都会弹出这个报错」）。块内定义、块外引用
+ * 是 TDZ 的经典形态，tsc 不报、lint 不报，只有真机跑才炸。
+ */
+const broadcastMaximize = (win) => {
+  if (win && !win.isDestroyed()) win.webContents.send('window:maximize-change', win.isMaximized());
+};
+
 if (USE_SELF_DRAWN_WINDOW_CONTROLS) {
   const winOf = (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -193,11 +208,6 @@ if (USE_SELF_DRAWN_WINDOW_CONTROLS) {
     winOf(event)?.close();
   });
   ipcMain.handle('window:is-maximized', (event) => winOf(event)?.isMaximized() ?? false);
-  // 最大化态变更推送：按钮图标要在「最大化 ⇄ 还原」之间切换（用户双击标题栏
-  // 或按系统快捷键时同样走这条推送，否则图标与实际状态不一致）。
-  const broadcastMaximize = (win) => {
-    if (win && !win.isDestroyed()) win.webContents.send('window:maximize-change', win.isMaximized());
-  };
 }
 
 // ── 本机 Agent loopback 接线（v1.0 · P0） ──
