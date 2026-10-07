@@ -14,6 +14,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Puzzle,
   Settings,
   Sun,
   Trash2,
@@ -88,17 +89,30 @@ import {
  * 的 S-Z4；qa-batch-a-verify 的 Q-A2-1 旧口径（left≈0 / 盖住侧栏）随本次
  * 语义变更报 team-lead 确认后更新。
  *
- * ── v0.8.6 · 反馈 #7：分区重构（一列到底 → 左导航六区双栏）──
+ * ── v0.8.6 · 反馈 #7：分区重构（一列到底 → 左导航双栏）──
  * 她的原话：「设置里面有非常混乱每个部分应该属于哪一个栏，这些都是看不清楚的」，
- * 并授权「按我们软件自己的需求分区，不必对齐 ID-Aura」。分区顺序（即导航顺序）：
+ * 并授权「按我们软件自己的需求分区，不必对齐 ID-Aura」。
+ * 「数据与备份」排第 3 是刻意的：她在 0.8.6.0001 说过「导入备份没有看到在哪里」——
+ * 备份是高频路径，不能埋在最后。
+ *
+ * ── v0.8.6.0002 · 反馈 #2：层级修正（六区 → 七区，插件升为一级）──
+ * 她的原话：「目前的层级是不对的，插件应该是单独的一个，而不是集成在
+ * Agent 与自动化下面的。可以理解为：插件才是一级选项，Agent 只是装了插件
+ * 以后的二级选项。所以现在的逻辑是有问题的。」
+ *
+ * 采用七区方案（不是把 Agent 四项塞进插件区）：**插件**与**Agent 与自动化**
+ * 平级——插件区只放第三方功能包管理（开关 / 从文件安装 / 卸载）；Agent 席位、
+ * 本地库占用、自然语言通道、Agent 看板入口是**宿主自身**的 Agent 集成信息
+ * （没有装任何插件它们也在），塞进插件区会把「插件生态」与「宿主能力」搅成
+ * 一锅粥。她说的「Agent 只是二级」落在**导航心智**上：插件是一级入口，
+ * Agent 是宿主自带的面。分区顺序：
  *   ① 外观        主题 / 侧栏默认形态
  *   ② 排程        休息制度（管理员）/ 排期口径说明（项目级）
  *   ③ 数据与备份  保存·导入备份 / 日志导出 / NAS 服务 / 检查更新 / 数据存放说明
- *   ④ Agent 与自动化  插件开关 / Agent 席位与本地库 / 自然语言通道 / Agent 看板入口
- *   ⑤ 行业与模板  行业库（自定义包三步流）
- *   ⑥ 关于        版本 / 开源许可 / Issue / 赞赏与反馈预留卡
- * 「数据与备份」排第 3 是刻意的：她在 0.8.6.0001 说过「导入备份没有看到在哪里」——
- * 备份是高频路径，不能埋在最后。
+ *   ④ 插件        插件开关 / 从文件安装 / 卸载 / 启用前披露
+ *   ⑤ Agent 与自动化  Agent 席位与本地库 / 自然语言通道 / Agent 看板入口
+ *   ⑥ 行业与模板  行业库（自定义包三步流）
+ *   ⑦ 关于        版本 / 开源许可 / Issue / 赞赏与反馈预留卡
  *
  * 实现纪律（本轮只搬位置 + 补分区结构，不动设置项自身的 DOM/文案/钩子）：
  *   - 每个既有 Section 组件（CustomLibrary / Plugins / NasService / RestPolicyEditor）
@@ -109,13 +123,14 @@ import {
  *     data-settings-zone-panel 两条新钩子供验收，既有 data- 属性与 aria 一律不动。
  */
 
-/** 六个分区（反馈 #7）。顺序即导航顺序；key 同时是导航钩子值。 */
-type ZoneKey = 'appearance' | 'schedule' | 'data' | 'agent' | 'industry' | 'about';
+/** 七个分区（反馈 #7 六区 → v0.8.6.0002 反馈 #2 七区）。顺序即导航顺序；key 同时是导航钩子值。 */
+type ZoneKey = 'appearance' | 'schedule' | 'data' | 'plugins' | 'agent' | 'industry' | 'about';
 
 const ZONES: ReadonlyArray<{ key: ZoneKey; label: string; Icon: LucideIcon }> = [
   { key: 'appearance', label: '外观', Icon: Sun },
   { key: 'schedule', label: '排程', Icon: CalendarDays },
   { key: 'data', label: '数据与备份', Icon: Database },
+  { key: 'plugins', label: '插件', Icon: Puzzle },
   { key: 'agent', label: 'Agent 与自动化', Icon: Bot },
   { key: 'industry', label: '行业与模板', Icon: FileJson },
   { key: 'about', label: '关于', Icon: Info },
@@ -595,12 +610,18 @@ export function SettingsDialog({
                 </>
               )}
 
-              {/* ④ Agent 与自动化 */}
+              {/* ④ 插件（v0.8.6.0002 · 反馈 #2：插件升为一级分区，与 Agent 与自动化平级） */}
+              {zone === 'plugins' && (
+                <>
+                  {/* 插件区（v0.8.6 阶段 1 · 她要求「插件要能手动在设置里面去开关」；
+                      L2「从文件安装」+ 卸载/启用前披露同在此区） */}
+                  <PluginsSection />
+                </>
+              )}
+
+              {/* ⑤ Agent 与自动化（反馈 #2：插件已升为独立一级分区，这里只留宿主自身的 Agent 集成信息） */}
               {zone === 'agent' && (
                 <>
-                  {/* 插件区（v0.8.6 阶段 1 · 她要求「插件要能手动在设置里面去开关」） */}
-                  <PluginsSection />
-
                   {/* Agent 与本地库区（v0.6 · T13：席位明示 + 库占用，只展示不拦截） */}
                   <section>
                     <div className="mb-2 flex items-center gap-1.5">

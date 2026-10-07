@@ -169,10 +169,18 @@ window.idplan = {
 
 const HEAVY = 30000;
 
-/** 六区导航键（与产品 ZONES 同序；data-settings-zone 钩子值） */
-const ZONE_KEYS = ['appearance', 'schedule', 'data', 'agent', 'industry', 'about'] as const;
+/** 分区导航键（与产品 ZONES 同序；data-settings-zone 钩子值。v0.8.6.0002 反馈 #2 起为七区） */
+const ZONE_KEYS = [
+  'appearance',
+  'schedule',
+  'data',
+  'plugins',
+  'agent',
+  'industry',
+  'about',
+] as const;
 
-describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真 Chromium）', () => {
+describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 #7 / #1 · 真 Chromium）', () => {
   let browser: Browser;
   let server: { url: string; close(): Promise<void> };
   let DIST_URL = '';
@@ -266,7 +274,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真
     await waitSettingsDrawer(page);
   }
 
-  it('S-Z1 · 六区导航：默认「外观」，点击切换后右侧内容确实跟着换、高亮跟着走', async () => {
+  it('S-Z1 · 分区导航：默认「外观」，点击切换后右侧内容确实跟着换、高亮跟着走（插件为独立一级分区）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
       await becomeAdmin(page);
@@ -300,12 +308,23 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真
       expect(dataText).toContain('数据存在哪');
       expect(dataText).not.toContain('休息制度');
 
-      // 切「Agent 与自动化」：插件 + 席位/本地库 + 自然语言通道
+      // 切「插件」（v0.8.6.0002 · 反馈 #2：插件升为一级分区）：
+      // 插件开关 + 从文件安装/卸载入口都在这里（桌面端渲染安装钮）
+      await page.locator('[data-settings-zone="plugins"]').click();
+      const pluginsText = await drawer.innerText();
+      expect(pluginsText).toContain('插件');
+      expect(pluginsText).toContain('从文件安装');
+      expect(pluginsText).toContain('已装');
+      expect(pluginsText).not.toContain('前端日志');
+
+      // 切「Agent 与自动化」：席位/本地库 + 自然语言通道 + 看板入口；
+      // 插件已拆去独立分区，本区不得再出现插件开关（层级修正的判别力）
       await page.locator('[data-settings-zone="agent"]').click();
       const agentText = await drawer.innerText();
-      expect(agentText).toContain('插件');
       expect(agentText).toContain('Agent 与本地库');
       expect(agentText).toContain('自然语言通道');
+      expect(agentText).toContain('打开 Agent 看板');
+      expect(agentText, '插件应只在「插件」分区，Agent 区不得残留').not.toContain('从文件安装');
       expect(agentText).not.toContain('保存备份');
 
       // 切「行业与模板」：行业库三步流
@@ -333,7 +352,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真
         await page.locator('[data-settings-zone="appearance"]').getAttribute('aria-current'),
       ).toBeNull();
 
-      // 六个导航键一个不少（顺序即分区顺序）
+      // 七个导航键一个不少（顺序即分区顺序）
       const keys = await page.evaluate(() =>
         Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
           b.getAttribute('data-settings-zone'),
@@ -377,7 +396,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真
       expect(geo!.panelHeight).toBeGreaterThan(200);
       // 抽屉不横向溢出视口（不断裂）
       expect(geo!.drawerRight).toBeLessThanOrEqual(geo!.vw + 1);
-      // 390 档导航横滑是预期形态（六个区分横排放不下），不视为断裂
+      // 390 档导航横滑是预期形态（七个区分横排放不下），不视为断裂
       expect(geo!.navScrollable).toBe(true);
 
       // 可点：点横条里的「数据与备份」，右侧内容真的换成日志/备份
@@ -395,7 +414,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真
     }
   }, HEAVY);
 
-  it('S-Z3 · <xl 非手机档（767）：六个导航按钮同屏可点（不依赖横滑），点完内容跟着换', async () => {
+  it('S-Z3 · <xl 非手机档（767）：七个导航按钮同屏可点（不依赖横滑），点完内容跟着换', async () => {
     const { ctx, page } = await open(767, 900);
     try {
       await becomeAdmin(page);
@@ -418,8 +437,8 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真
         };
       });
       expect(fits).not.toBeNull();
-      expect(fits!.count).toBe(6);
-      expect(fits!.allVisible, '767 档六个导航按钮应同屏完整可见').toBe(true);
+      expect(fits!.count).toBe(7);
+      expect(fits!.allVisible, '767 档七个导航按钮应同屏完整可见').toBe(true);
       expect(fits!.navScrollable, '767 档不需要横滑').toBe(false);
       expect(fits!.navBottomOverPanel).toBeLessThanOrEqual(fits!.panelTop + 1);
 
