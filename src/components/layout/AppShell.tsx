@@ -1,4 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
+import { useLayoutEffect, useRef } from 'react';
 
 import { TopBar } from './TopBar';
 import { Sidebar } from './Sidebar';
@@ -74,6 +75,32 @@ export function AppShell(): JSX.Element {
   // 打印路由不让位给插件模式（打印是宿主文档流；/project/:id/{schedule,calendar,itinerary}-print）
   const printRoute = /(schedule|calendar|itinerary)-print$/.test(location.pathname);
 
+  /** 全站唯一滚动容器（下方 <main>）——路由切换回顶的唯一可引用入口 */
+  const mainRef = useRef<HTMLElement>(null);
+  /*
+    ★ 0.8.6.0003 · 反馈「首页点成员看板后页面不回到顶部」的**全局**修复点。
+
+    她的原话：「点击选择看板后，页面并不会回到顶栏，而是在相应位置的下方，
+    整体交互有问题」。根因：SPA 路由切换不重置滚动位；壳层常驻化（v0.8.6）后
+    滚动从 window 收进 <main>（overflow-y-auto），浏览器「导航即回顶」的原生
+    行为对自定义容器不生效 ⇒ 首页（月历+成员列表在下方）滚到中下部再跳
+    /member-board，视口停在原位，用户落在页面中段。
+
+    为什么修在 AppShell（而不是各页面各自修）：
+      ① 滚动容器 <main> 由本组件持有——只有这里能稳定拿到它的 ref；
+      ② 所有路由切换都经过这里的 <Outlet/>——**一个** effect 覆盖全部路由
+         （成员看板 / 我的任务 / 项目详情 / 打印页 / 插件路由）。逐页修必漏：
+         她的问题恰恰只在「首页 → 成员看板」一条路径上暴露，别的路径没人报；
+      ③ 只盯 pathname：页面内视图切换（首页 看板⇄月历、成员看板 看板⇄月历）
+         不是路由变化，滚动位**保持**（既有行为，由 spec 钉住防回归）；
+         search 变化也不重置（?member= 换人看的是同页，不该被弹顶）。
+    用 layout effect 而非 passive effect：在浏览器绘制前把 scrollTop 归零，
+    不闪一帧「旧滚动位」。打印路由同样回顶（打印页本就该从纸面头部开始）。
+  */
+  useLayoutEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-cream font-body text-ink print:block print:h-auto print:overflow-visible">
       {/* ① 侧栏：≥xl 持久左栏 / <xl Modal 抽屉 / 打印路由 return null */}
@@ -106,7 +133,10 @@ export function AppShell(): JSX.Element {
           壳层根节点（上方的 print:block print:h-auto print:overflow-visible）
           同步展平，双保险。iframe 隔离打印（print-frame.ts）不受影响。
         */}
-        <main className="mx-auto w-full max-w-[1440px] flex-1 min-h-0 overflow-y-auto print:h-auto print:overflow-visible">
+        <main
+          ref={mainRef}
+          className="mx-auto w-full max-w-[1440px] flex-1 min-h-0 overflow-y-auto print:h-auto print:overflow-visible"
+        >
           {/*
             插件宿主常驻（hidden 态不占布局）；有启用中的自装插件时它撑满内容区、
             路由出口让位。active 传 null（含打印路由）= 宿主隐藏、Outlet 照常。
