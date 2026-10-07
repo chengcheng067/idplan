@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 
@@ -12,7 +12,7 @@ import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView'
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { useMembersStore } from '../store/useMembersStore';
 import { useUiStore, type HomeViewMode } from '../store/useUiStore';
-import { useRoleGuard } from '../hooks/useRoleGuard';
+import { memberBoardHref, searchMemberHits, useRoleGuard } from '../hooks/useRoleGuard';
 import {
   effectiveDomainOf,
   useHumanProjects,
@@ -26,7 +26,7 @@ import {
   getDomains,
   getItemKanbanColumn,
 } from '../core/template/stage-library';
-import type { Project, Stage, Task } from '../core/types/entities';
+import type { Member, Project, Stage, Task } from '../core/types/entities';
 import { cn } from '../lib/cn';
 
 /**
@@ -99,6 +99,25 @@ export function HomePage(): JSX.Element {
           (isAdmin && (p.clientName ?? '').toLowerCase().includes(q)),
       )
     : active;
+
+  /*
+    ★ 0.8.6.0002 反馈 #5：搜索命中**成员**（仅管理员视角）。
+
+    她的原话：「比如我搜索了'朴彩英'，那我肯定就想看这个成员的任务排表……
+    我希望作为管理员，一点击就能看到」。在此之前搜成员名只会得到
+    「没有匹配『朴彩英』的项目」这条死胡同（成员列表在页面底部，与搜索结果无关）。
+
+    两条边界（与 `searchMemberHits` 的函数注释同义）：
+      · **只有管理员**看得到成员条目（isAdmin 门）——成员身份搜不到别人，
+        这是隐私边界，不是功能缺失；
+      · 只匹配 active 成员（停用成员不当入口）。
+    落点是 `/member-board?member=<id>`（管理员看该成员的看板，见 MemberBoardPage）。
+    点击即清空搜索词：用户已经找到要找的人，不该留着查询词挡住回退路径。
+  */
+  const memberHits = useMemo(
+    () => (q && isAdmin ? searchMemberHits(members, q) : []),
+    [q, isAdmin, members],
+  );
 
   // 指标卡（全部派生自 stages / projects，无历史趋势数据则不显示趋势）
   const weekStart = startOfWeekIso(today);
@@ -210,6 +229,18 @@ export function HomePage(): JSX.Element {
           */}
           <DomainConfirmPrompt projects={active} />
 
+          {/* 反馈 #5：搜索到的成员（仅管理员）。放在项目网格/空态**之上**——
+              她的截图里「没有匹配的项目」正是死胡同，成员条目要在那条消息之前被看见。 */}
+          {memberHits.length > 0 && (
+            <MemberHitSection
+              hits={memberHits}
+              onOpen={(m) => {
+                setSearchQuery('');
+                navigate(memberBoardHref(m.id));
+              }}
+            />
+          )}
+
           {active.length === 0 ? (
             <EmptyState onManual={openManual} />
           ) : filtered.length === 0 ? (
@@ -245,6 +276,56 @@ export function HomePage(): JSX.Element {
       {/* 成员管理（权限矩阵 #5：仅 admin；路由守卫已把成员重定向出首页，这里双保险） */}
       {isAdmin && <MembersPageSection />}
     </div>
+  );
+}
+
+/* ------------------------------ 成员搜索结果（反馈 #5） ------------------------------ */
+
+/**
+ * 搜索到的成员条目（管理员视角）：点头像行 → 该成员的看板。
+ *
+ * 视觉纪律：全部既有 token（bg-paper / border-line / bg-cream / text-mist …），
+ * 头像底色用成员自带的 `avatarColor`（与成员管理区、顶栏身份头像同一字段，
+ * 是模板常量级的受控 hex 例外，不在本文件新造）。
+ */
+function MemberHitSection({
+  hits,
+  onOpen,
+}: {
+  hits: Member[];
+  onOpen(member: Member): void;
+}): JSX.Element {
+  return (
+    <section
+      aria-label="成员搜索结果"
+      className="rounded-2xl border border-line bg-paper p-4 shadow-soft dark:rounded-md"
+    >
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <h2 className="text-sm font-semibold text-ink">搜索到的成员</h2>
+        <span className="text-xs text-mist">点击查看该成员的任务看板</span>
+      </div>
+      <ul className="flex flex-wrap gap-2">
+        {hits.map((m) => (
+          <li key={m.id}>
+            <button
+              type="button"
+              onClick={() => onOpen(m)}
+              className="inline-flex items-center gap-2 rounded-full border border-line bg-cream/60 py-1 pl-1 pr-3 text-left transition-colors hover:bg-sand hover:text-pine"
+            >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs text-white"
+                style={{ backgroundColor: m.avatarColor }}
+                aria-hidden
+              >
+                {m.name[0]}
+              </span>
+              <span className="text-sm text-ink">{m.name}</span>
+              {m.role && <span className="text-xs text-mist">{m.role}</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

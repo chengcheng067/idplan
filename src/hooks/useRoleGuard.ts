@@ -124,6 +124,66 @@ export function homeRouteTarget(isMember: boolean): string {
   return isMember ? '/member-board' : '/';
 }
 
+/* -------------------- 成员看板「看谁」的解析（0.8.6.0002 反馈 #5） -------------------- */
+
+/**
+ * `/member-board` 的**观看对象**解析结果（纯函数，供 MemberBoardPage 复用 + spec 单测）。
+ *
+ * 背景（她的原话）：「我搜索了'朴彩英'，那我肯定就想看这个成员的任务排表……
+ * 我在成员面板点击了成员，那是否也会显示这个看板」。落地形态是路由参数
+ * `?member=<id>`（而不是新全局状态）：深链可分享、浏览器返回键自然、
+ * 刷新不丢，且不需要给 zustand 加「当前查看的成员」这种一刷新就错的瞬态。
+ *
+ * 四条语义（按优先级）：
+ *   `self`   —— 无参数：看**自己**（= today 的行为，逐字不变；成员身份落地页正是它）
+ *   `member` —— 有参数且**是管理员**且 id 命中：看该成员（含停用成员：历史任务仍在库里，
+ *               管理员要能回看；隐私边界只由 isAdmin 把守，不与 active 耦合）
+ *   `denied` —— 有参数但**不是管理员**：成员身份不放行（隐私边界，不是功能缺失），
+ *               调用方应重定向回无参 `/member-board`（落到她自己）
+ *   `missing`—— 有参数、是管理员、但 id 查无此人（删成员后的陈旧深链）：显式空态，
+ *               **不静默回落自己**（回落会把「看别人的板」骗成「看自己的板」）
+ */
+export type MemberBoardSubject =
+  | { kind: 'self'; memberId: string | null }
+  | { kind: 'member'; member: Member }
+  | { kind: 'missing' }
+  | { kind: 'denied' };
+
+/** 见 {@link MemberBoardSubject} 的四条语义。空串/空白参数视同「无参数」。 */
+export function resolveMemberBoardSubject(opts: {
+  memberParam: string | null;
+  isAdmin: boolean;
+  currentMemberId: string | null;
+  members: Member[];
+}): MemberBoardSubject {
+  const param = opts.memberParam?.trim() ?? '';
+  if (!param) return { kind: 'self', memberId: opts.currentMemberId };
+  if (!opts.isAdmin) return { kind: 'denied' };
+  const member = opts.members.find((m) => m.id === param);
+  if (!member) return { kind: 'missing' };
+  return { kind: 'member', member };
+}
+
+/** 「看某成员的看板」链接（URL 参数唯一构造点，避免各处手拼 query 漂移） */
+export function memberBoardHref(memberId: string): string {
+  return `/member-board?member=${encodeURIComponent(memberId)}`;
+}
+
+/**
+ * 搜索成员命中（0.8.6.0002 反馈 #5）：**active** 成员、姓名包含查询词（trim + 大小写不敏感）。
+ *
+ * 两条纪律：
+ *   ① 只匹配 active 成员 —— 与 `matchActiveMemberByName`（进入主路径）同口径，
+ *      停用成员不该被搜出来当入口；
+ *   ② 本函数**不做角色门控** —— 「是否出现成员条目」由调用方按 `isAdmin` 决定
+ *      （成员身份搜不到别人，这是隐私边界）。
+ */
+export function searchMemberHits(members: Member[], query: string): Member[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return members.filter((m) => m.active && m.name.toLowerCase().includes(q));
+}
+
 /* -------------------- 受限视图判定（BUG-1 修复的核心语义） -------------------- */
 
 /**

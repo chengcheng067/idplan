@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { Plus, UserRound, UserX, Crown, XCircle, Pencil, Check, X, KeyRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+
+import { Plus, UserRound, UserX, Crown, XCircle, Pencil, Check, X, KeyRound, LayoutGrid } from 'lucide-react';
 
 import { memberHasPassword, type Member } from '../../core/types/entities';
 import { ChangxiaError, MemberActorKind, MemberRoleKind } from '../../core/types/enums';
@@ -8,7 +10,7 @@ import { useMembersStore } from '../../store/useMembersStore';
 import { createMemberActions } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
-import { useRoleGuard, countActiveAdmins } from '../../hooks/useRoleGuard';
+import { memberBoardHref, useRoleGuard, countActiveAdmins } from '../../hooks/useRoleGuard';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
@@ -17,9 +19,13 @@ import { ImeInput } from '../common/ImeInput';
  * 成员管理区（首页内嵌）：列表 / 新增 / 重命名 / 停用 / 设管理员 / 取消管理员。
  * v0.2：仅管理员视角出现（HomePage 已按 isAdmin 双保险渲染）。
  * v0.4.1：新增「重命名」入口——成员名字可随时修改，避免首字头像与实际姓名长期不一致。
+ * v0.8.6.0002（反馈 #5）：每行新增「看板」——她原话「我在成员面板点击了成员，
+ *   那是否也会显示这个看板」。落点 `/member-board?member=<id>`（管理员看该成员）；
+ *   本区整体 `!isAdmin` 早退，按钮因此天然只在管理员视角出现。
  */
 export function MembersPageSection(): JSX.Element | null {
   const repos = useRepos();
+  const navigate = useNavigate();
   const members = useMembersStore((s) => s.members);
   const { isAdmin } = useRoleGuard();
   const [adding, setAdding] = useState(false);
@@ -218,6 +224,7 @@ export function MembersPageSection(): JSX.Element | null {
               onDemote={() => setDemoteTarget(m)}
               onRename={(name) => void onRename(m.id, name)}
               onPassword={() => setPasswordMember(m)}
+              onOpenBoard={() => navigate(memberBoardHref(m.id))}
             />
           ))}
         </ul>
@@ -371,6 +378,7 @@ function MemberRow({
   onDemote,
   onRename,
   onPassword,
+  onOpenBoard,
 }: {
   member: Member;
   isLastAdmin: boolean;
@@ -379,6 +387,8 @@ function MemberRow({
   onDemote(): void;
   onRename(name: string): void;
   onPassword(): void;
+  /** 反馈 #5：查看该成员的看板（管理员视角，落点 /member-board?member=<id>） */
+  onOpenBoard(): void;
 }): JSX.Element {
   const isAdminMember = member.roleKind === MemberRoleKind.Admin;
   const [editing, setEditing] = useState(false);
@@ -471,6 +481,16 @@ function MemberRow({
 
       {!editing && (
         <span className="ml-auto flex flex-wrap items-center gap-2">
+          {/* 反馈 #5：看板入口放在行操作最前——它是「看这个人」的正向动作，
+              其余（设管理员/密码/重命名/停用）都是管理动作 */}
+          <button
+            type="button"
+            onClick={onOpenBoard}
+            title="查看该成员的看板"
+            className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
+          >
+            <LayoutGrid size={12} /> <span className="hidden sm:inline">看板</span>
+          </button>
           {!isAdminMember && member.active && (
             <button
               type="button"
