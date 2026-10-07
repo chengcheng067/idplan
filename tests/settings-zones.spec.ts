@@ -16,7 +16,7 @@ import { listenOnSafePort } from './helpers/safe-listen';
  * 里面，它属于插件的设置，和插件不应该是平级关系」——Agent 三项（席位/本地库、
  * 自然语言通道、看板入口）收进插件区顶部的两段子导航（插件 / Agent 与自动化）。
  *
- * 本 spec 守五件用户能看见的事：
+ * 本 spec 守六件用户能看见的事：
  *   ① 分区导航切换后，右侧内容**确实跟着换**（默认「外观」；点「数据与备份」
  *      见日志与备份、点「插件」见插件开关与子导航；当前区 aria-current 高亮移动）；
  *   ② <xl 窄视口**不断裂**：左导航退化为顶部横向条，位于内容上方、可点可见，
@@ -25,7 +25,9 @@ import { listenOnSafePort } from './helpers/safe-listen';
  *   ④ ≥xl 贴缘几何（v0.8.6.0002 · 反馈 #1）：抽屉左缘 = 侧栏右缘（展开 240 /
  *      收起 64，折叠后随缘移动），遮罩不压侧栏（侧栏中心命中测试仍是侧栏自己）；
  *   ⑤ 按角色收分区（v0.8.6.0002 · 反馈 #11）：管理员看得到「行业与模板」，
- *      成员看不到（整分区消失，不是禁用；插件对成员保留）。
+ *      成员看不到（整分区消失，不是禁用；插件对成员保留）；
+ *   ⑥ 接缝同色（v0.8.6.0002 · 图 5 第 2 点）：抽屉贴着侧栏展开时，接缝带与
+ *      侧栏底色逐像素一致（亮/暗双主题）——不靠描线与投影把两侧分成两块。
  *
  * 为什么不走 jsdom：②③ 是 flex 断点几何 + 横滑容器的事实，jsdom 的
  * getBoundingClientRect 恒 0、overflow-x-auto 无概念，只有真 Chromium 能验。
@@ -629,6 +631,94 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
           ),
         );
         expect(keys).toEqual(['appearance', 'schedule', 'data', 'plugins', 'about']);
+      } finally {
+        await ctx.close();
+      }
+    }
+  }, 90000);
+
+  it('S-Z6 · 接缝同色：侧栏右缘→抽屉左缘逐像素同一底色（亮/暗双主题）（图 5 第 2 点）', async () => {
+    /*
+     * v0.8.6.0002 · 图 5 第 2 点，她的原话：「弹出的设置窗颜色和侧边栏的颜色
+     * 差别过大，我认为这个时候不应该有这个色差。」
+     *
+     * 实测前提（2026-10-07 逐像素采样）：两侧底色本来就是同一个 paper token
+     * （glass-strong），修前的「色差」全部来自接缝——① 侧栏右描边 + 抽屉左描边
+     * 两道 1px line；② 两侧外凸投影互溅（暗色下把侧栏右缘约 35px 压深一档，
+     * #1f2126→#181a1e）。修法不换底色，只把接缝修没：抽屉 .settings-rail-drawer
+     * 清零左描边，侧栏 .sidebar-settings-open 清零右描边 + 关投影，并把侧栏抬到
+     * 抽屉浮层之上（z-[61]）让抽屉投影向左的溢出被不透明侧栏挡住。
+     *
+     * 判据：横跨接缝的一条像素带（侧栏右缘内 + 抽屉左缘内）与**侧栏自身计算
+     * 底色**逐像素一致（容差 ≤3/通道）。修前暗色在该带上有 -7 的投影梯度与
+     * +18 的描边线，本条直接把「两块拼起来」钉死在这里。
+     */
+    for (const theme of ['light', 'dark'] as const) {
+      const { ctx, page } = await open(1600, 900);
+      try {
+        await becomeAdmin(page);
+        await clickSidebarSettings(page);
+        await waitSettingsDrawer(page);
+        if (theme === 'dark') {
+          // 真实切换路径：抽屉内点「深色」（默认停在「外观」区，主题三选在场）
+          await page.evaluate(() => {
+            const b = Array.from(document.querySelectorAll<HTMLElement>('[data-settings-drawer] button')).find(
+              (x) => (x.textContent ?? '').trim() === '深色',
+            );
+            b?.click();
+          });
+          await page.waitForTimeout(500);
+        }
+
+        // 找一行「两侧都是容器背景」的y：侧栏内 x=235（侧栏内容右缘在 228 内），
+        // 抽屉导航区 x=250（导航 px-3 内边距区，无交互元素）
+        const row = await page.evaluate(() => {
+          for (let y = 120; y < 600; y += 1) {
+            const a = document.elementFromPoint(235, y);
+            const b = document.elementFromPoint(250, y);
+            const plain = (el: Element | null): boolean =>
+              !!el && !el.closest('button,a,[role="button"],input,select,textarea');
+            if (plain(a) && plain(b)) return y;
+          }
+          return null;
+        });
+        expect(row, '找不到两侧均为背景的采样行（布局变了？）').not.toBeNull();
+
+        // 参考色 = 侧栏自身的计算底色（theme 敏感，不写死 hex）
+        const base = await page.evaluate(
+          () => getComputedStyle(document.querySelector('[data-app-sidebar]') as HTMLElement).backgroundColor,
+        );
+
+        // 横跨接缝的像素带：228..248（侧栏 12px + 接缝 2px + 抽屉导航内边垫 8px）
+        const shot = await page.screenshot({ clip: { x: 228, y: (row as number) - 1, width: 22, height: 3 } });
+        const dataUrl = `data:image/png;base64,${shot.toString('base64')}`;
+        const maxDev = await page.evaluate(
+          async ({ url, base: ref }: { url: string; base: string }) => {
+            const [r, g, b] = (ref.match(/\d+/g) ?? []).map(Number);
+            const img = new Image();
+            await new Promise((res, rej) => {
+              img.onload = res;
+              img.onerror = rej;
+              img.src = url;
+            });
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth;
+            c.height = img.naturalHeight;
+            const g2 = c.getContext('2d')!;
+            g2.drawImage(img, 0, 0);
+            const d = g2.getImageData(0, 0, c.width, c.height).data;
+            let max = 0;
+            for (let i = 0; i < d.length; i += 4) {
+              max = Math.max(max, Math.abs(d[i] - r), Math.abs(d[i + 1] - g), Math.abs(d[i + 2] - b));
+            }
+            return max;
+          },
+          { url: dataUrl, base },
+        );
+        expect(
+          maxDev,
+          `接缝带应与侧栏底色逐像素一致（theme=${theme}，容差 ≤3；修前暗色此处有 -7 投影梯度 +18 描边线）`,
+        ).toBeLessThanOrEqual(3);
       } finally {
         await ctx.close();
       }

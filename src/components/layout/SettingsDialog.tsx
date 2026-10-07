@@ -311,6 +311,13 @@ export function SettingsDialog({
           · 贴顶栏底缘全高（Modal 抽屉族几何：p-0 + items-stretch），不再有
             max-h/圆角被裁的旧问题——高度就是遮罩可用高度
           · 圆角只留右缘（左缘贴侧栏，视觉上是侧栏的延伸）；glass-strong 自带描边与底色
+          · v0.8.6.0002 · 图 5 第 2 点：贴侧栏右缘时**接缝不画线、投影不溅到侧栏**——
+            她的原话：「弹出的设置窗颜色和侧边栏的颜色差别过大，我认为这个时候
+            不应该有这个色差。」实测两侧底色本来就是同一个 paper token，差别全部
+            来自接缝（抽屉左描边 + 侧栏右描边两道 1px line，以及两侧外凸投影互相
+            溅——暗色下把侧栏右缘压深一档 #1f2126→#181a1e，像两块拼起来的）。
+            抽屉侧接缝类 settings-rail-drawer 清零左描边（投影保留、向左的
+            溢出被上层不透明侧栏挡住）；侧栏的右描边 / 投影 / z 层在 Sidebar 同步收。
           · v0.8.6 · 反馈 #7：头部之下改「左导航 168 + 右内容」双栏（≥xl 竖排导航；
             <xl 导航退化顶部横向条），主体滚动收进右栏（min-h-0 overflow-y-auto）
           · drawer-in-left：从左缘 24px 滑入，200ms ease-out（克制；reduced-motion 已关停）
@@ -318,7 +325,7 @@ export function SettingsDialog({
         */}
         <div
           data-settings-drawer=""
-          className="drawer-in-left glass-strong flex h-full w-[640px] max-w-[100vw] flex-col rounded-r-2xl max-xl:w-full"
+          className="drawer-in-left settings-rail-drawer glass-strong flex h-full w-[640px] max-w-[100vw] flex-col rounded-r-2xl max-xl:w-full"
         >
           {/* 头部 */}
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
