@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import {
@@ -93,32 +93,33 @@ import {
  * 「数据与备份」排第 3 是刻意的：她在 0.8.6.0001 说过「导入备份没有看到在哪里」——
  * 备份是高频路径，不能埋在最后。
  *
- * ── v0.8.6.0002 · 反馈 #2：层级修正（六区 → 七区，插件升为一级）──
- * 她的原话：「目前的层级是不对的，插件应该是单独的一个，而不是集成在
- * Agent 与自动化下面的。可以理解为：插件才是一级选项，Agent 只是装了插件
- * 以后的二级选项。所以现在的逻辑是有问题的。」
+ * ── v0.8.6.0002 · 反馈 #2（她 10-07 21:21 图 5 第 1 点**自我修正**）──
+ * 早些时候她说「插件才是一级选项，Agent 只是二级」，我实现时理解成
+ * 「Agent 席位是宿主能力、不该塞进插件」，做成了七区（Agent 与自动化
+ * 与插件平级）。她看完真机后明确否定：「Agent 与自动化的设置应该是在
+ * 插件里面，它属于插件的设置，和插件不应该是平级关系。」
  *
- * 采用七区方案（不是把 Agent 四项塞进插件区）：**插件**与**Agent 与自动化**
- * 平级——插件区只放第三方功能包管理（开关 / 从文件安装 / 卸载）；Agent 席位、
- * 本地库占用、自然语言通道、Agent 看板入口是**宿主自身**的 Agent 集成信息
- * （没有装任何插件它们也在），塞进插件区会把「插件生态」与「宿主能力」搅成
- * 一锅粥。她说的「Agent 只是二级」落在**导航心智**上：插件是一级入口，
- * Agent 是宿主自带的面。分区顺序：
+ * 本轮按她的新口径收口：**「Agent 与自动化」不再是独立一级分区**，它的
+ * 三项内容（Agent 席位与本地库 / 自然语言通道 / Agent 看板入口）收进
+ * **插件区内的二级分组**——插件区顶部一枚两段子导航（插件 / Agent 与
+ * 自动化），默认落在「插件」段。为什么用子导航而不是一区两个小标题：
+ * 插件区自身已有说明段 + 安装钮 + N 行插件，再并进 Agent 三块会顶出
+ * 一屏半，子导航让两段各自一屏内聚焦，也把「Agent 是插件的二级」这件
+ * 事在结构上说清。左导航从七项变六项：
  *   ① 外观        主题（侧栏展开/折叠选项已于 0.8.6.0002 反馈 #4 后半拿掉）
  *   ② 排程        休息制度（管理员）/ 排期口径说明（项目级）
  *   ③ 数据与备份  保存·导入备份 / 日志导出 / NAS 服务 / 检查更新 / 数据存放说明
- *   ④ 插件        插件开关 / 从文件安装 / 卸载 / 启用前披露
- *   ⑤ Agent 与自动化  Agent 席位与本地库 / 自然语言通道 / Agent 看板入口
- *   ⑥ 行业与模板  行业库（自定义包三步流）
- *   ⑦ 关于        版本 / 开源许可 / Issue / 赞赏与反馈预留卡
- *
+ *   ④ 插件        子导航二段：插件开关/从文件安装/卸载/启用前披露 + Agent 与自动化
+ *   ⑤ 行业与模板  行业库（自定义包三步流）
+ *   ⑥ 关于        版本 / 开源许可 / Issue / 赞赏与反馈预留卡
+
  * ── v0.8.6.0002 · 反馈 #11：按角色收分区 ──
  * 她的原话：「成员看板的设置界面，是不是'行业与模板'这个位置就可以让它消失掉」。
  * 规则：「行业与模板」仅管理员可见——成员身份下该分区**从左导航消失**（不是
  * 禁用态占位）。行业库是管理职能（导入的自定义阶段/套餐会进**所有人**的
- * 建档器）；插件**保留给成员**（她明确「插件给成员保留」）。其余分区两角色
- * 均可见（休息制度本就是 admin-only 内容级门控；排程区对成员仍有排期口径
- * 说明可看，不整区收；备份自 0.8.6.0002 起全员开放，数据与备份区同样保留）。
+ * 建档器）；插件**保留给成员**（她明确「插件给成员保留」）；Agent 与自动化
+ * 子段原为全员可见，收进插件区后仍全员可见；备份自 0.8.6.0002 起全员开放，
+ * 数据与备份区同样保留。
  *
  * ── v0.8.6.0002 · 反馈 #4 后半：拿掉外观区「侧栏 展开/折叠」选项 ──
  * 她的原话：「至于侧栏的展开与折叠，你是不是想要实现：如果选择了展开，
@@ -138,20 +139,34 @@ import {
  */
 
 /**
- * 七个分区（反馈 #7 六区 → v0.8.6.0002 反馈 #2 七区）。顺序即导航顺序；key 同时是导航钩子值。
- * `adminOnly`：仅管理员可见（反馈 #11）——成员身份下该分区从左导航消失（不是禁用）。
+ * 六个分区（反馈 #7 六区 → v0.8.6.0002 反馈 #2 七区 → 图 5 第 1 点收回口：
+ * Agent 与自动化并入插件区作二级分组，回到六区）。顺序即导航顺序；
+ * key 同时是导航钩子值。
+ * `adminOnly`：仅管理员可见（反馈 #11 + 图 5 第 3 点）——成员身份下该分区
+ * 从左导航消失（不是禁用）。
  */
-type ZoneKey = 'appearance' | 'schedule' | 'data' | 'plugins' | 'agent' | 'industry' | 'about';
+type ZoneKey = 'appearance' | 'schedule' | 'data' | 'plugins' | 'industry' | 'about';
 
 const ZONES: ReadonlyArray<{ key: ZoneKey; label: string; Icon: LucideIcon; adminOnly?: boolean }> = [
   { key: 'appearance', label: '外观', Icon: Sun },
   { key: 'schedule', label: '排程', Icon: CalendarDays },
   { key: 'data', label: '数据与备份', Icon: Database },
   { key: 'plugins', label: '插件', Icon: Puzzle },
-  { key: 'agent', label: 'Agent 与自动化', Icon: Bot },
   // 行业库是管理职能（反馈 #11）：成员身份下整分区从左导航消失
   { key: 'industry', label: '行业与模板', Icon: FileJson, adminOnly: true },
   { key: 'about', label: '关于', Icon: Info },
+];
+
+/**
+ * 插件区内的两段子导航（v0.8.6.0002 图 5 第 1 点：Agent 与自动化归入插件区）。
+ * 她是「Agent 与自动化」与「插件」不是平级关系的原话落地处：一级分区只有
+ * 「插件」一枚，Agent 段是它的二级。顺序即子导航顺序；key 同时是子导航钩子值。
+ */
+type PluginSubKey = 'plugins' | 'agent';
+
+const PLUGIN_SUBS: ReadonlyArray<{ key: PluginSubKey; label: string; Icon: LucideIcon }> = [
+  { key: 'plugins', label: '插件', Icon: Puzzle },
+  { key: 'agent', label: 'Agent 与自动化', Icon: Bot },
 ];
 
 /** 「赞赏支持 / 反馈建议」预留卡（v0.8.6 · 反馈 #7）：微信图由产品负责人后续提供 */
@@ -194,6 +209,16 @@ export function SettingsDialog({
   const { status, payload, error, check } = useUpdateCheck();
   /** 当前所在分区（反馈 #7：默认「外观」——最轻、最高频的一项） */
   const [zone, setZone] = useState<ZoneKey>('appearance');
+  /**
+   * 插件区内的当前子段（图 5 第 1 点：Agent 与自动化是插件区的二级分组）。
+   * 默认「插件」——第三方功能包管理是这个区的主业；Agent 段收在它下面。
+   */
+  const [pluginSub, setPluginSub] = useState<PluginSubKey>('plugins');
+  /** 右内容滚动容器：切分区 / 切插件子段时回到顶部（内容整块换血，不留旧滚动位） */
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    panelRef.current?.scrollTo({ top: 0 });
+  }, [zone, pluginSub]);
 
   // 打开时实时读一次日志条数（抽屉每次打开都刷新，避免静态旧值）
   const count = useMemo(() => dump().length, [open]);
@@ -356,6 +381,7 @@ export function SettingsDialog({
 
             {/* 右内容（当前分区；切换分区即整块换血，滚动位置随之重置） */}
             <div
+              ref={panelRef}
               data-settings-zone-panel={zone}
               className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5"
             >
@@ -601,98 +627,137 @@ export function SettingsDialog({
                 </>
               )}
 
-              {/* ④ 插件（v0.8.6.0002 · 反馈 #2：插件升为一级分区，与 Agent 与自动化平级） */}
+              {/*
+                ④ 插件（含 Agent 与自动化子段）——v0.8.6.0002 图 5 第 1 点：
+                「Agent 与自动化的设置应该是在插件里面，它属于插件的设置，
+                和插件不应该是平级关系」。一级分区只有「插件」一枚，顶部两段
+                子导航（插件 / Agent 与自动化）把 Agent 三项收成它的二级。
+              */}
               {zone === 'plugins' && (
                 <>
-                  {/* 插件区（v0.8.6 阶段 1 · 她要求「插件要能手动在设置里面去开关」；
-                      L2「从文件安装」+ 卸载/启用前披露同在此区） */}
-                  <PluginsSection />
-                </>
-              )}
-
-              {/* ⑤ Agent 与自动化（反馈 #2：插件已升为独立一级分区，这里只留宿主自身的 Agent 集成信息） */}
-              {zone === 'agent' && (
-                <>
-                  {/* Agent 与本地库区（v0.6 · T13：席位明示 + 库占用，只展示不拦截） */}
-                  <section>
-                    <div className="mb-2 flex items-center gap-1.5">
-                      <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                        <Database size={14} className="text-mist" aria-hidden />
-                        Agent 与本地库
-                      </h3>
-                    </div>
-                    <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5 text-xs leading-6">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-mist">Agent 席位</span>
-                        <span className="font-mono text-ink">
-                          已用 {agentSeatUsed}/{AGENT_SEAT_LIMIT}
-                        </span>
-                      </div>
-                      {agentSeatOver && (
-                        <p className="text-[11px] text-amber">
-                          已超出免费席位额度（{AGENT_SEAT_LIMIT} 个）——不影响使用，仅作提示。
-                        </p>
-                      )}
-                      <div className="mt-1 flex items-center justify-between gap-2">
-                        <span className="text-mist">本地库占用</span>
-                        <span className="font-mono text-ink">
-                          {dbUsage ? formatBytes(dbUsage.bytes) : '—'}
-                          {dbUsage && dbUsage.source === 'serialization-fallback' && (
-                            <span className="ml-1 text-[10px] text-mist">（估算）</span>
+                  {/* 插件区二级导航（ segmented 两段；role=tablist 供验收与读屏） */}
+                  <div
+                    role="tablist"
+                    aria-label="插件分区"
+                    className="flex gap-1 rounded-[10px] border border-line bg-cream/50 p-1"
+                  >
+                    {PLUGIN_SUBS.map((s) => {
+                      const active = pluginSub === s.key;
+                      return (
+                        <button
+                          key={s.key}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          data-plugins-subtab={s.key}
+                          onClick={() => setPluginSub(s.key)}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-medium transition-colors outline-none',
+                            'focus-visible:ring-2 focus-visible:ring-pine/40',
+                            active
+                              ? 'bg-paper text-ink shadow-soft'
+                              : 'text-mist hover:bg-sand hover:text-ink',
                           )}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-mist">
-                        未来单库超过约 50MB 时会在此提示清理 / 分库建议。
-                      </p>
-                    </div>
-                  </section>
+                        >
+                          <s.Icon size={13} aria-hidden />
+                          <span className="whitespace-nowrap">{s.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 子段一：插件（v0.8.6 阶段 1 · 她要求「插件要能手动在设置里面去开关」；
+                      L2「从文件安装」+ 卸载/启用前披露同在此区） */}
+                  {pluginSub === 'plugins' && <PluginsSection />}
 
                   {/*
-                    自然语言通道（说明性条目，不重复数据）：接入凭据的生成/管理在
-                    Agent 看板的接入面板——那边是工作流现场，设置里只讲清口径。
+                    子段二：Agent 与自动化（原一级分区整体迁入，内容零改动）。
+                    v0.6 · T13：席位明示（B5：只展示不拦截）+ 本地库占用。
                   */}
-                  <section>
-                    <div className="mb-2 flex items-center gap-1.5">
-                      <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                        <Bot size={14} className="text-mist" aria-hidden />
-                        自然语言通道
-                      </h3>
-                    </div>
-                    <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-                      外部 Agent 通过本机回环地址以<strong className="text-ink">结构化命令</strong>
-                      接入 ID Plan；自然语言由 Agent 侧自己解析——ID Plan 不解析自然语言、不调用大模型。
-                      接入地址与访问令牌在 Agent 看板的接入面板里生成与管理，此处不重复。
-                    </p>
-                  </section>
+                  {pluginSub === 'agent' && (
+                    <>
+                      {/* Agent 与本地库区（v0.6 · T13：席位明示 + 库占用，只展示不拦截） */}
+                      <section>
+                        <div className="mb-2 flex items-center gap-1.5">
+                          <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                            <Database size={14} className="text-mist" aria-hidden />
+                            Agent 与本地库
+                          </h3>
+                        </div>
+                        <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5 text-xs leading-6">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-mist">Agent 席位</span>
+                            <span className="font-mono text-ink">
+                              已用 {agentSeatUsed}/{AGENT_SEAT_LIMIT}
+                            </span>
+                          </div>
+                          {agentSeatOver && (
+                            <p className="text-[11px] text-amber">
+                              已超出免费席位额度（{AGENT_SEAT_LIMIT} 个）——不影响使用，仅作提示。
+                            </p>
+                          )}
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <span className="text-mist">本地库占用</span>
+                            <span className="font-mono text-ink">
+                              {dbUsage ? formatBytes(dbUsage.bytes) : '—'}
+                              {dbUsage && dbUsage.source === 'serialization-fallback' && (
+                                <span className="ml-1 text-[10px] text-mist">（估算）</span>
+                              )}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[11px] text-mist">
+                            未来单库超过约 50MB 时会在此提示清理 / 分库建议。
+                          </p>
+                        </div>
+                      </section>
 
-                  {/* Agent 看板入口（说明性：数据不复制进设置，点它去现场） */}
-                  <section>
-                    <div className="mb-2 flex items-center gap-1.5">
-                      <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                        <Bot size={14} className="text-mist" aria-hidden />
-                        Agent 看板
-                      </h3>
-                    </div>
-                    <p className="mb-2 rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-                      Agent 看板是 AI 工作区：执行记录、接入面板与任务队列都在那里。
-                    </p>
-                    <Link
-                      to="/agent"
-                      onClick={onClose}
-                      className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
-                    >
-                      <Bot size={15} className="text-mist" aria-hidden />
-                      打开 Agent 看板
-                    </Link>
-                  </section>
+                      {/*
+                        自然语言通道（说明性条目，不重复数据）：接入凭据的生成/管理在
+                        Agent 看板的接入面板——那边是工作流现场，设置里只讲清口径。
+                      */}
+                      <section>
+                        <div className="mb-2 flex items-center gap-1.5">
+                          <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                            <Bot size={14} className="text-mist" aria-hidden />
+                            自然语言通道
+                          </h3>
+                        </div>
+                        <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
+                          外部 Agent 通过本机回环地址以<strong className="text-ink">结构化命令</strong>
+                          接入 ID Plan；自然语言由 Agent 侧自己解析——ID Plan 不解析自然语言、不调用大模型。
+                          接入地址与访问令牌在 Agent 看板的接入面板里生成与管理，此处不重复。
+                        </p>
+                      </section>
+
+                      {/* Agent 看板入口（说明性：数据不复制进设置，点它去现场） */}
+                      <section>
+                        <div className="mb-2 flex items-center gap-1.5">
+                          <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                            <Bot size={14} className="text-mist" aria-hidden />
+                            Agent 看板
+                          </h3>
+                        </div>
+                        <p className="mb-2 rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
+                          Agent 看板是 AI 工作区：执行记录、接入面板与任务队列都在那里。
+                        </p>
+                        <Link
+                          to="/agent"
+                          onClick={onClose}
+                          className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
+                        >
+                          <Bot size={15} className="text-mist" aria-hidden />
+                          打开 Agent 看板
+                        </Link>
+                      </section>
+                    </>
+                  )}
                 </>
               )}
 
-              {/* ⑥ 行业与模板（仅管理员：反馈 #11 成员身份下整分区不渲染） */}
+              {/* ⑤ 行业与模板（仅管理员：反馈 #11 成员身份下整分区不渲染） */}
               {zone === 'industry' && isAdmin && <CustomLibrarySection />}
 
-              {/* ⑦ 关于 */}
+              {/* ⑥ 关于 */}
               {zone === 'about' && (
                 <>
                   <section>

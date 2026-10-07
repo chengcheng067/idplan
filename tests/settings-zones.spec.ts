@@ -5,19 +5,23 @@ import { resolve } from 'node:path';
 import { listenOnSafePort } from './helpers/safe-listen';
 
 /**
- * 设置抽屉 · 六区分区（v0.8.6 · 反馈 #7）——真构建产物 + 真 Chromium。
+ * 设置抽屉 · 六区分区（v0.8.6 · 反馈 #7 → v0.8.6.0002 反馈 #2 七区 → 图 5
+ * 第 1 点收回口：Agent 与自动化并入插件区作二级分组，回到六区）——真构建
+ * 产物 + 真 Chromium。
  *
- * 她的原话：「设置里面有非常混乱每个部分应该属于哪一个栏，这些都是看不清楚的」，
+ * 她的原话（反馈 #7）：「设置里面有非常混乱每个部分应该属于哪一个栏，这些都是看不清楚的」，
  * 并授权「按我们软件自己的需求分区，不必对齐 ID-Aura」。落地为「左导航 168 +
- * 右侧内容」双栏、六个分区按序：外观 / 排程 / 数据与备份 / Agent 与自动化 /
- * 行业与模板 / 关于。
+ * 右侧内容」双栏、六个分区按序：外观 / 排程 / 数据与备份 / 插件 / 行业与模板 / 关于。
+ * v0.8.6.0002 图 5 第 1 点她再次修正层级：「Agent 与自动化的设置应该是在插件
+ * 里面，它属于插件的设置，和插件不应该是平级关系」——Agent 三项（席位/本地库、
+ * 自然语言通道、看板入口）收进插件区顶部的两段子导航（插件 / Agent 与自动化）。
  *
  * 本 spec 守五件用户能看见的事：
  *   ① 分区导航切换后，右侧内容**确实跟着换**（默认「外观」；点「数据与备份」
- *      见日志与备份、点「插件」见插件开关；当前区 aria-current 高亮移动）；
+ *      见日志与备份、点「插件」见插件开关与子导航；当前区 aria-current 高亮移动）；
  *   ② <xl 窄视口**不断裂**：左导航退化为顶部横向条，位于内容上方、可点可见，
  *      点完内容切换；抽屉自身不横向溢出视口；
- *   ③ 768–1279（<xl 非手机档）：七个导航按钮同屏可点，不依赖横滑；
+ *   ③ 768–1279（<xl 非手机档）：六个导航按钮同屏可点，不依赖横滑；
  *   ④ ≥xl 贴缘几何（v0.8.6.0002 · 反馈 #1）：抽屉左缘 = 侧栏右缘（展开 240 /
  *      收起 64，折叠后随缘移动），遮罩不压侧栏（侧栏中心命中测试仍是侧栏自己）；
  *   ⑤ 按角色收分区（v0.8.6.0002 · 反馈 #11）：管理员看得到「行业与模板」，
@@ -167,13 +171,12 @@ window.idplan = {
 
 const HEAVY = 30000;
 
-/** 分区导航键（与产品 ZONES 同序；data-settings-zone 钩子值。v0.8.6.0002 反馈 #2 起为七区） */
+/** 分区导航键（与产品 ZONES 同序；data-settings-zone 钩子值。图 5 第 1 点起为六区：Agent 并入插件区） */
 const ZONE_KEYS = [
   'appearance',
   'schedule',
   'data',
   'plugins',
-  'agent',
   'industry',
   'about',
 ] as const;
@@ -320,7 +323,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     });
   }
 
-  it('S-Z1 · 分区导航：默认「外观」，点击切换后右侧内容确实跟着换、高亮跟着走（插件为独立一级分区）', async () => {
+  it('S-Z1 · 分区导航：默认「外观」，点击切换后右侧内容确实跟着换、高亮跟着走（Agent 与自动化收在插件区内）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
       await becomeAdmin(page);
@@ -359,24 +362,41 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       expect(dataText).toContain('数据存在哪');
       expect(dataText).not.toContain('休息制度');
 
-      // 切「插件」（v0.8.6.0002 · 反馈 #2：插件升为一级分区）：
-      // 插件开关 + 从文件安装/卸载入口都在这里（桌面端渲染安装钮）
+      // 切「插件」（图 5 第 1 点：Agent 与自动化并入插件区作二级分组）：
+      // 插件开关 + 从文件安装/卸载入口都在这里（桌面端渲染安装钮），
+      // 顶部两段子导航默认落在「插件」段
       await page.locator('[data-settings-zone="plugins"]').click();
       const pluginsText = await drawer.innerText();
       expect(pluginsText).toContain('插件');
       expect(pluginsText).toContain('从文件安装');
       expect(pluginsText).toContain('已装');
       expect(pluginsText).not.toContain('前端日志');
+      expect(
+        await page.locator('[data-plugins-subtab="plugins"]').getAttribute('aria-selected'),
+      ).toBe('true');
+      expect(await page.locator('[data-plugins-subtab="agent"]').count()).toBe(1);
+      // 插件段内不得出现 Agent 子段内容（层级修正的判别力）
+      expect(pluginsText, '「插件」子段不得混入 Agent 内容').not.toContain('Agent 与本地库');
 
-      // 切「Agent 与自动化」：席位/本地库 + 自然语言通道 + 看板入口；
-      // 插件已拆去独立分区，本区不得再出现插件开关（层级修正的判别力）
-      await page.locator('[data-settings-zone="agent"]').click();
+      // 切子导航「Agent 与自动化」：席位/本地库 + 自然语言通道 + 看板入口；
+      // 插件子段内容随之消失（两段互斥，不是一区平铺）
+      await page.locator('[data-plugins-subtab="agent"]').click();
       const agentText = await drawer.innerText();
       expect(agentText).toContain('Agent 与本地库');
       expect(agentText).toContain('自然语言通道');
       expect(agentText).toContain('打开 Agent 看板');
-      expect(agentText, '插件应只在「插件」分区，Agent 区不得残留').not.toContain('从文件安装');
+      expect(
+        await page.locator('[data-plugins-subtab="agent"]').getAttribute('aria-selected'),
+      ).toBe('true');
+      expect(agentText, '切子段后插件段内容不得残留').not.toContain('从文件安装');
       expect(agentText).not.toContain('保存备份');
+      // 左导航没有独立的「Agent 与自动化」一级分区了（图 5 第 1 点的形态要件）
+      const keys = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
+          b.getAttribute('data-settings-zone'),
+        ),
+      );
+      expect(keys).toEqual([...ZONE_KEYS]);
 
       // 切「行业与模板」：行业库三步流
       await page.locator('[data-settings-zone="industry"]').click();
@@ -402,14 +422,6 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       expect(
         await page.locator('[data-settings-zone="appearance"]').getAttribute('aria-current'),
       ).toBeNull();
-
-      // 七个导航键一个不少（顺序即分区顺序）
-      const keys = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
-          b.getAttribute('data-settings-zone'),
-        ),
-      );
-      expect(keys).toEqual([...ZONE_KEYS]);
     } finally {
       await ctx.close();
     }
@@ -447,7 +459,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       expect(geo!.panelHeight).toBeGreaterThan(200);
       // 抽屉不横向溢出视口（不断裂）
       expect(geo!.drawerRight).toBeLessThanOrEqual(geo!.vw + 1);
-      // 390 档导航横滑是预期形态（七个区分横排放不下），不视为断裂
+      // 390 档导航横滑是预期形态（六个区分横排放不下），不视为断裂
       expect(geo!.navScrollable).toBe(true);
 
       // 可点：点横条里的「数据与备份」，右侧内容真的换成日志/备份
@@ -465,7 +477,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     }
   }, HEAVY);
 
-  it('S-Z3 · <xl 非手机档（767）：七个导航按钮同屏可点（不依赖横滑），点完内容跟着换', async () => {
+  it('S-Z3 · <xl 非手机档（767）：六个导航按钮同屏可点（不依赖横滑），点完内容跟着换', async () => {
     const { ctx, page } = await open(767, 900);
     try {
       await becomeAdmin(page);
@@ -488,8 +500,8 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
         };
       });
       expect(fits).not.toBeNull();
-      expect(fits!.count).toBe(7);
-      expect(fits!.allVisible, '767 档七个导航按钮应同屏完整可见').toBe(true);
+      expect(fits!.count).toBe(6);
+      expect(fits!.allVisible, '767 档六个导航按钮应同屏完整可见').toBe(true);
       expect(fits!.navScrollable, '767 档不需要横滑').toBe(false);
       expect(fits!.navBottomOverPanel).toBeLessThanOrEqual(fits!.panelTop + 1);
 
@@ -567,7 +579,8 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
 
      * 规则（实现侧口径）：行业库是**管理职能**（导入的自定义阶段/套餐会进
      * 所有人的建档器）⇒ 成员身份下「行业与模板」**整分区从左导航消失**
-     * （不是禁用占位）；插件**保留给成员**（她明确「插件给成员保留」）；
+     * （不是禁用占位）；插件**保留给成员**（她明确「插件给成员保留」），
+     * Agent 与自动化作为插件区的二级子段同样对成员可达（图 5 第 1 点）；
      * 其余分区两角色均可见。对照组全走真 UI（becomeMember 走示例数据 +
      * 姓名进入），管理员/成员各起一个 context。
      */
@@ -598,20 +611,24 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
           await page.locator('[data-settings-zone="industry"]').count(),
           '成员身份下「行业与模板」应整分区消失（不是禁用）',
         ).toBe(0);
-        // 插件保留给成员（她明确「插件给成员保留」）
+        // 插件保留给成员（她明确「插件给成员保留」）；Agent 与自动化是插件区的
+        // 二级子段（图 5 第 1 点），成员同样可达
         expect(await page.locator('[data-settings-zone="plugins"]').count()).toBe(1);
         await page.locator('[data-settings-zone="plugins"]').click();
         const pluginsText = await page.locator('[data-settings-drawer]').innerText();
         expect(pluginsText).toContain('从文件安装');
         expect(pluginsText, '成员看不到行业库').not.toContain('行业库（自定义）');
+        expect(await page.locator('[data-plugins-subtab="agent"]').count()).toBe(1);
+        await page.locator('[data-plugins-subtab="agent"]').click();
+        expect(await page.locator('[data-settings-drawer]').innerText()).toContain('Agent 与本地库');
 
-        // 导航键集合 = 七区减去行业与模板（顺序不变）
+        // 导航键集合 = 六区减去行业与模板（顺序不变；无独立 Agent 一级分区）
         const keys = await page.evaluate(() =>
           Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
             b.getAttribute('data-settings-zone'),
           ),
         );
-        expect(keys).toEqual(['appearance', 'schedule', 'data', 'plugins', 'agent', 'about']);
+        expect(keys).toEqual(['appearance', 'schedule', 'data', 'plugins', 'about']);
       } finally {
         await ctx.close();
       }

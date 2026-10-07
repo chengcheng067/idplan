@@ -925,7 +925,8 @@ await page.click('[data-industry-select-option="indoor"]');
    *     ② 侧栏**不被盖**（elementFromPoint 诚实判据：侧栏中心命中侧栏自己），
    *        贴顶栏底缘全高（无悬空带）；设置打开期间折叠侧栏 ⇒ 抽屉随缘；
    *     ③ 设置项在抽屉内可见、可点（主题切换真路径；v0.8.6 反馈 #7 起经
-   *        左导航分区可达；v0.8.6.0002 反馈 #2 起插件是独立一级分区）；
+   *        左导航分区可达；v0.8.6.0002 图 5 第 1 点起 Agent 与自动化是插件区
+   *        内的二级子段，经子导航可达）；
    *     ④ 焦点管理：打开入抽屉、Esc 关、关闭焦点回触发钮（Q-A2-3）。
    *   旧 float 口径（锚定在点击处 / 底圆角不被裁 / 让开三键）随形态废止：
    *   全高抽屉贴边，底圆角被裁的结构性根因不复存在；让开三键由遮罩让位承担
@@ -942,7 +943,7 @@ await page.click('[data-industry-select-option="indoor"]');
 
         // ③ 设置项可见、可点（v0.8.6 · 反馈 #7：分区化后抽屉只渲染当前分区，
         //    内容可达性 = 左导航切换真路径，不再是"一列到底全在内"；
-        //    v0.8.6.0002 · 反馈 #2：插件是独立一级分区，与 Agent 与自动化平级）
+        //    v0.8.6.0002 · 图 5 第 1 点：Agent 与自动化收进插件区作二级子段）
         const drawer = page.locator('[data-settings-drawer]');
         const headText = await drawer.innerText();
         expect(headText, '默认应落在「外观」区（主题三选）').toContain('主题');
@@ -950,13 +951,12 @@ await page.click('[data-industry-select-option="indoor"]');
         await page.locator('[data-settings-zone="data"]').click();
         expect(await drawer.innerText(), '「数据与备份」区应有日志区').toContain('前端日志');
         expect(await drawer.innerText()).toContain('保存备份');
-        // 插件独立分区（反馈 #2）：插件开关/从文件安装在「插件」区
+        // 插件区（二级子段「Agent 与自动化」）：安装入口与席位信息都经子导航可达
         await page.locator('[data-settings-zone="plugins"]').click();
         expect(await drawer.innerText(), '「插件」区应有安装入口').toContain('从文件安装');
-        // 「Agent 与自动化」只剩宿主 Agent 集成信息，不得残留插件开关
-        await page.locator('[data-settings-zone="agent"]').click();
-        expect(await drawer.innerText(), '「Agent 与自动化」区应有席位信息').toContain('Agent 与本地库');
-        expect(await drawer.innerText(), '插件已拆去独立分区，Agent 区不得残留').not.toContain('从文件安装');
+        await page.locator('[data-plugins-subtab="agent"]').click();
+        expect(await drawer.innerText(), '「Agent 与自动化」子段应有席位信息').toContain('Agent 与本地库');
+        expect(await drawer.innerText(), '切子段后插件段内容不得残留').not.toContain('从文件安装');
         await page.locator('[data-settings-zone="appearance"]').click();
 
         if (theme === 'dark') {
