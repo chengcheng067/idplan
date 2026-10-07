@@ -44,7 +44,15 @@ export function StatCard({
         'xl:h-[156px] xl:rounded-3xl xl:p-6 xl:gap-4',
       )}
     >
-      <span className="truncate text-[13px] text-mist">{label}</span>
+      {/*
+        标签**不截断**（v0.8.6.0003 · 反馈「统计卡文字缺失」）：此前的 `truncate`
+        （nowrap + ellipsis）在卡片被压窄时会把标题尾部静静吃掉——用户看到的是
+        「进行中项□」而不是任何可察觉的溢出信号。去掉 truncate 后标签**允许换行**：
+        窄到放不下一行时折成两行，文字永远完整（硬要求：文字不许被裁）。
+        `min-w-0`（上方卡片根类）保证 flex 行里卡片仍可收缩，不会把行撑爆。
+        实测各视口（390–1920）标签均单行放下，此处是结构性保险而非视觉变化。
+      */}
+      <span className="text-[13px] text-mist">{label}</span>
       <span className="text-[18px] font-bold leading-tight text-ink">{value}</span>
       {trend ? (
         <span className={cn('flex items-center gap-1 text-[11px] font-medium', tClass)}>
