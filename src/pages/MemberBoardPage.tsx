@@ -233,8 +233,13 @@ export function MemberBoardPage(): JSX.Element {
         </div>
       </div>
 
-      {/* 统计概览行（两档共用；口径已是「观看对象的 active 项目」） */}
-      <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      {/* 统计概览行（两档共用；口径已是「观看对象的 active 项目」）
+          v0.8.6.0002 · 反馈 #10.4：改回与 HomePage 逐字同款的 flex-wrap 行。
+          此前这里是 grid-cols-2/lg:grid-cols-4，与 StatCard 自身断点（md 半宽 /
+          xl flex-1）错配——lg 档（1024–1279）每张卡只有半格宽（实测 126px），
+          数字和标签被挤瘪。StatCard 的设计口径就是「flex-wrap + flex 1 1 基准宽」，
+          按它本来姿势用即修复，且与首页统计行严格一致。 */}
+      <section className="flex flex-wrap gap-5">
         <StatCard icon="▣" tone="pine" value={active.length} label="进行中项目" trend={null} />
         <StatCard icon="▢" tone="amber" value={dueThisWeek} label="本周到期任务" trend={null} />
         <StatCard icon="▲" tone="clay" value={overdueCount} label="逾期风险" trend={null} />
@@ -282,9 +287,15 @@ export function MemberBoardPage(): JSX.Element {
       ) : (
         <section
           /* 列数与 HomePage 同源（项目所属行业派生），不能写死 grid-cols-4。
-             注释放属性位：三元括号内直接写花括号注释是表达式位，会编译错。 */
+             注释放属性位：三元括号内直接写花括号注释是表达式位，会编译错。
+             v0.8.6.0002 · 反馈 #10.4：列基准 260→340。260 是「与卡片设计宽度
+             脱节」的旧值——ProjectCard 的 340 是首页 3 列布局的校准基准
+             （见 ProjectCard.tsx 注释），列窄于它，卡内标题/进度条/头像行/Tag
+             全在超设计宽度下运行（实测 1152–1024 档卡片被压到 105–130px：
+             标题截断、Tag 逐字竖绕、头像行报废）。340 下桌面 3 列、
+             卡片≈340，与首页卡宽同一量级。 */
           className="grid items-start gap-3 sm:gap-4"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))' }}
         >
           {columns.map((col) => {
             const items = buckets[col.key] ?? [];
@@ -315,6 +326,10 @@ export function MemberBoardPage(): JSX.Element {
                       todayIso={todayIso}
                       selected={selectedProjectId === p.id}
                       onOpen={() => openProject(p.id)}
+                      /* v0.8.6.0002 · 反馈 #10.4：列内堆叠档——卡片宽度撑满列、
+                         高度只走固定档，不吃首页 flex-wrap 行的 flex-basis/半宽类
+                         （那些类在 flex-col 列里分别把卡片抅高、压窄，见 ProjectCard.tsx） */
+                      layout="column"
                     />
                   ))}
                   {items.length === 0 && (

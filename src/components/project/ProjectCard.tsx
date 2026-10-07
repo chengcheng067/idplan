@@ -70,6 +70,7 @@ export function ProjectCard({
   todayIso,
   selected = false,
   onOpen,
+  layout = 'row',
 }: {
   project: Project;
   stages: Stage[];
@@ -78,6 +79,17 @@ export function ProjectCard({
   todayIso: string;
   selected?: boolean;
   onOpen(): void;
+  /**
+   * 卡片在外容器中的布局角色（v0.8.6.0002 · 反馈 #10.4 修复）：
+   *   'row'    = 首页 flex-wrap 卡片行（默认，行为逐字节不变）：md 半宽 +
+   *              xl 吃 flex 1 1 340px 基准（340 是首页 3 列布局的校准值）；
+   *   'column' = 看板列内纵向堆叠（成员看板）：宽度撑满列、高度只走固定档
+   *              （h-124 / xl:h-185）。**不能**把上面两个 flex 行专用类带进
+   *              列容器——`xl:flex-[1_1_340px]` 的基准在 flex-col 列里会作用
+   *              到**纵轴**（卡片被抅到 340px 高），`md:w-[calc(50%-10px)]`
+   *              会把卡片压成列宽的一半（标题截断、头像行/Tag 挤烂）。
+   */
+  layout?: 'row' | 'column';
 }): JSX.Element {
   const { role, isAdmin, isMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
@@ -274,7 +286,8 @@ export function ProjectCard({
         // Soft UI 卡片：bg-paper + shadow-raised；Cloud Float 悬浮上浮 + 选中态主色环
         'group flex w-full min-w-0 cursor-pointer flex-col bg-paper shadow-raised',
         'rounded-md p-4 gap-[10px] h-[124px]',
-        'md:w-[calc(50%-10px)]',
+        // 「row」档专属：首页 flex-wrap 行的半宽 + 340 基准（见 layout 形参注释）
+        layout === 'row' && 'md:w-[calc(50%-10px)]',
         // 桌面列宽：规格 §2.5 明确写「卡片宽 365、高 185」，并注明
         // 「365 是 1440 下的固定稿宽，实现时用 flex: 1 1 340px 让列数随容器自适应」。
         // 这个 340 的基准是**精确校准过的**：内容区 = 1440 − 侧栏 240 − 内边距 64 = 1136，
@@ -282,7 +295,8 @@ export function ProjectCard({
         //   4 张：340×4 + gap 20×3 = 1420 > 1136 → 放不下，自动换行
         // 所以 1440 下恰好是 3 列 × 365。若写成 flex-1（= flex: 1 1 0%），
         // 基准宽度变 0、四张卡全挤进一行各 279px，与规格差一整列 —— 这是曾经的实现。
-        'xl:w-auto xl:flex-[1_1_340px] xl:h-[185px] xl:rounded-3xl xl:p-6 xl:gap-3',
+        'xl:h-[185px] xl:rounded-3xl xl:p-6 xl:gap-3',
+        layout === 'row' && 'xl:w-auto xl:flex-[1_1_340px]',
         /*
          * ★ v0.8.5 C3（排障手实测 Bug 1）：transition-all → 只过渡 transform/box-shadow。
          *   根因：卡片是**布局容器**（xl:flex-[1_1_340px] 随断点变宽），transition-all
