@@ -207,7 +207,7 @@ export function MemberBoardPage(): JSX.Element {
     <div className="flex flex-col gap-4 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
       {/* 标题行 + 视图切换（P0-18）
           切换控件用既有 SegmentedControl 的 lg 档，与首页 `HomePage.tsx` 的
-          「首页视图切换」同款（同一控件、同一档位、只是 ariaLabel 与绑定的 key 不同）。
+          「首页视图切换」同款（同一控件、同一档位，只是 ariaLabel 与绑定的 key 不同）。
           反馈 #5：管理员看指定成员时，标题即该成员的名字（她的预期是「这个成员的任务排表」，
           不是一个名叫「项目看板」的页面）；无参自己看的文案逐字不变。 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -258,6 +258,11 @@ export function MemberBoardPage(): JSX.Element {
           · 进行中 = 未完成且未逾期（「还有哪些任务」的主体）；
           · 近期完成 = 已完成且到期日在最近 30 天内（无到期日的也算，排尾）。
         仅看板档渲染：月历档是另一套数据视图（V1-26 纪律：只挂一棵数据树）。
+
+        v0.8.6.0003 · 反馈「宽窗空白」：列几何从 `lg:grid-cols-3`（3×1fr 无限拉伸，
+        1920 实测每列 448px）改为与看板列**同款**的 BOARD_COLUMN_TEMPLATE
+        （基准 340 / 上限 360 / auto-fit 换行 + justify-center 居中消化余量）——
+        同一页两处列几何必须同源，否则「看板列收窄了、任务块还抻着」更难看。
       */}
       {!isCalendar && (
         <MemberTaskTriage
@@ -288,14 +293,20 @@ export function MemberBoardPage(): JSX.Element {
         <section
           /* 列数与 HomePage 同源（项目所属行业派生），不能写死 grid-cols-4。
              注释放属性位：三元括号内直接写花括号注释是表达式位，会编译错。
+
              v0.8.6.0002 · 反馈 #10.4：列基准 260→340。260 是「与卡片设计宽度
              脱节」的旧值——ProjectCard 的 340 是首页 3 列布局的校准基准
              （见 ProjectCard.tsx 注释），列窄于它，卡内标题/进度条/头像行/Tag
              全在超设计宽度下运行（实测 1152–1024 档卡片被压到 105–130px：
              标题截断、Tag 逐字竖绕、头像行报废）。340 下桌面 3 列、
-             卡片≈340，与首页卡宽同一量级。 */
-          className="grid items-start gap-3 sm:gap-4"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))' }}
+             卡片≈340，与首页卡宽同一量级。
+
+             v0.8.6.0003 · 反馈「宽窗空白」：列上限 360 + auto-fit 换行 +
+             justify-center 居中消化余量（旧 1fr 会把 3 列抻到 448px，比设计宽
+             32%，列内容顶对齐 ⇒ 大片空洞）。列几何与任务三块同源，见
+             BOARD_COLUMN_TEMPLATE 注释。 */
+          className="grid items-start justify-center gap-3 sm:gap-4"
+          style={{ gridTemplateColumns: BOARD_COLUMN_TEMPLATE }}
         >
           {columns.map((col) => {
             const items = buckets[col.key] ?? [];
@@ -344,6 +355,28 @@ export function MemberBoardPage(): JSX.Element {
     </div>
   );
 }
+
+/**
+ * 看板列与「任务三块」共用的列几何（v0.8.6.0003 · 反馈「窗口拉宽后看板空白太多」）。
+ *
+ * 她的截图（宽窗）：看板列被横向拉得很宽、列内容顶对齐、下半大片空白。
+ * 根因：列模板是 `minmax(min(100%, 340px), 1fr)`——`1fr` 让轨道**无限拉伸**：
+ * 1440 以上 main 封顶 1440 ⇒ section ≤1376，只放得下 3 条 340 轨道，于是 3 列
+ * 各分到 448px（1920 实测），比 ProjectCard 的设计宽 340 宽出 32%，卡片跟着被
+ * 抻宽；列内内容不随宽度增长 ⇒ 又宽又空。
+ *
+ * 新几何（三段都有出处，不是拍脑袋）：
+ *   · 基准 340 = ProjectCard 设计宽（首页 3 列布局的校准基准，见 ProjectCard.tsx
+ *     注释；列窄于它，卡内标题/进度条/头像行/Tag 全在超设计宽度下运行——
+ *     反馈 #10.4 的实测教训：105–130px 窄卡全面报废）；
+ *   · 上限 360 = 宽窗时列**不无限拉伸**（360 下卡片 ≈332，贴设计宽；再宽就是空洞）；
+ *   · auto-fit = 列数随容器宽度换行，与首页 ProjectCard 的 flex-wrap 同源，
+ *     不写死列数（列集合由项目所属行业派生，见 deriveColumns）；
+ *   · min(100%, …) = 容器窄于基准时坍缩为 100%（手机单列，不被 340 撑破）；
+ *   · 横向余量由外层 grid 的 `justify-center` **居中消化**——刻意不用「拉伸卡片
+ *     高度填满列高」那种糊法（产品负责人明令禁止；等高是数据该有的样子，不是排版）。
+ */
+const BOARD_COLUMN_TEMPLATE = 'repeat(auto-fit, minmax(min(100%, 340px), 360px))';
 
 /* ------------------------------ 成员任务三块（反馈 #5） ------------------------------ */
 
@@ -439,7 +472,12 @@ function MemberTaskTriage({
   const doneHidden = Math.max(0, buckets.done.length - DONE_PREVIEW_LIMIT);
 
   return (
-    <section className="grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-3">
+    <section
+      /* v0.8.6.0003 · 反馈「宽窗空白」：三块列几何与看板列同源（BOARD_COLUMN_TEMPLATE），
+         宽窗不拉伸到 448、窄窗 auto-fit 换行、余量 justify-center 居中消化。 */
+      className="grid items-start justify-center gap-3 sm:gap-4"
+      style={{ gridTemplateColumns: BOARD_COLUMN_TEMPLATE }}
+    >
       <TaskGroup
         label="已逾期"
         tone={GROUP_TONE.clay}
