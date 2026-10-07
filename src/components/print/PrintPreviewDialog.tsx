@@ -46,13 +46,23 @@ export function PrintPreviewDialog({
   onClose: () => void;
 }): JSX.Element | null {
   const d = useSchedulePaperData(projectId);
-  const stageRef = useRef<HTMLDivElement | null>(null);
   const paperRootRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [zoom, setZoom] = useState<Zoom>('fit');
   const [scale, setScale] = useState(1);
   const [printBusy, setPrintBusy] = useState(false);
   const [pngBusy, setPngBusy] = useState(false);
+  /**
+   * 预览区元素（v0.8.6.0002 · 反馈 #9.1 修复）。
+   *
+   * 为什么从 useRef 改成 state：fit 缩放 effect 此前只依赖 `[zoom]`，而本面板是
+   * 「常驻挂载、open 才渲染内容」——Modal 在 open=false 时 return null，stage
+   * 元素**每次打开才挂载**。首开时 deps 未变 ⇒ effect 不跑 ⇒ scale 停在初始 1、
+   * ResizeObserver 也没挂：「适应」是按下的却没生效，「100%」因 scale 本就是 1
+   * 点了肉眼无变化——她看到的就是「第一次打开两个按钮都失效」。
+   * 元素进 state 后，每次打开（挂载）/ 关闭（卸载）都会换依赖 ⇒ effect 必跑。
+   */
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
 
   /** fit 档：随预览区宽度重算（ResizeObserver；规范 §2 公式 clamp((w−32)/794, 0.25, 1)） */
   useEffect(() => {
@@ -60,17 +70,16 @@ export function PrintPreviewDialog({
       setScale(1);
       return;
     }
-    const el = stageRef.current;
-    if (!el) return;
+    if (!stageEl) return;
     const calc = (): void => {
-      const s = Math.min(Math.max((el.clientWidth - 32) / A4_WIDTH_PX, 0.25), 1);
+      const s = Math.min(Math.max((stageEl.clientWidth - 32) / A4_WIDTH_PX, 0.25), 1);
       setScale(s);
     };
     calc();
     const ro = new ResizeObserver(calc);
-    ro.observe(el);
+    ro.observe(stageEl);
     return () => ro.disconnect();
-  }, [zoom]);
+  }, [zoom, stageEl]);
 
   const onPrint = useCallback(() => {
     const root = paperRootRef.current;
@@ -156,7 +165,7 @@ export function PrintPreviewDialog({
         {/* 预览区：chrome 跟随主题；纸面栈包在 .print-root 内锁亮色（D3） */}
         <div
           data-print-preview-stage=""
-          ref={stageRef}
+          ref={setStageEl}
           className="flex-1 overflow-auto bg-cream px-4 py-8"
         >
           <div
