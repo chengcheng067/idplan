@@ -393,8 +393,13 @@ describe('⑤ 三路关闭（Esc / 点外部 / ✕）与焦点回还', () => {
     act(() => {
       btn.click();
     });
-    expect(document.activeElement, '打开时焦点入面板').toBe(panel());
-
+    /*
+     * 「打开时焦点入面板」的真机断言在 calendar-popover-geometry.spec.ts 的 P-06
+     * （真 Chromium）：那条契约的真 bug——挂载即聚焦那一版，focus() 调在面板
+     * visibility:hidden 时是**空操作**（首帧 pos=null）——只有真浏览器量得出。
+     * jsdom 不实现「hidden 元素聚焦是空操作」，这里断言恒真、无判别力，
+     * 按纪律不留恒真断言误导后人（焦点回还下面那条仍保留：恢复链断了 jsdom 会红）。
+     */
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });

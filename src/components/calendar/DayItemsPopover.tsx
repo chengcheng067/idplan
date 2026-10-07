@@ -99,17 +99,32 @@ export function DayItemsPopover({
   const month = Number(day.date.slice(5, 7));
   const headLabel = `${month} 月 ${day.day} 日 · ${items.length} 个项目`;
 
-  /** 焦点管理：打开入面板；卸载时还给打开前的焦点元素（「+N」按钮，从哪来回哪去） */
+  /**
+   * 焦点管理（规格 §5.3），两件事分成两个 effect——
+   *
+   * ① 打开入面板（**Bug A 修复**，真 Chromium 实测的老 bug）：桌面档面板在 pos 算出来
+   *    之前是 `visibility:hidden`（定位要等父组件同步 anchorRect，首帧 pos=null），
+   *    而**对 visibility:hidden 元素调 focus() 是空操作**——老实现把 focus() 放在挂载
+   *    effect 里，那一刻面板恰好 hidden，焦点从未进过面板（✕/行键盘不可达、
+   *    role=dialog 焦点契约失效）。故聚焦条件挂「面板已可见」：sheet 无 visibility 门
+   *    （挂载即可见）直接聚焦；panel 等 pos 有值那一刻（面板已 visible）再聚焦，
+   *    pos 变化本 effect 自然重跑。
+   * ② 关闭回还：卸载时把焦点还给打开前的 activeElement（「+N」按钮，从哪来回哪去）。
+   *    isConnected 兜底：触发格可能已随切月重挂（旧节点 detached），此时无权抢焦点。
+   */
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
     return () => {
       const trigger = restoreFocusRef.current;
       // isConnected：触发格可能已随切月重挂（旧节点 detached），此时无权抢焦点
       if (trigger && trigger.isConnected) trigger.focus();
     };
   }, []);
+
+  useEffect(() => {
+    if (sheet || pos) panelRef.current?.focus();
+  }, [sheet, pos]);
 
   /** 关闭两路（第三路 ✕ 走面板内按钮 onClick）：Esc + 点外部。mousedown 用**捕获**——
    *  必须早于格子根节点的 onClick（onSelect 选中态）拿到事件，否则关之前先闪一下选中 */
@@ -119,7 +134,19 @@ export function DayItemsPopover({
     };
     const onDown = (e: MouseEvent): void => {
       const panel = panelRef.current;
-      if (panel && !panel.contains(e.target as Node)) onCloseRef.current();
+      if (panel && !panel.contains(e.target as Node)) {
+        /*
+         * Bug B 修复（真 Chromium 实测的老 bug）：先 preventDefault 再关。
+         * mousedown 的浏览器默认行为会把焦点移到事件目标——目标**不可聚焦**（h2/空白）
+         * 时焦点被清到 <body>，而它发生在 React 同步刷新「卸载 ⇒ 焦点回还 +N」之后，
+         * 把回还结果覆盖掉（点 Esc/✕ 不受影响，那两路没有默认焦点转移）。
+         * preventDefault 掐掉默认焦点转移，回还才留得住。副作用（可接受）：不 start
+         * 文本选择；点外部可聚焦元素也不抢焦点——焦点按规格回「+N」，click 照常触发。
+         * 这也是 overlay 类组件（dropdown/popover）的标准做法。
+         */
+        e.preventDefault();
+        onCloseRef.current();
+      }
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onDown, true);

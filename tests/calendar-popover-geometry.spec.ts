@@ -30,12 +30,13 @@
  * P-03 默认右展：首列（周一）格的浮层 left ≥ 格 right，且精确落在 right + 8
  * P-04 边缘左翻：末列（周日）格的浮层 right ≤ 格 left，且精确落在 left − 280 − 8
  * P-05 底部夹紧：末行格的浮层 bottom ≤ 视口高 − 8，且精确贴 vh − 8（顶缘被顶上去）
- * P-06 三路关闭 + 焦点回还：Esc / ✕ / 点外部均关得上；Esc 与 ✕ 关闭后焦点停回那颗
- *      「+N」按钮。两条**已知偏差**（真 Chromium 实测，已报 team-lead 待决策，spec 不
- *      固化错误行为，详见 P-06 用例内注记）：
- *        [A] 打开时焦点未入面板——mount 焦点 effect 在面板 visibility:hidden 时调
- *            focus()（空操作）且不重试（DayItemsPopover.tsx:106 vs :252）；
- *        [B] 点外部**不可聚焦**背景关闭后焦点落在 body（浏览器默认行为覆盖回还）。
+ * P-06 焦点契约：**打开即入面板**；Esc / ✕ / 点外部（不可聚焦背景）三路关闭后焦点
+ *      停回「+N」按钮。两条真 Chromium 实测抓到的时序 bug 已修，本条即回归面：
+ *       [A] 打开时焦点未入面板——挂载 focus effect 跑在面板 visibility:hidden 时
+ *           （首帧 pos=null），hidden 元素 focus() 是空操作（DayItemsPopover：
+ *           focus 改挂 pos/sheet 条件后才跑）；
+ *       [B] 点不可聚焦外部关闭后焦点落 body——浏览器 mousedown 默认焦点转移覆盖了
+ *           卸载时的回还（DayItemsPopover：捕获阶段先 preventDefault 再关）。
  * P-07 窄窗 bottom-sheet：视口 500 时同交互弹 data-day-popover="sheet"，左右 12、贴底、
  *      圆角 16（顶两角）、清单与桌面同一份（同日行数一致）；移动档格高 78
  * P-08 行完整：浮层行数 === 格子 aria-label 的项目数 === 「+N」数字 + 4；每行有全名/
@@ -492,9 +493,9 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await closePopoverByEsc(page);
     }, 60000);
 
-    /* ---------- P-06：三路关闭 + 焦点回还 ---------- */
+    /* ---------- P-06：焦点契约 + 三路关闭 + 焦点回还 ---------- */
 
-    it('P-06 · 三路关闭（Esc / ✕ / 点外部）；关闭后焦点停回「+N」按钮', async () => {
+    it('P-06 · 打开焦点入面板；Esc / ✕ / 点不可聚焦外部三路关闭后焦点停回「+N」', async () => {
       const idx = await firstCrowdedInCol(page, 0);
       expect(idx).toBeGreaterThanOrEqual(0);
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -502,9 +503,29 @@ describe.skipIf(!CAN_RUN_FRESH)(
       const moreBtn = page.locator('[data-day-cell]').nth(idx).locator('button[aria-label^="展开"]');
       const triggerLabel = (await moreBtn.getAttribute('aria-label')) ?? '';
 
-      // ── 路 1：Esc ──
+      // ── 打开即入面板（规格 §5.3；Bug A 修复前：挂载 effect 在面板 visibility:hidden
+      //    时调 focus() 是空操作，键盘用户打开浮层后 Tab 还停在页面别处） ──
       await moreBtn.click();
       await page.waitForSelector('[data-day-popover="panel"]', { timeout: 8000 });
+      // 轮询等焦点真正落进面板（focus effect 在 pos 就绪那一帧跑，快照断言会撞时序）；
+      // 修坏了（回退到 visibility:hidden 上 focus）这里 5s 超时即红
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector('[data-day-popover]') as HTMLElement | null;
+          const ae = document.activeElement;
+          return !!el && !!ae && el.contains(ae);
+        },
+        undefined,
+        { timeout: 5000 },
+      );
+      const focusIn = await page.evaluate(() => {
+        const panel = document.querySelector('[data-day-popover]') as HTMLElement;
+        const ae = document.activeElement;
+        return { isPanelItself: ae === panel, tag: ae?.tagName ?? '' };
+      });
+      expect(focusIn.isPanelItself, `打开后焦点应落在面板本体（实测 <${focusIn.tag}>）`).toBe(true);
+
+      // ── 路 1：Esc（关闭后焦点停回「+N」） ──
       await closePopoverByEsc(page);
       expect((await activeElt(page)).aria, 'Esc 关闭后焦点应还给触发它的「+N」按钮').toBe(triggerLabel);
 
@@ -515,42 +536,18 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await page.waitForFunction(() => !document.querySelector('[data-day-popover]'), undefined, { timeout: 5000 });
       expect((await activeElt(page)).aria, '✕ 关闭后焦点应还给「+N」按钮').toBe(triggerLabel);
 
-      // ── 路 3：点浮层外部（mousedown 捕获）──
+      // ── 路 3：点浮层外部**不可聚焦**背景（h2） ──
+      // Bug B 修复前：浏览器 mousedown 默认行为（目标不可聚焦 ⇒ 焦点清到 body）发生在
+      // React「卸载 ⇒ 焦点回还 +N」之后，把回还覆盖掉。修法：捕获阶段先 preventDefault
+      // 再关（overlay 类组件标准做法；副作用仅不 start 文本选择）。
       await moreBtn.click();
       await page.waitForSelector('[data-day-popover="panel"]', { timeout: 8000 });
       await page.locator('h2').first().click();
       await page.waitForFunction(() => !document.querySelector('[data-day-popover]'), undefined, { timeout: 5000 });
       expect(
-        await page.evaluate(() => !!document.querySelector('[data-day-popover]')),
-        '点外部应关闭',
-      ).toBe(false);
-      /*
-       * ── 两条已知偏差（真 Chromium 实测，已报 team-lead 待决策，**不在本 spec 固化错误行为**） ──
-       *
-       * [A] 打开时焦点**没有**入面板（规格 §5.3「打开焦点入面板」在真浏览器未兑现）：
-       *     monkey-patch HTMLElement.prototype.focus 实测，挂载即跑的焦点 effect 调用
-       *     `panelRef.current.focus()` 时面板仍是 `visibility:hidden`（首帧 pos=null——
-       *     anchorRect 要等父组件 layout effect 同步才有值），visibility:hidden 的元素
-       *     聚焦是**空操作**；该 effect 依赖 [] 只在挂载跑一次，面板可见后从不重试。
-       *     根因：DayItemsPopover.tsx:106（focus 调用点）与 :252（visibility 门）时序竞争；
-       *     父侧 MonthlyCalendarView.tsx:470-477 首渲染传的 anchorRect 恒为 null。
-       *     连带后果：面板内 ✕/行 按钮键盘 Tab 不可达、role=dialog 焦点契约失效；
-       *     jsdom spec（calendar-day-popover.spec.tsx:396）的同类断言在 jsdom 恒真
-       *     （jsdom 不实现 focusability），抓不到——正是「jsdom 量不出」的那类几何/焦点话题。
-       *     修复方向（实现侧定）：focus 移进定位 useLayoutEffect（pos 算出来那一刻），
-       *     或加一个 pos!==null 时才跑的 focus effect。
-       *     注：也因此，「关闭后焦点停回 +N」在本浏览器里恰好仍成立（焦点从未离开过触发钮），
-       *     上面三条关闭断言不受影响、全部实测通过。
-       *
-       * [B] 点浮层外**不可聚焦**背景（h2/空白）关闭后，焦点落在 <body> 而非「+N」：
-       *     React 同步刷新把焦点还给触发钮后，浏览器默认的 mousedown 行为（目标不可
-       *     聚焦 ⇒ 焦点清到 body）又把它覆盖掉。点外部**可聚焦**元素（按钮/链接）时
-       *     焦点随点击走，属自然行为。Esc / ✕ 两条路径焦点回还实测正常。
-       */
-      expect(
-        (await activeElt(page)).kind,
-        '点外部关闭后，焦点不得仍停留在已卸载的浮层上',
-      ).not.toBe('panel');
+        (await activeElt(page)).aria,
+        '点不可聚焦外部关闭后，焦点应还给「+N」（不得落在 body）',
+      ).toBe(triggerLabel);
     }, 60000);
 
     /* ---------- P-07：窄窗 bottom-sheet ---------- */
