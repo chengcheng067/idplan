@@ -286,7 +286,19 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   );
 
   return (
-    <div className="flex flex-col gap-[12px] bg-cream px-[16px] pb-[24px] pt-[20px] md:px-[36px]">
+    /*
+      v0.8.6.0002 · 反馈 #7：去掉根节点自带的 px-[16px] / md:px-[36px] 横向内边距。
+
+      她的话：「日历看板这个位置，它左右两侧和上下 UI 没有对齐，我希望使其是对齐的」。
+      根因：本组件在页级 px-8（32px）之内又自带一层横向内边距（移动端 16 / 桌面 36），
+      而页面底色与这里的 bg-cream 同值（AppShell 根就是 bg-cream）⇒ 这层 cream 带
+      视觉上不可见，可见的 sunken 日历卡因此比同页统计卡行 / 看板列**内缩 36px**
+      （实测 1440 档：统计卡左缘 272，日历卡左缘 308）——左右锚点错位即她看到的
+      「没对齐」。两个使用方（HomePage / MemberBoardPage）都已有页级 px，本组件
+      再加一层即是双重锚点；去掉后工具行 / 图例 / 筛选 / 日历卡与页内其他块共用
+      同一条左右竖线。纵向节奏不变（pt/pb 与页面 gap 原样保留）。
+    */
+    <div className="flex flex-col gap-[12px] bg-cream pb-[24px] pt-[20px]">
       {/* ① 日历工具行（画板 14：高 60 / 横向 gap 16） */}
       <div className="flex flex-col gap-[10px] md:h-[60px] md:flex-row md:items-center md:gap-[16px]">
         {/* 左：年月 + 上/下月 */}
