@@ -22,9 +22,16 @@ export const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as con
 /** 网格行数：6 行 42 格，恒定行高节奏（月历不因月长跳高） */
 export const GRID_ROWS = 6;
 
-/** 每日格可点击元素的最小高度（画板 19 约束值 92，取 90 贴近；桌面画板 14 为 110） */
-export const MOBILE_CELL_MIN_H = 90;
-export const DESKTOP_CELL_MIN_H = 110;
+/**
+ * 每日格**恒定高度**（画布定稿 2026-10-08「B 方案」· 规格 §2 铁律 1：桌面 86 / 窄窗 78）。
+ *
+ * 恒定 = 组件侧用 `height` + `overflow:hidden`，内容超限**裁掉**（不滚动、不撑高）。
+ * 旧版 `MIN_H`（移动 90 / 桌面 110 + min-height）配「点 +N 就地展开把行撑高」的交互
+ * 已被需求方明确反馈过（「格子撑高、行高跳变」+「我已经点不动了」），本定稿从机制上废除：
+ * 想看全部条目一律走当日浮层（DayItemsPopover），格内永不展开。
+ */
+export const MOBILE_CELL_H = 78;
+export const DESKTOP_CELL_H = 86;
 
 /** 网格中一天 */
 export interface GridDay {

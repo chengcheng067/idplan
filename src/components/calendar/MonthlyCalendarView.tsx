@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -40,6 +40,7 @@ import { CalendarLegend } from './CalendarLegend';
 import { CalendarFilters as CalendarFilterPanel } from './CalendarFilters';
 import { CalendarEmptyStates, type EmptyKind } from './CalendarEmptyStates';
 import { MonthDayCell, stageLabelOf } from './MonthDayCell';
+import { DayItemsPopover, type PopoverAnchorRect } from './DayItemsPopover';
 
 /**
  * 月历看板（v0.7 画板 14 亮色 / 15 暗色 / 16-17 空状态四态 / 18 拥挤方案 A / 19 移动端）。
@@ -164,6 +165,45 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
 
   const [selectedDate, setSelectedDate] = useState(meta.todayIso);
 
+  /**
+   * 「当日条目浮层」状态（画布定稿 2026-10-08 · 规格 §5：点「+N」弹全量清单）。
+   *
+   * 为什么住在 view 级而不是格子里：浮层是 body portal 的跨格浮层（格子 overflow:hidden，
+   * 住进去会被整块裁掉——规格 §5.1 有实测记录）。格子的「+N」只负责把
+   * 「当天全部条目 + 锚定格 DOM」回调上来。
+   */
+  const [dayPopover, setDayPopover] = useState<{
+    day: GridDay;
+    items: CalendarEntry[];
+    anchorEl: HTMLElement;
+  } | null>(null);
+  const [popoverAnchorRect, setPopoverAnchorRect] = useState<PopoverAnchorRect | null>(null);
+
+  // 锚定矩形同步：打开时量一次，滚动/缩放时重算（fixed 浮层不随页面滚动，
+  // 锚格动了浮层必须跟着动）。锚定格被卸载（切月/切视图导致网格重挂）⇒ 直接关浮层。
+  useLayoutEffect(() => {
+    if (dayPopover === null) {
+      setPopoverAnchorRect(null);
+      return;
+    }
+    const sync = (): void => {
+      const el = dayPopover.anchorEl;
+      if (!el.isConnected) {
+        setDayPopover(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      setPopoverAnchorRect({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    };
+    sync();
+    window.addEventListener('scroll', sync, true);
+    window.addEventListener('resize', sync);
+    return () => {
+      window.removeEventListener('scroll', sync, true);
+      window.removeEventListener('resize', sync);
+    };
+  }, [dayPopover]);
+
   // 切换月份时，若选中日期不在当月，则重置为当月 1 日
   useEffect(() => {
     if (selectedDate < meta.monthStart || selectedDate > meta.monthEnd) {
@@ -280,6 +320,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
           isMobile={isMobile}
           onSelect={() => setSelectedDate(day.date)}
           onOpen={open}
+          onOpenDay={(items, anchorEl) => setDayPopover({ day, items, anchorEl })}
         />
       ))}
     </div>
@@ -422,6 +463,18 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
               ))}
           </div>,
         )
+      )}
+
+      {/* 当日条目浮层（body portal，挂在本组件外也不影响 React 树归属）；
+          空状态四态下没有格可点，不渲染 */}
+      {dayPopover && (
+        <DayItemsPopover
+          day={dayPopover.day}
+          items={dayPopover.items}
+          anchorRect={popoverAnchorRect}
+          onOpenProject={open}
+          onClose={() => setDayPopover(null)}
+        />
       )}
     </div>
   );

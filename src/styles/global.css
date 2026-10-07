@@ -236,6 +236,9 @@
   --color-rest-day: #eef2f7;
   --color-rest-day-band: rgba(15, 23, 42, 0.04);
   --calendar-not-started: #a0a0a8; /* 未开始幽灵态底色（亮色） */
+  /* 月历「今天」圆点（画布定稿 2026-10-08：重新定义为自然绿 #2F9E77，亮暗同值——
+     与全局 pine（靛蓝）刻意不同：那是全应用皮肤，不属于本次月历改动的范围 */
+  --cal-today: #2F9E77;
 
   /* —— 时间轴 SVG 行底纹 / 描边（亮暗双主题；改时须与 src/components/timeline/timelineColors.ts 同步）—— */
   --timeline-row-even: #f1f5f9; /* surface-sunken */

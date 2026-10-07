@@ -1,53 +1,42 @@
 /**
- * 月历日期格（画板 14 日期网格 · 画板 18 方案 A · 画板 19 移动端 · 规格 §6.3）。
+ * 月历日期格（画布定稿 2026-10-08「B 方案」· 规格 §3.5/§3.5.1/§3.6/§5）。
  *
- * ── 画板 14 原文 ──
- *   「日期网格 7 列 × 6 行 …… 每格内：日号 + 阶段色带（高 11–14，圆角 6，用 lightBar，
- *     宽度撑满格宽减内边距）」「今天：日号外加 18 × 18 圆点（pine 底，圆角 9999），数字白色」
+ * ── 画布定稿（ardot 733991817247895，用户已确认）──
+ *   月历格内条目**废除整条实心色带**，改为「小色点 + 项目名」：
+ *     · 色点 8×8 圆形，取该阶段「实心块」色（stageSolidOf，亮 = main / 暗 = lightBar，
+ *       自定义色走 --stage-local-solid）；未开始幽灵态 = 空心点（同色描边 1.5px、内部透明）。
+ *     · 条目名 11px（移动端 10px），超宽 truncate；title 仍给全量「项目 · 阶段 · 百分比」。
+ *     · 条目流：两列栅格（CSS grid repeat(2, minmax(0,1fr))，移动端单列）——
+ *       每列的色点各自成一条竖线（§3.5.1 对齐规则：靠栅格列对齐，禁止按序号奇偶推断宽度）。
+ *     · 溢出标（§3.6）：满排优先，真放不下的才折叠为「…+N 个项目」（移动端「+N」），
+ *       纯文字、无底色；**点击弹当日浮层（DayItemsPopover），格内永不就地展开**。
+ *     · 格子高度**恒定**（桌面 86 / 窄窗 78，calendarGrid 常量）：height + overflow:hidden，
+ *       内容超限裁掉。旧版「点 +N 就地展开把格子撑高」是需求方明确反馈过的
+ *       （「格子撑高、行高跳变」+「我已经点不动了，没有办法再继续展开」），本定稿从机制上废除。
  *
- * ── 画板 19（移动端 < 768）原文 ──
- *   「日期网格 7 × 6（不横滚）：每格 48 × 90（最小高 90）；每格色带 38 × 11，圆角 ~6；
- *     每格最多 2 条；日号 11；今天为 18 × 18 pine 圆点 + 白字；双行小字（农历 / 计数）9 mist」
- *
- * ── 画板 18 方案 A（§7.2 D2 已拍板「A 为主」）──
- *   「格内阶段超过 3 条（桌面）/ 2 条（移动端）时（§6.3 溢出策略），折叠为
- *     「+N 个项目」可点行；点击 → 就地展开清单（不跳页、不弹窗）：聚合带（高 20，
- *     圆角 10，浅底）+ 清单行（色点 12 × 12 圆角 3 取 main 值 + 「{项目名} · {阶段名}」12）
- *     + 末尾「还有 N 个项目」12」
- *   规格补充说明：画板 18 是「交互方案讨论稿，不是要 1:1 实现」，故本组件实现
- *   **方案 A 的交互 + 清单视觉**，尺寸按容器自适应，不复刻画板里的固定 px。
- *
- * ── 一处有意偏离（产品决策，已在报告中说明）──
- *   画板 14 与 画板 18-A 都把格内色带画成**纯色条**（不带项目名），项目名只在
- *   画板 18-B 的展开清单里出现。本实现遵循该设计：色带=纯色 + `title` 提示，
- *   点名信息通过「+N 个项目」就地展开的清单暴露。色带仍可点进项目详情（既有功能保留）。
+ * ── 历史（画板 14/18-A/19 的纯色带方案 + 就地展开清单）已被本定稿取代 ──
+ *   色带的发丝描边（BUG-04）随色带一并退役：8px 色点在亮暗两主题格底上
+ *   对比度均 ≥ 3（实心块角色本就是为小面积设计的），无需描边。
  */
 
-import { useState } from 'react';
+import { useRef } from 'react';
 
 import { cn } from '../../lib/cn';
 import {
-  MOBILE_CELL_MIN_H,
-  DESKTOP_CELL_MIN_H,
+  MOBILE_CELL_H,
+  DESKTOP_CELL_H,
   type GridDay,
 } from './calendarGrid';
-import { stageSolidOf, bandOutlineOf } from './calendarColors';
+import { stageSolidOf } from './calendarColors';
 import { customStageColor } from '../timeline/stageColorKey';
 import type { CalendarEntry } from './calendarMath';
 
 /**
- * 溢出折叠阈值（规格 §6.3 表格）：
- *   月历格内阶段超过 2 条（移动端）/ 3 条（桌面）→ 折叠为「+N 个项目」，点击展开。
- * ⚠️ 注意这与「休息日」无关：这里的「拥挤」指**一个格子里有几个项目/阶段**。
+ * 折叠阈值（§3.6 画布定稿）：两列栅格下桌面满排 2 行 = 4 条，移动端单列 2 条。
+ * 超出即出现「…+N 个项目」；点击弹出当日浮层全列，**不就地展开**。
  */
-const COLLAPSE_LIMIT_DESKTOP = 3;
+const COLLAPSE_LIMIT_DESKTOP = 4;
 const COLLAPSE_LIMIT_MOBILE = 2;
-
-/**
- * 展开态最多渲染的清单行数。展开后网格行会随内容变高（画板 18-B 的格子就比 A 高），
- * 但无上限会让整月网格失控跳高，故设上限，超出部分并入末尾「还有 N 个项目」。
- */
-const MAX_EXPANDED_ROWS = 6;
 
 /** 清单行里的阶段名：激活阶段优先，否则按状态给一个可读词，绝不留空 */
 export function stageLabelOf(entry: CalendarEntry): string {
@@ -57,6 +46,56 @@ export function stageLabelOf(entry: CalendarEntry): string {
   return '进行中';
 }
 
+/** 折叠态单条条目：色点 + 项目名（B 方案画布定稿形态） */
+function EntryRow({
+  entry,
+  isMobile,
+  onOpen,
+}: {
+  entry: CalendarEntry;
+  isMobile: boolean;
+  onOpen(projectId: string): void;
+}) {
+  // ★ 通路 B：判定 + `data-stage-key` 一次取齐（只写一半 ⇒ var() 解析为空 ⇒ 透明）
+  const { attrs: colorAttrs } = customStageColor(entry.activeStage?.customColor);
+  return (
+    <button
+      type="button"
+      onClick={(ev) => {
+        ev.stopPropagation();
+        onOpen(entry.project.id);
+      }}
+      aria-label={`打开项目 ${entry.project.name}`}
+      title={`${entry.project.name} · ${stageLabelOf(entry)} · ${Math.round(entry.percent)}%`}
+      className="flex min-w-0 items-center gap-[5px] text-left"
+    >
+      {/* 色点 8×8 圆形；幽灵态 = 空心（同色 1.5px 描边、内部透明），§3.5 未开始语义 */}
+      <span
+        aria-hidden
+        className={cn(
+          'h-[8px] w-[8px] shrink-0 rounded-full',
+          entry.isGhost && 'opacity-80',
+        )}
+        style={
+          entry.isGhost
+            ? { border: `1.5px solid ${stageSolidOf(entry.filterStageIndex, entry.activeStage?.colorIndex, entry.activeStage?.customColor)}` }
+            : { backgroundColor: stageSolidOf(entry.filterStageIndex, entry.activeStage?.colorIndex, entry.activeStage?.customColor) }
+        }
+        {...colorAttrs}
+      />
+      <span
+        className={cn(
+          'min-w-0 truncate',
+          isMobile ? 'text-[10px]' : 'text-[11px]',
+          'text-ink',
+        )}
+      >
+        {entry.project.name}
+      </span>
+    </button>
+  );
+}
+
 export function MonthDayCell({
   day,
   items,
@@ -64,44 +103,52 @@ export function MonthDayCell({
   isMobile,
   onSelect,
   onOpen,
+  onOpenDay,
 }: {
   day: GridDay;
   items: CalendarEntry[];
-  /** 是否休息日。**由调用方走 lib/workdays.isRestDay 得出**（见文件尾「休息日口径」说明） */
+  /** 是否休息日。**由调用方走 lib/workdays.isRestDay 得出**（见 calendarGrid「休息日口径」说明） */
   isRest: boolean;
   isMobile: boolean;
   onSelect(): void;
   onOpen(projectId: string): void;
+  /**
+   * 「+N」回调：把**当天全部条目**与锚定格 DOM 交给调用方弹当日浮层。
+   * 状态必须住在外层（MonthlyCalendarView）——浮层是 body portal 的跨格浮层，
+   * 住格子会被 overflow:hidden 整块裁掉（规格 §5.1，有实测记录）。
+   */
+  onOpenDay(items: CalendarEntry[], anchorEl: HTMLElement): void;
 }): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
 
   const limit = isMobile ? COLLAPSE_LIMIT_MOBILE : COLLAPSE_LIMIT_DESKTOP;
   const crowded = items.length > limit;
   const hiddenCount = Math.max(0, items.length - limit);
-  const shownRows = items.slice(0, MAX_EXPANDED_ROWS);
-  const restAfterRows = Math.max(0, items.length - shownRows.length);
 
   return (
     <div
+      ref={cellRef}
+      data-day-cell=""
       onClick={onSelect}
       className={cn(
         'relative flex cursor-pointer flex-col gap-[4px] overflow-hidden p-[4px] transition-colors md:p-[6px]',
-        // 格底色三分（画板 14/15）：当月 paper / 休息日 rest-day / 非当月 cream
+        // 格底色三分：当月 paper / 休息日 rest-day / 非当月 cream
         day.inMonth ? (isRest ? 'bg-rest-day' : 'bg-paper') : 'bg-cream',
         day.inMonth ? 'text-ink' : 'text-mist',
         'hover:bg-sand/40',
         // 选中格高亮（既有功能保留）
         day.isSelected && 'ring-1 ring-inset ring-pine',
       )}
-      /* 最小高走常量（单一来源）：移动端 90（画板 19 约束值 92 的贴近）/ 桌面 110（画板 14）。
-         用 min-height 而非 height —— 展开清单时格子允许变高（画板 18-B 即更高的格）。 */
-      style={{ minHeight: isMobile ? MOBILE_CELL_MIN_H : DESKTOP_CELL_MIN_H }}
+      /* 恒高走常量（单一来源）：桌面 86 / 窄窗 78。
+         用 height 而非 min-height —— 定稿铁律 1「格子高度恒定」：内容超限裁掉，
+         任何交互（含「+N」浮层）都不允许把格子撑高。 */
+      style={{ height: isMobile ? MOBILE_CELL_H : DESKTOP_CELL_H }}
       aria-label={`${day.date}${day.isToday ? '（今天）' : ''}，${items.length} 个项目`}
     >
-      {/* 日号（画板 14：13；画板 19：11。今天 = 18×18 pine 圆点 + 白字） */}
+      {/* 日号（今天 = 18×18 圆点 + 白字，定稿重新定义为自然绿 --cal-today）；色点轴线对齐日号字轴（§3.5.1） */}
       <div className="flex items-center justify-between gap-[2px]">
         {day.isToday ? (
-          <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-pine text-[11px] font-medium text-white">
+          <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--cal-today)] text-[11px] font-medium text-white">
             {day.day}
           </span>
         ) : (
@@ -115,118 +162,36 @@ export function MonthDayCell({
         )}
       </div>
 
-      {/* 色带区（溢出隐藏，保证任何情况下都不横向滚动） */}
-      <div className={cn('flex min-w-0 flex-1 flex-col gap-[3px] overflow-hidden', !day.inMonth && 'opacity-70')}>
-        {/* 折叠态：只画前 limit 条纯色带（画板 14 / 18-A） */}
-        {!expanded &&
-          items.slice(0, limit).map((e) => {
-            // ★ 通路 B：判定 + `data-stage-key` 一次取齐（只写一半 ⇒ var() 解析为空 ⇒ 透明）
-            const { attrs: colorAttrs } = customStageColor(e.activeStage?.customColor);
-            return (
-              <button
-                key={e.project.id}
-                type="button"
-                onClick={(ev) => {
-                  ev.stopPropagation();
-                  onOpen(e.project.id);
-                }}
-                title={`${e.project.name} · ${stageLabelOf(e)} · ${Math.round(e.percent)}%`}
-                className={cn(
-                  // 色带：高 11（移动端画板 19）/ 14（桌面画板 14），圆角 6，撑满格宽
-                  'block w-full shrink-0 rounded-[6px] transition-transform hover:scale-[1.02]',
-                  isMobile ? 'h-[11px]' : 'h-[14px]',
-                  // 未开始幽灵态（图例有「未开始」说明，此处保持语义一致）
-                  e.isGhost && 'opacity-40',
-                )}
-                // 发丝描边（BUG-04）：浅色带（s5 芽白/s7 米白）在亮色格底上对比度仅 1.10，
-                // 深色带在暗色格底上同为 ~1.1，两侧主题都会「隐形」。描边取该阶段 stage-ink
-                // （天生与带面明度对立），与时间轴色带共用同一份实现。
-                // v0.8 通路 B：色值（background）来自 `calendarMath → entry.color`，
-                // 它已带过 customColor；这里再把 `customColor` 透传给描边出口，两者才不会分裂
-                // （带面走自定义色、描边却仍是内置 ink-rgb ⇒ 自定义色下描边完全不见）。
-                style={{
-                  backgroundColor: e.color,
-                  boxShadow: bandOutlineOf(
-                    e.filterStageIndex,
-                    e.activeStage?.colorIndex,
-                    e.activeStage?.customColor,
-                  ).boxShadow,
-                }}
-                {...colorAttrs}
-                aria-label={`打开项目 ${e.project.name}`}
-              />
-            );
-          })}
-
-        {/* 折叠入口（§6.3）：拥挤时出现，点击**就地展开**，不跳页不弹窗。
-            文案分档：画板 19（移动端专版）写「折叠为「+N」」，§6.3 写「折叠为「+N 个项目」」。
-            移动端格宽仅 ~48px，用长文案会折成两行把格高顶开，故移动端按画板 19 用「+N」。 */}
-        {crowded && !expanded && (
-          <button
-            type="button"
-            onClick={(ev) => {
-              ev.stopPropagation();
-              setExpanded(true);
-            }}
-            className="w-full whitespace-nowrap rounded-[6px] py-[1px] text-left text-[9px] text-mist transition-colors hover:text-ink md:text-[11px]"
-          >
-            {isMobile ? `+${hiddenCount}` : `+${hiddenCount} 个项目`}
-          </button>
-        )}
-
-        {/* 展开态（画板 18-B）：色带**被聚合带取代**（不是并列），下接清单行 */}
-        {crowded && expanded && (
-          <div className="flex min-w-0 flex-col gap-[3px]">
-            {/* 聚合带：高 20，圆角 10，浅底（画板 18-B 的 #EEF1F5 ≈ sunken「凹陷井」token） */}
-            <span aria-hidden className="block h-[20px] w-full shrink-0 rounded-[10px] bg-sunken" />
-            {shownRows.map((e) => {
-              // ★ 通路 B（展开态清单色点）：与折叠态色带同一判定出口
-              const { attrs: colorAttrs } = customStageColor(e.activeStage?.customColor);
-              return (
-                <button
-                  key={`row-${e.project.id}`}
-                  type="button"
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    onOpen(e.project.id);
-                  }}
-                  className="flex min-w-0 items-center gap-[6px] text-left"
-                >
-                  {/* 色点 12 × 12，圆角 3，取该阶段「实心块」色（亮 = main / 暗 = lightBar） */}
-                  <span
-                    aria-hidden
-                    className="h-[12px] w-[12px] shrink-0 rounded-[3px]"
-                    style={{
-                      backgroundColor: stageSolidOf(
-                        e.filterStageIndex,
-                        e.activeStage?.colorIndex,
-                        e.activeStage?.customColor,
-                      ),
-                    }}
-                    {...colorAttrs}
-                  />
-                  <span className="min-w-0 truncate text-[12px] text-ink">
-                    {e.project.name} · {stageLabelOf(e)}
-                  </span>
-                </button>
-              );
-            })}
-            {restAfterRows > 0 && (
-              <span className="text-[12px] text-mist">还有 {restAfterRows} 个项目</span>
-            )}
-            {/* 收起入口：展开是就地状态，必须可逆 */}
+      {/* 条目流（两列栅格，§3.5.1；溢出隐藏，保证任何情况下都不横向滚动） */}
+      <div className={cn('min-w-0 flex-1 overflow-hidden', !day.inMonth && 'opacity-70')}>
+        {/* 折叠态：满排优先（B 方案画布定稿），真放不下的才进「…+N」→ 当日浮层 */}
+        <div
+          className={cn(
+            'grid min-w-0 gap-x-[10px] gap-y-[3px]',
+            isMobile ? 'grid-cols-1' : 'grid-cols-2',
+          )}
+        >
+          {items.slice(0, limit).map((e) => (
+            <EntryRow key={e.project.id} entry={e} isMobile={isMobile} onOpen={onOpen} />
+          ))}
+          {crowded && (
             <button
               type="button"
               onClick={(ev) => {
                 ev.stopPropagation();
-                setExpanded(false);
+                // 锚点传格子本体（浮层贴格展开，规格 §5.1）。点按钮时 ref 必已挂载，
+                // 用非空断言拿 DOM；+N 按钮自身保持焦点，浮层关闭后经 activeElement
+                // 还原链把焦点还给本按钮（§5.3）。
+                const anchor = cellRef.current;
+                if (anchor) onOpenDay(items, anchor);
               }}
-              className="w-full whitespace-nowrap text-left text-[9px] text-mist transition-colors hover:text-ink md:text-[11px]"
+              aria-label={`展开 ${hiddenCount} 个项目的当日清单`}
+              className="min-w-0 truncate text-left text-[10px] text-mist transition-colors hover:text-ink md:text-[11px]"
             >
-              收起
+              {isMobile ? `+${hiddenCount}` : `…+${hiddenCount} 个项目`}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

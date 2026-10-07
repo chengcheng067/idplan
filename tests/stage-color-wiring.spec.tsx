@@ -68,6 +68,7 @@ import { StageBar } from '../src/components/timeline/StageBar';
 import { StageRowsColumn } from '../src/components/timeline/StageRowsColumn';
 import { MobileStageList } from '../src/components/timeline/MobileStageList';
 import { MonthDayCell } from '../src/components/calendar/MonthDayCell';
+import { DayItemsPopover } from '../src/components/calendar/DayItemsPopover';
 import { ProjectCard } from '../src/components/project/ProjectCard';
 import { ProjectAppearanceDialog } from '../src/components/project/ProjectAppearanceDialog';
 import { Sidebar } from '../src/components/layout/Sidebar';
@@ -788,7 +789,7 @@ describe('② 阶段卡 · 移动 MobileStageList 序号块与进度条', () => 
  *   这条链有三个环节，任何一环没穿到 customColor，自定义色都会在月历上退回内置色：
  *     calendarMath.computeCalendarEntry → e.color
  *     calendarColors.stageColorOf / stageSolidOf / bandOutlineOf → 必须接受第 3 形参
- *     MonthDayCell 折叠态色带 + 展开态清单色点 → 必须挂 data-stage-key
+ *     MonthDayCell 折叠态色点 + 当日浮层（DayItemsPopover）清单色点 → 必须挂 data-stage-key
  * ══════════════════════════════════════════════════════════════════════════════ */
 
 const MONTH_META = buildMonthMeta('2026-06', '2026-06-10');
@@ -810,7 +811,11 @@ function makeEntry(pid: string, name: string, stage: Stage): CalendarEntry {
   );
 }
 
-function renderDayCell(items: CalendarEntry[], isMobile = false): HTMLDivElement {
+function renderDayCell(
+  items: CalendarEntry[],
+  isMobile = false,
+  onOpenDay: (list: CalendarEntry[], anchorEl: HTMLElement) => void = () => undefined,
+): HTMLDivElement {
   return mount(
     <MonthDayCell
       day={CAL_DAY}
@@ -819,6 +824,7 @@ function renderDayCell(items: CalendarEntry[], isMobile = false): HTMLDivElement
       isMobile={isMobile}
       onSelect={() => undefined}
       onOpen={() => undefined}
+      onOpenDay={onOpenDay}
     />,
   );
 }
@@ -854,54 +860,89 @@ describe('③ 月历取色链：calendarMath.computeCalendarEntry 必须把自�
   });
 });
 
-describe('③ 月历 MonthDayCell：折叠态色带 + 展开态清单色点', () => {
-  it('折叠态（不拥挤）：色带背景走通路 B，且描边用 --stage-local-ink-rgb 三元组', () => {
+describe('③ 月历 MonthDayCell：折叠态色点（B 方案画布定稿）+ 当日浮层清单色点', () => {
+  it('折叠态（不拥挤）：条目色点背景走通路 B（--stage-local-solid），且挂 data-stage-key', () => {
     const key = registerStageColor(CUSTOM);
     const entry = makeEntry('proj_d1', '自定义项目', makeStage('stg_d1', 1, { customColor: CUSTOM }));
     const h = renderDayCell([entry]);
 
-    // 折叠态唯一的色带按钮（带 title）
-    const band = must(h, 'button[title]', '折叠态色带按钮');
-    expect(inline(band).backgroundColor).toBe('var(--stage-local-band)');
-    // ⚠️ -rgb 三元组：漏了它，自定义色的月历色带描边会静默消失（BUG-04 的新通路复现）
-    expect(inline(band).boxShadow).toBe(
-      'inset 0 0 0 1px rgb(var(--stage-local-ink-rgb) / 0.3)',
-    );
-    expectWired(band, key);
+    // B 方案：折叠态条目 = 色点 + 项目名（色带已退役）；按钮仍带 title
+    const row = must(h, 'button[title]', '折叠态条目按钮');
+    const dot = row.querySelector('span[aria-hidden]') as HTMLElement;
+    expect(dot, '条目按钮内应有色点 span').toBeDefined();
+    expect(inline(dot).backgroundColor).toBe('var(--stage-local-solid)');
+    // 发丝描边随色带退役：色点不再有 boxShadow
+    expect(inline(dot).boxShadow ?? '').toBe('');
+    expectWired(dot, key);
   });
 
   it('折叠态（不拥挤）内置色：走通路 A，不得挂属性', () => {
     const entry = makeEntry('proj_d2', '内置色项目', makeStage('stg_d2', 1, { customColor: null }));
     const h = renderDayCell([entry]);
 
-    const band = must(h, 'button[title]', '折叠态色带按钮');
-    expectBuiltinToken(band, 'band', 1);
-    expect(inline(band).boxShadow).toBe('inset 0 0 0 1px rgb(var(--stage-ink-s1-rgb) / 0.3)');
+    const row = must(h, 'button[title]', '折叠态条目按钮');
+    const dot = row.querySelector('span[aria-hidden]') as HTMLElement;
+    expectBuiltinToken(dot, 'solid', 1);
     expectNotWired(h);
   });
 
-  it('展开态清单色点（桌面阈值 3）：4 项 ⇒ 出现「+N 个项目」，展开后色点也走通路 B', async () => {
+  it('幽灵态条目：色点空心（border 描边、无实心背景）', () => {
+    const entry = { ...makeEntry('proj_d3', '未开始项目', makeStage('stg_d3', 1)), isGhost: true };
+    const h = renderDayCell([entry]);
+    const row = must(h, 'button[title]', '幽灵态条目按钮');
+    const dot = row.querySelector('span[aria-hidden]') as HTMLElement;
+    expect(inline(dot).backgroundColor ?? '').not.toContain('var(--stage');
+    expect(inline(dot).border).toContain('1.5px');
+  });
+
+  it('当日浮层清单色点（桌面阈值 4）：5 项 ⇒ 出现「…+N 个项目」，点开浮层后色点也走通路 B', async () => {
     const key = registerStageColor(CUSTOM);
     const items: CalendarEntry[] = [
       makeEntry('proj_e1', '项目一', makeStage('stg_e1', 1, { customColor: CUSTOM })),
       makeEntry('proj_e2', '项目二', makeStage('stg_e2', 2, { customColor: null })),
       makeEntry('proj_e3', '项目三', makeStage('stg_e3', 3, { customColor: null })),
       makeEntry('proj_e4', '项目四', makeStage('stg_e4', 4, { customColor: null })),
+      makeEntry('proj_e5', '项目五', makeStage('stg_e5', 5, { customColor: null })),
     ];
-    const h = renderDayCell(items);
+    // 「+N」不再是就地展开：只把「当天全部条目 + 锚定格」回调给调用方（浮层住 MonthlyCalendarView）
+    const opened: Array<{ count: number; anchor: HTMLElement | null }> = [];
+    const h = renderDayCell(items, false, (list, anchorEl) => {
+      opened.push({ count: list.length, anchor: anchorEl });
+    });
 
-    // 前置：4 > 3 ⇒ 必须是折叠态，否则下面的展开断言无从谈起（且会空过）
-    const expandBtn = qa(h, 'button').find((b) => /^\+\d+/.test((b.textContent ?? '').trim())) as
+    // 前置：5 > 4 ⇒ 必须是折叠态，否则下面的弹出断言无从谈起（且会空过）
+    const expandBtn = qa(h, 'button').find((b) => /^[+…]/.test((b.textContent ?? '').trim())) as
       | HTMLElement
       | undefined;
-    expect(expandBtn, '4 项（> 桌面阈值 3）应出现「+N 个项目」折叠入口').toBeDefined();
+    expect(expandBtn, '5 项（> 桌面阈值 4）应出现「…+N 个项目」入口').toBeDefined();
+    expect(expandBtn!.textContent).toContain('+1 个项目');
 
     await act(async () => {
       expandBtn!.click();
     });
 
-    const dots = qa(h, 'span[aria-hidden][style]');
-    expect(dots, '展开态应渲染 4 条清单行（各带一枚色点）').toHaveLength(4);
+    // 格内不得出现任何展开态清单（色点数仍应等于折叠态的 4 条）
+    expect(opened, '点「+N」应触发回调而不是就地展开').toHaveLength(1);
+    expect(opened[0]!.count, '回调必须带当天全部条目（不是可见的那几条）').toBe(5);
+    expect(opened[0]!.anchor, '回调应带上锚定元素（格子 DOM），浮层据此定位').toBeInstanceOf(
+      HTMLElement,
+    );
+
+    // 当日浮层（portal 到 body）：全量清单的色点接线
+    mount(
+      <DayItemsPopover
+        day={CAL_DAY}
+        items={items}
+        anchorRect={{ left: 0, top: 0, right: 0, bottom: 0 }}
+        onOpenProject={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+    // 浮层是 body portal：内容不在 mount 宿主里，直接查 document
+    const pop = document.querySelector('[data-day-popover]');
+    expect(pop, '浮层应渲染').not.toBeNull();
+    const dots = qa(pop!, 'span[aria-hidden][style]');
+    expect(dots, '浮层应渲染 5 条清单行（各带一枚色点）——全列，不截断').toHaveLength(5);
 
     expect(inline(dots[0]!).backgroundColor).toBe('var(--stage-local-solid)');
     expectWired(dots[0]!, key);
