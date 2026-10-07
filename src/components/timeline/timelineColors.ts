@@ -25,7 +25,22 @@ export const ROW_BG_ODD = 'var(--timeline-row-odd)';
  * 画板 04：进行中阶段色带额外加 1px pine 描边；替换旧硬编码的浅蓝 #6ea8fe，
  * 以对齐 v0.7 令牌（§1.1 pine / 暗色 #828CF7）。
  */
-export const STAGE_ACTIVE_STROKE = 'var(--pine)';
+/**
+ * 「当前阶段」描边色。
+ *
+ * ⚠️ 2026-10-07 修：原值 `var(--pine)` **引用了不存在的 CSS 变量**——global.css
+ * 只定义 `--color-pine`（亮 #6366f1 / 暗 #828cf7，随 [data-theme] 换值）与
+ * `--pine-rgb`，没有 `--pine`。SVG stroke 拿到无效值 ⇒ 浏览器按继承色兜底，
+ * 「激活阶段 pine 描边」这个效果**从来没生效过**（impl-board-fixes 修反馈 #10.1
+ * 时附带发现：时间轴当前阶段的描边看着比进度条浅一档，就是这个原因）。
+ *
+ * 为什么用 var(--color-pine) 而不是写死 hex：它随亮/暗主题自动换值，不需要
+ * 在 JS 里判主题（判主题就要订阅，而这是纯常量模块）。
+ *
+ * 契约由 `tests/css-var-exists.spec.ts` 守：src 里任何 var(--x) 必须在
+ * global.css 有定义——这类「拼错的变量名」tsc 与 lint 都不报，只有真机看才炸。
+ */
+export const STAGE_ACTIVE_STROKE = 'var(--color-pine)';
 
 /** 激活彩条发光（feDropShadow floodColor，accent #6ea8fe） */
 export const STAGE_GLOW_COLOR = 'var(--timeline-glow)';

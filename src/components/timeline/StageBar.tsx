@@ -257,13 +257,13 @@ function DateBubble({
   const rx = 4;
   return (
     <g transform={`translate(${x - width / 2}, ${y - height})`} pointerEvents="none">
-      <rect x={0} y={0} width={width} height={height} rx={rx} fill="var(--ink)" />
+      <rect x={0} y={0} width={width} height={height} rx={rx} fill="var(--color-ink)" />
       <text
         x={width / 2}
         y={12}
         textAnchor="middle"
         fontSize={9}
-        fill="var(--paper)"
+        fill="var(--color-paper)"
       >
         {label}
       </text>
