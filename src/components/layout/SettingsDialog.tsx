@@ -114,6 +114,14 @@ import {
  *   ⑥ 行业与模板  行业库（自定义包三步流）
  *   ⑦ 关于        版本 / 开源许可 / Issue / 赞赏与反馈预留卡
  *
+ * ── v0.8.6.0002 · 反馈 #11：按角色收分区 ──
+ * 她的原话：「成员看板的设置界面，是不是'行业与模板'这个位置就可以让它消失掉」。
+ * 规则：「行业与模板」仅管理员可见——成员身份下该分区**从左导航消失**（不是
+ * 禁用态占位）。行业库是管理职能（导入的自定义阶段/套餐会进**所有人**的
+ * 建档器）；插件**保留给成员**（她明确「插件给成员保留」）。其余分区两角色
+ * 均可见（休息制度本就是 admin-only 内容级门控；排程区对成员仍有排期口径
+ * 说明可看，不整区收；备份自 0.8.6.0002 起全员开放，数据与备份区同样保留）。
+ *
  * 实现纪律（本轮只搬位置 + 补分区结构，不动设置项自身的 DOM/文案/钩子）：
  *   - 每个既有 Section 组件（CustomLibrary / Plugins / NasService / RestPolicyEditor）
  *     原样搬进对应分区，内部零改动；
@@ -123,16 +131,20 @@ import {
  *     data-settings-zone-panel 两条新钩子供验收，既有 data- 属性与 aria 一律不动。
  */
 
-/** 七个分区（反馈 #7 六区 → v0.8.6.0002 反馈 #2 七区）。顺序即导航顺序；key 同时是导航钩子值。 */
+/**
+ * 七个分区（反馈 #7 六区 → v0.8.6.0002 反馈 #2 七区）。顺序即导航顺序；key 同时是导航钩子值。
+ * `adminOnly`：仅管理员可见（反馈 #11）——成员身份下该分区从左导航消失（不是禁用）。
+ */
 type ZoneKey = 'appearance' | 'schedule' | 'data' | 'plugins' | 'agent' | 'industry' | 'about';
 
-const ZONES: ReadonlyArray<{ key: ZoneKey; label: string; Icon: LucideIcon }> = [
+const ZONES: ReadonlyArray<{ key: ZoneKey; label: string; Icon: LucideIcon; adminOnly?: boolean }> = [
   { key: 'appearance', label: '外观', Icon: Sun },
   { key: 'schedule', label: '排程', Icon: CalendarDays },
   { key: 'data', label: '数据与备份', Icon: Database },
   { key: 'plugins', label: '插件', Icon: Puzzle },
   { key: 'agent', label: 'Agent 与自动化', Icon: Bot },
-  { key: 'industry', label: '行业与模板', Icon: FileJson },
+  // 行业库是管理职能（反馈 #11）：成员身份下整分区从左导航消失
+  { key: 'industry', label: '行业与模板', Icon: FileJson, adminOnly: true },
   { key: 'about', label: '关于', Icon: Info },
 ];
 
@@ -166,6 +178,12 @@ export function SettingsDialog({
   // 角色闭环：休息制度仅在管理员设置界面出现（普通成员界面取消该区块）。
   // 顶栏独立入口 RestPolicySettingsButton 已是 admin-only，这里保持一致，权限规则不再散落。
   const { isAdmin } = useRoleGuard();
+  /**
+   * 按角色收分区（v0.8.6.0002 · 反馈 #11）：「行业与模板」仅管理员可见——
+   * 成员身份下从左导航**消失**（不是禁用占位）。判定与休息制度同源
+   * （useRoleGuard().isAdmin），不另造角色口径。
+   */
+  const visibleZones = useMemo(() => ZONES.filter((z) => !z.adminOnly || isAdmin), [isAdmin]);
   // 仅桌面端生效：浏览器/NAS 端 isDesktop() 为 false，下方更新区整块不渲染、从不发起请求。
   const { status, payload, error, check } = useUpdateCheck();
   /** 当前所在分区（反馈 #7：默认「外观」——最轻、最高频的一项） */
@@ -309,7 +327,7 @@ export function SettingsDialog({
               aria-label="设置分区"
               className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-2 xl:w-[168px] xl:flex-col xl:overflow-y-auto xl:border-b-0 xl:border-r xl:px-3 xl:py-4"
             >
-              {ZONES.map((z) => {
+              {visibleZones.map((z) => {
                 const active = zone === z.key;
                 return (
                   <button
@@ -698,10 +716,10 @@ export function SettingsDialog({
                 </>
               )}
 
-              {/* ⑤ 行业与模板 */}
-              {zone === 'industry' && <CustomLibrarySection />}
+              {/* ⑥ 行业与模板（仅管理员：反馈 #11 成员身份下整分区不渲染） */}
+              {zone === 'industry' && isAdmin && <CustomLibrarySection />}
 
-              {/* ⑥ 关于 */}
+              {/* ⑦ 关于 */}
               {zone === 'about' && (
                 <>
                   <section>

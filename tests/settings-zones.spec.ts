@@ -11,14 +11,16 @@ import { resolve } from 'node:path';
  * 右侧内容」双栏、六个分区按序：外观 / 排程 / 数据与备份 / Agent 与自动化 /
  * 行业与模板 / 关于。
  *
- * 本 spec 守四件用户能看见的事：
- *   ① 六区导航切换后，右侧内容**确实跟着换**（默认「外观」；点「数据与备份」
- *      见日志与备份、点「Agent 与自动化」见插件；当前区 aria-current 高亮移动）；
+ * 本 spec 守五件用户能看见的事：
+ *   ① 分区导航切换后，右侧内容**确实跟着换**（默认「外观」；点「数据与备份」
+ *      见日志与备份、点「插件」见插件开关；当前区 aria-current 高亮移动）；
  *   ② <xl 窄视口**不断裂**：左导航退化为顶部横向条，位于内容上方、可点可见，
  *      点完内容切换；抽屉自身不横向溢出视口；
- *   ③ 768–1279（<xl 非手机档）：六个导航按钮同屏可点，不依赖横滑；
+ *   ③ 768–1279（<xl 非手机档）：七个导航按钮同屏可点，不依赖横滑；
  *   ④ ≥xl 贴缘几何（v0.8.6.0002 · 反馈 #1）：抽屉左缘 = 侧栏右缘（展开 240 /
- *      收起 64，折叠后随缘移动），遮罩不压侧栏（侧栏中心命中测试仍是侧栏自己）。
+ *      收起 64，折叠后随缘移动），遮罩不压侧栏（侧栏中心命中测试仍是侧栏自己）；
+ *   ⑤ 按角色收分区（v0.8.6.0002 · 反馈 #11）：管理员看得到「行业与模板」，
+ *      成员看不到（整分区消失，不是禁用；插件对成员保留）。
  *
  * 为什么不走 jsdom：②③ 是 flex 断点几何 + 横滑容器的事实，jsdom 的
  * getBoundingClientRect 恒 0、overflow-x-auto 无概念，只有真 Chromium 能验。
@@ -274,6 +276,54 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     await waitSettingsDrawer(page);
   }
 
+  /**
+   * 走真实旅程成为**成员**身份（v0.8.6.0002 · 反馈 #11 的对照组）。
+   * 全走 UI、不预制 IndexedDB（与 f3-sidebar-identity 同口径）：
+   *   ① 先确立管理员（前几步同 becomeAdmin，但**不**跳过首启引导卡）；
+   *   ② 点引导卡「室内」⇒ 覆盖导入示例数据（buildDemoBackup 含 demo 成员：
+   *      陈工/周工/吴工/郑工 均为 member）+ reload；
+   *   ③ reload 后身份为空（示例数据整库替换了 members）⇒ 姓名输入「陈工」
+   *      进入成员身份。
+   */
+  async function becomeMember(page: Page): Promise<void> {
+    await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll('button')).find(
+        (x) => (x.textContent ?? '').trim() === '我是管理员',
+      );
+      b?.click();
+    });
+    await page.waitForTimeout(400);
+    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll('button')).find((x) =>
+        (x.textContent ?? '').includes('确认为管理员'),
+      );
+      b?.click();
+    });
+    await page.waitForTimeout(1000);
+    // ② 引导卡 → 覆盖导入二次确认（「确认载入」）→ 示例数据导入 + reload
+    //    （示例项目名出现 = 导入生效；与 f3-sidebar-identity 同口径）
+    const card = page.locator('[data-first-run-card="indoor"]');
+    await card.first().waitFor({ state: 'visible', timeout: 10000 });
+    await card.first().click();
+    await page.waitForTimeout(400);
+    await page.locator('button', { hasText: '确认载入' }).first().click();
+    await page.waitForFunction(() => document.body.innerText.includes('云栖·湖畔茶室'), undefined, {
+      timeout: 20000,
+    });
+    await page.waitForTimeout(800);
+    // ③ 以成员姓名进入（hasAdmin ⇒ 直接姓名输入流，adminIntent=false）
+    await page.locator('button', { hasText: '点击进入' }).first().click();
+    await page.waitForTimeout(400);
+    await page.locator('input[placeholder="你的姓名"]').fill('陈工');
+    await page.locator('button', { hasText: '下一步' }).first().click();
+    await page.waitForTimeout(1200);
+    // 自检：顶栏出现的是成员姓名（不是「点击进入」），否则后续断言 vacuous
+    await page.waitForFunction(() => document.body.innerText.includes('陈工'), undefined, {
+      timeout: 8000,
+    });
+  }
+
   it('S-Z1 · 分区导航：默认「外观」，点击切换后右侧内容确实跟着换、高亮跟着走（插件为独立一级分区）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
@@ -508,4 +558,62 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       await ctx.close();
     }
   }, HEAVY);
+
+  it('S-Z5 · 按角色收分区：管理员看得到「行业与模板」，成员看不到（插件保留）（反馈 #11）', async () => {
+    /*
+     * v0.8.6.0002 · 反馈 #11，她的原话：「成员看板的设置界面，是不是'行业与
+     * 模板'这个位置就可以让它消失掉，不需要有吧」。
+
+     * 规则（实现侧口径）：行业库是**管理职能**（导入的自定义阶段/套餐会进
+     * 所有人的建档器）⇒ 成员身份下「行业与模板」**整分区从左导航消失**
+     * （不是禁用占位）；插件**保留给成员**（她明确「插件给成员保留」）；
+     * 其余分区两角色均可见。对照组全走真 UI（becomeMember 走示例数据 +
+     * 姓名进入），管理员/成员各起一个 context。
+     */
+    // ① 管理员：行业与模板在导航里，内容可点开
+    {
+      const { ctx, page } = await open(1600, 900);
+      try {
+        await becomeAdmin(page);
+        await clickSidebarSettings(page);
+        await waitSettingsDrawer(page);
+        expect(await page.locator('[data-settings-zone="industry"]').count()).toBe(1);
+        await page.locator('[data-settings-zone="industry"]').click();
+        expect(await page.locator('[data-settings-drawer]').innerText()).toContain('行业库（自定义）');
+      } finally {
+        await ctx.close();
+      }
+    }
+
+    // ② 成员：行业与模板整分区消失；插件区仍在
+    {
+      const { ctx, page } = await open(1600, 900);
+      try {
+        await becomeMember(page);
+        await clickSidebarSettings(page);
+        await waitSettingsDrawer(page);
+
+        expect(
+          await page.locator('[data-settings-zone="industry"]').count(),
+          '成员身份下「行业与模板」应整分区消失（不是禁用）',
+        ).toBe(0);
+        // 插件保留给成员（她明确「插件给成员保留」）
+        expect(await page.locator('[data-settings-zone="plugins"]').count()).toBe(1);
+        await page.locator('[data-settings-zone="plugins"]').click();
+        const pluginsText = await page.locator('[data-settings-drawer]').innerText();
+        expect(pluginsText).toContain('从文件安装');
+        expect(pluginsText, '成员看不到行业库').not.toContain('行业库（自定义）');
+
+        // 导航键集合 = 七区减去行业与模板（顺序不变）
+        const keys = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
+            b.getAttribute('data-settings-zone'),
+          ),
+        );
+        expect(keys).toEqual(['appearance', 'schedule', 'data', 'plugins', 'agent', 'about']);
+      } finally {
+        await ctx.close();
+      }
+    }
+  }, 90000);
 });
