@@ -38,7 +38,12 @@ import { PluginsSection } from '../settings/PluginsSection';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import { useMembersStore } from '../../store/useMembersStore';
-import { useLayoutStore } from '../../store/useLayoutStore';
+import {
+  useLayoutStore,
+  SIDEBAR_W_COLLAPSED,
+  SIDEBAR_W_EXPANDED,
+} from '../../store/useLayoutStore';
+import { useXlViewport } from '../../hooks/useXlViewport';
 import { appEnv } from '../../config/env';
 import { useBackupIo } from './useBackupIo';
 import { cn } from '../../lib/cn';
@@ -65,10 +70,23 @@ import {
  * （anchor={x: clientX, y: clientY}，键盘触发退化右下角）。她的原话：「应该是从
  * 这个边栏从左往右滑出，而不是鼠标在哪里点击弹出设置窗口，它就从哪里生成」。
  *
- * 新形态：`Modal placement="left"`，抽屉从**窗口左缘**滑出、盖住侧栏、贴顶栏
+ * v0.8.6 形态：`Modal placement="left"`，抽屉从**窗口左缘**滑出、盖住侧栏、贴顶栏
  * 底缘全高展开（遮罩让位见 Modal.tsx 的 top-14 xl:top-16）。宽 640（≥xl），
  * <xl 近全屏（calc(100vw - 2rem)）。`anchor` 形参整个删除：新形态下锚点无意义
  * （Sidebar / MobileMoreMenu 两处调用点的 settingsAnchor state 同步移除）。
+ *
+ * ── v0.8.6.0002 · 反馈 #1：位置修正（盖住侧栏 → 贴侧栏右缘展开）──
+ * 她的原话：「点击设置以后的二级菜单，我希望是在红色框的范围，当然可以往右边
+ * 再有延伸。而不是现在的这个设置弹开的面板样式」——红框圈的是**侧栏那一列**
+ * （含设置按钮）。即：她不要「盖住侧栏」，要设置面板**从侧栏右缘开始、紧贴
+ * 侧栏右侧展开**（侧栏保持可见可点——她想设置时还能切侧栏）。
+ *
+ * 新形态：`Modal placement="left-rail"`，遮罩左缘 = 侧栏宽度（xl 展开 240 /
+ * 收起 64，随侧栏折叠实时跟随），抽屉贴侧栏右缘展开；遮罩只压内容区，侧栏
+ * 不被压住、中心命中测试仍是侧栏自己。宽仍 640（≥xl）/<xl 全屏（该档无持久
+ * 侧栏，railLeft=0 与旧 left 档一致）。几何验收见 tests/settings-zones.spec.ts
+ * 的 S-Z4；qa-batch-a-verify 的 Q-A2-1 旧口径（left≈0 / 盖住侧栏）随本次
+ * 语义变更报 team-lead 确认后更新。
  *
  * ── v0.8.6 · 反馈 #7：分区重构（一列到底 → 左导航六区双栏）──
  * 她的原话：「设置里面有非常混乱每个部分应该属于哪一个栏，这些都是看不清楚的」，
@@ -174,10 +192,18 @@ export function SettingsDialog({
   // 这里是设置内「数据与备份」区的入口——备份是高频路径，不埋在所有区最后。
   const { save, pick, fileInput, confirmDialog } = useBackupIo();
 
-  // 侧栏默认形态（v0.7 · D3 持久化偏好）：此前只能通过侧栏折叠开关触达，
-  // 反馈 #7 盘点后收进「外观」区；与侧栏开关共用同一 store 字段，不新造状态。
+  // 侧栏展开态（v0.7 · D3 持久化偏好）：抽屉贴侧栏右缘展开的几何要用——
+  // ≥xl 侧栏是持久左栏（宽 240/64），<xl 侧栏自身是 Modal 抽屉（无持久栏 ⇒ 全屏）。
   const sidebarExpanded = useLayoutStore((s) => s.sidebarExpanded);
   const setSidebarExpanded = useLayoutStore((s) => s.setSidebarExpanded);
+  const xl = useXlViewport();
+  /**
+   * v0.8.6.0002 · 反馈 #1：遮罩（与抽屉）左缘让出的宽度 = 侧栏宽度。
+   * ≥xl 展开 240 / 收起 64（与 CSS --sidebar-w / --sidebar-w-collapsed 同值，
+   * 常量见 useLayoutStore）；<xl 传 0——该档无持久侧栏，抽屉即主视野（全屏）。
+   * 折叠开关在设置打开期间也能点（zustand 订阅 ⇒ 抽屉随缘实时跟随）。
+   */
+  const railLeftPx = xl ? (sidebarExpanded ? SIDEBAR_W_EXPANDED : SIDEBAR_W_COLLAPSED) : 0;
 
   // 打包日期（构建时静态快照，便于排查版本）
   const buildDate = new Date().toISOString().slice(0, 10);
@@ -210,13 +236,21 @@ export function SettingsDialog({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} placement="left" ariaLabel="设置">
+      <Modal
+        open={open}
+        onClose={onClose}
+        placement="left-rail"
+        railLeft={`${railLeftPx}px`}
+        ariaLabel="设置"
+      >
         {/*
-          v0.8.6 · 反馈 #4：从窗口左缘滑出的全高抽屉，盖住侧栏。
-          · 宽 640（≥xl 分栏预留）；<xl 全屏（该档无持久侧栏，抽屉即主视野）
-          · 贴顶栏底缘全高（Modal left 档几何：p-0 + items-stretch），不再有
+          v0.8.6.0002 · 反馈 #1：贴侧栏右缘展开的全高抽屉（左缘 = 侧栏右缘，
+          侧栏不被遮罩压住、保持可见可点）。
+          · ≥xl：遮罩 left = 侧栏宽（展开 240 / 收起 64，见 railLeftPx），
+            抽屉宽 640 紧随其后；<xl：railLeft=0 ⇒ 全屏（该档无持久侧栏）
+          · 贴顶栏底缘全高（Modal 抽屉族几何：p-0 + items-stretch），不再有
             max-h/圆角被裁的旧问题——高度就是遮罩可用高度
-          · 圆角只留右缘（左缘贴窗口边，滑出来源）；glass-strong 自带描边与底色
+          · 圆角只留右缘（左缘贴侧栏，视觉上是侧栏的延伸）；glass-strong 自带描边与底色
           · v0.8.6 · 反馈 #7：头部之下改「左导航 168 + 右内容」双栏（≥xl 竖排导航；
             <xl 导航退化顶部横向条），主体滚动收进右栏（min-h-0 overflow-y-auto）
           · drawer-in-left：从左缘 24px 滑入，200ms ease-out（克制；reduced-motion 已关停）

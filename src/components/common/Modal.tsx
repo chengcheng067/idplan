@@ -24,6 +24,11 @@ import { resolveAnchoredPosition, type Point } from '../../lib/anchoredPosition'
  *   </Modal>
  *   侧滑抽屉传 placement="right"，子面板给 max-w + 自己撑满高度即可。
  *
+ *   v0.8.6.0002 · 反馈 #1 新增 `left-rail`：与 `left` 同几何（贴顶栏底缘全高、
+ *   左缘滑入），但**遮罩左缘让出 `railLeft` 像素**——让出的正是常驻侧栏：
+ *   设置抽屉贴侧栏右缘展开，侧栏保持可见可点（她想设置时还能切侧栏）。
+ *   消费者：SettingsDialog（≥xl 侧栏宽度 240/64；<xl 传 '0px' 即全屏）。
+ *
  * 注意：`glass-strong / iridescent-border` 等玻璃样式请放在子面板（children 内）上，
  * 不要加到外层遮罩上——遮罩由本组件统一渲染，否则玻璃自身又变成新的固定包含块。
  */
@@ -33,6 +38,7 @@ export function Modal({
   placement = 'center',
   ariaLabel = '浮层',
   anchor = null,
+  railLeft,
   children,
 }: {
   open: boolean;
@@ -43,10 +49,19 @@ export function Modal({
    *   right       右侧滑出抽屉（连续阅读的详情）
    *   right-float 右侧悬浮圆角卡片（长内容、无锚点的设置类面板）
    *   float       锚定浮动卡 —— 出现在**触发元素/点击点附近**，空间不足自动翻转（反馈 #3）
+   *   left-rail   左侧贴缘抽屉（v0.8.6.0002 · 反馈 #1）——同 left 几何，但遮罩
+   *               左缘让出 railLeft（常驻侧栏宽度）：抽屉贴侧栏右缘展开，
+   *               侧栏不被遮罩压住、保持可见可点
    */
-  placement?: 'center' | 'right' | 'left' | 'right-float' | 'float' | 'dropdown' | 'fullscreen';
+  placement?: 'center' | 'right' | 'left' | 'left-rail' | 'right-float' | 'float' | 'dropdown' | 'fullscreen';
   /** 无障碍标签，读屏用 */
   ariaLabel?: string;
+  /**
+   * `placement='left-rail'` 专用：遮罩（与抽屉）左缘让出的宽度，CSS 长度
+   * （如 '240px' / '64px' / '0px'）。≥xl 传侧栏宽度（展开 240 / 收起 64），
+   * <xl 无持久侧栏传 '0px'（全屏，与 left 档一致）。
+   */
+  railLeft?: string;
   /**
    * 锚点（视口坐标）。`placement='float'` 时用它在点击位置附近展开；
    * 缺省时退回右浮动（老调用方零改动）。
@@ -212,6 +227,9 @@ export function Modal({
       //    解决：顶栏与三键在任何浮层打开期间保持原色、可点，对齐原生 titleBar 语义。
       //    档位口径与 TopBar 的行高一致：<md 两行顶帽合计 100，md–xl 56，xl 64。
       //    ⚠️ 不要改回 inset-0，也不要在遮罩上动 z-index（toast/三键层级会被搅乱）。
+      //    v0.8.6.0002 · 反馈 #1：`left-rail` 档在此之上把**左缘**推到 railLeft
+      //    （内联 style 覆盖 inset-x-0 的 left:0）——遮罩只压内容区，常驻侧栏
+      //    保持可见可点；抽屉是遮罩的 flex 首子项，随之贴侧栏右缘展开。
       className={`fixed inset-x-0 bottom-0 max-md:top-[100px] md:top-14 xl:top-16 ${
         placement === 'center'
           ? 'z-[70] bg-ink/45'
@@ -223,8 +241,10 @@ export function Modal({
                 // （z-[70]；原生 select 本来就能盖），**无底色**——下拉不该把背后弹窗压暗。
                 // 与打印预览同值但场景互斥（下拉只出现在建档弹窗内，打印路由独立）。
                 'z-[75] bg-transparent'
-              : 'z-[60] bg-ink/25'
+                : // left / left-rail 同层同浓度（z-60 / bg-ink/25）
+                  'z-[60] bg-ink/25'
       }`}
+      style={placement === 'left-rail' ? { left: railLeft ?? '0px' } : undefined}
     >
       {/* 点击关闭判定放在锚点面板（e.currentTarget）上而非遮罩：因为面板是 flex 容器且覆盖内容区，
           点面板自身的空白区域（子面板之外）即关闭，点子面板内部不关闭。这样居中/右侧抽屉一致生效，
@@ -232,7 +252,7 @@ export function Modal({
           否则 center 模式的垂直居中失效、right 抽屉的 h-full 子面板也撑不满视口。
 
           ⚠️ v0.8.6 壳层常驻后的 padding 口径（重要，别改回）：
-          抽屉族（left / right）现在是 **p-0 + items-stretch**——遮罩从顶栏下缘起始
+          抽屉族（left / left-rail / right）现在是 **p-0 + items-stretch**——遮罩从顶栏下缘起始
           （overlay 的 top-14 xl:top-16），抽屉贴顶栏底缘全高展开。旧口径的
           `pt-[max(env(safe-area-inset-top),3rem)] sm:pt-12` 是系统标题栏时代的避让，
           在自绘标题栏 + 遮罩让位的双重结构下只会制造悬空带（顶栏与抽屉之间一条
@@ -248,13 +268,15 @@ export function Modal({
             : placement === 'fullscreen'
               ? // 打印预览：全屏、无点击缓冲区（面板不透明，遮罩仅入场动画期可见）
                 'p-0'
-              : placement === 'left'
+              : placement === 'left' || placement === 'left-rail'
                 ? // v0.8.5 C1：左侧抽屉（right 的镜像）——触发侧感知：汉堡在左上，抽屉同侧滑出。
                   // v0.8.6 壳层常驻后几何修正：原先 pt-[max(env(safe-area-inset-top),3rem)]
                   // sm:pt-12 是系统标题栏时代的避让；现在遮罩已从顶栏下缘起始（top-14
                   // xl:top-16，见本组件 overlay），抽屉贴顶栏底缘全高展开（p-0 +
                   // items-stretch）——再留 48px 就是遮罩上的一条悬空带。
                   // 消费者：侧栏导航抽屉（264px）+ 设置抽屉（640px，反馈 #4）。
+                  // left-rail（反馈 #1）：几何同 left，差别只在 overlay 左缘让出
+                  // 侧栏宽度（见上方 style）；flex 首子项的抽屉随之贴侧栏右缘。
                   'items-stretch justify-start p-0'
                 : placement === 'dropdown'
                   ? // v0.8.5 A 规范 §A.4：锚定下拉。外层只当点击捕获层，面板 fixed 自行定位

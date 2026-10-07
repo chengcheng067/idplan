@@ -8,11 +8,12 @@ import { useBackupIo } from './useBackupIo';
 import { SidebarCollapseToggle } from './SidebarCollapseToggle';
 import { navItemClass, SidebarNav } from './SidebarNav';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
+import { useXlViewport } from '../../hooks/useXlViewport';
 import { useAgentProjects, useHumanProjects, useHumanStages } from '../../core/project/visibility';
 import { usePluginEnabled } from '../../core/plugin/PluginRegistryProvider';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useUiStore } from '../../store/useUiStore';
-import { useLayoutStore, isXlViewport } from '../../store/useLayoutStore';
+import { useLayoutStore } from '../../store/useLayoutStore';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { stageSolidColor } from '../timeline/stageColors';
 import { customStageColor } from '../timeline/stageColorKey';
@@ -167,17 +168,10 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   /**
    * 是否达到 xl（≥1280）。用于决定「持久栏是否真正参与布局」——虽显隐由
    * `hidden xl:flex` 承担，但折叠开关语义需 JS 侧同一口径。
+   * v0.8.6.0002 · 反馈 #1：订阅逻辑抽到 `useXlViewport`（与设置抽屉贴缘几何
+   * 共用同一断点口径，两处各写一份 matchMedia 会漂移）。
    */
-  const [xl, setXl] = useState<boolean>(() => isXlViewport());
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(min-width: 1280px)');
-    const onChange = (e: MediaQueryListEvent): void => setXl(e.matches);
-    setXl(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+  const xl = useXlViewport();
 
   /** <xl 时强制收起（R13：xl 以下强制折叠，忽略持久值，但不污染持久值本身） */
   const collapsed = xl ? !sidebarExpanded : true;
@@ -772,7 +766,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         </div>
       </Modal>
 
-      {/* 设置抽屉（侧栏底部入口；v0.8.6 反馈 #4：左缘滑出，盖住侧栏） */}
+      {/* 设置抽屉（侧栏底部入口；v0.8.6.0002 反馈 #1：贴侧栏右缘滑出，侧栏保持可见可点） */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* 备份 IO 的隐藏 file input + 确认对话框（与 useBackupIo 同一份逻辑） */}

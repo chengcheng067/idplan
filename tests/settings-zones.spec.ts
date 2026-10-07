@@ -11,12 +11,14 @@ import { resolve } from 'node:path';
  * 右侧内容」双栏、六个分区按序：外观 / 排程 / 数据与备份 / Agent 与自动化 /
  * 行业与模板 / 关于。
  *
- * 本 spec 守三件用户能看见的事：
+ * 本 spec 守四件用户能看见的事：
  *   ① 六区导航切换后，右侧内容**确实跟着换**（默认「外观」；点「数据与备份」
  *      见日志与备份、点「Agent 与自动化」见插件；当前区 aria-current 高亮移动）；
  *   ② <xl 窄视口**不断裂**：左导航退化为顶部横向条，位于内容上方、可点可见，
  *      点完内容切换；抽屉自身不横向溢出视口；
- *   ③ 768–1279（<xl 非手机档）：六个导航按钮同屏可点，不依赖横滑。
+ *   ③ 768–1279（<xl 非手机档）：六个导航按钮同屏可点，不依赖横滑；
+ *   ④ ≥xl 贴缘几何（v0.8.6.0002 · 反馈 #1）：抽屉左缘 = 侧栏右缘（展开 240 /
+ *      收起 64，折叠后随缘移动），遮罩不压侧栏（侧栏中心命中测试仍是侧栏自己）。
  *
  * 为什么不走 jsdom：②③ 是 flex 断点几何 + 横滑容器的事实，jsdom 的
  * getBoundingClientRect 恒 0、overflow-x-auto 无概念，只有真 Chromium 能验。
@@ -426,6 +428,63 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 六区分区（反馈 #7 · 真
       expect(await page.locator('[data-settings-drawer]').innerText()).toContain('跟随系统');
       await page.locator('[data-settings-zone="about"]').click();
       expect(await page.locator('[data-settings-drawer]').innerText()).toContain('图片待补');
+    } finally {
+      await ctx.close();
+    }
+  }, HEAVY);
+
+  it('S-Z4 · ≥xl 抽屉贴侧栏右缘展开：侧栏保持可见可点，折叠后抽屉随缘到 64（反馈 #1）', async () => {
+    /*
+     * v0.8.6.0002 · 反馈 #1（她的原话见文件头）：设置面板不再盖住侧栏，而是
+     * 从侧栏右缘开始、紧贴侧栏右侧展开——侧栏保持可见可点（她想设置时还能切侧栏）。
+     * 判据全部是可证伪的实测几何：
+     *   ① 抽屉左缘 = 侧栏右缘（展开 240）；
+     *   ② 遮罩不压侧栏：elementFromPoint 点侧栏中心，命中的是侧栏自己；
+     *   ③ 真点侧栏上的折叠开关 ⇒ 抽屉左缘随缘到 64，侧栏仍不被压。
+     */
+    const { ctx, page } = await open(1600, 900);
+    try {
+      await becomeAdmin(page);
+      await clickSidebarSettings(page);
+      await waitSettingsDrawer(page);
+
+      const probe = () =>
+        page.evaluate(() => {
+          const drawer = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
+          const sidebar = document.querySelector('[data-app-sidebar]') as HTMLElement | null;
+          if (!drawer || !sidebar) return null;
+          const dr = drawer.getBoundingClientRect();
+          const sr = sidebar.getBoundingClientRect();
+          const hit = document.elementFromPoint(sr.x + sr.width / 2, sr.y + sr.height / 2);
+          return {
+            drawerLeft: dr.left,
+            drawerWidth: dr.width,
+            drawerRight: dr.right,
+            sidebarWidth: sr.width,
+            sidebarRight: sr.right,
+            sidebarCenterHit: !!hit && sidebar.contains(hit),
+            vw: window.innerWidth,
+          };
+        });
+
+      // ① 展开态：抽屉左缘 = 侧栏右缘（240），宽 640，右缘不越界
+      const m = await probe();
+      expect(m).not.toBeNull();
+      expect(Math.round(m!.sidebarWidth)).toBe(240);
+      expect(Math.abs(m!.drawerLeft - m!.sidebarRight), '抽屉左缘应贴合侧栏右缘').toBeLessThanOrEqual(1);
+      expect(Math.round(m!.drawerWidth)).toBe(640);
+      expect(m!.drawerRight).toBeLessThanOrEqual(m!.vw + 0.5);
+      // ② 侧栏保持可见可点：中心命中的是侧栏自己（不是抽屉/遮罩）
+      expect(m!.sidebarCenterHit, '抽屉或遮罩盖住了侧栏（反馈 #1 的形态要件）').toBe(true);
+
+      // ③ 折叠侧栏（真点侧栏上的折叠开关，设置在打开期间也能点）⇒ 随缘到 64
+      await page.locator('[data-app-sidebar] button[aria-label="收起侧边栏"]').first().click();
+      await page.waitForTimeout(600); // 侧栏宽度过渡 180ms + 余量
+      const c = await probe();
+      expect(c).not.toBeNull();
+      expect(Math.round(c!.sidebarWidth)).toBe(64);
+      expect(Math.abs(c!.drawerLeft - c!.sidebarRight), '折叠后抽屉应随缘到 64').toBeLessThanOrEqual(1);
+      expect(c!.sidebarCenterHit, '折叠态侧栏仍不被压').toBe(true);
     } finally {
       await ctx.close();
     }

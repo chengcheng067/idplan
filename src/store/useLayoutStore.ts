@@ -62,6 +62,15 @@ export const LAYOUT_STORAGE_KEY = 'idplan.layout';
 /** 与 Tailwind `xl` 严格对齐的断点（D3 锁 1280，禁止改成 lg/2xl） */
 export const SIDEBAR_BREAKPOINT_PX = 1280;
 
+/**
+ * 侧栏两档宽度（v0.8.6.0002 · 反馈 #1）。
+ * TS 侧镜像 global.css `:root` 的 `--sidebar-w` / `--sidebar-w-collapsed`：
+ * 设置抽屉「贴侧栏右缘展开」的几何（遮罩左缘 = 侧栏宽度）要用这两个数。
+ * ⚠️ 改宽度必须两处同步（CSS 变量 + 本常量），否则抽屉会与侧栏错位。
+ */
+export const SIDEBAR_W_EXPANDED = 240;
+export const SIDEBAR_W_COLLAPSED = 64;
+
 export interface LayoutState {
   /** 侧栏展开态（≥xl 有效；<xl 走抽屉，本字段不参与形态决策） */
   sidebarExpanded: boolean;
