@@ -5,6 +5,7 @@ import { CalendarRange, MoreHorizontal, Archive, Palette, Trash2 } from 'lucide-
 import type { Member, Project, Stage, Task } from '../../core/types/entities';
 import { domainLabel } from '../../core/template/stage-library';
 import { taskIsDone } from '../../core/types/entities';
+import { StageStatus } from '../../core/types/enums';
 import { effectiveDomainOf } from '../../core/project/visibility';
 import { useRoleGuard, isRestrictedView, taskAssigneeIds } from '../../hooks/useRoleGuard';
 import { currentStageOf, computeProjectPercent, computeProjectStatus } from '../../lib/progress';
@@ -445,23 +446,50 @@ export function ProjectCard({
       {/* 委托方（成员受限视图隐藏客户名，沿用既有语义） */}
       <span className="w-full truncate text-[13px] text-mist">{clientText}</span>
 
-      {/* 阶段进度轨道：高 8，槽 sunken，多段按工期占比拼接（实心块 main 色） */}
+      {/* 阶段进度轨道：高 8，槽 sunken，多段按工期占比拼接（实心块 main 色）
+          v0.8.6.0002 · 反馈 #10.1 / #10.2：分段上色规则重定——
+            未来段（未到达）：不给了色（opacity-0），槽底透出；
+            已完成段：阶段色降饱和（opacity-40）；
+            当前段：阶段色全饱和 + 1px pine 内描边。
+          「现在进行时 = pine」是本仓既有语义（百分比 text-pine、状态胶囊 pine）：
+          给当前段描上 1px pine 内圈（rgb(var(--pine-rgb) / 1)，与 text-pine 编译
+          结果同色、随 data-theme 切换），pine 就同时出现在百分比与进度条当前段上
+          ——她反馈的「'现在进行时'的色彩和上方进度条的色彩有较大的色差，无法匹配上」
+          即由此消除；彩虹条收敛为「淡=已过、亮=此刻、空=未来」后，「进度到底走到哪」
+          也一目了然。
+          ⚠️ 内联 backgroundColor 与 data-stage-key 通路**逐字节不动**
+          （tests/stage-color-wiring.spec.tsx ⑦-① 钉的就是这两个值 + 段数）——
+          视觉权重全部经 opacity 类与 boxShadow 表达，不改 spec 钉的任何值。 */}
       <div className="flex w-full flex-col gap-1">
         <div className="flex w-full items-center justify-between text-[12px]">
           <span className="text-mist">进度</span>
           <span className={cn('font-medium', tone.text)}>{Math.round(percent)}%</span>
         </div>
         <div className="flex h-2 w-full overflow-hidden rounded-full bg-sunken">
-          {segs.map((s, i) => (
-            <div
-              key={i}
-              data-stage-track-seg=""
-              className="h-full"
-              style={{ width: `${(s.dur / total) * 100}%`, backgroundColor: s.color }}
-              /* 通路 B 的第二个半件：与上面的 `s.color` 成对，缺一则 var() 解析为空 */
-              {...s.attrs}
-            />
-          ))}
+          {segs.map((s, i) => {
+            const stage = ordered[i];
+            const state: 'done' | 'current' | 'future' =
+              cur && stage && stage.id === cur.id
+                ? 'current'
+                : stage && stage.status === StageStatus.Completed
+                  ? 'done'
+                  : 'future';
+            return (
+              <div
+                key={i}
+                data-stage-track-seg=""
+                data-stage-track-state={state}
+                className={cn('h-full', state === 'done' && 'opacity-40', state === 'future' && 'opacity-0')}
+                style={{
+                  width: `${(s.dur / total) * 100}%`,
+                  backgroundColor: s.color,
+                  ...(state === 'current' ? { boxShadow: 'inset 0 0 0 1px rgb(var(--pine-rgb) / 1)' } : null),
+                }}
+                /* 通路 B 的第二个半件：与上面的 `s.color` 成对，缺一则 var() 解析为空 */
+                {...s.attrs}
+              />
+            );
+          })}
         </div>
       </div>
 
