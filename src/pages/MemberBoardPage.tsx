@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { ArrowLeft } from 'lucide-react';
 
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -91,7 +92,7 @@ export function MemberBoardPage(): JSX.Element {
   const tasks = useHumanTasks();
   const members = useMembersStore((s) => s.members);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
-  const { isAdmin } = useRoleGuard();
+  const { isAdmin, isMember } = useRoleGuard();
   const selectedProjectId = useUiStore((s) => s.selectedProjectId);
   const setSelectedProjectId = useUiStore((s) => s.setSelectedProjectId);
   // 视图模式偏好（独立持久化键 idplan.memberBoardView，**不复用**管理员首页的 idplan.homeView）
@@ -176,6 +177,39 @@ export function MemberBoardPage(): JSX.Element {
     navigate(`/project/${id}`);
   };
 
+  /*
+    ★ 0.8.6.0003 · 反馈「成员看板左上角没有返回键」的落点。
+
+    她的原话：「我需要再点击左侧边栏的项目或其他位置，才能触达上一步」——
+    站内其他页（项目详情）的返回在 TopBar 面包屑（`navigate(-1)`），而本页的
+         面包屑只是静态文字（TopBar 的 STATIC_CRUMB 无返回箭），<768 连面包屑都不
+         渲染 ⇒ 成员的回程只剩侧栏，她认为「整体交互有问题」。
+
+    返回语义（定版，commit message 里同步说明理由）：
+      ① **有会话历史**（`history.state.idx > 0`）⇒ `navigate(-1)`：与 TopBar
+         项目详情的返回箭**逐字同口径**（同一个行为，不是第二套）。从项目详情/
+         我的任务点进来 ⇒ 回到来的那页；管理员从首页搜索命中/成员行「看板」点
+         进来（`?member=<id>`）⇒ 回到的正是首页——她的主路径无需特殊分支。
+      ② **无会话历史**（`idx = 0`：直接深链 `/member-board`、刷新即落地、
+         Electron 冷启动落在本页）⇒ 按身份分流兜底：
+            · 管理员 / 未进入身份 ⇒ `/`（首页：搜索框与成员列表都在那里，
+              是 `?member=` 深链的「逻辑来处」）；
+            · 成员 ⇒ `/my-tasks`。**不能**回 `/`：HomeRouteGuard 把成员在 `/`
+              的重定向回本页，点返回＝原地打转，会被读成「按钮坏了」；我的任务是
+              成员除本页外的另一个主页面（侧栏对成员只有「看板 / 我的任务」）。
+    为什么不放进 TopBar：反馈指定的是**标题行**；且 TopBar 的返回箭是面包屑的
+    组成部分，给静态路由加箭会同时改变首页/我的任务/Agent 看板的顶栏形态——
+    超出本条反馈的范围，留待全局导航决策。
+  */
+  const goBack = (): void => {
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate(isMember ? '/my-tasks' : '/');
+  };
+
   const isCalendar = memberBoardView === 'calendar';
 
   /*
@@ -209,11 +243,25 @@ export function MemberBoardPage(): JSX.Element {
           切换控件用既有 SegmentedControl 的 lg 档，与首页 `HomePage.tsx` 的
           「首页视图切换」同款（同一控件、同一档位，只是 ariaLabel 与绑定的 key 不同）。
           反馈 #5：管理员看指定成员时，标题即该成员的名字（她的预期是「这个成员的任务排表」，
-          不是一个名叫「项目看板」的页面）；无参自己看的文案逐字不变。 */}
+          不是一个名叫「项目看板」的页面）；无参自己看的文案逐字不变。
+
+          v0.8.6.0003 · 反馈「左上角没有返回键」：标题行补返回钮（‹ 图标 + 语义见
+          `goBack` 注释）。视觉逐字复用 TopBar 面包屑返回箭的类（同一控件家族：
+          h-7 w-7 rounded-md text-mist hover:bg-sand），不引新视觉语言。 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-display text-display-lg">
-          {viewedMember ? `${viewedMember.name} 的项目看板` : '项目看板'}
-        </h1>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label="返回上一页"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand hover:text-ink focus-visible:ring-2 focus-visible:ring-pine/40"
+          >
+            <ArrowLeft size={18} aria-hidden />
+          </button>
+          <h1 className="font-display text-display-lg">
+            {viewedMember ? `${viewedMember.name} 的项目看板` : '项目看板'}
+          </h1>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-mist">
             {viewedMember
