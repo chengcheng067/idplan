@@ -60,6 +60,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
+
+import { listenOnSafePort } from './helpers/safe-listen';
 import { extname, join, resolve } from 'node:path';
 
 import { StageBar } from '../src/components/timeline/StageBar';
@@ -1525,16 +1527,8 @@ function startStaticServer(rootDir: string): Promise<{ url: string; close(): Pro
       res.writeHead(404).end('not found');
     }
   });
-  return new Promise((r) => {
-    server.listen(0, '127.0.0.1', () => {
-      const addr = server.address();
-      const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
-      r({
-        url: `http://127.0.0.1:${port}/index.html`,
-        close: () => new Promise<void>((done) => server.close(() => done())),
-      });
-    });
-  });
+  // listen(0) 的随机端口可能撞 Chromium 不安全端口黑名单（ERR_UNSAFE_PORT 假红）⇒ 安全 listen
+  return listenOnSafePort(server);
 }
 
 interface Readback {

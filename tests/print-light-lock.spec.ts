@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { listenOnSafePort } from './helpers/safe-listen';
 
 /**
  * v0.7 · 打印锁浅色验收（真实构建产物 + 真 Chromium 实测）
@@ -98,13 +99,8 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
     }
   });
 
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const addr = server.address();
-  const port = typeof addr === 'object' && addr ? addr.port : 0;
-  return {
-    url: `http://127.0.0.1:${port}/index.html`,
-    close: () => new Promise<void>((r) => server.close(() => r())),
-  };
+  // listen(0) 的随机端口可能撞 Chromium 不安全端口黑名单（ERR_UNSAFE_PORT 假红）⇒ 安全 listen
+  return listenOnSafePort(server);
 }
 
 /**

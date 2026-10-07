@@ -43,6 +43,7 @@ import {
 } from '../src/core/color/custom-color-registry';
 import { deriveStageColors } from '../src/core/color/derive-stage-colors';
 import { stageColorAttrs, stageColorKeyOf } from '../src/components/timeline/stageColorKey';
+import { listenOnSafePort } from './helpers/safe-listen';
 
 /**
  * ⚠️ Electron 把 `ELECTRON_RUN_AS_NODE=1` 注入到环境里。
@@ -158,13 +159,8 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
     }
   });
 
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const addr = server.address();
-  const port = typeof addr === 'object' && addr ? addr.port : 0;
-  return {
-    url: `http://127.0.0.1:${port}/index.html`,
-    close: () => new Promise<void>((r) => server.close(() => r())),
-  };
+  // listen(0) 的随机端口可能撞 Chromium 不安全端口黑名单（ERR_UNSAFE_PORT 假红）⇒ 安全 listen
+  return listenOnSafePort(server);
 }
 
 /** 探针读到的取值 */

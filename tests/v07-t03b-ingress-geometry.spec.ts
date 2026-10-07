@@ -3,6 +3,8 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { listenOnSafePort } from './helpers/safe-listen';
+
 /** IndexedDB 库名 —— 唯一出处 `src/core/schema/current.ts`（不在测试里硬编码） */
 import { DB_NAME } from '../src/core/schema/current';
 
@@ -198,13 +200,8 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
     }
   });
 
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const addr = server.address();
-  const port = typeof addr === 'object' && addr ? addr.port : 0;
-  return {
-    url: `http://127.0.0.1:${port}/index.html`,
-    close: () => new Promise<void>((r) => server.close(() => r())),
-  };
+  // listen(0) 的随机端口可能撞 Chromium 不安全端口黑名单（ERR_UNSAFE_PORT 假红）⇒ 安全 listen
+  return listenOnSafePort(server);
 }
 
 /* ================================================================================================

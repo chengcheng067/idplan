@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { listenOnSafePort } from './helpers/safe-listen';
 
 /**
  * 设置抽屉 · 六区分区（v0.8.6 · 反馈 #7）——真构建产物 + 真 Chromium。
@@ -138,13 +139,8 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
       res.writeHead(404).end('not found');
     }
   });
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const addr = server.address();
-  const port = typeof addr === 'object' && addr ? addr.port : 0;
-  return {
-    url: `http://127.0.0.1:${port}/index.html`,
-    close: () => new Promise<void>((r) => server.close(() => r())),
-  };
+  // listen(0) 的随机端口可能撞 Chromium 不安全端口黑名单（ERR_UNSAFE_PORT 假红）⇒ 安全 listen
+  return listenOnSafePort(server);
 }
 
 /** 桌面端 stub（自绘三键 + 更新探测），与 qa-batch-a-verify 同口径 */

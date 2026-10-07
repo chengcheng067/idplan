@@ -27,6 +27,8 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve, extname } from 'node:path';
 
+import { listenOnSafePort } from './helpers/safe-listen';
+
 /**
  * ⚠️ Electron 把 `ELECTRON_RUN_AS_NODE=1` 注入到环境里。
  * 不清掉 chromium.launch() 拉起的进程会按 Node 解释器启动（立即退出）。
@@ -131,29 +133,29 @@ describe.skipIf(!CAN_RUN || buildIsStale())('F3-BROWSER · 退出身份后侧栏
       '.woff': 'font/woff',
       '.woff2': 'font/woff2',
     };
-    server = await new Promise((res) => {
-      const s = createServer((req, rsp) => {
-        const raw = decodeURIComponent((req.url ?? '').split('?')[0]);
-        let p = join(ROOT, 'build-dist', raw);
-        // 目录 / 未知路径 → SPA 回落 index.html；资源请求缺失一律 404
-        // （与 qa-batch-a-verify 的 startStaticServer 同口径——先判目录再读，
-        //   否则 read(dir) 抛 EISDIR 时 writeHead(200) 已发出 ⇒ ERR_HTTP_HEADERS_SENT）
-        if (!existsSync(p) || stat(p).isDirectory()) {
-          if (/\.(js|mjs|css|json|png|jpg|svg|ico|woff2?)$/.test(raw)) {
-            rsp.writeHead(404).end('not found');
-            return;
-          }
-          p = DIST_INDEX;
-        }
-        try {
-          rsp.writeHead(200, { 'Content-Type': MIME[extname(p)] ?? 'application/octet-stream' });
-          rsp.end(read(p));
-        } catch {
+    const s = createServer((req, rsp) => {
+      const raw = decodeURIComponent((req.url ?? '').split('?')[0]);
+      let p = join(ROOT, 'build-dist', raw);
+      // 目录 / 未知路径 → SPA 回落 index.html；资源请求缺失一律 404
+      // （与 qa-batch-a-verify 的 startStaticServer 同口径——先判目录再读，
+      //   否则 read(dir) 抛 EISDIR 时 writeHead(200) 已发出 ⇒ ERR_HTTP_HEADERS_SENT）
+      if (!existsSync(p) || stat(p).isDirectory()) {
+        if (/\.(js|mjs|css|json|png|jpg|svg|ico|woff2?)$/.test(raw)) {
           rsp.writeHead(404).end('not found');
+          return;
         }
-      });
-      s.listen(0, '127.0.0.1', () => res({ url: `http://127.0.0.1:${(s.address() as { port: number }).port}/`, close: () => new Promise<void>((r) => s.close(() => r())) }));
+        p = DIST_INDEX;
+      }
+      try {
+        rsp.writeHead(200, { 'Content-Type': MIME[extname(p)] ?? 'application/octet-stream' });
+        rsp.end(read(p));
+      } catch {
+        rsp.writeHead(404).end('not found');
+      }
     });
+    // listen(0) 的随机端口可能撞 Chromium 不安全端口黑名单（ERR_UNSAFE_PORT
+    // 假红——2026-10-07 实测分到过 5061、咬过一次 F3-01）⇒ 走安全 listen
+    server = await listenOnSafePort(s, '/');
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH ?? undefined });
   }, 60000);
 

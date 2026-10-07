@@ -3,6 +3,8 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { listenOnSafePort } from './helpers/safe-listen';
+
 // ★ 顶栏高度口径的**单一出处**（与产品同一份实现）。
 //   绝不在 `page.evaluate` 里重算 `innerWidth >= 1280 ? 64 : 56`：
 //   那份副本会在口径变更时静默不同步，而它恰是断言另一边的基准 → 直接放进假绿。
@@ -139,13 +141,8 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
       res.writeHead(404).end('not found');
     }
   });
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const addr = server.address();
-  const port = typeof addr === 'object' && addr ? addr.port : 0;
-  return {
-    url: `http://127.0.0.1:${port}/index.html`,
-    close: () => new Promise<void>((r) => server.close(() => r())),
-  };
+  // listen(0) 的随机端口可能撞 Chromium 不安全端口黑名单（ERR_UNSAFE_PORT 假红）⇒ 安全 listen
+  return listenOnSafePort(server);
 }
 
 /**
@@ -337,9 +334,21 @@ await page.click('[data-industry-select-option="indoor"]');
   }
 
   /**
-   * 量设置抽屉的真几何（反馈 #4 形态：窗口左缘 → 右，盖住侧栏，贴顶栏全高）。
+   * 量设置抽屉的真几何。
+   *
+   * 形态两代契约（别混）：
+   *   v0.8.6 · 反馈 #4：`placement="left"`，抽屉从**窗口左缘**滑出、盖住侧栏、
+   *     贴顶栏底缘全高；
+   *   v0.8.6.0002 · 反馈 #1：**贴侧栏右缘展开、侧栏不被盖**（遮罩左缘 = 侧栏
+   *     右缘，侧栏保持可见可点）。她的原话：「点击设置以后的二级菜单，我希望
+   *     是在红色框的范围……而不是现在的这个设置弹开的面板样式」——红框圈的
+   *     是侧栏那一列。
+   *
    * DOM 层次：`[role="dialog"]`（遮罩）→ 点击捕获层 →
-   *   `div[data-settings-drawer]`（抽屉本体）。几何/圆角都量抽屉本体。
+   *   `div[data-settings-drawer]`（抽屉本体）。几何/圆角都量抽屉本体；
+   *   侧栏右缘 / 侧栏宽 / 「侧栏中心命中」一并量出来——抽屉左缘对比**实测**
+   *   侧栏右缘，不硬编码 240/64（侧栏宽随折叠态变，测试环境落到哪个态不由
+   *   用例决定；硬编码会在侧栏默认收起时假红）。
    */
   function probeSettingsDrawer(page: Page) {
     return page.evaluate(() => {
@@ -350,8 +359,10 @@ await page.click('[data-industry-select-option="indoor"]');
       const pr = panel.getBoundingClientRect();
       const cs = getComputedStyle(panel);
       const header = document.querySelector('header')!.getBoundingClientRect();
-      const sidebar = document.querySelector('[data-app-sidebar]')!.getBoundingClientRect();
-      // 「盖住侧栏」的诚实判据：点在侧栏中心，命中的必须是抽屉而不是侧栏
+      const sidebarEl = document.querySelector('[data-app-sidebar]') as HTMLElement | null;
+      if (!sidebarEl) return null;
+      const sidebar = sidebarEl.getBoundingClientRect();
+      // 「侧栏不被盖」的诚实判据：点在侧栏中心，命中的必须是侧栏自己（不是抽屉/遮罩）
       const atSidebar = document.elementFromPoint(
         sidebar.x + sidebar.width / 2,
         sidebar.y + sidebar.height / 2,
@@ -369,7 +380,9 @@ await page.click('[data-industry-select-option="indoor"]');
         topbarH: Math.round(header.height),
         blRadius: cs.borderBottomLeftRadius,
         brRadius: cs.borderBottomRightRadius,
-        coversSidebar: !!atSidebar && panel.contains(atSidebar),
+        sidebarWidth: sidebar.width,
+        sidebarRight: sidebar.right,
+        sidebarHit: !!atSidebar && (atSidebar === sidebarEl || sidebarEl.contains(atSidebar)),
         theme: document.documentElement.getAttribute('data-theme'),
       };
     });
@@ -888,30 +901,38 @@ await page.click('[data-industry-select-option="indoor"]');
     }
   }, HEAVY);
 
-  /* ================= A2 · 设置抽屉：从窗口左缘滑出 + 盖住侧栏 + 贴顶栏全高 ================= */
+  /* ============ A2 · 设置抽屉：贴侧栏右缘展开 + 侧栏不被盖 + 贴顶栏全高 ============ */
 
   /**
-   * ★ 契约变更（v0.8.6 · 反馈 #4）——本组用例的口径与前两代**完全不同**：
+   * ★ 契约变更（两代，别混口径）：
    *
-   *   旧版（反馈 #2/#3 时代）：设置是 `placement="float"` 锚定浮动卡，面板在
+   *   反馈 #2/#3 时代（更早）：设置是 `placement="float"` 锚定浮动卡，面板在
    *   **鼠标点击处**展开（anchor={clientX,clientY}）。她的原话：「应该是从这个
    *   边栏从左往右滑出，而不是鼠标在哪里点击弹出设置窗口，它就从哪里生成」。
    *
-   *   新版：`placement="left"` 全高抽屉——**窗口左缘**起、盖住侧栏、贴顶栏
-   *   底缘（遮罩让位 top-14 xl:top-16，见 Q-A1-6）。anchor 链路整个删除。
+   *   v0.8.6 · 反馈 #4：`placement="left"` 全高抽屉——**窗口左缘**起、盖住
+   *   侧栏、贴顶栏底缘（遮罩让位 top-14 xl:top-16，见 Q-A1-6）。anchor 链路删除。
+   *
+   *   v0.8.6.0002 · 反馈 #1：**贴侧栏右缘展开、侧栏不被盖**（`left-rail`，
+   *   遮罩左缘 = 侧栏右缘 240/64，随折叠实时跟随；侧栏保持可见可点——她想
+   *   设置时还能切侧栏）。她的原话：「点击设置以后的二级菜单，我希望是在
+   *   红色框的范围，当然可以往右边再有延伸。而不是现在的这个设置弹开的
+   *   面板样式」——红框圈的是侧栏那一列（含设置按钮）。
    *
    *   本组守住四件用户能看见的事：
-   *     ① 抽屉从窗口左缘滑出（left ≈ 0），宽 640（<xl 全屏）；
-   *     ② 盖住侧栏（elementFromPoint 诚实判据），贴顶栏底缘全高（无悬空带）；
+   *     ① ≥xl：抽屉左缘 = **实测侧栏右缘**（不硬编码宽度），宽 640；
+   *        <xl 仍全屏（Q-A2-2）；
+   *     ② 侧栏**不被盖**（elementFromPoint 诚实判据：侧栏中心命中侧栏自己），
+   *        贴顶栏底缘全高（无悬空带）；设置打开期间折叠侧栏 ⇒ 抽屉随缘；
    *     ③ 设置项在抽屉内可见、可点（主题切换真路径；v0.8.6 反馈 #7 起经
-   *        左导航分区可达——六区各渲染当前分区，不再是"一列到底"）；
+   *        左导航分区可达；v0.8.6.0002 反馈 #2 起插件是独立一级分区）；
    *     ④ 焦点管理：打开入抽屉、Esc 关、关闭焦点回触发钮（Q-A2-3）。
    *   旧 float 口径（锚定在点击处 / 底圆角不被裁 / 让开三键）随形态废止：
    *   全高抽屉贴边，底圆角被裁的结构性根因不复存在；让开三键由遮罩让位承担
    *   （Q-A1-6），不在本组重复。
    */
 
-  it('Q-A2-1 · 管理员打开设置：抽屉从窗口左缘滑出、盖住侧栏、贴顶栏全高（亮/暗一致）', async () => {
+  it('Q-A2-1 · 设置抽屉贴侧栏右缘展开、侧栏不被盖且折叠时随缘（反馈 #1 语义，亮/暗一致）', async () => {
     for (const theme of ['light', 'dark'] as const) {
       const { ctx, page } = await open(1600, 900);
       try {
@@ -919,17 +940,23 @@ await page.click('[data-industry-select-option="indoor"]');
         await clickSidebarSettings(page);
         await waitSettingsDrawer(page);
 
-        // ③ 设置项可见、可点（v0.8.6 · 反馈 #7：六区化后抽屉只渲染当前分区，
-        //    内容可达性 = 左导航切换真路径，不再是"一列到底全在内"）
+        // ③ 设置项可见、可点（v0.8.6 · 反馈 #7：分区化后抽屉只渲染当前分区，
+        //    内容可达性 = 左导航切换真路径，不再是"一列到底全在内"；
+        //    v0.8.6.0002 · 反馈 #2：插件是独立一级分区，与 Agent 与自动化平级）
         const drawer = page.locator('[data-settings-drawer]');
         const headText = await drawer.innerText();
-        expect(headText, '默认应落在「外观」区（主题 + 侧栏）').toContain('主题');
-        expect(headText).toContain('侧栏');
+        expect(headText, '默认应落在「外观」区（主题三选）').toContain('主题');
+        expect(headText).toContain('跟随系统');
         await page.locator('[data-settings-zone="data"]').click();
         expect(await drawer.innerText(), '「数据与备份」区应有日志区').toContain('前端日志');
         expect(await drawer.innerText()).toContain('保存备份');
+        // 插件独立分区（反馈 #2）：插件开关/从文件安装在「插件」区
+        await page.locator('[data-settings-zone="plugins"]').click();
+        expect(await drawer.innerText(), '「插件」区应有安装入口').toContain('从文件安装');
+        // 「Agent 与自动化」只剩宿主 Agent 集成信息，不得残留插件开关
         await page.locator('[data-settings-zone="agent"]').click();
-        expect(await drawer.innerText(), '「Agent 与自动化」区应有插件区').toContain('插件');
+        expect(await drawer.innerText(), '「Agent 与自动化」区应有席位信息').toContain('Agent 与本地库');
+        expect(await drawer.innerText(), '插件已拆去独立分区，Agent 区不得残留').not.toContain('从文件安装');
         await page.locator('[data-settings-zone="appearance"]').click();
 
         if (theme === 'dark') {
@@ -949,23 +976,35 @@ await page.click('[data-industry-select-option="indoor"]');
         // eslint-disable-next-line no-console
         console.log('[Q-A2-1] probe=', JSON.stringify(m));
 
-        // ① 左缘滑出：贴窗口左缘（±1px 抗亚像素）
-        expect(Math.abs(m!.drawerLeft)).toBeLessThanOrEqual(1);
+        // ① 贴侧栏右缘：抽屉左缘 = **实测侧栏右缘**（±1px 抗亚像素；不硬编码
+        //    240/64——侧栏宽随折叠态变，落到哪个态由环境决定，见 probe 注释）
+        expect(Math.abs(m!.drawerLeft - m!.sidebarRight), '抽屉左缘应贴合侧栏右缘（反馈 #1）').toBeLessThanOrEqual(1);
         // ② 宽 640（≥xl 分栏预留）；<xl 全屏由 Q-A2-2 覆盖
         expect(Math.round(m!.drawerWidth)).toBe(640);
-        // 盖住侧栏（诚实判据：侧栏中心的命中点是抽屉，不是侧栏）
-        expect(m!.coversSidebar, '抽屉没有盖住侧栏（反馈 #4 的形态要件）').toBe(true);
+        // 侧栏**不被盖**（诚实判据反转：侧栏中心的命中点是侧栏自己，不是抽屉）
+        expect(m!.sidebarHit, '抽屉/遮罩盖住了侧栏（反馈 #1 的形态要件：侧栏保持可见可点）').toBe(true);
         // ② 贴顶栏底缘全高：抽屉顶 = 顶栏高、底 = 视口底（无悬空带、无裁切）
         expect(Math.abs(m!.drawerTop - m!.topbarH)).toBeLessThanOrEqual(1);
         expect(Math.abs(m!.vh - m!.drawerBottom)).toBeLessThanOrEqual(1);
         expect(Math.round(m!.drawerHeight)).toBe(m!.vh - m!.topbarH);
         // 遮罩与抽屉同缘让出顶栏（与 Q-A1-6 同口径）
         expect(Math.round(m!.overlayTop)).toBe(m!.topbarH);
-        // 右缘圆角 = 抽屉的「出来」方向；左缘贴边不修圆角
+        // 右缘圆角 = 抽屉的「出来」方向；左缘贴侧栏不修圆角
         expect(m!.brRadius).toBe('16px');
         expect(m!.blRadius).toBe('0px');
         // 完整落在视口内（右不越界）
         expect(m!.drawerRight).toBeLessThanOrEqual(m!.vw + 0.5);
+
+        // ② ′ 随缘判别（反馈 #1 的活的要件）：设置打开期间真点侧栏折叠开关
+        //    ⇒ 抽屉左缘随缘到新侧栏右缘、侧栏中心仍命中侧栏自己
+        //    （她想设置时还能切侧栏——见 settings-zones S-Z4 同口径行为）
+        await page.locator('[data-app-sidebar] button[aria-label="收起侧边栏"]').first().click();
+        await page.waitForTimeout(600); // 侧栏宽度过渡 180ms + 余量
+        const c = await probeSettingsDrawer(page);
+        expect(c).not.toBeNull();
+        expect(Math.round(c!.sidebarWidth), '折叠后侧栏应变为 64').toBe(64);
+        expect(Math.abs(c!.drawerLeft - c!.sidebarRight), '折叠后抽屉应随缘到新侧栏右缘').toBeLessThanOrEqual(1);
+        expect(c!.sidebarHit, '折叠态侧栏仍不被压').toBe(true);
       } finally {
         await ctx.close();
       }
