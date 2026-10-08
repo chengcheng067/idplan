@@ -293,7 +293,7 @@ async function assertPagesAndShot(
     expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
     expect(box!.height, `第 ${i + 1} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
     expect(box!.height, `第 ${i + 1} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
-    await el.screenshot({ path: join(OUT_DIR, `density-e-p${i + 1}-${tag}.png`) });
+    await el.screenshot({ path: join(OUT_DIR, `density3-e-p${i + 1}-${tag}.png`) });
   }
   return pages.length;
 }
@@ -548,6 +548,11 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       // ⑥ 口径注上纸：占比 ≠ 完成度（01 §3.1 防误读，每页可独立解释）
       const p1Text = (await p1!.textContent()) ?? '';
       expect(p1Text).toContain('占比 = 阶段工作量分配（ratioPercent），不等于完成度');
+
+      // ⑦ Agent 签字号 ≥9.5px（accent 文字下限，密度研究 §4 约束 3：
+      //    Agent 签随负责人行走朱红；原 9px 的登记项已清）
+      const tagFs = await p1!.$eval('.ei-row__agent-tag', (el) => Number.parseFloat(getComputedStyle(el).fontSize));
+      expect(tagFs, 'Agent 签字号应 ≥9.5px（accent 文字下限）').toBeGreaterThanOrEqual(9.5);
     } finally {
       await page.close();
     }

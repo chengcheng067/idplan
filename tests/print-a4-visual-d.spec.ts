@@ -377,7 +377,7 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
           expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
           expect(box!.height, `第 ${i + 1} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
           expect(box!.height, `第 ${i + 1} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
-          await el.screenshot({ path: join(OUT_DIR, `density2-d-p${i + 1}-${tag}.png`) });
+          await el.screenshot({ path: join(OUT_DIR, `density3-d-p${i + 1}-${tag}.png`) });
         }
       }
     } finally {
@@ -547,6 +547,14 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
       // 延期阶段段走信号色（重点状态）
       const delayedSeg = await p3!.$$eval('.de-stack__seg[data-delayed]', (els) => els.length);
       expect(delayedSeg, '1 个延期阶段').toBe(1);
+
+      // 段下标号行字号 ≥9.5px（accent 文字下限，密度研究 §4 约束 3：延期
+      // 段下标走信号色；原 8.5px 的登记项已清，整行同字号）
+      const tickFs = await p3!.$eval('.de-stack__ticks', (el) => Number.parseFloat(getComputedStyle(el).fontSize));
+      expect(tickFs, '段下标号行字号应 ≥9.5px（accent 文字下限）').toBeGreaterThanOrEqual(9.5);
+      // 延期 tick 确实是信号色（约束 3 管的就是这类文字）
+      const tickColor = await p3!.$eval('.de-stack__tick[data-delayed]', (el) => getComputedStyle(el).color);
+      expect(tickColor, '延期段下标应为信号橙红 #EF4B23').toBe('rgb(239, 75, 35)');
     } finally {
       await page.close();
     }

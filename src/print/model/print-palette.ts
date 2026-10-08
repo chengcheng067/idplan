@@ -122,10 +122,11 @@ export const PALETTE_MIN_CONTRAST = {
  *    print-a4-visual-d.spec 的 Chromium 实测断言（字体无关），不靠硬编码
  *    px——那会是第二真值源。
  *
- * ⚠️ 已知低于 ③ 的既有元素（模板交接稿原值，登记在此待后续专项）：
- * E `.ei-row__agent-tag` 9px（Agent 签随负责人行变朱红）、D
- * `.de-stack__tick[data-delayed]` 8.5px（延期段下标变信号色）。
- * （H `.ap-status__card-key` 原 9px 已于 2026-10-09 收尾批修到 9.5px。）
+ * ⚠️ accent 文字下限的既有违登记项**已全部清除**（2026-10-09 收尾批：
+ * H `.ap-status__card-key` 9→9.5px；E `.ei-row__agent-tag` 9→9.5px；
+ * D `.de-stack__ticks` 8.5→9.5px——整行同字号，原值同时低于规则 4 的
+ * L3 9-10px 区间，P3 实测 356px 自由空间吸收行高 +1.4px）。此后新元素
+ * 一律 ≥9.5px，spec 有断言。
  */
 export const PRINT_DENSITY_FLOORS = {
   /** td/行 padding 单侧下限（px）；行高下限 = 文字行高 + 2×此值 */

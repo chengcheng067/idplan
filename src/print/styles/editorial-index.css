@@ -345,7 +345,10 @@
 
 .print-root.print-template-editorial-index .ei-row__agent-tag {
   font-family: var(--ei-font-num);
-  font-size: 9px;
+  /* 9→9.5px：「Agent」签随负责人行走朱红（accent 文字）——密度研究 §4
+     约束 3「accent 文字 ≥9.5px」的登记项，2026-10-09 收尾批清掉这处。
+     非行高决定元素（目录行高由 24px 巨编号定），不影响 EI_ROW_H 估高。 */
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   border: 1px solid currentColor;
   padding: 0 3px;

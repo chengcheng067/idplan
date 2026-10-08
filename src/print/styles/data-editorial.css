@@ -752,7 +752,12 @@
 .print-root.print-template-data-editorial .de-stack__ticks {
   display: flex;
   width: 100%;
-  font-size: 8.5px;
+  /* 8.5→9.5px：① 延期段下标走信号色（accent 文字）⇒ 密度研究 §4 约束 3
+     「accent 文字 ≥9.5px」的登记项；② 原 8.5px 同时低于规则 4 的 L3
+     9-10px 区间。整行同字号而不是只提延期 tick——同行混排两种字号会是
+     新的不一致。P3 实测（2026-10-09）：tick 宽 ≈78px（11% 段），装得下
+     「03▲」≈15.6px；行高 +1.4px 由 P3 主体 356px 自由空间吸收。 */
+  font-size: 9.5px;
   color: var(--de-gray-500);
 }
 
