@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * 打印内容自定义 + 皮肤预留（v0.8.6.0002 · 反馈 #9.2 / #9.3）验收，
- * 四版模板重建（产品决策文档 §2.1/§2.2/§3.2）后适配。
+ * 四版模板重建（产品决策文档 §2.1/§2.2/§3.2）后适配；
+ * v1.5-a 期二「外表 × 模块分离」（决策文档 §3.3）中截改**模块勾选**后再适配。
  *
  * 她的原话：
  *   ② 打印内容自定义：「希望给用户提供打印内容的选项，将选择权交给用户。
@@ -34,6 +35,23 @@
  *           不碰，classic 恒default 皮肤；print-skins.ts 锁增补模板注册表断言）。
  *   **未动**：五块开关的 data-print-block 契约、经典纸面全部行为断言、
  *   paginateSections 纯函数口径、`.print-root` 挂类断言（classic 类名冻结）。
+ *
+ * ── v3（期二）适配记录（pages → modules，决策文档 §3.3）──
+ *   语义真变：中截从「该模板的**页**复选框」改为「11 个**内容模块**复选框」
+ *   （4 套模板 = 外表，模块跨模板可选；非原生 = 禁用态 + 原因，期三通用渲染补）。
+ *   改动 1：⑥ 的标题/步骤/断言全改模块口径（默认全选**原生**模块、可摘模块、
+ *          预计页数联动；原生页勾选与旧页勾选等价 = 打印零变化红线由
+ *          print-selector-modules.spec.tsx 专锁）；
+ *   改动 2：helper 改名（`pageCheckbox`→`moduleCheckbox`、`setPageChecked`→
+ *          `setModuleChecked`、`blocksPanel`→`selectorPanel`），查询属性
+ *          `data-print-page`→`data-print-module`、`data-print-pages-all/none`
+ *          →`data-print-modules-all/none`、面板 `data-print-blocks-panel`
+ *          →`data-print-selector-panel`，触发钮文案「模板与页面」→「模板与模块」；
+ *   改动 3：L2 静态锁同步（PrintPreviewDialog 的 data-print-module、
+ *          usePrintPrefsStore 的模块语义三件套）。
+ *   **未动**：五块开关契约、经典纸面全部行为、④ 的持久化/脏数据口径、
+ *   ⑦ 配色闸门、paginateSections 纯函数、纸面 `.a4-page[data-print-page]`
+ *   （页 kind 属性在渲染侧不动，视觉 spec 照旧命中）。
  *
  * 挂载形态同 `print-preview-zoom.spec.tsx`：先 open=false 再翻 true（= 首次
  * 打开），纸面走**真实** SchedulePaper + 真实 useSchedulePaperData，stores
@@ -257,15 +275,15 @@ function clickButton(text: string): void {
   });
 }
 
-function blocksPanel(): HTMLElement | null {
-  return document.querySelector('[data-print-blocks-panel]');
+function selectorPanel(): HTMLElement | null {
+  return document.querySelector('[data-print-selector-panel]');
 }
 
 /** 打开下拉面板（幂等：已开则不动） */
 function openBlocksPanel(): void {
-  if (blocksPanel()) return;
-  clickButton('模板与页面');
-  expect(blocksPanel(), '点「模板与页面」后下拉面板应出现').not.toBeNull();
+  if (selectorPanel()) return;
+  clickButton('模板与模块');
+  expect(selectorPanel(), '点「模板与模块」后下拉面板应出现').not.toBeNull();
 }
 
 /** 点模板卡（选择器上截） */
@@ -283,9 +301,10 @@ function checkbox(key: string): HTMLInputElement {
   return el;
 }
 
-function pageCheckbox(page: string): HTMLInputElement {
-  const el = document.querySelector<HTMLInputElement>(`input[data-print-page="${page}"]`);
-  if (!el) throw new Error(`找不到页勾选框：${page}`);
+/** 模块勾选框（中截 · 期二：pages → modules） */
+function moduleCheckbox(module: string): HTMLInputElement {
+  const el = document.querySelector<HTMLInputElement>(`input[data-print-module="${module}"]`);
+  if (!el) throw new Error(`找不到模块勾选框：${module}`);
   return el;
 }
 
@@ -300,15 +319,15 @@ function setBlockChecked(key: string, on: boolean): void {
   expect(checkbox(key).checked, `勾选 ${key} 后期望 ${on}`).toBe(on);
 }
 
-/** 勾 / 取消一页（幂等） */
-function setPageChecked(page: string, on: boolean): void {
-  const el = pageCheckbox(page);
+/** 勾 / 消一个模块（幂等；校验点击后 checked 确实到位） */
+function setModuleChecked(module: string, on: boolean): void {
+  const el = moduleCheckbox(module);
   if (el.checked !== on) {
     act(() => {
       el.click();
     });
   }
-  expect(pageCheckbox(page).checked, `勾选页 ${page} 后期望 ${on}`).toBe(on);
+  expect(moduleCheckbox(module).checked, `勾选模块 ${module} 后期望 ${on}`).toBe(on);
 }
 
 /* ---- 纸面探针 ---- */
@@ -559,16 +578,16 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(document.querySelector('.ap-giant')).toBeNull();
   });
 
-  it('⑥【新】页面勾选：四版默认全选、可摘单页、页码/预计页数联动', () => {
+  it('⑥【新】模块勾选：四版默认全选原生、可摘模块、页码/预计页数联动', () => {
     renderDialog(true);
     openBlocksPanel();
     pickTemplate('swiss-schedule');
-    // 默认全选（01 §8）
-    for (const p of ['stage-overview', 'task-register', 'delay-ledger', 'member-roster']) {
-      expect(pageCheckbox(p).checked, `${p} 默认应勾选`).toBe(true);
+    // 默认全选原生模块（01 §8；期二：勾的是模块，纸面落原生页）
+    for (const m of ['stage-list', 'task-list', 'delay-ledger', 'member-roster']) {
+      expect(moduleCheckbox(m).checked, `${m} 默认应勾选`).toBe(true);
     }
-    // 摘一页 ⇒ 纸面 3 页 + 页码重排 + 预计联动
-    setPageChecked('task-register', false);
+    // 摘一个模块 ⇒ 纸面 3 页 + 页码重排 + 预计联动
+    setModuleChecked('task-list', false);
     expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
     expect(bodyContains('预计 3 页')).toBe(true);
     expect(document.querySelector('.a4-page')!.getAttribute('data-print-page')).toBe('stage-overview');
@@ -576,12 +595,12 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
 
     // 反选 ⇒ 0 页；全选 ⇒ 回 4 页
     act(() => {
-      document.querySelector<HTMLButtonElement>('[data-print-pages-none]')!.click();
+      document.querySelector<HTMLButtonElement>('[data-print-modules-none]')!.click();
     });
     expect(document.querySelectorAll('.a4-page')).toHaveLength(0);
     expect(bodyContains('预计 0 页')).toBe(true);
     act(() => {
-      document.querySelector<HTMLButtonElement>('[data-print-pages-all]')!.click();
+      document.querySelector<HTMLButtonElement>('[data-print-modules-all]')!.click();
     });
     expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
   });
@@ -642,6 +661,11 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
     expect(src).toContain('export const PRINT_TEMPLATES');
     expect(src).toContain('export function printTemplateClass');
     expect(src).toContain('print-skin-default');
+    // 期二：模块能力表（外表 × 模块分离，决策文档 §3.2/§3.3）
+    expect(src).toContain('export const PRINT_MODULES');
+    expect(src).toContain('export function enabledPagesOf');
+    expect(src).toContain('export function pageKindToModule');
+    expect(src).toContain('PAGE_TO_MODULE');
     // 静态映射纪律（同 stageColors）：整个文件不允许出现模板字符串
     expect(src, '禁止模板字符串拼类名（Tailwind JIT 看不见动态串）').not.toContain('${');
     // legacy 出口（SchedulePaper 主体仍消费，未碰）
@@ -682,14 +706,18 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
     expect(paper).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
-  it('PrintPreviewDialog.tsx：复用 Modal dropdown 档 + 模板/页面/配色三截接线', () => {
+  it('PrintPreviewDialog.tsx：复用 Modal dropdown 档 + 模板/模块/配色三截接线', () => {
     const src = read('src/components/print/PrintPreviewDialog.tsx');
     expect(src, '必须复用既有 Modal 体系（dropdown 档），不许发明新浮层').toContain(
       'placement="dropdown"',
     );
     expect(src).toContain('data-print-block');
     expect(src).toContain('data-print-template-option');
-    expect(src).toContain('data-print-page');
+    // 期二：中截页勾选 → 模块勾选（data-print-page 是纸面页 kind 属性，
+    // 在四个 Document 组件上，不在本文件）
+    expect(src).toContain('data-print-module');
+    expect(src).toContain('PrintModuleSection');
+    expect(src).toContain('data-print-selector-panel');
     expect(src).toContain('data-print-grayscale-toggle');
     expect(src).toContain('usePrintPrefsStore');
     expect(src, '勾选即时喂给纸面').toContain('blocks={blocks}');
@@ -713,6 +741,10 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
     expect(src).toContain('palette');
     expect(src).toContain('legacySkinToTemplate');
     expect(src).toContain('checkPrintPalette');
+    // 期二增量：pages 语义 = 模块勾选（PrintModuleId[]）+ 旧页 key 迁移
+    expect(src).toContain('PrintModuleId');
+    expect(src).toContain('setModuleEnabled');
+    expect(src).toContain('pageKindToModule');
   });
 
   it('useSchedulePaperData.ts：分页随 blocks 走 firstPageHeaderFor', () => {
