@@ -10,8 +10,11 @@
  *      经典模板无闸门（品牌资产不开放）。
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import {
+  PRINT_DENSITY_FLOORS,
   PRINT_TEMPLATE_PALETTES,
   PRINT_PALETTE_SLOTS,
   canSavePrintPalette,
@@ -126,5 +129,64 @@ describe('配色架构 · 硬闸门（禁存，不是提示）', () => {
 
   it('④ 槽位表完整（三枚，UI 遍历用）', () => {
     expect(PRINT_PALETTE_SLOTS).toEqual(['accent', 'ink', 'line']);
+  });
+});
+
+describe('打印密度下限（密度研究 §4 三约束：改色后密度不失效）', () => {
+  it('三条下限常量在位且取值正确（行高 2×3px / 轨道 6px / accent 文字 9.5px）', () => {
+    expect(PRINT_DENSITY_FLOORS.rowPaddingMin).toBe(3);
+    expect(PRINT_DENSITY_FLOORS.trackHeightMin).toBe(6);
+    expect(PRINT_DENSITY_FLOORS.accentFontSizeMin).toBe(9.5);
+  });
+
+  it('四版 CSS 现状不踩任一条下限（行 padding 上下侧 ≥3px / 轨道 ≥6px）', () => {
+    // 从四套模板 CSS 源码实读（不是复述常识）：compact 档是最紧档，取全表最小值
+    const styles = ['swiss-schedule', 'data-editorial', 'editorial-index'].map((f) =>
+      readFileSync(resolve(__dirname, '..', 'src', 'print', 'styles', `${f}.css`), 'utf-8'),
+    );
+    /** 取一条规则的 padding 四联值（CSS 简写展开：1→全同，2→[v,v]，3→[上,右,下]） */
+    const verticalOf = (shorthand: string): number[] => {
+      const v = shorthand
+        .trim()
+        .split(/\s+/)
+        .map((x) => Number.parseFloat(x));
+      const top = v[0]!;
+      const bottom = v[2] ?? top; // 3/4 值写法第 3 项是下；1/2 值写法上下同值
+      return [top, bottom];
+    };
+    const verticalPaddings = styles.flatMap((css) =>
+      [
+        '\\.swiss-stage-row\\b',
+        '\\.swiss-register td',
+        '\\.de-table td',
+        '\\.ei-row\\b',
+      ].flatMap((sel) =>
+        Array.from(
+          css.matchAll(new RegExp(`${sel}\\s*\\{[^}]*padding:\\s*([^;}]+)`, 'g')),
+          (m) => verticalOf(m[1]!),
+        ),
+      ),
+    );
+    expect(verticalPaddings.length, '应读到四版的行 padding 规则').toBeGreaterThan(0);
+    for (const [top, bottom] of verticalPaddings) {
+      const where = `行 padding 上下侧 ${top}/${bottom}px`;
+      expect(top, `${where} 上侧不得低于 ${PRINT_DENSITY_FLOORS.rowPaddingMin}px`).toBeGreaterThanOrEqual(
+        PRINT_DENSITY_FLOORS.rowPaddingMin,
+      );
+      expect(bottom, `${where} 下侧不得低于 ${PRINT_DENSITY_FLOORS.rowPaddingMin}px`).toBeGreaterThanOrEqual(
+        PRINT_DENSITY_FLOORS.rowPaddingMin,
+      );
+    }
+    // 进度条/色带轨道高度（D 唯一定义轨道的模板；compact 6px 贴下限）
+    const trackHeights = Array.from(
+      styles[1]!.matchAll(/\.de-bar__track\s*\{[^}]*height:\s*(\d+)px/g),
+      (m) => Number.parseInt(m[1]!, 10),
+    );
+    expect(trackHeights.length, '应读到 D 的轨道高度规则').toBeGreaterThan(0);
+    for (const h of trackHeights) {
+      expect(h, `轨道高 ${h}px 不得低于 ${PRINT_DENSITY_FLOORS.trackHeightMin}px`).toBeGreaterThanOrEqual(
+        PRINT_DENSITY_FLOORS.trackHeightMin,
+      );
+    }
   });
 });

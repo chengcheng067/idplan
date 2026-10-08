@@ -21,6 +21,11 @@
  * 其余三版纸底固定，三对即决策文档原文：ink ≥ 4.5 / accent ≥ 3 / line ≥ 1.5。
  * 每套的 pairs 在 spec 里显式列出——闸门口径随模板可见、可测、可评审。
  *
+ * ── 密度下限也住这里 ──
+ * 对比度闸门管「改色后可辨」，`PRINT_DENSITY_FLOORS`（下文）管「改色后
+ * 密度不失效」——行高下限 / 轨道 6px 硬下限 / accent 文字 ≥9.5px。两条
+ * 护栏同源：都是用户可改三槽位的前提下，纸面质量的可机器执行底线。
+ *
  * ── 经典（classic）为什么不在这张表里 ──
  * 它的 token 是 global.css 的阶段九色板品牌资产（应用内/打印共用），
  * 开放自定义会造成「打印稿与应用内不同色」的分裂（决策文档 §3.2 边界）。
@@ -87,6 +92,39 @@ export const PALETTE_MIN_CONTRAST = {
   ink: TEXT_MIN_CONTRAST, // 4.5 正文级（复用 derive-stage-colors.ts:56）
   accent: PALETTE_ACCENT_MIN_CONTRAST, // 3 图形/大字级
   line: CONTRAST_WARN_MAIN_ON_PAGE, // 1.5 线条可辨级（复用 derive-stage-colors.ts:63）
+} as const;
+
+/* ------------------------------------------------------------------ 密度下限 */
+
+/**
+ * 打印密度三条硬下限（print-density-study-2026-10-09 §4；与对比度闸门同源
+ * 的**配色侧护栏**——用户可改 accent/ink/line 三槽位，密度规则要防「改色
+ * 后密度失效」，故在此立常量、可被 spec 钉）：
+ *
+ * ① **行高下限 = 文字行高 + 2×3px**（`rowPaddingMin`）：td/行 padding 任何
+ *    档位不得低于上下各 3px。用户把 line 调深后，5px 间距是「文字不碰线」
+ *    的最低保障；E 的 compact 31px 估高 + 6px padding 已贴近下限，不要再出
+ *    第三档。四版现状全部达标（最小 4px：A/D 的 compact td）。
+ * ② **进度条/色带轨道 6px 硬下限**（`trackHeightMin`）：再细，填充色
+ *    （ink 或 accent）与 1px 边框（line）在任何用户线下都会糊成一条。
+ *    D 的 8px / compact 6px 已到位；经典收紧到 28px 是**行高**，色带视觉
+ *    厚薄（inset-y-1.5）不碰此规则。
+ * ③ **accent 文字 ≥9.5px**（`accentFontSizeMin`）：延期 flags、焦点编号
+ *    这类 accent 色文字，用户把 accent 调深/调艳后，小字号高饱和最糊。
+ *    A 的行内 meta 收紧到 9.5 后正好压线，禁止再小。
+ *
+ * ⚠️ 已知低于 ③ 的既有元素（模板交接稿原值，本期密度修订不动它们，登记
+ *    在此待后续专项）：E `.ei-row__agent-tag` 9px（Agent 签随负责人行变
+ *    朱红）、H `.ap-status__card-key` 9px（gate 态卡变橙）、D
+ *    `.de-stack__tick[data-delayed]` 8.5px（延期段下标变信号色）。
+ */
+export const PRINT_DENSITY_FLOORS = {
+  /** td/行 padding 单侧下限（px）；行高下限 = 文字行高 + 2×此值 */
+  rowPaddingMin: 3,
+  /** 进度条/色带轨道高度硬下限（px） */
+  trackHeightMin: 6,
+  /** accent 色文字字号下限（px） */
+  accentFontSizeMin: 9.5,
 } as const;
 
 /* ------------------------------------------------------------------ 四版规格 */
