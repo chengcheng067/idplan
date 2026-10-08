@@ -20,8 +20,10 @@
  * 决策 ⑥「四套全上」的实现顺序是分批落地：选择器要先能渲染五张卡（用户看得见
  * 全貌），点未实现的进「建设中」空态——**不许假装能打**（打印/导出禁用）。
  * `implemented: false` 就是这个开关，选择器与预览面板都读它。
- * D 版四页已落地（DataEditorialDocument + pages/data-editorial/），本条
- * 开关对 E/H 继续生效。
+ * D 版四页已落地（DataEditorialDocument + pages/data-editorial/）；E 版三页
+ * （EditorialIndexDocument + pages/editorial-index/）与 H 版三页
+ * （AgentPosterDocument + pages/agent-poster/）亦已落地，本条开关对
+ * **五套全部转正**——注册表不再有「建设中」条目。
  */
 
 import type {
@@ -124,10 +126,10 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: 'E',
     label: 'Editorial Index',
     scene: '跳读大编号索引：阶段 / 成员 / 产出物归档',
-    implemented: false,
+    implemented: true,
     usesBlocks: false,
     pages: [
-      { id: 'stage-index', label: '阶段目录', hint: '巨编号 · 双语名称 / 四态 / 占比' },
+      { id: 'stage-index', label: '阶段目录', hint: '巨编号 · 四态分章 / 日期 / 占比' },
       { id: 'member-index', label: '成员执行体目录', hint: 'human / agent · 角色 · 负责任务数' },
       { id: 'artifact-index', label: '产出物清单', hint: '种类 / 关联任务 / 来源' },
     ],
@@ -137,10 +139,10 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: 'H',
     label: 'Agent Poster',
     scene: '海报式跳读：Agent 执行状态与写回治理公示',
-    implemented: false,
+    implemented: true,
     usesBlocks: false,
     pages: [
-      { id: 'agent-declaration', label: 'Agent 执行宣告', hint: 'ExecutionStatus / runId / 写回白名单' },
+      { id: 'agent-declaration', label: 'Agent 执行宣告', hint: '状态巨字 / runId / 写回白名单' },
       { id: 'execution-status', label: '执行状态全览', hint: '10 态四组流程 · running 主焦点' },
       { id: 'writeback-proposals', label: '写回提案公示', hint: '五态 · confidence · 四项白名单' },
     ],

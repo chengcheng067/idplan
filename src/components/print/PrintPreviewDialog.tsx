@@ -48,8 +48,11 @@ import {
   printTemplatePages,
 } from './print-skins';
 import { usePrintViewModel } from '../../print/adapters/use-print-view-model';
+import { usePrintLogo } from '../../print/adapters/use-print-logo';
 import { SwissScheduleDocument } from '../../print/documents/SwissScheduleDocument';
 import { DataEditorialDocument } from '../../print/documents/DataEditorialDocument';
+import { EditorialIndexDocument } from '../../print/documents/EditorialIndexDocument';
+import { AgentPosterDocument } from '../../print/documents/AgentPosterDocument';
 import { PaletteSection } from '../../print/parts/PaletteSection';
 import { PRINT_TEMPLATE_PALETTES } from '../../print/model/print-palette';
 import type { PrintPageKind, PrintTemplateId } from '../../print/model/print-view-model';
@@ -112,6 +115,8 @@ export function PrintPreviewDialog({
 
   const d = useSchedulePaperData(projectId, blocks);
   const printVm = usePrintViewModel(projectId);
+  /** 全局打印 logo（settings KV；null = 未上传 ⇒ 四版统一「ID Plan」文字标） */
+  const { logo } = usePrintLogo();
   const meta = printTemplateMeta(template);
   const paperRootRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -356,6 +361,7 @@ export function PrintPreviewDialog({
                   }}
                   blocks={blocks}
                   skin="default"
+                  logo={logo}
                 />
               )}
               {template === 'swiss-schedule' && printVm.vm && (
@@ -365,6 +371,7 @@ export function PrintPreviewDialog({
                   palette={
                     palette['swiss-schedule'] ?? PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline
                   }
+                  logo={logo}
                   pageRef={(idx) => (el: HTMLDivElement | null) => {
                     pageRefs.current[idx] = el;
                   }}
@@ -377,6 +384,33 @@ export function PrintPreviewDialog({
                   palette={
                     palette['data-editorial'] ?? PRINT_TEMPLATE_PALETTES['data-editorial'].baseline
                   }
+                  logo={logo}
+                  pageRef={(idx) => (el: HTMLDivElement | null) => {
+                    pageRefs.current[idx] = el;
+                  }}
+                />
+              )}
+              {template === 'editorial-index' && printVm.vm && (
+                <EditorialIndexDocument
+                  vm={printVm.vm}
+                  pages={enabledPages}
+                  palette={
+                    palette['editorial-index'] ?? PRINT_TEMPLATE_PALETTES['editorial-index'].baseline
+                  }
+                  logo={logo}
+                  pageRef={(idx) => (el: HTMLDivElement | null) => {
+                    pageRefs.current[idx] = el;
+                  }}
+                />
+              )}
+              {template === 'agent-poster' && printVm.vm && (
+                <AgentPosterDocument
+                  vm={printVm.vm}
+                  pages={enabledPages}
+                  palette={
+                    palette['agent-poster'] ?? PRINT_TEMPLATE_PALETTES['agent-poster'].baseline
+                  }
+                  logo={logo}
                   pageRef={(idx) => (el: HTMLDivElement | null) => {
                     pageRefs.current[idx] = el;
                   }}
