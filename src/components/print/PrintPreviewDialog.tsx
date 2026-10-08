@@ -26,6 +26,20 @@
  *          仅四版显示（经典是品牌资产，不开放）。
  *  工具条另加「灰度」toggle（纸面 wrapper 套 filter:grayscale(1)）——选色时
  *  实时自查灰度可读，同时服务 02 §9 的灰度快照验收（不必真打黑白）。
+ *
+ * ── v1.5-c 期五：连续缩放（滑块 + Ctrl+滚轮双入口）──
+ * 她的原话：「在打印预览的这个位置增加滑块，用于页面的放大与缩小；或者再
+ * 增加一个 Ctrl+滚轮放大缩小页面的功能」——两个都做：滑块给发现性、
+ * Ctrl+滚轮给效率，二者同一状态源。缩放档位从二态（fit / 100%）扩为
+ * **fit + 连续自定义（50%–200%，滑块步进 5%、滚轮每档 5%）**：
+ *   · 「适应 / 100%」两钮保留当快速锚点（点 100% ⇒ 滑块到 100%，互为同步）；
+ *   · 缩放是**预览瞬态**：不进 usePrintPrefsStore、不进打印输出、不进 PNG
+ *     导出。隔离三重：① iframe 打印路径的克隆源是 `.print-root` 子树
+ *     （print-frame.ts:77），transform 在包裹层（`.print-zoom-layer`）上、
+ *     物理上不在克隆范围；② `@media print` 里 `.print-zoom-layer` transform
+ *     重置（主窗口兜底路径的保险，先例 `.a4-page { box-shadow:none !important }`）；
+ *     ③ 导出 PNG 期间 `exporting` 态强制 scale=1（html2canvas 按 100% 截，
+ *     用户档位原样保留、capture 后即恢复）。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -66,7 +80,23 @@ import type { PrintPageKind, PrintTemplateId } from '../../print/model/print-vie
 const A4_HEIGHT_PX = 1123;
 const GAP_BETWEEN_PAGES = 24;
 
-type Zoom = 'fit' | '100';
+/**
+ * 缩放档位（期五）：fit = 随预览区宽度自适应；custom = 用户连续值
+ * （滑块 50%–200% / Ctrl+滚轮同源）。旧二态 'fit' | '100' 中的 '100'
+ * 是 custom 在 100% 的特例（点「100%」= custom 且值 1）。
+ */
+export type Zoom = 'fit' | 'custom';
+
+/** 连续缩放范围（滑块 min/max 与滚轮钳制同一口径，导出供 spec 断言） */
+export const ZOOM_MIN = 0.5;
+export const ZOOM_MAX = 2;
+/** 滚轮每档步进（5%；滑块 step 同值，见 PrintZoomControls） */
+export const ZOOM_STEP = 0.05;
+
+/** 把缩放值钳回 [ZOOM_MIN, ZOOM_MAX]（滚轮连续累加不越界） */
+function clampZoom(value: number): number {
+  return Math.min(Math.max(value, ZOOM_MIN), ZOOM_MAX);
+}
 
 /** 打印内容勾选面板的行（键 ↔ SchedulePaperBlocks；hint 是该块的通俗解释）——经典模板专用 */
 const BLOCK_ROWS: ReadonlyArray<{ key: keyof SchedulePaperBlocks; label: string; hint: string }> = [
@@ -195,6 +225,78 @@ export function PrintModuleSection({
   );
 }
 
+/**
+ * 工具条 · 缩放控件（v1.5-c 期五：滑块 + Ctrl+滚轮双入口的可见面）。
+ *
+ * 她的原话：「在打印预览的这个位置增加滑块，用于页面的放大与缩小；或者再
+ * 增加一个 Ctrl+滚轮放大缩小页面的功能」——滑块给发现性（可见可点），
+ * Ctrl+滚轮给效率（监听在预览区上，见 PrintPreviewDialog 的 wheel effect），
+ * 二者同一状态源：`scale` 是生效缩放（fit 实测值或用户档位）。
+ *
+ * 形态：适应 / 100% 两钮 = 快速锚点（旧二态行为原样保留，既有 spec 不回归）；
+ * range 滑块 = 50%–200% 连续（步进 5%，accent 用 pine）；右侧等宽百分比。
+ * 点 100% ⇒ 滑块到 100%（atHundred 点亮）；拖到 100% ⇒ 100% 钮点亮——
+ * 两入口互为同步，不存两套状态。
+ *
+ * 为什么提成独立导出组件：截图 spec 用 renderToStaticMarkup 直接渲染它
+ * （同 PrintModuleSection / PaletteSection 先例），不必拉起整个预览面板
+ * （面板要 stores/Dexie，SSR 出不了纸面）也能验收工具条形态。
+ */
+export function PrintZoomControls({
+  zoom,
+  scale,
+  onFit,
+  onHundred,
+  onScale,
+}: {
+  zoom: Zoom;
+  /** 当前生效缩放（fit 实测值 / custom 值；导出期间恒 1） */
+  scale: number;
+  onFit(): void;
+  onHundred(): void;
+  /** 拖滑块 / 键盘微调（入参 = 百分比整数） */
+  onScale(percent: number): void;
+}): JSX.Element {
+  const percent = Math.round(scale * 100);
+  // 「100%」锚点在 custom 且值恰为 100 时点亮（拖滑块到 100 也点亮，见文件头）
+  const atHundred = zoom === 'custom' && percent === 100;
+  const anchorBtn = (active: boolean, label: string, onClick: () => void): JSX.Element => (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`rounded-[6px] px-2 py-0.5 text-xs font-medium transition-colors ${
+        active ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="flex items-center gap-2" data-print-zoom-controls="">
+      <div className="flex rounded-[8px] border border-line bg-cream p-0.5" role="group" aria-label="预览缩放">
+        {anchorBtn(zoom === 'fit', '适应', onFit)}
+        {anchorBtn(atHundred, '100%', onHundred)}
+      </div>
+      <input
+        type="range"
+        min={ZOOM_MIN * 100}
+        max={ZOOM_MAX * 100}
+        step={5}
+        value={percent}
+        onChange={(e) => onScale(Number(e.target.value))}
+        aria-label="预览缩放滑块"
+        data-print-zoom-slider=""
+        className="h-1 w-36 cursor-pointer accent-pine"
+      />
+      {/* 百分比：等宽数字（缩放连拖时数字不跳宽） */}
+      <span data-print-zoom-value="" className="w-9 text-right text-[11px] tabular-nums text-mist">
+        {percent}%
+      </span>
+    </div>
+  );
+}
+
 export function PrintPreviewDialog({
   projectId,
   open,
@@ -222,8 +324,18 @@ export function PrintPreviewDialog({
   const meta = printTemplateMeta(template);
   const paperRootRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
+  /** 缩放档位：fit（随预览区宽度自适应）/ custom（滑块或滚轮的连续值） */
   const [zoom, setZoom] = useState<Zoom>('fit');
-  const [scale, setScale] = useState(1);
+  /** fit 档实测缩放（ResizeObserver 喂；clamp((w−32)/794, 0.25, 1)） */
+  const [fitScale, setFitScale] = useState(1);
+  /** 用户连续档位（滑块 / Ctrl+滚轮；50%–200%） */
+  const [customScale, setCustomScale] = useState(1);
+  /**
+   * 导出 PNG 中（期五隔离③）：capture 期间强制 scale=1——html2canvas 按
+   * 100% 截，用户档位原样保留（不像旧实现把 zoom 切走再切回），capture
+   * 完成后即恢复，无视觉残留。
+   */
+  const [exporting, setExporting] = useState(false);
   const [printBusy, setPrintBusy] = useState(false);
   const [pngBusy, setPngBusy] = useState(false);
   /** 灰度预览（纸面 wrapper 套 grayscale(1)；选色自查 + 灰度快照验收用，不真打黑白） */
@@ -276,20 +388,56 @@ export function PrintPreviewDialog({
 
   /** fit 档：随预览区宽度重算（ResizeObserver；规范 §2 公式 clamp((w−32)/794, 0.25, 1)） */
   useEffect(() => {
-    if (zoom !== 'fit') {
-      setScale(1);
-      return;
-    }
-    if (!stageEl) return;
+    if (zoom !== 'fit' || !stageEl) return;
     const calc = (): void => {
       const s = Math.min(Math.max((stageEl.clientWidth - 32) / A4_WIDTH_PX, 0.25), 1);
-      setScale(s);
+      setFitScale(s);
     };
     calc();
     const ro = new ResizeObserver(calc);
     ro.observe(stageEl);
     return () => ro.disconnect();
   }, [zoom, stageEl]);
+
+  /**
+   * Ctrl+滚轮缩放（期五）：监听挂**预览区**（stageEl）而非 window——滚轮在
+   * 工具条/别处上来时不该偷走页面行为。`passive:false` 是硬要求：React 的
+   * onWheel 走根节点 passive 监听，preventDefault 会被浏览器忽略（且告警），
+   * 故必须原生 addEventListener。不按 Ctrl ⇒ 直接放行（预览区该滚还滚）。
+   *
+   * 同帧连续 wheel 事件（一次惯性滚轮排多个事件）必须逐次累加：setState 批
+   * 处理下闭包里的 scale 是陈旧的，故用 wheelZoomRef 做序列累加器；非滚轮
+   * 途径改变缩放（点锚点 / 拖滑块 / fit 重算）时下面 effect 清序列，下一次
+   * 从生效缩放重新起算（fit 档接管时不断档）。
+   *
+   * 档位领域 = 滑动的 50%–200%（同一状态源、同一把钳 clampZoom）。fit 实测
+   * 值可能低于手动下限（窄窗口下限 25%）——从这种 fit 接管时首档即落在下限
+   * 50%：手动档位没有更小的档，方向无所谓（都进 50%）。
+   */
+  useEffect(() => {
+    const el = stageEl;
+    if (!el) return;
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const dir = e.deltaY < 0 ? 1 : -1; // 向上放大 / 向下缩小
+      const next = clampZoom((wheelZoomRef.current ?? scaleRef.current) + dir * ZOOM_STEP);
+      wheelZoomRef.current = next;
+      setZoom('custom');
+      setCustomScale(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [stageEl]);
+
+  /** 生效缩放 + 滚轮序列的最新值（effect 同步，避免渲染期写 ref） */
+  const scaleRef = useRef(1);
+  const wheelZoomRef = useRef<number | null>(null);
+  const scale = exporting ? 1 : zoom === 'fit' ? fitScale : customScale;
+  useEffect(() => {
+    scaleRef.current = scale;
+    wheelZoomRef.current = null;
+  }, [scale]);
 
   /**
    * 该模板启用的纸面页（期二：模块勾选 ⇒ 原生页序派生）。
@@ -319,17 +467,19 @@ export function PrintPreviewDialog({
   }, [printBusy, canOutput]);
 
   /**
-   * 导出 PNG（规范 §2 铁律：`.a4-page` 自身永不缩放，导出前若当前档 ≠ 100%
-   * 先临时置回再截，capture 完成后恢复——React state 切换同帧完成，无视觉残留）。
-   * 灰度同理：html2canvas 不认 filter，导出前临时关掉。
+   * 导出 PNG（规范 §2 铁律：`.a4-page` 自身永不缩放）。期五连续缩放下
+   * **导出仍恒 100%**：capture 期间 `exporting` 态强制 scale=1（transform
+   * 从 wrapper 上撤掉），用户档位一个字节不动、完成后即恢复——旧实现
+   * 「wasFit 就把 zoom 切 100% 再切回」在连续缩放下会连用户自定义值一起
+   * 冲掉，故改为独立的导出态。灰度同理：html2canvas 不认 filter，导出前
+   * 临时关掉。
    */
   const onExportPng = useCallback(async () => {
     const els = pageRefs.current.filter((el): el is HTMLDivElement => el !== null);
     if (els.length === 0 || pngBusy || !d.project || !canOutput) return;
     setPngBusy(true);
-    const wasFit = zoom === 'fit';
     const wasGray = grayscale;
-    if (wasFit) setZoom('100');
+    setExporting(true);
     if (wasGray) setGrayscale(false);
     try {
       // 等一帧让 scale / filter 复原的样式生效（transform 在 wrapper 上，纸面自身不变）
@@ -338,28 +488,16 @@ export function PrintPreviewDialog({
     } catch {
       useProjectsStore.getState().pushToast('error', 'PNG 导出失败，请改用「打印 / 另存为 PDF」。');
     } finally {
-      if (wasFit) setZoom('fit');
+      setExporting(false);
       if (wasGray) setGrayscale(true);
       setPngBusy(false);
     }
-  }, [pngBusy, zoom, grayscale, canOutput, d.project]);
+  }, [pngBusy, grayscale, canOutput, d.project]);
 
   if (!open || !d.hydrated || !d.project) return null;
 
   const paperNaturalHeight =
     Math.max(pagesCount, 1) * A4_HEIGHT_PX + Math.max(Math.max(pagesCount, 1) - 1, 0) * GAP_BETWEEN_PAGES;
-  const zoomBtn = (z: Zoom, label: string): JSX.Element => (
-    <button
-      type="button"
-      aria-pressed={zoom === z}
-      onClick={() => setZoom(z)}
-      className={`rounded-[6px] px-2 py-0.5 text-xs font-medium transition-colors ${
-        zoom === z ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
-      }`}
-    >
-      {label}
-    </button>
-  );
 
   return (
     <Modal open={open} onClose={onClose} placement="fullscreen" ariaLabel="打印预览">
@@ -409,11 +547,22 @@ export function PrintPreviewDialog({
             <Palette size={14} aria-hidden />
             灰度
           </button>
-          {/* 缩放二态（规范 §2：fit / 100%，不做滑块） */}
-          <div className="flex rounded-[8px] border border-line bg-cream p-0.5" role="group" aria-label="预览缩放">
-            {zoomBtn('fit', '适应')}
-            {zoomBtn('100', '100%')}
-          </div>
+          {/* 缩放（期五）：适应/100% 快速锚点 + 连续滑块（Ctrl+滚轮同源）；
+              预览瞬态——不进 prefs、不进打印（.print-zoom-layer 打印重置）、
+              不进 PNG 导出（capture 期间强制 100%） */}
+          <PrintZoomControls
+            zoom={zoom}
+            scale={scale}
+            onFit={() => setZoom('fit')}
+            onHundred={() => {
+              setZoom('custom');
+              setCustomScale(1);
+            }}
+            onScale={(percent) => {
+              setZoom('custom');
+              setCustomScale(clampZoom(percent / 100));
+            }}
+          />
           <button
             type="button"
             onClick={onClose}
@@ -430,19 +579,26 @@ export function PrintPreviewDialog({
           ref={setStageEl}
           className="flex-1 overflow-auto bg-cream px-4 py-8"
         >
+          {/*
+            缩放包裹层（.print-zoom-layer）：transform 只在这一层，纸面自身
+            永不缩放（规范 §2 铁律）。隔离三重见文件头：iframe 打印克隆源是
+            内层 paperRootRef（本层不在克隆范围）；@media print 里本层
+            transform 重置（主窗口兜底路径保险）；导出期间 exporting 强制 1。
+            scale=1 时撤掉 transform（旧「100%」档行为：wrapper 无 transform）。
+          */}
           <div
             style={
-              zoom === 'fit'
-                ? {
+              scale === 1
+                ? { transition: 'transform 150ms' }
+                : {
                     transform: `scale(${scale})`,
                     transformOrigin: 'top center',
                     width: A4_WIDTH_PX,
                     marginBottom: -(1 - scale) * paperNaturalHeight,
                     transition: 'transform 150ms',
                   }
-                : { transition: 'transform 150ms' }
             }
-            className="mx-auto"
+            className="mx-auto print-zoom-layer"
           >
             {/* 灰度只套纸面（chrome 不灰度）；ref 两本账：外层 wrapper（缩放）与 .print-root（打印克隆源） */}
             <div

@@ -1051,6 +1051,18 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
     display: none !important; /* 打印视图操作栏隐藏 */
   }
 
+  /* 预览缩放层打印重置（期五 · 滑块 / Ctrl+滚轮的 transform 包裹层）：
+     主窗口兜底打印路径（printViaMainWindow）打的是整个主文档，缩放 transform
+     必须撤销——否则纸面按预览缩放比例出图（150% 预览打出放大 1.5 倍的废件）。
+     iframe 隔离路径天然不带本层（克隆源是 .print-root 子树，包裹层不在克隆
+     范围内，print-frame.ts:77），这里是第二道保险。先例：上方 .a4-page 的
+     box-shadow:none !important。 */
+  .print-zoom-layer {
+    transform: none !important;
+    width: auto !important;
+    margin-bottom: 0 !important;
+  }
+
   .print-root {
     background: #fff !important;
     color: #1e293b !important;
