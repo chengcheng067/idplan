@@ -62,10 +62,31 @@
 
 .print-root.print-template-swiss-schedule .swiss-topbar__nav {
   display: flex;
+  align-items: center;
   gap: 18px;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.14em;
+}
+
+/* logo：黑顶栏左端（≤24px，黄字旁）。二值化 logo 是黑字透明底 ⇒ 暗栏
+   （基线黑栏）必须反白才看得见；自定义预设把栏底改亮（站台蓝/赭石/松墨
+   的 line 皆浅色）时原样即可——反不反由文档层按栏底亮度判定（data-tone），
+   不写死 filter，否则浅栏预设下白 logo 直接消失。 */
+.print-root.print-template-swiss-schedule .swiss-topbar__nav .print-logo {
+  margin-right: 2px;
+}
+
+.print-root.print-template-swiss-schedule .print-logo[data-tone='on-dark'] {
+  filter: invert(1);
+}
+
+/* 未上传时的文字标：与栏内反白字同色（黄字旁的身份标） */
+.print-root.print-template-swiss-schedule .print-logo--text {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tpl-accent);
+  white-space: nowrap;
 }
 
 .print-root.print-template-swiss-schedule .swiss-topbar__navitem[data-current] {

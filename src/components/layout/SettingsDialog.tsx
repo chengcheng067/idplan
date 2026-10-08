@@ -34,6 +34,7 @@ import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { NasServiceSection } from '../settings/NasServiceSection';
 import { CustomLibrarySection } from '../settings/CustomLibrarySection';
 import { PluginsSection } from '../settings/PluginsSection';
+import { PrintLogoSection } from '../settings/PrintLogoSection';
 import { RestPolicyEditor } from '../settings/RestPolicyDialog';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import { useMembersStore } from '../../store/useMembersStore';
@@ -517,6 +518,15 @@ export function SettingsDialog({
                       月历以周一为一周起始，当前不可切换。
                     </p>
                   </section>
+
+                  {/*
+                    打印标识（logo）：全局级、管理员上传（产品决策文档 §3.3）。
+                    住在排程区 = 「管理员可见、成员不可见」由分区角色可见性直接
+                    兑现（本区 adminOnly，成员从左导航整区消失）；上传时前端
+                    灰度二值化 + ≤200KB，落 settings KV（随备份换设备恢复）。
+                    未上传 ⇒ 四版模板与经典纸面统一「ID Plan」文字标。
+                  */}
+                  <PrintLogoSection />
                 </>
               )}
 

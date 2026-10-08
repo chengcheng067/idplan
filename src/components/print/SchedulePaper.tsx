@@ -40,6 +40,7 @@ import { customStageColor } from '../timeline/stageColorKey';
 import { A4_WIDTH_PX, A4_HEIGHT_PX, type ScheduleSection, type SchedulePaperBlocks, DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../../lib/schedule-print';
 import type { Project, Stage } from '../../core/types/entities';
 import { printSkinClass, type PrintSkinId } from './print-skins';
+import { PrintLogoMark } from '../../print/parts/PrintLogoMark';
 
 /** 母本同款：打印纸面需要的最小项目面（ Pick 而非全量，预览面板同样喂得起 ） */
 export interface SchedulePaperProject {
@@ -74,6 +75,12 @@ export interface SchedulePaperProps {
   blocks?: SchedulePaperBlocks;
   /** 皮肤（反馈 #9.3；v1 仅 'default'，缺省 = 经典） */
   skin?: PrintSkinId;
+  /**
+   * 全局打印 logo（产品决策文档 §3.3；null = 未上传 ⇒ 页脚署名旁显示
+   * 「ID Plan」文字标）。**只加渲染，不动五块契约与任何既有选择器**——
+   * 署名字样「ID Plan · 项目排期与交付管理」逐字保留（既有 spec 钉死）。
+   */
+  logo?: string | null;
 }
 
 /** 状态胶囊（浅色底 + 深色字：纸面与打印均清晰可读，全部走命名 token）——母本逐字 */
@@ -133,6 +140,7 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
     pageRef,
     blocks = DEFAULT_SCHEDULE_PAPER_BLOCKS,
     skin = 'default',
+    logo = null,
   } = props;
 
   return (
@@ -330,7 +338,12 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
           {/* 打印页脚（画板 09：左 署名 · 右 页码） */}
           {blocks.footer && (
             <footer className="mt-auto flex items-center justify-between border-t border-line pt-3 text-[11px] tabular-nums text-mist">
-              <span>ID Plan · 项目排期与交付管理</span>
+              {/* logo：页脚署名旁（经典纸面的落点；≤20px；未上传 = 文字标）。
+                  署名字样逐字保留（既有 spec 钉死），logo 只加在它旁边 */}
+              <span className="flex items-center gap-2">
+                <PrintLogoMark logo={logo} height={20} />
+                <span>ID Plan · 项目排期与交付管理</span>
+              </span>
               <span>
                 第 {idx + 1} / {pages.length} 页
               </span>

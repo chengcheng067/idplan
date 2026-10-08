@@ -33,6 +33,7 @@ import { printTemplateClass } from '../../components/print/print-skins';
 import type { PrintPageKind, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
+import { PrintLogoMark } from '../parts/PrintLogoMark';
 // D 版样式（Vite 随组件 chunk 进包；全部规则带 .print-root.print-template-* 前缀）
 import '../styles/data-editorial.css';
 import { ProgressMatrixPage } from '../pages/data-editorial/ProgressMatrixPage';
@@ -74,6 +75,8 @@ export interface DataEditorialDocumentProps {
   pages?: readonly PrintPageKind[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
+  /** 全局打印 logo（base64 dataURL；null = 未上传，每页头部左上格显示「ID Plan」文字标） */
+  logo?: string | null;
   /** 导出 PNG 的页面元素收集（ref callback 数组，宿主持有） */
   pageRef?: (idx: number) => Ref<HTMLDivElement>;
 }
@@ -82,6 +85,7 @@ export function DataEditorialDocument({
   vm,
   pages,
   palette,
+  logo = null,
   pageRef,
 }: DataEditorialDocumentProps): JSX.Element {
   const enabled = (pages ?? DATA_EDITORIAL_PAGES).filter((p) => DATA_EDITORIAL_PAGES.includes(p));
@@ -106,6 +110,7 @@ export function DataEditorialDocument({
           pageIndex={idx}
           pageTotal={total}
           pageRef={pageRef?.(idx)}
+          logo={logo}
         />
       ))}
     </div>
@@ -120,12 +125,14 @@ function DePage({
   pageIndex,
   pageTotal,
   pageRef,
+  logo,
 }: {
   kind: PrintPageKind;
   vm: PrintViewModel;
   pageIndex: number;
   pageTotal: number;
   pageRef?: Ref<HTMLDivElement>;
+  logo: string | null;
 }): JSX.Element {
   const title = DE_PAGE_TITLES[kind] ?? DE_PAGE_TITLES['progress-matrix']!;
   return (
@@ -139,6 +146,11 @@ function DePage({
       {/* 页头：英文栏 kicker + 完整单行中文标题；右侧项目标识与周期 */}
       <header className="de-head">
         <div className="de-head__left">
+          {/* logo：每页头部左上格（≤28px；D 的 radius=0 身份 ⇒ 不加圆角不加底）。
+              未上传 = 「ID Plan」文字标 */}
+          <div className="de-head__logo">
+            <PrintLogoMark logo={logo} height={28} />
+          </div>
           <p className="de-head__kicker">
             <span className="de-head__signal" aria-hidden />
             {title.en}

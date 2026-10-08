@@ -73,6 +73,22 @@
   min-width: 0;
 }
 
+/* logo：每页头部左上格（≤28px）。D 的 radius=0 是身份 ⇒ 不加圆角、不加底，
+   裸放在左上格；未上传 = 「ID Plan」文字标（英文栏字体，近黑） */
+.print-root.print-template-data-editorial .de-head__logo {
+  display: flex;
+  align-items: center;
+  margin-bottom: 9px;
+}
+
+.print-root.print-template-data-editorial .print-logo--text {
+  font-family: var(--de-font-en);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--tpl-ink);
+  white-space: nowrap;
+}
+
 .print-root.print-template-data-editorial .de-head__kicker {
   display: flex;
   align-items: center;

@@ -25,12 +25,14 @@ import type { CSSProperties, Ref } from 'react';
 
 import { MemberActorKind, StageStatus, TASK_STATUS_LABELS } from '../../core/types/enums';
 import { formatTaskNo } from '../../core/lib/task-no';
+import { relativeLuminance } from '../../core/color/contrast';
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
 import { printTemplateClass } from '../../components/print/print-skins';
 
 import type { PrintPageKind, PrintStageLogVM, PrintStageVM, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
+import { PrintLogoMark } from '../parts/PrintLogoMark';
 // A 版样式（Vite 随组件 chunk 进包；全部规则带 .print-root.print-template-* 前缀）
 import '../styles/swiss-schedule.css';
 
@@ -76,6 +78,8 @@ export interface SwissScheduleDocumentProps {
   pages?: readonly PrintPageKind[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
+  /** 全局打印 logo（base64 dataURL；null = 未上传，黑顶栏左端显示「ID Plan」文字标） */
+  logo?: string | null;
   /** 导出 PNG 的页面元素收集（ref callback 数组，宿主持有） */
   pageRef?: (idx: number) => Ref<HTMLDivElement>;
 }
@@ -84,10 +88,18 @@ export function SwissScheduleDocument({
   vm,
   pages,
   palette,
+  logo = null,
   pageRef,
 }: SwissScheduleDocumentProps): JSX.Element {
   const enabled = (pages ?? SWISS_SCHEDULE_PAGES).filter((p) => SWISS_SCHEDULE_PAGES.includes(p));
   const total = enabled.length;
+  /**
+   * 顶栏明暗（决定 logo 反不反白）：栏底 = --tpl-line 槽位。基线黑栏 ⇒
+   * 二值化黑 logo 必须反白才看得见；自定义预设若把栏底改亮（站台蓝/赭石/
+   * 松墨的 line 都是浅色）⇒ 原样即可。**按配色判定而不是写死 invert**——
+   * 否则三个浅栏预设下白 logo 直接消失。
+   */
+  const barIsDark = relativeLuminance(palette.line) < 0.2;
 
   return (
     <div
@@ -108,6 +120,8 @@ export function SwissScheduleDocument({
           pageIndex={idx}
           pageTotal={total}
           pageRef={pageRef?.(idx)}
+          logo={logo}
+          barIsDark={barIsDark}
         />
       ))}
     </div>
@@ -122,12 +136,16 @@ function SwissPage({
   pageIndex,
   pageTotal,
   pageRef,
+  logo,
+  barIsDark,
 }: {
   kind: PrintPageKind;
   vm: PrintViewModel;
   pageIndex: number;
   pageTotal: number;
   pageRef?: Ref<HTMLDivElement>;
+  logo: string | null;
+  barIsDark: boolean;
 }): JSX.Element {
   const nav = SWISS_NAV.find((n) => n.kind === kind) ?? SWISS_NAV[0]!;
   return (
@@ -141,6 +159,9 @@ function SwissPage({
       {/* 黑顶栏（左右内缩 40px，黄字反白；项目名居中=站名） */}
       <header className="swiss-topbar">
         <div className="swiss-topbar__nav" aria-label="栏目">
+          {/* logo：黑顶栏左端（≤24px，黄字旁）。暗栏反白、亮栏原样（按栏底
+              亮度判定，见文档层 barIsDark）；未上传 = 「ID Plan」文字标（黄字） */}
+          <PrintLogoMark logo={logo} height={24} tone={barIsDark ? 'on-dark' : 'ink'} />
           {SWISS_NAV.map((n) => (
             <span
               key={n.kind}
