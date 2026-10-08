@@ -8,6 +8,7 @@ import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { buildRestDayPreview, isValidAnchorWeek, isoWeekIdOf, shiftIsoWeek } from '../../lib/restPolicyDraft';
 import { planRestPolicyRecalc, sameWorkdayPolicy } from '../../lib/restPolicyRecalc';
+import { useHumanProjects } from '../../core/project/visibility';
 import { withCnHolidays } from '../../core/holidays/policy';
 import { cnHolidayYears } from '../../core/holidays';
 import { dayjs } from '../../lib/date';
@@ -89,7 +90,10 @@ export function RestPolicyEditor({
   const saved = useSettingsStore((s) => s.restPolicy);
   const savedEffective = useSettingsStore((s) => s.effectiveRestPolicy);
   const applyToStore = useSettingsStore((s) => s.setRestPolicy);
-  const projects = useProjectsStore((s) => s.projects);
+  // projects 走 visibility 漏斗（隔离纪律：store.projects 原始读只允许在
+  // visibility.ts——公司级制度作用于人类侧项目）；stages 无 kind 字段，
+  // 直读是设计认可口径（isolation-guard spec 注释明示）。
+  const projects = useHumanProjects();
   const stages = useProjectsStore((s) => s.stages);
 
   const [draft, setDraft] = useState<RestPolicyConfig>(saved);

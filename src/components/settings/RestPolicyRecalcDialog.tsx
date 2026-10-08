@@ -33,6 +33,7 @@ import {
 } from '../../core/types/enums';
 import type { Project, RestPolicyConfig, Stage, Task } from '../../core/types/entities';
 import { StageService } from '../../core/services/stage.service';
+import { useHumanProjects } from '../../core/project/visibility';
 import { withCnHolidays } from '../../core/holidays/policy';
 import {
   planRestPolicyRecalc,
@@ -149,7 +150,10 @@ export function RestPolicyRecalcDialog({
   onConfirmed,
 }: RestPolicyRecalcDialogProps): JSX.Element {
   const repos = useRepos();
-  const projects = useProjectsStore((s) => s.projects);
+  // projects 走 visibility 漏斗（隔离纪律：store.projects 原始读只允许在
+  // visibility.ts——公司级制度作用于人类侧项目）；stages/tasks 无 kind 字段，
+  // 直读是设计认可口径（isolation-guard spec 注释明示）。
+  const projects = useHumanProjects();
   const stages = useProjectsStore((s) => s.stages);
   const tasks = useProjectsStore((s) => s.tasks);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
