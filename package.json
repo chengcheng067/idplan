@@ -6,6 +6,11 @@
   "type": "module",
   "description": "ID Plan — 跨行业项目排程工具（离线优先）：把合同变成一张看得懂的阶段时间轴",
   "author": "杨雯丞",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chengcheng067/idplan.git"
+  },
+  "homepage": "https://github.com/chengcheng067/idplan#readme",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
