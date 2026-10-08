@@ -23,6 +23,7 @@ import {
 import { createProjectActions, useProjectsStore } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import { toIsoDate } from '../../lib/date';
+import { parseDurationDays } from '../../lib/restPolicyRecalc';
 import { DEFAULT_REST_POLICY } from '../../core/types/entities';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import {
@@ -204,12 +205,12 @@ export function ManualFallbackForm({
     const hasAnyDuration = Object.values(durations).some((v) => v.trim() !== '');
     if (!hasAnyDuration) return;
     try {
-      const filled = stageItems.map((it) => ({
-        ...it,
-        durationDays: durations[it.key]?.trim() !== '' && Number.isFinite(Number(durations[it.key]))
-          ? Number(durations[it.key])
-          : undefined,
-      }));
+      // 时长覆盖解析与「休息制度切换重算」弹窗同源（parseDurationDays）：
+      // 空=未填走占比兜底；非正整数=未填；小数四舍五入
+      const filled = stageItems.map((it) => {
+        const days = parseDurationDays(durations[it.key]);
+        return days === null ? it : { ...it, durationDays: days };
+      });
       const { endAt: computedEnd } = computeEndAtByDurations(
         startAt,
         filled,
@@ -255,10 +256,10 @@ export function ManualFallbackForm({
     void (0 as unknown as ConfirmedContractPayload); // 类型引用占位：payload 由 service 组装
     try {
       // 阶段时长：把用户填的天数合入 stageItems（供上层感知；未填的项不携带 durationDays）
+      // 解析与重算弹窗同源（parseDurationDays：空/非正=未填，小数四舍五入）
       const itemsWithDuration: StageSelectionItem[] = stageItems.map((it) => {
-        const raw = durations[it.key];
-        const hasDuration = raw?.trim() !== '' && Number.isFinite(Number(raw));
-        return hasDuration ? { ...it, durationDays: Number(raw) } : it;
+        const days = parseDurationDays(durations[it.key]);
+        return days === null ? it : { ...it, durationDays: days };
       });
       const project = await actions.createManual({
         name: name.trim(),

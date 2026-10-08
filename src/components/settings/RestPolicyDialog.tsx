@@ -55,6 +55,9 @@ export function RestPolicySettingsButton(): JSX.Element | null {
  *   - 设置面板 SettingsDialog 内联「休息制度」区（embedded，不套独立 Modal）
  *
  * - 三档单选：文案与遍历顺序全部取自 REST_POLICY_LABELS / ALL_REST_POLICIES（唯一文案源，铁律 7）；
+ * - 单休自定义休息周几（v3 §4.3，需求方拍板「单休之后允许用户自定义单休是周几」）：
+ *   单休档下出现「休息日 = 周X」七选一（0=周一…6=周日，默认 6=周日，缺省回落周日
+ *   ⇒ 旧数据无迁移）；双休/大小休档隐藏。判定侧见 lib/workdays.ts isRestDay。
  * - 法定节假日开关（三档单选下方）：skipHolidays 默认 false（现状不变）。开启后由
  *   hydrate 边界（core/holidays/policy.ts）把内置节假日表合并进 extraHolidays/extraWorkdays，
  *   内置表**不落库**——草稿（saved）与落库值恒是用户手填的原始值，绝不指向 store 的
@@ -63,8 +66,12 @@ export function RestPolicySettingsButton(): JSX.Element | null {
  *   并提供「从下周起对调」——锚点周位移 1 周 ⇒ 偏移奇偶翻转 ⇒ 大休周/小休周互换；
  *   预览吃 withCnHolidays(draft)（开关开着时节假日必须体现在预览格里）；
  * - 保存：settings 表 key='restPolicy' 落库 → 同步 store 镜像（刷新后由 useRepos.hydrate 读回）。
+ *   影响工作日口径的字段发生变化且存在工作日制项目时，先弹 RestPolicyRecalcDialog
+ *   「预览即演算」确认（见 src/components/settings/RestPolicyRecalcDialog.tsx）。
  *
- * 已排定的阶段日期不会因切换制度而变更（九阶段日期是建档时写死的绝对值）。
+ * ⚠️ 历史结论作废（v3）：本文件头曾写「已排定的阶段日期不会因切换制度而变更」——
+ *   需求方 10-09 拍板**废止**：切换制度后已排阶段必须按新制度重算，产品设计见
+ *   product-redesign-calendar-print-2026-10-09.md §四。
  *
  * @param onClose 独立弹窗关闭回调；embedded 时不传（保存后不关闭外层设置面板）。
  * @param embedded 是否为嵌入态（隐藏「取消」、保存后不关闭外层）。
@@ -84,6 +91,12 @@ export function RestPolicyEditor({
   const [saving, setSaving] = useState(false);
 
   const todayIso = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
+
+  /** 单休休息周几（0=周一…6=周日）；缺省/非法回落 6=周日（旧数据无迁移） */
+  const restWeekday = useMemo(() => {
+    const v = draft.singleRestWeekday;
+    return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 6 ? v : 6;
+  }, [draft.singleRestWeekday]);
 
   /** 切换制度：切到大小休且锚点不可用时，以本周为大休周起算 */
   const onPickKind = (kind: RestPolicyKind): void => {
@@ -187,6 +200,60 @@ export function RestPolicyEditor({
         </p>
       </div>
 
+      {/*
+        单休：自定义休息日 = 周X 七选一（v3 §4.3，需求方拍板「选择单休之后允许
+        用户自定义单休是周几」）。索引 0..6 = 周一..周日（与 WEEKDAY_LABELS 同序），
+        默认 6=周日（缺省回落，旧数据无迁移）。双休/大小休档隐藏。
+        判定侧见 lib/workdays.ts isRestDay 的 SingleOff 分支。
+      */}
+      {draft.kind === RestPolicyKind.SingleOff && (
+        <div
+          className="mt-4 rounded-[12px] border border-line bg-cream/60 p-3"
+          data-testid="single-rest-weekday"
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-xs text-mist">
+              单休休息日 = <span className="text-ink">周{WEEKDAY_LABELS[restWeekday]}</span>
+              （每周只休这一天）
+            </span>
+            {restWeekday !== 6 && (
+              <button
+                type="button"
+                onClick={() => setDraft((prev) => ({ ...prev, singleRestWeekday: 6 }))}
+                className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
+                title="恢复出厂口径：周日休息"
+              >
+                恢复默认（周日）
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {WEEKDAY_LABELS.map((w, idx) => (
+              <button
+                key={w}
+                type="button"
+                data-testid={`rest-weekday-${idx}`}
+                aria-pressed={restWeekday === idx}
+                onClick={() => setDraft((prev) => ({ ...prev, singleRestWeekday: idx }))}
+                className={cn(
+                  'flex h-8 items-center justify-center rounded-[8px] border text-xs transition-colors',
+                  restWeekday === idx
+                    ? 'border-pine bg-pine-soft text-ink'
+                    : 'border-line text-mist hover:bg-sand hover:text-ink',
+                )}
+              >
+                周{w}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-2 text-[11px] leading-relaxed text-mist">
+            默认周日（与历史行为一致）。改为周内单休后，保存时可按新口径重算已排阶段。
+          </p>
+        </div>
+      )}
+
       {/* 大小休：未来 4 周预览 + 对调 */}
       {draft.kind === RestPolicyKind.BigSmallWeek && (
         <div className="mt-4 rounded-[12px] border border-line bg-cream/60 p-3">
@@ -250,7 +317,9 @@ export function RestPolicyEditor({
       )}
 
       <div className="mt-5 flex items-center justify-between gap-3">
-        <span className="text-[11px] text-mist">已排定的阶段日期不会因切换制度自动变更。</span>
+        <span className="text-[11px] text-mist">
+          切换制度后保存时，将按新口径重算已排阶段（保存前有确认预览）。
+        </span>
         <div className="flex gap-2">
           {!embedded && onClose && (
             <button
