@@ -133,8 +133,22 @@ export function ProjectCard({
       .filter((t) => cur && t.stageId === cur.id && !taskIsDone(t))
       .flatMap((t) => taskAssigneeIds(t)),
   );
+  /**
+   * 卡片成员行（「当前有哪些人在此项目中」）的取值口径。
+   *
+   * ★ 2026-10-08 补 `m.active`：与上一行 `stageMembers` 的口径对齐——同文件两条
+   * 成员过滤规则原本不一致（stageMembers 滤 active、这里漏了），停用成员只要还有
+   * 未完成任务，头像就继续挂在卡片上（她 10-08 点名的第 4 条）。
+   *
+   * 为什么不是「停用时清任务指派」：本产品**没有成员删除**（唯一出口是停用
+   * `setActive(false)`），任务的 assigneeIds 是历史事实，清了就丢了「这活当初
+   * 派给过谁」的记录。正确解法是**展示层按当前有效成员收窄**：卡片这行回答的是
+   * 「现在有谁在这个项目里」，停用的人不属于现在。
+   */
   const cardMembers = members.filter(
-    (m) => activeMemberIds.has(m.id) || (cur?.ownerId && m.id === cur.ownerId),
+    (m) =>
+      m.active &&
+      (activeMemberIds.has(m.id) || Boolean(cur?.ownerId && m.id === cur.ownerId)),
   );
 
   /*
