@@ -145,10 +145,13 @@ export function MonthDayCell({
       style={{ height: isMobile ? MOBILE_CELL_H : DESKTOP_CELL_H }}
       aria-label={`${day.date}${day.isToday ? '（今天）' : ''}，${items.length} 个项目`}
     >
-      {/* 日号（今天 = 18×18 圆点 + 白字，定稿重新定义为自然绿 --cal-today）；色点轴线对齐日号字轴（§3.5.1） */}
+      {/* 日号（今天 = 18×18 pine 圆点 + 白字）；色点轴线对齐日号字轴（§3.5.1）
+          ⚠️ 2026-10-08 二次拍板：定稿当时把「今天」改成自然绿 #2F9E77（--cal-today），
+          她看过实物后改回主题色靛蓝——「和别的地方不像」。用 bg-pine 而非写色值：
+          pine 随亮/暗主题自动换值（亮 #6366f1 / 暗 #828cf7），--cal-today 已删。 */}
       <div className="flex items-center justify-between gap-[2px]">
         {day.isToday ? (
-          <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--cal-today)] text-[11px] font-medium text-white">
+          <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-pine text-[11px] font-medium text-white">
             {day.day}
           </span>
         ) : (
