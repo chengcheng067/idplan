@@ -6,9 +6,12 @@ import {
   type SchedulePaperBlocks,
 } from '../lib/schedule-print';
 import {
+  PRINT_MODULE_IDS,
   isPrintTemplateId,
   legacySkinToTemplate,
-  printTemplatePages,
+  pageKindToModule,
+  printTemplateModuleIds,
+  type PrintModuleId,
   type PrintTemplateId,
 } from '../components/print/print-skins';
 import {
@@ -17,11 +20,11 @@ import {
   type PrintPalette,
   type PrintPaletteGateResult,
 } from '../print/model/print-palette';
-import type { PrintPageKind } from '../print/model/print-view-model';
 import { normalizeHex } from '../core/color/contrast';
 
 /**
- * 打印偏好（v0.8.6.0002 · 反馈 #9.2 / #9.3；四版模板重建 · 决策文档 §3.1）。
+ * 打印偏好（v0.8.6.0002 · 反馈 #9.2 / #9.3；四版模板重建 · 决策文档 §3.1；
+ * v1.5-a 期二「外表 × 模块分离」· 决策文档 §3.3）。
  *
  * ── 为什么是 zustand + persist 到 localStorage ──
  * 打印内容选择是**个人偏好**（怎么打自己的排期自己定），不是公司制度，
@@ -44,12 +47,19 @@ import { normalizeHex } from '../core/color/contrast';
  *
  * ── v0.8.6 四版重建的字段增量（skin → template + pages + palette）──
  *   · `template`：模板选择（'classic' = 原 'default' 皮肤转正，决策 ⑦）；
- *   · `pages`：每模板一套「启用页」勾选态，**缺键 = 该模板默认全选**
+ *   · `pages`：每模板一套勾选态，**缺键 = 默认全选**
  *     （01 §8 明文；换模板不丢勾选——两套粒度并存，决策文档 §2.2）；
  *   · `palette`：每模板一套三槽位自定义配色，**缺键 = 设计师基线**。
  *     setPalette 是**硬闸门**：对比度不达标直接拒绝落库并返回失败明细
  *     （产品决策文档 §3.2：禁存，不是提示）；merge 读路径同样过闸——
  *     脏 localStorage 里的踩线配色在 hydrate 时就被丢弃，不进纸面。
+ *
+ * ── v1.5-a 期二：pages 语义升级（页粒度 → 模块粒度，决策文档 §3.3）──
+ * 字段名沿用 `pages`（持久键不变，免一次 key 迁移），值的语义由
+ * 「启用**页**」（PrintPageKind[]）升级为「启用**模块**」
+ * （PrintModuleId[]）——4 套模板是外表，11 个内容模块跨模板可选。
+ * 旧持久数据在 merge 时迁移：旧页 key 逐条映射模块 key，**有一条映射
+ * 不了 ⇒ 该模板整组回落默认全选**（照现有兜底手法，脏数据不赌）。
  */
 
 /** localStorage key（单处定义；无首屏闪烁面，不需 index.html 引导脚本，见文件头） */
@@ -60,18 +70,22 @@ export interface PrintPrefsState {
   blocks: SchedulePaperBlocks;
   /** 当前模板（'classic' = 现有纸面） */
   template: PrintTemplateId;
-  /** 每模板一套「启用页」（缺键 = 默认全选；未知页 id 在 merge 时剔除） */
-  pages: Partial<Record<PrintTemplateId, PrintPageKind[]>>;
+  /**
+   * 每模板一套「启用模块」勾选态（期二：原「启用页」语义升级）。
+   * 缺键 = 该模板默认全选原生模块；未知/非原生模块 id 在 merge 时剔除。
+   * 纸面页序由 print-skins 的 enabledPagesOf 派生（注册表原生页序）。
+   */
+  pages: Partial<Record<PrintTemplateId, PrintModuleId[]>>;
   /** 每模板一套自定义三槽位配色（缺键 = 设计师基线；classic 永不有条目） */
   palette: Partial<Record<PrintTemplateId, PrintPalette>>;
   /** 摘/贴一块（即时重渲染纸面 = 所见即所得） */
   setBlock(key: keyof SchedulePaperBlocks, on: boolean): void;
   /** 切模板（选择器上截；即时重渲染） */
   setTemplate(id: PrintTemplateId): void;
-  /** 勾 / 消一页（缺键时从「默认全选」起手） */
-  setPageEnabled(template: PrintTemplateId, page: PrintPageKind, on: boolean): void;
-  /** 整模板设启用页集合（全选 / 反选；未知页 id 忽略） */
-  setTemplatePages(template: PrintTemplateId, pages: PrintPageKind[]): void;
+  /** 勾 / 消一个模块（缺键时从「默认全选原生」起手；非原生模块不接受） */
+  setModuleEnabled(template: PrintTemplateId, module: PrintModuleId, on: boolean): void;
+  /** 整模板设启用模块集合（全选 / 反选；非原生 id 忽略） */
+  setTemplateModules(template: PrintTemplateId, modules: PrintModuleId[]): void;
   /**
    * 存自定义配色。**硬闸门**：任一对对比度不达标 ⇒ 不落库 + 返回失败明细
    * （指名哪一对、当前比值多少）。传 null = 恢复设计师基线（删除该键）。
@@ -79,17 +93,36 @@ export interface PrintPrefsState {
   setPalette(template: PrintTemplateId, palette: PrintPalette | null): PrintPaletteGateResult;
 }
 
-/** 该模板的已知页 id（未知模板 / 经典 ⇒ 空集） */
-function knownPages(template: PrintTemplateId): PrintPageKind[] {
-  return printTemplatePages(template).map((p) => p.id);
+/** 该模板的原生模块 id（未知模板 / 经典 ⇒ 空集） */
+function nativeModules(template: PrintTemplateId): PrintModuleId[] {
+  return printTemplateModuleIds(template);
 }
 
-/** 规范化一组页勾选：只保留已知 id，按注册表顺序去重 */
-function normalizePages(template: PrintTemplateId, pages: unknown): PrintPageKind[] | null {
-  if (!Array.isArray(pages)) return null;
-  const known = knownPages(template);
-  const kept = new Set(pages.filter((p): p is PrintPageKind => known.includes(p as PrintPageKind)));
-  return known.filter((p) => kept.has(p));
+/** 规范化一组模块勾选（实时设置路径）：只留原生 id，按 PRINT_MODULES 序去重 */
+function normalizeModules(template: PrintTemplateId, value: unknown): PrintModuleId[] | null {
+  if (!Array.isArray(value)) return null;
+  const native = nativeModules(template);
+  const kept = new Set(value.filter((m): m is PrintModuleId => native.includes(m as PrintModuleId)));
+  return PRINT_MODULE_IDS.filter((m) => kept.has(m));
+}
+
+/**
+ * 旧 pages 数据迁移（期二：页粒度 → 模块粒度，决策文档 §3.3）：
+ * 旧页 key 逐条映射模块 key；**有一条映射不了 ⇒ 整组回落默认全选**
+ * （返回 null = 调用方不存该键 = 缺键全选，照现有 merge 兜底手法）。
+ * 映射成功的组按「原生 + 注册序」收编——跨模板脏页名自然滤掉，
+ * 与旧 normalizePages 的「未知页 id 剔除」同后果。
+ */
+function migrateLegacyPages(template: PrintTemplateId, value: unknown): PrintModuleId[] | null {
+  if (!Array.isArray(value)) return null;
+  const mapped = new Set<PrintModuleId>();
+  for (const page of value) {
+    const module = pageKindToModule(page);
+    if (module === null) return null;
+    mapped.add(module);
+  }
+  const native = nativeModules(template);
+  return PRINT_MODULE_IDS.filter((m) => native.includes(m) && mapped.has(m));
 }
 
 /** 规范化一组配色：三槽位全是合法 hex 才收（否则整组丢弃，回落基线） */
@@ -114,17 +147,17 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
       setBlock: (key, on) =>
         set((s) => ({ blocks: { ...s.blocks, [key]: on } })),
       setTemplate: (template) => set({ template }),
-      setPageEnabled: (template, page, on) =>
+      setModuleEnabled: (template, module, on) =>
         set((s) => {
-          const known = knownPages(template);
-          if (!known.includes(page)) return {};
-          const current = s.pages[template] ?? known;
-          const next = on ? [...new Set([...current, page])] : current.filter((p) => p !== page);
-          return { pages: { ...s.pages, [template]: known.filter((p) => next.includes(p)) } };
+          const native = nativeModules(template);
+          if (!native.includes(module)) return {};
+          const current = s.pages[template] ?? native;
+          const next = on ? [...new Set([...current, module])] : current.filter((m) => m !== module);
+          return { pages: { ...s.pages, [template]: PRINT_MODULE_IDS.filter((m) => next.includes(m)) } };
         }),
-      setTemplatePages: (template, pages) =>
+      setTemplateModules: (template, modules) =>
         set((s) => {
-          const next = normalizePages(template, pages);
+          const next = normalizeModules(template, modules);
           if (next === null) return {};
           return { pages: { ...s.pages, [template]: next } };
         }),
@@ -165,11 +198,14 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
         const template = isPrintTemplateId(p.template)
           ? p.template
           : legacySkinToTemplate(p.skin) ?? current.template;
-        // pages：已知模板的数组才收，未知页 id 剔除；缺键不补（缺键 = 全选）
-        const pages: Partial<Record<PrintTemplateId, PrintPageKind[]>> = {};
+        // pages（期二）：旧「启用页」（PrintPageKind[]）逐条迁「启用模块」
+        // （PrintModuleId[]）；有一条映射不了 ⇒ 该模板回落默认全选。
+        // classic 不走模块表（五块 blocks 另一套粒度）⇒ 不收它的键；
+        // 未知 template id 剔除（同 palette 口径）
+        const pages: Partial<Record<PrintTemplateId, PrintModuleId[]>> = {};
         for (const id of Object.keys(p.pages ?? {}) as PrintTemplateId[]) {
-          if (!isPrintTemplateId(id)) continue;
-          const next = normalizePages(id, (p.pages ?? {})[id]);
+          if (id === 'classic' || !isPrintTemplateId(id)) continue;
+          const next = migrateLegacyPages(id, (p.pages ?? {})[id]);
           if (next !== null) pages[id] = next;
         }
         // palette：三槽位合法 hex **且过闸门**才收——脏数据里的踩线配色在

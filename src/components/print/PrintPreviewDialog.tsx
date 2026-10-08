@@ -16,11 +16,12 @@
  *  D4 圆角 0 · D5 iframe 打印（src/lib/print-frame.ts）· D6 PNG 导出复用。
  *
  * ── v0.8.6 四版模板重建（产品决策文档 §2.1/§2.2）──
- *  「打印内容」钮升格为「模板与页面」一个 dropdown 三截：
- *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H；A/D 已实现，E/H
- *          未实现 ⇒ 建设中空态 + 禁打印，**不许假装能打**）；
- *    中截 输出页面：经典 = 五块复选框（数据结构逐字不变，保护既有 spec）；
- *          四版 = 页复选框（默认全选、全选/反选、联动「预计 N 页」）；
+ *  「打印内容」钮升格为「模板与模块」一个 dropdown 三截：
+ *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H，全部已实现）；
+ *    中截 输出模块：经典 = 五块复选框（数据结构逐字不变，保护既有 spec）；
+ *          四版 = 11 个内容模块复选框（原生可勾选默认全选、非原生禁用态
+ *          + 原因；勾选态按模板各存一套，换模板不丢——期二「外表 × 模块
+ *          分离」，产品决策文档 §3.2/§3.3）；
  *    下截 配色：三槽位受控 token（预设变体卡为主 + 自定义过对比度硬闸门），
  *          仅四版显示（经典是品牌资产，不开放）。
  *  工具条另加「灰度」toggle（纸面 wrapper 套 filter:grayscale(1)）——选色时
@@ -42,11 +43,15 @@ import { titleBarHeight } from '../../lib/topbarMetrics';
 import { isDesktop } from '../../lib/desktopBridge';
 import { A4_WIDTH_PX } from '../../lib/schedule-print';
 import {
+  PRINT_MODULES,
   PRINT_TEMPLATES,
+  enabledPagesOf,
   printTemplateMeta,
+  printTemplateModuleIds,
+  printTemplateModules,
   printTemplateName,
-  printTemplatePages,
 } from './print-skins';
+import type { PrintModuleId } from './print-skins';
 import { usePrintViewModel } from '../../print/adapters/use-print-view-model';
 import { usePrintLogo } from '../../print/adapters/use-print-logo';
 import { SwissScheduleDocument } from '../../print/documents/SwissScheduleDocument';
@@ -80,7 +85,7 @@ const BLOCK_ROWS: ReadonlyArray<{ key: keyof SchedulePaperBlocks; label: string;
  * `panelHeight` 是**实测高**（ResizeObserver 跟着内容变——配色编辑器展开时
  * 面板会长高，不重算会把底部裁出视口）。
  */
-function resolveBlocksPanelPos(
+function resolveSelectorPanelPos(
   anchor: HTMLElement,
   panelHeight: number,
 ): { top: number; left: number; minWidth: number } {
@@ -92,6 +97,102 @@ function resolveBlocksPanelPos(
     left: r.left,
     minWidth: r.width,
   };
+}
+
+/**
+ * 选择器中截 · 模块勾选（v1.5-a 期二：页勾选 → 模块勾选，产品决策文档 §3.3）。
+ *
+ * 11 个内容模块逐行：模块名 + 一句话内容说明 + 归属页提示。
+ *   · **原生模块**（该外表能力表内）：可勾选、默认全选，右侧标注原生页名
+ *     （H 的 Agent 执行 = 两页，标「Agent 执行宣告 + 执行状态全览」）；
+ *   · **非原生模块**：禁用态 + 原因——通用渲染是期三分期补，这里先立
+ *     「模块跨模板选」的产品形态，**不装能打**（禁用行不进纸面、不计页数）。
+ * 勾选态按模板各存一套（store pages），换外表不丢失。
+ *
+ * 为什么提成独立导出组件：截图 spec 用 renderToStaticMarkup 直接渲染它
+ * （同 PaletteSection 先例），不必拉起整个预览面板也能验收四套外表的
+ * 模块勾选态；dialogue 本体只负责接线（store ↔ 组件）。
+ */
+export function PrintModuleSection({
+  template,
+  enabledModules,
+  onToggle,
+  onSelectAll,
+  onSelectNone,
+}: {
+  template: PrintTemplateId;
+  enabledModules: readonly PrintModuleId[];
+  onToggle?: (module: PrintModuleId, on: boolean) => void;
+  onSelectAll?: () => void;
+  onSelectNone?: () => void;
+}): JSX.Element {
+  const caps = printTemplateModules(template);
+  const on = new Set(enabledModules);
+  return (
+    <div data-print-module-section="">
+      <div className="flex items-center justify-between px-2 pb-1 pt-2">
+        <span className="text-[11px] font-medium text-mist">输出模块</span>
+        <span className="flex gap-1">
+          <button
+            type="button"
+            data-print-modules-all=""
+            onClick={onSelectAll}
+            className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
+          >
+            全选
+          </button>
+          <button
+            type="button"
+            data-print-modules-none=""
+            onClick={onSelectNone}
+            className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
+          >
+            反选
+          </button>
+        </span>
+      </div>
+      <div className="flex flex-col gap-0.5 pb-1">
+        {PRINT_MODULES.map((m) => {
+          const cap = caps.find((c) => c.module === m.id);
+          const native = cap !== undefined;
+          const pageHint = cap ? cap.pages.map((p) => p.label).join(' + ') : '';
+          return (
+            <label
+              key={m.id}
+              data-print-module-row={m.id}
+              data-native={native ? 'on' : 'off'}
+              className={`flex select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] ${
+                native ? 'cursor-pointer text-ink hover:bg-sand' : 'cursor-not-allowed text-mist'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={native && on.has(m.id)}
+                disabled={!native}
+                onChange={(e) => onToggle?.(m.id, e.target.checked)}
+                data-print-module={m.id}
+                className="h-3.5 w-3.5 shrink-0 accent-pine disabled:opacity-40"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block whitespace-nowrap text-[13px] font-medium">{m.label}</span>
+                <span className="block truncate text-[11px] text-mist">{m.hint}</span>
+              </span>
+              {/* 归属页提示（原生 = 原生页名；非原生 = 禁用原因；超长截断，完整值进 title） */}
+              <span
+                className="shrink-0 max-w-[120px] truncate text-[11px] text-mist"
+                title={native ? pageHint : '该外表下暂不可用，将随通用渲染陆续支持'}
+              >
+                {native ? pageHint : '该外表下暂不可用'}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      <p className="px-2 pb-1.5 text-[11px] leading-relaxed text-mist">
+        非原生模块将随通用渲染陆续支持；模块勾选按外表各存一套，换外表不丢失。
+      </p>
+    </div>
+  );
 }
 
 export function PrintPreviewDialog({
@@ -106,12 +207,13 @@ export function PrintPreviewDialog({
   /** 打印偏好（个人偏好，localStorage 持久化；无角色门控——成员也打印） */
   const blocks = usePrintPrefsStore((s) => s.blocks);
   const template = usePrintPrefsStore((s) => s.template);
+  /** 每模板一套「启用模块」勾选态（期二：pages 语义 = 模块，见 store 文件头） */
   const pages = usePrintPrefsStore((s) => s.pages);
   const palette = usePrintPrefsStore((s) => s.palette);
   const setBlock = usePrintPrefsStore((s) => s.setBlock);
   const setTemplate = usePrintPrefsStore((s) => s.setTemplate);
-  const setPageEnabled = usePrintPrefsStore((s) => s.setPageEnabled);
-  const setTemplatePages = usePrintPrefsStore((s) => s.setTemplatePages);
+  const setModuleEnabled = usePrintPrefsStore((s) => s.setModuleEnabled);
+  const setTemplateModules = usePrintPrefsStore((s) => s.setTemplateModules);
 
   const d = useSchedulePaperData(projectId, blocks);
   const printVm = usePrintViewModel(projectId);
@@ -127,29 +229,30 @@ export function PrintPreviewDialog({
   /** 灰度预览（纸面 wrapper 套 grayscale(1)；选色自查 + 灰度快照验收用，不真打黑白） */
   const [grayscale, setGrayscale] = useState(false);
   /**
-   * 打印内容勾选面板（v0.8.6.0002 · 反馈 #9.2；四版重建升格为「模板与页面」）：
+   * 模板与模块下拉面板（v0.8.6.0002 · 反馈 #9.2；四版重建升格为三截选择器；
+   * 期二「外表 × 模块分离」中截改模块勾选，产品决策文档 §3.3）：
    * 挂预览面板内 = 勾选即时重渲染纸面（所见即所得），这是挂在这里的理由。
    * 深链路由（`*-print` 三条）没有本面板 ⇒ SchedulePaper 默认五块全开（兜底）。
    */
-  const [blocksOpen, setBlocksOpen] = useState(false);
-  const [blocksPos, setBlocksPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
-  const blocksTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const blocksPanelRef = useRef<HTMLDivElement | null>(null);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [selectorPos, setSelectorPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
+  const selectorTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const selectorPanelRef = useRef<HTMLDivElement | null>(null);
   /** 面板实测高（ResizeObserver 喂给定位：配色编辑器展开 / 模板切换都会变高） */
   const [panelHeight, setPanelHeight] = useState(420);
 
   /** 弹开期间窗口尺寸变化 ⇒ 锚点失效，直接收起（重开照当时锚点重算，不给陈旧坐标留路） */
   useEffect(() => {
-    if (!blocksOpen) return;
-    const onResize = (): void => setBlocksOpen(false);
+    if (!selectorOpen) return;
+    const onResize = (): void => setSelectorOpen(false);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [blocksOpen]);
+  }, [selectorOpen]);
 
   /** 面板实测高 → 重算定位（内容变高不 stale；只改 top/left 不会自激） */
   useEffect(() => {
-    if (!blocksOpen) return;
-    const el = blocksPanelRef.current;
+    if (!selectorOpen) return;
+    const el = selectorPanelRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => {
       const h = el.offsetHeight;
@@ -157,7 +260,7 @@ export function PrintPreviewDialog({
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [blocksOpen]);
+  }, [selectorOpen]);
 
   /**
    * 预览区元素（v0.8.6.0002 · 反馈 #9.1 修复）。
@@ -188,11 +291,15 @@ export function PrintPreviewDialog({
     return () => ro.disconnect();
   }, [zoom, stageEl]);
 
-  /** 该模板启用的页（缺键 = 默认全选，决策文档 §3.1） */
-  const enabledPages = useMemo<PrintPageKind[]>(() => {
-    const known = printTemplatePages(template).map((p) => p.id);
-    return pages[template] ?? known;
-  }, [template, pages]);
+  /**
+   * 该模板启用的纸面页（期二：模块勾选 ⇒ 原生页序派生）。
+   * 缺键 = 默认全选原生模块 = 旧「页勾选」默认态**逐页等价**（回归红线：
+   * 四套模板打印输出零变化）。非原生模块不在能力表 ⇒ 不进纸面、不计页数。
+   */
+  const enabledPages = useMemo<PrintPageKind[]>(
+    () => enabledPagesOf(template, pages[template]),
+    [template, pages],
+  );
 
   /** 预计页数：经典 = 分页产物；四版 = 启用页数（勾选即时联动） */
   const pagesCount = template === 'classic' ? d.pages.length : enabledPages.length;
@@ -269,24 +376,24 @@ export function PrintPreviewDialog({
             {d.project.name} · 预计 {pagesCount} 页 · A4
           </span>
           <span className="ml-auto" />
-          {/* 模板与页面（反馈 #9.2/#9.3 升格）：样式照缩放钮范式，点开是三截下拉 */}
+          {/* 模板与模块（反馈 #9.2/#9.3 升格；期二中截改模块勾选）：样式照缩放钮范式，点开是三截下拉 */}
           <button
             type="button"
-            ref={blocksTriggerRef}
-            aria-expanded={blocksOpen}
+            ref={selectorTriggerRef}
+            aria-expanded={selectorOpen}
             aria-haspopup="true"
-            aria-label="模板与页面"
+            aria-label="模板与模块"
             onClick={() => {
-              const el = blocksTriggerRef.current;
-              setBlocksPos(el ? resolveBlocksPanelPos(el, panelHeight) : null);
-              setBlocksOpen((v) => !v);
+              const el = selectorTriggerRef.current;
+              setSelectorPos(el ? resolveSelectorPanelPos(el, panelHeight) : null);
+              setSelectorOpen((v) => !v);
             }}
             className={`inline-flex items-center gap-1 rounded-[6px] border border-line bg-cream px-2 py-0.5 text-xs font-medium transition-colors ${
-              blocksOpen ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
+              selectorOpen ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
             }`}
           >
             <ListChecks size={14} aria-hidden />
-            模板与页面
+            模板与模块
           </button>
           {/* 灰度预览（决策文档 §3.2-②）：纸面套 grayscale(1)，选色自查 + 灰度验收 */}
           <button
@@ -424,7 +531,7 @@ export function PrintPreviewDialog({
                 >
                   <p className="text-sm font-medium text-ink">{printTemplateName(template)} · 页面建设中</p>
                   <p className="mt-2 text-xs leading-relaxed text-mist">
-                    模板已注册（{meta.pages.length} 页；页面勾选与配色槽位已就绪），
+                    模板已注册（{meta.modules.length} 个原生模块；模块勾选与配色槽位已就绪），
                     页面将在后续批次实现。当前不会输出任何纸面，打印与导出已禁用。
                   </p>
                 </div>
@@ -433,24 +540,24 @@ export function PrintPreviewDialog({
           </div>
         </div>
 
-        {/* 模板与页面下拉：Modal dropdown 档（z-[75] 无底色遮罩，盖得住
+        {/* 模板与模块下拉：Modal dropdown 档（z-[75] 无底色遮罩，盖得住
             fullscreen 预览但不压暗；portal / Esc / 焦点圈禁 / 滚动锁定白拿，
             面板自身按触发钮 fixed 定位——范式同 IndustrySelect） */}
         <Modal
-          open={blocksOpen}
-          onClose={() => setBlocksOpen(false)}
+          open={selectorOpen}
+          onClose={() => setSelectorOpen(false)}
           placement="dropdown"
-          ariaLabel="模板与页面"
+          ariaLabel="模板与模块"
         >
           <div
             role="group"
-            aria-label="模板与页面"
-            data-print-blocks-panel=""
-            ref={blocksPanelRef}
+            aria-label="模板与模块"
+            data-print-selector-panel=""
+            ref={selectorPanelRef}
             tabIndex={-1}
             style={
-              blocksPos
-                ? { top: blocksPos.top, left: blocksPos.left, minWidth: blocksPos.minWidth }
+              selectorPos
+                ? { top: selectorPos.top, left: selectorPos.left, minWidth: selectorPos.minWidth }
                 : { top: -9999, left: -9999 }
             }
             className="dropdown-pop-in fixed z-[1] w-[300px] rounded-md border border-line bg-paper p-1 shadow-overlay outline-none"
@@ -511,33 +618,15 @@ export function PrintPreviewDialog({
               })}
             </div>
 
-            {/* 中截 · 输出页面：经典=五块（数据结构逐字不变）；四版=页复选框 */}
-            <div className="border-t border-line px-2 pb-1.5 pt-2">
-              <div className="flex items-center justify-between pb-1">
-                <span className="text-[11px] font-medium text-mist">输出页面</span>
-                {!meta.usesBlocks && (
-                  <span className="flex gap-1">
-                    <button
-                      type="button"
-                      data-print-pages-all=""
-                      onClick={() => setTemplatePages(template, printTemplatePages(template).map((p) => p.id))}
-                      className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
-                    >
-                      全选
-                    </button>
-                    <button
-                      type="button"
-                      data-print-pages-none=""
-                      onClick={() => setTemplatePages(template, [])}
-                      className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
-                    >
-                      反选
-                    </button>
-                  </span>
-                )}
-              </div>
-              {meta.usesBlocks
-                ? BLOCK_ROWS.map((row) => (
+            {/* 中截 · 输出模块：经典=五块（数据结构逐字不变，保护既有 spec）；
+                四版=11 个内容模块勾选（期二「外表 × 模块分离」，决策文档 §3.3） */}
+            <div className="border-t border-line px-2 pb-1.5 pt-1">
+              {meta.usesBlocks ? (
+                <>
+                  <div className="flex items-center justify-between pb-1 pt-1">
+                    <span className="text-[11px] font-medium text-mist">打印内容（五块）</span>
+                  </div>
+                  {BLOCK_ROWS.map((row) => (
                     <label
                       key={row.key}
                       className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink hover:bg-sand"
@@ -552,23 +641,17 @@ export function PrintPreviewDialog({
                       <span className="flex-1 whitespace-nowrap">{row.label}</span>
                       <span className="shrink-0 text-[11px] text-mist">{row.hint}</span>
                     </label>
-                  ))
-                : printTemplatePages(template).map((p) => (
-                    <label
-                      key={p.id}
-                      className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink hover:bg-sand"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={enabledPages.includes(p.id)}
-                        onChange={(e) => setPageEnabled(template, p.id, e.target.checked)}
-                        data-print-page={p.id}
-                        className="h-3.5 w-3.5 shrink-0 accent-pine"
-                      />
-                      <span className="flex-1 whitespace-nowrap">{p.label}</span>
-                      <span className="shrink-0 text-[11px] text-mist">{p.hint}</span>
-                    </label>
                   ))}
+                </>
+              ) : (
+                <PrintModuleSection
+                  template={template}
+                  enabledModules={pages[template] ?? printTemplateModuleIds(template)}
+                  onToggle={(module, on) => setModuleEnabled(template, module, on)}
+                  onSelectAll={() => setTemplateModules(template, printTemplateModuleIds(template))}
+                  onSelectNone={() => setTemplateModules(template, [])}
+                />
+              )}
             </div>
 
             {/* 下截 · 配色：仅四版（经典是品牌资产不开放；未实现模板只提示） */}
