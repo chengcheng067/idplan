@@ -175,7 +175,10 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  /* 章节间距 12→20px（密度研究 §3-D：KPI 带 ↔ 矩阵是 L1↔L2 界面，规则 2
+     给 16-24px，取 20 统一；口径注被 margin:auto 压到板块底部，此间距是
+     下限不是实际视觉距） */
+  gap: 20px;
 }
 
 .print-root.print-template-data-editorial .de-foot {
@@ -272,7 +275,8 @@
 
 .print-root.print-template-data-editorial .de-table td {
   border-bottom: 1px solid var(--tpl-line);
-  padding: 7px 8px;
+  /* 矩阵行 7→6px（密度研究 §3-D：数据行已偏紧，微收即可，别压糊进度条） */
+  padding: 6px 8px;
   vertical-align: middle;
 }
 
@@ -292,6 +296,11 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* KPI 带**不参与本轮收紧**（密度研究 §5 拿不准处 + 产品原则拍板）：
+     22px mono 大数字是 D「数据编辑」版性的锚点，且产品判据「焦点必须松」
+     （每页唯一焦点留白加倍）+ 研究自己的规则 1 把 KPI 带归 L1（分组、应松）
+     ⇒ 原案的微压（22→20、padding 10→8）**撤回**，「紧」全交给矩阵数据行。
+     动它等于动版性，要动先过产品原则评审。 */
   padding: 10px 12px;
   border-right: 1px solid var(--tpl-ink);
 }
@@ -1002,7 +1011,12 @@
   color: var(--de-gray-700);
 }
 
-/* ── 密度档：15+ 阶段 / 12+ 阶段构成时压紧 ── */
+/* ── 密度档：15+ 阶段 / 12+ 阶段构成时压紧 ──
+   档位语义（密度研究 §3-D 明文）：compact = 超限项目的**应急档**（P1 矩阵
+   15+ 阶段 / P3 构成 12+ 阶段触发），不是第三档更细的密度——normal 本轮
+   收紧（td 7→6）后两档差距变小是预期的，compact 的 td 4px 保持不动：
+   它已贴「文字行高 + 2×3px」的行高下限（密度研究 §4 约束 1），再压就
+   会在线色被用户调深后出现文字碰线。 */
 .print-root.print-template-data-editorial .de-board[data-density='compact'] .de-table td {
   padding: 4px 8px;
   font-size: 10.5px;
