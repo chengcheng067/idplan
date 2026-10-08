@@ -164,6 +164,40 @@ export function schedulePngFileName(projectName: string, now: Date = new Date())
 export const A4_WIDTH_PX = 794;
 export const A4_HEIGHT_PX = 1123;
 
+/**
+ * 打印内容可摘块（v0.8.6.0002 · 反馈 #9.2「将选择权交给用户」）。
+ *
+ * 五个块各自可摘；**默认全开** ⇒ 不传选择的宿主（深链路由
+ * `/project/:id/schedule-print` 等）视觉与行为逐字不变。
+ *
+ * 为什么住在本模块（lib）而不是组件 `SchedulePaper.tsx`：
+ * 第一页预留高度（`firstPageHeaderFor`）要读它 ⇒ 分页纯函数依赖它；
+ * 打印偏好 store 要落它的默认值。放 lib 层让「store → lib」「组件 → lib」
+ * 两条依赖都指向叶子，store 不需要为了几个布尔值去 import 组件文件
+ * （组件 mock 一旦缺导出，store 初始化就会静默拿到残缺默认）。
+ */
+export interface SchedulePaperBlocks {
+  /** 打印头部：项目名 + 委托方·周期 + 打印日期 */
+  header: boolean;
+  /** 打印时间轴：第一页的甘特摘要（月份刻度 / 色带 / 图例） */
+  timeline: boolean;
+  /** 项目信息：排期基准 + 打印时间 */
+  projectInfo: boolean;
+  /** 阶段清单表（每页） */
+  stageTable: boolean;
+  /** 页脚：署名 + 页码 */
+  footer: boolean;
+}
+
+/** v1 默认：五块全开（= 现有纸面视觉；未接选项面板的宿主走此默认） */
+export const DEFAULT_SCHEDULE_PAPER_BLOCKS: SchedulePaperBlocks = {
+  header: true,
+  timeline: true,
+  projectInfo: true,
+  stageTable: true,
+  footer: true,
+};
+
 /** 高度估算常量（px，与 SchedulePrintPage 的行高/间距保持同量级） */
 const EST = {
   sectionHeader: 52,
@@ -177,6 +211,27 @@ const EST = {
   pagePadding: 88,
 };
 
+/**
+ * 时间轴（第一页甘特摘要）被摘掉后，第一页的非清单内容只剩
+ * 「打印头部 + 项目信息」（≈ 53 + 34 = 87，取 92 留余量）。
+ *
+ * 为什么必须分开给：打印内容自定义（反馈 #9.2）允许关掉时间轴，此时若仍按
+ * 母本 `firstPageHeader = 210`（那是「头部 + 时间轴」的合计预留）预留，
+ * 第一页会按少 ~120px 内容的空间分页 ⇒ 第一页下半部永久留白。
+ */
+export const FIRST_PAGE_HEADER_NO_TIMELINE = 92;
+
+/**
+ * 按打印内容选项推导第一页预留高度（供 `paginateSections` 第二参）：
+ *   · 时间轴在（默认 / 未传 ⇒ 深链路由与老调用方）⇒ 母本 210；
+ *   · 时间轴关 ⇒ FIRST_PAGE_HEADER_NO_TIMELINE。
+ * header / projectInfo 也关时不进一步细分——那两个块合计不足 90px，
+ * 多预留一点只是分页略保守，不会留白。
+ */
+export function firstPageHeaderFor(blocks?: SchedulePaperBlocks | null): number {
+  return blocks && blocks.timeline === false ? FIRST_PAGE_HEADER_NO_TIMELINE : EST.firstPageHeader;
+}
+
 /** 单个阶段 section 的估算高度 */
 export function estimateSectionHeight(s: ScheduleSection): number {
   const rows = s.tasks.length === 0 ? EST.emptySection : s.tasks.length * EST.row;
@@ -188,8 +243,15 @@ export function estimateSectionHeight(s: ScheduleSection): number {
  *   - 第一页额外扣除页头（项目信息 + 时间轴摘要）高度；
  *   - 超过可用高度即换页，保证 section 不被切断（break-inside 语义）。
  * 纯函数可测，返回二维数组（每个元素 = 一页的 sections）。
+ *
+ * `firstPageHeader` 为**可选参**（默认 = 母本 210）：打印内容自定义关掉
+ * 时间轴时传 `firstPageHeaderFor(blocks)` 得到的更小值；不传 = 老行为
+ * （A13「预计页数」spec 的复算常量 719 = 929 − 210 逐字不变）。
  */
-export function paginateSections(sections: ScheduleSection[]): ScheduleSection[][] {
+export function paginateSections(
+  sections: ScheduleSection[],
+  firstPageHeader: number = EST.firstPageHeader,
+): ScheduleSection[][] {
   const usable = A4_HEIGHT_PX - EST.pagePadding - EST.pageHeaderBand - EST.pageFooter;
   const pages: ScheduleSection[][] = [];
   let current: ScheduleSection[] = [];
@@ -198,7 +260,7 @@ export function paginateSections(sections: ScheduleSection[]): ScheduleSection[]
 
   for (const s of sections) {
     const h = estimateSectionHeight(s);
-    const limit = usable - (isFirstPage ? EST.firstPageHeader : 0);
+    const limit = usable - (isFirstPage ? firstPageHeader : 0);
     // 首个 section 即便超高也放入当前页（避免死循环）
     if (current.length > 0 && used + h > limit) {
       pages.push(current);

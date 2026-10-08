@@ -16,6 +16,13 @@
  *
  * 取色纪律同母本：一律走静态类映射（stageSolidClass / stageBandClass /
  * stageBandOutline / customStageColor），禁止模板字符串拼类名、禁止裸 hex。
+ *
+ * ── v0.8.6.0002 · 反馈 #9.2/#9.3 的增量（不违反上一条）──
+ * 五个内容块改为 `blocks` 可摘（默认全开 ⇒ 未传 prop 的宿主逐字不变），
+ * 根 div 追加皮肤类（v1 default = 零新 CSS）。**所有既有选择器与文案
+ * 一个未删**（条件渲染保留源码字符串）：print-preview.spec ④ 的七选择器、
+ * v07-dline / schedule-print-band-bounds 的「阶段清单」「打印时间轴」
+ * 均照旧命中。改本文件JSX结构前先读这几条 spec。
  */
 
 import type { Ref } from 'react';
@@ -30,8 +37,9 @@ import {
   stageBandColor,
 } from '../timeline/stageColors';
 import { customStageColor } from '../timeline/stageColorKey';
-import { A4_WIDTH_PX, A4_HEIGHT_PX, type ScheduleSection } from '../../lib/schedule-print';
+import { A4_WIDTH_PX, A4_HEIGHT_PX, type ScheduleSection, type SchedulePaperBlocks, DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../../lib/schedule-print';
 import type { Project, Stage } from '../../core/types/entities';
+import { printSkinClass, type PrintSkinId } from './print-skins';
 
 /** 母本同款：打印纸面需要的最小项目面（ Pick 而非全量，预览面板同样喂得起 ） */
 export interface SchedulePaperProject {
@@ -62,6 +70,10 @@ export interface SchedulePaperProps {
   role: string | null;
   /** 导出 PNG 的页面元素收集（ref callback 数组，宿主持有） */
   pageRef: (idx: number) => Ref<HTMLDivElement>;
+  /** 打印内容勾选（反馈 #9.2；缺省 = 五块全开，默认值见 schedule-print.ts 的 DEFAULT_SCHEDULE_PAPER_BLOCKS） */
+  blocks?: SchedulePaperBlocks;
+  /** 皮肤（反馈 #9.3；v1 仅 'default'，缺省 = 经典） */
+  skin?: PrintSkinId;
 }
 
 /** 状态胶囊（浅色底 + 深色字：纸面与打印均清晰可读，全部走命名 token）——母本逐字 */
@@ -119,10 +131,12 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
     totalDays,
     role,
     pageRef,
+    blocks = DEFAULT_SCHEDULE_PAPER_BLOCKS,
+    skin = 'default',
   } = props;
 
   return (
-    <div className="print-root mx-auto w-full max-w-[900px] px-6 py-8">
+    <div className={`print-root mx-auto w-full max-w-[900px] px-6 py-8 ${printSkinClass(skin)}`}>
       {/* A4 分页纸面（画板 09：宽 900 · paper 底 · line 描边 · padding 56） */}
       {pages.map((pageSections, idx) => (
         <div
@@ -132,57 +146,159 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
           style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX, padding: 56 }}
         >
           {/* 打印头部（画板 09：项目名 18/700 + 委托方·周期 13 · 右 打印日期 11） */}
-          <header className="flex items-start justify-between border-b border-line pb-3">
-            <div>
-              <h1 className="text-[18px] font-bold leading-tight text-ink">{project.name}</h1>
-              <p className="mt-0.5 text-[13px] text-mist">
-                {/* 委托方：仅管理员（与 ProjectDetailPage.tsx:181 同一门控口径）。 */}
-                {role === 'admin' && project.clientName && (
-                  <span>委托方：{project.clientName}　</span>
-                )}
-                周期：{startAt} – {endAt}（共 {totalDays} 天）
-              </p>
-            </div>
-            <span className="shrink-0 text-[11px] tabular-nums text-mist">打印日期 {nowText}</span>
-          </header>
+          {blocks.header && (
+            <header className="flex items-start justify-between border-b border-line pb-3">
+              <div>
+                <h1 className="text-[18px] font-bold leading-tight text-ink">{project.name}</h1>
+                <p className="mt-0.5 text-[13px] text-mist">
+                  {/* 委托方：仅管理员（与 ProjectDetailPage.tsx:181 同一门控口径）。 */}
+                  {role === 'admin' && project.clientName && (
+                    <span>委托方：{project.clientName}　</span>
+                  )}
+                  周期：{startAt} – {endAt}（共 {totalDays} 天）
+                </p>
+              </div>
+              <span className="shrink-0 text-[11px] tabular-nums text-mist">打印日期 {nowText}</span>
+            </header>
+          )}
 
-          {/* 第一页：打印时间轴（甘特）+ 阶段清单 */}
+          {/* 第一页：打印时间轴（甘特）+ 项目信息 */}
           {idx === 0 && (
             <>
               {/* 打印时间轴（画板 09：刻度行 + 每条阶段 阶段点 + 名称 + 日期区间 + 跨度色带） */}
-              <section className="mt-6">
-                <h2 className="mb-2 text-[15px] font-semibold text-ink">打印时间轴</h2>
-                {/*
-                  刻度行：**与色条同一坐标系**（母本 monthTicks 注释有完整判据，别改回去）。
-                  ⚠️ 两栏结构必须与下面轨道行**逐项对齐**（`w-40` / `gap-3` / `flex-1`）。
-                */}
-                <div className="mb-1.5 flex gap-3 text-[11px] text-mist">
-                  <div className="w-40 shrink-0" aria-hidden />
-                  <div className="relative h-4 flex-1">
-                    {monthTicks.map((t) => (
-                      <span
-                        key={t.label}
-                        data-print-month-tick=""
-                        data-tick-left={t.leftPercent.toFixed(2)}
-                        className="absolute top-0 whitespace-nowrap tabular-nums"
-                        style={{ left: `${t.leftPercent}%` }}
-                      >
-                        {t.label}
-                      </span>
-                    ))}
+              {blocks.timeline && (
+                <section className="mt-6">
+                  <h2 className="mb-2 text-[15px] font-semibold text-ink">打印时间轴</h2>
+                  {/*
+                    刻度行：**与色条同一坐标系**（母本 monthTicks 注释有完整判据，别改回去）。
+                    ⚠️ 两栏结构必须与下面轨道行**逐项对齐**（`w-40` / `gap-3` / `flex-1`）。
+                  */}
+                  <div className="mb-1.5 flex gap-3 text-[11px] text-mist">
+                    <div className="w-40 shrink-0" aria-hidden />
+                    <div className="relative h-4 flex-1">
+                      {monthTicks.map((t) => (
+                        <span
+                          key={t.label}
+                          data-print-month-tick=""
+                          data-tick-left={t.leftPercent.toFixed(2)}
+                          className="absolute top-0 whitespace-nowrap tabular-nums"
+                          style={{ left: `${t.leftPercent}%` }}
+                        >
+                          {t.label}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  {sections.map((s) => {
-                    const g = bandGeom(s.startAt, s.endAt);
-                    // ★ v0.8 通路 B：自定义 ⇒ 描边走 --stage-local-ink(-rgb)；内置 ⇒ 逐字节不变
-                    const outline = stageBandOutline(s.orderIndex, s.colorIndex, s.customColor);
+                  <div className="space-y-1.5">
+                    {sections.map((s) => {
+                      const g = bandGeom(s.startAt, s.endAt);
+                      // ★ v0.8 通路 B：自定义 ⇒ 描边走 --stage-local-ink(-rgb)；内置 ⇒ 逐字节不变
+                      const outline = stageBandOutline(s.orderIndex, s.colorIndex, s.customColor);
+                      const sc = customStageColor(s.customColor);
+                      return (
+                        <div key={s.orderIndex} className="flex items-center gap-3">
+                          <div className="flex w-40 shrink-0 items-center gap-1.5">
+                            <span
+                              className={`schedule-status-dot inline-block h-2.5 w-2.5 shrink-0 rounded-full${
+                                sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
+                              }`}
+                              style={
+                                sc.isCustom
+                                  ? { backgroundColor: stageSolidColor(s.orderIndex, s.colorIndex, s.customColor) }
+                                  : undefined
+                              }
+                              {...sc.attrs}
+                            />
+                            <span className="truncate text-[13px] text-ink">{s.name}</span>
+                          </div>
+                          <div className="relative h-9 flex-1 rounded-lg bg-sunken">
+                            <div
+                              className={`schedule-bar-segment absolute inset-y-1.5 rounded-md${
+                                sc.isCustom ? '' : ` ${stageBandClass(s.orderIndex)}`
+                              }`}
+                              style={{
+                                left: `${g.left}%`,
+                                width: `${g.width}%`,
+                                boxShadow: outline.boxShadow,
+                                ...(sc.isCustom
+                                  ? { backgroundColor: stageBandColor(s.orderIndex, s.colorIndex, s.customColor) }
+                                  : {}),
+                              }}
+                              {...sc.attrs}
+                              title={`${s.orderIndex}. ${s.name}（${s.startAt} — ${s.endAt} · ${statusLabel(s.status)}）`}
+                            />
+                          </div>
+                          <span className="shrink-0 tabular-nums text-[11px] text-mist">
+                            {s.startAt} — {s.endAt}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* 图例：阶段色点（实心块）+ 状态（全部命名 token，无裸 hex） */}
+                  <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-mist">
+                    <span className="inline-flex items-center gap-1.5">阶段色：</span>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                      <span
+                        key={n}
+                        className={`schedule-status-dot inline-block h-3 w-3 rounded-sm ${stageSolidClass(n)}`}
+                        title={`${n} ${STAGE_COLOR_NAMES[n] ?? ''}`}
+                      />
+                    ))}
+                    <span className="inline-flex items-center gap-1.5">
+                      状态：
+                      {(
+                        [
+                          StageStatus.NotStarted,
+                          StageStatus.InProgress,
+                          StageStatus.Completed,
+                          StageStatus.Delayed,
+                        ] as StageStatus[]
+                      ).map((st) => (
+                        <span key={st} className="ml-1 inline-flex items-center gap-1">
+                          <span
+                            className={`schedule-status-dot inline-block h-2.5 w-2.5 rounded-full ${statusDotCls(st)}`}
+                          />
+                          {statusLabel(st)}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                </section>
+              )}
+
+              {/* 项目信息（画板 09 打印头部下方：排期基准 / 打印时间） */}
+              {blocks.projectInfo && (
+                <p className="mt-4 text-xs leading-relaxed text-mist">
+                  排期基准：{SCHEDULE_BASIS_LABELS[project.scheduleBasis] ?? SCHEDULE_BASIS_LABELS[ScheduleBasis.Calendar]}
+                  {'　·　'}打印时间：{nowText}
+                </p>
+              )}
+            </>
+          )}
+
+          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 34 · 数据行 42 · 斑马纹） */}
+          {blocks.stageTable && (
+            <section className="mt-6 break-inside-avoid">
+              <h2 className="mb-2 text-[15px] font-semibold text-ink">阶段清单</h2>
+              <table className="schedule-table w-full overflow-hidden rounded-lg border border-line text-[13px]">
+                <thead>
+                  <tr className="bg-sunken text-left text-[11px] font-semibold text-mist">
+                    <th className="h-[34px] px-3 font-semibold">序号</th>
+                    <th className="px-3 font-semibold">阶段</th>
+                    <th className="px-3 font-semibold">起止日期</th>
+                    <th className="px-3 font-semibold">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageSections.map((s, i) => {
+                    // ★ 与时间轴摘要同一判定出口：阶段清单里的实心小块也必须跟着自定义色走
                     const sc = customStageColor(s.customColor);
                     return (
-                      <div key={s.orderIndex} className="flex items-center gap-3">
-                        <div className="flex w-40 shrink-0 items-center gap-1.5">
+                      <tr key={s.orderIndex} className={i % 2 === 1 ? 'bg-sunken/60' : ''}>
+                        <td className="h-[42px] px-3">
                           <span
-                            className={`schedule-status-dot inline-block h-2.5 w-2.5 shrink-0 rounded-full${
+                            className={`mr-1.5 inline-block h-3 w-3 rounded-sm align-middle${
                               sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
                             }`}
                             style={
@@ -192,126 +308,34 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
                             }
                             {...sc.attrs}
                           />
-                          <span className="truncate text-[13px] text-ink">{s.name}</span>
-                        </div>
-                        <div className="relative h-9 flex-1 rounded-lg bg-sunken">
-                          <div
-                            className={`schedule-bar-segment absolute inset-y-1.5 rounded-md${
-                              sc.isCustom ? '' : ` ${stageBandClass(s.orderIndex)}`
-                            }`}
-                            style={{
-                              left: `${g.left}%`,
-                              width: `${g.width}%`,
-                              boxShadow: outline.boxShadow,
-                              ...(sc.isCustom
-                                ? { backgroundColor: stageBandColor(s.orderIndex, s.colorIndex, s.customColor) }
-                                : {}),
-                            }}
-                            {...sc.attrs}
-                            title={`${s.orderIndex}. ${s.name}（${s.startAt} — ${s.endAt} · ${statusLabel(s.status)}）`}
-                          />
-                        </div>
-                        <span className="shrink-0 tabular-nums text-[11px] text-mist">
-                          {s.startAt} — {s.endAt}
-                        </span>
-                      </div>
+                          <span className="text-ink">{s.orderIndex}</span>
+                        </td>
+                        <td className="px-3 text-ink">{s.name}</td>
+                        <td className="px-3 tabular-nums text-mist">{s.startAt} — {s.endAt}</td>
+                        <td className="px-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusChipCls(s.status)}`}
+                          >
+                            {statusLabel(s.status)}
+                          </span>
+                        </td>
+                      </tr>
                     );
                   })}
-                </div>
-                {/* 图例：阶段色点（实心块）+ 状态（全部命名 token，无裸 hex） */}
-                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-mist">
-                  <span className="inline-flex items-center gap-1.5">阶段色：</span>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                    <span
-                      key={n}
-                      className={`schedule-status-dot inline-block h-3 w-3 rounded-sm ${stageSolidClass(n)}`}
-                      title={`${n} ${STAGE_COLOR_NAMES[n] ?? ''}`}
-                    />
-                  ))}
-                  <span className="inline-flex items-center gap-1.5">
-                    状态：
-                    {(
-                      [
-                        StageStatus.NotStarted,
-                        StageStatus.InProgress,
-                        StageStatus.Completed,
-                        StageStatus.Delayed,
-                      ] as StageStatus[]
-                    ).map((st) => (
-                      <span key={st} className="ml-1 inline-flex items-center gap-1">
-                        <span
-                          className={`schedule-status-dot inline-block h-2.5 w-2.5 rounded-full ${statusDotCls(st)}`}
-                        />
-                        {statusLabel(st)}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              </section>
-
-              {/* 项目信息（画板 09 打印头部下方：排期基准 / 打印时间） */}
-              <p className="mt-4 text-xs leading-relaxed text-mist">
-                排期基准：{SCHEDULE_BASIS_LABELS[project.scheduleBasis] ?? SCHEDULE_BASIS_LABELS[ScheduleBasis.Calendar]}
-                {'　·　'}打印时间：{nowText}
-              </p>
-            </>
+                </tbody>
+              </table>
+            </section>
           )}
 
-          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 34 · 数据行 42 · 斑马纹） */}
-          <section className="mt-6 break-inside-avoid">
-            <h2 className="mb-2 text-[15px] font-semibold text-ink">阶段清单</h2>
-            <table className="schedule-table w-full overflow-hidden rounded-lg border border-line text-[13px]">
-              <thead>
-                <tr className="bg-sunken text-left text-[11px] font-semibold text-mist">
-                  <th className="h-[34px] px-3 font-semibold">序号</th>
-                  <th className="px-3 font-semibold">阶段</th>
-                  <th className="px-3 font-semibold">起止日期</th>
-                  <th className="px-3 font-semibold">状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageSections.map((s, i) => {
-                  // ★ 与时间轴摘要同一判定出口：阶段清单里的实心小块也必须跟着自定义色走
-                  const sc = customStageColor(s.customColor);
-                  return (
-                    <tr key={s.orderIndex} className={i % 2 === 1 ? 'bg-sunken/60' : ''}>
-                      <td className="h-[42px] px-3">
-                        <span
-                          className={`mr-1.5 inline-block h-3 w-3 rounded-sm align-middle${
-                            sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
-                          }`}
-                          style={
-                            sc.isCustom
-                              ? { backgroundColor: stageSolidColor(s.orderIndex, s.colorIndex, s.customColor) }
-                              : undefined
-                          }
-                          {...sc.attrs}
-                        />
-                        <span className="text-ink">{s.orderIndex}</span>
-                      </td>
-                      <td className="px-3 text-ink">{s.name}</td>
-                      <td className="px-3 tabular-nums text-mist">{s.startAt} — {s.endAt}</td>
-                      <td className="px-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusChipCls(s.status)}`}
-                        >
-                          {statusLabel(s.status)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-
           {/* 打印页脚（画板 09：左 署名 · 右 页码） */}
-          <footer className="mt-auto flex items-center justify-between border-t border-line pt-3 text-[11px] tabular-nums text-mist">
-            <span>ID Plan · 项目排期与交付管理</span>
-            <span>
-              第 {idx + 1} / {pages.length} 页
-            </span>
-          </footer>
+          {blocks.footer && (
+            <footer className="mt-auto flex items-center justify-between border-t border-line pt-3 text-[11px] tabular-nums text-mist">
+              <span>ID Plan · 项目排期与交付管理</span>
+              <span>
+                第 {idx + 1} / {pages.length} 页
+              </span>
+            </footer>
+          )}
         </div>
       ))}
     </div>

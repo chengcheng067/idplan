@@ -18,14 +18,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Download, Printer, X } from 'lucide-react';
+import { Download, ListChecks, Printer, X } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { SchedulePaper } from './SchedulePaper';
 import { useSchedulePaperData } from './useSchedulePaperData';
 import { printPaper } from '../../lib/print-frame';
-import { exportSchedulePngPages, schedulePngFileName } from '../../lib/schedule-print';
+import { exportSchedulePngPages, schedulePngFileName, type SchedulePaperBlocks } from '../../lib/schedule-print';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { usePrintPrefsStore } from '../../store/usePrintPrefsStore';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { isDesktop } from '../../lib/desktopBridge';
 import { A4_WIDTH_PX } from '../../lib/schedule-print';
@@ -36,6 +37,32 @@ const GAP_BETWEEN_PAGES = 24;
 
 type Zoom = 'fit' | '100';
 
+/** 打印内容勾选面板的行（键 ↔ SchedulePaperBlocks；hint 是该块的通俗解释） */
+const BLOCK_ROWS: ReadonlyArray<{ key: keyof SchedulePaperBlocks; label: string; hint: string }> = [
+  { key: 'header', label: '打印头部', hint: '项目名 / 周期' },
+  { key: 'timeline', label: '打印时间轴', hint: '甘特图' },
+  { key: 'projectInfo', label: '项目信息', hint: '排期基准' },
+  { key: 'stageTable', label: '阶段清单', hint: '表格' },
+  { key: 'footer', label: '页脚', hint: '署名 / 页码' },
+];
+
+/**
+ * 勾选面板定位（锚定触发钮；下方空间不够则向上翻）——范式同
+ * `IndustrySelect.resolvePanelPos`（0.8.5 A 规范 §A.4）：Modal 只出
+ * portal / 遮罩 / 焦点圈禁，面板自身 fixed 定位。
+ */
+function resolveBlocksPanelPos(anchor: HTMLElement): { top: number; left: number; minWidth: number } {
+  const r = anchor.getBoundingClientRect();
+  const panelHeight = BLOCK_ROWS.length * 30 + 34;
+  const below = window.innerHeight - r.bottom;
+  const flipUp = below < panelHeight + 8 && r.top > below;
+  return {
+    top: flipUp ? Math.max(8, r.top - panelHeight - 4) : r.bottom + 4,
+    left: r.left,
+    minWidth: r.width,
+  };
+}
+
 export function PrintPreviewDialog({
   projectId,
   open,
@@ -45,13 +72,34 @@ export function PrintPreviewDialog({
   open: boolean;
   onClose: () => void;
 }): JSX.Element | null {
-  const d = useSchedulePaperData(projectId);
+  /** 打印偏好（个人偏好，localStorage 持久化；无角色门控——成员也打印） */
+  const blocks = usePrintPrefsStore((s) => s.blocks);
+  const skin = usePrintPrefsStore((s) => s.skin);
+  const setBlock = usePrintPrefsStore((s) => s.setBlock);
+
+  const d = useSchedulePaperData(projectId, blocks);
   const paperRootRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [zoom, setZoom] = useState<Zoom>('fit');
   const [scale, setScale] = useState(1);
   const [printBusy, setPrintBusy] = useState(false);
   const [pngBusy, setPngBusy] = useState(false);
+  /**
+   * 打印内容勾选面板（v0.8.6.0002 · 反馈 #9.2）：
+   * 挂预览面板内 = 勾选即时重渲染纸面（所见即所得），这是挂在这里的理由。
+   * 深链路由（`*-print` 三条）没有本面板 ⇒ SchedulePaper 默认五块全开（兜底）。
+   */
+  const [blocksOpen, setBlocksOpen] = useState(false);
+  const [blocksPos, setBlocksPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
+  const blocksTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  /** 弹开期间窗口尺寸变化 ⇒ 锚点失效，直接收起（重开照当时锚点重算，不给陈旧坐标留路） */
+  useEffect(() => {
+    if (!blocksOpen) return;
+    const onResize = (): void => setBlocksOpen(false);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [blocksOpen]);
   /**
    * 预览区元素（v0.8.6.0002 · 反馈 #9.1 修复）。
    *
@@ -147,6 +195,25 @@ export function PrintPreviewDialog({
             {d.project.name} · 预计 {pagesCount} 页 · A4
           </span>
           <span className="ml-auto" />
+          {/* 打印内容勾选（反馈 #9.2）：样式照缩放钮范式，点开是五块勾选面板 */}
+          <button
+            type="button"
+            ref={blocksTriggerRef}
+            aria-expanded={blocksOpen}
+            aria-haspopup="true"
+            aria-label="打印内容"
+            onClick={() => {
+              const el = blocksTriggerRef.current;
+              setBlocksPos(el ? resolveBlocksPanelPos(el) : null);
+              setBlocksOpen((v) => !v);
+            }}
+            className={`inline-flex items-center gap-1 rounded-[6px] border border-line bg-cream px-2 py-0.5 text-xs font-medium transition-colors ${
+              blocksOpen ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
+            }`}
+          >
+            <ListChecks size={14} aria-hidden />
+            打印内容
+          </button>
           {/* 缩放二态（规范 §2：fit / 100%，不做滑块） */}
           <div className="flex rounded-[8px] border border-line bg-cream p-0.5" role="group" aria-label="预览缩放">
             {zoomBtn('fit', '适应')}
@@ -198,10 +265,53 @@ export function PrintPreviewDialog({
                 pageRef={(idx) => (el: HTMLDivElement | null) => {
                   pageRefs.current[idx] = el;
                 }}
+                blocks={blocks}
+                skin={skin}
               />
             </div>
           </div>
         </div>
+
+        {/* 打印内容勾选面板：Modal dropdown 档（z-[75] 无底色遮罩，盖得住
+            fullscreen 预览但不压暗；portal / Esc / 焦点圈禁 / 滚动锁定白拿，
+            面板自身按触发钮 fixed 定位——范式同 IndustrySelect） */}
+        <Modal
+          open={blocksOpen}
+          onClose={() => setBlocksOpen(false)}
+          placement="dropdown"
+          ariaLabel="打印内容选项"
+        >
+          <div
+            role="group"
+            aria-label="打印内容选项"
+            data-print-blocks-panel=""
+            tabIndex={-1}
+            style={
+              blocksPos
+                ? { top: blocksPos.top, left: blocksPos.left, minWidth: blocksPos.minWidth }
+                : { top: -9999, left: -9999 }
+            }
+            className="dropdown-pop-in fixed z-[1] w-[236px] rounded-md border border-line bg-paper p-1 shadow-overlay outline-none"
+          >
+            <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-mist">勾选要打印的内容，纸面即时更新</p>
+            {BLOCK_ROWS.map((row) => (
+              <label
+                key={row.key}
+                className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink hover:bg-sand"
+              >
+                <input
+                  type="checkbox"
+                  checked={blocks[row.key]}
+                  onChange={(e) => setBlock(row.key, e.target.checked)}
+                  data-print-block={row.key}
+                  className="h-3.5 w-3.5 shrink-0 accent-pine"
+                />
+                <span className="flex-1 whitespace-nowrap">{row.label}</span>
+                <span className="shrink-0 text-[11px] text-mist">{row.hint}</span>
+              </label>
+            ))}
+          </div>
+        </Modal>
 
         {/* 动作条：36px 主操作族；PDF 出口=打印对话框另存（规范 §4.2，不设重复按钮） */}
         <div

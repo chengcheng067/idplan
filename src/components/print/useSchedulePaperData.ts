@@ -17,7 +17,13 @@ import { useMemo } from 'react';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectById, useProjectStages, useProjectTasks } from '../../core/project/visibility';
 import { computeRelatedStageIds, isRestrictedView, useRoleGuard } from '../../hooks/useRoleGuard';
-import { buildScheduleSections, paginateSections, type ScheduleSection } from '../../lib/schedule-print';
+import {
+  buildScheduleSections,
+  firstPageHeaderFor,
+  paginateSections,
+  type SchedulePaperBlocks,
+  type ScheduleSection,
+} from '../../lib/schedule-print';
 import { buildMonthTicks, totalDaysInclusive } from '../../lib/date';
 
 export interface SchedulePaperData {
@@ -40,7 +46,15 @@ export interface SchedulePaperData {
 /** MIN_LABEL_GAP_PCT：母本逐字（启发式阈值，轨宽变化需复核） */
 const MIN_LABEL_GAP_PCT = 12;
 
-export function useSchedulePaperData(id: string): SchedulePaperData {
+/**
+ * 排期纸面数据。
+ *
+ * `blocks`（v0.8.6.0002 · 反馈 #9.2）：打印内容勾选，**可选参**。缺省 = 母本
+ * 行为（时间轴在 ⇒ 第一页按 210 预留）——深链路由 `SchedulePrintPage` 不传即
+ * 逐字不变；预览面板传用户勾选，关掉时间轴时第一页预留同步降到 92
+ * （`firstPageHeaderFor`），否则第一页会按少一截内容的空间分页、下半部留白。
+ */
+export function useSchedulePaperData(id: string, blocks?: SchedulePaperBlocks): SchedulePaperData {
   const project = useProjectById(id);
   const stages = useProjectStages(id);
   const tasks = useProjectTasks(id);
@@ -68,7 +82,12 @@ export function useSchedulePaperData(id: string): SchedulePaperData {
     () => (project ? buildScheduleSections({ project, stages: visibleStages, tasks, members }) : []),
     [project, visibleStages, tasks, members],
   );
-  const pages = useMemo(() => paginateSections(sections), [sections]);
+  // 分页随打印内容联动（反馈 #9.2）：关时间轴 ⇒ 第一页预留 210→92。
+  // blocks 是 store 里的稳定对象（未改动时引用不变）⇒ 不会无辜重算。
+  const pages = useMemo(
+    () => paginateSections(sections, firstPageHeaderFor(blocks)),
+    [sections, blocks],
+  );
   const nowIso = new Date().toISOString();
 
   // ── 以下母本逐字（越界窗口 union / 脏行过滤 / 同坐标系刻度）──
