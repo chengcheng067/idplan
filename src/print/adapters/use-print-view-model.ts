@@ -12,6 +12,12 @@
  * 故有仓储上下文时整项目拉一次（listStageLogsByProject）；没有时（孤立渲染 /
  * 单测）退回缓存，保证纯函数路径可测。
  *
+ * ── Agent 执行域（H 版）为什么也走「仓库拉取 + 失败回落空态」 ──
+ * executions / proposals 不进任何 store（执行域是 Agent 看板的自留地，
+ * 打印只读投影）。H 版批次在本 hook 补装载：listExecutionsByProject +
+ * 逐单 listProposals（AgentBoardPage 同手法）；拉取失败**静默回落空态**
+ * ——治理公示稿不许出现模拟记录（02 §8），空态是唯一诚实选项。
+ *
  * ── 为什么用 try/catch 包 useRepos() ──
  * useRepos() 在无 RepoProvider 的环境（tests/print-options 等把本面板孤立渲染）
  * 会抛 ChangxiaError。本 hook 的装载是**尽力而为**：拿不到仓储就退回缓存，
@@ -26,8 +32,9 @@ import { useProjectsStore } from '../../store/useProjectsStore';
 import { useProjectById, useProjectStages, useProjectTasks } from '../../core/project/visibility';
 import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
-import type { Project, StageLog } from '../../core/types/entities';
+import type { Member, Project, Stage, StageLog, Task } from '../../core/types/entities';
 import type { IRepositoryBundle } from '../../core/repositories/interfaces';
+import type { Execution, WritebackProposal } from '../../core/types/agent-execution';
 
 import { buildPrintViewModel } from './project-print-adapter';
 import type { PrintViewModel } from '../model/print-view-model';
@@ -72,6 +79,17 @@ export function usePrintViewModel(projectId: string): PrintViewModelData {
   const repos = useReposOrNull();
 
   const [projectLogs, setProjectLogs] = useState<StageLog[] | null>(null);
+  /**
+   * Agent 执行域数据（H 版消费；地基的适配器入参已就绪，本 hook 补装载——
+   * 「仓库优先、失败静默回落空态」：拉不到不进假数据，H 版走明确空态）。
+   *
+   * 提案按执行单逐条拉（仓储只有 listProposals(executionId) 维度），
+   * 与 AgentBoardPage.tsx:347-352 同一手法。
+   */
+  const [agentData, setAgentData] = useState<{
+    executions: Execution[];
+    proposals: WritebackProposal[];
+  } | null>(null);
 
   // 整项目拉一次流水（切项目 / bundle 就绪时重拉）；失败静默（退回缓存）
   useEffect(() => {
@@ -90,6 +108,26 @@ export function usePrintViewModel(projectId: string): PrintViewModelData {
     };
   }, [repos, projectId]);
 
+  // Agent 执行 + 写回提案（H 版数据面；失败静默 ⇒ 空态，不填模拟记录）
+  useEffect(() => {
+    if (!repos || !projectId) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const executions = await repos.executions.listExecutionsByProject(projectId);
+        const proposalRows = await Promise.all(
+          executions.map((e) => repos.executions.listProposals(e.id)),
+        );
+        if (alive) setAgentData({ executions, proposals: proposalRows.flat() });
+      } catch {
+        /* 拉取失败不阻断打印：H 版回落明确空态（02 §8） */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [repos, projectId]);
+
   const vm = useMemo(() => {
     if (!project || !hydrated) return null;
     const stageIds = new Set(stages.map((s) => s.id));
@@ -100,10 +138,12 @@ export function usePrintViewModel(projectId: string): PrintViewModelData {
       tasks,
       members,
       stageLogs,
+      executions: agentData?.executions,
+      proposals: agentData?.proposals,
       role,
       currentMemberId: currentMember?.id ?? null,
     });
-  }, [project, stages, tasks, members, stageLogCache, projectLogs, role, currentMember, hydrated]);
+  }, [project, stages, tasks, members, stageLogCache, projectLogs, agentData, role, currentMember, hydrated]);
 
   return { vm, project, hydrated };
 }
