@@ -6,7 +6,7 @@
  *
  * 三种制度：
  *   DoubleOff    双休   周六 + 周日休息
- *   SingleOff    单休   仅周日休息
+ *   SingleOff    单休   仅 singleRestWeekday 那天休息（缺省=周日，可自选周几）
  *   BigSmallWeek 大小休 周日固定休息，周六按 ISO 周交替（大休周休息 / 小休周上班）
  *
  * 大小休的交替由 anchorWeek（'YYYY-Www'，如 '2026-W35'）锚定：锚点周为大休周，
@@ -94,21 +94,39 @@ function isBigRestWeek(date: string, anchorWeek: string | null): boolean {
 }
 
 /**
+ * 单休的自定义休息周几（RestPolicyConfig.singleRestWeekday，0=周一…6=周日，
+ * 缺省/非法 = 6=周日）→ dayjs day() 口径（0=周日…6=周六）。
+ *
+ * 字段口径与仓库周一始终口径一致（CalendarPrintPage.tsx WEEKDAYS 一~日）；
+ * dayjs 的 day() 是 0=周日 开头，故这里做一次换算。旧数据缺省 = 周日
+ * ⇒ 与改造前「单休=周日休」逐字节一致，无迁移脚本。
+ */
+function singleRestDayjsDow(singleRestWeekday: number | undefined): number {
+  const v = singleRestWeekday ?? 6;
+  if (!Number.isInteger(v) || v < 0 || v > 6) return 0; // 非法值回落周日
+  return v === 6 ? 0 : v + 1;
+}
+
+/**
  * 该日是否休息。
  * 优先级：extraWorkdays 命中 → 上班（最高，短路）；extraHolidays 命中 → 休息；
- * 否则按 kind 判定周末。
+ * 否则按 kind 判定周末。单休读 singleRestWeekday（缺省=周日）；双休/大小休
+ * 的周日 + 大小休周六锚点逻辑不变。
  */
 export function isRestDay(date: string, policy: RestPolicyConfig): boolean {
   if (policy.extraWorkdays?.includes(date)) return false;
   if (policy.extraHolidays?.includes(date)) return true;
 
   const dow = dayjs(date).day(); // 0=周日 … 6=周六
-  if (dow === 0) return true; // 周日：三种制度都休息
+  if (policy.kind === RestPolicyKind.SingleOff) {
+    // 单休：仅自定义休息日那天休息（缺省=周日，保持历史行为）
+    return dow === singleRestDayjsDow(policy.singleRestWeekday);
+  }
+  if (dow === 0) return true; // 周日：双休/大小休都休息
   if (dow !== 6) return false; // 周一~周五：一律上班
 
-  // 周六：双休息 / 单休上班 / 大小休看锚点周奇偶
+  // 周六：双休息 / 大小休看锚点周奇偶
   if (policy.kind === RestPolicyKind.DoubleOff) return true;
-  if (policy.kind === RestPolicyKind.SingleOff) return false;
   return isBigRestWeek(date, policy.anchorWeek);
 }
 

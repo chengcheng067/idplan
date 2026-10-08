@@ -514,6 +514,15 @@ export interface RestPolicyConfig {
    * 双休/单休为 null。
    */
   anchorWeek: string | null;
+  /**
+   * 单休的自定义休息周几（v3 · 产品决策文档 §4.3，需求方拍板「单休之后允许
+   * 用户自定义单休是周几」）。**仅 SingleOff 有意义**，双休/大小休忽略。
+   *
+   * 口径：0=周一 … 6=周日（与仓库周一始终口径一致，CalendarPrintPage.tsx
+   * WEEKDAYS 一~日同 conventions）。**默认 6=周日**——与改造前「单休=周日休」
+   * 逐字节一致；旧数据缺省本字段 ⇒ 读时回落周日，**无迁移脚本**。
+   */
+  singleRestWeekday?: number;
   /** 法定节假日预留扩展点（MVP 不接数据）：命中即休息，优先级低于 extraWorkdays */
   extraHolidays?: string[];
   /** 调休上班日预留扩展点（MVP 不接数据）：命中即上班，优先级最高 */

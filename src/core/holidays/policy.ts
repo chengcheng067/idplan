@@ -63,14 +63,13 @@ export function withCnHolidays(policy: RestPolicyConfig): RestPolicyConfig {
 /**
  * 把任意解析结果收敛成合法 RestPolicyConfig；无法识别时回落默认值。
  * 体例与 `useRepos.ts` 旧实现逐行一致，仅追加 `skipHolidays` 字段
- * （旧行缺省 ⇒ false ⇒ 现状不变）。
+ * （旧行缺省 ⇒ false ⇒ 现状不变）与 `singleRestWeekday`（单休自定义休息
+ * 周几，0=周一…6=周日，缺省/非法 ⇒ undefined ⇒ 读时回落周日，无迁移）。
  */
 export function normalizeRestPolicy(raw: unknown): RestPolicyConfig {
   if (typeof raw !== 'object' || raw === null) return DEFAULT_REST_POLICY;
-  const { kind, anchorWeek, extraHolidays, extraWorkdays, skipHolidays } = raw as Record<
-    string,
-    unknown
-  >;
+  const { kind, anchorWeek, extraHolidays, extraWorkdays, skipHolidays, singleRestWeekday } =
+    raw as Record<string, unknown>;
   if (!ALL_REST_POLICIES.includes(kind as RestPolicyKind)) return DEFAULT_REST_POLICY;
   return {
     kind: kind as RestPolicyKind,
@@ -82,6 +81,13 @@ export function normalizeRestPolicy(raw: unknown): RestPolicyConfig {
       ? extraWorkdays.filter((d): d is string => typeof d === 'string')
       : undefined,
     skipHolidays: skipHolidays === true,
+    singleRestWeekday:
+      typeof singleRestWeekday === 'number' &&
+      Number.isInteger(singleRestWeekday) &&
+      singleRestWeekday >= 0 &&
+      singleRestWeekday <= 6
+        ? singleRestWeekday
+        : undefined,
   };
 }
 
