@@ -7,6 +7,8 @@ import type { RestPolicyConfig } from '../../core/types/entities';
 import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { buildRestDayPreview, isValidAnchorWeek, isoWeekIdOf, shiftIsoWeek } from '../../lib/restPolicyDraft';
+import { withCnHolidays } from '../../core/holidays/policy';
+import { cnHolidayYears } from '../../core/holidays';
 import { dayjs } from '../../lib/date';
 import { cn } from '../../lib/cn';
 import { useProjectsStore } from '../../store/useProjectsStore';
@@ -53,8 +55,13 @@ export function RestPolicySettingsButton(): JSX.Element | null {
  *   - 设置面板 SettingsDialog 内联「休息制度」区（embedded，不套独立 Modal）
  *
  * - 三档单选：文案与遍历顺序全部取自 REST_POLICY_LABELS / ALL_REST_POLICIES（唯一文案源，铁律 7）；
+ * - 法定节假日开关（三档单选下方）：skipHolidays 默认 false（现状不变）。开启后由
+ *   hydrate 边界（core/holidays/policy.ts）把内置节假日表合并进 extraHolidays/extraWorkdays，
+ *   内置表**不落库**——草稿（saved）与落库值恒是用户手填的原始值，绝不指向 store 的
+ *   effectiveRestPolicy（那会把内置日期冻结进 settings，次年数据更新即失效）；
  * - 大小休：额外渲染未来 4 周预览，每格直接是 isRestDay() 的结果（派生层 lib/restPolicyDraft.ts），
  *   并提供「从下周起对调」——锚点周位移 1 周 ⇒ 偏移奇偶翻转 ⇒ 大休周/小休周互换；
+ *   预览吃 withCnHolidays(draft)（开关开着时节假日必须体现在预览格里）；
  * - 保存：settings 表 key='restPolicy' 落库 → 同步 store 镜像（刷新后由 useRepos.hydrate 读回）。
  *
  * 已排定的阶段日期不会因切换制度而变更（九阶段日期是建档时写死的绝对值）。
@@ -91,7 +98,11 @@ export function RestPolicyEditor({
   };
 
   const preview = useMemo(
-    () => (draft.kind === RestPolicyKind.BigSmallWeek ? buildRestDayPreview(draft, { weeks: PREVIEW_WEEKS }) : []),
+    () =>
+      draft.kind === RestPolicyKind.BigSmallWeek
+        ? // 预览同样走生效口径：开关开着时，法定节假日/补班日必须体现在预览格里
+          buildRestDayPreview(withCnHolidays(draft), { weeks: PREVIEW_WEEKS })
+        : [],
     [draft],
   );
 
@@ -151,6 +162,31 @@ export function RestPolicyEditor({
         })}
       </div>
 
+      {/*
+        法定节假日开关（公司级/全局）。默认关 ⇒ 与上线前逐字节一致；
+        开启后由 hydrate 边界把内置节假日表合并进 extraHolidays/extraWorkdays
+        （用户手填优先），排期自动跳过节假日与调休补班日，月历显示节日名。
+        内置表不落库——次年安排公布后随版本更新，老库不会冻着过期副本。
+      */}
+      <div className="mt-4 rounded-[12px] border border-line bg-cream/60 p-3">
+        <label className="flex cursor-pointer items-center gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.skipHolidays === true}
+            onChange={() =>
+              setDraft((prev) => ({ ...prev, skipHolidays: prev.skipHolidays !== true }))
+            }
+            className="accent-pine"
+            data-testid="skip-holidays-toggle"
+          />
+          <span className="font-medium text-ink">跳过国家法定节假日（含调休补班日）</span>
+        </label>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-mist">
+          内置 {cnHolidayYears().join(' / ')} 年法定节假日与调休补班日安排（来源：国务院办公厅
+          年度通知），次年安排公布后随版本更新。开启后仅影响新排期，已排定的阶段日期不变。
+        </p>
+      </div>
+
       {/* 大小休：未来 4 周预览 + 对调 */}
       {draft.kind === RestPolicyKind.BigSmallWeek && (
         <div className="mt-4 rounded-[12px] border border-line bg-cream/60 p-3">
@@ -206,7 +242,9 @@ export function RestPolicyEditor({
           </div>
 
           <p className="mt-2 text-[11px] text-mist">
-            灰底为休息日。周一至周五不含法定节假日调休，遇法定节假日请手动改期。
+            {draft.skipHolidays === true
+              ? '灰底为休息日（已含法定节假日与调休补班日；补班日照常上班）。'
+              : '灰底为休息日。未开启「跳过国家法定节假日」时，遇法定节假日请手动改期。'}
           </p>
         </div>
       )}

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
-import { ALL_REST_POLICIES, MemberRoleKind, RestPolicyKind } from '../core/types/enums';
+import { MemberRoleKind } from '../core/types/enums';
 import { DEFAULT_REST_POLICY } from '../core/types/entities';
 import type { RestPolicyConfig } from '../core/types/entities';
+import { normalizeRestPolicy } from '../core/holidays/policy';
 import { useRepoContext } from '../di/repository.provider';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
@@ -90,6 +91,9 @@ async function loadAllStages(
 /**
  * 读取休息制度（settings 表 key='restPolicy'）。
  * 缺失、JSON 损坏、形状不符一律静默回落 DEFAULT_REST_POLICY——制度读不出来不该拦住首屏。
+ *
+ * 法定节假日（skipHolidays）的合并**不在这里做**：落 store 的仍是用户手填的原始值，
+ * 合并发生在 useSettingsStore.setRestPolicy 的派生（hydrate 边界，见 core/holidays/policy.ts）。
  */
 function readRestPolicyFromSettings(
   rows: Array<{ key: string; valueJson: string }>,
@@ -103,23 +107,6 @@ function readRestPolicyFromSettings(
     }
   }
   return DEFAULT_REST_POLICY;
-}
-
-/** 把任意解析结果收敛成合法 RestPolicyConfig；无法识别时回落默认值 */
-function normalizeRestPolicy(raw: unknown): RestPolicyConfig {
-  if (typeof raw !== 'object' || raw === null) return DEFAULT_REST_POLICY;
-  const { kind, anchorWeek, extraHolidays, extraWorkdays } = raw as Record<string, unknown>;
-  if (!ALL_REST_POLICIES.includes(kind as RestPolicyKind)) return DEFAULT_REST_POLICY;
-  return {
-    kind: kind as RestPolicyKind,
-    anchorWeek: typeof anchorWeek === 'string' ? anchorWeek : null,
-    extraHolidays: Array.isArray(extraHolidays)
-      ? extraHolidays.filter((d): d is string => typeof d === 'string')
-      : undefined,
-    extraWorkdays: Array.isArray(extraWorkdays)
-      ? extraWorkdays.filter((d): d is string => typeof d === 'string')
-      : undefined,
-  };
 }
 
 function readCurrentMemberFromSettings(

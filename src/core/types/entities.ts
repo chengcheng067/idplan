@@ -518,6 +518,13 @@ export interface RestPolicyConfig {
   extraHolidays?: string[];
   /** 调休上班日预留扩展点（MVP 不接数据）：命中即上班，优先级最高 */
   extraWorkdays?: string[];
+  /**
+   * 是否跳过国家法定节假日（含调休补班日）。默认 false = 现状不变。
+   * 开启时由 hydrate 边界（src/core/holidays/policy.ts withCnHolidays）把内置
+   * 节假日表合并进 extraHolidays / extraWorkdays（用户手填优先）；内置表本身
+   * **不落库**，次年数据随版本更新自动生效。
+   */
+  skipHolidays?: boolean;
 }
 
 /** 出厂默认：双休（与改造前的 businessdays.ts 口径完全一致） */

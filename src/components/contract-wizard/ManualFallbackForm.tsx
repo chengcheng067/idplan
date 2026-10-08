@@ -65,7 +65,8 @@ export function ManualFallbackForm({
 }): JSX.Element | null {
   const repos = useRepos();
   const navigate = useNavigate();
-  const restPolicy = useSettingsStore((s) => s.restPolicy);
+  // 生效口径：按工作日顺延竣工日时要跳过法定节假日（skipHolidays 开时已合并）
+  const restPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [clientName, setClientName] = useState('');

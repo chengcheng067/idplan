@@ -66,7 +66,8 @@ function EmptyShell({ children, className }: { children: ReactNode; className?: 
  * 休息日仍走 isRestDay（与真实网格同一口径，不硬编码周六周日）。
  */
 function GhostGrid({ gridDays }: { gridDays: GridDay[] }): JSX.Element {
-  const restPolicy = useSettingsStore((s) => s.restPolicy);
+  // 生效口径：与真实网格同一来源（skipHolidays 开时已合并内置节假日表）
+  const restPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
   return (
     <div className="w-full">
       <div className="grid grid-cols-7">

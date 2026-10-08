@@ -89,7 +89,8 @@ export function TimelineView({
   const zoom = useUiStore((s) => s.timelineZoom);
   const setZoom = useUiStore((s) => s.setTimelineZoom);
   const openDrawer = useUiStore((s) => s.openStageDrawer);
-  const restPolicy = useSettingsStore((s) => s.restPolicy);
+  // 生效口径：skipHolidays 开时已合并内置法定节假日表（拖拽吸附/磁吸联动同源）
+  const restPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
 
   const pxPerDay = ZOOM_PPD[zoom];
   // 手机左列收窄（<768px 由 260 降到 180）

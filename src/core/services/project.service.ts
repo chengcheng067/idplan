@@ -32,13 +32,13 @@ import type {
 import { ChangxiaError, ChangxiaErrorCode, StageLogType, StageStatus, TaskStatus } from '../types/enums';
 import { normalizeStageName } from '../lib/task-no';
 import {
-  DEFAULT_REST_POLICY,
   DEFAULT_SCHEDULE_BASIS,
   type Project,
   type RestPolicyConfig,
   type Stage,
   type Task,
 } from '../types/entities';
+import { hydrateRestPolicy } from '../holidays/policy';
 import type { IProjectsRepository } from '../repositories/interfaces';
 import type { LocalProjectsRepository } from '../repositories/local/local.projects.repo';
 
@@ -227,9 +227,12 @@ export class ProjectService {
    * 不传 stageItems → 回落全量九段模板（行为与改造前完全一致）。
    */
   public async createManualProject(cmd: CreateProjectCmd): Promise<Project> {
-    // 公司休息制度从 settings 读（公司级，非项目级）；损坏/缺失回落双休
-    const restPolicy =
-      (await this.deps.bundle.settings.get<RestPolicyConfig>('restPolicy')) ?? DEFAULT_REST_POLICY;
+    // 公司休息制度从 settings 读（公司级，非项目级）；损坏/缺失回落双休。
+    // skipHolidays 开时经 hydrate 边界合并内置法定节假日表（用户手填优先）——
+    // 排期跳过节假日的主目的就在这一步，漏了合并 = 开关只换了月历底纹。
+    const restPolicy = hydrateRestPolicy(
+      await this.deps.bundle.settings.get<RestPolicyConfig>('restPolicy'),
+    );
     const drafts = previewSplit({
       startAt: cmd.plannedStartAt,
       endAt: cmd.plannedEndAt,
