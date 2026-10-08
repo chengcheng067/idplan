@@ -18,6 +18,7 @@ import type { ReactNode } from 'react';
 
 import type { MemberActorKind, MemberRoleKind, StageStatus, TaskStatus } from '../../core/types/enums';
 import type { StageLogType, TaskSource } from '../../core/types/enums';
+import type { TaskArtifact } from '../../core/types/entities';
 import type { ExecutionSource, ExecutionStatus, WritebackProposalStatus } from '../../core/types/agent-execution';
 
 /** 模板 id（02 §2 四值 + default 纸面转正的 'classic'；决策文档 §2.3 迁移结论） */
@@ -99,6 +100,11 @@ export interface PrintStageVM {
   status: StageStatus;
   /** 负责人姓名（ownerId 解析不到 → null） */
   ownerName: string | null;
+  /**
+   * 负责人成员 id（E 版 P1 判定「Agent 负责的阶段」用——按 id 精确解析
+   * actorKind，不拿姓名猜；纯增量字段，权限语义零变化）。
+   */
+  ownerId: string | null;
   colorIndex: number;
   customColor: string | null;
   /** 阶段内任务完成度（复用 computeStageTaskProgress：done/total） */
@@ -117,8 +123,18 @@ export interface PrintTaskVM {
   dueDate: string | null;
   /** 同项目内前驱 Task.id 原样集合（跨项目/不可见引用的化解由 D 版负责） */
   dependsOn: string[];
-  /** 产出物数量（种类明细由 E 版消费，此处只计数） */
+  /** 产出物数量（种类明细由 E 版消费，见 artifacts 字段） */
   artifactCount: number;
+  /**
+   * 产出物明细（种类 + 标题；**E 版 P3 产出物清单消费**）。
+   *
+   * ── 为什么加这个字段 ──
+   * 地基首版只带计数，而 E P3 的口径是「产出物种类、关联任务、来源」逐行列出
+   * （01 §6 P3）——没有明细，E P3 只能打出数字，版式要求做不到。故在此补
+   * **纯增量**字段：只加不改，权限语义零变化（明细随任务过同一道可见性过滤，
+   * 隐藏阶段/不可见任务的产出物同样不进 VM）。
+   */
+  artifacts: ReadonlyArray<{ kind: TaskArtifact['kind']; title: string }>;
   stageId: string;
   /** 任务逾期：dueDate < today 且 status !== done（01 §3.3 口径三） */
   overdue: boolean;

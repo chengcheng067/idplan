@@ -143,6 +143,8 @@ export function buildPrintViewModel(input: PrintViewModelInput): PrintViewModel 
     endAt: s.endAt.slice(0, 10),
     status: s.status,
     ownerName: memberName(s.ownerId ?? ''),
+    // E 版 P1 按 id 精确判定 Agent 负责阶段（不拿姓名猜 actorKind）
+    ownerId: s.ownerId ?? null,
     colorIndex: s.colorIndex,
     customColor: s.customColor ?? null,
     // 阶段内任务完成度复用 computeStageTaskProgress（done/total，不复制算法）
@@ -161,6 +163,9 @@ export function buildPrintViewModel(input: PrintViewModelInput): PrintViewModel 
     // 原样携带；指向不可见/不存在任务的「引用不可用」化解在 D 版依赖网络
     dependsOn: [...t.dependsOn],
     artifactCount: t.artifacts.length,
+    // 产出物明细（E 版 P3）：随任务过同一道可见性过滤，只携种类 + 标题
+    // （path/url/note 不进打印投影——纸面不需要，也不该把本机路径打到纸上）
+    artifacts: t.artifacts.map((a) => ({ kind: a.kind, title: a.title })),
     stageId: t.stageId,
     // 口径三「任务逾期」：dueDate < today 且 status !== done。**不**与阶段延期混用
     overdue: t.dueDate !== null && t.dueDate.slice(0, 10) < todayIso && !taskIsDone(t),
