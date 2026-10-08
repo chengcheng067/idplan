@@ -1,0 +1,379 @@
+/**
+ * A 版 · Swiss Schedule 样式（02 文档 §5/§6；设计源 01 文档 §4）。
+ *
+ * ── 前缀纪律（print-skins-brief §2.3 遗产，02 §5 继承）──
+ * 每条规则必须同时命中 `.print-root` 与模板类——只写 `.swiss-*` 会解析不回
+ * 亮色锁，暗色主题下打印稿直接废掉（机理见 global.css「:root, .print-root」）。
+ * 故本文件所有选择器以 `.print-root.print-template-swiss-schedule` 起头。
+ *
+ * ── token（02 §6）──
+ *   --swiss-yellow #F2D957 → 纸面（= --tpl-accent 槽位，可被自定义覆盖）
+ *   --swiss-black #191816 → 主文字（--tpl-ink）+ 顶/底栏栏底（--tpl-line）
+ *   --swiss-inset 40px    → 顶/底栏左右内缩
+ *   --swiss-bar-height-top 100px / --swiss-bar-height-bottom 48px
+ * 自定义配色经 `.print-root` 的 inline CSS 变量进入（见 print-palette.ts），
+ * 故每条取值都写 `var(--tpl-*, <设计师默认值>)`——不传变量时就是设计基线。
+ *
+ * ── 打印色准（02 §5）──
+ * 黄纸面 + 黑栏必须 `print-color-adjust: exact`（-webkit- 双写），否则浏览器
+ * 「省墨」默认会把黄底打白。同时颜色关闭时仍有 1px 实线 + 文字语义
+ * （状态双编码在组件层，不依赖颜色）。
+ */
+
+.print-root.print-template-swiss-schedule {
+  /* 设计师基线（inline 变量缺省时的回落；自定义经 .print-root style 进入） */
+  --swiss-yellow: #f2d957;
+  --swiss-black: #191816;
+  --swiss-inset: 40px;
+  --swiss-bar-height-top: 100px;
+  --swiss-bar-height-bottom: 48px;
+  --tpl-accent: var(--swiss-yellow);
+  --tpl-ink: var(--swiss-black);
+  --tpl-line: var(--swiss-black);
+}
+
+/* ── 纸面：整幅交通黄，顶/底黑栏由内部元素自持（不用 padding 让位）── */
+.print-root.print-template-swiss-schedule .a4-page {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--tpl-accent);
+  color: var(--tpl-ink);
+  font-family: inherit;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── 黑顶栏：左右内缩 40px，黄字反白，项目名居中=站名 ── */
+.print-root.print-template-swiss-schedule .swiss-topbar {
+  margin: 0 var(--swiss-inset);
+  height: var(--swiss-bar-height-top);
+  box-sizing: border-box;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  background: var(--tpl-line);
+  color: var(--tpl-accent);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-swiss-schedule .swiss-topbar__nav {
+  display: flex;
+  gap: 18px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+}
+
+.print-root.print-template-swiss-schedule .swiss-topbar__navitem[data-current] {
+  font-weight: 700;
+  border-bottom: 2px solid currentColor;
+  padding-bottom: 1px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-topbar__title {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-align: center;
+  /* 项目名最多两行，超出截断（02 §8）；完整文本经 title 属性可访问 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.print-root.print-template-swiss-schedule .swiss-topbar__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+/* ── 主体：密集横线、数字优先 ── */
+.print-root.print-template-swiss-schedule .swiss-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px var(--swiss-inset) 16px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding-bottom: 6px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board__title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board__count {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board__subtitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+/* ── P1 三列错落 ── */
+.print-root.print-template-swiss-schedule .swiss-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 20px;
+  align-items: start;
+}
+
+.print-root.print-template-swiss-schedule .swiss-column[data-col='2'] {
+  margin-top: 34px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-column[data-col='3'] {
+  margin-top: 68px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row {
+  border-bottom: 1px solid var(--tpl-ink);
+  padding: 8px 0 7px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row__top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row__no {
+  font-size: 20px;
+  font-weight: 700;
+  min-width: 34px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row[data-state='delayed'] .swiss-stage-row__state {
+  font-weight: 700;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin-top: 3px;
+  font-size: 10.5px;
+}
+
+/* ── P2/P3/P4 读号表（密集横线表格）── */
+.print-root.print-template-swiss-schedule .swiss-register {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-register th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .swiss-register td {
+  border-bottom: 1px solid var(--tpl-ink);
+  padding: 7px 8px;
+  vertical-align: top;
+}
+
+.print-root.print-template-swiss-schedule .swiss-register__no {
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .swiss-register__date {
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .swiss-register__title {
+  max-width: 340px;
+  /* 任务标题一至两行（02 §8）：不挤入日期/状态列 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.print-root.print-template-swiss-schedule .swiss-register__reason {
+  max-width: 240px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.print-root.print-template-swiss-schedule .swiss-task-state {
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .swiss-task-state[data-overdue] {
+  font-weight: 700;
+}
+
+/* P4 Agent 行：全页唯一强焦点（反色；灰度下靠反相 + 字重仍可辨） */
+.print-root.print-template-swiss-schedule .swiss-roster__row--agent td {
+  background: var(--tpl-line);
+  color: var(--tpl-accent);
+  font-weight: 700;
+  border-bottom: 1px solid var(--tpl-ink);
+}
+
+/* ── P3 三类延期口径 ── */
+.print-root.print-template-swiss-schedule .swiss-delay-types {
+  border-top: 2px solid var(--tpl-ink);
+}
+
+.print-root.print-template-swiss-schedule .swiss-delay-type {
+  display: grid;
+  grid-template-columns: 76px 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--tpl-ink);
+  font-size: 11.5px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-delay-type__name {
+  font-weight: 700;
+}
+
+.print-root.print-template-swiss-schedule .swiss-delay-type__value {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .swiss-delay-note {
+  font-size: 10.5px;
+  padding-top: 6px;
+}
+
+/* ── 空态（02 §8 标准文案由 EmptyPrintState 提供）── */
+.print-root.print-template-swiss-schedule .print-empty-state {
+  margin: 0;
+  padding: 16px 0;
+  font-size: 12px;
+  text-align: center;
+  border-top: 1px solid var(--tpl-ink);
+  border-bottom: 1px solid var(--tpl-ink);
+}
+
+/* ── 密度档：20+ 阶段 / 22+ 任务 / 12+ 流水时压紧 ── */
+.print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row {
+  padding: 5px 0 4px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__no {
+  font-size: 16px;
+  min-width: 28px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__bottom {
+  font-size: 10px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-register td {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-register th {
+  padding: 4px 8px;
+}
+
+/* ── 黑底栏：署名 + 页码 + 数据时间 ── */
+.print-root.print-template-swiss-schedule .swiss-bottombar {
+  margin: 0 var(--swiss-inset);
+  height: var(--swiss-bar-height-bottom);
+  box-sizing: border-box;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--tpl-line);
+  color: var(--tpl-accent);
+  font-size: 11px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── 打印媒体：黄纸面必须压过 global.css 的 `.print-root { background:#fff!important }` ──
+ * 两条都是 !important ⇒ 特异性高者胜：本选择器两类 > `.print-root` 一类。 */
+@media print {
+  .print-root.print-template-swiss-schedule,
+  .print-root.print-template-swiss-schedule .a4-page {
+    background: var(--tpl-accent) !important;
+    color: var(--tpl-ink) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-root.print-template-swiss-schedule .swiss-topbar,
+  .print-root.print-template-swiss-schedule .swiss-bottombar {
+    background: var(--tpl-line) !important;
+    color: var(--tpl-accent) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-root.print-template-swiss-schedule .swiss-roster__row--agent td {
+    background: var(--tpl-line) !important;
+    color: var(--tpl-accent) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

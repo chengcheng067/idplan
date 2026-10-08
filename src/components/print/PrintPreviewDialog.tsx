@@ -8,17 +8,28 @@
  *
  * ── 与独立路由的关系 ──
  * 路由 `/project/:id/schedule-print` **保留**（深链/直接输 URL 兜底）；
- * 同一棵纸面（SchedulePaper）+ 同一份算法（useSchedulePaperData）两个宿主共用，
+ * 经典纸面（SchedulePaper）+ 同一份算法（useSchedulePaperData）两个宿主共用，
  * 不存在第二份 DOM 或第二份计算。
  *
  * ── 规范落地索引 ──
- * D1 浮层=Modal fullscreen · D2 z-[75] · D3 纸面恒浅（.print-root 内）·
- * D4 圆角 0 · D5 iframe 打印（src/lib/print-frame.ts）· D6 PNG 导出复用。
+ *  D1 浮层=Modal fullscreen · D2 z-[75] · D3 纸面恒浅（.print-root 内）·
+ *  D4 圆角 0 · D5 iframe 打印（src/lib/print-frame.ts）· D6 PNG 导出复用。
+ *
+ * ── v0.8.6 四版模板重建（产品决策文档 §2.1/§2.2）──
+ *  「打印内容」钮升格为「模板与页面」一个 dropdown 三截：
+ *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H；D/E/H 未实现 ⇒ 建设中
+ *          空态 + 禁打印，**不许假装能打**）；
+ *    中截 输出页面：经典 = 五块复选框（数据结构逐字不变，保护既有 spec）；
+ *          四版 = 页复选框（默认全选、全选/反选、联动「预计 N 页」）；
+ *    下截 配色：三槽位受控 token（预设变体卡为主 + 自定义过对比度硬闸门），
+ *          仅四版显示（经典是品牌资产，不开放）。
+ *  工具条另加「灰度」toggle（纸面 wrapper 套 filter:grayscale(1)）——选色时
+ *  实时自查灰度可读，同时服务 02 §9 的灰度快照验收（不必真打黑白）。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Download, ListChecks, Printer, X } from 'lucide-react';
+import { Download, ListChecks, Palette, Printer, X } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { SchedulePaper } from './SchedulePaper';
@@ -30,6 +41,17 @@ import { usePrintPrefsStore } from '../../store/usePrintPrefsStore';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { isDesktop } from '../../lib/desktopBridge';
 import { A4_WIDTH_PX } from '../../lib/schedule-print';
+import {
+  PRINT_TEMPLATES,
+  printTemplateMeta,
+  printTemplateName,
+  printTemplatePages,
+} from './print-skins';
+import { usePrintViewModel } from '../../print/adapters/use-print-view-model';
+import { SwissScheduleDocument } from '../../print/documents/SwissScheduleDocument';
+import { PaletteSection } from '../../print/parts/PaletteSection';
+import { PRINT_TEMPLATE_PALETTES } from '../../print/model/print-palette';
+import type { PrintPageKind, PrintTemplateId } from '../../print/model/print-view-model';
 
 /** 纸面总自然高度（缩放 wrapper 的负边距修正用；规范 §2：总高 = 1123×N + 24×(N−1)） */
 const A4_HEIGHT_PX = 1123;
@@ -37,7 +59,7 @@ const GAP_BETWEEN_PAGES = 24;
 
 type Zoom = 'fit' | '100';
 
-/** 打印内容勾选面板的行（键 ↔ SchedulePaperBlocks；hint 是该块的通俗解释） */
+/** 打印内容勾选面板的行（键 ↔ SchedulePaperBlocks；hint 是该块的通俗解释）——经典模板专用 */
 const BLOCK_ROWS: ReadonlyArray<{ key: keyof SchedulePaperBlocks; label: string; hint: string }> = [
   { key: 'header', label: '打印头部', hint: '项目名 / 周期' },
   { key: 'timeline', label: '打印时间轴', hint: '甘特图' },
@@ -49,11 +71,16 @@ const BLOCK_ROWS: ReadonlyArray<{ key: keyof SchedulePaperBlocks; label: string;
 /**
  * 勾选面板定位（锚定触发钮；下方空间不够则向上翻）——范式同
  * `IndustrySelect.resolvePanelPos`（0.8.5 A 规范 §A.4）：Modal 只出
- * portal / 遮罩 / 焦点圈禁，面板自身 fixed 定位。
+ * portal / 遮罩 / 焦点圈禁 / 滚动锁定，面板自身 fixed 定位。
+ *
+ * `panelHeight` 是**实测高**（ResizeObserver 跟着内容变——配色编辑器展开时
+ * 面板会长高，不重算会把底部裁出视口）。
  */
-function resolveBlocksPanelPos(anchor: HTMLElement): { top: number; left: number; minWidth: number } {
+function resolveBlocksPanelPos(
+  anchor: HTMLElement,
+  panelHeight: number,
+): { top: number; left: number; minWidth: number } {
   const r = anchor.getBoundingClientRect();
-  const panelHeight = BLOCK_ROWS.length * 30 + 34;
   const below = window.innerHeight - r.bottom;
   const flipUp = below < panelHeight + 8 && r.top > below;
   return {
@@ -74,24 +101,36 @@ export function PrintPreviewDialog({
 }): JSX.Element | null {
   /** 打印偏好（个人偏好，localStorage 持久化；无角色门控——成员也打印） */
   const blocks = usePrintPrefsStore((s) => s.blocks);
-  const skin = usePrintPrefsStore((s) => s.skin);
+  const template = usePrintPrefsStore((s) => s.template);
+  const pages = usePrintPrefsStore((s) => s.pages);
+  const palette = usePrintPrefsStore((s) => s.palette);
   const setBlock = usePrintPrefsStore((s) => s.setBlock);
+  const setTemplate = usePrintPrefsStore((s) => s.setTemplate);
+  const setPageEnabled = usePrintPrefsStore((s) => s.setPageEnabled);
+  const setTemplatePages = usePrintPrefsStore((s) => s.setTemplatePages);
 
   const d = useSchedulePaperData(projectId, blocks);
+  const printVm = usePrintViewModel(projectId);
+  const meta = printTemplateMeta(template);
   const paperRootRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [zoom, setZoom] = useState<Zoom>('fit');
   const [scale, setScale] = useState(1);
   const [printBusy, setPrintBusy] = useState(false);
   const [pngBusy, setPngBusy] = useState(false);
+  /** 灰度预览（纸面 wrapper 套 grayscale(1)；选色自查 + 灰度快照验收用，不真打黑白） */
+  const [grayscale, setGrayscale] = useState(false);
   /**
-   * 打印内容勾选面板（v0.8.6.0002 · 反馈 #9.2）：
+   * 打印内容勾选面板（v0.8.6.0002 · 反馈 #9.2；四版重建升格为「模板与页面」）：
    * 挂预览面板内 = 勾选即时重渲染纸面（所见即所得），这是挂在这里的理由。
    * 深链路由（`*-print` 三条）没有本面板 ⇒ SchedulePaper 默认五块全开（兜底）。
    */
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [blocksPos, setBlocksPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
   const blocksTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const blocksPanelRef = useRef<HTMLDivElement | null>(null);
+  /** 面板实测高（ResizeObserver 喂给定位：配色编辑器展开 / 模板切换都会变高） */
+  const [panelHeight, setPanelHeight] = useState(420);
 
   /** 弹开期间窗口尺寸变化 ⇒ 锚点失效，直接收起（重开照当时锚点重算，不给陈旧坐标留路） */
   useEffect(() => {
@@ -100,6 +139,20 @@ export function PrintPreviewDialog({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [blocksOpen]);
+
+  /** 面板实测高 → 重算定位（内容变高不 stale；只改 top/left 不会自激） */
+  useEffect(() => {
+    if (!blocksOpen) return;
+    const el = blocksPanelRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      const h = el.offsetHeight;
+      setPanelHeight((prev) => (prev === h ? prev : h));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [blocksOpen]);
+
   /**
    * 预览区元素（v0.8.6.0002 · 反馈 #9.1 修复）。
    *
@@ -129,9 +182,20 @@ export function PrintPreviewDialog({
     return () => ro.disconnect();
   }, [zoom, stageEl]);
 
+  /** 该模板启用的页（缺键 = 默认全选，决策文档 §3.1） */
+  const enabledPages = useMemo<PrintPageKind[]>(() => {
+    const known = printTemplatePages(template).map((p) => p.id);
+    return pages[template] ?? known;
+  }, [template, pages]);
+
+  /** 预计页数：经典 = 分页产物；四版 = 启用页数（勾选即时联动） */
+  const pagesCount = template === 'classic' ? d.pages.length : enabledPages.length;
+  /** 未实现模板不许假装能打（决策 ⑥ 实现顺序：D/E/H 后续批次落地） */
+  const canOutput = meta.implemented;
+
   const onPrint = useCallback(() => {
     const root = paperRootRef.current;
-    if (!root || printBusy) return;
+    if (!root || printBusy || !canOutput) return;
     // 双击防护（规范 §5.1：150ms 内忽略重复点击）
     setPrintBusy(true);
     window.setTimeout(() => setPrintBusy(false), 150);
@@ -139,34 +203,38 @@ export function PrintPreviewDialog({
     if (via === 'main') {
       useProjectsStore.getState().pushToast('info', '已回退主窗口打印。');
     }
-  }, [printBusy]);
+  }, [printBusy, canOutput]);
 
   /**
    * 导出 PNG（规范 §2 铁律：`.a4-page` 自身永不缩放，导出前若当前档 ≠ 100%
    * 先临时置回再截，capture 完成后恢复——React state 切换同帧完成，无视觉残留）。
+   * 灰度同理：html2canvas 不认 filter，导出前临时关掉。
    */
   const onExportPng = useCallback(async () => {
     const els = pageRefs.current.filter((el): el is HTMLDivElement => el !== null);
-    if (els.length === 0 || pngBusy || !d.project) return;
+    if (els.length === 0 || pngBusy || !d.project || !canOutput) return;
     setPngBusy(true);
     const wasFit = zoom === 'fit';
+    const wasGray = grayscale;
     if (wasFit) setZoom('100');
+    if (wasGray) setGrayscale(false);
     try {
-      // 等一帧让 scale 复原的样式生效（transform 在 wrapper 上，纸面自身不变）
+      // 等一帧让 scale / filter 复原的样式生效（transform 在 wrapper 上，纸面自身不变）
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       await exportSchedulePngPages(els, schedulePngFileName(d.project.name));
     } catch {
       useProjectsStore.getState().pushToast('error', 'PNG 导出失败，请改用「打印 / 另存为 PDF」。');
     } finally {
       if (wasFit) setZoom('fit');
+      if (wasGray) setGrayscale(true);
       setPngBusy(false);
     }
-  }, [pngBusy, zoom, d.project]);
+  }, [pngBusy, zoom, grayscale, canOutput, d.project]);
 
   if (!open || !d.hydrated || !d.project) return null;
 
-  const pagesCount = d.pages.length;
-  const paperNaturalHeight = pagesCount * A4_HEIGHT_PX + Math.max(pagesCount - 1, 0) * GAP_BETWEEN_PAGES;
+  const paperNaturalHeight =
+    Math.max(pagesCount, 1) * A4_HEIGHT_PX + Math.max(Math.max(pagesCount, 1) - 1, 0) * GAP_BETWEEN_PAGES;
   const zoomBtn = (z: Zoom, label: string): JSX.Element => (
     <button
       type="button"
@@ -195,16 +263,16 @@ export function PrintPreviewDialog({
             {d.project.name} · 预计 {pagesCount} 页 · A4
           </span>
           <span className="ml-auto" />
-          {/* 打印内容勾选（反馈 #9.2）：样式照缩放钮范式，点开是五块勾选面板 */}
+          {/* 模板与页面（反馈 #9.2/#9.3 升格）：样式照缩放钮范式，点开是三截下拉 */}
           <button
             type="button"
             ref={blocksTriggerRef}
             aria-expanded={blocksOpen}
             aria-haspopup="true"
-            aria-label="打印内容"
+            aria-label="模板与页面"
             onClick={() => {
               const el = blocksTriggerRef.current;
-              setBlocksPos(el ? resolveBlocksPanelPos(el) : null);
+              setBlocksPos(el ? resolveBlocksPanelPos(el, panelHeight) : null);
               setBlocksOpen((v) => !v);
             }}
             className={`inline-flex items-center gap-1 rounded-[6px] border border-line bg-cream px-2 py-0.5 text-xs font-medium transition-colors ${
@@ -212,7 +280,21 @@ export function PrintPreviewDialog({
             }`}
           >
             <ListChecks size={14} aria-hidden />
-            打印内容
+            模板与页面
+          </button>
+          {/* 灰度预览（决策文档 §3.2-②）：纸面套 grayscale(1)，选色自查 + 灰度验收 */}
+          <button
+            type="button"
+            data-print-grayscale-toggle=""
+            aria-pressed={grayscale}
+            aria-label="灰度预览"
+            onClick={() => setGrayscale((v) => !v)}
+            className={`inline-flex items-center gap-1 rounded-[6px] border border-line bg-cream px-2 py-0.5 text-xs font-medium transition-colors ${
+              grayscale ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
+            }`}
+          >
+            <Palette size={14} aria-hidden />
+            灰度
           </button>
           {/* 缩放二态（规范 §2：fit / 100%，不做滑块） */}
           <div className="flex rounded-[8px] border border-line bg-cream p-0.5" role="group" aria-label="预览缩放">
@@ -249,67 +331,207 @@ export function PrintPreviewDialog({
             }
             className="mx-auto"
           >
-            {/* ref 两本账：外层 wrapper（缩放）与 .print-root（打印克隆源） */}
-            <div ref={paperRootRef} className="mx-auto w-fit">
-              <SchedulePaper
-                project={d.project}
-                pages={d.pages}
-                sections={d.sections}
-                bandGeom={d.bandGeom}
-                monthTicks={d.monthTicks}
-                nowText={d.nowText}
-                startAt={d.startAt}
-                endAt={d.endAt}
-                totalDays={d.totalDays}
-                role={d.role}
-                pageRef={(idx) => (el: HTMLDivElement | null) => {
-                  pageRefs.current[idx] = el;
-                }}
-                blocks={blocks}
-                skin={skin}
-              />
+            {/* 灰度只套纸面（chrome 不灰度）；ref 两本账：外层 wrapper（缩放）与 .print-root（打印克隆源） */}
+            <div
+              ref={paperRootRef}
+              className="mx-auto w-fit"
+              style={grayscale ? { filter: 'grayscale(1)' } : undefined}
+              data-print-grayscale={grayscale ? 'on' : 'off'}
+            >
+              {template === 'classic' && (
+                <SchedulePaper
+                  project={d.project}
+                  pages={d.pages}
+                  sections={d.sections}
+                  bandGeom={d.bandGeom}
+                  monthTicks={d.monthTicks}
+                  nowText={d.nowText}
+                  startAt={d.startAt}
+                  endAt={d.endAt}
+                  totalDays={d.totalDays}
+                  role={d.role}
+                  pageRef={(idx) => (el: HTMLDivElement | null) => {
+                    pageRefs.current[idx] = el;
+                  }}
+                  blocks={blocks}
+                  skin="default"
+                />
+              )}
+              {template === 'swiss-schedule' && printVm.vm && (
+                <SwissScheduleDocument
+                  vm={printVm.vm}
+                  pages={enabledPages}
+                  palette={
+                    palette['swiss-schedule'] ?? PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline
+                  }
+                  pageRef={(idx) => (el: HTMLDivElement | null) => {
+                    pageRefs.current[idx] = el;
+                  }}
+                />
+              )}
+              {/* 未实现模板：明确空态，不输出任何纸面（不许假装能打） */}
+              {template !== 'classic' && !meta.implemented && (
+                <div
+                  data-print-template-building=""
+                  className="my-10 w-[420px] rounded-md border border-line bg-paper p-6 text-center"
+                >
+                  <p className="text-sm font-medium text-ink">{printTemplateName(template)} · 页面建设中</p>
+                  <p className="mt-2 text-xs leading-relaxed text-mist">
+                    模板已注册（{meta.pages.length} 页；页面勾选与配色槽位已就绪），
+                    页面将在后续批次实现。当前不会输出任何纸面，打印与导出已禁用。
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* 打印内容勾选面板：Modal dropdown 档（z-[75] 无底色遮罩，盖得住
+        {/* 模板与页面下拉：Modal dropdown 档（z-[75] 无底色遮罩，盖得住
             fullscreen 预览但不压暗；portal / Esc / 焦点圈禁 / 滚动锁定白拿，
             面板自身按触发钮 fixed 定位——范式同 IndustrySelect） */}
         <Modal
           open={blocksOpen}
           onClose={() => setBlocksOpen(false)}
           placement="dropdown"
-          ariaLabel="打印内容选项"
+          ariaLabel="模板与页面"
         >
           <div
             role="group"
-            aria-label="打印内容选项"
+            aria-label="模板与页面"
             data-print-blocks-panel=""
+            ref={blocksPanelRef}
             tabIndex={-1}
             style={
               blocksPos
                 ? { top: blocksPos.top, left: blocksPos.left, minWidth: blocksPos.minWidth }
                 : { top: -9999, left: -9999 }
             }
-            className="dropdown-pop-in fixed z-[1] w-[236px] rounded-md border border-line bg-paper p-1 shadow-overlay outline-none"
+            className="dropdown-pop-in fixed z-[1] w-[300px] rounded-md border border-line bg-paper p-1 shadow-overlay outline-none"
           >
-            <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-mist">勾选要打印的内容，纸面即时更新</p>
-            {BLOCK_ROWS.map((row) => (
-              <label
-                key={row.key}
-                className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink hover:bg-sand"
-              >
-                <input
-                  type="checkbox"
-                  checked={blocks[row.key]}
-                  onChange={(e) => setBlock(row.key, e.target.checked)}
-                  data-print-block={row.key}
-                  className="h-3.5 w-3.5 shrink-0 accent-pine"
-                />
-                <span className="flex-1 whitespace-nowrap">{row.label}</span>
-                <span className="shrink-0 text-[11px] text-mist">{row.hint}</span>
-              </label>
-            ))}
+            {/* 上截 · 阅读方式：模板单选卡（缩略图占位 + 版本名 + 一句话场景） */}
+            <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-mist">阅读方式</p>
+            <div role="radiogroup" aria-label="阅读方式" className="flex flex-col gap-0.5 pb-1.5">
+              {PRINT_TEMPLATES.map((t) => {
+                const current = t.id === template;
+                const dots =
+                  t.id === 'classic' ? null : PRINT_TEMPLATE_PALETTES[t.id].baseline;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={current}
+                    data-print-template-option={t.id}
+                    onClick={() => {
+                      setTemplate(t.id);
+                      // 换模板 ⇒ 旧模板收集的页面 ref 作废（PNG 导出按新模板重收）
+                      pageRefs.current = [];
+                    }}
+                    className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors ${
+                      current ? 'bg-pine-soft' : 'hover:bg-sand'
+                    }`}
+                  >
+                    {/* 缩略图占位：设计师 Ardot 导出图未到，先用「版本字母 + 基线三色点」
+                        （不假装是设计稿；图到位后换 img 即可，data 属性不变） */}
+                    <span
+                      aria-hidden
+                      className="flex h-9 w-12 shrink-0 flex-col items-center justify-center rounded-sm border border-line bg-cream"
+                    >
+                      <span className="text-[13px] font-bold leading-none text-ink">
+                        {t.version || '经'}
+                      </span>
+                      {dots && (
+                        <span className="mt-1 flex gap-0.5">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: dots.accent }} />
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: dots.ink }} />
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: dots.line }} />
+                        </span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium text-ink">
+                        {printTemplateName(t.id)}
+                      </span>
+                      <span className="block truncate text-[11px] text-mist">{t.scene}</span>
+                    </span>
+                    {!t.implemented && (
+                      <span className="shrink-0 rounded-full bg-sunken px-1.5 py-0.5 text-[10px] text-mist">
+                        建设中
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 中截 · 输出页面：经典=五块（数据结构逐字不变）；四版=页复选框 */}
+            <div className="border-t border-line px-2 pb-1.5 pt-2">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-[11px] font-medium text-mist">输出页面</span>
+                {!meta.usesBlocks && (
+                  <span className="flex gap-1">
+                    <button
+                      type="button"
+                      data-print-pages-all=""
+                      onClick={() => setTemplatePages(template, printTemplatePages(template).map((p) => p.id))}
+                      className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
+                    >
+                      全选
+                    </button>
+                    <button
+                      type="button"
+                      data-print-pages-none=""
+                      onClick={() => setTemplatePages(template, [])}
+                      className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
+                    >
+                      反选
+                    </button>
+                  </span>
+                )}
+              </div>
+              {meta.usesBlocks
+                ? BLOCK_ROWS.map((row) => (
+                    <label
+                      key={row.key}
+                      className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink hover:bg-sand"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={blocks[row.key]}
+                        onChange={(e) => setBlock(row.key, e.target.checked)}
+                        data-print-block={row.key}
+                        className="h-3.5 w-3.5 shrink-0 accent-pine"
+                      />
+                      <span className="flex-1 whitespace-nowrap">{row.label}</span>
+                      <span className="shrink-0 text-[11px] text-mist">{row.hint}</span>
+                    </label>
+                  ))
+                : printTemplatePages(template).map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink hover:bg-sand"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={enabledPages.includes(p.id)}
+                        onChange={(e) => setPageEnabled(template, p.id, e.target.checked)}
+                        data-print-page={p.id}
+                        className="h-3.5 w-3.5 shrink-0 accent-pine"
+                      />
+                      <span className="flex-1 whitespace-nowrap">{p.label}</span>
+                      <span className="shrink-0 text-[11px] text-mist">{p.hint}</span>
+                    </label>
+                  ))}
+            </div>
+
+            {/* 下截 · 配色：仅四版（经典是品牌资产不开放；未实现模板只提示） */}
+            {template === 'classic' ? null : meta.implemented ? (
+              <PaletteSection template={template} />
+            ) : (
+              <div className="border-t border-line px-3 pb-2 pt-2 text-[11px] leading-relaxed text-mist">
+                配色：{printTemplateName(template)} 页面建设中，三槽位与预设已就绪，页面落地后生效。
+              </div>
+            )}
           </div>
         </Modal>
 
@@ -318,7 +540,9 @@ export function PrintPreviewDialog({
           data-print-preview-actionbar=""
           className="no-print flex h-16 items-center gap-3 border-t border-line bg-paper px-4"
         >
-          <span className="text-xs text-mist">需要 PDF？在打印对话框选「另存为 PDF」</span>
+          <span className="text-xs text-mist">
+            {canOutput ? '需要 PDF？在打印对话框选「另存为 PDF」' : '该模板页面建设中，暂不可打印'}
+          </span>
           <span className="ml-auto" />
           <button
             type="button"
@@ -330,7 +554,7 @@ export function PrintPreviewDialog({
           <button
             type="button"
             onClick={() => void onExportPng()}
-            disabled={pngBusy}
+            disabled={pngBusy || !canOutput}
             className="inline-flex items-center gap-1.5 rounded-[10px] border border-line bg-paper px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download size={14} />
@@ -339,7 +563,7 @@ export function PrintPreviewDialog({
           <button
             type="button"
             onClick={onPrint}
-            disabled={printBusy}
+            disabled={printBusy || !canOutput}
             className="inline-flex items-center gap-1.5 rounded-[10px] bg-pine px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Printer size={16} /> 打印

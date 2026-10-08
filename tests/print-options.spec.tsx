@@ -1,21 +1,37 @@
 // @vitest-environment jsdom
 /**
- * 打印内容自定义 + 皮肤预留（v0.8.6.0002 · 反馈 #9.2 / #9.3）验收。
+ * 打印内容自定义 + 皮肤预留（v0.8.6.0002 · 反馈 #9.2 / #9.3）验收，
+ * 四版模板重建（产品决策文档 §2.1/§2.2/§3.2）后适配。
  *
  * 她的原话：
  *   ② 打印内容自定义：「希望给用户提供打印内容的选项，将选择权交给用户。
  *      例如：具体要打印哪些内容、时间轴是否作为可选打印项，以及其他相关选择。」
  *   ③ 预留皮肤功能：「预留打印日程表的皮肤功能，以便日后推出更多皮肤。」
  *
- * ── 本 spec 锁的四件事（L1 行为，主力层）──
- *   ① 默认五块全在（未传偏好 = 视觉零变化），.print-root 挂 default 皮肤类；
+ * ── 本 spec 锁的事 ──
+ * L1 行为（真实纸面）：
+ *   ① 默认五块全在（未传偏好 = 视觉零变化），.print-root 挂 classic 模板类；
  *   ② 关「打印时间轴」⇒ 该 section 消失、`.schedule-table` 仍在、**第一页不留
  *      半白**（分页预留 210→92 ⇒ 首页 5 段变 6 段，纯函数口径见 L2 组）；
  *   ③ 其余四块逐块可摘：摘谁谁消失，没摘的不动；
  *   ④ 勾选写 localStorage（`changxia.printPrefs`），重 hydrate / 卸载重开
- *      仍是用户选的；脏数据（缺块键 / 未知 skin）merge 兜底回落默认而不是
- *      静默少打一块。
+ *      仍是用户选的；脏数据（缺块键 / 未知 template）merge 兜底回落默认而不是
+ *      静默少打一块；
+ *   ⑤【新】模板选择器：五张卡可切，A 版渲染 4 页、D/E/H 显示建设中且禁打印；
+ *   ⑥【新】页面勾选：四版默认全选、可摘单页、页码/预计页数联动；
+ *   ⑦【新】配色硬闸门：不达标禁存（store 层一个字节都不落库）。
  * L2（静态源码锁 + paginateSections 纯函数契约）见文件末组。
+ *
+ * ── v2 适配记录（skin → template，决策文档 §2.3 第 3 条；唯一必然变红的既有 spec）──
+ *   改动 1：`usePrintPrefsStore` 的 `skin: 'default'` → `template: 'classic'`
+ *           （旧键经 merge 迁移；L1④ 的脏数据例从「未知 skin」改演「旧 skin
+ *           键迁移 + 未知 template 回落」两件事——迁移是本次新增行为，必须锁）；
+ *   改动 2：持久值断言 `parsed.state.skin` → `parsed.state.template`；
+ *   改动 3：「打印内容」钮升格为「模板与页面」（三截下拉），点击 helper 跟着改；
+ *   改动 4：L2 静态锁里 `skin={skin}` → `skin="default"`（SchedulePaper 主体
+ *           不碰，classic 恒default 皮肤；print-skins.ts 锁增补模板注册表断言）。
+ *   **未动**：五块开关的 data-print-block 契约、经典纸面全部行为断言、
+ *   paginateSections 纯函数口径、`.print-root` 挂类断言（classic 类名冻结）。
  *
  * 挂载形态同 `print-preview-zoom.spec.tsx`：先 open=false 再翻 true（= 首次
  * 打开），纸面走**真实** SchedulePaper + 真实 useSchedulePaperData，stores
@@ -45,7 +61,12 @@ import {
   paginateSections,
   type ScheduleSection,
 } from '../src/lib/schedule-print';
-import { printSkinClass, type PrintSkinId } from '../src/components/print/print-skins';
+import {
+  printSkinClass,
+  printTemplateClass,
+  type PrintSkinId,
+  type PrintTemplateId,
+} from '../src/components/print/print-skins';
 import { PRINT_PREFS_STORAGE_KEY, usePrintPrefsStore } from '../src/store/usePrintPrefsStore';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useMembersStore } from '../src/store/useMembersStore';
@@ -210,6 +231,20 @@ async function rehydratePrefs(): Promise<void> {
   });
 }
 
+/** 每例从「默认全开 / classic 模板」起手（含把 persist 的异步写排空） */
+async function resetPrefs(): Promise<void> {
+  await act(async () => {
+    usePrintPrefsStore.setState({
+      blocks: { ...DEFAULT_SCHEDULE_PAPER_BLOCKS },
+      template: 'classic',
+      pages: {},
+      palette: {},
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 function clickButton(text: string): void {
   const btn = Array.from(document.querySelectorAll('button')).find(
     (b) => (b.textContent ?? '').trim() === text,
@@ -224,16 +259,31 @@ function blocksPanel(): HTMLElement | null {
   return document.querySelector('[data-print-blocks-panel]');
 }
 
-/** 打开勾选面板（幂等：已开则不动） */
+/** 打开下拉面板（幂等：已开则不动） */
 function openBlocksPanel(): void {
   if (blocksPanel()) return;
-  clickButton('打印内容');
-  expect(blocksPanel(), '点「打印内容」后勾选面板应出现').not.toBeNull();
+  clickButton('模板与页面');
+  expect(blocksPanel(), '点「模板与页面」后下拉面板应出现').not.toBeNull();
+}
+
+/** 点模板卡（选择器上截） */
+function pickTemplate(id: PrintTemplateId): void {
+  const btn = document.querySelector<HTMLButtonElement>(`[data-print-template-option="${id}"]`);
+  if (!btn) throw new Error(`找不到模板卡：${id}`);
+  act(() => {
+    btn.click();
+  });
 }
 
 function checkbox(key: string): HTMLInputElement {
   const el = document.querySelector<HTMLInputElement>(`input[data-print-block="${key}"]`);
   if (!el) throw new Error(`找不到勾选框：${key}`);
+  return el;
+}
+
+function pageCheckbox(page: string): HTMLInputElement {
+  const el = document.querySelector<HTMLInputElement>(`input[data-print-page="${page}"]`);
+  if (!el) throw new Error(`找不到页勾选框：${page}`);
   return el;
 }
 
@@ -248,6 +298,17 @@ function setBlockChecked(key: string, on: boolean): void {
   expect(checkbox(key).checked, `勾选 ${key} 后期望 ${on}`).toBe(on);
 }
 
+/** 勾 / 取消一页（幂等） */
+function setPageChecked(page: string, on: boolean): void {
+  const el = pageCheckbox(page);
+  if (el.checked !== on) {
+    act(() => {
+      el.click();
+    });
+  }
+  expect(pageCheckbox(page).checked, `勾选页 ${page} 后期望 ${on}`).toBe(on);
+}
+
 /* ---- 纸面探针 ---- */
 
 const paperRoot = (): HTMLElement | null => document.querySelector('.print-root');
@@ -259,18 +320,16 @@ const h2Texts = (): string[] =>
 const containsText = (t: string): boolean => (paperRoot()?.textContent ?? '').includes(t);
 /** 全 body 文本——工具条文案（预计 N 页）在 .print-root 外，走这个 */
 const bodyContains = (t: string): boolean => (document.body.textContent ?? '').includes(t);
+/** 打印按钮（动作条主操作） */
+const printButton = (): HTMLButtonElement | null =>
+  Array.from(document.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim() === '打印') ?? null;
 
 beforeEach(async () => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
   localStorage.clear();
-  // 每例从「默认全开 / default 皮肤」起手（含把 persist 的异步写排空，避免污染后续手动写的脏数据）
-  await act(async () => {
-    usePrintPrefsStore.setState({ blocks: { ...DEFAULT_SCHEDULE_PAPER_BLOCKS }, skin: 'default' });
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+  await resetPrefs();
   seedStores();
 });
 
@@ -285,14 +344,14 @@ afterEach(() => {
  * L1 · 行为
  * ==================================================================================== */
 
-describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', () => {
-  it('① 默认五块全在（未传偏好 ⇒ 视觉零变化），.print-root 挂 default 皮肤类', () => {
+describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', () => {
+  it('① 默认五块全在（未传偏好 ⇒ 视觉零变化），.print-root 挂 classic 模板类', () => {
     renderDialog(false);
     expect(paperRoot(), '关闭态不应渲染纸面').toBeNull();
 
     renderDialog(true);
     expect(paperRoot(), '打开后纸面上屏').not.toBeNull();
-    expect(paperRoot()!.className, 'default 皮肤类必须挂上（v1 无 CSS 规则，仅可观测）').toContain(
+    expect(paperRoot()!.className, 'classic 模板类必须挂上（类名冻结：既有 spec 钉死）').toContain(
       'print-skin-default',
     );
     // 头部 / 时间轴 / 项目信息 / 清单 / 页脚 五块都在
@@ -304,7 +363,7 @@ describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', 
     expect(firstPageRows(), '母本分页口径：首屏限 929−210=719 ⇒ 首页 5 段').toBe(5);
     expect(bodyContains('预计 2 页'), '工具条页数文案随分页').toBe(true);
 
-    // 打开勾选面板：五块默认全选
+    // 打开下拉面板：五块默认全选
     openBlocksPanel();
     for (const key of BLOCK_KEYS) {
       expect(checkbox(key).checked, `${key} 默认应勾选`).toBe(true);
@@ -341,10 +400,7 @@ describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', 
   it('③ 其余四块逐块可摘：摘谁谁消失，没摘的不动', async () => {
     for (const key of ['header', 'projectInfo', 'stageTable', 'footer'] as const) {
       // 每轮从默认偏好重来
-      await act(async () => {
-        usePrintPrefsStore.setState({ blocks: { ...DEFAULT_SCHEDULE_PAPER_BLOCKS }, skin: 'default' });
-        await Promise.resolve();
-      });
+      await resetPrefs();
       renderDialog(true);
       openBlocksPanel();
       setBlockChecked(key, false);
@@ -374,7 +430,7 @@ describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', 
     }
   });
 
-  it('④ 勾选写 localStorage；重 hydrate / 卸载重开仍是用户选的；脏数据 merge 兜底', async () => {
+  it('④ 勾选写 localStorage；重 hydrate / 卸载重开仍是用户选的；脏数据 merge 兜底（含旧 skin 键迁移）', async () => {
     renderDialog(true);
     openBlocksPanel();
     setBlockChecked('timeline', false);
@@ -384,13 +440,13 @@ describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', 
     const raw = localStorage.getItem(PRINT_PREFS_STORAGE_KEY);
     expect(raw, '勾选应写入 localStorage').not.toBeNull();
     const parsed = JSON.parse(raw!) as {
-      state: { blocks: Record<string, boolean>; skin: string };
+      state: { blocks: Record<string, boolean>; template: string };
       version: number;
     };
     expect(parsed.version).toBe(0);
     expect(parsed.state.blocks.timeline, '被摘的块落库为 false').toBe(false);
     expect(parsed.state.blocks.header, '没动的块落库为 true').toBe(true);
-    expect(parsed.state.skin).toBe('default');
+    expect(parsed.state.template, '模板落库（默认 classic）').toBe('classic');
 
     // 读路径 1：rehydrate 后 store 仍是用户选的
     await rehydratePrefs();
@@ -406,16 +462,12 @@ describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', 
     expect(firstPageTable(), '重开后清单仍在').not.toBeNull();
     expect(firstPageRows(), '重开后仍按 92 预留分页').toBe(6);
 
-    // 脏数据：缺四个块键的 blocks + 未知 skin ⇒ merge 兜底（缺键 = 回落默认，而不是静默少块）。
-    // 先把 store 复位到默认（= 老版本数据 + 新版本首启的内存态），再让 hydrate 读旧持久值。
-    await act(async () => {
-      usePrintPrefsStore.setState({ blocks: { ...DEFAULT_SCHEDULE_PAPER_BLOCKS }, skin: 'default' });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    // 脏数据 A：缺四个块键的 blocks + **旧 skin 键** ⇒ merge 兜底。
+    // skin:'default' 是 v0.8.6.0002 的持久形状，必须迁成 template:'classic'（决策文档 §2.3）。
+    await resetPrefs();
     localStorage.setItem(
       PRINT_PREFS_STORAGE_KEY,
-      JSON.stringify({ state: { blocks: { header: false }, skin: 'compact-x' }, version: 0 }),
+      JSON.stringify({ state: { blocks: { header: false }, skin: 'default' }, version: 0 }),
     );
     await rehydratePrefs();
     expect(usePrintPrefsStore.getState().blocks, '缺键回落默认全开').toEqual({
@@ -425,7 +477,109 @@ describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', 
       stageTable: true,
       footer: true,
     });
-    expect(usePrintPrefsStore.getState().skin, '未知 skin 回落 default').toBe('default');
+    expect(usePrintPrefsStore.getState().template, '旧 skin 键迁成 classic').toBe('classic');
+
+    // 脏数据 B：未知 template id ⇒ 回落 classic（与旧「未知 skin 回落 default」同兜底）
+    await resetPrefs();
+    localStorage.setItem(
+      PRINT_PREFS_STORAGE_KEY,
+      JSON.stringify({ state: { blocks: { header: false }, template: 'compact-x' }, version: 0 }),
+    );
+    await rehydratePrefs();
+    expect(usePrintPrefsStore.getState().template, '未知 template 回落 classic').toBe('classic');
+  });
+
+  it('⑤【新】模板选择器：A 版渲染 4 页；D/E/H 建设中且禁打印（不许假装能打）', () => {
+    renderDialog(true);
+    openBlocksPanel();
+    // 五张卡齐全（决策 ⑥：四套全上，选择器先看得见全貌）
+    for (const id of ['classic', 'swiss-schedule', 'data-editorial', 'editorial-index', 'agent-poster']) {
+      expect(
+        document.querySelector(`[data-print-template-option="${id}"]`),
+        `模板卡 ${id} 应在选择器里`,
+      ).not.toBeNull();
+    }
+
+    // 切 A：纸面换成 A 版四页 + 模板类
+    pickTemplate('swiss-schedule');
+    const rootEl = paperRoot()!;
+    expect(rootEl.className).toContain('print-template-swiss-schedule');
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
+    expect(bodyContains('预计 4 页')).toBe(true);
+    expect(printButton()!.disabled, 'A 版可打印').toBe(false);
+
+    // 切 D：建设中空态，零纸面，打印禁用
+    pickTemplate('data-editorial');
+    expect(document.querySelector('[data-print-template-building]'), 'D 应显示建设中空态').not.toBeNull();
+    expect(document.querySelectorAll('.a4-page'), '建设中不得输出任何纸面').toHaveLength(0);
+    expect(printButton()!.disabled, '建设中禁止打印').toBe(true);
+  });
+
+  it('⑥【新】页面勾选：四版默认全选、可摘单页、页码/预计页数联动', () => {
+    renderDialog(true);
+    openBlocksPanel();
+    pickTemplate('swiss-schedule');
+    // 默认全选（01 §8）
+    for (const p of ['stage-overview', 'task-register', 'delay-ledger', 'member-roster']) {
+      expect(pageCheckbox(p).checked, `${p} 默认应勾选`).toBe(true);
+    }
+    // 摘一页 ⇒ 纸面 3 页 + 页码重排 + 预计联动
+    setPageChecked('task-register', false);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
+    expect(bodyContains('预计 3 页')).toBe(true);
+    expect(document.querySelector('.a4-page')!.getAttribute('data-print-page')).toBe('stage-overview');
+    expect(document.body.textContent).toContain('第 1 / 3 页');
+
+    // 反选 ⇒ 0 页；全选 ⇒ 回 4 页
+    act(() => {
+      document.querySelector<HTMLButtonElement>('[data-print-pages-none]')!.click();
+    });
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(0);
+    expect(bodyContains('预计 0 页')).toBe(true);
+    act(() => {
+      document.querySelector<HTMLButtonElement>('[data-print-pages-all]')!.click();
+    });
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
+  });
+
+  it('⑦【新】配色硬闸门：不达标禁存（store 一个字节都不落库）；达标才落', async () => {
+    renderDialog(true);
+    openBlocksPanel();
+    pickTemplate('swiss-schedule');
+
+    // 踩线组合：浅黄纸 + 白字 + 白栏 ⇒ 三对全挂
+    const bad = { accent: '#FFF8E1', ink: '#FFFFFF', line: '#FFFFFF' };
+    let gate = usePrintPrefsStore.getState().setPalette('swiss-schedule', bad);
+    expect(gate.ok, '硬闸门必须拒绝').toBe(false);
+    expect(gate.message).toContain('栏内反白字 vs 栏底');
+    expect(usePrintPrefsStore.getState().palette['swiss-schedule'], '禁存 ⇒ 不落库').toBeUndefined();
+
+    // 达标组合（预设变体）：落库 + 进纸面 CSS 变量
+    const preset = { accent: '#16324F', ink: '#F2D957', line: '#F2D957' };
+    let ok = usePrintPrefsStore.getState().setPalette('swiss-schedule', preset);
+    expect(ok.ok).toBe(true);
+    await flush();
+    expect(usePrintPrefsStore.getState().palette['swiss-schedule']).toEqual(preset);
+    let style = paperRoot()!.getAttribute('style') ?? '';
+    expect(style, '自定义色经 .print-root inline 变量进纸面').toContain('--tpl-accent: #16324F');
+
+    // 恢复基线 = 删键（包 act：store 变更要触发重渲染才看得到纸面变化）
+    act(() => {
+      usePrintPrefsStore.getState().setPalette('swiss-schedule', null);
+    });
+    expect(usePrintPrefsStore.getState().palette['swiss-schedule']).toBeUndefined();
+    expect(paperRoot()!.getAttribute('style')).toContain('--tpl-accent: #F2D957');
+  });
+
+  it('⑧【新】灰度 toggle：纸面 wrapper 套 grayscale(1)（chrome 不灰度）', () => {
+    renderDialog(true);
+    expect(document.querySelector('[data-print-grayscale="on"]')).toBeNull();
+    clickButton('灰度');
+    const wrapper = document.querySelector('[data-print-grayscale="on"]');
+    expect(wrapper).not.toBeNull();
+    expect((wrapper as HTMLElement).style.filter).toBe('grayscale(1)');
+    clickButton('灰度');
+    expect(document.querySelector('[data-print-grayscale="on"]')).toBeNull();
   });
 });
 
@@ -433,20 +587,33 @@ describe('打印内容自定义 + 皮肤预留 · L1 行为（真实纸面）', 
  * L2 · 静态源码锁 + 纯函数契约
  * ==================================================================================== */
 
-describe('打印内容自定义 + 皮肤预留 · L2 静态锁与纯函数契约', () => {
+describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约', () => {
   const ROOT = resolve(__dirname, '..');
   const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf-8');
 
-  it('print-skins.ts：注册表 / 静态类映射在位，禁止模板拼类名', () => {
+  it('print-skins.ts：模板注册表 / 静态类映射在位，禁止模板拼类名；legacy 皮肤出口保留', () => {
     const src = read('src/components/print/print-skins.ts');
-    expect(src).toContain('export type PrintSkinId');
-    expect(src).toContain('export const PRINT_SKINS');
-    expect(src).toContain('export function printSkinClass');
+    // 类型契约住在 src/print/model（02 §2），注册表再导出（消费方一处取）
+    expect(src).toContain('export type { PrintPageKind, PrintTemplateId }');
+    expect(src).toContain('export const PRINT_TEMPLATES');
+    expect(src).toContain('export function printTemplateClass');
     expect(src).toContain('print-skin-default');
     // 静态映射纪律（同 stageColors）：整个文件不允许出现模板字符串
     expect(src, '禁止模板字符串拼类名（Tailwind JIT 看不见动态串）').not.toContain('${');
+    // legacy 出口（SchedulePaper 主体仍消费，未碰）
     expect(printSkinClass('default')).toBe('print-skin-default');
     expect(printSkinClass('compact' as PrintSkinId), '未知 id 回落 default').toBe(
+      'print-skin-default',
+    );
+    // 模板类映射：四版 print-template-<id>（02 §5）；classic 冻结为既有类
+    expect(printTemplateClass('swiss-schedule')).toBe('print-template-swiss-schedule');
+    expect(printTemplateClass('data-editorial')).toBe('print-template-data-editorial');
+    expect(printTemplateClass('editorial-index')).toBe('print-template-editorial-index');
+    expect(printTemplateClass('agent-poster')).toBe('print-template-agent-poster');
+    expect(printTemplateClass('classic'), 'classic 类名冻结（DOM 被既有 spec 钉死）').toBe(
+      'print-skin-default',
+    );
+    expect(printTemplateClass('nope' as PrintTemplateId), '未知 id 回落 classic').toBe(
       'print-skin-default',
     );
   });
@@ -471,22 +638,37 @@ describe('打印内容自定义 + 皮肤预留 · L2 静态锁与纯函数契约
     expect(paper).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
-  it('PrintPreviewDialog.tsx：复用 Modal dropdown 档 + 勾选即时生效接线', () => {
+  it('PrintPreviewDialog.tsx：复用 Modal dropdown 档 + 模板/页面/配色三截接线', () => {
     const src = read('src/components/print/PrintPreviewDialog.tsx');
     expect(src, '必须复用既有 Modal 体系（dropdown 档），不许发明新浮层').toContain(
       'placement="dropdown"',
     );
     expect(src).toContain('data-print-block');
+    expect(src).toContain('data-print-template-option');
+    expect(src).toContain('data-print-page');
+    expect(src).toContain('data-print-grayscale-toggle');
     expect(src).toContain('usePrintPrefsStore');
     expect(src, '勾选即时喂给纸面').toContain('blocks={blocks}');
-    expect(src).toContain('skin={skin}');
+    // v2 适配：skin 由 store 的 template 派生，经典恒 default（SchedulePaper 主体不碰）
+    expect(src).toContain('skin="default"');
+    // A 版文档接入 + 配色截 + 建设中空态
+    expect(src).toContain('SwissScheduleDocument');
+    expect(src).toContain('PaletteSection');
+    expect(src).toContain('data-print-template-building');
+    expect(src).toContain('usePrintViewModel');
   });
 
-  it('usePrintPrefsStore.ts：key / partialize / merge 兜底三件套', () => {
+  it('usePrintPrefsStore.ts：key / partialize / merge 兜底三件套 + 新字段', () => {
     const src = read('src/store/usePrintPrefsStore.ts');
     expect(src).toContain('changxia.printPrefs');
     expect(src).toContain('partialize');
     expect(src).toContain('merge:');
+    // v2 增量：template / pages / palette 三字段 + 旧 skin 迁移 + 闸门
+    expect(src).toContain('template');
+    expect(src).toContain('pages');
+    expect(src).toContain('palette');
+    expect(src).toContain('legacySkinToTemplate');
+    expect(src).toContain('checkPrintPalette');
   });
 
   it('useSchedulePaperData.ts：分页随 blocks 走 firstPageHeaderFor', () => {
