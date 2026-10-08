@@ -27,8 +27,7 @@ import {
   DESKTOP_CELL_H,
   type GridDay,
 } from './calendarGrid';
-import { stageSolidOf } from './calendarColors';
-import { customStageColor } from '../timeline/stageColorKey';
+import { EntryDot } from './EntryDot';
 import type { CalendarEntry } from './calendarMath';
 
 /**
@@ -56,8 +55,6 @@ function EntryRow({
   isMobile: boolean;
   onOpen(projectId: string): void;
 }) {
-  // ★ 通路 B：判定 + `data-stage-key` 一次取齐（只写一半 ⇒ var() 解析为空 ⇒ 透明）
-  const { attrs: colorAttrs } = customStageColor(entry.activeStage?.customColor);
   return (
     <button
       type="button"
@@ -70,18 +67,9 @@ function EntryRow({
       className="flex min-w-0 items-center gap-[5px] text-left"
     >
       {/* 色点 8×8 圆形；幽灵态 = 空心（同色 1.5px 描边、内部透明），§3.5 未开始语义 */}
-      <span
-        aria-hidden
-        className={cn(
-          'h-[8px] w-[8px] shrink-0 rounded-full',
-          entry.isGhost && 'opacity-80',
-        )}
-        style={
-          entry.isGhost
-            ? { border: `1.5px solid ${stageSolidOf(entry.filterStageIndex, entry.activeStage?.colorIndex, entry.activeStage?.customColor)}` }
-            : { backgroundColor: stageSolidOf(entry.filterStageIndex, entry.activeStage?.colorIndex, entry.activeStage?.customColor) }
-        }
-        {...colorAttrs}
+      <EntryDot
+        entry={entry}
+        className={cn('h-[8px] w-[8px] rounded-full', entry.isGhost && 'opacity-80')}
       />
       <span
         className={cn(

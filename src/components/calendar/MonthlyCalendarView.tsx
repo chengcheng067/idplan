@@ -40,6 +40,7 @@ import { CalendarLegend } from './CalendarLegend';
 import { CalendarFilters as CalendarFilterPanel } from './CalendarFilters';
 import { CalendarEmptyStates, type EmptyKind } from './CalendarEmptyStates';
 import { MonthDayCell, stageLabelOf } from './MonthDayCell';
+import { EntryDot } from './EntryDot';
 import { DayItemsPopover, type PopoverAnchorRect } from './DayItemsPopover';
 
 /**
@@ -435,13 +436,13 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
               .map((e) => (
                 <div
                   key={e.project.id}
+                  data-agenda-row=""
                   className="flex min-w-0 flex-wrap items-center gap-[10px] rounded-[12px] bg-paper px-[12px] py-[10px]"
                 >
-                  <span
-                    aria-hidden
-                    className="h-[12px] w-[12px] shrink-0 rounded-[3px]"
-                    style={{ backgroundColor: e.color }}
-                  />
+                  {/* v3「B 方案」色点：与月/周格内点、当日浮层行同一枚 EntryDot ——
+                      实心块角色（stageSolidOf）+ 幽灵态空心描边 + 自定义色 data-stage-key
+                      三态归一（旧实现用 e.color 宽面带、幽灵实心、且漏半套 attrs） */}
+                  <EntryDot entry={e} className="h-[12px] w-[12px] rounded-[3px]" />
                   <span className="min-w-0 truncate text-[13px] font-medium text-ink">
                     {e.project.name}
                   </span>

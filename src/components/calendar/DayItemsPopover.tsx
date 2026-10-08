@@ -30,8 +30,7 @@ import { X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import type { GridDay } from './calendarGrid';
 import type { CalendarEntry } from './calendarMath';
-import { stageSolidOf } from './calendarColors';
-import { customStageColor } from '../timeline/stageColorKey';
+import { EntryDot } from './EntryDot';
 import { stageLabelOf } from './MonthDayCell';
 
 /** 锚定矩形（视口坐标；调用方持触发格 DOM，scroll/resize 时同步） */
@@ -184,13 +183,6 @@ export function DayItemsPopover({
   const list = (
     <div data-day-popover-list="" className="-mx-[12px] max-h-[236px] overflow-y-auto">
       {items.map((e) => {
-        // ★ 通路 B：判定 + data-stage-key 一次取齐（只写一半 ⇒ var() 解析为空 ⇒ 透明）
-        const { attrs: colorAttrs } = customStageColor(e.activeStage?.customColor);
-        const solid = stageSolidOf(
-          e.filterStageIndex,
-          e.activeStage?.colorIndex,
-          e.activeStage?.customColor,
-        );
         return (
           <button
             key={e.project.id}
@@ -201,17 +193,8 @@ export function DayItemsPopover({
             }}
             className="flex w-full items-center gap-[8px] px-[12px] py-[7px] text-left transition-colors hover:bg-sand"
           >
-            {/* 色点 10×10 圆角 3；幽灵态空心（同色 1.5px 描边） */}
-            <span
-              aria-hidden
-              className="h-[10px] w-[10px] shrink-0 rounded-[3px]"
-              style={
-                e.isGhost
-                  ? { border: `1.5px solid ${solid}` }
-                  : { backgroundColor: solid }
-              }
-              {...colorAttrs}
-            />
+            {/* 色点 10×10 圆角 3；幽灵态空心（同色 1.5px 描边）——与格内/日程行同一枚组件 */}
+            <EntryDot entry={e} className="h-[10px] w-[10px] rounded-[3px]" />
             <span className="min-w-0 flex-1 truncate pl-[2px] text-[12px] text-ink">
               {e.project.name}
             </span>
