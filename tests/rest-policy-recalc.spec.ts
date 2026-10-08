@@ -123,7 +123,7 @@ function makeTask(stageId: string, projectId: string, over: Partial<Task> = {}):
     assigneeId: null,
     assigneeIds: [],
     dueDate: null,
-    source: 'manual',
+    source: 'human',
     externalId: null,
     agentId: null,
     status: 'draft',
@@ -133,6 +133,7 @@ function makeTask(stageId: string, projectId: string, over: Partial<Task> = {}):
     startAt: null,
     claimedAt: null,
     runId: null,
+    orderIndex: 0,
     revision: 1,
     updatedAt: '2026-09-07T00:00:00Z',
     ...over,
@@ -866,23 +867,23 @@ describe('Task.dueDate：默认不跟随，可选平移', () => {
     return { input: { project, stages, tasks: [task] }, taskId: task.id };
   }
 
-  it('默认（alignTaskDueDates 不传）：taskShifts 为空，dueDate 不跟随', () => {
+  it('默认不跟随：plan 恒算出 taskShiftCount（弹窗提示用），是否真写由应用层复选框决定', () => {
     const { input } = dueProject();
     const plan = planRestPolicyRecalc({
       projects: [input],
       oldPolicy: DOUBLE,
       newPolicy: SINGLE,
     });
-    expect(plan.taskShiftCount).toBe(0);
+    expect(plan.taskShiftCount).toBe(1);
+    expect(plan.projects[0].taskShifts).toHaveLength(1);
   });
 
-  it('alignTaskDueDates=true：到期日平移到新区间内（保持相对偏移）', () => {
+  it('到期日平移到新区间内（保持相对偏移；应用层勾选后写入）', () => {
     const { input, taskId } = dueProject();
     const plan = planRestPolicyRecalc({
       projects: [input],
       oldPolicy: DOUBLE,
       newPolicy: SINGLE,
-      alignTaskDueDates: true,
     });
     expect(plan.taskShiftCount).toBe(1);
     const shift = plan.projects[0].taskShifts[0];
@@ -905,7 +906,6 @@ describe('Task.dueDate：默认不跟随，可选平移', () => {
       projects: [{ project, stages, tasks: [t1, t2] }],
       oldPolicy: DOUBLE,
       newPolicy: SINGLE,
-      alignTaskDueDates: true,
     });
     expect(plan.taskShiftCount).toBe(0);
   });
@@ -922,7 +922,6 @@ describe('Task.dueDate：默认不跟随，可选平移', () => {
       projects: [{ project, stages, tasks: [task] }],
       oldPolicy: DOUBLE,
       newPolicy: SINGLE,
-      alignTaskDueDates: true,
     });
     // 新区间 09-12~09-17；原偏移 -3 → 09-12-3=09-09 < start → clamp 到 09-12
     expect(plan.projects[0].taskShifts[0].newDueDate).toBe('2026-09-12');

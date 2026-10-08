@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 
 import { CalendarDays, X } from 'lucide-react';
 
-import { ALL_REST_POLICIES, ChangxiaError, REST_POLICY_LABELS, RestPolicyKind } from '../../core/types/enums';
+import { ALL_REST_POLICIES, ChangxiaError, REST_POLICY_LABELS, RestPolicyKind, ScheduleBasis } from '../../core/types/enums';
 import type { RestPolicyConfig } from '../../core/types/entities';
 import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { buildRestDayPreview, isValidAnchorWeek, isoWeekIdOf, shiftIsoWeek } from '../../lib/restPolicyDraft';
+import { planRestPolicyRecalc, sameWorkdayPolicy } from '../../lib/restPolicyRecalc';
 import { withCnHolidays } from '../../core/holidays/policy';
 import { cnHolidayYears } from '../../core/holidays';
 import { dayjs } from '../../lib/date';
@@ -14,6 +15,7 @@ import { cn } from '../../lib/cn';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { Modal } from '../common/Modal';
+import { RestPolicyRecalcDialog } from './RestPolicyRecalcDialog';
 
 /** ISO 周行首为周一 */
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'] as const;
@@ -85,12 +87,29 @@ export function RestPolicyEditor({
 }): JSX.Element {
   const repos = useRepos();
   const saved = useSettingsStore((s) => s.restPolicy);
+  const savedEffective = useSettingsStore((s) => s.effectiveRestPolicy);
   const applyToStore = useSettingsStore((s) => s.setRestPolicy);
+  const projects = useProjectsStore((s) => s.projects);
+  const stages = useProjectsStore((s) => s.stages);
 
   const [draft, setDraft] = useState<RestPolicyConfig>(saved);
   const [saving, setSaving] = useState(false);
+  /** 制度口径发生变化且存在受影响阶段 → 打开重算确认弹窗 */
+  const [recalcOpen, setRecalcOpen] = useState(false);
 
   const todayIso = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
+
+  /** 工作日制项目（自然日制零影响——重算演算与弹窗计数同口径，§4.0） */
+  const workdayInputs = useMemo(
+    () =>
+      projects
+        .filter((p) => p.scheduleBasis === ScheduleBasis.Workday)
+        .map((p) => ({
+          project: p,
+          stages: stages.filter((s) => s.projectId === p.id),
+        })),
+    [projects, stages],
+  );
 
   /** 单休休息周几（0=周一…6=周日）；缺省/非法回落 6=周日（旧数据无迁移） */
   const restWeekday = useMemo(() => {
@@ -123,15 +142,39 @@ export function RestPolicyEditor({
     setDraft((prev) => ({ ...prev, anchorWeek: shiftIsoWeek(prev.anchorWeek, 1, todayIso) }));
   };
 
+  /** 直接落库（无重算路径）：先写库再更新内存镜像，失败保持原制度 */
+  const persist = async (next: RestPolicyConfig): Promise<void> => {
+    await repos.settings.set('restPolicy', next);
+    applyToStore(next);
+    useProjectsStore.getState().pushToast('success', '休息制度已保存');
+    // 独立弹窗保存后关闭；嵌入态只提示、留在设置面板内
+    if (onClose) onClose();
+  };
+
   const onSave = async (): Promise<void> => {
     setSaving(true);
     try {
-      // 先落库再更新内存镜像：写库失败时界面保持原制度，不出现「看起来改了其实没存」
-      await repos.settings.set('restPolicy', draft);
-      applyToStore(draft);
-      useProjectsStore.getState().pushToast('success', '休息制度已保存');
-      // 独立弹窗保存后关闭；嵌入态只提示、留在设置面板内
-      if (onClose) onClose();
+      // 口径未变（同制度内微调/无实质差异）→ 直接保存，无需重算
+      if (sameWorkdayPolicy(saved, draft)) {
+        await persist(draft);
+        return;
+      }
+      // 口径变化：先跑一遍纯函数（与弹窗「预览即演算」同一实现）。
+      // 零变化（如无工作日制项目）→ 直接保存，不弹确认窗。
+      const plan = planRestPolicyRecalc({
+        projects: workdayInputs,
+        oldPolicy: savedEffective,
+        newPolicy: withCnHolidays(draft),
+      });
+      if (!plan.hasChanges) {
+        await persist(draft);
+        useProjectsStore
+          .getState()
+          .pushToast('success', '休息制度已保存（没有阶段需要重算）');
+        return;
+      }
+      // 有变化 → 弹确认窗；确认后由弹窗完成「落库制度 + 应用重算」再回调关闭
+      setRecalcOpen(true);
     } catch (err) {
       useProjectsStore
         .getState()
@@ -343,6 +386,24 @@ export function RestPolicyEditor({
           </button>
         </div>
       </div>
+
+      {/*
+        重算确认弹窗（v3 §4.4）：制度口径变化且存在受影响阶段时出现。
+        Modal 走 createPortal 挂 body，放在本 div 内不影响布局；确认后由弹窗
+        完成「落库制度 + 应用重算」，再经 onConfirmed 回调关闭外层。
+      */}
+      {recalcOpen && (
+        <RestPolicyRecalcDialog
+          draft={draft}
+          oldPolicy={savedEffective}
+          onClose={() => setRecalcOpen(false)}
+          onConfirmed={() => {
+            setRecalcOpen(false);
+            // 制度已由弹窗落库、重算已应用；独立弹窗形态下随外层一起关闭
+            if (onClose) onClose();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -31,8 +31,9 @@
  * 覆盖」同源（parseDurationDays）。
  *
  * ── Task.dueDate（§4.2）──
- * 默认不跟随。alignTaskDueDates=true 时把到期日平移到阶段新区间内
- * （保持阶段内相对偏移，越界 clamp 到区间端点）。
+ * 默认不跟随。plan 恒算出 taskShifts（弹窗要报「N 个任务的到期日将落在阶段
+ * 新区间之外」的计数）；**是否真写**由应用层决定（弹窗复选框 alignTaskDueDates，
+ * 默认不勾）——applyRestPolicyRecalc 只平移被勾选的那批。
  *
  * 铁律：日期判定一律走 src/lib/workdays.ts，本文件不做二次周末判定。
  */
@@ -63,8 +64,6 @@ export interface PlanRestPolicyRecalcArgs {
   newPolicy: RestPolicyConfig;
   /** 工期覆盖（工期改变模式）：key=stageId，value=工作日天数（正整数） */
   durationOverrides?: Record<string, number>;
-  /** 是否把任务到期日平移到阶段新区间内（默认 false = dueDate 不跟随） */
-  alignTaskDueDates?: boolean;
 }
 
 /* ------------------------------ 输出形状 ------------------------------ */
@@ -115,7 +114,7 @@ export interface RecalcProjectPlan {
   oldPlannedEndAt: string;
   newPlannedEndAt: string;
   plannedEndAtChanged: boolean;
-  /** dueDate 需要平移的任务（alignTaskDueDates=true 时填充；false 时也用于提示计数） */
+  /** dueDate 需要平移的任务（恒算——弹窗据此报「N 个任务到期日将落在新区间外」；是否真写由应用层复选框决定） */
   taskShifts: RecalcTaskShift[];
 }
 
@@ -126,8 +125,9 @@ export interface RecalcPlan {
   changedStageCount: number;
   /** 已完成冻结阶段总数 */
   frozenStageCount: number;
+  /** dueDate 需要平移的任务总数（默认不写，见 taskShifts 注释） */
   taskShiftCount: number;
-  /** 是否有任何变化（false = 幂等：同制度重算第二次零变化） */
+  /** 是否有任何阶段/项目级变化（false = 幂等：同制度重算第二次零变化） */
   hasChanges: boolean;
 }
 
@@ -184,10 +184,9 @@ export function sameWorkdayPolicy(a: RestPolicyConfig, b: RestPolicyConfig): boo
 export function planRestPolicyRecalc(args: PlanRestPolicyRecalcArgs): RecalcPlan {
   const { oldPolicy, newPolicy } = args;
   const overrides = args.durationOverrides ?? {};
-  const alignDue = args.alignTaskDueDates === true;
 
   const projects: RecalcProjectPlan[] = args.projects.map(({ project, stages, tasks }) =>
-    planProject(project, stages, tasks ?? [], oldPolicy, newPolicy, overrides, alignDue),
+    planProject(project, stages, tasks ?? [], oldPolicy, newPolicy, overrides),
   );
 
   return {
@@ -196,9 +195,9 @@ export function planRestPolicyRecalc(args: PlanRestPolicyRecalcArgs): RecalcPlan
     changedStageCount: projects.reduce((acc, p) => acc + p.changedStageCount, 0),
     frozenStageCount: projects.reduce((acc, p) => acc + p.frozenStageCount, 0),
     taskShiftCount: projects.reduce((acc, p) => acc + p.taskShifts.length, 0),
-    hasChanges:
-      projects.some((p) => p.changedStageCount > 0 || p.plannedEndAtChanged) ||
-      projects.some((p) => p.taskShifts.length > 0),
+    // hasChanges 只看阶段与项目级日期——dueDate 平移依附于阶段变化，
+    // 阶段零变化时 taskShifts 必为空（无 changed 阶段可挂）。
+    hasChanges: projects.some((p) => p.changedStageCount > 0 || p.plannedEndAtChanged),
   };
 }
 
@@ -209,7 +208,6 @@ function planProject(
   oldPolicy: RestPolicyConfig,
   newPolicy: RestPolicyConfig,
   overrides: Record<string, number>,
-  alignDue: boolean,
 ): RecalcProjectPlan {
   const stages = [...rawStages].sort((a, b) => a.orderIndex - b.orderIndex);
   const stagePlans: RecalcStagePlan[] = [];
@@ -319,7 +317,7 @@ function planProject(
     oldPlannedEndAt,
     newPlannedEndAt,
     plannedEndAtChanged: newPlannedEndAt !== oldPlannedEndAt,
-    taskShifts: alignDue ? taskShifts : [],
+    taskShifts,
   };
 }
 
