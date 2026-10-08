@@ -15,6 +15,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../../hooks/useRoleGuard';
 import { cn } from '../../lib/cn';
 import { isRestDay } from '../../lib/workdays';
+import { cnHolidayIndex, holidayLabelOf } from '../../core/holidays';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import {
   buildMonthMeta,
@@ -150,7 +151,10 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   const projects = useHumanProjects();
   const stages = useHumanStages();
   const tasks = useHumanTasks();
-  const restPolicy = useSettingsStore((s) => s.restPolicy);
+  /* 生效口径（非原始值）：skipHolidays 开时已合并内置法定节假日表——
+     休息日底纹与排期吸附都必须是「用户真正生效的那份制度」 */
+  const restPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
+  const rawRestPolicy = useSettingsStore((s) => s.restPolicy);
 
   const { role, currentMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
@@ -274,6 +278,17 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
     meta.todayIso,
   ]);
 
+  /**
+   * 节日名查表（显示面）。仅 skipHolidays 开启时启用——开关关着就不会有合并，
+   * 显示节日名会造成「这天明明要上班却写着国庆节」的假信息。
+   * 内置表一次展开（~60 天），按开关布尔 memo，不在渲染路径里反复建 Set。
+   */
+  const holidayLabelFn = useMemo(() => {
+    if (rawRestPolicy.skipHolidays !== true) return null;
+    const index = cnHolidayIndex();
+    return (date: string): string | null => holidayLabelOf(index, date);
+  }, [rawRestPolicy.skipHolidays]);
+
   const entriesOnDate = (date: string): CalendarEntry[] =>
     finalEntries.filter((e) => e.bandStart <= date && e.bandEnd >= date);
 
@@ -316,9 +331,11 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
           key={day.date}
           day={day}
           items={entriesOnDate(day.date)}
-          /* ★ 休息日一律走公司制度判定，不硬编码周六周日（画板 14 的「六/日」是双休语境） */
+          /* ★ 休息日一律走公司制度判定，不硬编码周六周日（画板 14 的「六/日」是双休语境）。
+             此处 restPolicy = effectiveRestPolicy：skipHolidays 开时节假日自动落休息底纹。 */
           isRest={isRestDay(day.date, restPolicy)}
           isMobile={isMobile}
+          holidayLabel={holidayLabelFn?.(day.date) ?? null}
           onSelect={() => setSelectedDate(day.date)}
           onOpen={open}
           onOpenDay={(items, anchorEl) => setDayPopover({ day, items, anchorEl })}
@@ -385,8 +402,8 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
         <span className="text-[11px] text-mist">{lunarLabel()}</span>
       </div>
 
-      {/* ② 图例行 */}
-      <CalendarLegend />
+      {/* ② 图例行（节日名小字在场时补一条文字说明） */}
+      <CalendarLegend showHolidayHint={holidayLabelFn !== null} />
 
       {/* ③ 筛选行 */}
       <CalendarFilterPanel

@@ -14,6 +14,11 @@
  * 逾期（clay）、未开始（幽灵灰）、当前进度点（pine）。删掉这三个说明会让页面出
  * 三块「无人解释的颜色」，属于既有功能回退，故**保留**，并统一改成与九色一致的
  * 10×10 无圆角方块（进度点保留圆形，它语义上就是个点）。
+ *
+ * ── 法定节假日说明（showHolidayHint）──
+ * 节日名/「班」小字复用既有 text-mist token（零新色、零新色块），故图例也只补一条
+ * **轻量文字说明**，不加色块。仅在「跳过国家法定节假日」开关开启时传入 true——
+ * 开关关着没有节日名可解释，写出来反而是噪声。
  */
 
 import {
@@ -48,7 +53,7 @@ function Swatch({
   );
 }
 
-export function CalendarLegend(): JSX.Element {
+export function CalendarLegend({ showHolidayHint = false }: { showHolidayHint?: boolean }): JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-[10px]">
       {/* 阶段九色：label 10 + 方块 10×10 + gap 2 */}
@@ -80,6 +85,11 @@ export function CalendarLegend(): JSX.Element {
         <Swatch color={PROGRESS_DOT_COLOR} round />
         <span className="text-[11px] text-mist">当前进度位置</span>
       </div>
+
+      {/* 法定节假日说明（纯文字，不加色块：节日名小字本身不带新色） */}
+      {showHolidayHint && (
+        <span className="text-[11px] text-mist">节日名 = 法定节假日 · 班 = 调休补班日</span>
+      )}
     </div>
   );
 }

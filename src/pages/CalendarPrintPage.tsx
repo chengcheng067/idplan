@@ -26,9 +26,16 @@ import { customStageColor } from '../components/timeline/stageColorKey';
 import { CIRCLED_NUMBERS } from '../components/calendar/calendarColors';
 import { resolveStageColorIndex } from '../core/template/stage-fallback';
 import { isRestDay } from '../lib/workdays';
+import { cnHolidayIndex, holidayLabelOf } from '../core/holidays';
 import { exportSchedulePngPages, schedulePngFileName, A4_WIDTH_PX, A4_HEIGHT_PX } from '../lib/schedule-print';
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
+
+/**
+ * 法定节假日索引（内置表一次性展开；纯数据，无 I/O）。
+ * 打印格节日名与屏幕月历同源同口径：仅 skipHolidays 开启时显示。
+ */
+const HOLIDAY_INDEX = cnHolidayIndex();
 
 /** 本地时区 ISO（YYYY-MM-DD） */
 function localIso(d: Date): string {
@@ -46,6 +53,8 @@ interface GridDay {
   inMonth: boolean;
   isToday: boolean;
   isRest: boolean;
+  /** 法定节假日名 / 「班」（调休补班日）/ null——skipHolidays 关时恒 null */
+  holidayLabel: string | null;
   /** 覆盖该日的阶段（用于色带取色，宽面 lightBar） */
   coverStageIndex: number | null;
   /**
@@ -85,7 +94,12 @@ function buildCalendarGrid(
       day: d.getDate(),
       inMonth,
       isToday: iso === todayIso,
-      isRest: isRestDay(iso, useSettingsStore.getState().restPolicy),
+      // 生效口径（skipHolidays 开时已合并内置节假日表）；节日名同门控
+      isRest: isRestDay(iso, useSettingsStore.getState().effectiveRestPolicy),
+      holidayLabel:
+        useSettingsStore.getState().restPolicy.skipHolidays === true
+          ? holidayLabelOf(HOLIDAY_INDEX, iso)
+          : null,
       coverStageIndex: covered ? resolveStageColorIndex(covered.orderIndex, covered.colorIndex) : null,
       coverCustomColor: covered ? covered.customColor ?? null : null,
     });
@@ -413,12 +427,20 @@ export function CalendarPrintPage(): JSX.Element {
                     key={day.date}
                     className={`relative min-h-[110px] border-b border-r border-line p-2 last:border-r-0 ${cellBg}`}
                   >
-                    <span
-                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[13px] ${
-                        day.isToday ? 'bg-pine text-white' : ''
-                      }`}
-                    >
-                      {day.day}
+                    {/* 日号 + 节日名小字（法定节假日 / 班 = 调休补班日；与屏幕月历同 token） */}
+                    <span className="flex items-center gap-1">
+                      <span
+                        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[13px] ${
+                          day.isToday ? 'bg-pine text-white' : ''
+                        }`}
+                      >
+                        {day.day}
+                      </span>
+                      {day.holidayLabel && (
+                        <span className="truncate text-[10px] text-mist" title={day.holidayLabel}>
+                          {day.holidayLabel}
+                        </span>
+                      )}
                     </span>
                     {day.inMonth && day.coverStageIndex !== null && (
                       <div

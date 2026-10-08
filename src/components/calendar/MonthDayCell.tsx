@@ -89,6 +89,7 @@ export function MonthDayCell({
   items,
   isRest,
   isMobile,
+  holidayLabel,
   onSelect,
   onOpen,
   onOpenDay,
@@ -98,6 +99,12 @@ export function MonthDayCell({
   /** 是否休息日。**由调用方走 lib/workdays.isRestDay 得出**（见 calendarGrid「休息日口径」说明） */
   isRest: boolean;
   isMobile: boolean;
+  /**
+   * 节日名小字（法定节假日）或「班」（调休补班日）；null = 不显示。
+   * 由调用方从内置节假日表（core/holidays）按 skipHolidays 开关取——
+   * 与底纹同源：节假日 isRestDay 自动 true 落 bg-rest-day，补班日落 bg-paper。
+   */
+  holidayLabel?: string | null;
   onSelect(): void;
   onOpen(projectId: string): void;
   /**
@@ -131,22 +138,32 @@ export function MonthDayCell({
          用 height 而非 min-height —— 定稿铁律 1「格子高度恒定」：内容超限裁掉，
          任何交互（含「+N」浮层）都不允许把格子撑高。 */
       style={{ height: isMobile ? MOBILE_CELL_H : DESKTOP_CELL_H }}
-      aria-label={`${day.date}${day.isToday ? '（今天）' : ''}，${items.length} 个项目`}
+      aria-label={`${day.date}${day.isToday ? '（今天）' : ''}，${items.length} 个项目${
+        holidayLabel ? `，${holidayLabel === '班' ? '调休补班日' : holidayLabel}` : ''
+      }`}
     >
       {/* 日号（今天 = 18×18 pine 圆点 + 白字）；色点轴线对齐日号字轴（§3.5.1）
           ⚠️ 2026-10-08 二次拍板：定稿当时把「今天」改成自然绿 #2F9E77（--cal-today），
           她看过实物后改回主题色靛蓝——「和别的地方不像」。用 bg-pine 而非写色值：
           pine 随亮/暗主题自动换值（亮 #6366f1 / 暗 #828cf7），--cal-today 已删。 */}
       <div className="flex items-center justify-between gap-[2px]">
-        {day.isToday ? (
-          <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-pine text-[11px] font-medium text-white">
-            {day.day}
-          </span>
-        ) : (
-          <span className={cn('text-[11px] md:text-[13px]', day.inMonth ? 'text-ink' : 'text-mist')}>
-            {day.day}
-          </span>
-        )}
+        {/* 日号 + 节日名小字（iPhone 日历「寒露」形态）：同款 text-mist token，零新色 */}
+        <span className="flex min-w-0 items-center gap-[4px]">
+          {day.isToday ? (
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-pine text-[11px] font-medium text-white">
+              {day.day}
+            </span>
+          ) : (
+            <span className={cn('text-[11px] md:text-[13px]', day.inMonth ? 'text-ink' : 'text-mist')}>
+              {day.day}
+            </span>
+          )}
+          {holidayLabel && (
+            <span className="truncate text-[9px] leading-tight text-mist" title={holidayLabel}>
+              {holidayLabel}
+            </span>
+          )}
+        </span>
         {/* 移动端双行小字（画板 19）：不拥挤时给一个计数，拥挤时由「+N」承担 */}
         {isMobile && items.length > 0 && !crowded && (
           <span className="whitespace-nowrap text-[9px] leading-tight text-mist">{items.length} 个</span>
