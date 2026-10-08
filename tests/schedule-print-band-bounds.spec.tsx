@@ -20,9 +20,11 @@
  * ⚠️ 断言必须读**真实数值**（`parseFloat(el.style.left)`）。本项目有过「`toContain` 查
  * className 字符串恒真」的先例，禁止再用字符串包含当断言。
  *
- * ⚠️ 定位方式说明：用**结构**定位（轨道行 `div.relative.h-9` → 其内联样式子元素），
+ * ⚠️ 定位方式说明：用**结构**定位（轨道行 `div.relative.h-7` → 其内联样式子元素），
  * 而不是「按 class 名断言」。若将来行结构改了导致匹配不到，第 1 条前置断言会先红，
  * 不会退化成「0 条色条全部通过」的假绿。
+ * （2026-10-09 密度修订：轨道行高类 h-9→h-7，选择器与 SchedulePaper.tsx
+ * 同批改——这里锁的是「结构」不是具体高度值，高度归密度管。）
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import React from 'react';
@@ -190,14 +192,14 @@ interface Band {
 
 /**
  * 从 DOM 读出**打印时间轴**里每个色条的内联几何值。
- * 结构定位：轨道行 = `div.relative.h-9`；其带 `title` 的子元素 = 色条。
+ * 结构定位：轨道行 = `div.relative.h-7`；其带 `title` 的子元素 = 色条。
  *
  * ⚠️ 不用「`style.left` 非空」当识别条件：CSSOM 会**静默丢弃**非法值（如 `NaN%`），
  *    `style.left` 于是变成空串——那样脏行会被误判为「不是色条」，把「脏行是否渲染」
  *    这件事测不出来。故按 `title` 结构识别，解析失败的几何值如实保留为 `NaN` 上报。
  */
 function readBands(h: ParentNode): Band[] {
-  const rows = Array.from(h.querySelectorAll('div.relative.h-9'));
+  const rows = Array.from(h.querySelectorAll('div.relative.h-7'));
   return rows.map((row) => {
     const bar = Array.from(row.children).find(
       (el): el is HTMLElement => el instanceof HTMLElement && el.hasAttribute('title'),

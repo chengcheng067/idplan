@@ -23,6 +23,17 @@
  * 一个未删**（条件渲染保留源码字符串）：print-preview.spec ④ 的七选择器、
  * v07-dline / schedule-print-band-bounds 的「阶段清单」「打印时间轴」
  * 均照旧命中。改本文件JSX结构前先读这几条 spec。
+ *
+ * ── 2026-10-09 · 打印密度修订（print-density-study §3「H 版 · 经典」表）──
+ * 经典纸面是四版里行内最松的：甘特轨道 h-9（36px）给 6px 视觉厚薄的细条
+ * 配了宽跑道，清单数据行 42px 对四列内容过剩，而章节间距（mt-6/pb-3）
+ * 反而薄。按「紧 L2 数据行、松 L0/L1 界面」落：track h-9→h-7、数据行
+ * h-[42px]→h-[34px]、表头 h-[34px]→h-[30px]、section mt-6→mt-8、
+ * 页头 pb-3→pb-4、图例 mt-3→mt-4。轨道行间距 space-y-1.5 不动（恰是
+ * 规则 2 的行内值）；图例色点 h-3 不动。分页逻辑按块预算走、不逐行估高，
+ * 收紧只让每页内容更矮（页脚贴底、上方留白增多），不改变分页点。
+ * ⚠️ schedule-print-band-bounds.spec 用结构选择器 `div.relative.h-7`
+ * 定位轨道行——track 高度类与那条 spec 同批改（改类名 = 改定位）。
  */
 
 import type { Ref } from 'react';
@@ -155,7 +166,7 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
         >
           {/* 打印头部（画板 09：项目名 18/700 + 委托方·周期 13 · 右 打印日期 11） */}
           {blocks.header && (
-            <header className="flex items-start justify-between border-b border-line pb-3">
+            <header className="flex items-start justify-between border-b border-line pb-4">
               <div>
                 <h1 className="text-[18px] font-bold leading-tight text-ink">{project.name}</h1>
                 <p className="mt-0.5 text-[13px] text-mist">
@@ -175,7 +186,7 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
             <>
               {/* 打印时间轴（画板 09：刻度行 + 每条阶段 阶段点 + 名称 + 日期区间 + 跨度色带） */}
               {blocks.timeline && (
-                <section className="mt-6">
+                <section className="mt-8">
                   <h2 className="mb-2 text-[15px] font-semibold text-ink">打印时间轴</h2>
                   {/*
                     刻度行：**与色条同一坐标系**（母本 monthTicks 注释有完整判据，别改回去）。
@@ -219,7 +230,7 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
                             />
                             <span className="truncate text-[13px] text-ink">{s.name}</span>
                           </div>
-                          <div className="relative h-9 flex-1 rounded-lg bg-sunken">
+                          <div className="relative h-7 flex-1 rounded-lg bg-sunken">
                             <div
                               className={`schedule-bar-segment absolute inset-y-1.5 rounded-md${
                                 sc.isCustom ? '' : ` ${stageBandClass(s.orderIndex)}`
@@ -244,7 +255,7 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
                     })}
                   </div>
                   {/* 图例：阶段色点（实心块）+ 状态（全部命名 token，无裸 hex） */}
-                  <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-mist">
+                  <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-mist">
                     <span className="inline-flex items-center gap-1.5">阶段色：</span>
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                       <span
@@ -285,14 +296,14 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
             </>
           )}
 
-          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 34 · 数据行 42 · 斑马纹） */}
+          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 30 · 数据行 34 · 斑马纹） */}
           {blocks.stageTable && (
-            <section className="mt-6 break-inside-avoid">
+            <section className="mt-8 break-inside-avoid">
               <h2 className="mb-2 text-[15px] font-semibold text-ink">阶段清单</h2>
               <table className="schedule-table w-full overflow-hidden rounded-lg border border-line text-[13px]">
                 <thead>
                   <tr className="bg-sunken text-left text-[11px] font-semibold text-mist">
-                    <th className="h-[34px] px-3 font-semibold">序号</th>
+                    <th className="h-[30px] px-3 font-semibold">序号</th>
                     <th className="px-3 font-semibold">阶段</th>
                     <th className="px-3 font-semibold">起止日期</th>
                     <th className="px-3 font-semibold">状态</th>
@@ -304,7 +315,7 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
                     const sc = customStageColor(s.customColor);
                     return (
                       <tr key={s.orderIndex} className={i % 2 === 1 ? 'bg-sunken/60' : ''}>
-                        <td className="h-[42px] px-3">
+                        <td className="h-[34px] px-3">
                           <span
                             className={`mr-1.5 inline-block h-3 w-3 rounded-sm align-middle${
                               sc.isCustom ? '' : ` ${stageSolidClass(s.orderIndex)}`
