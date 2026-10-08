@@ -332,17 +332,26 @@
   table-layout: fixed;
 }
 
+/* ── P1 矩阵列宽（2026-10-09 收尾：日期列溢出修复）──
+   原 date 18%（≈128.5px）装不下等宽日期串「2026-01-05 — 2026-01-20」
+   （23 字符 × 11px mono：Consolas 实测 139.1px；最坏等宽回落 IBM Plex
+   Mono / Courier New 0.6em ⇒ 151.8px）＋左右 padding 16px ⇒ 需 ≥167.8px。
+   date 18%→24%（≈171.4px）全覆盖三种等宽回落；宽度 3% 取进度列
+   （28→25%，bar 仍 ≈110px）、3% 取阶段列（23→20%）：不全取阶段列是
+   因为它有「名字 ≈136px」的设计意图（文件下方 max-width 注释），取 6%
+   会把名字挤到 ~87px。nowrap 日期不再溢进进度列（彩/灰截图 + spec
+   实测断言「列宽 ≥ 日期串宽」双保险）。 */
 .print-root.print-template-data-editorial .de-matrix__stage {
-  width: 23%;
+  width: 20%;
 }
 
 .print-root.print-template-data-editorial .de-matrix__date {
-  width: 18%;
+  width: 24%;
   white-space: nowrap;
 }
 
 .print-root.print-template-data-editorial .de-matrix__progress {
-  width: 28%;
+  width: 25%;
 }
 
 .print-root.print-template-data-editorial .de-matrix__ratio {
@@ -357,7 +366,9 @@
 }
 
 /* 阶段名一至两行不挤入邻列（02 §8）：单行省略 + title 可访问。
-   列宽 23%（≈164px）扣除读号与间距后可给名字 ~136px，再宽就压进 STATUS 列 */
+   列宽 20%（≈142.8px，2026-10-09 日期列加宽后从 23% 让出 3%）扣除读号与
+   间距后可给名字 ~109px；max-width 136px 是历史上限，实际可用 ~109px，
+   更宽就压进 STATUS 列（82px 已无余量） */
 .print-root.print-template-data-editorial .de-matrix__name {
   display: inline-block;
   max-width: 136px;

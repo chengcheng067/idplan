@@ -473,9 +473,50 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
           expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
           expect(box!.height, `第 ${i + 1} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
           expect(box!.height, `第 ${i + 1} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
-          await el.screenshot({ path: join(OUT_DIR, `density-h-p${i + 1}-${gray ? 'gray' : 'color'}.png`) });
+          await el.screenshot({ path: join(OUT_DIR, `density2-h-p${i + 1}-${gray ? 'gray' : 'color'}.png`) });
         }
       }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('H 版自身密度修订锁定：状态卡 36px / card-key 9.5px / 块题下距 12px / 摘要下距 20px', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
+    const markup = renderToStaticMarkup(
+      createElement(AgentPosterDocument, { vm, palette: baseline }),
+    );
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      const htmlPath = writeHtml('h-default-color.html', shell(markup, css, false));
+      await page.goto('file://' + htmlPath);
+
+      // ① L2 状态卡 42→36px（padding 8→5；进密度规则 26-36px/行区间）
+      const cardH = await page.$eval('.ap-status__card', (el) => el.getBoundingClientRect().height);
+      expect(cardH, '状态卡高应为 36px（L2 区间上界）').toBeCloseTo(36, 0);
+      const cardPad = await page.$eval('.ap-status__card', (el) => getComputedStyle(el).padding);
+      expect(cardPad, '状态卡上下 padding 应为 5px').toBe('5px 11px');
+
+      // ② card-key 9→9.5px（gate 态随卡变 accent ⇒ 密度 §4 约束 3 下限）
+      const keyFs = await page.$eval('.ap-status__card-key', (el) => getComputedStyle(el).fontSize);
+      expect(keyFs, '状态卡 key 字号应 ≥9.5px（accent 文字下限）').toBe('9.5px');
+
+      // ③ P1 块题 → 字段行界面 8→12px（L1↔L2）
+      const blockTitleMb = await page.$eval('.ap-declare__block-title', (el) => getComputedStyle(el).marginBottom);
+      expect(blockTitleMb, '宣告块题下距应为 12px').toBe('12px');
+
+      // ④ P2 巨号摘要 → 状态卡界面 14→20px（L0↔L2）
+      const summaryPb = await page.$eval('.ap-status__summary', (el) => getComputedStyle(el).paddingBottom);
+      expect(summaryPb, '摘要带下距应为 20px').toBe('20px');
+
+      // 焦点纪律不断：running 仍是全页唯一实心黑卡
+      const runningBg = await page.$eval('[data-testid="ap-status-card-running"]', (el) =>
+        getComputedStyle(el).backgroundColor,
+      );
+      expect(runningBg, 'running 卡仍为近黑实心 #0A0A0A（焦点身份不断）').toBe('rgb(10, 10, 10)');
     } finally {
       await page.close();
     }

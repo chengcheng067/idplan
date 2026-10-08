@@ -263,7 +263,10 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin: 0 0 8px;
+  /* L1 块题 → L2 字段行界面 8→12px（密度研究规则 2：L1↔L2 16-24 区间下沿，
+     块题上方已有 2px 头线 + 10px padding 分担分组呼吸；P1 口径注 auto 压底，
+     余量吸收这 4px，不碰 1123 上限） */
+  margin: 0 0 12px;
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -404,7 +407,9 @@
   display: flex;
   align-items: baseline;
   gap: 12px;
-  padding: 2px 0 14px;
+  /* L0 巨号摘要 → L2 状态卡界面 14→20px（密度研究规则 2：L0↔L1/L2 20-28
+     区间下沿；P2 说明文字 auto 压底、余量 ~395px，吸收这 6px 不碰上限） */
+  padding: 2px 0 20px;
 }
 
 .print-root.print-template-agent-poster .ap-status__total {
@@ -499,7 +504,10 @@
   gap: 9px;
   border: 1px solid var(--tpl-line);
   background: #ffffff;
-  padding: 8px 11px;
+  /* L2 数据行收紧（密度研究规则 1：26-36px/行）：上下 padding 8→5px，
+     卡高 42→36px（内容最高子元素 = 16px 计数 24px + 2×5 + 2×1 边框）。
+     原 42px 超出 L2 区间上界——细条不配宽跑道，同经典甘特轨道修订。 */
+  padding: 5px 11px;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
@@ -519,7 +527,11 @@
 
 .print-root.print-template-agent-poster .ap-status__card-key {
   font-family: var(--ap-font-mono);
-  font-size: 9px;
+  /* 9→9.5px：gate 态卡（等待人工介入）此签随卡变 accent 色——密度研究 §4
+     约束 3「accent 文字 ≥9.5px」的登记项，本轮清掉 H 这处（E/D 两处仍
+     登记在 print-palette.ts 常量注释，待后续专项）。非最高子元素，不影响
+     卡高。 */
+  font-size: 9.5px;
   color: var(--tpl-ink);
   opacity: 0.56;
   white-space: nowrap;

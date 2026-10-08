@@ -23,8 +23,9 @@
  *
  * ── 密度下限也住这里 ──
  * 对比度闸门管「改色后可辨」，`PRINT_DENSITY_FLOORS`（下文）管「改色后
- * 密度不失效」——行高下限 / 轨道 6px 硬下限 / accent 文字 ≥9.5px。两条
- * 护栏同源：都是用户可改三槽位的前提下，纸面质量的可机器执行底线。
+ * 密度不失效」——行高下限 / 轨道 6px 硬下限 / accent 文字 ≥9.5px，外加
+ * 一条固定列宽表格的日期列防溢出布局规则。两条护栏同源：都是用户可改三
+ * 槽位的前提下，纸面质量的可机器执行底线。
  *
  * ── 经典（classic）为什么不在这张表里 ──
  * 它的 token 是 global.css 的阶段九色板品牌资产（应用内/打印共用），
@@ -97,9 +98,10 @@ export const PALETTE_MIN_CONTRAST = {
 /* ------------------------------------------------------------------ 密度下限 */
 
 /**
- * 打印密度三条硬下限（print-density-study-2026-10-09 §4；与对比度闸门同源
+ * 打印密度硬下限（print-density-study-2026-10-09 §4；与对比度闸门同源
  * 的**配色侧护栏**——用户可改 accent/ink/line 三槽位，密度规则要防「改色
- * 后密度失效」，故在此立常量、可被 spec 钉）：
+ * 后密度失效」，故在此立常量、可被 spec 钉）。三条有常量（①②③），
+ * 第四条是布局规则（④，靠 D 版视觉 spec 的 Chromium 实测断言防回潮）：
  *
  * ① **行高下限 = 文字行高 + 2×3px**（`rowPaddingMin`）：td/行 padding 任何
  *    档位不得低于上下各 3px。用户把 line 调深后，5px 间距是「文字不碰线」
@@ -112,11 +114,18 @@ export const PALETTE_MIN_CONTRAST = {
  * ③ **accent 文字 ≥9.5px**（`accentFontSizeMin`）：延期 flags、焦点编号
  *    这类 accent 色文字，用户把 accent 调深/调艳后，小字号高饱和最糊。
  *    A 的行内 meta 收紧到 9.5 后正好压线，禁止再小。
+ * ④ **固定列宽表格：列宽 ≥ 该列最长可能内容串 + 2×padding**（等宽日期列
+ *    防溢出）：table-layout:fixed 的列不会给 nowrap 内容让路——D 矩阵
+ *    日期列 18% 装不下 23 字符等宽日期串（Consolas 实测 139.1px，最坏
+ *    等宽回落 0.6em ⇒ 151.8px），溢出部分被下一列的不透明底遮成
+ *    「截断+残字」（0006 既有缺陷，2026-10-09 加宽到 24% 修复）。防回潮靠
+ *    print-a4-visual-d.spec 的 Chromium 实测断言（字体无关），不靠硬编码
+ *    px——那会是第二真值源。
  *
- * ⚠️ 已知低于 ③ 的既有元素（模板交接稿原值，本期密度修订不动它们，登记
- *    在此待后续专项）：E `.ei-row__agent-tag` 9px（Agent 签随负责人行变
- *    朱红）、H `.ap-status__card-key` 9px（gate 态卡变橙）、D
- *    `.de-stack__tick[data-delayed]` 8.5px（延期段下标变信号色）。
+ * ⚠️ 已知低于 ③ 的既有元素（模板交接稿原值，登记在此待后续专项）：
+ * E `.ei-row__agent-tag` 9px（Agent 签随负责人行变朱红）、D
+ * `.de-stack__tick[data-delayed]` 8.5px（延期段下标变信号色）。
+ * （H `.ap-status__card-key` 原 9px 已于 2026-10-09 收尾批修到 9.5px。）
  */
 export const PRINT_DENSITY_FLOORS = {
   /** td/行 padding 单侧下限（px）；行高下限 = 文字行高 + 2×此值 */

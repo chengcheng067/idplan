@@ -377,9 +377,66 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
           expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
           expect(box!.height, `第 ${i + 1} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
           expect(box!.height, `第 ${i + 1} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
-          await el.screenshot({ path: join(OUT_DIR, `density-d-p${i + 1}-${tag}.png`) });
+          await el.screenshot({ path: join(OUT_DIR, `density2-d-p${i + 1}-${tag}.png`) });
         }
       }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('D 版矩阵日期列不溢出：列宽 ≥ 最长日期串 + 2×padding（0006 缺陷修复锁）', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const baseline = PRINT_TEMPLATE_PALETTES['data-editorial'].baseline;
+    const markup = renderToStaticMarkup(
+      createElement(DataEditorialDocument, { vm, palette: baseline }),
+    );
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      const htmlPath = writeHtml('d-default-color.html', shell(markup, css, false));
+      await page.goto('file://' + htmlPath);
+      const p1 = await page.$('[data-print-page="progress-matrix"]');
+      expect(p1, 'P1 阶段进度矩阵页应在').not.toBeNull();
+
+      // 每个日期单元格：文字 Range 宽 + 左右 padding ≤ 单元格宽（nowrap 不溢进进度列）。
+      // 字体无关（实测当前等宽回活的渲染宽度），比硬编码 px 常量更防回潮。
+      const overflows = await p1!.$$eval('.de-matrix__date', (tds) => {
+        const bad: string[] = [];
+        for (const td of tds) {
+          const range = document.createRange();
+          range.selectNodeContents(td);
+          const textW = range.getBoundingClientRect().width;
+          const style = getComputedStyle(td);
+          const padX = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
+          const cellW = td.getBoundingClientRect().width;
+          if (textW + padX > cellW + 0.5) {
+            bad.push(`「${td.textContent}」文字 ${textW.toFixed(1)} + padding ${padX} > 列宽 ${cellW.toFixed(1)}`);
+          }
+        }
+        return bad;
+      });
+      expect(overflows, '日期列溢出（会被进度列不透明底遮成截断+残字）').toEqual([]);
+      // 前提自检：确实量到了日期单元格（防选择器漂移后空过）
+      const dateCount = await p1!.$$eval('.de-matrix__date', (els) => els.length);
+      expect(dateCount, '应读到 10 个可见阶段行的日期单元格').toBe(10);
+
+      // 列宽配比落定：date 24% / progress 25% / stage 20%（总宽 714px）
+      const colW = await p1!.$$eval('.de-matrix thead th', (ths) =>
+        ths.map((th) => +th.getBoundingClientRect().width.toFixed(1)),
+      );
+      expect(colW[2], '日期列宽应 ≥ 最坏等宽回落（23 字符 × 0.6em + 16px padding = 167.8）').toBeGreaterThanOrEqual(
+        167.8,
+      );
+      // 长阶段名不与日期列相撞：阶段名在自家列内省略（不越列）
+      const nameCollision = await p1!.$$eval('.de-matrix__name', (names) =>
+        names.filter((n) => {
+          const td = n.closest('td')!;
+          return n.getBoundingClientRect().right > td.getBoundingClientRect().right + 0.5;
+        }).length,
+      );
+      expect(nameCollision, '阶段名不得越出阶段列（截断在列内）').toBe(0);
     } finally {
       await page.close();
     }
