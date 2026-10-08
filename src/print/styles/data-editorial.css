@@ -331,10 +331,11 @@
   margin-right: 6px;
 }
 
-/* 阶段名一至两行不挤入邻列（02 §8）：单行省略 + title 可访问 */
+/* 阶段名一至两行不挤入邻列（02 §8）：单行省略 + title 可访问。
+   列宽 23%（≈164px）扣除读号与间距后可给名字 ~136px，再宽就压进 STATUS 列 */
 .print-root.print-template-data-editorial .de-matrix__name {
   display: inline-block;
-  max-width: 180px;
+  max-width: 136px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

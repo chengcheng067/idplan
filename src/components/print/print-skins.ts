@@ -16,10 +16,12 @@
  *     （文件边界纪律）。printTemplateClass('classic') 如实返回这个类，
  *     注册表与 DOM 因此保持一致，不留「注册表说 A、DOM 挂 B」的暗坑。
  *
- * ── 未实现模板（D/E/H）为什么也进注册表 ──
+ * ── 未实现模板（E/H）为什么也进注册表 ──
  * 决策 ⑥「四套全上」的实现顺序是分批落地：选择器要先能渲染五张卡（用户看得见
  * 全貌），点未实现的进「建设中」空态——**不许假装能打**（打印/导出禁用）。
  * `implemented: false` 就是这个开关，选择器与预览面板都读它。
+ * D 版四页已落地（DataEditorialDocument + pages/data-editorial/），本条
+ * 开关对 E/H 继续生效。
  */
 
 import type {
@@ -108,7 +110,7 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: 'D',
     label: 'Data Editorial',
     scene: '横读矩阵与数据图形：进度 / 依赖 / 工作量 / 验收',
-    implemented: false,
+    implemented: true,
     usesBlocks: false,
     pages: [
       { id: 'progress-matrix', label: '阶段进度矩阵', hint: '阶段内任务完成度 / 日期 / 占比' },

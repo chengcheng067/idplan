@@ -79,6 +79,24 @@ export function taskStatusLabel(status: TaskStatus): string {
   return TASK_STATUS_LABELS[status];
 }
 
+/**
+ * 任务七态 → `.de-state` 的 data-tone 值（CSS 只认 completed / in_progress /
+ * delayed / signal 四档 + 默认灰）。done 并入 completed 档（墨色），blocked
+ * 走 signal 档（橙红 = 重点状态），其余落默认灰。
+ */
+export function taskStateTone(status: TaskStatus): string {
+  switch (taskNodeTone(status)) {
+    case 'done':
+      return 'completed';
+    case 'active':
+      return 'in_progress';
+    case 'blocked':
+      return 'signal';
+    default:
+      return 'idle';
+  }
+}
+
 /** ISO 时间串 → 纸面用的「yyyy-MM-dd HH:mm」 */
 export function stampOf(iso: string): string {
   return iso.slice(0, 10) + ' ' + iso.slice(11, 16);

@@ -17,8 +17,8 @@
  *
  * ── v0.8.6 四版模板重建（产品决策文档 §2.1/§2.2）──
  *  「打印内容」钮升格为「模板与页面」一个 dropdown 三截：
- *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H；D/E/H 未实现 ⇒ 建设中
- *          空态 + 禁打印，**不许假装能打**）；
+ *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H；A/D 已实现，E/H
+ *          未实现 ⇒ 建设中空态 + 禁打印，**不许假装能打**）；
  *    中截 输出页面：经典 = 五块复选框（数据结构逐字不变，保护既有 spec）；
  *          四版 = 页复选框（默认全选、全选/反选、联动「预计 N 页」）；
  *    下截 配色：三槽位受控 token（预设变体卡为主 + 自定义过对比度硬闸门），
@@ -49,6 +49,7 @@ import {
 } from './print-skins';
 import { usePrintViewModel } from '../../print/adapters/use-print-view-model';
 import { SwissScheduleDocument } from '../../print/documents/SwissScheduleDocument';
+import { DataEditorialDocument } from '../../print/documents/DataEditorialDocument';
 import { PaletteSection } from '../../print/parts/PaletteSection';
 import { PRINT_TEMPLATE_PALETTES } from '../../print/model/print-palette';
 import type { PrintPageKind, PrintTemplateId } from '../../print/model/print-view-model';
@@ -363,6 +364,18 @@ export function PrintPreviewDialog({
                   pages={enabledPages}
                   palette={
                     palette['swiss-schedule'] ?? PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline
+                  }
+                  pageRef={(idx) => (el: HTMLDivElement | null) => {
+                    pageRefs.current[idx] = el;
+                  }}
+                />
+              )}
+              {template === 'data-editorial' && printVm.vm && (
+                <DataEditorialDocument
+                  vm={printVm.vm}
+                  pages={enabledPages}
+                  palette={
+                    palette['data-editorial'] ?? PRINT_TEMPLATE_PALETTES['data-editorial'].baseline
                   }
                   pageRef={(idx) => (el: HTMLDivElement | null) => {
                     pageRefs.current[idx] = el;

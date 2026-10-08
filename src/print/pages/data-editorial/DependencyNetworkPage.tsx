@@ -26,7 +26,7 @@ import {
   type DepGraphLayout,
   type DepGraphNode,
 } from './dependency-graph';
-import { taskGlyph, taskNodeTone, taskStatusLabel, truncateToWidth } from './shared';
+import { taskGlyph, taskNodeTone, taskStateTone, taskStatusLabel, truncateToWidth } from './shared';
 
 /* ---------------------------------------------------------------- 几何常量 */
 
@@ -294,7 +294,7 @@ function LayerTable({ graph }: { graph: DepGraphLayout }): JSX.Element {
               {n.title}
             </td>
             <td>
-              <span className="de-state" data-tone={n.status === 'blocked' ? 'signal' : n.status}>
+              <span className="de-state" data-tone={taskStateTone(n.status)}>
                 <span className="de-state__glyph" aria-hidden>
                   {taskGlyph(n.status)}
                 </span>

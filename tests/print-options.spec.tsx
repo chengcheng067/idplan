@@ -17,7 +17,8 @@
  *   ④ 勾选写 localStorage（`changxia.printPrefs`），重 hydrate / 卸载重开
  *      仍是用户选的；脏数据（缺块键 / 未知 template）merge 兜底回落默认而不是
  *      静默少打一块；
- *   ⑤【新】模板选择器：五张卡可切，A 版渲染 4 页、D/E/H 显示建设中且禁打印；
+ *   ⑤【新】模板选择器：五张卡可切，A/D 版各渲染 4 页且可打印、E/H 显示
+ *      建设中且禁打印（D 版批 2 落地后适配：E/H 的锁原样保留）；
  *   ⑥【新】页面勾选：四版默认全选、可摘单页、页码/预计页数联动；
  *   ⑦【新】配色硬闸门：不达标禁存（store 层一个字节都不落库）。
  * L2（静态源码锁 + paginateSections 纯函数契约）见文件末组。
@@ -489,7 +490,7 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(usePrintPrefsStore.getState().template, '未知 template 回落 classic').toBe('classic');
   });
 
-  it('⑤【新】模板选择器：A 版渲染 4 页；D/E/H 建设中且禁打印（不许假装能打）', () => {
+  it('⑤【新】模板选择器：A/D 版各渲染 4 页且可打印；E/H 建设中且禁打印（不许假装能打）', () => {
     renderDialog(true);
     openBlocksPanel();
     // 五张卡齐全（决策 ⑥：四套全上，选择器先看得见全貌）
@@ -508,9 +509,24 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(bodyContains('预计 4 页')).toBe(true);
     expect(printButton()!.disabled, 'A 版可打印').toBe(false);
 
-    // 切 D：建设中空态，零纸面，打印禁用
+    // 切 D：D 版四页落地（批 2），纸面 4 页 + 模板类 + 可打印
     pickTemplate('data-editorial');
-    expect(document.querySelector('[data-print-template-building]'), 'D 应显示建设中空态').not.toBeNull();
+    expect(paperRoot()!.className).toContain('print-template-data-editorial');
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
+    expect(bodyContains('预计 4 页')).toBe(true);
+    expect(printButton()!.disabled, 'D 版可打印').toBe(false);
+    // 四页标题（完整单行中文）与关键内容在纸面上
+    const dText = paperRoot()!.textContent ?? '';
+    for (const title of ['阶段进度矩阵', '任务依赖网络', '阶段工作量构成', '里程碑与验收']) {
+      expect(dText, `D 版纸面应含页题「${title}」`).toContain(title);
+    }
+    expect(dText).toContain('占比不等于完成度');
+    // 本夹具 8 任务 dependsOn 全空 ⇒ 依赖网络走「无依赖」空态 + 节点摘要
+    expect(document.querySelector('[data-print-empty="dependencies"]'), '无依赖空态').not.toBeNull();
+
+    // 切 E：仍未实现 ⇒ 建设中空态，零纸面，打印禁用（锁不因 D 转正而失效）
+    pickTemplate('editorial-index');
+    expect(document.querySelector('[data-print-template-building]'), 'E 应显示建设中空态').not.toBeNull();
     expect(document.querySelectorAll('.a4-page'), '建设中不得输出任何纸面').toHaveLength(0);
     expect(printButton()!.disabled, '建设中禁止打印').toBe(true);
   });
