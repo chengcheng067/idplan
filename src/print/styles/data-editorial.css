@@ -1,0 +1,1035 @@
+/**
+ * D 版 · Data Editorial 样式（02 文档 §5/§6；设计源 01 文档 §5）。
+ *
+ * ── 前缀纪律（02 §5 继承 print-skins-brief §2.3）──
+ * 每条规则必须同时命中 `.print-root` 与模板类——只写 `.de-*` 会解析不回
+ * 亮色锁，暗色主题下打印稿直接废掉（机理见 global.css「:root, .print-root」）。
+ * 故本文件所有选择器以 `.print-root.print-template-data-editorial` 起头。
+ *
+ * ── token（02 §6）──
+ *   --de-paper #FFFFFF / --de-ink #0A0A0A / --de-signal #EF4B23
+ *   灰阶七档 #262626 #404040 #737373 #A3A3A3 #D4D4D4 #E5E5E5 #F5F5F5
+ *   --de-radius 0px（圆角一律 0 = D 的硬边身份）
+ * 三枚配色槽位（--tpl-accent / --tpl-ink / --tpl-line）取设计师基线为
+ * 缺省值，自定义经 `.print-root` 的 inline CSS 变量进入（print-palette.ts）。
+ * ⚠️ line 槽基线是 #C9C9C9 而不是 02 §6 灰阶表的 #D4D4D4——后者 vs 白底
+ * 1.48:1 过不了配色架构 1.5 硬闸门（print-palette.ts 文件头有实测登记）；
+ * #D4D4D4 在本文件只作**填充**灰（堆叠条浅段 / 节点细边），不承担线槽。
+ *
+ * ── 打印色准（02 §5）──
+ * 纸面 / 填充元素一律 `print-color-adjust: exact`（-webkit- 双写），否则
+ * 浏览器「省墨」默认会把信号橙红与近黑填充打浅。同时颜色关闭时仍有
+ * 1px 实线 + 字形 + 文字语义（状态双编码在组件层，不依赖颜色）。
+ */
+
+.print-root.print-template-data-editorial {
+  /* 纸面与墨色（槽位缺省 = 设计师基线；自定义经 .print-root style 进入） */
+  --de-paper: #ffffff;
+  --de-ink: #0a0a0a;
+  --de-signal: #ef4b23;
+  /* 灰阶七档（01 §5 照抄） */
+  --de-gray-900: #262626;
+  --de-gray-700: #404040;
+  --de-gray-500: #737373;
+  --de-gray-400: #a3a3a3;
+  --de-gray-300: #d4d4d4;
+  --de-gray-200: #e5e5e5;
+  --de-gray-100: #f5f5f5;
+  /* 硬边身份：圆角一律 0 */
+  --de-radius: 0px;
+  /* 字体三族（栈内离线回落，不强拉网络字体） */
+  --de-font-cn: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --de-font-en: 'IBM Plex Sans Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --de-font-mono: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
+  /* 配色槽位（可被 .print-root inline 变量覆盖） */
+  --tpl-accent: var(--de-signal);
+  --tpl-ink: var(--de-ink);
+  --tpl-line: #c9c9c9;
+}
+
+/* ── 纸面：纯白编辑网格；flex 柱（页头 / 主体 / 页脚）── */
+.print-root.print-template-data-editorial .a4-page {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--de-paper);
+  color: var(--tpl-ink);
+  font-family: var(--de-font-cn);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── 页头：英文栏 kicker + 完整单行中文标题；右侧项目标识 ── */
+.print-root.print-template-data-editorial .de-head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 40px 14px;
+}
+
+.print-root.print-template-data-editorial .de-head__left {
+  min-width: 0;
+}
+
+.print-root.print-template-data-editorial .de-head__kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--de-font-en);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--de-gray-700);
+}
+
+/* 信号方块：D 版的身份记号（每页页头一枚） */
+.print-root.print-template-data-editorial .de-head__signal {
+  width: 10px;
+  height: 10px;
+  background: var(--tpl-accent);
+  border-radius: var(--de-radius);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* 完整单行中文标题（Black 字重；不拆两种字体拼接，01 §5） */
+.print-root.print-template-data-editorial .de-head__title {
+  margin: 6px 0 0;
+  font-family: var(--de-font-cn);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  color: var(--tpl-ink);
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-head__right {
+  max-width: 320px;
+  text-align: right;
+}
+
+/* 项目名最多两行，超出截断；完整文本经 title 属性可访问（02 §8） */
+.print-root.print-template-data-editorial .de-head__project {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.print-root.print-template-data-editorial .de-head__meta {
+  margin: 4px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--de-gray-500);
+}
+
+/* 3px 近黑硬边全出血分隔线（编辑网格身份） */
+.print-root.print-template-data-editorial .de-head__rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--tpl-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── 主体 / 页脚 ── */
+.print-root.print-template-data-editorial .de-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 40px 10px;
+}
+
+.print-root.print-template-data-editorial .de-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.print-root.print-template-data-editorial .de-foot {
+  margin: 0 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--tpl-line);
+  font-size: 10px;
+  color: var(--de-gray-500);
+}
+
+.print-root.print-template-data-editorial .de-foot__page {
+  font-family: var(--de-font-mono);
+}
+
+/* ── 共用小件 ── */
+.print-root.print-template-data-editorial .de-num {
+  font-family: var(--de-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 口径注释（压到板块底部） */
+.print-root.print-template-data-editorial .de-note {
+  margin: auto 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--tpl-line);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-note strong {
+  color: var(--tpl-ink);
+}
+
+/* 状态：字形 + 文字双编码（灰度可读）；信号色只给重点状态 */
+.print-root.print-template-data-editorial .de-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-state[data-tone='completed'],
+.print-root.print-template-data-editorial .de-state[data-tone='in_progress'] {
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-state[data-tone='delayed'],
+.print-root.print-template-data-editorial .de-state[data-tone='signal'] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* 警示框：信号描边 + 左侧粗边（硬边，无圆角） */
+.print-root.print-template-data-editorial .de-warn {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--tpl-accent);
+  border-left: 4px solid var(--tpl-accent);
+  border-radius: var(--de-radius);
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-warn strong {
+  color: var(--tpl-accent);
+}
+
+/* 表格：硬边编辑网格（2px 表头下线 + 1px 行线） */
+.print-root.print-template-data-editorial .de-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.print-root.print-template-data-editorial .de-table th {
+  font-family: var(--de-font-en);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: left;
+  color: var(--de-gray-700);
+  border-bottom: 2px solid var(--tpl-ink);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-table td {
+  border-bottom: 1px solid var(--tpl-line);
+  padding: 7px 8px;
+  vertical-align: middle;
+}
+
+.print-root.print-template-data-editorial .de-table tr[data-delayed] td {
+  background: var(--de-gray-100);
+}
+
+/* ── P1 阶段进度矩阵 ── */
+.print-root.print-template-data-editorial .de-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--tpl-ink);
+  border-radius: var(--de-radius);
+}
+
+.print-root.print-template-data-editorial .de-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-right: 1px solid var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-stat:last-child {
+  border-right: none;
+}
+
+.print-root.print-template-data-editorial .de-stat__value {
+  font-family: var(--de-font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--tpl-ink);
+}
+
+/* 重点状态统计格：唯一允许信号色的大数字 */
+.print-root.print-template-data-editorial .de-stat[data-signal] .de-stat__value {
+  color: var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .de-stat__caption {
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-matrix {
+  table-layout: fixed;
+}
+
+.print-root.print-template-data-editorial .de-matrix__stage {
+  width: 23%;
+}
+
+.print-root.print-template-data-editorial .de-matrix__date {
+  width: 18%;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-matrix__progress {
+  width: 28%;
+}
+
+.print-root.print-template-data-editorial .de-matrix__ratio {
+  width: 8%;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-matrix__no {
+  font-size: 11px;
+  color: var(--de-gray-500);
+  margin-right: 6px;
+}
+
+/* 阶段名一至两行不挤入邻列（02 §8）：单行省略 + title 可访问 */
+.print-root.print-template-data-editorial .de-matrix__name {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  font-weight: 600;
+}
+
+/* 进度条：硬边轨道 + 填充（信号色仅延期阶段） */
+.print-root.print-template-data-editorial .de-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.print-root.print-template-data-editorial .de-bar__track {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  background: var(--de-gray-100);
+  border: 1px solid var(--tpl-line);
+  border-radius: var(--de-radius);
+  overflow: hidden;
+}
+
+.print-root.print-template-data-editorial .de-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--tpl-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-bar__fill[data-tone='signal'] {
+  background: var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .de-bar__num {
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-matrix__flags {
+  display: block;
+  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--tpl-accent);
+}
+
+/* ── P2 任务依赖网络 ── */
+.print-root.print-template-data-editorial .de-graph {
+  display: block;
+}
+
+.print-root.print-template-data-editorial .de-graph__summary {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-graph__nodes-note {
+  margin: 0;
+  font-size: 10px;
+  color: var(--de-gray-700);
+}
+
+/* 正交连线：1.5px（≥1px 要求）；循环边虚线 + 信号色 */
+.print-root.print-template-data-editorial .de-graph__edge {
+  fill: none;
+  stroke: var(--de-gray-500);
+  stroke-width: 1.5;
+}
+
+.print-root.print-template-data-editorial .de-graph__edge[data-cycle] {
+  stroke: var(--tpl-accent);
+  stroke-dasharray: 5 3;
+}
+
+.print-root.print-template-data-editorial .de-graph__arrow {
+  fill: var(--de-gray-500);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-graph__arrow[data-tone='signal'] {
+  fill: var(--tpl-accent);
+}
+
+/* 节点：硬边矩形 + 左侧读号签；四类视觉编码（实心 / 粗边 / 信号边 / 细边） */
+.print-root.print-template-data-editorial .de-gnode__box {
+  fill: #ffffff;
+  stroke: var(--de-gray-300);
+  stroke-width: 1;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='done'] .de-gnode__box {
+  fill: var(--tpl-ink);
+  stroke: none;
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='active'] .de-gnode__box {
+  stroke: var(--tpl-ink);
+  stroke-width: 2;
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='blocked'] .de-gnode__box {
+  stroke: var(--tpl-accent);
+  stroke-width: 2;
+}
+
+.print-root.print-template-data-editorial .de-gnode__tab {
+  fill: var(--de-gray-100);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='done'] .de-gnode__tab {
+  fill: var(--de-gray-900);
+}
+
+.print-root.print-template-data-editorial .de-gnode__no {
+  font-family: var(--de-font-mono);
+  font-size: 9px;
+  fill: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='done'] .de-gnode__no {
+  fill: #ffffff;
+}
+
+.print-root.print-template-data-editorial .de-gnode__glyph {
+  font-size: 10px;
+  fill: var(--de-gray-500);
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='done'] .de-gnode__glyph {
+  fill: #ffffff;
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='blocked'] .de-gnode__glyph {
+  fill: var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .de-gnode__title {
+  font-family: var(--de-font-cn);
+  font-size: 11px;
+  fill: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='idle'] .de-gnode__title {
+  fill: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-gnode[data-tone='blocked'] .de-gnode__title {
+  fill: var(--tpl-accent);
+  font-weight: 700;
+}
+
+.print-root.print-template-data-editorial .de-graph[data-compact] .de-gnode__title {
+  font-size: 10px;
+}
+
+/* 异常后缀（引用不可用计数 / 环）：文本编码，灰度下不依赖颜色 */
+.print-root.print-template-data-editorial .de-gnode__flag {
+  font-family: var(--de-font-mono);
+  font-weight: 700;
+  fill: var(--tpl-accent);
+}
+
+/* 图例 */
+.print-root.print-template-data-editorial .de-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--tpl-line);
+  list-style: none;
+  font-size: 9.5px;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.print-root.print-template-data-editorial .de-legend__glyph[data-tone='done'] {
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-legend__glyph[data-tone='blocked'] {
+  color: var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .de-legend__flag {
+  font-family: var(--de-font-mono);
+  font-weight: 700;
+  color: var(--tpl-accent);
+}
+
+/* 无依赖时的节点摘要（HTML chips，避免空页） */
+.print-root.print-template-data-editorial .de-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.print-root.print-template-data-editorial .de-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--tpl-line);
+  border-radius: var(--de-radius);
+  font-size: 10px;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-chip[data-tone='done'] {
+  background: var(--tpl-ink);
+  border-color: var(--tpl-ink);
+  color: #ffffff;
+}
+
+.print-root.print-template-data-editorial .de-chip[data-tone='active'] {
+  border: 2px solid var(--tpl-ink);
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-chip[data-tone='blocked'] {
+  border: 2px solid var(--tpl-accent);
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+.print-root.print-template-data-editorial .de-chip__no {
+  font-size: 9px;
+}
+
+.print-root.print-template-data-editorial .de-chip__title {
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.print-root.print-template-data-editorial .de-chip__flag {
+  font-family: var(--de-font-mono);
+  font-weight: 700;
+  color: var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .de-chip[data-tone='done'] .de-chip__flag {
+  color: #ffffff;
+}
+
+/* 密度超限回退的分层表 */
+.print-root.print-template-data-editorial .de-graph-table {
+  table-layout: fixed;
+}
+
+.print-root.print-template-data-editorial .de-graph-table__layer {
+  width: 8%;
+}
+
+.print-root.print-template-data-editorial .de-graph-table__no {
+  width: 12%;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-graph-table__title {
+  max-width: 260px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.print-root.print-template-data-editorial .de-graph-table__flag {
+  width: 20%;
+}
+
+.print-root.print-template-data-editorial .de-flag {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* ── P3 阶段工作量构成 ── */
+.print-root.print-template-data-editorial .de-stack {
+  display: flex;
+  width: 100%;
+  height: 54px;
+  background: #ffffff;
+  border: 1px solid var(--tpl-ink);
+  border-radius: var(--de-radius);
+}
+
+/* 段 = 真实 ratioPercent 占轨；四阶灰循环（相邻段必不同灰度） */
+.print-root.print-template-data-editorial .de-stack__seg {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #ffffff;
+  border-radius: var(--de-radius);
+  overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='0'] {
+  background: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='1'] {
+  background: var(--de-gray-500);
+}
+
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='2'] {
+  background: var(--de-gray-400);
+}
+
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='3'] {
+  background: var(--de-gray-300);
+}
+
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='0'] .de-stack__seg-num,
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='1'] .de-stack__seg-num {
+  color: #ffffff;
+}
+
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='2'] .de-stack__seg-num,
+.print-root.print-template-data-editorial .de-stack__seg[data-gray='3'] .de-stack__seg-num {
+  color: var(--tpl-ink);
+}
+
+/* 延期阶段段 = 信号橙红（重点状态 + ▲ 角标，双编码） */
+.print-root.print-template-data-editorial .de-stack__seg[data-delayed] {
+  background: var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .de-stack__seg[data-delayed] .de-stack__seg-num {
+  color: #ffffff;
+}
+
+.print-root.print-template-data-editorial .de-stack__seg-num {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 未分配缺口：斜纹（不拉长凑数，02 §7 不静默归一化） */
+.print-root.print-template-data-editorial .de-stack__gap {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--de-gray-200) 0 4px,
+    #ffffff 4px 8px
+  );
+}
+
+.print-root.print-template-data-editorial .de-stack__gap-num {
+  font-size: 10px;
+  color: var(--de-gray-700);
+}
+
+/* 段下标号行（阶段序号 + 延期 ▲） */
+.print-root.print-template-data-editorial .de-stack__ticks {
+  display: flex;
+  width: 100%;
+  font-size: 8.5px;
+  color: var(--de-gray-500);
+}
+
+.print-root.print-template-data-editorial .de-stack__tick {
+  padding-top: 3px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  border-left: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-data-editorial .de-stack__tick:first-child {
+  border-left: none;
+}
+
+.print-root.print-template-data-editorial .de-stack__tick[data-delayed] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* 防误读主声明（01 §5 明文：明确「占比不等于完成度」） */
+.print-root.print-template-data-editorial .de-claim {
+  margin: 0;
+  padding: 8px 0;
+  border-top: 2px solid var(--tpl-ink);
+  border-bottom: 1px solid var(--tpl-ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-ratio {
+  table-layout: fixed;
+}
+
+.print-root.print-template-data-editorial .de-ratio__stage {
+  width: 26%;
+}
+
+.print-root.print-template-data-editorial .de-ratio__date {
+  width: 22%;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-ratio__ratio {
+  width: 10%;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-ratio__progress {
+  width: 18%;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-ratio tfoot td {
+  border-bottom: none;
+  border-top: 2px solid var(--tpl-ink);
+  background: var(--de-gray-100);
+  font-weight: 700;
+}
+
+/* 合计 ≠ 100%：合计数字进信号色（口径警告的视觉锚点） */
+.print-root.print-template-data-editorial .de-ratio tfoot tr[data-total] .de-ratio__ratio {
+  color: var(--tpl-accent);
+}
+
+/* ── P4 里程碑与验收 ── */
+.print-root.print-template-data-editorial .de-timeline {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 16px;
+  padding: 14px 0 4px;
+}
+
+/* 硬边轴线（等分三格；每格真实锚点日期，不暗示比例） */
+.print-root.print-template-data-editorial .de-timeline__axis {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 46px;
+  height: 2px;
+  background: var(--tpl-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-ms {
+  display: flex;
+  flex-direction: column;
+}
+
+.print-root.print-template-data-editorial .de-ms__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+}
+
+.print-root.print-template-data-editorial .de-ms__key {
+  font-family: var(--de-font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-ms__name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tpl-ink);
+}
+
+/* 节点方块：四档 tonal（实心 / 粗边 / 信号 / 空心）+ 字形 */
+.print-root.print-template-data-editorial .de-ms__marker {
+  width: 18px;
+  height: 18px;
+  margin: 8px auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  border-radius: var(--de-radius);
+  background: #ffffff;
+  border: 1px solid var(--de-gray-300);
+  color: var(--de-gray-500);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-ms[data-tone='done'] .de-ms__marker {
+  background: var(--tpl-ink);
+  border-color: var(--tpl-ink);
+  color: #ffffff;
+}
+
+.print-root.print-template-data-editorial .de-ms[data-tone='active'] .de-ms__marker {
+  border: 2px solid var(--tpl-ink);
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-ms[data-tone='delayed'] .de-ms__marker {
+  background: var(--tpl-accent);
+  border-color: var(--tpl-accent);
+  color: #ffffff;
+}
+
+.print-root.print-template-data-editorial .de-ms__date {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-ms__status {
+  min-height: 30px;
+  margin-top: 2px;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-ms[data-tone='delayed'] .de-ms__status {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* 验收清单：■ 达成 / □ 未达成（字形 + 文字双编码） */
+.print-root.print-template-data-editorial .de-check {
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--tpl-line);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.print-root.print-template-data-editorial .de-check li {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-check__glyph {
+  color: var(--de-gray-300);
+  flex-shrink: 0;
+}
+
+.print-root.print-template-data-editorial .de-check li[data-ok] {
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-check li[data-ok] .de-check__glyph {
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-ms__anchor {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 8.5px;
+  color: var(--de-gray-500);
+}
+
+/* 人工签署区（压到板块底部） */
+.print-root.print-template-data-editorial .de-sign {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-data-editorial .de-sign__note {
+  margin: 0 0 6px;
+  font-size: 9.5px;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .de-sign__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10.5px;
+}
+
+.print-root.print-template-data-editorial .de-sign__table th {
+  font-family: var(--de-font-en);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: left;
+  color: var(--de-gray-700);
+  border-bottom: 2px solid var(--tpl-ink);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-sign__table td {
+  padding: 12px 8px 4px;
+  border-bottom: 1px solid var(--tpl-line);
+  vertical-align: bottom;
+}
+
+/* 签署线：实线留白（人工签署动作） */
+.print-root.print-template-data-editorial .de-sign__line {
+  border-bottom: 1px solid var(--de-gray-500);
+}
+
+.print-root.print-template-data-editorial .de-sign__role {
+  width: 90px;
+  font-weight: 700;
+}
+
+.print-root.print-template-data-editorial .de-sign__date {
+  width: 150px;
+}
+
+/* ── 空态（02 §8 标准文案由 EmptyPrintState 提供）── */
+.print-root.print-template-data-editorial .print-empty-state {
+  margin: 0;
+  padding: 18px 0;
+  font-size: 11px;
+  text-align: center;
+  border-top: 1px solid var(--tpl-line);
+  border-bottom: 1px solid var(--tpl-line);
+  color: var(--de-gray-700);
+}
+
+/* ── 密度档：15+ 阶段 / 12+ 阶段构成时压紧 ── */
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-table td {
+  padding: 4px 8px;
+  font-size: 10.5px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-table th {
+  padding: 4px 8px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-stat {
+  padding: 7px 10px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-stat__value {
+  font-size: 18px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-bar__track {
+  height: 6px;
+}
+
+/* ── 打印媒体：白纸面压过 global 的 !important 规则（两条都 !important ⇒
+ * 特异性高者胜：本选择器两类 > `.print-root` 一类）；填充元素锁 exact ── */
+@media print {
+  .print-root.print-template-data-editorial,
+  .print-root.print-template-data-editorial .a4-page {
+    background: #ffffff !important;
+    color: var(--tpl-ink) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-root.print-template-data-editorial .de-head__rule,
+  .print-root.print-template-data-editorial .de-head__signal,
+  .print-root.print-template-data-editorial .de-stack__seg,
+  .print-root.print-template-data-editorial .de-stack__gap,
+  .print-root.print-template-data-editorial .de-bar__fill,
+  .print-root.print-template-data-editorial .de-gnode__box,
+  .print-root.print-template-data-editorial .de-gnode__tab,
+  .print-root.print-template-data-editorial .de-graph__arrow,
+  .print-root.print-template-data-editorial .de-ms__marker,
+  .print-root.print-template-data-editorial .de-timeline__axis,
+  .print-root.print-template-data-editorial .de-chip[data-tone='done'] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
