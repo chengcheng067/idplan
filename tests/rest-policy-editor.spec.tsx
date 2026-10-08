@@ -26,7 +26,7 @@ import { isRestDay } from '../src/lib/workdays';
 
 /* fake repos：保存路径落点（渲染期不触达，故无需 RepoProvider） */
 const hoisted = vi.hoisted(() => ({
-  settingsSet: vi.fn(async () => undefined),
+  settingsSet: vi.fn(async (_key: string, _draft: unknown) => undefined),
 }));
 vi.mock('../src/hooks/useRepos', () => ({
   useRepos: () => ({
@@ -127,8 +127,9 @@ describe('RestPolicyEditor：单休自定义休息周几（七选一）', () => 
       saveBtn!.click();
     });
     expect(hoisted.settingsSet).toHaveBeenCalledTimes(1);
-    const [key, draft] = hoisted.settingsSet.mock.calls[0] as [string, RestPolicyConfig];
-    expect(key).toBe('restPolicy');
+    const call = hoisted.settingsSet.mock.calls[0];
+    expect(call[0]).toBe('restPolicy');
+    const draft = call[1] as RestPolicyConfig;
     expect(draft.kind).toBe(RestPolicyKind.SingleOff);
     expect(draft.singleRestWeekday).toBe(2);
     // store 镜像同步（hydrate 边界派生 effectiveRestPolicy）
