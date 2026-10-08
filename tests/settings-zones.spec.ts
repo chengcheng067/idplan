@@ -407,14 +407,17 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       expect(industryText).toContain('复制提示词');
       expect(industryText).toContain('导回这里');
 
-      // 切「关于」：版本 + 开源许可 + 两张预留卡（图片待补）
+      // 切「关于」：版本 + 开源许可 + 赞赏/反馈两张实卡（微信图 2026-10-08 到位，
+      // 不再是「图片待补」占位——断言随之升级为验证真图渲染，比占位文本更强）
       await page.locator('[data-settings-zone="about"]').click();
       const aboutText = await drawer.innerText();
       expect(aboutText).toContain('版本号');
       expect(aboutText).toContain('开源许可');
       expect(aboutText).toContain('赞赏支持');
       expect(aboutText).toContain('反馈建议');
-      expect(aboutText).toContain('图片待补');
+      expect(aboutText).not.toContain('图片待补');
+      expect(await drawer.locator('img[src="/wechat-pay.jpg"]').count()).toBe(1);
+      expect(await drawer.locator('img[src="/wechat-contact.jpg"]').count()).toBe(1);
       expect(aboutText).not.toContain('复制提示词');
 
       // 高亮跟着走：about 当前、appearance 不再是 current
@@ -511,7 +514,13 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       await page.locator('[data-settings-zone="appearance"]').click();
       expect(await page.locator('[data-settings-drawer]').innerText()).toContain('跟随系统');
       await page.locator('[data-settings-zone="about"]').click();
-      expect(await page.locator('[data-settings-drawer]').innerText()).toContain('图片待补');
+      // 微信图 2026-10-08 到位：关于区现在渲染两张真码（不再是「图片待补」）
+      expect(
+        await page.locator('[data-settings-drawer] img[src="/wechat-pay.jpg"]').count(),
+      ).toBe(1);
+      expect(
+        await page.locator('[data-settings-drawer] img[src="/wechat-contact.jpg"]').count(),
+      ).toBe(1);
     } finally {
       await ctx.close();
     }

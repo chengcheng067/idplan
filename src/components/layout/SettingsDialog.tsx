@@ -177,18 +177,43 @@ const PLUGIN_SUBS: ReadonlyArray<{ key: PluginSubKey; label: string; Icon: Lucid
   { key: 'agent', label: 'Agent 与自动化', Icon: Bot },
 ];
 
-/** 「赞赏支持 / 反馈建议」预留卡（v0.8.6 · 反馈 #7）：微信图由产品负责人后续提供 */
-function ReservedCard({ title, icon: Icon }: { title: string; icon: LucideIcon }): JSX.Element {
+/**
+ * 「赞赏支持 / 反馈建议」卡（v0.8.6 · 反馈 #7）。
+ * 微信图 2026-10-08 由产品负责人提供，落 public/（随安装包与仓库分发）：
+ *   · wechat-pay.jpg     —— 微信收款码（竖图 828×1124）
+ *   · wechat-contact.jpg —— 微信个人二维码（竖图 592×754）
+ * 排版：实线卡（不再是虚线占位）+ 150px 图宽保持原比例（3:4 竖图不裁切，
+ * 裁了二维码不完整就扫不了）。文案口语化，不写"敬请赞赏"这类客套。
+ */
+function WeChatCard({
+  title,
+  caption,
+  img,
+  icon: Icon,
+}: {
+  title: string;
+  caption: string;
+  img: string;
+  icon: LucideIcon;
+}): JSX.Element {
   return (
-    <div className="flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[12px] border border-dashed border-line bg-cream/40 px-4 py-6 text-center">
-      <span
-        aria-hidden
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-pine-soft text-pine"
-      >
-        <Icon size={16} />
-      </span>
-      <p className="text-sm font-medium text-ink">{title}</p>
-      <p className="text-[11px] text-mist">图片待补</p>
+    <div className="flex flex-col items-center gap-2.5 rounded-[12px] border border-line bg-paper px-4 py-5 text-center">
+      <div className="flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="flex h-6 w-6 items-center justify-center rounded-full bg-pine-soft text-pine"
+        >
+          <Icon size={12} />
+        </span>
+        <p className="text-sm font-medium text-ink">{title}</p>
+      </div>
+      <img
+        src={img}
+        alt={title}
+        loading="lazy"
+        className="w-[150px] rounded-[8px] border border-line"
+      />
+      <p className="max-w-[220px] text-[11px] leading-relaxed text-mist">{caption}</p>
     </div>
   );
 }
@@ -828,7 +853,8 @@ export function SettingsDialog({
                   </section>
 
                   {/*
-                    赞赏与反馈（两张预留卡）：微信图由产品负责人后续提供，卡上标「图片待补」。
+                    赞赏与反馈：微信图 2026-10-08 到位（public/wechat-pay.jpg 收款码 +
+                    public/wechat-contact.jpg 个人二维码），两张虚线占位卡换成实卡。
                   */}
                   <section>
                     <div className="mb-2 flex items-center gap-1.5">
@@ -838,8 +864,18 @@ export function SettingsDialog({
                       </h3>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <ReservedCard title="赞赏支持" icon={Heart} />
-                      <ReservedCard title="反馈建议" icon={MessageSquare} />
+                      <WeChatCard
+                        title="赞赏支持"
+                        icon={Heart}
+                        img="/wechat-pay.jpg"
+                        caption="这工具省了你的时间的话，可以请我喝杯咖啡。"
+                      />
+                      <WeChatCard
+                        title="反馈建议"
+                        icon={MessageSquare}
+                        img="/wechat-contact.jpg"
+                        caption="用得别扭、想要什么功能，扫码直接跟我说。"
+                      />
                     </div>
                   </section>
                 </>

@@ -10,16 +10,17 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-0.8.4.0001-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-1841%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-0.8.6.0005-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-2109%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
 
 > 🌐 [English](./README.en.md) · 中文
 
-> 覆盖 **9 个主板块 / 29 套阶段套餐**（室内 / 景观 / 建筑 / 软件 / 市场 / 影视 / 婚礼 / 咨询 / 旅游）。把项目的金额、类型、阶段节点、参与成员整理成一条时间轴，用看板、月历、甘特随时掌握进度，并把排期导成能直接发给甲方的交付页。
+> 覆盖 **45 个类目 / 1087 条阶段规范**（室内 / 景观 / 建筑 / 软件 / 市场 / 影视 / 婚礼 / 咨询 / 旅游等）。把项目的金额、类型、阶段节点、参与成员整理成一条时间轴，用看板、月历、甘特随时掌握进度，并把排期导成能直接发给甲方的交付页。
 > **还能让外部 AI 写方（WorkBuddy / Codex 等）读一个文件就完成接入，把任务直接写进你的看板**——见 [🤖 Agent 接入](#-agent-接入)。
+> **插件系统已开放**：接口规范跟代码同仓，任何人都能照规范写一个插件装进来——见 [🧩 插件](#-插件)。
 
 ---
 
@@ -35,26 +36,50 @@
 
 ### 🧭 建档：先选行业，再出阶段
 - **三层级联建档** —— 行业大类 → 主板块 → 阶段套餐。首次打开**不做任何预选**，选定主板块后才会带出对应的套餐与阶段。
-- **9 个主板块** —— 室内 / 景观 / 建筑 / 软件开发 / 市场活动 / 影视制作 / 婚礼策划 / 咨询交付 / 旅游出行。
-- **29 套阶段套餐** —— 每个主板块都有贴合自身流程的阶段（不是把室内九段换个名字照搬）。例如旅游是「规划 → 行程设计 → 资源预订 → 行前确认 → 执行 → 结算 → 复盘」，软件开发是「规划 → 设计 → 开发 → 测试 → 发布」。
+- **45 个类目** —— 室内 / 景观 / 建筑 / 展陈 / 软件开发 / 市场活动 / 影视制作 / 婚礼策划 / 咨询交付 / 旅游出行……每个类目都有贴合自身流程的阶段，不是把室内九段换个名字照搬。
 - **看板列随主板块变化** —— 室内是设计 / 深化 / 施工，影视是筹备 / 拍摄 / 后期 / 交付，不共用一套列。
+- **自己的行业自己定** —— 内置库不合脚？设置里「复制提示词 → 发给你的 Agent → 导回」，三步生成一套你自己的行业库。
 
 ### 📐 排期与交付
 - **休息制度可配置** —— 大休 / 小休、单休 / 双休，排期自动跳过休息日，竣工日期算得准。
 - **多视图** —— 看板、月历、可拖拽改期的甘特时间轴。
-- **打印 / 导出** —— 日程表 A4 打印视图、导出 PNG 高清图。
-- **旅游客户行程单** —— 旅游项目按项目起止日期生成每日行程卡，可打印成给客户看的行程单；非旅游项目不显示。
+- **月历一眼报得出项目名** —— 格内条目是「项目色 + 项目名」；一天放不下就「+N」点开当日全部，不再有堆成一片认不出谁是谁的彩条。
+- **打印 / 导出** —— 日程表 A4 打印视图、导出 PNG 高清图；「适应 / 100%」缩放可用。
 - **双主题** —— 亮 / 暗 / 跟随系统三态。
 
 ### 👥 协同
 - **任务指派** —— 任务可指派多个成员，参与人可勾选完成，进度实时同步。
-- **角色权限** —— 管理员看全貌；普通成员只看与自己相关的项目与任务。
-- **成员看板** —— 每位成员登录后看到的是自己相关的项目进度。
+- **角色权限** —— 管理员看全貌；普通成员只看与自己相关的项目与任务（设置分区也跟着身份收）。
+- **成员看板** —— 每位成员登录后看到的是自己相关的项目进度；管理员搜成员名或点成员列表，直达任意成员的逾期 / 进行中 / 近期完成。
 - **密码登录** —— 管理员可为成员单独设置 / 清除密码。
 
 ### 💾 数据
 - **备份恢复** —— 一键导出 / 导入 JSON 备份，格式全量校验；旧版本备份可安全导入。
 - **离线优先** —— 桌面版数据存本机 IndexedDB，不依赖网络。
+
+---
+
+## 🧩 插件
+
+ID Plan 的界面是一组**贡献点**拼出来的：路由、侧栏入口、设置分区。注册表统一装配，插件开关是**真开关**——关掉，它的路由从不进路由表、侧栏入口从不渲染（不是置灰、不是隐藏）。
+
+**装一条插件有三条路**（当前版本的真实能力，不画饼）：
+
+| 路径 | 怎么装 | 适合谁 |
+|---|---|---|
+| **随版本分发** | 插件合并进本仓库 `src/plugins/`，随安装包发布，在设置 → 插件里启用 | 所有人（当前主流） |
+| **从文件安装** | 设置 → 插件 → 从文件安装：选一个插件文件，装前把 manifest 与能力清单摊给你看，沙箱加载、只读起步 | 想试别人插件的人 |
+| **远程市场** | ❌ v1 不做（要签名体系， roadmap 里挂着） | — |
+
+**安全边界说在前头**：v1 插件只能**只读**人类侧项目数据（拿不到仓储、写不了库——这是静态守卫钉死的，不是口头约定）；外来代码跑在沙箱 iframe 里，摸不到你的页面和本地库；但它**可以访问网络**（装前会明说，治本的 CSP 在 roadmap 上）。
+
+**想写一个？** 接口规范跟代码同仓，30 分钟能抄出第一个：
+
+- 📜 [**插件契约**](./docs/plugin-api/contract.md) —— manifest 字段、只读数据出口、三个贡献点、硬禁令、样式 token
+- 🧪 [**完整示例**](./docs/plugin-api/example.md) ——「会议室占用看板」，manifest + 面板 + 单测，可直接抄
+- ✅ [**提交前自检**](./docs/plugin-api/review-checklist.md) —— 我们审的五件事
+
+提 PR 到 `src/plugins/<你的插件>/` 就行——**代码共享同一个构建，评审合并后随下个版本分发**；或者把你的插件文件发给别人，让他们「从文件安装」。这就是「开放共创」在当前阶段的真实形状：写方照契约写，装方看得见自己装了什么。
 
 ---
 
@@ -66,10 +91,11 @@ ID Plan 内置一条**本机 loopback 通道**（`127.0.0.1:17788`），让外�
 - **自助建板** —— 写方可自己创建 Agent 看板（名称 + 起止日期 + 阶段集合，缺一即拒）
 - **幂等导入** —— `idplan-agent-payload/v1` schema；幂等键 `externalId`，重放不重号；依赖按 `externalId` 解析；支持 dryRun 预览（所见即所写）
 - **读回核对** —— 任务流只读接口，写方可随时核对落库结果
+- **提案审批** —— 外部写方的改动以「提案」形态落到执行记录页，人看过再落库（审计动作不外包给 Agent）
 - **结构性隔离** —— 落点只能是 Agent 看板（`kind=agent`），**人类项目一律拒绝**（`project_unresolved`）；门在共享核心单点实现，桌面 / NAS 两通道同码
 - **手动兜底** —— 不连通道时，内置可复制的导入提示词与 JSON 模板
 
-**建设中**：Agent 执行控制台界面（数据层已就绪：`Execution` / `ExecutionAttempt` / `ExecutionEvent` / `WritebackProposal`，状态机在存储边界强制）；NAS 远程自动写入（当前仅连通探测）。
+Agent 看板本身也是一个插件（设置 → 插件可关）——**它证明这套插件系统能扛最复杂的功能**。
 
 ---
 
@@ -81,12 +107,12 @@ cd idplan
 npm install
 
 npm run dev            # 前端 http://localhost:5173
-# 或 electron:dev      # 桌面形态开发运行
+npm run electron:dev   # 桌面形态开发运行
 ```
 
 ```bash
-npm test               # 全量单测（1841 用例，vitest）
-npm run typecheck      # 前端 / 服务端类型检查
+npm test               # 全量单测（2109 用例，vitest）
+npm run typecheck      # 前端类型检查
 npm run build          # 类型检查 + 构建
 npm run electron:build # 构建 + 打 Windows NSIS 安装包
 ```
@@ -101,6 +127,8 @@ npm run electron:build # 构建 + 打 Windows NSIS 安装包
 ┌─ Electron 桌面壳（Windows）───────────────────────┐
 │  主进程：loopback HTTP 通道（IPC 转发渲染侧落库）   │
 │  渲染层：React 18 + Zustand + Dexie(IndexedDB)     │
+│  插件层：manifest 声明贡献点，注册表统一装配        │
+│          外来插件跑沙箱 iframe（只读数据面）        │
 ├─ 浏览器 / NAS 形态 ──────────────────────────────┤
 │  前端：同一份 React（build-dist）                  │
 │  服务端：Fastify + SQLite（团队共享数据层）         │
@@ -147,7 +175,7 @@ ghcr.io/chengcheng067/idplan-backend:<版本>  # 后端（Fastify + SQLite）
 | 样式 | Tailwind CSS 3 |
 | 服务端 | Fastify 4 + SQLite（团队共享数据层） |
 | 校验 | Zod |
-| 测试 | Vitest + fake-indexeddb |
+| 测试 | Vitest + fake-indexeddb（含真 Chromium 几何验收） |
 | 打包 | electron-builder → NSIS（Windows） / 绿联 UPK |
 
 ---
@@ -155,7 +183,7 @@ ghcr.io/chengcheng067/idplan-backend:<版本>  # 后端（Fastify + SQLite）
 ## 📖 文档
 
 - 🪧 [Windows 安装](docs/install/windows-install.md) · 📦 [NAS · UPK](docs/install/upk-install-tutorial.md) · ⚙️ [NAS · Docker](docs/install/nas-deploy-tutorial.md)
-- 🔌 [接口契约（Agent 四端点）](docs/api-contract.md) · 🗂️ [备份格式](docs/backup-format.md) · 🧪 [迁移演练](docs/migration-drill.md)
+- 🧩 [**插件 API（契约 / 示例 / 自检）**](./docs/plugin-api/) · 🔌 [接口契约（Agent 四端点）](docs/api-contract.md) · 🗂️ [备份格式](docs/backup-format.md) · 🧪 [迁移演练](docs/migration-drill.md)
 - 🗺️ [路线图（含「明确不做」清单）](docs/roadmap.md)
 - 🧾 [发布 checklist（含 arm64 路线与踩坑汇编）](docs/release-checklist.md)
 
@@ -166,20 +194,26 @@ ghcr.io/chengcheng067/idplan-backend:<版本>  # 后端（Fastify + SQLite）
 | 能力 | 状态 |
 |------|------|
 | 多行业建档、排期、看板 / 月历 / 甘特、打印导出 | ✅ 可用 |
-| 旅游每日行程与客户行程单 | ✅ 可用 |
-| Agent loopback 自动导入、手动粘贴导入 | ✅ 可用 |
-| Agent 执行控制台界面 | 🔴 未接（数据层已就绪） |
-| 从 ID Plan 发起并追踪 Agent 执行 | 🔴 未接（目前只有外部写入通道） |
+| 成员看板、按角色的设置与数据边界 | ✅ 可用 |
+| 插件（注册表 / 真开关 / 沙箱加载 / 从文件安装） | ✅ 可用（v1 只读） |
+| 行业库自定义（复制提示词 → 生成 → 导回） | ✅ 可用 |
+| Agent loopback 自动导入、提案审批、执行记录 | ✅ 可用 |
+| 插件写能力 / 远程市场 / CSP 出口管控 | 🚧 roadmap（见下） |
 | NAS 远程自动写入 | 🔴 未启用（仅连通探测） |
+
+**近期 roadmap 上的大事**（完整清单带「明确不做」，见 [roadmap](docs/roadmap.md)）：归属门下沉（写能力的地基）→ 插件写能力与 CSP 出口管控 → 作者工具链（脚手架 / 打包器）。
 
 ---
 
 ## 🤝 如何参与共创
 
+- **写一个插件** —— 照着 [示例](./docs/plugin-api/example.md) 抄，30 分钟；提 PR 进 `src/plugins/`，或把文件发给别人「从文件安装」
+- **补充行业模板** —— 熟悉某个行业就提交模板 PR（阶段库是纯 JSON 增量，零迁移）； app 内「复制提示词 → 发给你的 Agent → 导回」能帮你生成
 - **反馈功能 / 提 Bug** —— 提 Issue 或直接 PR
-- **补充行业模板** —— 熟悉某个行业就提交模板 PR（阶段库是纯 JSON 增量，零迁移）
 - **改进交互 / 视觉** —— UI 文案、操作路径、图标优化
 - **贡献代码** —— 用 vitest 写测试，欢迎提 PR；提交即表示同意将你的贡献以与本项目相同的 MIT 许可并入
+
+> 装好软件后，**设置 → 关于** 有赞赏码和我的微信——用得顺手可以请我喝杯咖啡，用得别扭直接跟我说。
 
 ---
 
