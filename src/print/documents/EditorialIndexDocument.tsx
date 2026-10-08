@@ -101,14 +101,25 @@ const EI_NOTE_H = 46; // 口径注（10 上距 + 两行 16.5 + 1 线，取整）
 const EI_BODY_H =
   A4_HEIGHT_PX - EI_HEAD_H - EI_LOGO_ROW_H - EI_FOOT_H - EI_BODY_PADDING - EI_NOTE_H;
 
-/** 目录行估高（normal / compact 两档；实测 ≈41 / 30，取上整） */
+/**
+ * 目录行估高（normal / compact 两档）。
+ * normal 实测 37px（padding 6/6 + 巨编号 24px line-height:1 + 1px 发丝线，
+ * 2026-10-09 密度修订后真 Chromium 量）；取 40 偏保守（大）= 早分页白留一截，
+ * 不允许小于实测（小 = 溢出）。compact 实测 ≈30，取 31。
+ */
 const EI_ROW_H = {
-  stage: { normal: 42, compact: 31 },
-  member: { normal: 42, compact: 31 },
-  artifact: { normal: 42, compact: 31 },
+  stage: { normal: 40, compact: 31 },
+  member: { normal: 40, compact: 31 },
+  artifact: { normal: 40, compact: 31 },
 } as const;
-/** 章头估高（实测 ≈46.5 / 37，取上整） */
-const EI_CHAPTER_H = { normal: 48, compact: 38 } as const;
+/**
+ * 章头估高。normal 实测槽位 59.75px（margin-top 22 + 元素 37.75：2px 粗线
+ * + padding 9/8 + 12.5px 粗体文本，2026-10-09 密度修订后真 Chromium 量），
+ * 取 60 偏保守。⚠️ 设计文档原案写 54——那小于实测 59.75，违反本文件「估高
+ * 只允许偏保守」纪律（偏小 = 分页器多装 ⇒ 实际内容溢出纸面），故按实测取 60。
+ * compact 实测 ≈37，取 38。
+ */
+const EI_CHAPTER_H = { normal: 60, compact: 38 } as const;
 
 /** 超过该行数转紧凑档（分页照旧——紧凑只是让每页多装几行） */
 const COMPACT_THRESHOLD = 16;

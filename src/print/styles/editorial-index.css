@@ -186,8 +186,12 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
-  padding: 7px 0 6px;
+  /* 分组呼吸从行内赎回来（密度研究 §3-E + 规则 2）：margin-top 14→22、
+     padding 7/6→9/8——章头实测槽位 47.75→~58.5px，与目录行（37px）拉开
+     一个明确档位，分组才成为分组。EI_CHAPTER_H.normal 估高随 CSS 同源联动
+     （EditorialIndexDocument.tsx：估高只允许偏保守，不允许小于实测）。 */
+  margin-top: 22px;
+  padding: 9px 0 8px;
   border-top: 2px solid var(--tpl-ink);
   font-size: 12.5px;
   font-weight: 700;
@@ -239,8 +243,11 @@
   display: grid;
   grid-template-columns: 58px minmax(0, 1fr) 92px 158px minmax(0, 1fr) 60px;
   align-items: center;
-  gap: 12px;
-  padding: 8px 0;
+  /* 行内呼吸 16→12px（密度研究 §3-E：目录行实测约 42px，与章头几乎等高，
+     分组语言靠 2px 粗线硬撑；紧 L2 行、把呼吸赎回到章头界面）。
+     EI_ROW_H.normal 估高随 CSS 同源联动（EditorialIndexDocument.tsx）。 */
+  gap: 10px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--tpl-line);
   font-size: 12.5px;
 }

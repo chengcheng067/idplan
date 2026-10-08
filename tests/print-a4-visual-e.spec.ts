@@ -293,7 +293,7 @@ async function assertPagesAndShot(
     expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
     expect(box!.height, `第 ${i + 1} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
     expect(box!.height, `第 ${i + 1} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
-    await el.screenshot({ path: join(OUT_DIR, `e-default-p${i + 1}-${tag}.png`) });
+    await el.screenshot({ path: join(OUT_DIR, `density-e-p${i + 1}-${tag}.png`) });
   }
   return pages.length;
 }
