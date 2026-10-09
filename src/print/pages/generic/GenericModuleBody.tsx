@@ -1,10 +1,11 @@
 /**
- * 通用模块调度（一个 module + 一个 chunk ⇒ 对应组件）。
+ * 通用模块调度（一个 plan + 一个 chunk ⇒ 对应组件）。
  *
  * 四套 Document 的纸面外壳（页头/页脚/logo）由各自模板持有，主体里的
  * 通用模块都经本组件分发——「外表 × 模块分离」的渲染侧汇聚点：
- * 模块内容只实现一份（三组件），外表排版由 generic-modules.css 的
- * per-template 块承接。
+ * 模块内容只实现一份（三组件），期七起行形态由 plan.syntax（语法 token）
+ * 在组件内部分发（table/grid/blocks/staggered），外表排版由
+ * generic-modules.css 的 per-template 块承接。
  */
 
 import type { JSX } from 'react';
@@ -26,34 +27,12 @@ export interface GenericModuleBodyProps {
 
 export function GenericModuleBody({ plan, chunkIndex }: GenericModuleBodyProps): JSX.Element | null {
   if (plan === null || !isGenericRenderable(plan.module)) return null;
-  const continued = chunkIndex > 0;
   switch (plan.module) {
     case 'stage-list':
-      return (
-        <StageListModule
-          rows={plan.chunks[chunkIndex] ?? []}
-          count={plan.count}
-          compact={plan.compact}
-          continued={continued}
-        />
-      );
+      return <StageListModule plan={plan} chunkIndex={chunkIndex} />;
     case 'task-list':
-      return (
-        <TaskListModule
-          rows={plan.chunks[chunkIndex] ?? []}
-          count={plan.count}
-          compact={plan.compact}
-          continued={continued}
-        />
-      );
+      return <TaskListModule plan={plan} chunkIndex={chunkIndex} />;
     case 'member-roster':
-      return (
-        <MemberRosterModule
-          rows={plan.chunks[chunkIndex] ?? []}
-          count={plan.count}
-          compact={plan.compact}
-          continued={continued}
-        />
-      );
+      return <MemberRosterModule plan={plan} chunkIndex={chunkIndex} />;
   }
 }

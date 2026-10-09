@@ -1,36 +1,47 @@
 /**
- * 通用渲染 · 模块样式（期三第一批：M1 阶段清单 / M2 任务清单 / M4 成员名册；
- * 产品决策文档 §3.2 候选 3——通用模块用该外表的基础排版渲染，不套标志布局）。
+ * 通用渲染 · 模块样式（期三第一批 + 期七语法保真；产品决策文档 §3.2 候选 3
+ * / UX 研究 print-preview-ux-study §2.4/§2.6）。
  *
  * ── 两层结构（本文件与四套模板 CSS 的组织差异，特此说明） ──
  * 四套模板 CSS（swiss-schedule.css 等）每套一个文件、每条规则双类前缀。
  * 本文件是**一套组件 × 四套外表**，故分两层：
  *   ① 共享结构层 `.print-root .gm-*`：只放**跨版同构的几何/机制**
- *      （table-layout:fixed、省略号截断、列宽、口径注压底）——不含任何
- *      视觉身份（无颜色/字体/边框样式）。前缀取 `.print-root` 单类即满足
- *      亮色锁（前缀纪律的机理是「解析回亮色锁」，双类是模板文件的组织
- *      惯例；本文件视觉规则仍在第 ② 层逐版双类前缀）；
+ *      （table-layout:fixed、省略号截断、列宽、口径注压底、期七的
+ *      grid/blocks/staggered 行形态几何）——不含任何视觉身份（无颜色/
+ *      字体/边框样式）。前缀取 `.print-root` 单类即满足亮色锁（前缀纪律
+ *      的机理是「解析回亮色锁」，双类是模板文件的组织惯例；本文件视觉
+ *      规则仍在第 ②/③ 层逐版双类前缀）；
  *   ② 外表承接层 `.print-root.print-template-<id> .gm-*`：字体阶 / 色板 /
  *      密度 / 表格形态逐版落地——全部走该版 token（--tpl-accent / --tpl-ink
  *      / --tpl-line）与各版已有语法（A 的密集横线、D 的硬边网格、E 的发丝
  *      线分组、H 的海报块语言）。用户改配色槽位时通用渲染跟着变（硬验收点）。
+ *   ③ 期七变体层（同 ② 的双类前缀）：三种行形态的各版视觉——E 的 grid +
+ *      巨编号 + 分章、H 的 blocks 双栏 + 右栏面板、A 的 staggered 三列
+ *      错落卡片、D 的 KPI 带（复用原生 de-stat/de-bar 类，作用域正是 D 域）。
  *
  * ── 密度合规（print-density-study §2 规则 + §4 四约束） ──
- *   · L2 数据行：normal ≈27-28px（字号 11.5-12.5 ×1.35 + padding 5/5 + 1px
- *     行线），compact ≈22px（padding 3/3 压线，≥2×3px 下限）；行估高常量在
- *     pages/generic/shared.ts（normal 30-32 / compact 24-26，只偏保守）；
- *   · L1 模块头：2px 粗线 + 12.5-15px 粗体（分组呼吸在这层，规则 2）；
+ *   · L2 数据行：table ≈27-28px / grid 巨编号行 ≈36-40px / blocks 单行
+ *     ≈27px / staggered 卡片 ≈60-74px；compact 档行 padding 压到 3px
+ *     （≥2×3px 下限）；行估高常量在 pages/generic/shared.ts（只偏保守）；
+ *   · L1 模块头 / 章头：2px 粗线 + 12.5-15px 粗体（分组呼吸在这层，规则 2）；
  *   · L3 口径注：9.5-10px + 灰度一档（opacity 或灰阶），与 L2 差 ≥1.5px；
- *   · accent 文字 ≥9.5px（约束 3）：本文件 accent 只用于状态/焦点文字
- *     （行字号 11.5-12.5px，远超下限）与边框，无小字号 accent 文字；
+ *   · accent 文字 ≥9.5px（约束 3）：accent 只用于状态/焦点文字（行字号
+ *     11-12.5px）与边框；最小 accent 文字是 E Agent 签与 H 面板 item-kind
+ *     的 9.5px，压线不破；
  *   · 行 padding 任何档位 ≥3px（约束 1）：compact 的 3px 已压线，不再出第三档；
- *   · 无进度条/色带 ⇒ 不涉轨道 6px 下限（约束 2）。
+ *   · 进度条轨道 8px（约束 2 下限 6px）：D×M1 复用原生 de-bar__track 8px。
  *
  * ── A 版的一处必要微调（报告项） ──
  * A 的 --tpl-accent = 纸面黄（print-palette.ts：A 的 accent 兼纸面）⇒
  * accent 色文字在黄纸上不可读。故 A 的延期态焦点**不走 accent 色**，用
  * 「加重 + ▲ 字形」双编码（与 A 原生 swiss-stage-row 的延期处理一致）；
  * Agent 行焦点用 A 原生的反色行（line 底 + accent 字，反相可辨）。
+ *
+ * ── 期七变体与原生类复用（报告项） ──
+ * D 的 KPI 带 / 进度条直接复用原生 `.de-stat` / `.de-bar` 类名，H 的
+ * ≤8 状态卡复用原生 `.ap-status__card` 类名——这些类的作用域
+ * （.print-root.print-template-<id>）正是通用模块的渲染域，同构是同一套
+ * 规则而非抄样子；E 的 grid 几何（列宽/巨编号/章头）与原生 ei-row 同值。
  */
 
 /* ============================== ① 共享结构层 ============================== */
@@ -131,6 +142,152 @@
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-num {
   width: 20%;
+}
+
+/* ── 期七变体结构（行形态几何；视觉身份仍归 ② 各版块） ──
+ * grid（E 目录行）/ blocks（H 双栏）/ staggered（A 三列错落）三种行形态的
+ * 几何在这里；字体/色板/线型/焦点在各版承接层。列宽语义同 E 原生 ei-row。 */
+
+/* grid 行：六列栅格（M1/M4）；M2 五列 */
+.print-root .gm-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.print-root .gm-grid__row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 92px 158px minmax(0, 1fr) 60px;
+  align-items: center;
+  gap: 10px;
+}
+
+.print-root .gm-grid__row--task {
+  grid-template-columns: 64px minmax(0, 1.6fr) 96px minmax(0, 1fr) 64px;
+}
+
+.print-root .gm-grid__row--member {
+  grid-template-columns: 46px minmax(0, 1.2fr) 92px 130px minmax(0, 1fr) 64px;
+}
+
+/* blocks 双栏（H）：左明细 flex:1 + 右摘要 240px（§2.6.4） */
+.print-root .gm-blocks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 0 28px;
+  align-items: start;
+}
+
+.print-root .gm-blocks__main {
+  min-width: 0;
+}
+
+.print-root .gm-blocks__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.print-root .gm-block-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.print-root .gm-panel {
+  min-width: 0;
+}
+
+/* staggered 三列错落（A×M1 ≤9；A 原生 P1 并列语法） */
+.print-root .gm-staggered {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 28px;
+  align-items: start;
+}
+
+.print-root .gm-staggered__col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.print-root .gm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.print-root .gm-card__top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.print-root .gm-card__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+}
+
+/* 变体行长文本一律单行省略 + title 可访问（行高确定，分页估高不漂） */
+.print-root .gm-grid__name,
+.print-root .gm-grid__owner,
+.print-root .gm-grid__role,
+.print-root .gm-block-row__name,
+.print-root .gm-block-row__role,
+.print-root .gm-panel__item-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.print-root .gm-grid__date,
+.print-root .gm-block-row__date,
+.print-root .gm-panel__item-kind {
+  white-space: nowrap;
+}
+
+/* D×M1 的 merged 表（序号并入阶段单元格，同 D 原生 de-matrix；进度列进表） */
+.print-root .gm-module[data-module='stage-list'][data-table-layout='merged'] .gm-col-stage {
+  width: 22%;
+}
+.print-root .gm-module[data-module='stage-list'][data-table-layout='merged'] .gm-col-state {
+  width: 9%;
+}
+.print-root .gm-module[data-module='stage-list'][data-table-layout='merged'] .gm-col-date {
+  width: 24%;
+}
+.print-root .gm-module[data-module='stage-list'][data-table-layout='merged'] .gm-col-progress {
+  width: 22%;
+}
+.print-root .gm-module[data-module='stage-list'][data-table-layout='merged'] .gm-col-ratio {
+  width: 8%;
+}
+.print-root .gm-module[data-module='stage-list'][data-table-layout='merged'] .gm-col-owner {
+  width: 15%;
+}
+.print-root .gm-module[data-table-layout='merged'] .gm-cell-no {
+  margin-right: 6px;
+}
+
+/* merged 单元格必须是 flex 单行：序号不缩、名称 min-width:0 省略号收。
+   若任其 inline，长阶段名会在序号后的空白处断行 ⇒ 行高翻倍（实测 46.5px，
+   破 L2 区间）——flex 项被块化，overflow/ellipsis 才真正生效。 */
+.print-root .gm-module[data-table-layout='merged'] .gm-cell-stage {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.print-root .gm-module[data-table-layout='merged'] .gm-cell-stage .gm-cell-no {
+  flex: none;
+}
+
+.print-root .gm-module[data-table-layout='merged'] .gm-cell-stage .gm-cell-name {
+  flex: 1;
 }
 
 /* ============================== ② 外表承接层 · A ============================== */
@@ -496,4 +653,421 @@
 
 .print-root.print-template-agent-poster .gm-module[data-density='compact'] .gm-table th {
   padding: 4px 8px;
+}
+
+/* ============================== ③ 期七变体 · A（staggered） ============================== */
+
+/* A×M1 ≤9：三列错落卡片（A 原生 P1 时刻表语法）。序号 20px 粗体独立锚点
+   （§2.6.2 A×M1 的 giant = 20px，不是 E 的 24px 衬线——巨编号尺寸按各版
+   自己的原生值）；列 2/3 纵向错位 34/68（同原生 swiss-column）。 */
+.print-root.print-template-swiss-schedule .gm-staggered__col[data-col='2'] {
+  margin-top: 34px;
+}
+
+.print-root.print-template-swiss-schedule .gm-staggered__col[data-col='3'] {
+  margin-top: 68px;
+}
+
+.print-root.print-template-swiss-schedule .gm-card {
+  border-bottom: 1px solid var(--tpl-ink);
+  padding: 5px 0 4px;
+}
+
+.print-root.print-template-swiss-schedule .gm-card__no {
+  font-size: 20px;
+  font-weight: 700;
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}
+
+.print-root.print-template-swiss-schedule .gm-card__name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.print-root.print-template-swiss-schedule .gm-card__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .gm-card__bottom {
+  font-size: 9.5px;
+  opacity: 0.72;
+}
+
+/* A 的延期态：加重 + ▲（accent 是纸面黄，禁止作文字色——文件头微调项） */
+.print-root.print-template-swiss-schedule .gm-card[data-state='delayed'] .gm-card__state {
+  font-weight: 700;
+}
+
+.print-root.print-template-swiss-schedule .gm-module[data-density='compact'] .gm-card {
+  padding: 3px 0;
+}
+
+/* ============================== ③ 期七变体 · D（KPI 带 + merged 表 + 逾期灰底） ============================== */
+
+/* KPI 带三格（已完成 / 延期 / 占比）：复用原生 de-stat 视觉（硬边方框 +
+   mono 大数字 + 小字帽 caption），只把四格网格收成三格（D 原生 de-stats
+   是 repeat(4,1fr)——M1 只要三格）。 */
+.print-root.print-template-data-editorial .gm-kpi {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--tpl-ink);
+}
+
+/* 逾期行灰底（D 原生 de-table tr[data-delayed] 的同款处理；M2/M4 表生效） */
+.print-root.print-template-data-editorial .gm-row[data-overdue] td {
+  background: var(--de-gray-100);
+}
+
+/* merged 表：序号并入阶段单元格（同原生 de-matrix 的 no+name 结构） */
+.print-root.print-template-data-editorial .gm-cell-stage {
+  min-width: 0;
+}
+
+/* ============================== ③ 期七变体 · E（grid + 巨编号 + 分章） ============================== */
+
+/* E 的目录行语法：六列 grid + 发丝线 + 24px 衬线巨编号独立列。行 padding
+   6/6（同原生 ei-row）⇒ 行高 ≈36-40px（GENERIC_ROW_H grid normal 40）。 */
+.print-root.print-template-editorial-index .gm-grid__row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--tpl-line);
+  font-size: 12.5px;
+}
+
+/* 巨编号：衬线锚点字体（E 的目录身份装置；延期/焦点行转朱红） */
+.print-root.print-template-editorial-index .gm-grid__no {
+  font-family: var(--ei-font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--tpl-ink);
+  white-space: nowrap;
+}
+
+.print-root.print-template-editorial-index .gm-grid__no[data-focus] {
+  color: var(--tpl-accent);
+}
+
+/* E×M2 降级：mono 序号（§2.6.3——任务读号是密集表设备，不借巨编号） */
+.print-root.print-template-editorial-index .gm-grid__no--mono {
+  font-family: var(--ei-font-num);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.print-root.print-template-editorial-index .gm-grid__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-editorial-index .gm-grid__state[data-focus] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+.print-root.print-template-editorial-index .gm-grid__date {
+  font-family: var(--ei-font-num);
+  font-size: 10.5px;
+  color: var(--tpl-ink);
+  opacity: 0.82;
+}
+
+.print-root.print-template-editorial-index .gm-grid__owner {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-editorial-index .gm-grid__owner[data-agent],
+.print-root.print-template-editorial-index .gm-grid__name[data-agent] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* Agent 签字号 ≥9.5px（accent 文字下限；同原生 ei-row__agent-tag） */
+.print-root.print-template-editorial-index .gm-grid__agent-tag {
+  font-family: var(--ei-font-num);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  border: 1px solid currentColor;
+  padding: 0 3px;
+  opacity: 0.9;
+}
+
+.print-root.print-template-editorial-index .gm-grid__ratio {
+  font-family: var(--ei-font-num);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.print-root.print-template-editorial-index .gm-grid__num {
+  font-family: var(--ei-font-num);
+  font-size: 11.5px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.print-root.print-template-editorial-index .gm-grid__kind {
+  font-family: var(--ei-font-num);
+  font-size: 10.5px;
+  color: var(--tpl-ink);
+  opacity: 0.82;
+}
+
+.print-root.print-template-editorial-index .gm-grid__role {
+  font-size: 11.5px;
+  color: var(--tpl-ink);
+}
+
+/* Agent 行：朱红 3px 粗左边签（同原生 ei-row[data-agent]；不整行变红） */
+.print-root.print-template-editorial-index .gm-grid__row[data-agent] {
+  border-left: 3px solid var(--tpl-accent);
+  padding-left: 9px;
+}
+
+/* 章头：2px 粗章节线 + 12.5px 粗体 + 计数（同原生 ei-chapter；延期章朱红） */
+.print-root.print-template-editorial-index .gm-chapter {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 9px 0 8px;
+  border-top: 2px solid var(--tpl-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-editorial-index .gm-chapter:first-child {
+  margin-top: 0;
+}
+
+.print-root.print-template-editorial-index .gm-chapter[data-focus] {
+  color: var(--tpl-accent);
+  border-top-color: var(--tpl-accent);
+}
+
+.print-root.print-template-editorial-index .gm-chapter__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.print-root.print-template-editorial-index .gm-chapter__glyph {
+  font-size: 11px;
+}
+
+.print-root.print-template-editorial-index .gm-chapter__count {
+  font-family: var(--ei-font-num);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  opacity: 0.72;
+}
+
+.print-root.print-template-editorial-index .gm-module[data-density='compact'] .gm-grid__row {
+  padding: 4px 0;
+}
+
+.print-root.print-template-editorial-index .gm-module[data-density='compact'] .gm-grid__no {
+  font-size: 19px;
+}
+
+.print-root.print-template-editorial-index .gm-module[data-density='compact'] .gm-chapter {
+  margin-top: 10px;
+  padding: 5px 0 4px;
+  font-size: 11.5px;
+}
+
+/* ============================== ③ 期七变体 · H（blocks 双栏 + 右栏面板） ============================== */
+
+/* 左栏明细行：mono 编号 + 名 + 状态（+ 日期/角色/计数按模块），行间发丝线 */
+.print-root.print-template-agent-poster .gm-block-row {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--tpl-line);
+  font-size: 11.5px;
+}
+
+.print-root.print-template-agent-poster .gm-block-row__no {
+  min-width: 30px;
+  font-weight: 600;
+}
+
+.print-root.print-template-agent-poster .gm-block-row__name {
+  flex: 1;
+}
+
+.print-root.print-template-agent-poster .gm-block-row__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-agent-poster .gm-block-row__date {
+  font-size: 10px;
+  opacity: 0.66;
+}
+
+.print-root.print-template-agent-poster .gm-block-row__role {
+  font-size: 10.5px;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.print-root.print-template-agent-poster .gm-block-row__num {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+/* 延期/逾期行：治理焦点橙（H 槽位语义，仅此处） */
+.print-root.print-template-agent-poster .gm-block-row[data-delayed] .gm-block-row__state,
+.print-root.print-template-agent-poster .gm-block-row[data-overdue] .gm-block-row__state {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* Agent 行焦点：姓名橙 + 加重（block-focus；与门控焦点同语法） */
+.print-root.print-template-agent-poster .gm-block-row[data-agent] .gm-block-row__name {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+.print-root.print-template-agent-poster .gm-module[data-density='compact'] .gm-block-row {
+  padding: 3px 0;
+}
+
+/* ── 右栏摘要面板（§2.6.4：2px 顶线 + 大号 mono 数字 + 字段行；不借衬线巨字） ── */
+.print-root.print-template-agent-poster .gm-panel {
+  border-top: 2px solid var(--tpl-ink);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.print-root.print-template-agent-poster .gm-panel__title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .gm-panel__big {
+  margin: 0;
+  font-family: var(--ap-font-mono);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--tpl-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.print-root.print-template-agent-poster .gm-panel__caption {
+  margin: 0;
+  font-size: 10px;
+  color: var(--tpl-ink);
+  opacity: 0.66;
+}
+
+.print-root.print-template-agent-poster .gm-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.print-root.print-template-agent-poster .gm-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--tpl-line);
+  font-size: 11px;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .gm-panel__item-name {
+  flex: 1;
+}
+
+.print-root.print-template-agent-poster .gm-panel__item-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-agent-poster .gm-panel__item-num {
+  font-weight: 600;
+}
+
+/* 延期行：▲ + 治理焦点橙（H×M1 右栏的唯一彩色位） */
+.print-root.print-template-agent-poster .gm-panel__item[data-delayed] .gm-panel__item-state {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+.print-root.print-template-agent-poster .gm-panel__item-kind {
+  font-size: 9.5px;
+  opacity: 0.72;
+}
+
+.print-root.print-template-agent-poster .gm-panel__more {
+  margin: 0;
+  font-size: 10px;
+  opacity: 0.66;
+}
+
+/* 逾期块（H×M2 右栏）：▲ + 逾期数 + 最早逾期日（accent 文字 11px ≥9.5 下限） */
+.print-root.print-template-agent-poster .gm-panel__flag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tpl-accent);
+}
+
+/* 门控提示行（H×M4 右栏）：满席时转治理焦点橙 */
+.print-root.print-template-agent-poster .gm-panel__gate {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--tpl-ink);
+  opacity: 0.72;
+}
+
+.print-root.print-template-agent-poster .gm-panel__gate[data-full] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+  opacity: 1;
+}
+
+/* H×M2 ≤8 卡化：状态分组卡直接复用原生 .ap-status__cards / .ap-status__card
+   （agent-poster.css 已按 H 域作用域样式化——同构不只是样子，是同一套规则） */
+.print-root.print-template-agent-poster .gm-module .ap-status__cards {
+  margin-top: 2px;
 }
