@@ -160,7 +160,13 @@ function shiftNaturalDays(iso: string, days: number): string {
   return dayjs(iso).add(days, 'day').format('YYYY-MM-DD');
 }
 
-/** 制度里影响工作日判定的字段是否有差异（kind/锚点/单休周几/节假日三件套） */
+/**
+ * 制度里影响工作日判定的字段是否有差异（kind/锚点/单休周几/双休休息日集合/节假日三件套）。
+ *
+ * ⚠️ 双休休息日集合（doubleRestWeekdays）**必须**参与判定：漏它 = 用户改了
+ * 双休日（如周六+周日 → 周一+周五）却判定「口径未变」→ 编辑器走直接保存
+ * 不弹重算确认 → 已排阶段静默不一致（§4.6 最高风险项，spec 有守门用例）。
+ */
 export function sameWorkdayPolicy(a: RestPolicyConfig, b: RestPolicyConfig): boolean {
   const norm = (p: RestPolicyConfig): string =>
     JSON.stringify([
@@ -171,6 +177,10 @@ export function sameWorkdayPolicy(a: RestPolicyConfig, b: RestPolicyConfig): boo
       p.skipHolidays === true,
       // 单休周几：仅单休档参与判定；非单休档缺省等价
       p.kind === RestPolicyKind.SingleOff ? (p.singleRestWeekday ?? 6) : null,
+      // 双休休息日集合：仅双休档参与判定；非双休档缺省等价（默认 [5,6] 周六+周日）
+      p.kind === RestPolicyKind.DoubleOff
+        ? [...(p.doubleRestWeekdays ?? [5, 6])].sort((x, y) => x - y)
+        : null,
     ]);
   return norm(a) === norm(b);
 }

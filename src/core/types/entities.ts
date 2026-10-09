@@ -523,6 +523,19 @@ export interface RestPolicyConfig {
    * 逐字节一致；旧数据缺省本字段 ⇒ 读时回落周日，**无迁移脚本**。
    */
   singleRestWeekday?: number;
+  /**
+   * 双休的自定义两个休息日（v3 §4.6，需求方拍板「让用户可以自主选择双休在
+   * 周内的连续两天，还是分开的（比如选择休星期六和星期一）」）。
+   * **仅 DoubleOff 有意义**，单休/大小休忽略；不泛化 restWeekdays——两个
+   * 制度的休息日语义不同（单休一天 / 双休两天），合并字段会让「休几天」
+   * 也要从数组长度推断，反而多一个失真源。
+   *
+   * 口径：0=周一 … 6=周日（与 singleRestWeekday / 仓库周一始终口径一致），
+   * **升序存盘**（[a,b] 且 a<b；同一天休两次无意义，逆序一律归一时拒绝）。
+   * 缺省/非法 ⇒ 读时回落 [5,6]（周六+周日，与改造前逐字节一致）⇒
+   * **旧数据无迁移脚本**（手法同 singleRestWeekday）。
+   */
+  doubleRestWeekdays?: [number, number];
   /** 法定节假日预留扩展点（MVP 不接数据）：命中即休息，优先级低于 extraWorkdays */
   extraHolidays?: string[];
   /** 调休上班日预留扩展点（MVP 不接数据）：命中即上班，优先级最高 */

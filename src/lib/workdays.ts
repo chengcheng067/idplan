@@ -5,7 +5,7 @@
  * 禁止在调用方二次实现周末判定）。
  *
  * 三种制度：
- *   DoubleOff    双休   周六 + 周日休息
+ *   DoubleOff    双休   doubleRestWeekdays 两个休息日（缺省=[5,6] 周六+周日，可自选）
  *   SingleOff    单休   仅 singleRestWeekday 那天休息（缺省=周日，可自选周几）
  *   BigSmallWeek 大小休 周日固定休息，周六按 ISO 周交替（大休周休息 / 小休周上班）
  *
@@ -108,10 +108,32 @@ function singleRestDayjsDow(singleRestWeekday: number | undefined): number {
 }
 
 /**
+ * 双休的自定义两个休息日（RestPolicyConfig.doubleRestWeekdays，0=周一…6=周日，
+ * 升序；缺省/非法 = [5,6] 周六+周日）→ dayjs day() 口径集合（0=周日…6=周六）。
+ *
+ * 换算同 singleRestDayjsDow（字段是周一始终口径，dayjs 的 day() 是周日开头）。
+ * 缺省 = [5,6] ⇒ 与改造前「双休=周六+周日休」逐字节一致，无迁移脚本。
+ */
+function doubleRestDayjsDows(doubleRestWeekdays: [number, number] | undefined): Set<number> {
+  const out = new Set<number>();
+  for (const v of doubleRestWeekdays ?? [5, 6]) {
+    if (!Number.isInteger(v) || v < 0 || v > 6) continue;
+    out.add(v === 6 ? 0 : v + 1);
+  }
+  // 全非法（理论上 normalize 边界已拦，这里双保险）⇒ 回落周六+周日
+  if (out.size === 0) {
+    out.add(5);
+    out.add(0);
+  }
+  return out;
+}
+
+/**
  * 该日是否休息。
  * 优先级：extraWorkdays 命中 → 上班（最高，短路）；extraHolidays 命中 → 休息；
- * 否则按 kind 判定周末。单休读 singleRestWeekday（缺省=周日）；双休/大小休
- * 的周日 + 大小休周六锚点逻辑不变。
+ * 否则按 kind 判定周末。单休读 singleRestWeekday（缺省=周日）；双休读
+ * doubleRestWeekdays 集合（缺省=[5,6] 周六+周日）；大小休的周日固定 +
+ * 周六锚点逻辑不变。
  */
 export function isRestDay(date: string, policy: RestPolicyConfig): boolean {
   if (policy.extraWorkdays?.includes(date)) return false;
@@ -122,11 +144,14 @@ export function isRestDay(date: string, policy: RestPolicyConfig): boolean {
     // 单休：仅自定义休息日那天休息（缺省=周日，保持历史行为）
     return dow === singleRestDayjsDow(policy.singleRestWeekday);
   }
-  if (dow === 0) return true; // 周日：双休/大小休都休息
-  if (dow !== 6) return false; // 周一~周五：一律上班
+  if (policy.kind === RestPolicyKind.DoubleOff) {
+    // 双休：两个自定义休息日（缺省=周六+周日，与改造前逐字节一致）
+    return doubleRestDayjsDows(policy.doubleRestWeekdays).has(dow);
+  }
 
-  // 周六：双休息 / 大小休看锚点周奇偶
-  if (policy.kind === RestPolicyKind.DoubleOff) return true;
+  // 大小休：周日固定休息，周六按 ISO 周交替（大休周休息 / 小休周上班）
+  if (dow === 0) return true;
+  if (dow !== 6) return false;
   return isBigRestWeek(date, policy.anchorWeek);
 }
 

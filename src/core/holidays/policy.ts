@@ -61,14 +61,30 @@ export function withCnHolidays(policy: RestPolicyConfig): RestPolicyConfig {
 }
 
 /**
+ * 双休自定义休息日收敛（hydrate 边界，规则同 singleRestWeekday）：
+ * 两整数、各在 0-6、**严格升序**；同天/逆序/越界/非整数/长度不符 ⇒ undefined
+ * （读时回落 [5,6] 周六+周日，旧数据无迁移）。
+ */
+function normalizeDoubleRestWeekdays(raw: unknown): [number, number] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 2) return undefined;
+  const [a, b] = raw as [unknown, unknown];
+  const ok = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 6;
+  if (!ok(a) || !ok(b)) return undefined;
+  return a < b ? [a, b] : undefined;
+}
+
+/**
  * 把任意解析结果收敛成合法 RestPolicyConfig；无法识别时回落默认值。
  * 体例与 `useRepos.ts` 旧实现逐行一致，仅追加 `skipHolidays` 字段
- * （旧行缺省 ⇒ false ⇒ 现状不变）与 `singleRestWeekday`（单休自定义休息
- * 周几，0=周一…6=周日，缺省/非法 ⇒ undefined ⇒ 读时回落周日，无迁移）。
+ * （旧行缺省 ⇒ false ⇒ 现状不变）、`singleRestWeekday`（单休自定义休息
+ * 周几，0=周一…6=周日，缺省/非法 ⇒ undefined ⇒ 读时回落周日，无迁移）
+ * 与 `doubleRestWeekdays`（双休自定义两个休息日，升序，缺省/非法 ⇒
+ * undefined ⇒ 读时回落 [5,6] 周六+周日，无迁移）。
  */
 export function normalizeRestPolicy(raw: unknown): RestPolicyConfig {
   if (typeof raw !== 'object' || raw === null) return DEFAULT_REST_POLICY;
-  const { kind, anchorWeek, extraHolidays, extraWorkdays, skipHolidays, singleRestWeekday } =
+  const { kind, anchorWeek, extraHolidays, extraWorkdays, skipHolidays, singleRestWeekday, doubleRestWeekdays } =
     raw as Record<string, unknown>;
   if (!ALL_REST_POLICIES.includes(kind as RestPolicyKind)) return DEFAULT_REST_POLICY;
   return {
@@ -88,6 +104,7 @@ export function normalizeRestPolicy(raw: unknown): RestPolicyConfig {
       singleRestWeekday <= 6
         ? singleRestWeekday
         : undefined,
+    doubleRestWeekdays: normalizeDoubleRestWeekdays(doubleRestWeekdays),
   };
 }
 

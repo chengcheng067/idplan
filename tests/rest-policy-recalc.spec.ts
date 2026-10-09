@@ -29,7 +29,7 @@ import {
   type RecalcInputProject,
 } from '../src/lib/restPolicyRecalc';
 import { addWorkdays, countWorkdays, isRestDay } from '../src/lib/workdays';
-import { hydrateRestPolicy } from '../src/core/holidays/policy';
+import { hydrateRestPolicy, normalizeRestPolicy } from '../src/core/holidays/policy';
 import { DEFAULT_REST_POLICY } from '../src/core/types/entities';
 import type { Project, RestPolicyConfig, Stage, Task } from '../src/core/types/entities';
 import {
@@ -925,6 +925,169 @@ describe('Task.dueDate：默认不跟随，可选平移', () => {
     });
     // 新区间 09-12~09-17；原偏移 -3 → 09-12-3=09-09 < start → clamp 到 09-12
     expect(plan.projects[0].taskShifts[0].newDueDate).toBe('2026-09-12');
+  });
+});
+
+/* ------------------------------ 双休自定义（§4.6） ------------------------------ */
+
+describe('双休自定义休息日 doubleRestWeekdays（§4.6，需求方拍板）', () => {
+  /** 双休 + 自定义两个休息日（0=周一…6=周日，升序） */
+  function doubleOn(days: [number, number]): RestPolicyConfig {
+    return { kind: RestPolicyKind.DoubleOff, anchorWeek: null, doubleRestWeekdays: days };
+  }
+
+  it('isRestDay 集合判定：默认（缺省）[5,6] = 周六+周日，与改造前逐字节一致', () => {
+    const p: RestPolicyConfig = { kind: RestPolicyKind.DoubleOff, anchorWeek: null };
+    const week = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'];
+    expect(week.filter((d) => isRestDay(d, p))).toEqual(['2026-09-12', '2026-09-13']);
+    expect(isRestDay('2026-09-12', p)).toBe(true);
+    expect(isRestDay('2026-09-13', p)).toBe(true);
+    expect(isRestDay('2026-09-07', p)).toBe(false); // 周一上班
+  });
+
+  it('isRestDay 集合判定：自定义 [0,5]（周一+周六）——周日变上班、周三不变', () => {
+    const p = doubleOn([0, 5]);
+    expect(isRestDay('2026-09-07', p)).toBe(true); // 周一休
+    expect(isRestDay('2026-09-12', p)).toBe(true); // 周六休
+    expect(isRestDay('2026-09-13', p)).toBe(false); // 周日上班（默认双休下是休的）
+    expect(isRestDay('2026-09-09', p)).toBe(false); // 周三上班
+    expect(isRestDay('2026-09-11', p)).toBe(false); // 周五上班
+    // 一周仍休 2 天
+    const week = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'];
+    expect(week.filter((d) => isRestDay(d, p))).toHaveLength(2);
+  });
+
+  it('isRestDay 集合判定：自定义 [0,4]（周一+周五，连续两天休在两侧）', () => {
+    const p = doubleOn([0, 4]);
+    expect(isRestDay('2026-09-07', p)).toBe(true); // 周一休
+    expect(isRestDay('2026-09-11', p)).toBe(true); // 周五休
+    expect(isRestDay('2026-09-12', p)).toBe(false); // 周六上班
+    expect(isRestDay('2026-09-13', p)).toBe(false); // 周日上班
+  });
+
+  it('集合含周日口径换算正确（6→dayjs 0）', () => {
+    // [5,6]：周六(dayjs 6)+周日(dayjs 0)；[0,6]：周一+周日
+    expect(doubleOn([0, 6]) && isRestDay('2026-09-13', doubleOn([0, 6]))).toBe(true);
+    expect(isRestDay('2026-09-13', doubleOn([1, 2]))).toBe(false); // 周二+周三：周日上班
+  });
+
+  it('sameWorkdayPolicy：改双休日必须判定为「不同」（漏此=改双休日不弹重算，静默不一致）', () => {
+    expect(sameWorkdayPolicy(DOUBLE, doubleOn([0, 5]))).toBe(false);
+    expect(sameWorkdayPolicy(DOUBLE, doubleOn([0, 4]))).toBe(false);
+    // 显式写默认 [5,6] 与缺省等价
+    expect(sameWorkdayPolicy(DOUBLE, doubleOn([5, 6]))).toBe(true);
+    // 集合语义：逆序存盘等价（归一后同集合）
+    expect(sameWorkdayPolicy(doubleOn([0, 5]), { kind: RestPolicyKind.DoubleOff, anchorWeek: null, doubleRestWeekdays: [5, 0] as [number, number] })).toBe(true);
+    // 非双休档带该字段不参与判定
+    expect(
+      sameWorkdayPolicy(SINGLE, { ...SINGLE, doubleRestWeekdays: [0, 4] }),
+    ).toBe(true);
+  });
+
+  it('normalizeRestPolicy 收敛：合法升序保留', () => {
+    expect(
+      normalizeRestPolicy({ kind: 'double_off', anchorWeek: null, doubleRestWeekdays: [0, 5] })
+        .doubleRestWeekdays,
+    ).toEqual([0, 5]);
+    expect(
+      normalizeRestPolicy({ kind: 'double_off', anchorWeek: null, doubleRestWeekdays: [1, 6] })
+        .doubleRestWeekdays,
+    ).toEqual([1, 6]);
+  });
+
+  it('normalizeRestPolicy 收敛：同天/逆序/越界/非整数/长度不符/缺省 ⇒ undefined（读时回落 [5,6]）', () => {
+    const base = { kind: 'double_off', anchorWeek: null };
+    const bad: unknown[] = [
+      [3, 3], // 同天
+      [6, 1], // 逆序
+      [7, 1], // 越界上
+      [-1, 2], // 越界下
+      [1.5, 2], // 非整数
+      ['1', 2], // 字符串
+      [5], // 长度 1
+      [1, 2, 3], // 长度 3
+      '56', // 非数组
+      null, // null
+    ];
+    for (const v of bad) {
+      expect(
+        normalizeRestPolicy({ ...base, doubleRestWeekdays: v }).doubleRestWeekdays,
+      ).toBeUndefined();
+    }
+    expect(normalizeRestPolicy(base).doubleRestWeekdays).toBeUndefined();
+    // 回落口径：undefined ⇒ isRestDay 按 [5,6]
+    const p = normalizeRestPolicy(base);
+    expect(isRestDay('2026-09-12', p)).toBe(true);
+    expect(isRestDay('2026-09-13', p)).toBe(true);
+  });
+
+  it('hydrate 往返（JSON）不丢双休日', () => {
+    const raw = { kind: 'double_off', anchorWeek: null, doubleRestWeekdays: [0, 4] };
+    const roundtrip = normalizeRestPolicy(JSON.parse(JSON.stringify(raw)));
+    expect(roundtrip.doubleRestWeekdays).toEqual([0, 4]);
+    expect(hydrateRestPolicy(raw).doubleRestWeekdays).toEqual([0, 4]);
+  });
+
+  it('守门：改双休日 → plan.hasChanges=true（重算确认流必须被触发）', () => {
+    const plan = planRestPolicyRecalc({
+      projects: [chainProject()],
+      oldPolicy: DOUBLE,
+      newPolicy: doubleOn([0, 5]), // 周六+周日 → 周一+周六
+    });
+    expect(plan.hasChanges).toBe(true);
+    expect(plan.changedStageCount).toBe(3);
+    // S1：起点吸附到 09-08（周一休），5 个工作日（周日上班、周六休）落 09-08~09-13
+    const s1 = planOf(plan, 1);
+    expect(s1.newStartAt).toBe('2026-09-08');
+    expect(s1.newEndAt).toBe('2026-09-13');
+    // S2：链式 09-15~09-20；S3：链式 09-22~09-27
+    expect(planOf(plan, 2).newStartAt).toBe('2026-09-15');
+    expect(planOf(plan, 2).newEndAt).toBe('2026-09-20');
+    expect(planOf(plan, 3).newStartAt).toBe('2026-09-22');
+    expect(planOf(plan, 3).newEndAt).toBe('2026-09-27');
+    // 新起止都不落在新制度休息日上
+    for (const s of plan.projects[0].stages) {
+      expect(isRestDay(s.newStartAt, doubleOn([0, 5]))).toBe(false);
+      expect(isRestDay(s.newEndAt, doubleOn([0, 5]))).toBe(false);
+    }
+  });
+
+  it('守门：双休日改回默认（[0,5]→缺省）= 反向重算，hasChanges=true', () => {
+    // 项目已按 [0,5]（周一+周六休）排过：S1=09-08~09-13（5 个工作日，周日上班）
+    const project = makeProject();
+    const stages = [
+      makeStage(project.id, 1, '2026-09-08', '2026-09-13'),
+      makeStage(project.id, 2, '2026-09-15', '2026-09-20'),
+    ];
+    const plan = planRestPolicyRecalc({
+      projects: [{ project, stages }],
+      oldPolicy: doubleOn([0, 5]),
+      newPolicy: DOUBLE,
+    });
+    expect(plan.hasChanges).toBe(true);
+    // S1 锚=自身吸附（09-08 周二上班）；5 个工作日（双休）落 09-08~09-14
+    expect(planOf(plan, 1).newStartAt).toBe('2026-09-08');
+    expect(planOf(plan, 1).newEndAt).toBe('2026-09-14');
+  });
+
+  it('幂等：双休 [0,5] 重算两次 = 第二次零变化', () => {
+    const first = planRestPolicyRecalc({
+      projects: [chainProject()],
+      oldPolicy: DOUBLE,
+      newPolicy: doubleOn([0, 5]),
+    });
+    expect(first.hasChanges).toBe(true);
+    const project = makeProject();
+    const stages = first.projects[0].stages.map((p) =>
+      makeStage(project.id, p.orderIndex, p.newStartAt, p.newEndAt),
+    );
+    const second = planRestPolicyRecalc({
+      projects: [{ project, stages }],
+      oldPolicy: doubleOn([0, 5]),
+      newPolicy: doubleOn([0, 5]),
+    });
+    expect(second.hasChanges).toBe(false);
+    expect(second.changedStageCount).toBe(0);
   });
 });
 
