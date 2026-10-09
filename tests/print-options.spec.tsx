@@ -76,7 +76,6 @@ class ResizeObserverStub {
 import { PrintPreviewDialog } from '../src/components/print/PrintPreviewDialog';
 import {
   DEFAULT_SCHEDULE_PAPER_BLOCKS,
-  FIRST_PAGE_HEADER_NO_TIMELINE,
   firstPageHeaderFor,
   paginateSections,
   type ScheduleSection,
@@ -108,10 +107,11 @@ import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 const PROJECT_ID = 'proj_print_opts';
 const ADMIN_ID = 'm-admin-print-opts';
 /**
- * 8 段 × 每段 1 任务 ⇒ 每段估算高 122px（52+46+24），可用高 929：
- *   · 默认（时间轴在，首屏限 719）⇒ 首页 5 段（6×122=732 > 719）
- *   · 关时间轴（首屏限 929−92=837）⇒ 首页 6 段（7×122=854 > 837）
- * 两档页数都是 2 ⇒ 「页数合理」不变量不被本夹具破坏，只有首页段数变。
+ * 8 段 × 每段 1 任务。2026-10-09 分页早断修复后：每段 = 数据行一行
+ * （实测 34px，估高 37），第一页预算 = 972 − 头部/项目信息/时间轴
+ * （213 + 8×37 = 509）− 表格 chrome 90 = 373 ⇒ 10 行 ⇒ **8 段全部
+ * 一页装下**（旧估高每段 122px，被切成 5+3 两页、第一页下半部留白）。
+ * 关时间轴 ⇒ 第一页预算 972 − 103 − 90 = 779 ⇒ 21 行 ⇒ 同样一页。
  */
 const STAGE_COUNT = 8;
 const BLOCK_KEYS = ['header', 'timeline', 'projectInfo', 'stageTable', 'footer'] as const;
@@ -381,8 +381,8 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(containsText('打印日期'), '头部块在').toBe(true);
     expect(containsText('ID Plan · 项目排期与交付管理'), '页脚块在').toBe(true);
     expect(containsText(PROJECT.name), '头部块含项目名').toBe(true);
-    expect(firstPageRows(), '母本分页口径：首屏限 929−210=719 ⇒ 首页 5 段').toBe(5);
-    expect(bodyContains('预计 2 页'), '工具条页数文案随分页').toBe(true);
+    expect(firstPageRows(), '实测校准分页：首屏限 373px ⇒ 8 段全部一页装下（旧 5 段）').toBe(8);
+    expect(bodyContains('预计 1 页'), '工具条页数文案随分页（旧为 2 页）').toBe(true);
 
     // 打开下拉面板：五块默认全选
     openBlocksPanel();
@@ -391,10 +391,10 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     }
   });
 
-  it('② 关「打印时间轴」⇒ 甘特消失、清单还在、第一页不留半白（首页 5 段变 6 段）', () => {
+  it('② 关「打印时间轴」⇒ 甘特消失、清单还在、第一页不留半白（8 段仍一页）', () => {
     renderDialog(true);
     expect(h2Texts(), '前置：时间轴在').toContain('打印时间轴');
-    expect(firstPageRows(), '前置：默认首页 5 段').toBe(5);
+    expect(firstPageRows(), '前置：默认 8 段一页').toBe(8);
 
     openBlocksPanel();
     setBlockChecked('timeline', false);
@@ -406,8 +406,8 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(containsText('排期基准'), '项目信息没摘 ⇒ 仍在').toBe(true);
     expect(
       firstPageRows(),
-      '第一页预留 210→92 ⇒ 首屏限 837 ⇒ 首页 6 段（不是母本的 5 段 = 半白锁）',
-    ).toBe(6);
+      '关时间轴 ⇒ 首屏限 779px ⇒ 8 段仍全部一页（比旧口径的 6 段更满）',
+    ).toBe(8);
     // 只动时间轴，其余勾选不动
     expect(usePrintPrefsStore.getState().blocks).toEqual({
       header: true,
@@ -481,7 +481,7 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     renderDialog(true);
     expect(h2Texts(), '重开后时间轴仍被摘着').not.toContain('打印时间轴');
     expect(firstPageTable(), '重开后清单仍在').not.toBeNull();
-    expect(firstPageRows(), '重开后仍按 92 预留分页').toBe(6);
+    expect(firstPageRows(), '重开后仍按「关时间轴」预算分页 ⇒ 8 段一页').toBe(8);
 
     // 脏数据 A：缺四个块键的 blocks + **旧 skin 键** ⇒ merge 兜底。
     // skin:'default' 是 v0.8.6.0002 的持久形状，必须迁成 template:'classic'（决策文档 §2.3）。
@@ -760,13 +760,16 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
     expect(src).toContain('pageKindToModule');
   });
 
-  it('useSchedulePaperData.ts：分页随 blocks 走 firstPageHeaderFor', () => {
+  it('useSchedulePaperData.ts：分页随 blocks 走 paginateSections（时间轴关 ⇒ 首屏预算降）', () => {
     const src = read('src/components/print/useSchedulePaperData.ts');
-    expect(src).toContain('firstPageHeaderFor');
+    expect(src).toContain('paginateSections');
+    // 分页第二参直接吃 blocks（时间轴勾选态），不再经 firstPageHeaderFor 中转
+    expect(src).toContain('paginateSections(sections, blocks)');
   });
 
-  it('paginateSections 可选参：默认 = 母本 210（老调用方/A13 全绿）；关时间轴 ⇒ 92', () => {
-    // 每段 1 任务 ⇒ 122px；可用高 929（A13 spec 的复算口径）
+  it('paginateSections：实测校准口径（20 段 ⇒ 默认 2 页 4+16；关时间轴 ⇒ 1 页）', () => {
+    // 2026-10-09 分页早断修复：每段 = 数据行一行（估高 37），可用高 972
+    // （1123 − padding 118 − 页脚 33），表格 chrome 90。
     const sections: ScheduleSection[] = makeStages(20).map((_, i) => ({
       orderIndex: i + 1,
       name: `阶段${i + 1}`,
@@ -785,19 +788,21 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
         },
       ],
     }));
-    // 老行为：719 ⇒ 首页 5 段（A13 期望 4 页：5/7/7/1）
+    // 默认（时间轴在）：20 段触发时间轴紧凑档（≥20）⇒ 首屏预留
+    // 213 + 20×26 = 733 ⇒ 首屏限 149 ⇒ 4 行；次页起 882 ⇒ 23 行
     const pagesDefault = paginateSections(sections);
-    expect(pagesDefault[0]!.length, '默认首屏限 719 ⇒ 首页 5 段').toBe(5);
-    expect(pagesDefault.length, 'A13 复算：20 = 5+7+7+1 ⇒ 4 页').toBe(4);
-    // 关时间轴：837 ⇒ 首页 6 段
-    const pagesNoTimeline = paginateSections(sections, FIRST_PAGE_HEADER_NO_TIMELINE);
-    expect(pagesNoTimeline[0]!.length, '关时间轴首屏限 837 ⇒ 首页 6 段').toBe(6);
-    // 推导函数：缺省 / 时间轴在 ⇒ 210；关 ⇒ 92
-    expect(firstPageHeaderFor(undefined)).toBe(210);
-    expect(firstPageHeaderFor(null)).toBe(210);
-    expect(firstPageHeaderFor(DEFAULT_SCHEDULE_PAPER_BLOCKS)).toBe(210);
-    expect(firstPageHeaderFor({ ...DEFAULT_SCHEDULE_PAPER_BLOCKS, timeline: false })).toBe(
-      FIRST_PAGE_HEADER_NO_TIMELINE,
-    );
+    expect(pagesDefault[0]!.length, '默认首屏限 149 ⇒ 首页 4 段').toBe(4);
+    expect(pagesDefault.length, '20 = 4+16 ⇒ 2 页（旧口径 5+7+7+1 = 4 页）').toBe(2);
+    expect(pagesDefault[1]!.length, '第二页装剩余 16 段').toBe(16);
+    // 行不裂：总行数守恒
+    expect(pagesDefault.reduce((n, p) => n + p.length, 0), '20 段全部上纸').toBe(20);
+    // 关时间轴：首屏预留 103 ⇒ 首屏限 779 ⇒ 21 行 ⇒ 20 段一页
+    const pagesNoTimeline = paginateSections(sections, { ...DEFAULT_SCHEDULE_PAPER_BLOCKS, timeline: false });
+    expect(pagesNoTimeline.length, '关时间轴首屏限 779 ⇒ 20 段一页').toBe(1);
+    // 推导函数：时间轴在 ⇒ 213 + 段数×轨道行距（紧凑档 26 / 正常档 37）；
+    // 关 ⇒ 103。20 段起走紧凑档（与 SchedulePaper 的 CSS 档同源）
+    expect(firstPageHeaderFor(undefined, 8), '8 段（正常档）：213 + 8×37').toBe(509);
+    expect(firstPageHeaderFor(DEFAULT_SCHEDULE_PAPER_BLOCKS, 20), '20 段（紧凑档）：213 + 20×26').toBe(733);
+    expect(firstPageHeaderFor({ ...DEFAULT_SCHEDULE_PAPER_BLOCKS, timeline: false }, 8), '关时间轴：66+37').toBe(103);
   });
 });

@@ -198,78 +198,110 @@ export const DEFAULT_SCHEDULE_PAPER_BLOCKS: SchedulePaperBlocks = {
   footer: true,
 };
 
-/** 高度估算常量（px，与 SchedulePrintPage 的行高/间距保持同量级） */
+/**
+ * 高度估算常量（px）——2026-10-09「分页早断」修复：全部为 SchedulePaper
+ * **实测值 × ~1.07 上取**（真 Chromium 量：纸面 padding 56×2、头部 61、
+ * 时间轴 chrome 103、轨道行距 34、项目信息 33.9、表格 chrome 84.5、
+ * 数据行 34、页脚 31）。纪律不变：**估高只许偏大不许偏小**（偏大 = 早分页
+ * 白留一截，偏小 = 内容溢出纸面），幅度收敛到 +10% 内。
+ *
+ * ⚠️ 旧值是母本「每阶段一张任务清单」布局的猜测（每段 52+任务×46+24），
+ * 而经典纸面早已是「每阶段一行 34px 的紧凑表」——估高虚高 4-10 倍：
+ * 5 阶段项目被切成 2+3 两页、20+ 阶段第 1 页被时间轴撑爆（1292/1632px
+ * 溢出 1123）。现在按实测布局重算。
+ */
 const EST = {
-  sectionHeader: 52,
-  row: 46,
-  emptySection: 44,
-  sectionGap: 24,
-  /** 第一页额外的页头：项目信息 + 时间轴摘要 */
-  firstPageHeader: 210,
-  pageHeaderBand: 58,
-  pageFooter: 48,
-  pagePadding: 88,
+  /** 数据行（= 一个阶段一行；任务数不上纸，不影响行高） */
+  row: 37,
+  /** 表格 chrome（每页一次）：section mt-8 32 + h2 22.5 + thead 30 */
+  tableChrome: 90,
+  /** 纸面上下内距（padding 56×2） */
+  pagePadding: 118,
+  /** 页脚（pt-3 + 一行 11px 文字 + 发丝线） */
+  pageFooter: 33,
+  /** 第一页·打印头部（pb-4 + 项目名 18px + 委托方·周期 13px） */
+  headerBlock: 66,
+  /** 第一页·项目信息行（mt-4 + 一行 12px 文字） */
+  projectInfo: 37,
+  /** 第一页·时间轴 chrome（mt-8 32 + h2 22.5 + 刻度行 16 + 图例 mt-4+16.5） */
+  timelineChrome: 110,
+  /** 时间轴轨道行距（h-7 28 + space-y-1.5 6） */
+  trackNormal: 37,
+  /** 时间轴轨道行距·紧凑档（h-5 20 + space-y-1 4） */
+  trackCompact: 26,
+  /** 20+ 阶段 ⇒ 时间轴转紧凑档（与 A/D/E 的 compact 密度档同款语言；
+   *  推导：纸面可用 972 − 头部/项目信息/时间轴 chrome 213 − 表格 chrome 90
+   *  − 至少一行 37 = 632px 给轨道，632÷37 ≈ 17 行——19 阶段起正常档就
+   *  放不下任何表格行，20 起整页直奔溢出，故 20 触发紧凑） */
+  timelineCompactAt: 20,
 };
 
-/**
- * 时间轴（第一页甘特摘要）被摘掉后，第一页的非清单内容只剩
- * 「打印头部 + 项目信息」（≈ 53 + 34 = 87，取 92 留余量）。
- *
- * 为什么必须分开给：打印内容自定义（反馈 #9.2）允许关掉时间轴，此时若仍按
- * 母本 `firstPageHeader = 210`（那是「头部 + 时间轴」的合计预留）预留，
- * 第一页会按少 ~120px 内容的空间分页 ⇒ 第一页下半部永久留白。
- */
-export const FIRST_PAGE_HEADER_NO_TIMELINE = 92;
+/** 20+ 阶段 ⇒ 时间轴紧凑档的阈值（SchedulePaper 的 CSS 档与分页估高同源） */
+export const TIMELINE_COMPACT_AT = EST.timelineCompactAt;
 
 /**
- * 按打印内容选项推导第一页预留高度（供 `paginateSections` 第二参）：
- *   · 时间轴在（默认 / 未传 ⇒ 深链路由与老调用方）⇒ 母本 210；
- *   · 时间轴关 ⇒ FIRST_PAGE_HEADER_NO_TIMELINE。
- * header / projectInfo 也关时不进一步细分——那两个块合计不足 90px，
- * 多预留一点只是分页略保守，不会留白。
+ * 第一页非表格内容的总预留（px）= 打印头部 + 项目信息 + 时间轴
+ * （chrome + 阶段数 × 轨道行距；轨道行距随紧凑档切换）。
+ *
+ * `sectionCount` 必须给全量可见阶段数——时间轴把**所有**轨道画在第一页，
+ * 它的高度随阶段数线性增长，不给就等于重复 0006 的「第 1 页被撑爆」。
+ *
+ * 为什么必须分开给：打印内容自定义（反馈 #9.2）允许关掉时间轴，此时预留
+ * 只剩「头部 + 项目信息」（≈103）；若仍按含时间轴预留，第一页会按少一截
+ * 内容的空间分页 ⇒ 第一页下半部永久留白（正是需求方反馈的「大面积留白」）。
  */
-export function firstPageHeaderFor(blocks?: SchedulePaperBlocks | null): number {
-  return blocks && blocks.timeline === false ? FIRST_PAGE_HEADER_NO_TIMELINE : EST.firstPageHeader;
+export function firstPageHeaderFor(blocks?: SchedulePaperBlocks | null, sectionCount = 0): number {
+  if (blocks && blocks.timeline === false) return EST.headerBlock + EST.projectInfo;
+  const pitch = sectionCount >= EST.timelineCompactAt ? EST.trackCompact : EST.trackNormal;
+  return EST.headerBlock + EST.timelineChrome + EST.projectInfo + sectionCount * pitch;
 }
 
-/** 单个阶段 section 的估算高度 */
-export function estimateSectionHeight(s: ScheduleSection): number {
-  const rows = s.tasks.length === 0 ? EST.emptySection : s.tasks.length * EST.row;
-  return EST.sectionHeader + rows + EST.sectionGap;
+/** 单个阶段 section 的估算高度（= 数据行一行；经典纸面每阶段只出一行） */
+export function estimateSectionHeight(_s: ScheduleSection): number {
+  return EST.row;
 }
 
 /**
- * 把阶段 section 分配到 A4 页：
- *   - 第一页额外扣除页头（项目信息 + 时间轴摘要）高度；
- *   - 超过可用高度即换页，保证 section 不被切断（break-inside 语义）。
- * 纯函数可测，返回二维数组（每个元素 = 一页的 sections）。
+ * 把阶段 section 分配到 A4 页（行 = 原子单位，行不裂）：
+ *   - 每页成本 = 表格 chrome（mt-8 + h2 + thead，只向**有行的页**收）
+ *     + 行数 × 行高；第一页额外扣 头部 + 项目信息 + 时间轴（随阶段数）；
+ *   - 第一页连一行都放不下（20+ 阶段时间轴占满纸面）⇒ 第一页只出纸壳
+ *     （时间轴），表格从第二页起——调用方对空页不渲染表格，不会出孤单表头；
+ *   - 超过可用高度即换页，行不被切断（break-inside 语义）。
+ * 纯函数可测，返回二维数组（每个元素 = 一页的 sections；空数组 = 无表格行）。
  *
- * `firstPageHeader` 为**可选参**（默认 = 母本 210）：打印内容自定义关掉
- * 时间轴时传 `firstPageHeaderFor(blocks)` 得到的更小值；不传 = 老行为
- * （A13「预计页数」spec 的复算常量 719 = 929 − 210 逐字不变）。
+ * `blocks` 为**可选参**（缺省 = 五块全开）：时间轴关掉时传勾选态，
+ * 第一页预留随之降到「头部 + 项目信息」。不传 = 老行为（含时间轴）。
  */
 export function paginateSections(
   sections: ScheduleSection[],
-  firstPageHeader: number = EST.firstPageHeader,
+  blocks?: SchedulePaperBlocks | null,
 ): ScheduleSection[][] {
-  const usable = A4_HEIGHT_PX - EST.pagePadding - EST.pageHeaderBand - EST.pageFooter;
+  const usable = A4_HEIGHT_PX - EST.pagePadding - EST.pageFooter;
+  const firstLimit = usable - firstPageHeaderFor(blocks, sections.length) - EST.tableChrome;
+  const laterLimit = usable - EST.tableChrome;
   const pages: ScheduleSection[][] = [];
   let current: ScheduleSection[] = [];
   let used = 0;
   let isFirstPage = true;
 
+  // 第一页放不下任何一行（时间轴占满）⇒ 先出一张只有纸壳的页，表格整体后移
+  if (sections.length > 0 && firstLimit < EST.row) {
+    pages.push([]);
+    isFirstPage = false;
+  }
+
   for (const s of sections) {
-    const h = estimateSectionHeight(s);
-    const limit = usable - (isFirstPage ? firstPageHeader : 0);
+    const limit = isFirstPage ? firstLimit : laterLimit;
     // 首个 section 即便超高也放入当前页（避免死循环）
-    if (current.length > 0 && used + h > limit) {
+    if (current.length > 0 && used + EST.row > limit) {
       pages.push(current);
       current = [];
       used = 0;
       isFirstPage = false;
     }
     current.push(s);
-    used += h;
+    used += EST.row;
   }
   if (current.length > 0) pages.push(current);
   return pages.length > 0 ? pages : [[]];

@@ -34,6 +34,14 @@
  * 收紧只让每页内容更矮（页脚贴底、上方留白增多），不改变分页点。
  * ⚠️ schedule-print-band-bounds.spec 用结构选择器 `div.relative.h-7`
  * 定位轨道行——track 高度类与那条 spec 同批改（改类名 = 改定位）。
+ *
+ * ── 2026-10-09 · 分页早断修复（schedule-print.ts 估高实测校准）──
+ * 估高模型从母本「每阶段一张任务清单」改为实测的「每阶段一行 34px」：
+ * 5 阶段项目一页装下（旧 2+3 两页）、20+ 阶段第一页不再被时间轴撑爆
+ * （旧 20 阶段第 1 页实测 1292px 溢出 1123）。配套两改：时间轴 20+ 阶段
+ * 转紧凑档（h-7→h-5，阈值 TIMELINE_COMPACT_AT，与分页估高同源）；第一页
+ * 放不下任何表格行时只出纸壳（时间轴），空页不渲染表格（不出孤单表头）。
+ * band-bounds spec 的夹具 3-4 阶段走正常档，`div.relative.h-7` 不受影响。
  */
 
 import type { Ref } from 'react';
@@ -48,7 +56,14 @@ import {
   stageBandColor,
 } from '../timeline/stageColors';
 import { customStageColor } from '../timeline/stageColorKey';
-import { A4_WIDTH_PX, A4_HEIGHT_PX, type ScheduleSection, type SchedulePaperBlocks, DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../../lib/schedule-print';
+import {
+  A4_WIDTH_PX,
+  A4_HEIGHT_PX,
+  TIMELINE_COMPACT_AT,
+  type ScheduleSection,
+  type SchedulePaperBlocks,
+  DEFAULT_SCHEDULE_PAPER_BLOCKS,
+} from '../../lib/schedule-print';
 import type { Project, Stage } from '../../core/types/entities';
 import { printSkinClass, type PrintSkinId } from './print-skins';
 import { PrintLogoMark } from '../../print/parts/PrintLogoMark';
@@ -154,6 +169,15 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
     logo = null,
   } = props;
 
+  /**
+   * 时间轴紧凑档（2026-10-09 分页早断修复）：20+ 阶段时正常轨道
+   * （h-7 + space-y-1.5 = 34px 行距）会把第一页撑爆——24 阶段起整页直奔
+   * 1123 上限（旧代码 21 阶段就溢岀：20 阶段实测第 1 页 1292px）。紧凑档
+   * 轨道 h-5 + space-y-1 = 24px 行距，30 阶段也能整页装下。与 A/D/E 的
+   * compact 密度档同款语言；阈值与分页估高同源（TIMELINE_COMPACT_AT）。
+   */
+  const timelineCompact = sections.length >= TIMELINE_COMPACT_AT;
+
   return (
     <div className={`print-root mx-auto w-full max-w-[900px] px-6 py-8 ${printSkinClass(skin)}`}>
       {/* A4 分页纸面（画板 09：宽 900 · paper 底 · line 描边 · padding 56） */}
@@ -208,7 +232,7 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className={timelineCompact ? 'space-y-1' : 'space-y-1.5'}>
                     {sections.map((s) => {
                       const g = bandGeom(s.startAt, s.endAt);
                       // ★ v0.8 通路 B：自定义 ⇒ 描边走 --stage-local-ink(-rgb)；内置 ⇒ 逐字节不变
@@ -230,7 +254,13 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
                             />
                             <span className="truncate text-[13px] text-ink">{s.name}</span>
                           </div>
-                          <div className="relative h-7 flex-1 rounded-lg bg-sunken">
+                          <div
+                            className={
+                              timelineCompact
+                                ? 'relative h-5 flex-1 rounded-lg bg-sunken'
+                                : 'relative h-7 flex-1 rounded-lg bg-sunken'
+                            }
+                          >
                             <div
                               className={`schedule-bar-segment absolute inset-y-1.5 rounded-md${
                                 sc.isCustom ? '' : ` ${stageBandClass(s.orderIndex)}`
@@ -296,8 +326,11 @@ export function SchedulePaper(props: SchedulePaperProps): JSX.Element {
             </>
           )}
 
-          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 30 · 数据行 34 · 斑马纹） */}
-          {blocks.stageTable && (
+          {/* 阶段清单表（画板 09：paper 底 + line 描边 · 表头 30 · 数据行 34 · 斑马纹）
+              ⚠️ 空页（时间轴占满第一页时的纯纸壳页）不渲染表格——否则出
+              「阶段清单」标题 + 表头 + 零行的孤单表头（2026-10-09 分页修复：
+              20+ 阶段第一页只出时间轴，表格整体后移） */}
+          {blocks.stageTable && pageSections.length > 0 && (
             <section className="mt-8 break-inside-avoid">
               <h2 className="mb-2 text-[15px] font-semibold text-ink">阶段清单</h2>
               <table className="schedule-table w-full overflow-hidden rounded-lg border border-line text-[13px]">

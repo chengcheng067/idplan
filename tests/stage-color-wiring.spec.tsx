@@ -1103,14 +1103,14 @@ describe('④ 打印 · 月历 CalendarPrintPage', () => {
  * 故这里的两侧取自**两个互相独立**的来源：
  *   · 文本侧 M  ← 从 DOM 里那段文案用正则捕获（用户真正看到的数字）；
  *   · 分页侧 N  ← 数渲染出的 `.a4-page` 容器个数（DOM 里真实存在的页数）。
- * 而期望值 4 是**按 src/lib/schedule-print.ts 的真实常量独立复算**出来的硬编码常量：
- *   可用高 = A4 1123 − padding 88 − 页眉带 58 − 页脚 48 = **929**
- *   单段高（1 任务）= sectionHeader 52 + row 46 + sectionGap 24 = **122**
- *   首页另扣 firstPageHeader 210 ⇒ 首屏限 929 − 210 = 719 → 5 段
- *   其后每页限 929                                 → 7 段
- *   20 = 5 + 7 + 7 + 1 ⇒ **4 页**（分布 5/7/7/1）
- * （复算方式：用 `node -e` 照抄上述常量重演 `paginateSections` 的循环，见交付报告。
- *   注：`emptySection` 是 44，本用例每段都有 1 任务，走 `tasks.length * EST.row` 一支，用不到它。）
+ * 而期望值 2 是**按 src/lib/schedule-print.ts 的真实常量独立复算**出来的硬编码常量
+ * （2026-10-09 分页早断修复后改为实测校准口径）：
+ *   可用高 = A4 1123 − padding 118 − 页脚 33 = **972**
+ *   单段高 = 数据行一行 = **37**（实测 34 上取；任务数不上纸）
+ *   表格 chrome（每页一次）= **90**；首页另扣 头部 66 + 项目信息 37
+ *   + 时间轴 chrome 110 + 20 段 × 紧凑轨道 26（≥20 段触发紧凑档）= **733**
+ *   ⇒ 首屏限 972 − 733 − 90 = 149 → 4 段；其后每页限 972 − 90 = 882 → 23 段
+ *   20 = 4 + 16 ⇒ **2 页**（分布 4/16）
  * ══════════════════════════════════════════════════════════════════════════════ */
 
 /** A13 场景的段数（PRD 指定 20 段） */
@@ -1149,7 +1149,7 @@ function makeTask(id: string, stageId: string, over: Partial<Task> = {}): Task {
   };
 }
 
-/** 20 段 × 每段恰好 1 任务（⇒ 每个 section 高 122，期望页数 4） */
+/** 20 段 × 每段恰好 1 任务（⇒ 每段 = 数据行一行 37px 估高，期望页数 2） */
 function a13Fixture(): { stages: Stage[]; tasks: Task[] } {
   const stages: Stage[] = [];
   const tasks: Task[] = [];
@@ -1181,8 +1181,8 @@ describe('⑥ A13 · 打印前显示预计页数（文案 + 与实际分页一�
     // ② DOM 里真实渲染出的页数（与文本侧相互独立）
     const printedPages = qa(h, '.a4-page').length;
 
-    // ③ 20 段 ⇒ 期望 4 页（常量独立复算，见本组头部注释）
-    expect(printedPages, '20 段 × 每段 1 任务 ⇒ 应为 4 页').toBe(4);
+    // ③ 20 段 ⇒ 期望 2 页（常量独立复算，见本组头部注释；旧口径 4 页 5/7/7/1）
+    expect(printedPages, '20 段 × 每段 1 任务 ⇒ 应为 2 页').toBe(2);
 
     // ④ M 必须等于真实页数（PRD 的「与 pages.length 一致」）
     expect(shown, `文案数字(${shown}) 必须等于实际页数(${printedPages})`).toBe(printedPages);
@@ -1190,7 +1190,7 @@ describe('⑥ A13 · 打印前显示预计页数（文案 + 与实际分页一�
     // ⑤ 反向断言：数字不得等于段数 —— 防有人退回「按段数当页数」
     const renderedRows = qa(h, 'table.schedule-table tbody tr').length;
     expect(renderedRows, '阶段清单应渲染全部 20 段').toBe(A13_STAGE_COUNT);
-    expect(shown, '页数不得等于段数（段数 20 ≠ 页数 4）').not.toBe(A13_STAGE_COUNT);
+    expect(shown, '页数不得等于段数（段数 20 ≠ 页数 2）').not.toBe(A13_STAGE_COUNT);
     expect(shown, '页数必须真的大于 1（否则 ⑤ 会退化成平凡断言）').toBeGreaterThan(1);
   });
 
