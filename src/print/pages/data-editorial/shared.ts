@@ -123,3 +123,91 @@ export function truncateToWidth(text: string, maxWidth: number, fontSize: number
   }
   return text;
 }
+
+/* ------------------------------------------------------------------ 矩阵分页 */
+
+import type { PrintStageVM } from '../../model/print-view-model';
+
+/**
+ * D 矩阵分页估高（2026-10-09「原生矩阵无分页」修复；0.8.6.0007 反馈：
+ * 20 阶段第 1 页实测 1193px、30 阶段 1615px 溢出纸面）。
+ *
+ * 纪律与经典 `paginateSections`（schedule-print.ts，f428902）同源：**实测
+ * 校准、只许偏大不许偏小、幅度 ≤+10%**（偏大 = 早分页白留一截，偏小 =
+ * 内容溢出 794×1123 即红）。下列实测值均为真 Chromium 量：
+ *   页壳 chrome：de-head 125.6 + de-foot 40 + de-body 内距 26 = 191.6
+ *   KPI 带：normal 74.6 / compact 51.3（阈值同 ProgressMatrixPage：15+ 阶段）
+ *   表头 thead：normal 27.3 / compact 23.3
+ *   数据行：normal 48.5 / compact 42.8（行高由 stage 格 no+name 行盒主导，
+ *           ~35px 内容 vs 16.5px 行高——既有布局特性，分页只估不改）
+ *   口径注 41；board 子项间距 20；续表头（border 2 + padding 8 + 文字）≈25
+ * ⚠️ 若将来收紧矩阵行高（如给 no/name 定 line-height），必须同步重估这里。
+ */
+const MATRIX_EST = {
+  /** 纸面可用高 = 1123 − 页头 130 − 页脚 42 − body 内距 27 */
+  usable: 1123 - 130 - 42 - 27,
+  /** board 子项间距（stats/续表头/table/note 之间） */
+  boardGap: 21,
+  /** KPI 摘要带（**仅第一页**——产品原则「焦点必须松」，续表不重复） */
+  kpiNormal: 78,
+  kpiCompact: 54,
+  /** 表头 */
+  theadNormal: 29,
+  theadCompact: 25,
+  /** 数据行（一行 = 一个阶段的完整记录，行不裂） */
+  rowNormal: 52,
+  rowCompact: 46,
+  /** 口径注（每页都有——每页可独立解释，01 §2） */
+  note: 44,
+  /** 续表头（仅续表页；D 硬边语法：2px 线 + kicker） */
+  contHead: 28,
+} as const;
+
+/** 15+ 阶段转紧凑档（与 ProgressMatrixPage 的 dense 判定同源）。
+ *  为什么是 15 而不是密度批的 16：分页估高下 normal 行容量 14——15 阶段若走
+ *  normal 会被切 14+1 两页，而修复前 15 阶段本来能一页装下（不回归）；紧凑档
+ *  容量 16，15/16 阶段都守一页。 */
+const MATRIX_COMPACT_AT = 14;
+
+/** 一个物理纸面的矩阵行分块（行不裂：行是原子单位） */
+export interface MatrixChunk {
+  readonly rows: readonly PrintStageVM[];
+}
+
+export interface MatrixPlan {
+  readonly chunks: readonly MatrixChunk[];
+  readonly compact: boolean;
+}
+
+/**
+ * 阶段行 ⇒ 分块计划（贪心装页，确定性）。
+ * 第一页预算扣 KPI 带（焦点只首页）；续表页扣续表头、不扣 KPI。
+ * 行数 0 ⇒ 单空块（调用方走空态，不出表格纸面）。
+ */
+export function planMatrixPages(stages: readonly PrintStageVM[]): MatrixPlan {
+  const compact = stages.length > MATRIX_COMPACT_AT;
+  const row = compact ? MATRIX_EST.rowCompact : MATRIX_EST.rowNormal;
+  const thead = compact ? MATRIX_EST.theadCompact : MATRIX_EST.theadNormal;
+  const kpi = compact ? MATRIX_EST.kpiCompact : MATRIX_EST.kpiNormal;
+  const chrome = thead + MATRIX_EST.note + MATRIX_EST.boardGap * 2;
+  const firstBudget = MATRIX_EST.usable - kpi - chrome;
+  const laterBudget = MATRIX_EST.usable - MATRIX_EST.contHead - chrome;
+
+  const chunks: MatrixChunk[] = [];
+  let current: PrintStageVM[] = [];
+  let used = 0;
+  let isFirst = true;
+  for (const s of stages) {
+    const budget = isFirst ? firstBudget : laterBudget;
+    if (current.length > 0 && used + row > budget) {
+      chunks.push({ rows: current });
+      current = [];
+      used = 0;
+      isFirst = false;
+    }
+    current.push(s);
+    used += row;
+  }
+  if (current.length > 0 || chunks.length === 0) chunks.push({ rows: current });
+  return { chunks, compact };
+}

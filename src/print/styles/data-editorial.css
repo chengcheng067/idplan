@@ -332,6 +332,45 @@
   table-layout: fixed;
 }
 
+/* ── P1 矩阵续表模块头（2026-10-09 分页修复；D 硬边语法：2px 近黑线 +
+   英文栏 kicker + 信号方，与页头 de-head__kicker 同族）── */
+.print-root.print-template-data-editorial .de-matrix__cont {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 2px solid var(--tpl-ink);
+  padding: 8px 0 0;
+}
+
+.print-root.print-template-data-editorial .de-matrix__cont-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--de-font-en);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-matrix__cont-signal {
+  width: 10px;
+  height: 10px;
+  background: var(--tpl-accent);
+  border-radius: var(--de-radius);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-data-editorial .de-matrix__cont-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--de-gray-700);
+  white-space: nowrap;
+}
+
 /* ── P1 矩阵列宽（2026-10-09 收尾：日期列溢出修复）──
    原 date 18%（≈128.5px）装不下等宽日期串「2026-01-05 — 2026-01-20」
    （23 字符 × 11px mono：Consolas 实测 139.1px；最坏等宽回落 IBM Plex

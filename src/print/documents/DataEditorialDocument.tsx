@@ -48,6 +48,7 @@ import { ProgressMatrixPage } from '../pages/data-editorial/ProgressMatrixPage';
 import { DependencyNetworkPage } from '../pages/data-editorial/DependencyNetworkPage';
 import { WorkloadCompositionPage } from '../pages/data-editorial/WorkloadCompositionPage';
 import { MilestoneAcceptancePage } from '../pages/data-editorial/MilestoneAcceptancePage';
+import { planMatrixPages, type MatrixPlan } from '../pages/data-editorial/shared';
 import { stampOf } from '../pages/data-editorial/shared';
 
 /** D 版四页（02 §6 组件映射；顺序即纸面顺序） */
@@ -96,7 +97,15 @@ export interface DataEditorialDocumentProps {
 
 /** D 版一个物理纸面（原生页 or 通用模块的一个 chunk；plan=null = 空态纸） */
 export type DePhysical =
-  | { type: 'native'; kind: PrintPageKind }
+  | {
+      type: 'native';
+      kind: 'progress-matrix';
+      /** 矩阵分页计划（2026-10-09：阶段行按页预算 chunk，KPI 只首页） */
+      plan: MatrixPlan;
+      chunkIndex: number;
+      chunkTotal: number;
+    }
+  | { type: 'native'; kind: Exclude<PrintPageKind, 'progress-matrix'> }
   | {
       type: 'generic';
       module: 'stage-list' | 'task-list' | 'member-roster';
@@ -105,12 +114,20 @@ export type DePhysical =
       chunkTotal: number;
     };
 
-/** sheets ⇒ D 版物理页序列（原生 1:1；通用模块经 planGenericModule 分页） */
+/** sheets ⇒ D 版物理页序列（原生 1:1；进度矩阵按行预算分页；通用模块经 planGenericModule 分页） */
 export function dataEditorialPhysical(vm: PrintViewModel, sheets: readonly PrintSheet[]): DePhysical[] {
   const out: DePhysical[] = [];
   for (const sheet of sheets) {
     if (sheet.type === 'native') {
       if (!DATA_EDITORIAL_PAGES.includes(sheet.page)) continue;
+      if (sheet.page === 'progress-matrix') {
+        // 阶段行分页（行不裂；KPI 只首页；续表页带续表头）
+        const plan = planMatrixPages(vm.stages);
+        for (let i = 0; i < plan.chunks.length; i++) {
+          out.push({ type: 'native', kind: 'progress-matrix', plan, chunkIndex: i, chunkTotal: plan.chunks.length });
+        }
+        continue;
+      }
       out.push({ type: 'native', kind: sheet.page });
       continue;
     }
@@ -221,11 +238,7 @@ function DePage({
       </header>
 
       <div className="de-body">
-        {page.type === 'native' ? (
-          <DePageBody kind={page.kind} vm={vm} />
-        ) : (
-          <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />
-        )}
+        <DePageBody page={page} vm={vm} />
       </div>
 
       {/* 页脚：发丝线 + 署名 + 页码/数据时间（每页可独立解释，01 §2） */}
@@ -239,10 +252,20 @@ function DePage({
   );
 }
 
-function DePageBody({ kind, vm }: { kind: PrintPageKind; vm: PrintViewModel }): JSX.Element {
-  switch (kind) {
+function DePageBody({ page, vm }: { page: DePhysical; vm: PrintViewModel }): JSX.Element {
+  if (page.type === 'generic') {
+    return <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />;
+  }
+  switch (page.kind) {
     case 'progress-matrix':
-      return <ProgressMatrixPage vm={vm} />;
+      return (
+        <ProgressMatrixPage
+          vm={vm}
+          rows={page.plan.chunks[page.chunkIndex]?.rows ?? []}
+          chunkIndex={page.chunkIndex}
+          chunkTotal={page.chunkTotal}
+        />
+      );
     case 'dependency-network':
       return <DependencyNetworkPage vm={vm} />;
     case 'workload-composition':

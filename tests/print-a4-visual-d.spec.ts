@@ -32,6 +32,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { DataEditorialDocument } from '../src/print/documents/DataEditorialDocument';
 import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
+import { planMatrixPages } from '../src/print/pages/data-editorial/shared';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
 import {
   MemberActorKind,
@@ -43,6 +44,7 @@ import {
   TaskStatus,
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, StageLog, Task } from '../src/core/types/entities';
+import type { PrintStageVM } from '../src/print/model/print-view-model';
 import { createElement } from 'react';
 
 /* ------------------------------------------------------------------ 前置探测 */
@@ -442,6 +444,92 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     }
   });
 
+  it('D 矩阵分页（30 阶段）：2 页、KPI 只首页、续表头、页码联动、无溢出', async () => {
+    const css = builtCss();
+    // 长 VM：9 个可见夹具阶段轮值扩到 30 个（隐藏夹具阶段不进来）
+    const stages: Stage[] = Array.from({ length: 30 }, (_, i) => {
+      const tpl = STAGES[i % 9]!;
+      return {
+        ...tpl,
+        id: `stg_d4_l_${i + 1}`,
+        orderIndex: i + 1,
+        name: `阶段${i + 1}·${i % 2 === 0 ? '方案深化' : '现场勘查'}`,
+      };
+    });
+    const tasks: Task[] = stages.map((s, i) => ({
+      ...TASKS[i % TASKS.length]!,
+      id: `tsk_d4_l_${i + 1}`,
+      stageId: s.id,
+      taskNo: 3000 + i + 1,
+    }));
+    const vm = buildPrintViewModel({
+      project: PROJECT,
+      stages,
+      tasks,
+      members: [HUMAN, AGENT],
+      stageLogs: LOGS,
+      role: MemberRoleKind.Admin,
+      currentMemberId: HUMAN.id,
+      todayIso: TODAY,
+      now: new Date('2026-10-09T07:30:00Z'),
+    });
+    const markup = renderToStaticMarkup(
+      createElement(DataEditorialDocument, {
+        vm,
+        sheets: [{ type: 'native', page: 'progress-matrix' }],
+        palette: PRINT_TEMPLATE_PALETTES['data-editorial'].baseline,
+      }),
+    );
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      const htmlPath = writeHtml('d-matrix-pagination-30.html', shell(markup, css, false));
+      await page.goto('file://' + htmlPath);
+      const pages = await page.$$('.a4-page');
+      expect(pages.length, '30 阶段应拆 2 页（16+14）').toBe(2);
+
+      let totalRows = 0;
+      for (let i = 0; i < pages.length; i++) {
+        const box = await pages[i]!.boundingBox();
+        expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
+        expect(box!.height, `第 ${i + 1} 页溢出即红（修复前 30 阶段单页 1615px）`).toBeLessThanOrEqual(1124);
+        await pages[i]!.screenshot({
+          path: join(OUT_DIR, `d-matrix-pagination-30-after-p${i + 1}-color.png`),
+        });
+        totalRows += await pages[i]!.$$eval('.de-matrix tbody tr', (els) => els.length);
+        // 每页自解释：表头 + 口径注齐全（续表也有）
+        expect(await pages[i]!.$('.de-matrix thead'), `第 ${i + 1} 页表头`).not.toBeNull();
+        expect(await pages[i]!.$('.de-note'), `第 ${i + 1} 页口径注`).not.toBeNull();
+        // 页码联动：第 i / 2 页
+        const text = (await pages[i]!.textContent()) ?? '';
+        expect(text, `第 ${i + 1} 页页码`).toContain(`第 ${i + 1} / 2 页`);
+      }
+      expect(totalRows, '30 行全部上纸（行不裂）').toBe(30);
+
+      // ① KPI 只首页（产品原则「焦点必须松」）：首页有统计带，续表没有
+      expect(await pages[0]!.$('.de-stats'), '第一页应带 KPI 摘要带').not.toBeNull();
+      expect(await pages[1]!.$('.de-stats'), '续表页不得重复 KPI（焦点只首页）').toBeNull();
+      // ② 续表模块头：仅第二页有，带「（续）」与部分序号
+      expect(await pages[0]!.$('.de-matrix__cont'), '第一页不得有续表头').toBeNull();
+      const cont = await pages[1]!.$('.de-matrix__cont');
+      expect(cont, '第二页应有续表模块头').not.toBeNull();
+      const contText = (await pages[1]!.textContent()) ?? '';
+      expect(contText, '续表头带「（续）」标识').toContain('阶段进度矩阵（续）');
+      expect(contText, '续表头带部分序号').toContain('第 2 / 2 部分');
+      // ③ 结构标记不断：3px 页头线两页都在
+      for (let i = 0; i < pages.length; i++) {
+        const rule = await pages[i]!.$eval('.de-head__rule', (el) => {
+          const s = getComputedStyle(el);
+          return { h: s.height, bg: s.backgroundColor };
+        });
+        expect(rule.h, `第 ${i + 1} 页 3px 头线`).toBe('3px');
+        expect(rule.bg, `第 ${i + 1} 页头线近黑`).toBe('rgb(10, 10, 10)');
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
   it('D 版 P2 依赖网络：环、缺失引用、20+ 任务全部上纸（DOM 断言）', async () => {
     const css = builtCss();
     const vm = buildVm();
@@ -558,5 +646,63 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     } finally {
       await page.close();
     }
+  });
+});
+
+/* ====================================================================================
+ * M1 · 矩阵分页计划（纯函数：2026-10-09「原生矩阵无分页」修复；不依赖 build-dist）
+ * 锁四件：行不裂（总数守恒）/ 页容量（估高只许偏大）/ compact 档边界（15+，
+ * 不断点）/ 空阶段单空块。视觉侧（KPI 只首页、续表头、页码、无溢出）见下方
+ * V5 真 Chromium 用例。
+ * ==================================================================================== */
+
+function matrixStages(n: number): PrintStageVM[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `stg_mp_${i + 1}`,
+    orderIndex: i + 1,
+    name: `阶段${i + 1}·现场勘查与方案深化`,
+    ratioPercent: 11,
+    startAt: '2026-01-05',
+    endAt: '2026-01-20',
+    status: (i + 1) % 4 === 0 ? StageStatus.Delayed : StageStatus.InProgress,
+    ownerName: '负责人甲',
+    ownerId: HUMAN.id,
+    colorIndex: (i % 9) + 1,
+    customColor: null,
+    taskProgress: { done: 1, total: 4 },
+  }));
+}
+
+describe('D 矩阵分页计划（纯函数：行不裂 / 容量 / compact 边界）', () => {
+  it('10 阶段（默认夹具级）⇒ 1 块不拆页；行数守恒', () => {
+    const plan = planMatrixPages(matrixStages(10));
+    expect(plan.chunks).toHaveLength(1);
+    expect(plan.compact, '10 阶段走 normal 档').toBe(false);
+    expect(plan.chunks[0]!.rows).toHaveLength(10);
+  });
+
+  it('15/16 阶段 ⇒ 紧凑档都守一页（阈值 15+，无「15 拆两页、16 一页」断点）', () => {
+    for (const n of [15, 16]) {
+      const plan = planMatrixPages(matrixStages(n));
+      expect(plan.compact, `${n} 阶段应走 compact 档`).toBe(true);
+      expect(plan.chunks, `${n} 阶段应一页装下`).toHaveLength(1);
+      expect(plan.chunks[0]!.rows).toHaveLength(n);
+    }
+  });
+
+  it('20 阶段 ⇒ 2 块 16+4；30 阶段 ⇒ 2 块 16+14（compact 容量 16/17）', () => {
+    const p20 = planMatrixPages(matrixStages(20));
+    expect(p20.compact).toBe(true);
+    expect(p20.chunks.map((c) => c.rows.length)).toEqual([16, 4]);
+    const p30 = planMatrixPages(matrixStages(30));
+    expect(p30.chunks.map((c) => c.rows.length)).toEqual([16, 14]);
+    // 行不裂：总行数守恒（两规模）
+    expect(p30.chunks.reduce((n, c) => n + c.rows.length, 0)).toBe(30);
+  });
+
+  it('空阶段 ⇒ 单空块（调用方走空态，不出零页纸面）', () => {
+    const plan = planMatrixPages([]);
+    expect(plan.chunks).toHaveLength(1);
+    expect(plan.chunks[0]!.rows).toHaveLength(0);
   });
 });
