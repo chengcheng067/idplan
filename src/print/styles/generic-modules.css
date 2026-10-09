@@ -1,0 +1,499 @@
+/**
+ * 通用渲染 · 模块样式（期三第一批：M1 阶段清单 / M2 任务清单 / M4 成员名册；
+ * 产品决策文档 §3.2 候选 3——通用模块用该外表的基础排版渲染，不套标志布局）。
+ *
+ * ── 两层结构（本文件与四套模板 CSS 的组织差异，特此说明） ──
+ * 四套模板 CSS（swiss-schedule.css 等）每套一个文件、每条规则双类前缀。
+ * 本文件是**一套组件 × 四套外表**，故分两层：
+ *   ① 共享结构层 `.print-root .gm-*`：只放**跨版同构的几何/机制**
+ *      （table-layout:fixed、省略号截断、列宽、口径注压底）——不含任何
+ *      视觉身份（无颜色/字体/边框样式）。前缀取 `.print-root` 单类即满足
+ *      亮色锁（前缀纪律的机理是「解析回亮色锁」，双类是模板文件的组织
+ *      惯例；本文件视觉规则仍在第 ② 层逐版双类前缀）；
+ *   ② 外表承接层 `.print-root.print-template-<id> .gm-*`：字体阶 / 色板 /
+ *      密度 / 表格形态逐版落地——全部走该版 token（--tpl-accent / --tpl-ink
+ *      / --tpl-line）与各版已有语法（A 的密集横线、D 的硬边网格、E 的发丝
+ *      线分组、H 的海报块语言）。用户改配色槽位时通用渲染跟着变（硬验收点）。
+ *
+ * ── 密度合规（print-density-study §2 规则 + §4 四约束） ──
+ *   · L2 数据行：normal ≈27-28px（字号 11.5-12.5 ×1.35 + padding 5/5 + 1px
+ *     行线），compact ≈22px（padding 3/3 压线，≥2×3px 下限）；行估高常量在
+ *     pages/generic/shared.ts（normal 30-32 / compact 24-26，只偏保守）；
+ *   · L1 模块头：2px 粗线 + 12.5-15px 粗体（分组呼吸在这层，规则 2）；
+ *   · L3 口径注：9.5-10px + 灰度一档（opacity 或灰阶），与 L2 差 ≥1.5px；
+ *   · accent 文字 ≥9.5px（约束 3）：本文件 accent 只用于状态/焦点文字
+ *     （行字号 11.5-12.5px，远超下限）与边框，无小字号 accent 文字；
+ *   · 行 padding 任何档位 ≥3px（约束 1）：compact 的 3px 已压线，不再出第三档；
+ *   · 无进度条/色带 ⇒ 不涉轨道 6px 下限（约束 2）。
+ *
+ * ── A 版的一处必要微调（报告项） ──
+ * A 的 --tpl-accent = 纸面黄（print-palette.ts：A 的 accent 兼纸面）⇒
+ * accent 色文字在黄纸上不可读。故 A 的延期态焦点**不走 accent 色**，用
+ * 「加重 + ▲ 字形」双编码（与 A 原生 swiss-stage-row 的延期处理一致）；
+ * Agent 行焦点用 A 原生的反色行（line 底 + accent 字，反相可辨）。
+ */
+
+/* ============================== ① 共享结构层 ============================== */
+
+.print-root .gm-module {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.print-root .gm-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* 列宽由首行 cells 的百分比定（shared 的 col 类）；长文本省略号截断 */
+  table-layout: fixed;
+}
+
+/* 长文本单行省略 + title 可访问（02 §8：不挤邻字段；行高因此确定，分页估高不漂） */
+.print-root .gm-cell-name,
+.print-root .gm-cell-owner,
+.print-root .gm-cell-kind,
+.print-root .gm-cell-role {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.print-root .gm-cell-date,
+.print-root .gm-cell-no {
+  white-space: nowrap;
+}
+
+.print-root .gm-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+/* 口径注压到主体底部（每页可独立解释，01 §2；L3 附属层） */
+.print-root .gm-note {
+  margin: auto 0 0;
+  line-height: 1.6;
+}
+
+/* ── 列宽（内容宽 706-714px 跨版差 1%，百分比通用） ── */
+/* M1 阶段清单：序号 / 阶段 / 状态 / 计划日期 / 占比 / 负责人 */
+.print-root .gm-module[data-module='stage-list'] .gm-col-no {
+  width: 7%;
+}
+.print-root .gm-module[data-module='stage-list'] .gm-col-name {
+  width: 30%;
+}
+.print-root .gm-module[data-module='stage-list'] .gm-col-state {
+  width: 12%;
+}
+.print-root .gm-module[data-module='stage-list'] .gm-col-date {
+  width: 26%;
+}
+.print-root .gm-module[data-module='stage-list'] .gm-col-num {
+  width: 8%;
+}
+.print-root .gm-module[data-module='stage-list'] .gm-col-owner {
+  width: 17%;
+}
+
+/* M2 任务清单：读号 / 任务 / 状态 / 负责人 / 产出物 */
+.print-root .gm-module[data-module='task-list'] .gm-col-no {
+  width: 9%;
+}
+.print-root .gm-module[data-module='task-list'] .gm-col-name {
+  width: 45%;
+}
+.print-root .gm-module[data-module='task-list'] .gm-col-state {
+  width: 13%;
+}
+.print-root .gm-module[data-module='task-list'] .gm-col-owner {
+  width: 21%;
+}
+.print-root .gm-module[data-module='task-list'] .gm-col-num {
+  width: 12%;
+}
+
+/* M4 成员名册：姓名 / 类型 / agentKind / 角色 / 负责任务数 */
+.print-root .gm-module[data-module='member-roster'] .gm-col-name {
+  width: 18%;
+}
+.print-root .gm-module[data-module='member-roster'] .gm-col-state {
+  width: 12%;
+}
+.print-root .gm-module[data-module='member-roster'] .gm-col-kind {
+  width: 24%;
+}
+.print-root .gm-module[data-module='member-roster'] .gm-col-role {
+  width: 26%;
+}
+.print-root .gm-module[data-module='member-roster'] .gm-col-num {
+  width: 20%;
+}
+
+/* ============================== ② 外表承接层 · A ============================== */
+
+/* A · Swiss Schedule：交通黄纸面 + 密集横线 + 数字优先。accent = 纸面黄
+   （不可作文字色，见文件头「A 版的必要微调」）；线色 = 墨色（顶/底栏同色）。 */
+.print-root.print-template-swiss-schedule .gm-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding-bottom: 6px;
+}
+
+.print-root.print-template-swiss-schedule .gm-head__label {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.print-root.print-template-swiss-schedule .gm-head__count {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.print-root.print-template-swiss-schedule .gm-table {
+  font-size: 12px;
+}
+
+.print-root.print-template-swiss-schedule .gm-table th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .gm-table td {
+  border-bottom: 1px solid var(--tpl-ink);
+  /* normal 行内呼吸 5/5（L2 区间 26-36px 内；行估高 30-32 见 shared.ts） */
+  padding: 5px 8px;
+  vertical-align: middle;
+}
+
+/* A 的数字纪律：等宽数字（tabular-nums），不引等宽字体族（同 swiss-num） */
+.print-root.print-template-swiss-schedule .gm-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A 的延期/逾期焦点：加重 + 字形（accent 是纸面色，禁止作文字色） */
+.print-root.print-template-swiss-schedule .gm-state[data-tone='signal'] {
+  font-weight: 700;
+}
+
+/* Agent 行 = 全页唯一强焦点：反色行（line 底 + accent 字；灰度下反相 + 字重可辨，
+   与 A 原生 swiss-roster__row--agent 同一语法） */
+.print-root.print-template-swiss-schedule .gm-row[data-agent] td {
+  background: var(--tpl-line);
+  color: var(--tpl-accent);
+  font-weight: 700;
+  border-bottom: 1px solid var(--tpl-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-swiss-schedule .gm-note {
+  font-size: 9.5px;
+  opacity: 0.72;
+}
+
+.print-root.print-template-swiss-schedule .gm-module[data-density='compact'] .gm-table td {
+  /* compact：行 padding 压到 3px 下限（密度研究 §4 约束 1，不再出第三档） */
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.print-root.print-template-swiss-schedule .gm-module[data-density='compact'] .gm-table th {
+  padding: 4px 8px;
+}
+
+@media print {
+  /* 反色行的填充必须压过浏览器「省墨」（两条 !important，特异性高者胜） */
+  .print-root.print-template-swiss-schedule .gm-row[data-agent] td {
+    background: var(--tpl-line) !important;
+    color: var(--tpl-accent) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ============================== ② 外表承接层 · D ============================== */
+
+/* D · Data Editorial：纯白编辑网格 + 信号橙红（仅重点状态）+ 圆角一律 0。 */
+.print-root.print-template-data-editorial .gm-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  /* 硬边身份：2px 近黑下划线（同 de-matrix 表头线） */
+  border-bottom: 2px solid var(--tpl-ink);
+  padding-bottom: 6px;
+}
+
+.print-root.print-template-data-editorial .gm-head__label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.print-root.print-template-data-editorial .gm-head__count {
+  font-family: var(--de-font-mono);
+  font-size: 10px;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .gm-table {
+  font-size: 11px;
+}
+
+.print-root.print-template-data-editorial .gm-table th {
+  font-family: var(--de-font-en);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: left;
+  color: var(--de-gray-700);
+  border-bottom: 2px solid var(--tpl-ink);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .gm-table td {
+  border-bottom: 1px solid var(--tpl-line);
+  padding: 5px 8px;
+  vertical-align: middle;
+}
+
+.print-root.print-template-data-editorial .gm-num {
+  font-family: var(--de-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 信号色只给重点状态（延期/逾期）：accent + 加重，字形/文字仍双编码 */
+.print-root.print-template-data-editorial .gm-state[data-tone='signal'] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* Agent 行：左侧信号粗签 + 姓名着色（硬边，无圆角——D 的 blocked 节点同语法） */
+.print-root.print-template-data-editorial .gm-row[data-agent] td {
+  border-bottom: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-data-editorial .gm-row[data-agent] td:first-child {
+  border-left: 3px solid var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .gm-row[data-agent] .gm-cell-name {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* 口径注：de-note 语法（10px 灰阶 + 发丝上线） */
+.print-root.print-template-data-editorial .gm-note {
+  margin: auto 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--tpl-line);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--de-gray-700);
+}
+
+.print-root.print-template-data-editorial .gm-module[data-density='compact'] .gm-table td {
+  padding: 3px 8px;
+  font-size: 10.5px;
+}
+
+.print-root.print-template-data-editorial .gm-module[data-density='compact'] .gm-table th {
+  padding: 4px 8px;
+}
+
+/* ============================== ② 外表承接层 · E ============================== */
+
+/* E · Editorial Index：暖浅纸面 + 发丝线分组（无竖线、无卡片）。表格在 E 的
+   语言里退化为「发丝线分隔的行列」：首末列不内缩，与章头规则左右对齐。 */
+.print-root.print-template-editorial-index .gm-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  /* 粗章节线（2px 近黑）= E 的分组语言（同 ei-chapter） */
+  border-top: 2px solid var(--tpl-ink);
+  padding: 9px 0 8px;
+}
+
+.print-root.print-template-editorial-index .gm-head__label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.print-root.print-template-editorial-index .gm-head__count {
+  font-family: var(--ei-font-num);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  opacity: 0.72;
+}
+
+.print-root.print-template-editorial-index .gm-table {
+  font-size: 12.5px;
+}
+
+.print-root.print-template-editorial-index .gm-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding: 8px 8px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-editorial-index .gm-table td {
+  border-bottom: 1px solid var(--tpl-line);
+  padding: 5px 8px;
+  vertical-align: middle;
+}
+
+/* 首末列不内缩：与章头粗线左右对齐（E 的目录行语言） */
+.print-root.print-template-editorial-index .gm-table th:first-child,
+.print-root.print-template-editorial-index .gm-table td:first-child {
+  padding-left: 0;
+}
+
+.print-root.print-template-editorial-index .gm-table th:last-child,
+.print-root.print-template-editorial-index .gm-table td:last-child {
+  padding-right: 0;
+}
+
+.print-root.print-template-editorial-index .gm-num {
+  font-family: var(--ei-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 朱红只给延期态（E 的焦点语法：accent + ▲ 字形） */
+.print-root.print-template-editorial-index .gm-state[data-tone='signal'] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* Agent 行：朱红粗左边签（同 ei-row[data-agent]；不整行变红） */
+.print-root.print-template-editorial-index .gm-row[data-agent] td:first-child {
+  border-left: 3px solid var(--tpl-accent);
+  padding-left: 9px;
+}
+
+.print-root.print-template-editorial-index .gm-row[data-agent] .gm-cell-name {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+.print-root.print-template-editorial-index .gm-note {
+  margin: auto 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--tpl-line);
+  font-size: 10px;
+  line-height: 1.65;
+  opacity: 0.72;
+}
+
+.print-root.print-template-editorial-index .gm-module[data-density='compact'] .gm-table td {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.print-root.print-template-editorial-index .gm-module[data-density='compact'] .gm-table th {
+  padding: 5px 8px;
+}
+
+/* ============================== ② 外表承接层 · H ============================== */
+
+/* H · Agent Poster：灰白纸面 + 海报块语言（2px 粗上线分块 + 局部留白收口）。 */
+.print-root.print-template-agent-poster .gm-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 2px solid var(--tpl-ink);
+  padding-top: 10px;
+}
+
+.print-root.print-template-agent-poster .gm-head__label {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.print-root.print-template-agent-poster .gm-head__count {
+  font-family: var(--ap-font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.66;
+}
+
+.print-root.print-template-agent-poster .gm-table {
+  font-size: 11.5px;
+}
+
+.print-root.print-template-agent-poster .gm-table th {
+  text-align: left;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.print-root.print-template-agent-poster .gm-table td {
+  border-bottom: 1px solid var(--tpl-line);
+  padding: 5px 8px;
+  vertical-align: middle;
+}
+
+.print-root.print-template-agent-poster .gm-num {
+  font-family: var(--ap-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 橙 = 治理焦点（H 的槽位语义）：延期/逾期态 accent + 加重 */
+.print-root.print-template-agent-poster .gm-state[data-tone='signal'] {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+/* Agent 行：左侧橙粗签 + 姓名着色（与 H 的门控焦点同语法） */
+.print-root.print-template-agent-poster .gm-row[data-agent] td:first-child {
+  border-left: 3px solid var(--tpl-accent);
+}
+
+.print-root.print-template-agent-poster .gm-row[data-agent] .gm-cell-name {
+  color: var(--tpl-accent);
+  font-weight: 700;
+}
+
+.print-root.print-template-agent-poster .gm-note {
+  margin: auto 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--tpl-line);
+  font-size: 10px;
+  line-height: 1.6;
+  opacity: 0.72;
+}
+
+.print-root.print-template-agent-poster .gm-module[data-density='compact'] .gm-table td {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.print-root.print-template-agent-poster .gm-module[data-density='compact'] .gm-table th {
+  padding: 4px 8px;
+}

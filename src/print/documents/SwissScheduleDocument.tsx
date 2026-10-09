@@ -27,12 +27,25 @@ import { MemberActorKind, StageStatus, TASK_STATUS_LABELS } from '../../core/typ
 import { formatTaskNo } from '../../core/lib/task-no';
 import { relativeLuminance } from '../../core/color/contrast';
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
-import { printTemplateClass } from '../../components/print/print-skins';
+import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-skins';
+import type { PrintSheet } from '../../components/print/print-skins';
 
-import type { PrintPageKind, PrintStageLogVM, PrintStageVM, PrintViewModel } from '../model/print-view-model';
+import type {
+  PrintPageKind,
+  PrintStageLogVM,
+  PrintStageVM,
+  PrintViewModel,
+} from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
+import { GenericModuleBody } from '../pages/generic/GenericModuleBody';
+import {
+  GENERIC_TITLES,
+  isGenericRenderable,
+  planGenericModule,
+  type GenericPlan,
+} from '../pages/generic/shared';
 // A 版样式（Vite 随组件 chunk 进包；全部规则带 .print-root.print-template-* 前缀）
 import '../styles/swiss-schedule.css';
 
@@ -74,8 +87,12 @@ function stampOf(iso: string): string {
 
 export interface SwissScheduleDocumentProps {
   vm: PrintViewModel;
-  /** 启用的页（缺省 = 四页全选；选择器勾选即时重渲染） */
-  pages?: readonly PrintPageKind[];
+  /**
+   * 纸面页（期三：原生页 kind + 通用模块 id 的混合序列；缺省 = 全选可用模块）。
+   * 选择器勾选即时重渲染；A 的 M1/M2/M4 是原生页，通用页在本版不会出现
+   * （期三第一批里 A 无 generic 标记模块），装配链仍统一走 sheets。
+   */
+  sheets?: readonly PrintSheet[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，黑顶栏左端显示「ID Plan」文字标） */
@@ -84,15 +101,50 @@ export interface SwissScheduleDocumentProps {
   pageRef?: (idx: number) => Ref<HTMLDivElement>;
 }
 
+/* ------------------------------------------------------------------ 物理页装配 */
+
+/** A 版一个物理纸面（原生页 or 通用模块的一个 chunk；plan=null = 空态纸） */
+export type SwissPhysical =
+  | { type: 'native'; kind: PrintPageKind }
+  | {
+      type: 'generic';
+      module: 'stage-list' | 'task-list' | 'member-roster';
+      plan: GenericPlan | null;
+      chunkIndex: number;
+      chunkTotal: number;
+    };
+
+/**
+ * sheets ⇒ A 版物理页序列（原生 1:1；通用模块经 planGenericModule 分页）。
+ * 外来页 kind / 非本批通用模块静默滤掉（纸面不因此多页）。
+ */
+export function swissSchedulePhysical(vm: PrintViewModel, sheets: readonly PrintSheet[]): SwissPhysical[] {
+  const out: SwissPhysical[] = [];
+  for (const sheet of sheets) {
+    if (sheet.type === 'native') {
+      if (!SWISS_SCHEDULE_PAGES.includes(sheet.page)) continue;
+      out.push({ type: 'native', kind: sheet.page });
+      continue;
+    }
+    if (!isGenericRenderable(sheet.module)) continue;
+    const plan = planGenericModule(sheet.module, vm, 'swiss-schedule');
+    const total = plan === null ? 1 : plan.chunks.length;
+    for (let i = 0; i < total; i++) {
+      out.push({ type: 'generic', module: sheet.module, plan, chunkIndex: i, chunkTotal: total });
+    }
+  }
+  return out;
+}
+
 export function SwissScheduleDocument({
   vm,
-  pages,
+  sheets,
   palette,
   logo = null,
   pageRef,
 }: SwissScheduleDocumentProps): JSX.Element {
-  const enabled = (pages ?? SWISS_SCHEDULE_PAGES).filter((p) => SWISS_SCHEDULE_PAGES.includes(p));
-  const total = enabled.length;
+  const physical = swissSchedulePhysical(vm, sheets ?? enabledSheetsOf('swiss-schedule', undefined));
+  const total = physical.length;
   /**
    * 顶栏明暗（决定 logo 反不反白）：栏底 = --tpl-line 槽位。基线黑栏 ⇒
    * 二值化黑 logo 必须反白才看得见；自定义预设若把栏底改亮（站台蓝/赭石/
@@ -112,10 +164,10 @@ export function SwissScheduleDocument({
         } as CSSProperties
       }
     >
-      {enabled.map((kind, idx) => (
+      {physical.map((p, idx) => (
         <SwissPage
-          key={kind}
-          kind={kind}
+          key={p.type === 'native' ? p.kind : `generic-${p.module}-${p.chunkIndex}`}
+          page={p}
           vm={vm}
           pageIndex={idx}
           pageTotal={total}
@@ -131,7 +183,7 @@ export function SwissScheduleDocument({
 /* ------------------------------------------------------------------ 纸面外壳 */
 
 function SwissPage({
-  kind,
+  page,
   vm,
   pageIndex,
   pageTotal,
@@ -139,7 +191,7 @@ function SwissPage({
   logo,
   barIsDark,
 }: {
-  kind: PrintPageKind;
+  page: SwissPhysical;
   vm: PrintViewModel;
   pageIndex: number;
   pageTotal: number;
@@ -147,11 +199,14 @@ function SwissPage({
   logo: string | null;
   barIsDark: boolean;
 }): JSX.Element {
-  const nav = SWISS_NAV.find((n) => n.kind === kind) ?? SWISS_NAV[0]!;
+  // 原生页 = 栏内当前项（nav 点亮）；通用页 = 模块英文栏名（nav 不点亮）
+  const nav = page.type === 'native' ? SWISS_NAV.find((n) => n.kind === page.kind) : undefined;
+  const navEn = page.type === 'native' ? (nav ?? SWISS_NAV[0]!).en : GENERIC_TITLES[page.module].en;
+  const pageAttr = page.type === 'native' ? page.kind : `generic-${page.module}`;
   return (
     <div
       ref={pageRef}
-      data-print-page={kind}
+      data-print-page={pageAttr}
       data-page-index={pageIndex}
       className="a4-page swiss-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
@@ -166,7 +221,7 @@ function SwissPage({
             <span
               key={n.kind}
               className="swiss-topbar__navitem"
-              data-current={n.kind === kind || undefined}
+              data-current={page.type === 'native' && n.kind === page.kind ? true : undefined}
             >
               {n.en}
             </span>
@@ -177,7 +232,7 @@ function SwissPage({
           {vm.project.name}
         </div>
         <div className="swiss-topbar__meta">
-          <span>{nav.en}</span>
+          <span>{navEn}</span>
           <span className="swiss-num">
             {vm.project.scheduleBasisLabel} · {vm.project.plannedStartAt} – {vm.project.plannedEndAt}
           </span>
@@ -185,7 +240,11 @@ function SwissPage({
       </header>
 
       <div className="swiss-body">
-        <SwissPageBody kind={kind} vm={vm} />
+        {page.type === 'native' ? (
+          <SwissPageBody kind={page.kind} vm={vm} />
+        ) : (
+          <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />
+        )}
       </div>
 
       {/* 黑底栏（左右内缩 40px）：署名 + 页码 + 数据时间（每页可独立解释，01 §2） */}

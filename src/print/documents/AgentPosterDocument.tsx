@@ -35,12 +35,20 @@
 import type { CSSProperties, Ref } from 'react';
 
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
-import { printTemplateClass } from '../../components/print/print-skins';
+import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-skins';
+import type { PrintSheet } from '../../components/print/print-skins';
 
 import type { PrintPageKind, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
+import { GenericModuleBody } from '../pages/generic/GenericModuleBody';
+import {
+  GENERIC_TITLES,
+  isGenericRenderable,
+  planGenericModule,
+  type GenericPlan,
+} from '../pages/generic/shared';
 import { AgentDeclarationPage } from '../pages/agent-poster/AgentDeclarationPage';
 import { ExecutionStatusPage } from '../pages/agent-poster/ExecutionStatusPage';
 import { WritebackProposalPage } from '../pages/agent-poster/WritebackProposalPage';
@@ -76,8 +84,11 @@ const AP_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
 
 export interface AgentPosterDocumentProps {
   vm: PrintViewModel;
-  /** 启用的页（缺省 = 三页全选；选择器勾选即时重渲染） */
-  pages?: readonly PrintPageKind[];
+  /**
+   * 纸面页（期三：原生页 kind + 通用模块 id；缺省 = 全选可用模块）。
+   * H 的 M1/M2/M4 无原生页 ⇒ 走通用渲染（去专属化：H 不再是 Agent 专属外表）。
+   */
+  sheets?: readonly PrintSheet[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，显示「ID Plan」文字标） */
@@ -86,17 +97,49 @@ export interface AgentPosterDocumentProps {
   pageRef?: (idx: number) => Ref<HTMLDivElement>;
 }
 
+/* ------------------------------------------------------------------ 物理页装配 */
+
+/** H 版一个物理纸面（原生页 or 通用模块的一个 chunk；plan=null = 空态纸） */
+export type ApPhysical =
+  | { type: 'native'; kind: PrintPageKind }
+  | {
+      type: 'generic';
+      module: 'stage-list' | 'task-list' | 'member-roster';
+      plan: GenericPlan | null;
+      chunkIndex: number;
+      chunkTotal: number;
+    };
+
+/** sheets ⇒ H 版物理页序列（原生 1:1；通用模块经 planGenericModule 分页） */
+export function agentPosterPhysical(vm: PrintViewModel, sheets: readonly PrintSheet[]): ApPhysical[] {
+  const out: ApPhysical[] = [];
+  for (const sheet of sheets) {
+    if (sheet.type === 'native') {
+      if (!AGENT_POSTER_PAGES.includes(sheet.page)) continue;
+      out.push({ type: 'native', kind: sheet.page });
+      continue;
+    }
+    if (!isGenericRenderable(sheet.module)) continue;
+    const plan = planGenericModule(sheet.module, vm, 'agent-poster');
+    const total = plan === null ? 1 : plan.chunks.length;
+    for (let i = 0; i < total; i++) {
+      out.push({ type: 'generic', module: sheet.module, plan, chunkIndex: i, chunkTotal: total });
+    }
+  }
+  return out;
+}
+
 export function AgentPosterDocument({
   vm,
-  pages,
+  sheets,
   palette,
   logo = null,
   pageRef,
 }: AgentPosterDocumentProps): JSX.Element {
-  const enabled = (pages ?? AGENT_POSTER_PAGES).filter((p) => AGENT_POSTER_PAGES.includes(p));
-  // 整版空态判定：执行与提案皆空（非 Agent 项目 / 无 Agent 数据）
+  const physical = agentPosterPhysical(vm, sheets ?? enabledSheetsOf('agent-poster', undefined));
+  // 整版空态判定：执行与提案皆空（非 Agent 项目 / 无 Agent 数据）——只作用于原生页
   const hasAgentData = vm.executions.length > 0 || vm.proposals.length > 0;
-  const total = enabled.length;
+  const total = physical.length;
 
   return (
     <div
@@ -109,10 +152,10 @@ export function AgentPosterDocument({
         } as CSSProperties
       }
     >
-      {enabled.map((kind, idx) => (
+      {physical.map((p, idx) => (
         <ApPage
-          key={kind}
-          kind={kind}
+          key={p.type === 'native' ? p.kind : `generic-${p.module}-${p.chunkIndex}`}
+          page={p}
           vm={vm}
           hasAgentData={hasAgentData}
           logo={logo}
@@ -128,7 +171,7 @@ export function AgentPosterDocument({
 /* ------------------------------------------------------------------ 纸面外壳 */
 
 function ApPage({
-  kind,
+  page,
   vm,
   hasAgentData,
   logo,
@@ -136,7 +179,7 @@ function ApPage({
   pageTotal,
   pageRef,
 }: {
-  kind: PrintPageKind;
+  page: ApPhysical;
   vm: PrintViewModel;
   hasAgentData: boolean;
   logo: string | null;
@@ -144,16 +187,21 @@ function ApPage({
   pageTotal: number;
   pageRef?: Ref<HTMLDivElement>;
 }): JSX.Element {
-  const title = AP_PAGE_TITLES[kind] ?? AP_PAGE_TITLES['agent-declaration']!;
-  // P1 的 logo 在巨字下方左侧（页内自绘，≤24px）；P2/P3 走页级 logo 行
+  // 页题：原生页走 AP_PAGE_TITLES；通用模块走 GENERIC_TITLES（期三）
+  const title =
+    page.type === 'native'
+      ? (AP_PAGE_TITLES[page.kind] ?? AP_PAGE_TITLES['agent-declaration']!)
+      : GENERIC_TITLES[page.module];
+  const pageAttr = page.type === 'native' ? page.kind : `generic-${page.module}`;
+  // P1 的 logo 在巨字下方左侧（页内自绘，≤24px）；P2/P3 与通用页走页级 logo 行
   // （左上角发丝线下方，≤22px）。空态下 P1 也走页级行——整版空态时每页
   // 都要有标识，不留空。
-  const pageLevelLogo = kind !== 'agent-declaration' || !hasAgentData;
+  const pageLevelLogo = page.type === 'generic' || page.kind !== 'agent-declaration' || !hasAgentData;
 
   return (
     <div
       ref={pageRef}
-      data-print-page={kind}
+      data-print-page={pageAttr}
       data-page-index={pageIndex}
       className="a4-page ap-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
@@ -178,20 +226,26 @@ function ApPage({
         <div className="ap-head__rule" aria-hidden />
       </header>
 
-      {/* logo 行：P2/P3（及空态 P1）左上角、发丝线下方（≤22px） */}
+      {/* logo 行：P2/P3（及空态 P1、通用页）左上角、发丝线下方（≤22px） */}
       {pageLevelLogo && (
         <div className="ap-logo-row">
           <PrintLogoMark logo={logo} height={22} />
         </div>
       )}
 
-      {/* 主体 */}
+      {/* 主体：原生页（无 Agent 数据走整版只读空态）/ 通用模块（期三） */}
       <div className="ap-body">
-        {!hasAgentData ? (
+        {page.type === 'generic' ? (
+          page.plan === null ? (
+            <GenericPosterEmpty module={page.module} />
+          ) : (
+            <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />
+          )
+        ) : !hasAgentData ? (
           /* 整版只读空态：不用模拟记录填版（02 §8） */
           <EmptyPrintState kind="agent" />
         ) : (
-          <ApBody kind={kind} vm={vm} logo={logo} />
+          <ApBody kind={page.kind} vm={vm} logo={logo} />
         )}
       </div>
 
@@ -204,6 +258,17 @@ function ApPage({
       </footer>
     </div>
   );
+}
+
+/** 通用模块空态（期三：无数据 ⇒ 明确空态，不用示例数据填版，01 §8） */
+function GenericPosterEmpty({
+  module,
+}: {
+  module: 'stage-list' | 'task-list' | 'member-roster';
+}): JSX.Element {
+  if (module === 'task-list') return <EmptyPrintState kind="tasks" />;
+  if (module === 'member-roster') return <EmptyPrintState kind="members" />;
+  return <EmptyPrintState kind="stages" />;
 }
 
 /** 页主体分发（三页组件独立；类型上不可达的 kind 兜底空态） */

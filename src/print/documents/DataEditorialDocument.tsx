@@ -28,12 +28,20 @@
 import type { CSSProperties, Ref } from 'react';
 
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
-import { printTemplateClass } from '../../components/print/print-skins';
+import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-skins';
+import type { PrintSheet } from '../../components/print/print-skins';
 
 import type { PrintPageKind, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
+import { GenericModuleBody } from '../pages/generic/GenericModuleBody';
+import {
+  GENERIC_TITLES,
+  isGenericRenderable,
+  planGenericModule,
+  type GenericPlan,
+} from '../pages/generic/shared';
 // D 版样式（Vite 随组件 chunk 进包；全部规则带 .print-root.print-template-* 前缀）
 import '../styles/data-editorial.css';
 import { ProgressMatrixPage } from '../pages/data-editorial/ProgressMatrixPage';
@@ -71,8 +79,11 @@ const DE_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
 
 export interface DataEditorialDocumentProps {
   vm: PrintViewModel;
-  /** 启用的页（缺省 = 四页全选；选择器勾选即时重渲染） */
-  pages?: readonly PrintPageKind[];
+  /**
+   * 纸面页（期三：原生页 kind + 通用模块 id；缺省 = 全选可用模块）。
+   * D 的 M1/M2/M4 无原生页 ⇒ 走通用渲染（该外表基础排版承接）。
+   */
+  sheets?: readonly PrintSheet[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，每页头部左上格显示「ID Plan」文字标） */
@@ -81,15 +92,47 @@ export interface DataEditorialDocumentProps {
   pageRef?: (idx: number) => Ref<HTMLDivElement>;
 }
 
+/* ------------------------------------------------------------------ 物理页装配 */
+
+/** D 版一个物理纸面（原生页 or 通用模块的一个 chunk；plan=null = 空态纸） */
+export type DePhysical =
+  | { type: 'native'; kind: PrintPageKind }
+  | {
+      type: 'generic';
+      module: 'stage-list' | 'task-list' | 'member-roster';
+      plan: GenericPlan | null;
+      chunkIndex: number;
+      chunkTotal: number;
+    };
+
+/** sheets ⇒ D 版物理页序列（原生 1:1；通用模块经 planGenericModule 分页） */
+export function dataEditorialPhysical(vm: PrintViewModel, sheets: readonly PrintSheet[]): DePhysical[] {
+  const out: DePhysical[] = [];
+  for (const sheet of sheets) {
+    if (sheet.type === 'native') {
+      if (!DATA_EDITORIAL_PAGES.includes(sheet.page)) continue;
+      out.push({ type: 'native', kind: sheet.page });
+      continue;
+    }
+    if (!isGenericRenderable(sheet.module)) continue;
+    const plan = planGenericModule(sheet.module, vm, 'data-editorial');
+    const total = plan === null ? 1 : plan.chunks.length;
+    for (let i = 0; i < total; i++) {
+      out.push({ type: 'generic', module: sheet.module, plan, chunkIndex: i, chunkTotal: total });
+    }
+  }
+  return out;
+}
+
 export function DataEditorialDocument({
   vm,
-  pages,
+  sheets,
   palette,
   logo = null,
   pageRef,
 }: DataEditorialDocumentProps): JSX.Element {
-  const enabled = (pages ?? DATA_EDITORIAL_PAGES).filter((p) => DATA_EDITORIAL_PAGES.includes(p));
-  const total = enabled.length;
+  const physical = dataEditorialPhysical(vm, sheets ?? enabledSheetsOf('data-editorial', undefined));
+  const total = physical.length;
 
   return (
     <div
@@ -102,10 +145,10 @@ export function DataEditorialDocument({
         } as CSSProperties
       }
     >
-      {enabled.map((kind, idx) => (
+      {physical.map((p, idx) => (
         <DePage
-          key={kind}
-          kind={kind}
+          key={p.type === 'native' ? p.kind : `generic-${p.module}-${p.chunkIndex}`}
+          page={p}
           vm={vm}
           pageIndex={idx}
           pageTotal={total}
@@ -120,25 +163,30 @@ export function DataEditorialDocument({
 /* ------------------------------------------------------------------ 纸面外壳 */
 
 function DePage({
-  kind,
+  page,
   vm,
   pageIndex,
   pageTotal,
   pageRef,
   logo,
 }: {
-  kind: PrintPageKind;
+  page: DePhysical;
   vm: PrintViewModel;
   pageIndex: number;
   pageTotal: number;
   pageRef?: Ref<HTMLDivElement>;
   logo: string | null;
 }): JSX.Element {
-  const title = DE_PAGE_TITLES[kind] ?? DE_PAGE_TITLES['progress-matrix']!;
+  // 页题：原生页走 DE_PAGE_TITLES；通用模块走 GENERIC_TITLES（期三）
+  const title =
+    page.type === 'native'
+      ? (DE_PAGE_TITLES[page.kind] ?? DE_PAGE_TITLES['progress-matrix']!)
+      : GENERIC_TITLES[page.module];
+  const pageAttr = page.type === 'native' ? page.kind : `generic-${page.module}`;
   return (
     <div
       ref={pageRef}
-      data-print-page={kind}
+      data-print-page={pageAttr}
       data-page-index={pageIndex}
       className="a4-page de-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
@@ -173,7 +221,11 @@ function DePage({
       </header>
 
       <div className="de-body">
-        <DePageBody kind={kind} vm={vm} />
+        {page.type === 'native' ? (
+          <DePageBody kind={page.kind} vm={vm} />
+        ) : (
+          <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />
+        )}
       </div>
 
       {/* 页脚：发丝线 + 署名 + 页码/数据时间（每页可独立解释，01 §2） */}

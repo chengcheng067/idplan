@@ -30,12 +30,20 @@
 import type { CSSProperties, Ref } from 'react';
 
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
-import { printTemplateClass } from '../../components/print/print-skins';
+import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-skins';
+import type { PrintSheet } from '../../components/print/print-skins';
 
 import type { PrintMemberVM, PrintPageKind, PrintStageVM, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
+import { GenericModuleBody } from '../pages/generic/GenericModuleBody';
+import {
+  GENERIC_TITLES,
+  isGenericRenderable,
+  planGenericModule,
+  type GenericPlan,
+} from '../pages/generic/shared';
 import { paginateEiEntries, stampOf, type EiEntry } from '../pages/editorial-index/shared';
 import {
   ArtifactIndexEmpty,
@@ -126,8 +134,11 @@ const COMPACT_THRESHOLD = 16;
 
 export interface EditorialIndexDocumentProps {
   vm: PrintViewModel;
-  /** 启用的页（缺省 = 三页全选；选择器勾选即时重渲染） */
-  pages?: readonly PrintPageKind[];
+  /**
+   * 纸面页（期三：原生页 kind + 通用模块 id；缺省 = 全选可用模块）。
+   * E 的 M2 任务清单无原生页 ⇒ 走通用渲染（该外表基础排版承接）。
+   */
+  sheets?: readonly PrintSheet[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，显示「ID Plan」文字标） */
@@ -138,13 +149,12 @@ export interface EditorialIndexDocumentProps {
 
 export function EditorialIndexDocument({
   vm,
-  pages,
+  sheets,
   palette,
   logo = null,
   pageRef,
 }: EditorialIndexDocumentProps): JSX.Element {
-  const enabled = (pages ?? EDITORIAL_INDEX_PAGES).filter((p) => EDITORIAL_INDEX_PAGES.includes(p));
-  const physical = buildPhysicalPages(enabled, vm);
+  const physical = editorialIndexPhysical(vm, sheets ?? enabledSheetsOf('editorial-index', undefined));
   const total = physical.length;
 
   return (
@@ -175,17 +185,35 @@ export function EditorialIndexDocument({
 
 /* ------------------------------------------------------------------ 物理页装配 */
 
-/** 一个物理纸面的内容（kind + 条目块；null = 空态纸面） */
-type EiPhysical =
+/** 一个物理纸面的内容（原生 kind + 条目块；通用模块 + 分页计划；null = 空态纸面） */
+export type EiPhysical =
   | { kind: 'stage-index'; block: { entries: readonly EiEntry<PrintStageVM>[]; compact: boolean } | null }
   | { kind: 'member-index'; block: { entries: readonly EiEntry<PrintMemberVM & { seq: number }>[]; compact: boolean } | null }
-  | { kind: 'artifact-index'; block: { entries: readonly EiEntry<EiArtifactRow>[]; compact: boolean } | null };
+  | { kind: 'artifact-index'; block: { entries: readonly EiEntry<EiArtifactRow>[]; compact: boolean } | null }
+  | {
+      kind: 'generic';
+      module: 'stage-list' | 'task-list' | 'member-roster';
+      plan: GenericPlan | null;
+      chunkIndex: number;
+      chunkTotal: number;
+    };
 
 /** 逻辑页 → 物理页组（条目构造 + 分页；空逻辑页 = 一张空态纸） */
-function buildPhysicalPages(enabled: readonly PrintPageKind[], vm: PrintViewModel): EiPhysical[] {
+export function editorialIndexPhysical(vm: PrintViewModel, sheets: readonly PrintSheet[]): EiPhysical[] {
   const out: EiPhysical[] = [];
 
-  for (const kind of enabled) {
+  for (const sheet of sheets) {
+    if (sheet.type === 'generic') {
+      // 期三：通用模块（M2 任务清单）经共享分页器落多页；空模块 = 一张空态纸
+      if (!isGenericRenderable(sheet.module)) continue;
+      const plan = planGenericModule(sheet.module, vm, 'editorial-index');
+      const total = plan === null ? 1 : plan.chunks.length;
+      for (let i = 0; i < total; i++) {
+        out.push({ kind: 'generic', module: sheet.module, plan, chunkIndex: i, chunkTotal: total });
+      }
+      continue;
+    }
+    const kind = sheet.page;
     if (kind === 'stage-index') {
       if (stageIndexIsEmpty(vm)) {
         out.push({ kind, block: null });
@@ -260,12 +288,16 @@ function EiPage({
   pageTotal: number;
   pageRef?: Ref<HTMLDivElement>;
 }): JSX.Element {
-  const kind = page.kind;
-  const title = EI_PAGE_TITLES[kind] ?? EI_PAGE_TITLES['stage-index']!;
+  // 页题：原生逻辑页走 EI_PAGE_TITLES；通用模块走 GENERIC_TITLES（期三）
+  const title =
+    page.kind === 'generic'
+      ? GENERIC_TITLES[page.module]
+      : (EI_PAGE_TITLES[page.kind] ?? EI_PAGE_TITLES['stage-index']!);
+  const pageAttr = page.kind === 'generic' ? `generic-${page.module}` : page.kind;
   return (
     <div
       ref={pageRef}
-      data-print-page={kind}
+      data-print-page={pageAttr}
       data-page-index={pageIndex}
       className="a4-page ei-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
@@ -297,8 +329,10 @@ function EiPage({
         <PrintLogoMark logo={logo} height={22} />
       </div>
 
-      {/* 主体：目录条目（分页产物）；空逻辑页走明确空态 */}
-      <div className="ei-body">{page.block === null ? <LogicalEmpty kind={kind} /> : <LogicalBody page={page} vm={vm} />}</div>
+      {/* 主体：目录条目（分页产物）/ 通用模块（期三）；空逻辑页走明确空态 */}
+      <div className="ei-body">
+        <LogicalBody page={page} vm={vm} />
+      </div>
 
       {/* 页脚：发丝线 + 署名 + 页码（**无黑栏**——01 §6 明文） */}
       <footer className="ei-foot">
@@ -311,27 +345,34 @@ function EiPage({
   );
 }
 
-/** 逻辑页主体分发（每页组件独立；联合类型收窄，无 any  cast） */
+/** 通用模块空态（期三：无数据 ⇒ 明确空态，不用示例数据填版，01 §8） */
+function GenericModuleEmpty({
+  module,
+}: {
+  module: 'stage-list' | 'task-list' | 'member-roster';
+}): JSX.Element {
+  if (module === 'task-list') return <EmptyPrintState kind="tasks" />;
+  if (module === 'member-roster') return <EmptyPrintState kind="members" />;
+  return <EmptyPrintState kind="stages" />;
+}
+
+/** 逻辑页主体分发（每页组件独立；联合类型收窄，无 any cast；空态/通用模块同口） */
 function LogicalBody({ page, vm }: { page: EiPhysical; vm: PrintViewModel }): JSX.Element {
+  if (page.kind === 'generic') {
+    return page.plan === null ? (
+      <GenericModuleEmpty module={page.module} />
+    ) : (
+      <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />
+    );
+  }
+  if (page.block === null) return <LogicalEmpty kind={page.kind} />;
   switch (page.kind) {
     case 'stage-index':
-      return (
-        <StageIndexPage
-          vm={vm}
-          entries={page.block!.entries}
-          compact={page.block!.compact}
-        />
-      );
+      return <StageIndexPage vm={vm} entries={page.block.entries} compact={page.block.compact} />;
     case 'member-index':
-      return (
-        <MemberIndexPage
-          vm={vm}
-          entries={page.block!.entries}
-          compact={page.block!.compact}
-        />
-      );
+      return <MemberIndexPage vm={vm} entries={page.block.entries} compact={page.block.compact} />;
     case 'artifact-index':
-      return <ArtifactIndexPage vm={vm} entries={page.block!.entries} compact={page.block!.compact} />;
+      return <ArtifactIndexPage vm={vm} entries={page.block.entries} compact={page.block.compact} />;
   }
 }
 

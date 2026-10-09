@@ -36,6 +36,20 @@
  * （usePrintPrefsStore.pages，换模板不丢），纸面页序由 enabledPagesOf
  * 派生（注册表原生页序，与勾选顺序无关）。
  *
+ * ── v1.5-b 期三第一批：原生 + 通用两类标记（决策文档 §3.2 候选 3） ──
+ * 他的原话：「这 4 个新模板只是一个外表，里面的内容还是由我们 ID plan
+ * 和用户来共同决定」的落地第二步：M1 阶段清单 / M2 任务清单 / M4 成员
+ * 名册三模块在**全部 4 套外表**下可输出——
+ *   · 原生页已存在的（A 的 M1/M2/M4、E 的 M1/M4）⇒ 仍走原生页（标志
+ *     布局不动，如 A 的 M1 走三栏错落时刻表页）；
+ *   · 原生页不存在的 ⇒ 走**通用渲染**（该外表的基础排版承接：
+ *     pages/generic/ 三组件 + styles/generic-modules.css 四套块）。
+ * 故能力表条目加 `generic` 标记（pages 空 + generic = 通用渲染可用），
+ * 纸面单元从「页 kind」升级为 **PrintSheet**（原生页 kind | 通用模块
+ * id），按 PRINT_MODULES 序（M1→M11）派生——选择器按同一序列展示，
+ * 纸面页序与勾选序无关的老口径不变。M3/M5-M11 的本批之外的组合保持
+ * 禁用态（后续批次陆续补）。
+ *
  * ── 未实现模板为什么也进注册表 ──
  * 决策 ⑥「四套全上」的实现顺序是分批落地：选择器要先能渲染五张卡（用户看得见
  * 全貌），点未实现的进「建设中」空态——**不许假装能打**（打印/导出禁用）。
@@ -143,13 +157,28 @@ export interface PrintNativePage {
 }
 
 /**
- * 模块能力表条目：某外表**原生渲染**某模块 ⇒ 它的原生页列表。
+ * 模块能力表条目（期三升级：原生 + 通用两类）。
+ *   · `pages` 非空 ⇒ 该外表**原生渲染**该模块（标志布局，优先）；
+ *   · `pages` 空 + `generic` ⇒ 该外表下该模块走**通用渲染**（基础排版承接）；
+ *   · 两者皆无 ⇒ 该外表下暂不可用（选择器禁用态 + 原因，后续批次补）。
  * 模型容纳 1:N（H 的 Agent 执行 = 执行宣告 + 执行状态全览两页）。
  */
 export interface PrintModuleCapability {
   module: PrintModuleId;
+  /** 原生页列表（原生渲染；空 = 该外表下该模块无原生页） */
   pages: readonly PrintNativePage[];
+  /** 通用渲染可用（期三第一批：M1/M2/M4 于 D/E/H；pages 非空时原生优先，本标记不参与分发） */
+  generic: boolean;
 }
+
+/**
+ * 纸面页（sheet）——「外表 × 模块分离」的纸面单元（期三）。
+ * 原生页 kind（标志布局）或通用模块 id（基础排版）；勾选态按模块粒度，
+ * 纸面落页由 enabledSheetsOf 按 M1→M11 序派生，与勾选顺序无关。
+ */
+export type PrintSheet =
+  | { readonly type: 'native'; readonly page: PrintPageKind }
+  | { readonly type: 'generic'; readonly module: PrintModuleId };
 
 /** 模板元数据（选择器上截卡片 + 预览面板分发都读它） */
 export interface PrintTemplateMeta {
@@ -164,9 +193,9 @@ export interface PrintTemplateMeta {
   /** 经典专用：用五块开关而不是模块复选框（决策文档 §2.2） */
   usesBlocks: boolean;
   /**
-   * 模块能力表（期二：原 `pages` 语义升级）——该模板**原生渲染**哪些模块
-   * 及各自原生页（决策文档 §3.2/§3.3）。11 个模块里不在本表的 = 非原生
-   * （选择器禁用态 + 原因；通用渲染期三补）。经典不走模块表 ⇒ 恒空。
+   * 模块能力表（期二：原 `pages` 语义升级；期三：原生 + 通用两类）——该模板
+   * **可用**哪些模块及各自渲染方式（原生页 / 通用渲染；决策文档 §3.2/§3.3）。
+   * 不在本表的 = 暂不可用（选择器禁用态 + 原因；后续批次补）。经典不走模块表 ⇒ 恒空。
    */
   modules: readonly PrintModuleCapability[];
 }
@@ -188,22 +217,27 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '时刻表式竖读扫描：阶段 / 任务 / 延期 / 成员',
     implemented: true,
     usesBlocks: false,
+    // A 的 M1/M2/M4 已有原生页（时刻表/读号表/责任表）⇒ 通用标记不参与分发
     modules: [
       {
         module: 'stage-list',
         pages: [{ id: 'stage-overview', label: '阶段总览' }],
+        generic: false,
       },
       {
         module: 'task-list',
         pages: [{ id: 'task-register', label: '任务读号表' }],
+        generic: false,
       },
       {
         module: 'delay-ledger',
         pages: [{ id: 'delay-ledger', label: '延期记录表' }],
+        generic: false,
       },
       {
         module: 'member-roster',
         pages: [{ id: 'member-roster', label: '成员责任表' }],
+        generic: false,
       },
     ],
   },
@@ -214,22 +248,42 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '横读矩阵与数据图形：进度 / 依赖 / 工作量 / 验收',
     implemented: true,
     usesBlocks: false,
+    // 期三第一批：M1/M2/M4 在 D 无原生页 ⇒ 通用渲染（该外表基础排版承接）
     modules: [
+      {
+        module: 'stage-list',
+        pages: [],
+        generic: true,
+      },
+      {
+        module: 'task-list',
+        pages: [],
+        generic: true,
+      },
+      {
+        module: 'member-roster',
+        pages: [],
+        generic: true,
+      },
       {
         module: 'progress-matrix',
         pages: [{ id: 'progress-matrix', label: '阶段进度矩阵' }],
+        generic: false,
       },
       {
         module: 'dependency-network',
         pages: [{ id: 'dependency-network', label: '任务依赖网络' }],
+        generic: false,
       },
       {
         module: 'workload-composition',
         pages: [{ id: 'workload-composition', label: '阶段工作量构成' }],
+        generic: false,
       },
       {
         module: 'milestone-acceptance',
         pages: [{ id: 'milestone-acceptance', label: '里程碑与验收' }],
+        generic: false,
       },
     ],
   },
@@ -240,18 +294,27 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '跳读大编号索引：阶段 / 成员 / 产出物归档',
     implemented: true,
     usesBlocks: false,
+    // 期三第一批：M2 任务清单在 E 无原生页 ⇒ 通用渲染；M1/M4 已有原生目录页
     modules: [
       {
         module: 'stage-list',
         pages: [{ id: 'stage-index', label: '阶段目录' }],
+        generic: false,
+      },
+      {
+        module: 'task-list',
+        pages: [],
+        generic: true,
       },
       {
         module: 'member-roster',
         pages: [{ id: 'member-index', label: '成员执行体目录' }],
+        generic: false,
       },
       {
         module: 'artifact-list',
         pages: [{ id: 'artifact-index', label: '产出物清单' }],
+        generic: false,
       },
     ],
   },
@@ -262,7 +325,23 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '海报式跳读：Agent 执行状态与写回治理公示',
     implemented: true,
     usesBlocks: false,
+    // 期三第一批：M1/M2/M4 在 H 无原生页 ⇒ 通用渲染（去专属化的第一批落地）
     modules: [
+      {
+        module: 'stage-list',
+        pages: [],
+        generic: true,
+      },
+      {
+        module: 'task-list',
+        pages: [],
+        generic: true,
+      },
+      {
+        module: 'member-roster',
+        pages: [],
+        generic: true,
+      },
       {
         // M10 = 1 模块 2 页（执行宣告 + 状态全览）：模型容纳 1:N，
         // 勾选态是模块粒度，纸面落两页（决策文档 §3.3）
@@ -271,10 +350,12 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
           { id: 'agent-declaration', label: 'Agent 执行宣告' },
           { id: 'execution-status', label: '执行状态全览' },
         ],
+        generic: false,
       },
       {
         module: 'writeback-proposals',
         pages: [{ id: 'writeback-proposals', label: '写回提案公示' }],
+        generic: false,
       },
     ],
   },
@@ -316,39 +397,88 @@ export function printTemplateModules(id: PrintTemplateId): readonly PrintModuleC
   return printTemplateMeta(id).modules;
 }
 
-/** 该模板原生渲染的模块 id（经典 ⇒ 空集） */
+/**
+ * 该模板**可用**的模块 id（原生 + 通用；选择器勾选它，store 全选口径）。
+ * 期三升级：原「原生模块集」语义扩为「可用模块集」——M1/M2/M4 在 D/E/H
+ * 经通用渲染进入可用集。经典 ⇒ 空集。
+ */
 export function printTemplateModuleIds(id: PrintTemplateId): PrintModuleId[] {
   return printTemplateModules(id).map((c) => c.module);
 }
 
+/** 该模板**原生渲染**的模块 id（能力表里 pages 非空的；经典 ⇒ 空集） */
+export function printTemplateNativeModuleIds(id: PrintTemplateId): PrintModuleId[] {
+  return printTemplateModules(id)
+    .filter((c) => c.pages.length > 0)
+    .map((c) => c.module);
+}
+
+/** 该模板**通用渲染**可用的模块 id（pages 空 + generic 标记；经典 ⇒ 空集） */
+export function printTemplateGenericModuleIds(id: PrintTemplateId): PrintModuleId[] {
+  return printTemplateModules(id)
+    .filter((c) => c.pages.length === 0 && c.generic)
+    .map((c) => c.module);
+}
+
+/** (template, module) 在该外表的可用性：原生 / 通用 / 暂不可用（选择器三态） */
+export function moduleAvailability(
+  template: PrintTemplateId,
+  module: PrintModuleId,
+): 'native' | 'generic' | 'off' {
+  const cap = printTemplateModules(template).find((c) => c.module === module);
+  if (!cap) return 'off';
+  return cap.pages.length > 0 ? 'native' : cap.generic ? 'generic' : 'off';
+}
+
 /**
  * (template, module) → 原生页 kind 列表；**非原生 ⇒ null**。
- * 「某外表能不能原生生出某模块」只有这一个出处：选择器禁用态、
- * 期三通用渲染的分界、store 勾选归一化都读它。
+ * 「某外表能不能原生生出某模块」只有这一个出处：选择器原生态标注、
+ * store 勾选归一化都读它。注意 null ≠ 不可用——通用渲染可用的模块
+ * （期三 M1/M2/M4 于 D/E/H）同样返回 null（它们没有原生页）。
  */
 export function nativePagesOf(
   template: PrintTemplateId,
   module: PrintModuleId,
 ): readonly PrintPageKind[] | null {
   const cap = printTemplateModules(template).find((c) => c.module === module);
-  return cap ? cap.pages.map((p) => p.id) : null;
+  return cap && cap.pages.length > 0 ? cap.pages.map((p) => p.id) : null;
 }
 
 /**
- * 勾选态 ⇒ 纸面页序（**注册表原生页序**，与模块勾选顺序无关）。
- * 缺参 / 缺键 = 默认全选 = 旧「页勾选」默认态**逐页等价**（期二回归红线：
- * 四套模板打印输出零变化）。非原生模块不在能力表 ⇒ 永不进纸面、不计页数。
+ * 勾选态 ⇒ 纸面页序（**注册表序 = PRINT_MODULES 的 M1→M11**，与勾选顺序无关）。
+ * 缺参 / 缺键 = 默认全选可用模块（原生 + 通用；01 §8「每套默认全选」的
+ * 期三口径）。原生模块落原生页（M10 落两页），通用模块落通用页。
+ */
+export function enabledSheetsOf(
+  template: PrintTemplateId,
+  modules: readonly PrintModuleId[] | undefined,
+): PrintSheet[] {
+  const caps = printTemplateModules(template);
+  const on = new Set(modules ?? caps.map((c) => c.module));
+  const out: PrintSheet[] = [];
+  for (const cap of caps) {
+    if (!on.has(cap.module)) continue;
+    if (cap.pages.length > 0) {
+      for (const page of cap.pages) out.push({ type: 'native', page: page.id });
+    } else if (cap.generic) {
+      out.push({ type: 'generic', module: cap.module });
+    }
+  }
+  return out;
+}
+
+/**
+ * 勾选态 ⇒ **原生页** kind 列表（通用模块不进本函数；纸面全量用
+ * enabledSheetsOf）。缺参 = 全选可用模块 ⇒ 原生页序与旧「页勾选」默认态
+ * 逐页等价（期二回归红线的保留锚点：四套模板原生输出零变化）。
  */
 export function enabledPagesOf(
   template: PrintTemplateId,
   modules: readonly PrintModuleId[] | undefined,
 ): PrintPageKind[] {
-  const caps = printTemplateModules(template);
-  const on = new Set(modules ?? caps.map((c) => c.module));
   const out: PrintPageKind[] = [];
-  for (const cap of caps) {
-    if (!on.has(cap.module)) continue;
-    for (const page of cap.pages) out.push(page.id);
+  for (const sheet of enabledSheetsOf(template, modules)) {
+    if (sheet.type === 'native') out.push(sheet.page);
   }
   return out;
 }
