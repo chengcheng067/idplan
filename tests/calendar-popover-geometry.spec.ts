@@ -88,6 +88,7 @@ function buildSeedFixture(): string {
     data: {
       projects: Array<Record<string, unknown>>;
       stages: Array<Record<string, unknown>>;
+      settings?: Array<Record<string, unknown>>;
     };
   };
   const now = new Date().toISOString();
@@ -134,6 +135,33 @@ function buildSeedFixture(): string {
   }
   // 夹具自身先过导入预检（与 demo-data.spec.ts 同口径）：漂移当场红，不留给浏览器
   validateBackupJson(pkg);
+
+  /*
+   * 0.8.6.0009：月历条目改为只渲染在工作日（她 10-09 反馈「国庆格排满」，
+   * 见 calendarMath.entryShowsOnDate）。本 spec 考的是浮层几何，旧前提是
+   * 「当月/下个月每天都是拥挤格」（P-03 首列周一 / P-04 末列周日 / P-05 末行）
+   * ⇒ 把 [上月..下月] 全域的周六周日全部钉成补班工作日（extraWorkdays 在
+   * isRestDay 判定链里优先级最高），让几何判据与休息日过滤规则解耦。
+   * normalizeRestPolicy 保留 extraWorkdays（core/holidays/policy.ts），
+   * skipHolidays 缺省 false ⇒ 内置节假日表不合并，钉进去的周末即生效。
+   */
+  const settings = (pkg.data.settings ?? []) as Array<Record<string, unknown>>;
+  const restRow = settings.find((s) => s.key === 'restPolicy');
+  if (restRow) {
+    const workdays: string[] = [];
+    const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const to = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+    for (const d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) workdays.push(isoDay(d));
+    }
+    restRow.valueJson = JSON.stringify({
+      kind: 'double_off',
+      anchorWeek: null,
+      extraWorkdays: workdays,
+    });
+  }
+
   mkdirSync(SHOT_DIR, { recursive: true });
   writeFileSync(SEED_FILE, JSON.stringify(pkg), 'utf8');
   return SEED_FILE;

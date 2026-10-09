@@ -35,6 +35,7 @@ import { useMembersStore } from '../src/store/useMembersStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import { useUiStore } from '../src/store/useUiStore';
 import type { Member, Project, Stage } from '../src/core/types/entities';
+import { DEFAULT_REST_POLICY } from '../src/core/types/entities';
 import {
   MemberActorKind,
   MemberRoleKind,
@@ -193,7 +194,19 @@ function seedStores(): void {
   act(() => {
     useProjectsStore.getState().replaceAll({ projects, stages, tasks: [] });
     useMembersStore.getState().setAll([ADMIN]);
-    useSettingsStore.setState({ currentMemberId: ADMIN.id, hydrated: true });
+    /*
+     * 0.8.6.0009 起月历条目只渲染在工作日（她 10-09 反馈「国庆格排满」，
+     * 见 calendarMath.entryShowsOnDate）。本 spec 考的是拥挤/浮层/焦点，
+     * 前提是「今天格真的是工作日」——把 TODAY 钉成补班工作日（extraWorkdays
+     * 优先级最高）让用例与运行日期解耦：周末跑也不会因今天格零条目而红。
+     */
+    const pinned = { ...DEFAULT_REST_POLICY, extraWorkdays: [TODAY] };
+    useSettingsStore.setState({
+      currentMemberId: ADMIN.id,
+      hydrated: true,
+      restPolicy: pinned,
+      effectiveRestPolicy: pinned,
+    });
     useUiStore.getState().setCalendarMonth(MONTH);
     useUiStore.setState({ calendarFilters: { status: new Set(), stage: new Set() } });
   });

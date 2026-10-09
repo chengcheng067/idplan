@@ -1,4 +1,4 @@
-import type { Project, Stage } from '../../core/types/entities';
+import type { Project, Stage, RestPolicyConfig } from '../../core/types/entities';
 import { dayjs, totalDaysInclusive, remainingDays } from '../../lib/date';
 import {
   pickActiveStage,
@@ -6,6 +6,7 @@ import {
   computeProjectStatus,
   type ProjectCalendarStatus,
 } from '../../lib/progress';
+import { isWorkday } from '../../lib/workdays';
 import { COMPLETED_COLOR, NOT_STARTED_COLOR, OVERDUE_COLOR, stageColorOf } from './calendarColors';
 
 /**
@@ -253,4 +254,37 @@ export function filterEntries(entries: CalendarEntry[], filters: CalendarFilters
     const stageOk = !stageOn || filters.stage.has(e.filterStageIndex);
     return statusOk && stageOk;
   });
+}
+
+/**
+ * 条目在某日是否在月历格内渲染（0.8.6.0009 · 她 10-09 21:35 反馈）。
+ *
+ * ──  bug 与原话 ──
+ * 「设置里面已经选择了『跳过节假日』以及『休息的时间』，但是在月历看板上仍然
+ *   没有跳过这些时间。这意味着，本来国庆节是休息的，但是国庆节却被排满了」。
+ * 根因：格内条目此前只按色带区间投影（bandStart ≤ 日 ≤ bandEnd），**不看这天
+ * 是否休息**——格子底纹说「这天休息」（bg-rest-day + 节日名小字）而条目圆点说
+ * 「这天有活」，同一格两套语言自相矛盾（她截图里国庆格正是灰底 + 5 个项目）。
+ *
+ * ── 规则：休息日格不渲染工作条目（底纹 / 节日名小字照旧，只清条目）──
+ * 三种投影形态各自的结果：
+ *   ① 阶段**跨**休息日（如 9/28–10/9 跨国庆）：**不整条消失**——非休息日格
+ *      照常渲染（9/28–9/30、10/9 有条目；10/1–10/7 没有）；
+ *   ② 阶段**整天**在休息日内（如 10/1–10/7）：区间内无可渲染日 ⇒ 月/周格内
+ *      一格都不出现（议程视图是项目清单、非逐日投影，不受本规则影响，条目仍在）；
+ *   ③ 单日投影落休息日（未开始幽灵点 plannedStart 落国庆 / 逾期终点落休息日
+ *      等）：当日不渲染。
+ *
+ * ── 判定口径 ──
+ * 一律走**生效制度** `policy`（调用方传 effectiveRestPolicy）：skipHolidays 开时
+ * 已合并内置法定节假日表，extraWorkdays 优先级最高 ⇒ 调休补班的周六/周日**照常**
+ * 渲染条目（「班」就是要上班，isRestDay 判定链本就如此）。开关关着 ⇒ 纯周末/
+ * 制度口径，与改造前一致（节假日不合并 ⇒ 国庆格照旧渲染，她没要求跳过）。
+ */
+export function entryShowsOnDate(
+  entry: CalendarEntry,
+  date: string,
+  policy: RestPolicyConfig,
+): boolean {
+  return entry.bandStart <= date && date <= entry.bandEnd && isWorkday(date, policy);
 }

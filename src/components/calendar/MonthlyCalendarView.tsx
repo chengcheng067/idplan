@@ -22,6 +22,7 @@ import {
   shiftMonth,
   computeCalendarEntry,
   filterEntries,
+  entryShowsOnDate,
   stageSpan,
   type CalendarEntry,
   type CalendarMonthMeta,
@@ -289,8 +290,17 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
     return (date: string): string | null => holidayLabelOf(index, date);
   }, [rawRestPolicy.skipHolidays]);
 
+  /**
+   * 当日条目（0.8.6.0009 起叠加**休息日过滤**）：色带区间命中只是第一条件，
+   * 该天还必须真的是工作日（effectiveRestPolicy 口径）——格子底纹说「这天休息」
+   * （bg-rest-day + 节日名小字）而条目圆点说「这天有活」自相矛盾，她的原话：
+   * 「本来国庆节是休息的，但是国庆节却被排满了」。
+   * 跨休息日的阶段只在其非休息日格渲染（不是整条消失）；整段落在休息日内的
+   * 条目一格都不渲染；调休补班日照常渲染（extraWorkdays 优先级最高）。
+   * 规则本体与三态判例见 calendarMath.entryShowsOnDate。
+   */
   const entriesOnDate = (date: string): CalendarEntry[] =>
-    finalEntries.filter((e) => e.bandStart <= date && e.bandEnd >= date);
+    finalEntries.filter((e) => entryShowsOnDate(e, date, restPolicy));
 
   const open = (projectId: string): void => navigate(`/project/${projectId}`);
 
