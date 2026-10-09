@@ -72,6 +72,7 @@ import { EDITORIAL_INDEX_PAGES } from '../src/print/documents/EditorialIndexDocu
 import { SWISS_SCHEDULE_PAGES } from '../src/print/documents/SwissScheduleDocument';
 import type { PrintPageKind } from '../src/print/model/print-view-model';
 import { PRINT_PREFS_STORAGE_KEY, usePrintPrefsStore } from '../src/store/usePrintPrefsStore';
+import { useLayoutStore } from '../src/store/useLayoutStore';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useMembersStore } from '../src/store/useMembersStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
@@ -1048,6 +1049,41 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
       closeBtn!.click();
     });
     expect(document.querySelector('[data-print-selector-panel]'), '✕ 后面板应消失').toBeNull();
+  });
+
+  it('打印预览遮罩让出侧栏（她 10-09 23:38 反馈：fullscreen + railLeft，xl 随折叠随缘）', () => {
+    // jsdom 的 matchMedia.matches 恒 false ⇒ 打桩成 ≥xl（1280）再挂对话框
+    const original = window.matchMedia;
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes('1280'),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+      onchange: null,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      // 侧栏展开 ⇒ 遮罩左缘让出 240（与 CSS --sidebar-w 同值）
+      act(() => {
+        useLayoutStore.setState({ sidebarExpanded: true });
+      });
+      renderDialog(true);
+      const overlay = document.querySelector<HTMLElement>('[role="dialog"][aria-label="打印预览"]');
+      expect(overlay, '打印预览遮罩应在').not.toBeNull();
+      expect(overlay!.style.left, '≥xl 预览遮罩应从侧栏右缘起（让出 240）').toBe('240px');
+      // 折叠侧栏 ⇒ 左缘随缘到 64（活的要件：预览打开期间侧栏仍可折叠）
+      act(() => {
+        useLayoutStore.setState({ sidebarExpanded: false });
+      });
+      expect(
+        document.querySelector<HTMLElement>('[role="dialog"][aria-label="打印预览"]')!.style.left,
+        '侧栏折叠后遮罩左缘随缘到 64',
+      ).toBe('64px');
+    } finally {
+      window.matchMedia = original;
+    }
   });
 });
 

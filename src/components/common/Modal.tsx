@@ -66,6 +66,9 @@ function overlayZClass(placement: ModalPlacement, zTier?: 60 | 70 | 75 | 78): st
  *   左缘滑入），但**遮罩左缘让出 `railLeft` 像素**——让出的正是常驻侧栏：
  *   设置抽屉贴侧栏右缘展开，侧栏保持可见可点（她想设置时还能切侧栏）。
  *   消费者：SettingsDialog（≥xl 侧栏宽度 240/64；<xl 传 '0px' 即全屏）。
+ *   她 10-09 23:38 反馈「日程表打印预览的窗口不要超过左侧的侧边栏」：
+ *   `fullscreen` 档同样接受可选 `railLeft`（≥xl 传侧栏宽度，预览从侧栏右缘
+ *   起、侧栏不被压暗；不传 = 全宽，<xl 现状）。消费者：PrintPreviewDialog。
  *
  * 注意：`glass-strong / iridescent-border` 等玻璃样式请放在子面板（children 内）上，
  * 不要加到外层遮罩上——遮罩由本组件统一渲染，否则玻璃自身又变成新的固定包含块。
@@ -91,6 +94,9 @@ export function Modal({
    *   left-rail   左侧贴缘抽屉（v0.8.6.0002 · 反馈 #1）——同 left 几何，但遮罩
    *               左缘让出 railLeft（常驻侧栏宽度）：抽屉贴侧栏右缘展开，
    *               侧栏不被遮罩压住、保持可见可点
+   *   fullscreen  全屏面板（打印预览）。同样接受可选 railLeft：传了 ⇒ 遮罩
+   *               （与面板）左缘让出该宽度（≥xl 侧栏宽度，侧栏可见可点）；
+   *               不传 ⇒ 全宽（<xl 无持久侧栏的现状）
    */
   placement?: ModalPlacement;
   /** 无障碍标签，读屏用 */
@@ -102,9 +108,15 @@ export function Modal({
    */
   zTier?: 60 | 70 | 75 | 78;
   /**
-   * `placement='left-rail'` 专用：遮罩（与抽屉）左缘让出的宽度，CSS 长度
-   * （如 '240px' / '64px' / '0px'）。≥xl 传侧栏宽度（展开 240 / 收起 64），
-   * <xl 无持久侧栏传 '0px'（全屏，与 left 档一致）。
+   * 遮罩左缘让出的宽度，CSS 长度（如 '240px' / '64px' / '0px'）。
+   *
+   * `placement='left-rail'`（v0.8.6.0002 · 反馈 #1）：≥xl 传侧栏宽度
+   * （展开 240 / 收起 64），<xl 传 '0px'（全屏，与 left 档一致）。
+   *
+   * `placement='fullscreen'`（她 10-09 23:38 反馈「日程表打印预览的窗口不要
+   * 超过左侧的侧边栏」）：**可选**——传了就把遮罩（与全屏面板）左缘让到该
+   * 宽度（≥xl 的侧栏宽度：侧栏全程可见可点、不被压暗）；不传（undefined）
+   * 保持全宽（<xl 无持久侧栏 ⇒ 现状不变）。bg / z 档不随本参数变。
    */
   railLeft?: string;
   /**
@@ -278,6 +290,10 @@ export function Modal({
       //    v0.8.6.0002 · 反馈 #1：`left-rail` 档在此之上把**左缘**推到 railLeft
       //    （内联 style 覆盖 inset-x-0 的 left:0）——遮罩只压内容区，常驻侧栏
       //    保持可见可点；抽屉是遮罩的 flex 首子项，随之贴侧栏右缘展开。
+      //    她 10-09 23:38 反馈「日程表打印预览的窗口不要超过左侧的侧边栏」：
+      //    `fullscreen` 档同样支持 railLeft（可选）——传了就把遮罩左缘让到侧栏
+      //    宽度（≥xl 打印预览从侧栏右缘起，侧栏全程可见可点）；不传保持全宽
+      //    （<xl 无持久侧栏的现状）。bg / z 档不随本参数变。
       className={`fixed inset-x-0 bottom-0 max-md:top-[100px] md:top-14 xl:top-16 ${
         placement === 'center'
           ? 'bg-ink/45'
@@ -292,7 +308,13 @@ export function Modal({
                 : // left / left-rail 同层同浓度（z-60 / bg-ink/25）
                   'bg-ink/25'
       } ${overlayZClass(placement, zTier)}`}
-      style={placement === 'left-rail' ? { left: railLeft ?? '0px' } : undefined}
+      style={
+        placement === 'left-rail'
+          ? { left: railLeft ?? '0px' }
+          : placement === 'fullscreen' && railLeft !== undefined
+            ? { left: railLeft }
+            : undefined
+      }
     >
       {/* 点击关闭判定放在锚点面板（e.currentTarget）上而非遮罩：因为面板是 flex 容器且覆盖内容区，
           点面板自身的空白区域（子面板之外）即关闭，点子面板内部不关闭。这样居中/右侧抽屉一致生效，
