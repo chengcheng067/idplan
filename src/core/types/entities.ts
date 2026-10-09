@@ -530,12 +530,17 @@ export interface RestPolicyConfig {
    * 制度的休息日语义不同（单休一天 / 双休两天），合并字段会让「休几天」
    * 也要从数组长度推断，反而多一个失真源。
    *
-   * 口径：0=周一 … 6=周日（与 singleRestWeekday / 仓库周一始终口径一致），
-   * **升序存盘**（[a,b] 且 a<b；同一天休两次无意义，逆序一律归一时拒绝）。
-   * 缺省/非法 ⇒ 读时回落 [5,6]（周六+周日，与改造前逐字节一致）⇒
-   * **旧数据无迁移脚本**（手法同 singleRestWeekday）。
+   * 口径：0=周一 … 6=周日（与 singleRestWeekday / 仓库周一始终口径一致）。
+   * **存盘形状恒为「两整数、严格升序」**（[a,b] 且 a<b；同一天休两次无意义，
+   * 逆序一律归一时拒绝）；缺省/非法 ⇒ 读时回落 [5,6]（周六+周日，与改造前
+   * 逐字节一致）⇒ **旧数据无迁移脚本**（手法同 singleRestWeekday）。
+   *
+   * 类型放宽为 number[] 而非 [number, number]：编辑器多选有「取消到剩 1 天」
+   * 的编辑瞬态（保存闸门要求选满两天才准存盘，见 RestPolicyDialog 的
+   * doubleComplete 检查）——用元组会逼瞬态走 hack 占位。归一边界
+   * （normalizeRestPolicy）只收 length===2 严格升序，瞬态落不了库。
    */
-  doubleRestWeekdays?: [number, number];
+  doubleRestWeekdays?: number[];
   /** 法定节假日预留扩展点（MVP 不接数据）：命中即休息，优先级低于 extraWorkdays */
   extraHolidays?: string[];
   /** 调休上班日预留扩展点（MVP 不接数据）：命中即上班，优先级最高 */

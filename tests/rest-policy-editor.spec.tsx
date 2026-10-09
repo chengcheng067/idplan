@@ -287,6 +287,150 @@ describe('RestPolicyEditor：草稿与 saved 同步（hydrate / 编辑门 / 重�
   });
 });
 
+/* ------------------------------ 双休自定义多选（§4.6） ------------------------------ */
+
+function doubleBtn(idx: number): HTMLButtonElement {
+  const btn = container.querySelector(`[data-testid="double-rest-day-${idx}"]`) as HTMLButtonElement | null;
+  if (!btn) throw new Error(`未找到双休日按钮：${idx}`);
+  return btn;
+}
+
+function doubleBox(): HTMLElement | null {
+  return container.querySelector('[data-testid="double-rest-weekdays"]');
+}
+
+describe('RestPolicyEditor：双休自定义两个休息日（多选，§4.6）', () => {
+  it('双休档出现多选块，默认周六(5)+周日(6)选中；单休/大小休档隐藏', () => {
+    renderEditor();
+    expect(doubleBox()).not.toBeNull();
+    expect(doubleBtn(5).getAttribute('aria-pressed')).toBe('true');
+    expect(doubleBtn(6).getAttribute('aria-pressed')).toBe('true');
+    for (const idx of [0, 1, 2, 3, 4]) {
+      expect(doubleBtn(idx).getAttribute('aria-pressed')).toBe('false');
+    }
+    expect(doubleBox()?.textContent).toContain('周六 + 周日');
+    pickKind('单休');
+    expect(doubleBox()).toBeNull();
+    pickKind('双休');
+    expect(doubleBox()).not.toBeNull();
+    pickKind('大小休');
+    expect(doubleBox()).toBeNull();
+  });
+
+  it('满两天忽略：默认态点未选日不生效', () => {
+    renderEditor();
+    act(() => {
+      doubleBtn(0).click(); // 周一：已满两天 → 忽略
+    });
+    expect(doubleBtn(0).getAttribute('aria-pressed')).toBe('false');
+    expect(doubleBtn(5).getAttribute('aria-pressed')).toBe('true');
+    expect(doubleBtn(6).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('取消 + 加入：周日取消 → 周一加入 → (0,5) 升序，标题行「周一 + 周六」', () => {
+    renderEditor();
+    act(() => {
+      doubleBtn(6).click(); // 取消周日
+    });
+    expect(doubleBtn(6).getAttribute('aria-pressed')).toBe('false');
+    expect(doubleBtn(5).getAttribute('aria-pressed')).toBe('true');
+    act(() => {
+      doubleBtn(0).click(); // 加入周一
+    });
+    expect(doubleBtn(0).getAttribute('aria-pressed')).toBe('true');
+    expect(doubleBox()?.textContent).toContain('周一 + 周六');
+    // 「恢复默认」钮出现（非默认态）
+    expect(container.querySelector('[data-testid="double-rest-restore"]')).not.toBeNull();
+  });
+
+  it('至少保留一天：取消到剩 1 天后再点已选 → 忽略 + 出现「需选满两天」提示', () => {
+    renderEditor();
+    act(() => {
+      doubleBtn(6).click(); // 剩 (5,)
+    });
+    expect(doubleBox()?.querySelector('[data-testid="double-rest-incomplete"]')).not.toBeNull();
+    act(() => {
+      doubleBtn(5).click(); // 最后一个 → 忽略
+    });
+    expect(doubleBtn(5).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('恢复默认（周六+周日）钮：点击后回默认且钮消失', () => {
+    renderEditor();
+    act(() => {
+      doubleBtn(6).click();
+      doubleBtn(0).click();
+    });
+    const restore = container.querySelector('[data-testid="double-rest-restore"]') as HTMLButtonElement;
+    expect(restore).not.toBeNull();
+    act(() => {
+      restore.click();
+    });
+    expect(doubleBtn(5).getAttribute('aria-pressed')).toBe('true');
+    expect(doubleBtn(6).getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('[data-testid="double-rest-restore"]')).toBeNull();
+  });
+
+  it('保存 → settings 落库 doubleRestWeekdays=[0,5]（升序）+ store 镜像', async () => {
+    renderEditor();
+    act(() => {
+      doubleBtn(6).click();
+      doubleBtn(0).click();
+    });
+    const saveBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('保存'),
+    );
+    await act(async () => {
+      saveBtn!.click();
+    });
+    expect(hoisted.settingsSet).toHaveBeenCalledTimes(1);
+    const draft = hoisted.settingsSet.mock.calls[0][1] as RestPolicyConfig;
+    expect(draft.kind).toBe(RestPolicyKind.DoubleOff);
+    expect(draft.doubleRestWeekdays).toEqual([0, 5]);
+    expect(useSettingsStore.getState().restPolicy.doubleRestWeekdays).toEqual([0, 5]);
+  });
+
+  it('保存闸门：1 天瞬态 → 保存按钮禁用 + 点击不落库', async () => {
+    renderEditor();
+    act(() => {
+      doubleBtn(6).click(); // 剩 (5,)
+    });
+    const saveBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('保存'),
+    ) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    await act(async () => {
+      saveBtn.click();
+    });
+    expect(hoisted.settingsSet).not.toHaveBeenCalled();
+  });
+
+  it('已存 [0,4] 读回高亮（周一+周五）', () => {
+    act(() => {
+      useSettingsStore.setState({
+        restPolicy: { kind: RestPolicyKind.DoubleOff, anchorWeek: null, doubleRestWeekdays: [0, 4] },
+        effectiveRestPolicy: {
+          kind: RestPolicyKind.DoubleOff,
+          anchorWeek: null,
+          doubleRestWeekdays: [0, 4],
+        },
+      });
+    });
+    renderEditor();
+    expect(doubleBtn(0).getAttribute('aria-pressed')).toBe('true');
+    expect(doubleBtn(4).getAttribute('aria-pressed')).toBe('true');
+    expect(doubleBtn(5).getAttribute('aria-pressed')).toBe('false');
+    expect(doubleBtn(6).getAttribute('aria-pressed')).toBe('false');
+    expect(doubleBox()?.textContent).toContain('周一 + 周五');
+  });
+
+  it('skipHolidays 脚注：重算上线后旧文案「已排定的阶段日期不变」已不在 DOM', () => {
+    renderEditor();
+    expect(container.textContent).not.toContain('已排定的阶段日期不变');
+    expect(container.textContent).toContain('重算已排阶段');
+  });
+});
+
 describe('hydrate 边界：singleRestWeekday 归一', () => {
   it('0-6 原样保留', () => {
     for (const v of [0, 1, 2, 3, 4, 5, 6]) {

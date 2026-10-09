@@ -148,6 +148,43 @@ export function RestPolicyEditor({
     return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 6 ? v : 6;
   }, [draft.singleRestWeekday]);
 
+  /**
+   * 双休的两个休息日（§4.6 多选）。缺省/非法回落 [5,6] 周六+周日；
+   * 归一为「合法值 + 升序」的数组（编辑瞬态可短至 1 天，见 toggleDoubleDay）。
+   */
+  const doubleDays = useMemo(() => {
+    const v = draft.doubleRestWeekdays;
+    if (!Array.isArray(v)) return [5, 6];
+    const clean = v
+      .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      .sort((a, b) => a - b);
+    return clean.length > 0 ? clean : [5, 6];
+  }, [draft.doubleRestWeekdays]);
+  /** 双休必须选满两天才准保存（1 天 = 编辑瞬态，0 天 = 全年无休是数据事故） */
+  const doubleComplete = doubleDays.length === 2;
+  const isDefaultDoubleDays = doubleComplete && doubleDays[0] === 5 && doubleDays[1] === 6;
+
+  /**
+   * 双休多选交互（§4.6）：点未选 = 加入（满两天忽略）；点已选 = 取消
+   * （至少保留一天——取消到 0 天等于全年无休，绝非用户所求）。连续两天与
+   * 分开两天都允许（集合无序语义，升序归一后存盘）。
+   */
+  const toggleDoubleDay = (idx: number): void => {
+    updateDraft((prev) => {
+      const cur = Array.isArray(prev.doubleRestWeekdays)
+        ? prev.doubleRestWeekdays
+            .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+            .sort((a, b) => a - b)
+        : [5, 6];
+      if (cur.includes(idx)) {
+        if (cur.length <= 1) return prev; // 最后一个不取消
+        return { ...prev, doubleRestWeekdays: cur.filter((d) => d !== idx) };
+      }
+      if (cur.length >= 2) return prev; // 满两天忽略
+      return { ...prev, doubleRestWeekdays: [...cur, idx].sort((a, b) => a - b) };
+    });
+  };
+
   /** 切换制度：切到大小休且锚点不可用时，以本周为大休周起算 */
   const onPickKind = (kind: RestPolicyKind): void => {
     updateDraft((prev) => ({
@@ -185,6 +222,11 @@ export function RestPolicyEditor({
   };
 
   const onSave = async (): Promise<void> => {
+    // 双休未选满两天 ⇒ 拒存（1 天是编辑瞬态；双休语义 = 一周休两天）
+    if (draft.kind === RestPolicyKind.DoubleOff && !doubleComplete) {
+      useProjectsStore.getState().pushToast('error', '双休需选满两个休息日才能保存。');
+      return;
+    }
     setSaving(true);
     try {
       // 口径未变（同制度内微调/无实质差异）→ 直接保存，无需重算
@@ -272,7 +314,7 @@ export function RestPolicyEditor({
         </label>
         <p className="mt-1.5 text-[11px] leading-relaxed text-mist">
           内置 {cnHolidayYears().join(' / ')} 年法定节假日与调休补班日安排（来源：国务院办公厅
-          年度通知），次年安排公布后随版本更新。开启后仅影响新排期，已排定的阶段日期不变。
+          年度通知），次年安排公布后随版本更新。开启后保存时，可按新口径重算已排阶段（保存前有确认预览）。
         </p>
       </div>
 
@@ -327,6 +369,71 @@ export function RestPolicyEditor({
           <p className="mt-2 text-[11px] leading-relaxed text-mist">
             默认周日（与历史行为一致）。改为周内单休后，保存时可按新口径重算已排阶段。
           </p>
+        </div>
+      )}
+
+      {/*
+        双休：自定义两个休息日 = 周A + 周B 多选（v3 §4.6，需求方拍板「双休在
+        周内的连续两天，还是分开的（比如休星期六和星期一）」）。索引 0..6 =
+        周一..周日（与 WEEKDAY_LABELS 同序），缺省 = [5,6] 周六+周日（旧数据
+        无迁移）。交互：点未选=加入（满两天忽略）；点已选=取消（至少留一天）。
+        判定侧见 lib/workdays.ts isRestDay 的 DoubleOff 分支。
+      */}
+      {draft.kind === RestPolicyKind.DoubleOff && (
+        <div
+          className="mt-4 rounded-[12px] border border-line bg-cream/60 p-3"
+          data-testid="double-rest-weekdays"
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-xs text-mist">
+              双休休息日 ={' '}
+              <span className="text-ink">
+                {doubleDays.map((d) => `周${WEEKDAY_LABELS[d]}`).join(' + ')}
+              </span>
+              （每周休这{doubleComplete ? '两天' : '一天，再选一天'}）
+            </span>
+            {!isDefaultDoubleDays && (
+              <button
+                type="button"
+                onClick={() => updateDraft((prev) => ({ ...prev, doubleRestWeekdays: undefined }))}
+                data-testid="double-rest-restore"
+                className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
+                title="恢复出厂口径：周六+周日"
+              >
+                恢复默认（周六+周日）
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {WEEKDAY_LABELS.map((w, idx) => (
+              <button
+                key={w}
+                type="button"
+                data-testid={`double-rest-day-${idx}`}
+                aria-pressed={doubleDays.includes(idx)}
+                onClick={() => toggleDoubleDay(idx)}
+                className={cn(
+                  'flex h-8 items-center justify-center rounded-[8px] border text-xs transition-colors',
+                  doubleDays.includes(idx)
+                    ? 'border-pine bg-pine-soft text-ink'
+                    : 'border-line text-mist hover:bg-sand hover:text-ink',
+                )}
+              >
+                周{w}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-2 text-[11px] leading-relaxed text-mist">
+            连续两天或分开两天都可以。已选两天后点其他日期不生效；点已选可取消
+            （至少保留一天）。改为自定义双休日后，保存时可按新口径重算已排阶段。
+          </p>
+          {!doubleComplete && (
+            <p className="mt-1 text-[11px] font-medium text-clay" data-testid="double-rest-incomplete">
+              双休需选满两个休息日才能保存。
+            </p>
+          )}
         </div>
       )}
 
@@ -409,7 +516,7 @@ export function RestPolicyEditor({
           <button
             type="button"
             onClick={() => void onSave()}
-            disabled={saving}
+            disabled={saving || (draft.kind === RestPolicyKind.DoubleOff && !doubleComplete)}
             className={cn(
               'rounded-md px-3 py-1.5 text-sm text-white transition-colors',
               saving ? 'bg-pine-soft text-mist' : 'bg-pine hover:bg-pine-deep',

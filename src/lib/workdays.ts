@@ -108,13 +108,15 @@ function singleRestDayjsDow(singleRestWeekday: number | undefined): number {
 }
 
 /**
- * 双休的自定义两个休息日（RestPolicyConfig.doubleRestWeekdays，0=周一…6=周日，
- * 升序；缺省/非法 = [5,6] 周六+周日）→ dayjs day() 口径集合（0=周日…6=周六）。
+ * 双休的自定义休息日（RestPolicyConfig.doubleRestWeekdays，0=周一…6=周日；
+ * 缺省/非法 = [5,6] 周六+周日）→ dayjs day() 口径集合（0=周日…6=周六）。
  *
  * 换算同 singleRestDayjsDow（字段是周一始终口径，dayjs 的 day() 是周日开头）。
  * 缺省 = [5,6] ⇒ 与改造前「双休=周六+周日休」逐字节一致，无迁移脚本。
+ * 容忍编辑器「取消到剩 1 天」的编辑瞬态（length===1 ⇒ 单元素集合）；
+ * 存盘形状由 normalize 边界保证恒为两整数升序。
  */
-function doubleRestDayjsDows(doubleRestWeekdays: [number, number] | undefined): Set<number> {
+function doubleRestDayjsDows(doubleRestWeekdays: number[] | undefined): Set<number> {
   const out = new Set<number>();
   for (const v of doubleRestWeekdays ?? [5, 6]) {
     if (!Number.isInteger(v) || v < 0 || v > 6) continue;
