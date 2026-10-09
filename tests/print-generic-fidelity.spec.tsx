@@ -275,19 +275,25 @@ describe('期七 · F3 E×M2 巨编号降级 mono', () => {
  * F4 · H×M2 ≤8 卡化（§2.6.4 左栏联动规则）
  * ==================================================================================== */
 
-describe('期七 · F4 H×M2 状态分组卡化（≤8 条）', () => {
-  it('≤8 条：左栏状态分组卡（ap-status__card 同构）+ 右栏省略', () => {
+describe('期七 · F4 H×M2 双栏状态分组卡化（≤8 条，新稿 H P1 形态）', () => {
+  it('≤8 条：双栏（进行中 / 待命与终局）+ 栏间橙粗线 + 状态标签底色；右栏省略', () => {
     const vm = buildVm(6, 8);
     const d = doc(renderDoc('agent-poster', vm, genericSheet('task-list')));
-    expect(d.querySelector('.gm-blocks'), '卡化模式不走双栏').toBeNull();
-    const cards = d.querySelectorAll('.ap-status__card');
-    expect(cards.length, '应按任务七态出卡（8 条覆盖全部七态）').toBe(7);
-    // 卡同构 ExecutionStatusPage：glyph + 状态名 + key + 计数
-    const card = cards[0]!;
-    expect(card.querySelector('.ap-status__card-glyph')).not.toBeNull();
-    expect(card.querySelector('.ap-status__card-name')).not.toBeNull();
-    expect(card.querySelector('.ap-status__card-key')).not.toBeNull();
-    expect(card.querySelector('.ap-status__card-count')!.textContent).toBe('2');
+    expect(d.querySelector('.gm-blocks'), '卡化模式不走双栏摘要').toBeNull();
+    // 双栏：8 条覆盖七态 ⇒ 「进行中」栏 4 条 + 「待命与终局」栏 4 条
+    const cols = d.querySelectorAll('.gm-task-col');
+    expect(cols).toHaveLength(2);
+    expect(cols[0]!.querySelector('.gm-task-col__label')!.textContent).toContain('进行中');
+    expect(cols[1]!.querySelector('.gm-task-col__label')!.textContent).toContain('待命与终局');
+    // 每条任务一行：任务名 + 状态标签（8 行全覆盖，一条不丢）
+    const rows = d.querySelectorAll('.gm-task-col__row');
+    expect(rows).toHaveLength(8);
+    // 状态标签：门控态（受阻/待审）橙底、其他墨底（data-tone 分流，CSS 落地在 a4 spec）
+    const tags = Array.from(d.querySelectorAll('.gm-task-tag'));
+    expect(tags).toHaveLength(8);
+    expect(tags.some((t) => t.getAttribute('data-tone') === 'gate')).toBe(true);
+    expect(tags.some((t) => t.getAttribute('data-tone') === 'sys')).toBe(true);
+    // 右栏省略（卡化模式）
     expect(d.querySelector('.gm-panel'), '卡化模式右栏省略').toBeNull();
   });
 
@@ -295,7 +301,7 @@ describe('期七 · F4 H×M2 状态分组卡化（≤8 条）', () => {
     const vm = buildVm(6, 9);
     const d = doc(renderDoc('agent-poster', vm, genericSheet('task-list')));
     expect(d.querySelectorAll('.gm-block-row')).toHaveLength(9);
-    expect(d.querySelector('.ap-status__card'), '>8 条不出卡').toBeNull();
+    expect(d.querySelector('.gm-task-cols'), '>8 条不出双栏卡').toBeNull();
     expect(d.querySelector('.gm-panel__title')!.textContent).toBe('任务状态分布');
   });
 });
@@ -427,6 +433,95 @@ describe('期七 · F6 blocks 右栏三模块（字段级）', () => {
     const leftRow = d.querySelector('.gm-block-row')!;
     expect(leftRow.textContent).not.toContain('10%');
     expect(leftRow.textContent).not.toContain('任务');
+  });
+});
+
+/* ====================================================================================
+ * F8 · 期七深化（对照四张新稿的签名特性补齐）
+ * ==================================================================================== */
+
+describe('期七 · F8 新稿签名特性补齐（分组 / 双色条 / 元信息行 / 右栏权重）', () => {
+  it('A×M1 三列 = 前期/中期/后期分组（组头标签 + 组内按序归属，非轮分）', () => {
+    const vm = buildVm(9, 0);
+    const d = doc(renderDoc('swiss-schedule', vm, genericSheet('stage-list')));
+    const phases = Array.from(d.querySelectorAll('.gm-phase__label')).map((el) =>
+      (el.textContent ?? '').replace(/\s+/g, ''),
+    );
+    expect(phases).toEqual(['前期/PREP', '中期/BUILD', '后期/CLOSE']);
+    // 组内归属：第 1 组 = 01-03、第 2 组 = 04-06、第 3 组 = 07-09（按序切组）
+    const cols = d.querySelectorAll('.gm-staggered__col');
+    expect(cols).toHaveLength(3);
+    const nosOf = (col: Element): string[] =>
+      Array.from(col.querySelectorAll('.gm-card__no')).map((n) => n.textContent ?? '');
+    expect(nosOf(cols[0]!)).toEqual(['01', '02', '03']);
+    expect(nosOf(cols[1]!)).toEqual(['04', '05', '06']);
+    expect(nosOf(cols[2]!)).toEqual(['07', '08', '09']);
+    // 组头计数（每组条数）
+    expect(cols[0]!.querySelector('.gm-phase__count')!.textContent).toBe('3');
+  });
+
+  it('D×M1 进度条双色编码 + 段内白字百分比（≥15% 嵌段内，更窄落条外）', () => {
+    const vm = buildVm(6, 0);
+    const d = doc(renderDoc('data-editorial', vm, genericSheet('stage-list')));
+    const rows = d.querySelectorAll('.gm-row');
+    // 阶段 1：done 1/4 = 25% ≥15 ⇒ 段内白字
+    const r1 = rows[0]!;
+    expect(r1.querySelector('.gm-bar__num')!.textContent).toBe('25%');
+    expect(r1.querySelector('.de-bar__num')!.textContent).toBe('1/4');
+    // 阶段 3：done 0/4 = 0% <15 ⇒ 百分比落条外
+    const r3 = rows[2]!;
+    expect(r3.querySelector('.gm-bar__num'), '窄段不硬塞段内字').toBeNull();
+    expect(r3.querySelector('.de-bar__num')!.textContent).toContain('0%');
+  });
+
+  it('E 元信息行：通用模块「可见阶段 N · 完成度 X%」+ 原生三页同版式', () => {
+    const vm = buildVm(6, 8);
+    // 产出物页要有数据才出主体（空态走 EmptyPrintState，无元信息行）
+    vm.tasks[0]!.artifacts = [
+      { id: 'art_f8_1', kind: 'doc', title: '会议纪要', path: null, url: null, note: null },
+      { id: 'art_f8_2', kind: 'file', title: '测绘图', path: null, url: null, note: null },
+    ];
+    // 通用（E×M1）：模块头计数行即元信息行文案
+    const g = doc(renderDoc('editorial-index', vm, genericSheet('stage-list')));
+    expect(g.querySelector('.gm-head__count')!.textContent).toBe('可见阶段 6 · 完成度 50%');
+    // 原生 P1：元信息行上纸（新稿口径）
+    const n1 = doc(renderDoc('editorial-index', vm, [{ type: 'native', page: 'stage-index' }]));
+    expect(n1.querySelector('.ei-meta')!.textContent).toBe('可见阶段 6 · 完成度 50%');
+    // 原生 P2/P3：同版式元信息行
+    const n2 = doc(renderDoc('editorial-index', vm, [{ type: 'native', page: 'member-index' }]));
+    expect(n2.querySelector('.ei-meta')!.textContent).toBe('成员 3 人 · Agent 1');
+    const n3 = doc(renderDoc('editorial-index', vm, [{ type: 'native', page: 'artifact-index' }]));
+    expect(n3.querySelector('.ei-meta')!.textContent).toContain('产出物');
+    expect(n3.querySelector('.ei-meta')!.textContent).toContain('关联任务');
+  });
+
+  it('A 原生 P1 三列同样按前期/中期/后期分组（原生页补齐，非轮分）', () => {
+    const vm = buildVm(9, 0);
+    const d = doc(renderDoc('swiss-schedule', vm, [{ type: 'native', page: 'stage-overview' }]));
+    const labels = Array.from(d.querySelectorAll('.swiss-column__label')).map((el) =>
+      (el.textContent ?? '').replace(/\s+/g, ''),
+    );
+    expect(labels).toEqual(['前期/PREP', '中期/BUILD', '后期/CLOSE']);
+    const cols = d.querySelectorAll('.swiss-column');
+    const nosOf = (col: Element): string[] =>
+      Array.from(col.querySelectorAll('.swiss-stage-row__no')).map((n) => (n.textContent ?? '').trim());
+    expect(nosOf(cols[0]!)).toEqual(['01', '02', '03']);
+    expect(nosOf(cols[2]!)).toEqual(['07', '08', '09']);
+  });
+
+  it('H×M2 双栏卡：进行中 / 待命与终局两栏 + 门控态橙底标签（data-tone 分流）', () => {
+    const vm = buildVm(6, 8);
+    const d = doc(renderDoc('agent-poster', vm, genericSheet('task-list')));
+    const labels = Array.from(d.querySelectorAll('.gm-task-col__label')).map((el) =>
+      (el.textContent ?? '').replace(/\s+/g, ''),
+    );
+    expect(labels[0]).toContain('进行中');
+    expect(labels[1]).toContain('待命与终局');
+    // 门控态（受阻 blocked / 待审 review）走 gate tone
+    const gateTags = Array.from(d.querySelectorAll('.gm-task-tag[data-tone="gate"]'));
+    expect(gateTags.length, '8 条中 blocked+review 各一条').toBe(2);
+    // 任务名上纸（每条一行，非状态计数卡）
+    expect(d.querySelector('.gm-task-col__name')!.textContent).toContain('任务');
   });
 });
 

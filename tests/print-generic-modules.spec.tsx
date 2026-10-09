@@ -214,9 +214,10 @@ describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同�
     const vm = buildVm();
     const d = doc(renderDoc('data-editorial', vm, [{ type: 'generic', module: 'stage-list' }]));
     const page = d.querySelector('[data-print-page="generic-stage-list"]')!;
-    // 模块头 + 计数行（N 阶段 · 完成度 · 任务）
+    // 模块头 + 元信息行（期七深化：新稿 E P1 口径「可见阶段 N · 完成度 X%」）
     expect(page.querySelector('.gm-head__label')!.textContent).toBe('阶段清单');
-    expect(page.querySelector('.gm-head__count')!.textContent).toContain('6 阶段');
+    expect(page.querySelector('.gm-head__count')!.textContent).toContain('可见阶段 6');
+    expect(page.querySelector('.gm-head__count')!.textContent).toContain('完成度 50%');
     // 期七 D×M1：KPI 带三格（已完成/延期/占比）——复用原生 de-stat 视觉
     const kpi = page.querySelector('.gm-kpi');
     expect(kpi, 'D×M1 应有 KPI 带').not.toBeNull();
@@ -238,10 +239,11 @@ describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同�
     expect(rows).toHaveLength(6);
     expect(rows[0]!.querySelector('.gm-cell-no')!.textContent).toBe('01');
     expect(rows[0]!.querySelector('.gm-cell-date')!.textContent).toBe('2026-01-05 — 2026-01-20');
-    // 行内进度条（复用原生 de-bar；done/total · 百分比）
+    // 行内进度条（复用原生 de-bar；done/total 条外 + ≥15% 段内白字百分比）
     const bar = rows[0]!.querySelector('.de-bar');
     expect(bar, 'D×M1 行内应有进度条').not.toBeNull();
-    expect(bar!.querySelector('.de-bar__num')!.textContent).toContain('1/4 · 25%');
+    expect(bar!.querySelector('.de-bar__num')!.textContent).toContain('1/4');
+    expect(bar!.querySelector('.gm-bar__num')!.textContent).toBe('25%');
     // 四态 = 字形 + 文字双编码（灰度可读，不靠色相）
     const glyphs = Array.from(page.querySelectorAll('.gm-glyph')).map((g) => g.textContent);
     expect(new Set(glyphs)).toEqual(new Set(['□', '◐', '●', '▲']));
@@ -461,8 +463,11 @@ describe('期三 · G5 静态锁', () => {
     expect(css).toContain('var(--tpl-accent)');
     expect(css).toContain('var(--tpl-ink)');
     expect(css).toContain('var(--tpl-line)');
-    // 不出现设计师基线 hex（硬编码色会绕过硬闸门）
-    expect(css).not.toMatch(/#[0-9a-fA-F]{6}/);
+    // 不出现硬编码 hex（会绕过硬闸门）。白色豁免：#fff/#ffffff 是**纸面白常量**
+    // （深色 fill/标签上的反白字），不在 accent/ink/line 三槽位里，闸门管不到它；
+    // 原生四版 CSS 同样直接用 #ffffff（agent-poster.css:558 等）。其余 hex 一律禁。
+    const nonWhite = css.replace(/#[fF]{3,6}/g, '');
+    expect(nonWhite).not.toMatch(/#[0-9a-fA-F]{3,8}/);
     // 组件落位
     for (const f of [
       'src/print/pages/generic/shared.ts',

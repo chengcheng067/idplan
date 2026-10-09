@@ -375,7 +375,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('E 版默认态：3 原生 + 1 通用 = 4 页，彩色 4 张 + 灰度 4 张；794×1123 无裁切（期三）', async () => {
+  it('E 版默认态：3 原生 + 1 通用 = 5 页，彩色 5 张 + 灰度 5 张；794×1123 无裁切（期七深化：元信息行占流高，artifact 页保守跨页）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['editorial-index'].baseline;
@@ -391,7 +391,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
           shell(markup, css, gray),
         );
         await page.goto('file://' + htmlPath);
-        await assertPagesAndShot(page, gray ? 'gray' : 'color', 4);
+        await assertPagesAndShot(page, gray ? 'gray' : 'color', 5);
       }
     } finally {
       await page.close();
@@ -558,7 +558,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     }
   });
 
-  it('E 版预设变体（靛蓝）彩色 4 张；焦点槽位确实挂上（非默认态重截，期三）', async () => {
+  it('E 版预设变体（靛蓝）彩色 5 张；焦点槽位确实挂上（非默认态重截，期三）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['editorial-index'].presets.find((p) => p.id === 'indigo')!;
@@ -571,7 +571,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       const htmlPath = writeHtml('e-preset-indigo.html', shell(markup, css, false));
         await page.goto('file://' + htmlPath);
         const pages = await page.$$('.a4-page');
-        expect(pages).toHaveLength(4);
+        expect(pages).toHaveLength(5);
       for (let i = 0; i < pages.length; i++) {
         const box = await pages[i]!.boundingBox();
         expect(Math.abs(box!.width - 794)).toBeLessThanOrEqual(1);
