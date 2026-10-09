@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CalendarDays, X } from 'lucide-react';
 
@@ -100,6 +100,33 @@ export function RestPolicyEditor({
   const [saving, setSaving] = useState(false);
   /** 制度口径发生变化且存在受影响阶段 → 打开重算确认弹窗 */
   const [recalcOpen, setRecalcOpen] = useState(false);
+  /**
+   * 用户是否动过草稿。动过之后 saved 的后台变化**不**冲掉未保存的编辑；
+   * 未动过时 saved 一到就同步（见下方 effect）。保存成功后复位。
+   */
+  const dirtyRef = useRef(false);
+
+  /**
+   * 草稿同步（2026-10-09 反馈修复：选了单休周三但月历不跟随）：
+   * `saved` 来自 settings 行异步 hydrate（useRepos.ts bootstrapAllStores →
+   * normalizeRestPolicy），挂载瞬间可能是出厂默认——`useState(saved)` 是
+   * **惰性初值**，saved  hydrate 回来后草稿不跟，于是「编辑器显示的」
+   * （draft）与「实际生效的」（effectiveRestPolicy ← saved）成了两个源：
+   * 用户按编辑器显示操作，月历底纹却按另一个值渲染。
+   * 修法 = saved 变化且用户未编辑时同步草稿；编辑中不跟随（避免后台变化
+   * 冲掉未保存的编辑）。「每次打开重置草稿」由挂载生命周期天然保证——
+   * 独立弹窗与 embedded（随 SettingsDialog / zone 切换卸载）重挂时
+   * useState(saved) 即取当前值，无脏值残留（范式同 ProjectAppearanceDialog）。
+   */
+  useEffect(() => {
+    if (!dirtyRef.current) setDraft(saved);
+  }, [saved]);
+
+  /** 草稿更新统一入口：用户编辑即置脏（脏后 saved 后台变化不冲草稿） */
+  const updateDraft = (updater: (prev: RestPolicyConfig) => RestPolicyConfig): void => {
+    dirtyRef.current = true;
+    setDraft(updater);
+  };
 
   const todayIso = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
 
@@ -123,7 +150,7 @@ export function RestPolicyEditor({
 
   /** 切换制度：切到大小休且锚点不可用时，以本周为大休周起算 */
   const onPickKind = (kind: RestPolicyKind): void => {
-    setDraft((prev) => ({
+    updateDraft((prev) => ({
       ...prev,
       kind,
       anchorWeek:
@@ -143,13 +170,15 @@ export function RestPolicyEditor({
   );
 
   const onSwap = (): void => {
-    setDraft((prev) => ({ ...prev, anchorWeek: shiftIsoWeek(prev.anchorWeek, 1, todayIso) }));
+    updateDraft((prev) => ({ ...prev, anchorWeek: shiftIsoWeek(prev.anchorWeek, 1, todayIso) }));
   };
 
   /** 直接落库（无重算路径）：先写库再更新内存镜像，失败保持原制度 */
   const persist = async (next: RestPolicyConfig): Promise<void> => {
     await repos.settings.set('restPolicy', next);
     applyToStore(next);
+    // 草稿已落库（= saved）：解脏，之后 saved 的变化可继续同步
+    dirtyRef.current = false;
     useProjectsStore.getState().pushToast('success', '休息制度已保存');
     // 独立弹窗保存后关闭；嵌入态只提示、留在设置面板内
     if (onClose) onClose();
@@ -234,7 +263,7 @@ export function RestPolicyEditor({
             type="checkbox"
             checked={draft.skipHolidays === true}
             onChange={() =>
-              setDraft((prev) => ({ ...prev, skipHolidays: prev.skipHolidays !== true }))
+              updateDraft((prev) => ({ ...prev, skipHolidays: prev.skipHolidays !== true }))
             }
             className="accent-pine"
             data-testid="skip-holidays-toggle"
@@ -266,7 +295,7 @@ export function RestPolicyEditor({
             {restWeekday !== 6 && (
               <button
                 type="button"
-                onClick={() => setDraft((prev) => ({ ...prev, singleRestWeekday: 6 }))}
+                onClick={() => updateDraft((prev) => ({ ...prev, singleRestWeekday: 6 }))}
                 className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
                 title="恢复出厂口径：周日休息"
               >
@@ -282,7 +311,7 @@ export function RestPolicyEditor({
                 type="button"
                 data-testid={`rest-weekday-${idx}`}
                 aria-pressed={restWeekday === idx}
-                onClick={() => setDraft((prev) => ({ ...prev, singleRestWeekday: idx }))}
+                onClick={() => updateDraft((prev) => ({ ...prev, singleRestWeekday: idx }))}
                 className={cn(
                   'flex h-8 items-center justify-center rounded-[8px] border text-xs transition-colors',
                   restWeekday === idx

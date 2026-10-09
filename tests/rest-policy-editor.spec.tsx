@@ -188,6 +188,105 @@ describe('RestPolicyEditor：单休自定义休息周几（七选一）', () => 
   });
 });
 
+/**
+ * 草稿同步守门（2026-10-09 反馈：选了单休周三但月历不跟随）。
+ * 根因：`useState(saved)` 是惰性初值，saved 异步 hydrate（bootstrapAllStores →
+ * normalizeRestPolicy）回来后草稿不跟 ⇒ 编辑器显示的（draft）与实际生效的
+ * （effectiveRestPolicy ← saved）成了两个源。修法：saved 变化且用户未编辑时
+ * 同步草稿；编辑中不跟随；重挂载天然重置（打开边界无脏值残留）。
+ */
+describe('RestPolicyEditor：草稿与 saved 同步（hydrate / 编辑门 / 重开重置）', () => {
+  const SINGLE_WED: RestPolicyConfig = {
+    kind: RestPolicyKind.SingleOff,
+    anchorWeek: null,
+    singleRestWeekday: 2,
+  };
+
+  it('hydrate 后同步：挂载时 saved 还是出厂默认，hydrate 回来（单休周三）→ 编辑器跟上', () => {
+    // 模拟挂载瞬间：saved 尚未 hydrate（bootstrap 异步）
+    act(() => {
+      useSettingsStore.setState({
+        restPolicy: DEFAULT_REST_POLICY,
+        effectiveRestPolicy: DEFAULT_REST_POLICY,
+      });
+    });
+    renderEditor();
+    // 挂载瞬间：双休选中、无七选一
+    expect(container.querySelector('[data-testid="single-rest-weekday"]')).toBeNull();
+
+    // saved hydrate 回来（settings 行 → normalizeRestPolicy → store）
+    act(() => {
+      useSettingsStore.setState({
+        restPolicy: SINGLE_WED,
+        effectiveRestPolicy: SINGLE_WED,
+      });
+    });
+    // 草稿同步：单休档 + 周三高亮（编辑器显示的与月历生效的同一个源）
+    const box = container.querySelector('[data-testid="single-rest-weekday"]');
+    expect(box).not.toBeNull();
+    expect(weekdayBtn(2).getAttribute('aria-pressed')).toBe('true');
+    expect(weekdayBtn(6).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('编辑中不跟随：用户动过草稿后 saved 后台变化不冲掉未保存的编辑', () => {
+    act(() => {
+      useSettingsStore.setState({
+        restPolicy: SINGLE_WED,
+        effectiveRestPolicy: SINGLE_WED,
+      });
+    });
+    renderEditor();
+    // 用户在编辑器里改选双休（dirty）
+    pickKind('双休');
+    expect(container.querySelector('[data-testid="single-rest-weekday"]')).toBeNull();
+    // saved 后台变化（hydrate 迟到/别处改制度）→ 草稿不被冲掉
+    act(() => {
+      useSettingsStore.setState({
+        restPolicy: { kind: RestPolicyKind.BigSmallWeek, anchorWeek: '2026-W37' },
+        effectiveRestPolicy: { kind: RestPolicyKind.BigSmallWeek, anchorWeek: '2026-W37' },
+      });
+    });
+    // 仍是用户选的「双休」（七选一隐藏 = 非单休档）
+    expect(container.querySelector('[data-testid="single-rest-weekday"]')).toBeNull();
+    const radio = Array.from(container.querySelectorAll('input[type="radio"]')).find(
+      (el) => (el as HTMLInputElement).value === 'double_off',
+    ) as HTMLInputElement | undefined;
+    expect(radio?.checked).toBe(true);
+  });
+
+  it('重开重置：编辑到一半未保存 → 卸载重挂（关开设置）→ 草稿回到 saved，无脏值残留', () => {
+    act(() => {
+      useSettingsStore.setState({
+        restPolicy: DEFAULT_REST_POLICY,
+        effectiveRestPolicy: DEFAULT_REST_POLICY,
+      });
+    });
+    renderEditor();
+    // 编辑到一半（脏）：选单休 + 周三，不保存
+    pickKind('单休');
+    act(() => {
+      weekdayBtn(2).click();
+    });
+    expect(weekdayBtn(2).getAttribute('aria-pressed')).toBe('true');
+    // 卸载（关设置抽屉/切 zone）
+    act(() => {
+      root.unmount();
+    });
+    // saved 已是单休周三（此前保存过）→ 重挂载草稿直接取它（新 root：unmount 后不可复用）
+    act(() => {
+      useSettingsStore.setState({
+        restPolicy: SINGLE_WED,
+        effectiveRestPolicy: SINGLE_WED,
+      });
+    });
+    root = createRoot(container);
+    renderEditor();
+    pickKind('单休');
+    expect(weekdayBtn(2).getAttribute('aria-pressed')).toBe('true');
+    expect(weekdayBtn(6).getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
 describe('hydrate 边界：singleRestWeekday 归一', () => {
   it('0-6 原样保留', () => {
     for (const v of [0, 1, 2, 3, 4, 5, 6]) {
