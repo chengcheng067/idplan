@@ -60,6 +60,14 @@ import { normalizeHex } from '../core/color/contrast';
  * （PrintModuleId[]）——4 套模板是外表，11 个内容模块跨模板可选。
  * 旧持久数据在 merge 时迁移：旧页 key 逐条映射模块 key，**有一条映射
  * 不了 ⇒ 该模板整组回落默认全选**（照现有兜底手法，脏数据不赌）。
+ *
+ * ── v1.5-b 期三第一批：可用集 = 原生 + 通用 ──
+ * M1 阶段清单 / M2 任务清单 / M4 成员名册在全部 4 套外表下可输出
+ * （原生页 or 通用渲染，print-skins 能力表 generic 标记）。本 store 的
+ * 「可用」判定随之从原生集扩为可用集（printTemplateModuleIds 的新语义）：
+ * 默认全选、勾选接受、旧数据迁移过滤都以它为准；勾选粒度仍是模块
+ * （一个模块 = 一页 or 多页，纸面落页由 enabledSheetsOf + 各 Document
+ * 的物理页装配决定）。
  */
 
 /** localStorage key（单处定义；无首屏闪烁面，不需 index.html 引导脚本，见文件头） */
@@ -71,9 +79,10 @@ export interface PrintPrefsState {
   /** 当前模板（'classic' = 现有纸面） */
   template: PrintTemplateId;
   /**
-   * 每模板一套「启用模块」勾选态（期二：原「启用页」语义升级）。
-   * 缺键 = 该模板默认全选原生模块；未知/非原生模块 id 在 merge 时剔除。
-   * 纸面页序由 print-skins 的 enabledPagesOf 派生（注册表原生页序）。
+   * 每模板一套「启用模块」勾选态（期二：原「启用页」语义升级；期三：可用集
+   * = 原生 + 通用）。缺键 = 该模板默认全选可用模块；暂不可用的模块 id 在
+   * merge 时剔除。纸面页序由 print-skins 的 enabledSheetsOf 派生（注册表
+   * M1→M11 序，与勾选顺序无关）。
    */
   pages: Partial<Record<PrintTemplateId, PrintModuleId[]>>;
   /** 每模板一套自定义三槽位配色（缺键 = 设计师基线；classic 永不有条目） */
@@ -82,9 +91,9 @@ export interface PrintPrefsState {
   setBlock(key: keyof SchedulePaperBlocks, on: boolean): void;
   /** 切模板（选择器上截；即时重渲染） */
   setTemplate(id: PrintTemplateId): void;
-  /** 勾 / 消一个模块（缺键时从「默认全选原生」起手；非原生模块不接受） */
+  /** 勾 / 消一个模块（缺键时从「默认全选可用」起手；暂不可用的模块不接受） */
   setModuleEnabled(template: PrintTemplateId, module: PrintModuleId, on: boolean): void;
-  /** 整模板设启用模块集合（全选 / 反选；非原生 id 忽略） */
+  /** 整模板设启用模块集合（全选 / 反选；暂不可用的 id 忽略） */
   setTemplateModules(template: PrintTemplateId, modules: PrintModuleId[]): void;
   /**
    * 存自定义配色。**硬闸门**：任一对对比度不达标 ⇒ 不落库 + 返回失败明细
@@ -93,16 +102,20 @@ export interface PrintPrefsState {
   setPalette(template: PrintTemplateId, palette: PrintPalette | null): PrintPaletteGateResult;
 }
 
-/** 该模板的原生模块 id（未知模板 / 经典 ⇒ 空集） */
-function nativeModules(template: PrintTemplateId): PrintModuleId[] {
+/**
+ * 该模板**可用**的模块 id（原生 + 通用；未知模板 / 经典 ⇒ 空集）。
+ * 期三：printTemplateModuleIds 语义升级为「可用集」——M1/M2/M4 在 D/E/H
+ * 经通用渲染进入可用集，勾选/全选/迁移过滤都以它为准。
+ */
+function availableModules(template: PrintTemplateId): PrintModuleId[] {
   return printTemplateModuleIds(template);
 }
 
-/** 规范化一组模块勾选（实时设置路径）：只留原生 id，按 PRINT_MODULES 序去重 */
+/** 规范化一组模块勾选（实时设置路径）：只留可用 id，按 PRINT_MODULES 序去重 */
 function normalizeModules(template: PrintTemplateId, value: unknown): PrintModuleId[] | null {
   if (!Array.isArray(value)) return null;
-  const native = nativeModules(template);
-  const kept = new Set(value.filter((m): m is PrintModuleId => native.includes(m as PrintModuleId)));
+  const available = availableModules(template);
+  const kept = new Set(value.filter((m): m is PrintModuleId => available.includes(m as PrintModuleId)));
   return PRINT_MODULE_IDS.filter((m) => kept.has(m));
 }
 
@@ -110,8 +123,8 @@ function normalizeModules(template: PrintTemplateId, value: unknown): PrintModul
  * 旧 pages 数据迁移（期二：页粒度 → 模块粒度，决策文档 §3.3）：
  * 旧页 key 逐条映射模块 key；**有一条映射不了 ⇒ 整组回落默认全选**
  * （返回 null = 调用方不存该键 = 缺键全选，照现有 merge 兜底手法）。
- * 映射成功的组按「原生 + 注册序」收编——跨模板脏页名自然滤掉，
- * 与旧 normalizePages 的「未知页 id 剔除」同后果。
+ * 映射成功的组按「可用 + 注册序」收编——跨模板脏页名自然滤掉
+ * （期三：在某外表可用的模块——含通用渲染——不再被滤掉）。
  */
 function migrateLegacyPages(template: PrintTemplateId, value: unknown): PrintModuleId[] | null {
   if (!Array.isArray(value)) return null;
@@ -121,8 +134,8 @@ function migrateLegacyPages(template: PrintTemplateId, value: unknown): PrintMod
     if (module === null) return null;
     mapped.add(module);
   }
-  const native = nativeModules(template);
-  return PRINT_MODULE_IDS.filter((m) => native.includes(m) && mapped.has(m));
+  const available = availableModules(template);
+  return PRINT_MODULE_IDS.filter((m) => available.includes(m) && mapped.has(m));
 }
 
 /** 规范化一组配色：三槽位全是合法 hex 才收（否则整组丢弃，回落基线） */
@@ -149,9 +162,10 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
       setTemplate: (template) => set({ template }),
       setModuleEnabled: (template, module, on) =>
         set((s) => {
-          const native = nativeModules(template);
-          if (!native.includes(module)) return {};
-          const current = s.pages[template] ?? native;
+          const available = availableModules(template);
+          // 暂不可用的模块（能力表里没有的）不接受勾选
+          if (!available.includes(module)) return {};
+          const current = s.pages[template] ?? available;
           const next = on ? [...new Set([...current, module])] : current.filter((m) => m !== module);
           return { pages: { ...s.pages, [template]: PRINT_MODULE_IDS.filter((m) => next.includes(m)) } };
         }),

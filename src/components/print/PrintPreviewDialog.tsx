@@ -19,9 +19,11 @@
  *  「打印内容」钮升格为「模板与模块」一个 dropdown 三截：
  *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H，全部已实现）；
  *    中截 输出模块：经典 = 五块复选框（数据结构逐字不变，保护既有 spec）；
- *          四版 = 11 个内容模块复选框（原生可勾选默认全选、非原生禁用态
- *          + 原因；勾选态按模板各存一套，换模板不丢——期二「外表 × 模块
- *          分离」，产品决策文档 §3.2/§3.3）；
+ *          四版 = 11 个内容模块复选框三态（期二：原生可勾选默认全选、
+ *          非原生禁用态 + 原因；期三：M1/M2/M4 通用渲染落地，无原生页的
+ *          外表改标「通用渲染」可勾选，M3/M5-M11 保持禁用）；勾选态按
+ *          模板各存一套，换模板不丢——期二「外表 × 模块分离」+ 期三
+ *          通用渲染第一批，产品决策文档 §3.2/§3.3/§3.5；
  *    下截 配色：三槽位受控 token（预设变体卡为主 + 自定义过对比度硬闸门），
  *          仅四版显示（经典是品牌资产，不开放）。
  *  工具条另加「灰度」toggle（纸面 wrapper 套 filter:grayscale(1)）——选色时
@@ -59,22 +61,23 @@ import { A4_WIDTH_PX } from '../../lib/schedule-print';
 import {
   PRINT_MODULES,
   PRINT_TEMPLATES,
-  enabledPagesOf,
+  enabledSheetsOf,
   printTemplateMeta,
   printTemplateModuleIds,
   printTemplateModules,
   printTemplateName,
 } from './print-skins';
-import type { PrintModuleId } from './print-skins';
+import type { PrintModuleId, PrintSheet } from './print-skins';
 import { usePrintViewModel } from '../../print/adapters/use-print-view-model';
 import { usePrintLogo } from '../../print/adapters/use-print-logo';
 import { SwissScheduleDocument } from '../../print/documents/SwissScheduleDocument';
 import { DataEditorialDocument } from '../../print/documents/DataEditorialDocument';
 import { EditorialIndexDocument } from '../../print/documents/EditorialIndexDocument';
 import { AgentPosterDocument } from '../../print/documents/AgentPosterDocument';
+import { printPhysicalPageCount } from '../../print/documents/physical-pages';
 import { PaletteSection } from '../../print/parts/PaletteSection';
 import { PRINT_TEMPLATE_PALETTES } from '../../print/model/print-palette';
-import type { PrintPageKind, PrintTemplateId } from '../../print/model/print-view-model';
+import type { PrintTemplateId } from '../../print/model/print-view-model';
 
 /** 纸面总自然高度（缩放 wrapper 的负边距修正用；规范 §2：总高 = 1123×N + 24×(N−1)） */
 const A4_HEIGHT_PX = 1123;
@@ -130,13 +133,16 @@ function resolveSelectorPanelPos(
 }
 
 /**
- * 选择器中截 · 模块勾选（v1.5-a 期二：页勾选 → 模块勾选，产品决策文档 §3.3）。
+ * 选择器中截 · 模块勾选（v1.5-a 期二：页勾选 → 模块勾选，产品决策文档 §3.3；
+ * v1.5-b 期三：M1/M2/M4 通用渲染落地，禁用态解除）。
  *
- * 11 个内容模块逐行：模块名 + 一句话内容说明 + 归属页提示。
- *   · **原生模块**（该外表能力表内）：可勾选、默认全选，右侧标注原生页名
- *     （H 的 Agent 执行 = 两页，标「Agent 执行宣告 + 执行状态全览」）；
- *   · **非原生模块**：禁用态 + 原因——通用渲染是期三分期补，这里先立
- *     「模块跨模板选」的产品形态，**不装能打**（禁用行不进纸面、不计页数）。
+ * 11 个内容模块逐行：模块名 + 一句话内容说明 + 渲染方式提示。三态：
+ *   · **原生**（该外表能力表内有原生页）：可勾选、默认全选，右侧标注
+ *     原生页名（H 的 Agent 执行 = 两页，标「Agent 执行宣告 + 执行状态全览」）；
+ *   · **通用**（期三：M1/M2/M4 于无原生页的外表）：可勾选、默认全选，
+ *     右侧标注「通用渲染」——该外表的基础排版承接（字体阶/色板/密度/
+ *     表格形态），不套标志布局；
+ *   · **暂不可用**（M3/M5-M11 于非原生外表）：禁用态 + 原因，等后续批次。
  * 勾选态按模板各存一套（store pages），换外表不丢失。
  *
  * 为什么提成独立导出组件：截图 spec 用 renderToStaticMarkup 直接渲染它
@@ -184,21 +190,24 @@ export function PrintModuleSection({
       <div className="flex flex-col gap-0.5 pb-1">
         {PRINT_MODULES.map((m) => {
           const cap = caps.find((c) => c.module === m.id);
-          const native = cap !== undefined;
-          const pageHint = cap ? cap.pages.map((p) => p.label).join(' + ') : '';
+          // 三态：原生（有原生页）/ 通用（generic 标记）/ 暂不可用（能力表没有）
+          const avail = cap === undefined ? 'off' : cap.pages.length > 0 ? 'native' : cap.generic ? 'generic' : 'off';
+          const native = avail === 'native';
+          const pageHint = native ? cap!.pages.map((p) => p.label).join(' + ') : '';
+          const hint = native ? pageHint : avail === 'generic' ? '通用渲染' : '该外表下暂不可用';
           return (
             <label
               key={m.id}
               data-print-module-row={m.id}
-              data-native={native ? 'on' : 'off'}
+              data-avail={avail}
               className={`flex select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] ${
-                native ? 'cursor-pointer text-ink hover:bg-sand' : 'cursor-not-allowed text-mist'
+                avail === 'off' ? 'cursor-not-allowed text-mist' : 'cursor-pointer text-ink hover:bg-sand'
               }`}
             >
               <input
                 type="checkbox"
-                checked={native && on.has(m.id)}
-                disabled={!native}
+                checked={avail !== 'off' && on.has(m.id)}
+                disabled={avail === 'off'}
                 onChange={(e) => onToggle?.(m.id, e.target.checked)}
                 data-print-module={m.id}
                 className="h-3.5 w-3.5 shrink-0 accent-pine disabled:opacity-40"
@@ -207,19 +216,16 @@ export function PrintModuleSection({
                 <span className="block whitespace-nowrap text-[13px] font-medium">{m.label}</span>
                 <span className="block truncate text-[11px] text-mist">{m.hint}</span>
               </span>
-              {/* 归属页提示（原生 = 原生页名；非原生 = 禁用原因；超长截断，完整值进 title） */}
-              <span
-                className="shrink-0 max-w-[120px] truncate text-[11px] text-mist"
-                title={native ? pageHint : '该外表下暂不可用，将随通用渲染陆续支持'}
-              >
-                {native ? pageHint : '该外表下暂不可用'}
+              {/* 渲染方式提示（原生页名 / 通用渲染 / 禁用原因；超长截断，完整值进 title） */}
+              <span className="shrink-0 max-w-[120px] truncate text-[11px] text-mist" title={hint}>
+                {hint}
               </span>
             </label>
           );
         })}
       </div>
       <p className="px-2 pb-1.5 text-[11px] leading-relaxed text-mist">
-        非原生模块将随通用渲染陆续支持；模块勾选按外表各存一套，换外表不丢失。
+        阶段清单 / 任务清单 / 成员名册已支持通用渲染；暂不可用的模块将随通用渲染陆续支持。模块勾选按外表各存一套，换外表不丢失。
       </p>
     </div>
   );
@@ -440,17 +446,23 @@ export function PrintPreviewDialog({
   }, [scale]);
 
   /**
-   * 该模板启用的纸面页（期二：模块勾选 ⇒ 原生页序派生）。
-   * 缺键 = 默认全选原生模块 = 旧「页勾选」默认态**逐页等价**（回归红线：
-   * 四套模板打印输出零变化）。非原生模块不在能力表 ⇒ 不进纸面、不计页数。
+   * 该模板启用的纸面页（期三：模块勾选 ⇒ sheets 序列派生）。
+   * 缺键 = 默认全选可用模块（原生 + 通用；01 §8 明文）。原生模块落原生页
+   * （M10 落两页），通用模块落通用页（可跨多页）；页序按注册表 M1→M11，
+   * 与勾选顺序无关。
    */
-  const enabledPages = useMemo<PrintPageKind[]>(
-    () => enabledPagesOf(template, pages[template]),
+  const enabledSheets = useMemo<PrintSheet[]>(
+    () => enabledSheetsOf(template, pages[template]),
     [template, pages],
   );
 
-  /** 预计页数：经典 = 分页产物；四版 = 启用页数（勾选即时联动） */
-  const pagesCount = template === 'classic' ? d.pages.length : enabledPages.length;
+  /** 预计页数：经典 = 分页产物；四版 = 物理纸面数（原生 1:1 + 通用模块分页产物） */
+  const pagesCount =
+    template === 'classic'
+      ? d.pages.length
+      : printVm.vm
+        ? printPhysicalPageCount(template, printVm.vm, enabledSheets)
+        : enabledSheets.length;
   /** 未实现模板不许假装能打（决策 ⑥ 实现顺序：D/E/H 后续批次落地） */
   const canOutput = meta.implemented;
 
@@ -630,7 +642,7 @@ export function PrintPreviewDialog({
               {template === 'swiss-schedule' && printVm.vm && (
                 <SwissScheduleDocument
                   vm={printVm.vm}
-                  pages={enabledPages}
+                  sheets={enabledSheets}
                   palette={
                     palette['swiss-schedule'] ?? PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline
                   }
@@ -643,7 +655,7 @@ export function PrintPreviewDialog({
               {template === 'data-editorial' && printVm.vm && (
                 <DataEditorialDocument
                   vm={printVm.vm}
-                  pages={enabledPages}
+                  sheets={enabledSheets}
                   palette={
                     palette['data-editorial'] ?? PRINT_TEMPLATE_PALETTES['data-editorial'].baseline
                   }
@@ -656,7 +668,7 @@ export function PrintPreviewDialog({
               {template === 'editorial-index' && printVm.vm && (
                 <EditorialIndexDocument
                   vm={printVm.vm}
-                  pages={enabledPages}
+                  sheets={enabledSheets}
                   palette={
                     palette['editorial-index'] ?? PRINT_TEMPLATE_PALETTES['editorial-index'].baseline
                   }
@@ -669,7 +681,7 @@ export function PrintPreviewDialog({
               {template === 'agent-poster' && printVm.vm && (
                 <AgentPosterDocument
                   vm={printVm.vm}
-                  pages={enabledPages}
+                  sheets={enabledSheets}
                   palette={
                     palette['agent-poster'] ?? PRINT_TEMPLATE_PALETTES['agent-poster'].baseline
                   }
