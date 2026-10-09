@@ -1030,6 +1030,25 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
     display: none !important; /* TopBar（配合 TopBar print:hidden 双保险） */
   }
 
+  /* 纸面页头豁免（预存 bug 修复，2026-10-09）：上方裸规则的本意是排除应用
+     TopBar，但 `.print-root` 纸面内的语义 <header> 同被命中——经典
+     SchedulePaper（打印头部：项目名/委托方/周期/打印日期，flex）与月历打印页
+     （公文头，flex）自 v0.4 起真机打印 / 另存 PDF 时页头整块消失（既有视觉
+     spec 全走 screen 媒体故未红）。两条豁免都是两类 + !important ⇒ 特异性
+     高者胜；screen 态零变化，应用 chrome（.print-root 外）仍走裸规则。
+     ⚠️ block 布局的纸面 header 不能跟第一条的 flex：H 分组头
+     （.ap-status__group-head，h3+p 纵排）在 agent-poster.css 以更高特异性
+     还原为 block；行程打印页的抬头是 .print-root 直接子元素且无 flex 类，
+     单独一条还原 block。新增纸面 header 时按它的**实际布局**接一条，
+     不要默认 flex。 */
+  .print-root .a4-page header {
+    display: flex !important;
+  }
+
+  .print-root > header {
+    display: block !important;
+  }
+
   /* 侧栏打印排除（v0.7 · R20 双保险的 CSS 层）：
      侧栏根节点已带 print:hidden，这里再显式写一条作为第二道保险——
      打印件绝不能出现导航（打印页是给委托方看的交付物）。

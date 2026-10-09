@@ -9,20 +9,29 @@
  * spec 全走 screen 媒体截图，故一直未红（探针实证：screen=flex / print=none）。
  *
  * ── 修法 ──
- * 四套模板 CSS 各自 @media print 块加页头豁免（两类选择器 + !important ⇒
- * 特异性高者胜，与同块内「纸面背景压过 global」同一手法）：
+ * ① 四套模板 CSS 各自 @media print 块加页头豁免（两类选择器 + !important ⇒
+ *   特异性高者胜，与同块内「纸面背景压过 global」同一手法）：
  *   A .swiss-topbar / D .de-head / E .ei-head / H .ap-head ⇒ display:flex
  *   H .ap-status__group-head ⇒ display:block（h3 组题 + p 组注**纵排**，
  *     不能跟 blanket-flex 否则并排压坏 P2 双栏——按元素显式还原的理由）
- * screen 态零变化；应用级 header（.print-root 外）print 态仍 none
- * （global 规则的本职保留）。
+ * ② global.css 的 @media print 块加两条纸面豁免（经典/月历无自有样式表，
+ *   落点选 global.css：一条 `.print-root .a4-page header ⇒ flex` 覆盖经典
+ *   SchedulePaper + 月历打印页（均 flex 布局）；行程打印页的抬头是
+ *   `.print-root` 直接子元素且 block 布局，单独一条 `.print-root > header
+ *   ⇒ block`）。block 布局的纸面 header 一律按实际布局接条，不默认 flex。
+ * screen 态零变化；应用级 header（TopBar，在 .print-root 外）print 态仍
+ * none（global 裸规则的本职保留）。
  *
  * ── 本文件锁什么 ──
  *   P1 四版页头 print 态可见（display 非 none + 有布局盒）；
  *   P2 A 黑顶栏 print 态背景色 computed 仍在（print-color-adjust 链路未破）；
  *   P3 H 分组头 print 态 block 且组题/组注仍纵排（没被 flex 化）；
  *   P4 screen 态四版页头不变（豁免只作用于 print 媒体）；
- *   P5 应用级 header print 态仍 none（裸规则本职：TopBar 不进打印件）。
+ *   P5 应用级 header print 态仍 none（裸规则本职：TopBar 不进打印件）；
+ *   P6 经典（默认模板，断言最全）：真实 SchedulePaper 渲染，screen 不变 +
+ *      print 可见 + 打印头部四个信息位（项目名/委托方/周期/打印日期）都在；
+ *   P7 月历打印页 / P8 行程打印页：真实类名骨架（源码锁钉住 DOM 契约）
+ *      screen 不变 + print display 与各自既有布局一致且有布局盒、页题在纸面。
  *
  * 前置：`npx vite build --outDir build-dist` 与本机 chromium；缺任一整组 skip。
  */
@@ -38,6 +47,7 @@ import { SwissScheduleDocument } from '../src/print/documents/SwissScheduleDocum
 import { DataEditorialDocument } from '../src/print/documents/DataEditorialDocument';
 import { EditorialIndexDocument } from '../src/print/documents/EditorialIndexDocument';
 import { AgentPosterDocument } from '../src/print/documents/AgentPosterDocument';
+import { SchedulePaper } from '../src/components/print/SchedulePaper';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
 import type { PrintViewModel } from '../src/print/model/print-view-model';
 import { MemberActorKind, MemberRoleKind, StageStatus, TaskStatus } from '../src/core/types/enums';
@@ -241,6 +251,52 @@ const HEAD_SEL: Record<DocKind, string> = {
   'agent-poster': '.ap-head',
 };
 
+/** 经典（默认模板）最小夹具：1 阶段 1 任务，blocks 默认全开 */
+const CLASSIC_SECTIONS = [
+  {
+    orderIndex: 1,
+    name: '现场勘查',
+    startAt: '2026-01-05',
+    endAt: '2026-01-20',
+    status: StageStatus.InProgress,
+    colorIndex: 1,
+    customColor: null,
+    tasks: [{ id: 'tsk_cls_1', title: '复核尺寸', dueDate: null, done: false, assigneeNames: [] }],
+  },
+];
+
+function renderClassic(vm: PrintViewModel): string {
+  return renderToStaticMarkup(
+    createElement(SchedulePaper, {
+      project: vm.project,
+      pages: [CLASSIC_SECTIONS],
+      sections: CLASSIC_SECTIONS,
+      bandGeom: () => ({ left: 0, width: 50 }),
+      monthTicks: [],
+      nowText: '2026-10-09 07:30',
+      startAt: '2026-01-01',
+      endAt: '2026-03-01',
+      totalDays: 60,
+      role: 'admin',
+      pageRef: () => null,
+      skin: 'default',
+      logo: null,
+    }),
+  );
+}
+
+/**
+ * 月历 / 行程打印页是 store/router 耦合组件（useParams + useRepos +
+ * useRoleGuard + 异步装载），Chromium spec 里真实渲染要整套 mock 戏法；
+ * 且本 spec 的被测 unit 是 **CSS 豁免规则**（global.css），不是页面组件。
+ * 故用「真实类名骨架 + 源码锁」：骨架逐字复刻两页抬头与容器的真实类名
+ * （从源码读出），源码锁钉住这些类名不漂移——结构漂移 ⇒ 源码锁先红。
+ * 两页自身的 DOM 渲染由 itinerary-print.spec.tsx 等既有 jsdom spec 覆盖。
+ */
+const CALENDAR_SKELETON = `<div class="print-root mx-auto w-full max-w-[900px] px-6 py-8"><div class="a4-page mx-auto mb-6 flex flex-col" style="width:794px;min-height:1123px;padding:40"><header class="flex items-start justify-between border-b border-line pb-2"><div><h1 class="text-[26px] font-bold leading-tight text-ink">云栖·湖畔茶室综合改造项目</h1><p class="mt-0.5 text-[13px] text-mist">委托方：客户甲</p><p class="text-[13px] text-mist">周期：2026-01-01 – 2026-03-01</p></div><span class="shrink-0 text-[13px] text-mist">ID Plan 月历</span></header></div></div>`;
+
+const ITINERARY_SKELETON = `<div class="print-root mx-auto max-w-4xl bg-paper p-8"><header class="mb-5 border-b border-line pb-4"><h1 class="font-display text-2xl font-semibold text-ink">云南七日·亲子团</h1><p class="mt-1.5 text-sm text-mist">行程周期：2026-10-01 — 2026-10-03<span class="ml-3">共 3 天</span></p></header><table class="w-full border-collapse text-sm"><tbody><tr><td class="py-2.5 pr-3 text-ink">第 1 天</td></tr></tbody></table></div>`;
+
 /* ====================================================================================
  * 验收
  * ==================================================================================== */
@@ -351,6 +407,117 @@ describe.skipIf(!CAN_RUN)('纸面页头 print 媒体豁免（真 Chromium + 真�
       // 同时纸面页头仍可见（两个断言同页，证明豁免与本职共存）
       const paperHead = await page.$eval('.de-head', (el) => getComputedStyle(el).display);
       expect(paperHead, '同页纸面页头应可见').not.toBe('none');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('P6 经典（默认模板）：真实 SchedulePaper——screen 不变 + print 可见 + 打印头部四信息位齐全', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.setContent(shell(renderClassic(vm), css));
+      const headSel = '.a4-page header';
+      // screen 态：flex 不变（豁免只作用 print）
+      await page.emulateMedia({ media: 'screen' });
+      expect(await page.$eval(headSel, (el) => getComputedStyle(el).display), 'screen 态应为 flex').toBe('flex');
+      // print 态：豁免生效（修复前 none，整个打印头部消失）
+      await page.emulateMedia({ media: 'print' });
+      expect(await page.$eval(headSel, (el) => getComputedStyle(el).display), 'print 态应可见').toBe('flex');
+      const headH = await page.$eval(headSel, (el) => el.getBoundingClientRect().height);
+      expect(headH, 'print 态打印头部应有布局盒').toBeGreaterThan(0);
+      // 打印头部四个信息位（SchedulePaper.tsx:169 块内）print 态都有布局盒
+      const bits = await page.$eval(headSel, (el) => {
+        const h1 = el.querySelector('h1')!.getBoundingClientRect();
+        const ps = Array.from(el.querySelectorAll('p')).map((p) => ({
+          text: p.textContent ?? '',
+          h: p.getBoundingClientRect().height,
+        }));
+        // 打印日期是 header 的直接子 span（委托方是 p 内的嵌套 span，别取错）
+        const dateSpan = Array.from(el.children).find((c) => c.tagName === 'SPAN');
+        return {
+          h1H: h1.height,
+          h1Text: el.querySelector('h1')!.textContent ?? '',
+          ps,
+          dateH: dateSpan ? dateSpan.getBoundingClientRect().height : 0,
+        };
+      });
+      expect(bits.h1H, '项目名应有高度').toBeGreaterThan(0);
+      expect(bits.h1Text, '项目名文本').toContain('云栖·湖畔茶室综合改造项目');
+      const client = bits.ps.find((p) => p.text.includes('委托方：'));
+      expect(client, '委托方行应在').toBeDefined();
+      expect(client!.h, '委托方行应有高度').toBeGreaterThan(0);
+      const period = bits.ps.find((p) => p.text.includes('周期：'));
+      expect(period, '周期行应在').toBeDefined();
+      expect(period!.h, '周期行应有高度').toBeGreaterThan(0);
+      expect(bits.dateH, '打印日期应有高度').toBeGreaterThan(0);
+      const text = (await page.textContent('body')) ?? '';
+      expect(text, '委托方（admin 视角）').toContain('委托方：客户甲');
+      expect(text, '打印日期').toContain('打印日期 2026-10-09 07:30');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('P7 月历打印页：骨架（真实类名）+ 源码锁——screen flex 不变 + print 可见', async () => {
+    const css = builtCss();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      // 源码锁：豁免规则依赖的 DOM 契约（flex 布局 + .a4-page 容器）不漂移
+      const calSrc = readFileSync(resolve(ROOT, 'src/pages/CalendarPrintPage.tsx'), 'utf-8');
+      expect(calSrc, '月历公文头应是 flex 布局（豁免还原 flex 的依据）').toContain(
+        '<header className="flex items-start justify-between border-b border-line pb-2">',
+      );
+      expect(calSrc, '月历纸面容器应是 .a4-page（global 豁免的命中路径）').toContain(
+        'className="a4-page mx-auto mb-6 flex flex-col"',
+      );
+      await page.setContent(shell(CALENDAR_SKELETON, css));
+      const headSel = '.a4-page header';
+      await page.emulateMedia({ media: 'screen' });
+      expect(await page.$eval(headSel, (el) => getComputedStyle(el).display), 'screen 态应为 flex').toBe('flex');
+      await page.emulateMedia({ media: 'print' });
+      expect(await page.$eval(headSel, (el) => getComputedStyle(el).display), 'print 态应可见').toBe('flex');
+      const box = await page.$eval(headSel, (el) => el.getBoundingClientRect().height);
+      expect(box, 'print 态公文头应有布局盒').toBeGreaterThan(0);
+      const text = (await page.textContent('body')) ?? '';
+      expect(text, '项目名上纸').toContain('云栖·湖畔茶室综合改造项目');
+      expect(text, '周期上纸').toContain('周期：2026-01-01 – 2026-03-01');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('P8 行程打印页：骨架（真实类名）+ 源码锁——screen block 不变 + print 还原 block', async () => {
+    const css = builtCss();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      // 源码锁：行程抬头无 flex 类（block 布局）+ 是 .print-root 直接子元素
+      const itiSrc = readFileSync(resolve(ROOT, 'src/pages/ItineraryPrintPage.tsx'), 'utf-8');
+      expect(itiSrc, '行程抬头无 flex 类（block 布局——豁免还原 block 的依据）').toContain(
+        '<header className="mb-5 border-b border-line pb-4">',
+      );
+      expect(itiSrc, '行程纸面根是 .print-root（.print-root > header 的命中路径）').toContain(
+        'className="print-root mx-auto max-w-4xl bg-paper p-8"',
+      );
+      await page.setContent(shell(ITINERARY_SKELETON, css));
+      const headSel = '.print-root > header';
+      await page.emulateMedia({ media: 'screen' });
+      expect(await page.$eval(headSel, (el) => getComputedStyle(el).display), 'screen 态应为 block').toBe('block');
+      await page.emulateMedia({ media: 'print' });
+      expect(await page.$eval(headSel, (el) => getComputedStyle(el).display), 'print 态应还原 block').toBe('block');
+      const box = await page.$eval(headSel, (el) => el.getBoundingClientRect().height);
+      expect(box, 'print 态抬头应有布局盒').toBeGreaterThan(0);
+      const text = (await page.textContent('body')) ?? '';
+      expect(text, '项目名上纸').toContain('云南七日·亲子团');
+      expect(text, '行程周期上纸').toContain('行程周期：2026-10-01 — 2026-10-03');
+      // 抬头内 h1 与 p 仍纵排（block 还原没被 flex 化）
+      const stack = await page.$eval(headSel, (el) => {
+        const h1 = el.querySelector('h1')!.getBoundingClientRect();
+        const p = el.querySelector('p')!.getBoundingClientRect();
+        return { h1Bottom: h1.bottom, pTop: p.top };
+      });
+      expect(stack.pTop, '周期行应在项目名下方（纵排）').toBeGreaterThanOrEqual(stack.h1Bottom - 1);
     } finally {
       await page.close();
     }
