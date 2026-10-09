@@ -529,31 +529,37 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(bodyContains('预计 4 页')).toBe(true);
     expect(printButton()!.disabled, 'A 版可打印').toBe(false);
 
-    // 切 D：D 版四页落地（批 2），纸面 4 页 + 模板类 + 可打印
+    // 切 D：D 版落地（批 2 四原生页 + 期三第一批三通用页 ⇒ 7 页）
     pickTemplate('data-editorial');
     expect(paperRoot()!.className).toContain('print-template-data-editorial');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
-    expect(bodyContains('预计 4 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(7);
+    expect(bodyContains('预计 7 页')).toBe(true);
     expect(printButton()!.disabled, 'D 版可打印').toBe(false);
-    // 四页标题（完整单行中文）与关键内容在纸面上
+    // 四页原生页题（完整单行中文）与关键内容在纸面上
     const dText = paperRoot()!.textContent ?? '';
     for (const title of ['阶段进度矩阵', '任务依赖网络', '阶段工作量构成', '里程碑与验收']) {
       expect(dText, `D 版纸面应含页题「${title}」`).toContain(title);
+    }
+    // 期三：三通用页（M1/M2/M4）页题与口径注上纸
+    for (const title of ['阶段清单', '任务清单', '成员名册']) {
+      expect(dText, `D 版纸面应含通用页题「${title}」`).toContain(title);
     }
     expect(dText).toContain('占比不等于完成度');
     // 本夹具 8 任务 dependsOn 全空 ⇒ 依赖网络走「无依赖」空态 + 节点摘要
     expect(document.querySelector('[data-print-empty="dependencies"]'), '无依赖空态').not.toBeNull();
 
-    // 切 E：三页落地（批 3）⇒ 纸面 3 页 + 模板类 + 可打印
+    // 切 E：三原生页 + 期三第一批一通用页（M2 任务清单）⇒ 纸面 4 页
     pickTemplate('editorial-index');
     expect(paperRoot()!.className).toContain('print-template-editorial-index');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
-    expect(bodyContains('预计 3 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
+    expect(bodyContains('预计 4 页')).toBe(true);
     expect(printButton()!.disabled, 'E 版可打印').toBe(false);
     const eText = paperRoot()!.textContent ?? '';
     for (const title of ['阶段目录', '成员执行体目录', '产出物清单']) {
       expect(eText, `E 版纸面应含页题「${title}」`).toContain(title);
     }
+    // 期三：M2 通用页（任务清单）在 E 纸面上
+    expect(eText, 'E 版纸面应含通用页题「任务清单」').toContain('任务清单');
     // 本夹具任务无产出物 ⇒ P3 走标准空态（02 §8 文案，不造数据填版）
     expect(
       document.querySelector('[data-print-empty="artifacts"]'),
@@ -561,21 +567,28 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     ).not.toBeNull();
     // 未上传 logo ⇒ 每页左上角发丝线下方是「ID Plan」文字标（不留空）
     const eLogos = document.querySelectorAll('.a4-page [data-print-logo="text"]');
-    expect(eLogos.length, 'E 三页各一枚文字标').toBe(3);
+    expect(eLogos.length, 'E 四页各一枚文字标').toBe(4);
     expect((eLogos[0]!.textContent ?? '').trim()).toBe('ID Plan');
 
-    // 切 H：三页落地（批 4）；本夹具无 Agent 数据 ⇒ 整版只读空态（不许假装有执行）
+    // 切 H：三原生页落地（批 4）+ 期三第一批三通用页（M1/M2/M4）⇒ 6 页；
+    // 本夹具无 Agent 数据 ⇒ 三个原生页整版只读空态（不许假装有执行），
+    // 三个通用页照常出内容（去专属化：H 不再是 Agent 专属外表）
     pickTemplate('agent-poster');
     expect(paperRoot()!.className).toContain('print-template-agent-poster');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
-    expect(bodyContains('预计 3 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(6);
+    expect(bodyContains('预计 6 页')).toBe(true);
     expect(printButton()!.disabled, 'H 版可打印').toBe(false);
     const hEmpty = document.querySelectorAll('[data-print-empty="agent"]');
-    expect(hEmpty.length, '无 Agent 数据 ⇒ 三页整版只读空态').toBe(3);
+    expect(hEmpty.length, '无 Agent 数据 ⇒ 三个原生页整版只读空态').toBe(3);
     expect(paperRoot()!.textContent).toContain('当前项目暂无 Agent 执行数据');
     // 空态下不许出现任何执行状态卡（不拿模拟记录填版）
     expect(document.querySelector('[data-testid="ap-status-columns"]')).toBeNull();
     expect(document.querySelector('.ap-giant')).toBeNull();
+    // 期三：三个通用页有内容（本夹具 2 阶段 / 2 任务 / 1 成员）
+    const hText = paperRoot()!.textContent ?? '';
+    for (const title of ['阶段清单', '任务清单', '成员名册']) {
+      expect(hText, `H 版纸面应含通用页题「${title}」`).toContain(title);
+    }
   });
 
   it('⑥【新】模块勾选：四版默认全选原生、可摘模块、页码/预计页数联动', () => {

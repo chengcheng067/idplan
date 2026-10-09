@@ -448,7 +448,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('H 版三页：默认态彩色 3 张 + 灰度 3 张；794×1123 无裁切', async () => {
+  it('H 版默认态：3 原生 + 3 通用 = 6 页，彩色 6 张 + 灰度 6 张；794×1123 无裁切（期三）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
@@ -465,7 +465,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
         );
         await page.goto('file://' + htmlPath);
         const pages = await page.$$('.a4-page');
-        expect(pages, 'H 版应渲染 3 页').toHaveLength(3);
+        expect(pages, 'H 版应渲染 6 页（期三：+3 通用页）').toHaveLength(6);
         for (let i = 0; i < pages.length; i++) {
           const el = pages[i]!;
           const box = await el.boundingBox();
@@ -534,11 +534,12 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
     try {
       const htmlPath = writeHtml('h-empty.html', shell(markup, css, false));
       await page.goto('file://' + htmlPath);
-      // 三页照常出纸（页头页脚齐全），主体全是同一条只读空态
+      // 六页照常出纸（页头页脚齐全）：原生三页主体是只读空态，
+      // 通用三页（期三 M1/M2/M4）照常有内容——H 不再是 Agent 专属外表
       const pages = await page.$$('.a4-page');
-      expect(pages).toHaveLength(3);
+      expect(pages).toHaveLength(6);
       const empties = await page.$$('[data-print-empty="agent"]');
-      expect(empties.length, '三页整版只读空态').toBe(3);
+      expect(empties.length, '三个原生页整版只读空态').toBe(3);
       const text = (await page.textContent('body')) ?? '';
       expect(text).toContain('当前项目暂无 Agent 执行数据');
       // 不许拿模拟记录填版：空态下没有任何状态卡 / 巨字 / 流程盒
@@ -716,7 +717,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
     }
   });
 
-  it('H 版预设变体（朱红）彩色 3 张；状态槽位确实挂上（非默认态重截）', async () => {
+  it('H 版预设变体（朱红）彩色 6 张；状态槽位确实挂上（非默认态重截，期三）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['agent-poster'].presets.find((p) => p.id === 'vermilion')!;
@@ -729,7 +730,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
       const htmlPath = writeHtml('h-preset-vermilion.html', shell(markup, css, false));
       await page.goto('file://' + htmlPath);
       const pages = await page.$$('.a4-page');
-      expect(pages).toHaveLength(3);
+      expect(pages).toHaveLength(6);
       for (let i = 0; i < pages.length; i++) {
         const box = await pages[i]!.boundingBox();
         expect(Math.abs(box!.width - 794)).toBeLessThanOrEqual(1);

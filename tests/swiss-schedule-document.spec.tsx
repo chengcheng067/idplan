@@ -18,6 +18,7 @@ import { act } from 'react-dom/test-utils';
 import { SwissScheduleDocument, SWISS_SCHEDULE_PAGES } from '../src/print/documents/SwissScheduleDocument';
 import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
+import type { PrintPageKind } from '../src/print/model/print-view-model';
 import {
   MemberActorKind,
   MemberRoleKind,
@@ -208,12 +209,17 @@ const BASELINE = PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline;
 let container: HTMLDivElement;
 let root: Root;
 
-function render(pages?: readonly string[]): void {
+/**
+ * 渲染助手（期三：pages → sheets。A 版四页全是原生页，spec 仍按原生页
+ * kind 传，helper 负责包成 native sheet——「外表 × 模块分离」后纸面
+ * 单元是 sheet，A 的原生页语义不变）。
+ */
+function render(pages?: readonly PrintPageKind[]): void {
   act(() => {
     root.render(
       <SwissScheduleDocument
         vm={buildVm()}
-        pages={pages as never}
+        sheets={pages?.map((page) => ({ type: 'native', page }) as const)}
         palette={BASELINE}
       />,
     );

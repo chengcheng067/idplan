@@ -140,8 +140,8 @@ describe('打印密度下限（密度研究 §4 三约束：改色后密度不�
   });
 
   it('四版 CSS 现状不踩任一条下限（行 padding 上下侧 ≥3px / 轨道 ≥6px）', () => {
-    // 从四套模板 CSS 源码实读（不是复述常识）：compact 档是最紧档，取全表最小值
-    const styles = ['swiss-schedule', 'data-editorial', 'editorial-index'].map((f) =>
+    // 从四套模板 CSS + 通用模块 CSS 源码实读（不是复述常识）：compact 档是最紧档，取全表最小值
+    const styles = ['swiss-schedule', 'data-editorial', 'editorial-index', 'generic-modules'].map((f) =>
       readFileSync(resolve(__dirname, '..', 'src', 'print', 'styles', `${f}.css`), 'utf-8'),
     );
     /** 取一条规则的 padding 四联值（CSS 简写展开：1→全同，2→[v,v]，3→[上,右,下]） */
@@ -160,6 +160,8 @@ describe('打印密度下限（密度研究 §4 三约束：改色后密度不�
         '\\.swiss-register td',
         '\\.de-table td',
         '\\.ei-row\\b',
+        // 期三通用模块（generic-modules.css 四套外表块 + compact 档都在内）
+        '\\.gm-table td',
       ].flatMap((sel) =>
         Array.from(
           css.matchAll(new RegExp(`${sel}\\s*\\{[^}]*padding:\\s*([^;}]+)`, 'g')),

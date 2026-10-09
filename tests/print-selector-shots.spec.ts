@@ -73,12 +73,18 @@ function builtCss(): string {
 
 /* ------------------------------------------------------------------ 四套外表 */
 
-/** 四版各一张（classic 走五块不进模块表，不在本组截图范围） */
-const CASES: ReadonlyArray<{ tag: string; template: PrintTemplateId; nativeCount: number }> = [
-  { tag: 'a', template: 'swiss-schedule', nativeCount: 4 },
-  { tag: 'd', template: 'data-editorial', nativeCount: 4 },
-  { tag: 'e', template: 'editorial-index', nativeCount: 3 },
-  { tag: 'h', template: 'agent-poster', nativeCount: 2 },
+/** 四版各一张（classic 走五块不进模块表，不在本组截图范围）。
+ *  期三第一批起三态：原生（有原生页）/ 通用（generic 标记）/ 暂不可用。 */
+const CASES: ReadonlyArray<{
+  tag: string;
+  template: PrintTemplateId;
+  nativeCount: number;
+  genericCount: number;
+}> = [
+  { tag: 'a', template: 'swiss-schedule', nativeCount: 4, genericCount: 0 },
+  { tag: 'd', template: 'data-editorial', nativeCount: 4, genericCount: 3 },
+  { tag: 'e', template: 'editorial-index', nativeCount: 3, genericCount: 1 },
+  { tag: 'h', template: 'agent-poster', nativeCount: 2, genericCount: 3 },
 ];
 
 function shell(bodyMarkup: string, css: string): string {
@@ -103,7 +109,7 @@ describe.skipIf(!CAN_RUN)('选择器模块化 · 四套外表模块勾选态截�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('A/D/E/H 各自截图：11 行模块表单，原生可选（默认全选）+ 非原生禁用带原因', async () => {
+  it('A/D/E/H 各自截图：11 行模块表单三态——原生/通用可选（默认全选）+ 暂不可用禁用带原因', async () => {
     const css = builtCss();
     const page = await browser.newPage({ viewport: { width: 480, height: 900 } });
     try {
@@ -118,33 +124,47 @@ describe.skipIf(!CAN_RUN)('选择器模块化 · 四套外表模块勾选态截�
         const htmlPath = writeHtml(`selector-modules-${c.tag}.html`, shell(markup, css));
         await page.goto('file://' + htmlPath);
 
-        // 11 行齐全（四套外表同一个模块表单，原生/禁用随外表变）
+        // 11 行齐全（四套外表同一个模块表单，三态随外表变）
         const rows = await page.$$('[data-print-module-row]');
         expect(rows.length, `${c.tag} 外表应有 11 个模块行`).toBe(11);
 
         // 原生计数与能力表一致；原生可勾且默认全选
-        const nativeCount = await page.$$eval('[data-print-module-row][data-native="on"]', (els) => els.length);
+        const nativeCount = await page.$$eval('[data-print-module-row][data-avail="native"]', (els) => els.length);
         expect(nativeCount, `${c.tag} 外表原生模块数`).toBe(c.nativeCount);
         const nativeChecked = await page.$$eval(
-          '[data-print-module-row][data-native="on"] input[data-print-module]',
+          '[data-print-module-row][data-avail="native"] input[data-print-module]',
           (els) => els.filter((el) => (el as HTMLInputElement).checked).length,
         );
         expect(nativeChecked, `${c.tag} 原生模块默认全选`).toBe(c.nativeCount);
 
-        // 非原生：禁用 + 不勾 + 原因文案（期三通用渲染补，不装能打）
-        const offRows = await page.$$('[data-print-module-row][data-native="off"]');
-        expect(offRows.length, `${c.tag} 非原生模块数`).toBe(11 - c.nativeCount);
+        // 期三通用：可勾 + 默认全选 + 行标「通用渲染」
+        const genericCount = await page.$$eval('[data-print-module-row][data-avail="generic"]', (els) => els.length);
+        expect(genericCount, `${c.tag} 外表通用渲染模块数`).toBe(c.genericCount);
+        const genericChecked = await page.$$eval(
+          '[data-print-module-row][data-avail="generic"] input[data-print-module]',
+          (els) => els.filter((el) => (el as HTMLInputElement).checked).length,
+        );
+        expect(genericChecked, `${c.tag} 通用模块默认全选`).toBe(c.genericCount);
+        for (const row of await page.$$('[data-print-module-row][data-avail="generic"]')) {
+          const text = (await row.textContent()) ?? '';
+          expect(text, '通用行标注渲染方式').toContain('通用渲染');
+        }
+
+        // 暂不可用：禁用 + 不勾 + 原因文案（后续批次陆续补）
+        const offRows = await page.$$('[data-print-module-row][data-avail="off"]');
+        expect(offRows.length, `${c.tag} 暂不可用模块数`).toBe(11 - c.nativeCount - c.genericCount);
         for (const row of offRows) {
           const disabled = await row.$eval('input[data-print-module]', (el) =>
             (el as HTMLInputElement).disabled,
           );
-          expect(disabled, '非原生模块必须禁用').toBe(true);
+          expect(disabled, '暂不可用模块必须禁用').toBe(true);
           const text = (await row.textContent()) ?? '';
           expect(text, '禁用行带原因').toContain('该外表下暂不可用');
         }
 
-        // 脚注：后续支持口径如实告知
+        // 脚注：已支持口径 + 后续支持口径如实告知
         const note = await page.$eval('[data-print-module-section]', (el) => el.textContent ?? '');
+        expect(note).toContain('已支持通用渲染');
         expect(note).toContain('将随通用渲染陆续支持');
 
         await (await page.$('[data-selector-shot]'))!.screenshot({

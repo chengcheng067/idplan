@@ -350,7 +350,7 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('D 版四页：默认态彩色 4 张 + 灰度 4 张；794×1123 无裁切', async () => {
+  it('D 版默认态：4 原生 + 3 通用 = 7 页，彩色 7 张 + 灰度 7 张；794×1123 无裁切（期三）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['data-editorial'].baseline;
@@ -367,7 +367,7 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
         );
         await page.goto('file://' + htmlPath);
         const pages = await page.$$('.a4-page');
-        expect(pages, 'D 版应渲染 4 页').toHaveLength(4);
+        expect(pages, 'D 版应渲染 7 页（期三：+3 通用页）').toHaveLength(7);
         for (let i = 0; i < pages.length; i++) {
           const el = pages[i]!;
           const box = await el.boundingBox();
@@ -487,7 +487,7 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     }
   });
 
-  it('D 版四页：套预设变体（靛蓝）彩色 4 张；信号槽位确实挂上（非默认态重截）', async () => {
+  it('D 版默认态：套预设变体（靛蓝）彩色 7 张；信号槽位确实挂上（非默认态重截）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['data-editorial'].presets.find((p) => p.id === 'indigo')!;
@@ -500,7 +500,7 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
       const htmlPath = writeHtml('d-preset-indigo.html', shell(markup, css, false));
       await page.goto('file://' + htmlPath);
       const pages = await page.$$('.a4-page');
-      expect(pages).toHaveLength(4);
+      expect(pages).toHaveLength(7);
       for (let i = 0; i < pages.length; i++) {
         const box = await pages[i]!.boundingBox();
         expect(Math.abs(box!.width - 794)).toBeLessThanOrEqual(1);

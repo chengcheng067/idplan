@@ -375,7 +375,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('E 版三页：默认态彩色 3 张 + 灰度 3 张；794×1123 无裁切', async () => {
+  it('E 版默认态：3 原生 + 1 通用 = 4 页，彩色 4 张 + 灰度 4 张；794×1123 无裁切（期三）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['editorial-index'].baseline;
@@ -391,7 +391,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
           shell(markup, css, gray),
         );
         await page.goto('file://' + htmlPath);
-        await assertPagesAndShot(page, gray ? 'gray' : 'color', 3);
+        await assertPagesAndShot(page, gray ? 'gray' : 'color', 4);
       }
     } finally {
       await page.close();
@@ -558,7 +558,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     }
   });
 
-  it('E 版预设变体（靛蓝）彩色 3 张；焦点槽位确实挂上（非默认态重截）', async () => {
+  it('E 版预设变体（靛蓝）彩色 4 张；焦点槽位确实挂上（非默认态重截，期三）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['editorial-index'].presets.find((p) => p.id === 'indigo')!;
@@ -571,7 +571,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       const htmlPath = writeHtml('e-preset-indigo.html', shell(markup, css, false));
         await page.goto('file://' + htmlPath);
         const pages = await page.$$('.a4-page');
-        expect(pages).toHaveLength(3);
+        expect(pages).toHaveLength(4);
       for (let i = 0; i < pages.length; i++) {
         const box = await pages[i]!.boundingBox();
         expect(Math.abs(box!.width - 794)).toBeLessThanOrEqual(1);
@@ -591,7 +591,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     }
   });
 
-  it('E 版空态：无可见阶段 ⇒ P1 明确空态（02 §8 文案，不造数据填版）', async () => {
+  it('E 版空态：无可见阶段 ⇒ 四页全明确空态（02 §8 文案，不造数据填版）', async () => {
     const css = builtCss();
     // 空阶段 VM：项目在、阶段全隐藏
     const vm = buildPrintViewModel({
@@ -614,11 +614,11 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     try {
       const htmlPath = writeHtml('e-empty.html', shell(markup, css, false));
       await page.goto('file://' + htmlPath);
-      // 三个逻辑页都出纸（页头页脚齐全），主体全是标准空态文案
+      // 四个逻辑页都出纸（页头页脚齐全），主体全是标准空态文案
       const pages = await page.$$('.a4-page');
-      expect(pages).toHaveLength(3);
+      expect(pages).toHaveLength(4);
       const empties = await page.$$('[data-print-empty]');
-      expect(empties.length, '三页各一条空态').toBe(3);
+      expect(empties.length, '四页各一条空态（期三：+通用任务清单页）').toBe(4);
       const text = (await page.textContent('body')) ?? '';
       expect(text).toContain('当前可见范围内无阶段');
       expect(text).toContain('当前可见范围内无相关成员');
