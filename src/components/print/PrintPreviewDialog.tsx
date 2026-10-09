@@ -14,6 +14,10 @@
  * ── 规范落地索引 ──
  *  D1 浮层=Modal fullscreen · D2 z-[75] · D3 纸面恒浅（.print-root 内）·
  *  D4 圆角 0 · D5 iframe 打印（src/lib/print-frame.ts）· D6 PNG 导出复用。
+ *  她 10-09 23:38 反馈「日程表打印预览的窗口不要超过左侧的侧边栏」：
+ *  fullscreen 遮罩传 railLeft（≥xl = 侧栏宽 240/64，随折叠随缘；<xl 不传
+ *  ⇒ 全宽）——预览从侧栏右缘起，侧栏全程可见可点、不被压暗（Modal 的
+ *  left-rail 同款让位模式，几何与 SettingsDialog 反馈 #1 同源）。
  *
  * ── v0.8.6 四版模板重建（产品决策文档 §2.1/§2.2）──
  *  「打印内容」钮升格为「模板与模块」一个**弹窗**三截（期六由 dropdown
@@ -21,11 +25,14 @@
  *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H，全部已实现；期六起
  *          带 96×64 真缩略图，经典沿用「版本字母 + 基线三色点」占位）；
  *    中截 输出模块：经典 = 五块复选框（数据结构逐字不变，保护既有 spec）；
- *          四版 = 11 个内容模块复选框三态（期二：原生可勾选默认全选、
- *          非原生禁用态 + 原因；期三：M1/M2/M4 通用渲染落地，无原生页的
- *          外表改标「通用渲染」可勾选，M3/M5-M11 保持禁用）；勾选态按
- *          模板各存一套，换模板不丢——期二「外表 × 模块分离」+ 期三
- *          通用渲染第一批，产品决策文档 §3.2/§3.3/§3.5；
+ *          四版 = 11 个内容模块复选框三态（期二：原生可勾选、非原生禁用态
+ *          + 原因；期三：M1/M2/M4 通用渲染落地，无原生页的外表改标「通用
+ *          渲染」可勾选，M3/M5-M11 保持禁用；**默认态 = 原生签名页**——
+ *          她 10-09 23:38 反馈「做出来的东西完全不是参考稿那个味道」的
+ *          修复：缺键兜底从「全选可用」收敛为原生模块，通用模块默认不勾、
+ *          可手动勾选或「全选」）；勾选态按模板各存一套，换模板不丢——
+ *          期二「外表 × 模块分离」+ 期三通用渲染第一批 + 默认态收敛，
+ *          产品决策文档 §3.2/§3.3/§3.5；
  *    下截 配色：三槽位受控 token（预设变体卡为主 + 自定义过对比度硬闸门），
  *          仅四版显示（经典是品牌资产，不开放）。
  *  工具条另加「灰度」toggle（纸面 wrapper 套 filter:grayscale(1)）——选色时
@@ -69,6 +76,12 @@ import { printPaper } from '../../lib/print-frame';
 import { exportSchedulePngPages, schedulePngFileName, type SchedulePaperBlocks } from '../../lib/schedule-print';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { usePrintPrefsStore } from '../../store/usePrintPrefsStore';
+import {
+  useLayoutStore,
+  SIDEBAR_W_COLLAPSED,
+  SIDEBAR_W_EXPANDED,
+} from '../../store/useLayoutStore';
+import { useXlViewport } from '../../hooks/useXlViewport';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { isDesktop } from '../../lib/desktopBridge';
 import { A4_WIDTH_PX } from '../../lib/schedule-print';
@@ -76,6 +89,7 @@ import {
   PRINT_MODULES,
   PRINT_TEMPLATES,
   enabledSheetsOf,
+  printTemplateDefaultModuleIds,
   printTemplateMeta,
   printTemplateModuleIds,
   printTemplateModules,
@@ -310,14 +324,16 @@ export function PrintSelectorPanel({
 
 /**
  * 选择器中截 · 模块勾选（v1.5-a 期二：页勾选 → 模块勾选，产品决策文档 §3.3；
- * v1.5-b 期三：M1/M2/M4 通用渲染落地，禁用态解除）。
+ * v1.5-b 期三：M1/M2/M4 通用渲染落地，禁用态解除；默认态收敛：原生默认
+ * 勾选、通用默认不勾——她 10-09 23:38 反馈修复）。
  *
  * 11 个内容模块逐行：模块名 + 一句话内容说明 + 渲染方式提示。三态：
- *   · **原生**（该外表能力表内有原生页）：可勾选、默认全选，右侧标注
+ *   · **原生**（该外表能力表内有原生页）：可勾选、**默认勾选**，右侧标注
  *     原生页名（H 的 Agent 执行 = 两页，标「Agent 执行宣告 + 执行状态全览」）；
- *   · **通用**（期三：M1/M2/M4 于无原生页的外表）：可勾选、默认全选，
- *     右侧标注「通用渲染」——该外表的基础排版承接（字体阶/色板/密度/
- *     表格形态），不套标志布局；
+ *   · **通用**（期三：M1/M2/M4 于无原生页的外表）：可勾选、**默认不勾**
+ *     （缺键默认 = 原生签名页，见 print-skins 的 printTemplateDefaultModuleIds；
+ *     用户可手动勾选或点「全选」），右侧标注「通用渲染」——该外表的基础排版
+ *     承接（字体阶/色板/密度/表格形态），不套标志布局；
  *   · **暂不可用**（M3/M5-M11 于非原生外表）：禁用态 + 原因，等后续批次。
  * 勾选态按模板各存一套（store pages），换外表不丢失。
  *
@@ -504,6 +520,17 @@ export function PrintPreviewDialog({
   /** 全局打印 logo（settings KV；null = 未上传 ⇒ 四版统一「ID Plan」文字标） */
   const { logo } = usePrintLogo();
   const meta = printTemplateMeta(template);
+  /**
+   * 预览遮罩左缘让出的宽度 = 侧栏宽度（她 10-09 23:38 反馈：「日程表打印
+   * 预览的窗口不要超过左侧的侧边栏」）。算法与 SettingsDialog 的贴侧栏
+   * 右缘展开同源（反馈 #1）：≥xl 侧栏是持久左栏（展开 240 / 收起 64，
+   * 与 CSS --sidebar-w / --sidebar-w-collapsed 同值，常量见 useLayoutStore），
+   * <xl 无持久侧栏 ⇒ 不传（Modal fullscreen 全宽，现状不变）。侧栏展开态
+   * 走 store 订阅 ⇒ 预览打开期间折叠/展开侧栏，遮罩左缘随缘实时跟随。
+   */
+  const sidebarExpanded = useLayoutStore((s) => s.sidebarExpanded);
+  const xl = useXlViewport();
+  const railLeftPx = xl ? (sidebarExpanded ? SIDEBAR_W_EXPANDED : SIDEBAR_W_COLLAPSED) : 0;
   const paperRootRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
   /** 缩放档位：fit（随预览区宽度自适应）/ custom（滑块或滚轮的连续值） */
@@ -617,12 +644,14 @@ export function PrintPreviewDialog({
 
   /**
    * 该模板启用的纸面页（期三：模块勾选 ⇒ sheets 序列派生）。
-   * 缺键 = 默认全选可用模块（原生 + 通用；01 §8 明文）。原生模块落原生页
+   * 缺键 = 默认勾选**原生**模块（签名页；她 10-09 23:38 反馈的修复——
+   * 旧兜底是全选可用，D 的 3 个通用模块按 M1→M11 序排最前，打开第一页
+   * 是通用「阶段清单」表格而不是「阶段进度矩阵」）。原生模块落原生页
    * （M10 落两页），通用模块落通用页（可跨多页）；页序按注册表 M1→M11，
    * 与勾选顺序无关。
    */
   const enabledSheets = useMemo<PrintSheet[]>(
-    () => enabledSheetsOf(template, pages[template]),
+    () => enabledSheetsOf(template, pages[template] ?? printTemplateDefaultModuleIds(template)),
     [template, pages],
   );
 
@@ -680,13 +709,19 @@ export function PrintPreviewDialog({
 
   const paperNaturalHeight =
     Math.max(pagesCount, 1) * A4_HEIGHT_PX + Math.max(Math.max(pagesCount, 1) - 1, 0) * GAP_BETWEEN_PAGES;
-  /** 状态条读数：当前启用的模块数（四版）/ 块数（经典） */
+  /** 状态条读数：当前启用的模块数（四版）/ 块数（经典）；四版缺键 = 默认原生模块 */
   const enabledModuleCount = meta.usesBlocks
     ? BLOCK_ROWS.filter((row) => blocks[row.key]).length
-    : (pages[template] ?? printTemplateModuleIds(template)).length;
+    : (pages[template] ?? printTemplateDefaultModuleIds(template)).length;
 
   return (
-    <Modal open={open} onClose={onClose} placement="fullscreen" ariaLabel="打印预览">
+    <Modal
+      open={open}
+      onClose={onClose}
+      placement="fullscreen"
+      railLeft={xl ? `${railLeftPx}px` : undefined}
+      ariaLabel="打印预览"
+    >
       <div data-print-preview="" className="print-preview flex h-full w-full flex-col bg-paper">
         {/* 工具条：win32 桌面端避让系统三键（与 SettingsDialog 同款 titleBarHeight） */}
         <div
@@ -892,7 +927,7 @@ export function PrintPreviewDialog({
             template={template}
             pagesCount={pagesCount}
             enabledModuleCount={enabledModuleCount}
-            enabledModules={pages[template] ?? printTemplateModuleIds(template)}
+            enabledModules={pages[template] ?? printTemplateDefaultModuleIds(template)}
             onTemplatePick={(id) => {
               setTemplate(id);
               // 换模板 ⇒ 旧模板收集的页面 ref 作废（PNG 导出按新模板重收）

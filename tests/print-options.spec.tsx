@@ -21,7 +21,7 @@
  *   ⑤【新】模板选择器：五张卡可切，A/D 版各渲染 4 页且可打印；E/H 版已
  *      落地（批 3/批 4）——E 渲染 3 页（产出物空态）、H 渲染 3 页（无 Agent
  *      数据 ⇒ 整版只读空态），均可打印（转正后适配：不再有「建设中」）；
- *   ⑥【新】页面勾选：四版默认全选、可摘单页、页码/预计页数联动；
+ *   ⑥【新】页面勾选：四版默认勾选原生签名页、可摘模块、页码/预计页数联动；
  *   ⑦【新】配色硬闸门：不达标禁存（store 层一个字节都不落库）。
  * L2（静态源码锁 + paginateSections 纯函数契约）见文件末组。
  *
@@ -52,6 +52,19 @@
  *   **未动**：五块开关契约、经典纸面全部行为、④ 的持久化/脏数据口径、
  *   ⑦ 配色闸门、paginateSections 纯函数、纸面 `.a4-page[data-print-page]`
  *   （页 kind 属性在渲染侧不动，视觉 spec 照旧命中）。
+ *
+ * ── v4（默认态收敛）适配记录（她 10-09 23:38 反馈的修复） ──
+ *   她的原话：「地板参考图的甘特图是示意图这个样子的，但是比如说现在我们
+ *   做出来的东西，就完全不是这个味道，其他几个版本同理」——根因：pages
+ *   缺键兜底曾是「全选可用」，D/E/H 的通用模块（M1/M2/M4）按 M1→M11 序
+ *   排最前，打开预览第一页是通用表格而不是签名页。缺键兜底收敛为
+ *   `printTemplateDefaultModuleIds`（= 原生模块）。
+ *   改动 1：⑤ 的 D/E/H 默认页数断言随改（D 7→4、E 4→3、H 6→3），通用页
+ *          的标题/口径断言改走「手动勾选后上纸」的路径（可勾选性保留的
+ *          证据），并新增「D 默认第一页 = progress-matrix」断言；
+ *   改动 2：L2 静态锁增补 printTemplateDefaultModuleIds 在位断言。
+ *   **未动**：A/classic 的全部断言（A 无通用模块，默认形状不变）、五块
+ *   开关、⑥ 的 A 路径（原生 = 可用，默认全选形状不变）。
  *
  * 挂载形态同 `print-preview-zoom.spec.tsx`：先 open=false 再翻 true（= 首次
  * 打开），纸面走**真实** SchedulePaper + 真实 useSchedulePaperData，stores
@@ -529,37 +542,50 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(bodyContains('预计 4 页')).toBe(true);
     expect(printButton()!.disabled, 'A 版可打印').toBe(false);
 
-    // 切 D：D 版落地（批 2 四原生页 + 期三第一批三通用页 ⇒ 7 页）
+    // 切 D：默认 = 4 原生签名页（她 10-09 23:38 反馈修复：第一页是进度
+    // 矩阵，不再是通用「阶段清单」表格——参考稿那个味道）
     pickTemplate('data-editorial');
     expect(paperRoot()!.className).toContain('print-template-data-editorial');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(7);
-    expect(bodyContains('预计 7 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
+    expect(bodyContains('预计 4 页')).toBe(true);
     expect(printButton()!.disabled, 'D 版可打印').toBe(false);
+    // 默认通用模块不勾（M1/M2/M4 在 D 是通用渲染，不进默认态）
+    for (const m of ['stage-list', 'task-list', 'member-roster']) {
+      expect(moduleCheckbox(m).checked, `D 的 ${m} 默认不勾（默认 = 原生签名页）`).toBe(false);
+    }
     // 四页原生页题（完整单行中文）与关键内容在纸面上
     const dText = paperRoot()!.textContent ?? '';
     for (const title of ['阶段进度矩阵', '任务依赖网络', '阶段工作量构成', '里程碑与验收']) {
       expect(dText, `D 版纸面应含页题「${title}」`).toContain(title);
     }
-    // 期三：三通用页（M1/M2/M4）页题与口径注上纸
-    for (const title of ['阶段清单', '任务清单', '成员名册']) {
-      expect(dText, `D 版纸面应含通用页题「${title}」`).toContain(title);
-    }
     expect(dText).toContain('占比不等于完成度');
     // 本夹具 8 任务 dependsOn 全空 ⇒ 依赖网络走「无依赖」空态 + 节点摘要
     expect(document.querySelector('[data-print-empty="dependencies"]'), '无依赖空态').not.toBeNull();
+    // 第一页 = 进度矩阵（反馈修复的核心断言：默认态落在签名原生页）
+    expect(
+      document.querySelector('.a4-page')!.getAttribute('data-print-page'),
+      'D 默认第一页应是进度矩阵（不是通用阶段清单表）',
+    ).toBe('progress-matrix');
+    // 手动勾通用模块 ⇒ 三通用页（M1/M2/M4）页题与口径注上纸（可勾选性保留）
+    for (const m of ['stage-list', 'task-list', 'member-roster']) setModuleChecked(m, true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(7);
+    expect(bodyContains('预计 7 页')).toBe(true);
+    for (const title of ['阶段清单', '任务清单', '成员名册']) {
+      expect(paperRoot()!.textContent, `D 版纸面应含通用页题「${title}」`).toContain(title);
+    }
+    for (const m of ['stage-list', 'task-list', 'member-roster']) setModuleChecked(m, false);
 
-    // 切 E：三原生页 + 期三第一批一通用页（M2 任务清单）⇒ 纸面 4 页
+    // 切 E：默认 = 3 原生签名页（M2 任务清单是通用渲染，默认不勾）
     pickTemplate('editorial-index');
     expect(paperRoot()!.className).toContain('print-template-editorial-index');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
-    expect(bodyContains('预计 4 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
+    expect(bodyContains('预计 3 页')).toBe(true);
     expect(printButton()!.disabled, 'E 版可打印').toBe(false);
+    expect(moduleCheckbox('task-list').checked, 'E 的 task-list 默认不勾（通用渲染）').toBe(false);
     const eText = paperRoot()!.textContent ?? '';
     for (const title of ['阶段目录', '成员执行体目录', '产出物清单']) {
       expect(eText, `E 版纸面应含页题「${title}」`).toContain(title);
     }
-    // 期三：M2 通用页（任务清单）在 E 纸面上
-    expect(eText, 'E 版纸面应含通用页题「任务清单」').toContain('任务清单');
     // 本夹具任务无产出物 ⇒ P3 走标准空态（02 §8 文案，不造数据填版）
     expect(
       document.querySelector('[data-print-empty="artifacts"]'),
@@ -567,16 +593,21 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     ).not.toBeNull();
     // 未上传 logo ⇒ 每页左上角发丝线下方是「ID Plan」文字标（不留空）
     const eLogos = document.querySelectorAll('.a4-page [data-print-logo="text"]');
-    expect(eLogos.length, 'E 四页各一枚文字标').toBe(4);
+    expect(eLogos.length, 'E 三页各一枚文字标').toBe(3);
     expect((eLogos[0]!.textContent ?? '').trim()).toBe('ID Plan');
+    // 手动勾 M2 ⇒ 通用任务清单页上纸（期三通用渲染在 E 的落地）
+    setModuleChecked('task-list', true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
+    expect(paperRoot()!.textContent, 'E 版纸面应含通用页题「任务清单」').toContain('任务清单');
+    setModuleChecked('task-list', false);
 
-    // 切 H：三原生页落地（批 4）+ 期三第一批三通用页（M1/M2/M4）⇒ 6 页；
-    // 本夹具无 Agent 数据 ⇒ 三个原生页整版只读空态（不许假装有执行），
-    // 三个通用页照常出内容（去专属化：H 不再是 Agent 专属外表）
+    // 切 H：默认 = 3 原生签名页（M10 两页 + 写回一页）；
+    // 本夹具无 Agent 数据 ⇒ 三个原生页整版只读空态（不许假装有执行）；
+    // 通用 M1/M2/M4 默认不勾（去专属化后默认态仍是原生签名页）
     pickTemplate('agent-poster');
     expect(paperRoot()!.className).toContain('print-template-agent-poster');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(6);
-    expect(bodyContains('预计 6 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
+    expect(bodyContains('预计 3 页')).toBe(true);
     expect(printButton()!.disabled, 'H 版可打印').toBe(false);
     const hEmpty = document.querySelectorAll('[data-print-empty="agent"]');
     expect(hEmpty.length, '无 Agent 数据 ⇒ 三个原生页整版只读空态').toBe(3);
@@ -584,7 +615,9 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     // 空态下不许出现任何执行状态卡（不拿模拟记录填版）
     expect(document.querySelector('[data-testid="ap-status-columns"]')).toBeNull();
     expect(document.querySelector('.ap-giant')).toBeNull();
-    // 期三：三个通用页有内容（本夹具 2 阶段 / 2 任务 / 1 成员）
+    // 手动勾通用模块 ⇒ 三个通用页有内容（本夹具 2 阶段 / 2 任务 / 1 成员）
+    for (const m of ['stage-list', 'task-list', 'member-roster']) setModuleChecked(m, true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(6);
     const hText = paperRoot()!.textContent ?? '';
     for (const title of ['阶段清单', '任务清单', '成员名册']) {
       expect(hText, `H 版纸面应含通用页题「${title}」`).toContain(title);
@@ -679,6 +712,8 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
     expect(src).toContain('export function enabledPagesOf');
     expect(src).toContain('export function pageKindToModule');
     expect(src).toContain('PAGE_TO_MODULE');
+    // 默认态收敛（她 10-09 23:38 反馈）：缺键兜底 = 原生签名页
+    expect(src).toContain('export function printTemplateDefaultModuleIds');
     // 静态映射纪律（同 stageColors）：整个文件不允许出现模板字符串
     expect(src, '禁止模板字符串拼类名（Tailwind JIT 看不见动态串）').not.toContain('${');
     // legacy 出口（SchedulePaper 主体仍消费，未碰）

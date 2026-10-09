@@ -81,7 +81,7 @@ const DE_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
 export interface DataEditorialDocumentProps {
   vm: PrintViewModel;
   /**
-   * 纸面页（期三：原生页 kind + 通用模块 id；缺省 = 全选可用模块）。
+   * 纸面页（期三：原生页 kind + 通用模块 id；缺省 = 默认原生模块）。
    * D 的 M1/M2/M4 无原生页 ⇒ 走通用渲染（该外表基础排版承接）。
    */
   sheets?: readonly PrintSheet[];

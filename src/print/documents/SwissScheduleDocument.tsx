@@ -88,7 +88,7 @@ function stampOf(iso: string): string {
 export interface SwissScheduleDocumentProps {
   vm: PrintViewModel;
   /**
-   * 纸面页（期三：原生页 kind + 通用模块 id 的混合序列；缺省 = 全选可用模块）。
+   * 纸面页（期三：原生页 kind + 通用模块 id 的混合序列；缺省 = 默认原生模块）。
    * 选择器勾选即时重渲染；A 的 M1/M2/M4 是原生页，通用页在本版不会出现
    * （期三第一批里 A 无 generic 标记模块），装配链仍统一走 sheets。
    */

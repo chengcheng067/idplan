@@ -431,6 +431,29 @@ export function printTemplateGenericModuleIds(id: PrintTemplateId): PrintModuleI
     .map((c) => c.module);
 }
 
+/**
+ * 该模板的**默认勾选**模块 id = **原生模块**（能力表里 pages 非空的；
+ * 经典 ⇒ 空集——它 usesBlocks，不走模块表）。
+ *
+ * ── 为什么默认不再是「全部可用」 ──
+ * 她 10-09 23:38 反馈：「地板参考图的甘特图是示意图这个样子的，但是比如说
+ * 现在我们做出来的东西，就完全不是这个味道，其他几个版本同理」——根因：
+ * pages 缺键的兜底曾是 `printTemplateModuleIds`（= 原生 + 通用**全部可用**）。
+ * D 可用 7 个（3 通用 M1/M2/M4 + 4 原生 M5-M8），按 PRINT_MODULES 序通用
+ * 模块排在最前 ⇒ 打开 D 预览第一页是通用「阶段清单」表格，而不是签名页
+ * 「阶段进度矩阵」；E/H 同理（通用模块排在原生前面）。
+ *
+ * 默认 = 原生签名页（A 4 页 / D 4 页 / E 3 页 / H 3 纸面——M10 落两页），
+ * 通用模块（M1/M2/M4 于 D/E/H）仍可**手动勾选**、「全选」范围也仍是可用集
+ * （printTemplateModuleIds）——变的只是**默认态**：打开预览看到的是该模板
+ * 的标志设计（参考稿那个味道）。
+ */
+export function printTemplateDefaultModuleIds(id: PrintTemplateId): PrintModuleId[] {
+  return printTemplateModules(id)
+    .filter((c) => c.pages.length > 0)
+    .map((c) => c.module);
+}
+
 /** (template, module) 在该外表的可用性：原生 / 通用 / 暂不可用（选择器三态） */
 export function moduleAvailability(
   template: PrintTemplateId,
@@ -457,15 +480,17 @@ export function nativePagesOf(
 
 /**
  * 勾选态 ⇒ 纸面页序（**注册表序 = PRINT_MODULES 的 M1→M11**，与勾选顺序无关）。
- * 缺参 / 缺键 = 默认全选可用模块（原生 + 通用；01 §8「每套默认全选」的
- * 期三口径）。原生模块落原生页（M10 落两页），通用模块落通用页。
+ * **缺参 = 默认原生模块**（printTemplateDefaultModuleIds；她 10-09 23:38
+ * 反馈的修复：默认必须落到签名原生页——D 打开第一页是进度矩阵而不是通用
+ * 阶段清单表格；通用模块可手动勾选，不进默认态）。原生模块落原生页
+ * （M10 落两页），通用模块落通用页。
  */
 export function enabledSheetsOf(
   template: PrintTemplateId,
   modules: readonly PrintModuleId[] | undefined,
 ): PrintSheet[] {
   const caps = printTemplateModules(template);
-  const on = new Set(modules ?? caps.map((c) => c.module));
+  const on = new Set(modules ?? printTemplateDefaultModuleIds(template));
   const out: PrintSheet[] = [];
   for (const cap of caps) {
     if (!on.has(cap.module)) continue;
@@ -480,8 +505,9 @@ export function enabledSheetsOf(
 
 /**
  * 勾选态 ⇒ **原生页** kind 列表（通用模块不进本函数；纸面全量用
- * enabledSheetsOf）。缺参 = 全选可用模块 ⇒ 原生页序与旧「页勾选」默认态
- * 逐页等价（期二回归红线的保留锚点：四套模板原生输出零变化）。
+ * enabledSheetsOf）。缺参 = 默认原生模块 ⇒ 原生页序与旧「页勾选」默认态
+ * 逐页等价（期二回归红线的保留锚点：四套模板原生输出零变化；默认态收敛
+ * 到原生签名页后这条锚点反而更直接）。
  */
 export function enabledPagesOf(
   template: PrintTemplateId,

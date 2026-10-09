@@ -13,14 +13,19 @@
  *   L1-a 模块能力表：原生集 A/D 各 4、E 3、H 2（M10 = 1 模块 2 页）；
  *        期三通用集 M1/M2/M4 于 D/E/H；可用集 = 原生 + 通用（按 M1→M11 序）；
  *        classic 不走模块表（五块 blocks 另一套粒度）；
- *   L1-b 打印零变化红线：默认（缺键）= 全选可用模块 ⇒ 原生页序与旧「页勾选」
- *        默认态**逐页等价**（四版模板原生输出零变化，编译期锚点）；通用模块
- *        另落通用页（enabledSheetsOf）；
+ *   L1-b 打印零变化红线：默认（缺键）= **原生签名页**
+ *        （printTemplateDefaultModuleIds；她 10-09 23:38 反馈「做出来的
+ *        东西完全不是参考稿那个味道」的修复——旧兜底是全选可用，D/E/H 的
+ *        通用模块按 M1→M11 序排最前，打开第一页是通用表格而不是签名页）
+ *        ⇒ 原生页序与旧「页勾选」默认态**逐页等价**（四版模板原生输出
+ *        零变化，编译期锚点）；通用模块另落通用页（显式勾选时，
+ *        enabledSheetsOf）；
  *   L1-c 选择器中截：11 模块逐行三态（原生 = 原生页名 / 通用 = 「通用渲染」/
- *        暂不可用 = 禁用 + 原因）；原生与通用默认全选，勾选联动纸面与
- *        「预计 N 页」；按模板各存一套，换外表不丢失；
+ *        暂不可用 = 禁用 + 原因）；**原生默认勾选、通用默认不勾**（可手动
+ *        勾选 / 全选），勾选联动纸面与「预计 N 页」；按模板各存一套，
+ *        换外表不丢失；
  *   L1-d 旧 pages 数据迁移：旧页 key → 模块 key（merge 兜底手法照旧）；有一条
- *        映射不了 ⇒ 该模板回落默认全选；反选意图保留；classic 键不收；
+ *        映射不了 ⇒ 该模板回落默认；反选意图保留；classic 键不收；
  *        期三：映射成功的模块若在该外表可用（含通用）不再被滤掉。
  *
  * 挂载形态同 print-options.spec.tsx：先 open=false 再翻 true，纸面走真实
@@ -54,6 +59,7 @@ import {
   moduleAvailability,
   nativePagesOf,
   pageKindToModule,
+  printTemplateDefaultModuleIds,
   printTemplateGenericModuleIds,
   printTemplateModuleIds,
   printTemplateModules,
@@ -469,7 +475,7 @@ describe('期二+期三 · L1-a 模块能力表', () => {
  * L1-b · 打印零变化红线（默认模块勾选 ≡ 旧页勾选）
  * ==================================================================================== */
 
-describe('期二+期三 · L1-b 打印零变化红线（缺键 = 全选可用 = 旧页勾选默认态）', () => {
+describe('期二+期三 · L1-b 打印零变化红线（缺键 = 原生签名页 = 旧页勾选默认态）', () => {
   it('enabledPagesOf 默认态与四个 Document 的原生页常量逐一相等', () => {
     expect(enabledPagesOf('swiss-schedule', undefined)).toEqual([...SWISS_SCHEDULE_PAGES]);
     expect(enabledPagesOf('data-editorial', undefined)).toEqual([...DATA_EDITORIAL_PAGES]);
@@ -478,15 +484,51 @@ describe('期二+期三 · L1-b 打印零变化红线（缺键 = 全选可用 = 
     expect(enabledPagesOf('classic', undefined), 'classic 无模块页').toEqual([]);
   });
 
-  it('显式全选可用模块 = 缺键默认态（store 落库形状不改变纸面）', () => {
+  it('缺键默认态 = 默认原生模块（她 10-09 23:38 反馈：默认必须落到签名页）', () => {
     for (const t of PRINT_TEMPLATE_IDS) {
-      expect(enabledSheetsOf(t, printTemplateModuleIds(t)), `${t} 全选`).toEqual(
+      expect(enabledSheetsOf(t, printTemplateDefaultModuleIds(t)), `${t} 默认原生`).toEqual(
         enabledSheetsOf(t, undefined),
       );
-      expect(enabledPagesOf(t, printTemplateModuleIds(t)), `${t} 全选（原生页）`).toEqual(
+      expect(enabledPagesOf(t, printTemplateDefaultModuleIds(t)), `${t} 默认原生（原生页）`).toEqual(
         enabledPagesOf(t, undefined),
       );
+      // 默认集 ≡ 原生集（通用模块不进默认态）
+      expect(printTemplateDefaultModuleIds(t), `${t} 默认 = 原生`).toEqual(
+        printTemplateNativeModuleIds(t),
+      );
     }
+    // D/E/H 的可用集严格大于默认集（通用模块可勾选但不默认）——反馈根因的形状锁
+    expect(printTemplateDefaultModuleIds('data-editorial')).not.toEqual(
+      printTemplateModuleIds('data-editorial'),
+    );
+    expect(printTemplateDefaultModuleIds('swiss-schedule')).toEqual(
+      printTemplateModuleIds('swiss-schedule'),
+    );
+  });
+
+  it('显式全选可用模块：只多通用页，原生页输出零变化（「全选」范围仍是可用集）', () => {
+    for (const t of PRINT_TEMPLATE_IDS) {
+      const all = enabledSheetsOf(t, printTemplateModuleIds(t));
+      const dft = enabledSheetsOf(t, undefined);
+      // 原生页序逐页等价（零变化红线核心：任何勾选路径都碰不到原生布局）
+      expect(enabledPagesOf(t, printTemplateModuleIds(t)), `${t} 全选后原生页不动`).toEqual(
+        enabledPagesOf(t, undefined),
+      );
+      // 多出来的恰是通用页（数量 = 通用模块数）
+      expect(all.length - dft.length, `${t} 全选只多通用页`).toBe(
+        printTemplateGenericModuleIds(t).length,
+      );
+    }
+    // D 显式全选 = 三通用页 + 四原生页（按 M1→M11 序；期三口径的形状锁）
+    expect(enabledSheetsOf('data-editorial', printTemplateModuleIds('data-editorial'))).toEqual([
+      { type: 'generic', module: 'stage-list' },
+      { type: 'generic', module: 'task-list' },
+      { type: 'generic', module: 'member-roster' },
+      { type: 'native', page: 'progress-matrix' },
+      { type: 'native', page: 'dependency-network' },
+      { type: 'native', page: 'workload-composition' },
+      { type: 'native', page: 'milestone-acceptance' },
+    ]);
   });
 
   it('勾选态只做筛选不改序；暂不可用 id 混入不进纸面、不计页数', () => {
@@ -505,11 +547,8 @@ describe('期二+期三 · L1-b 打印零变化红线（缺键 = 全选可用 = 
     ]);
     // 反选 ⇒ 空
     expect(enabledSheetsOf('swiss-schedule', [])).toEqual([]);
-    // 期三：D 默认 sheets = 三通用页 + 四原生页（按 M1→M11 序）
+    // 反馈修复后：D 默认 sheets = 四原生页（通用 M1/M2/M4 不进默认态）
     expect(enabledSheetsOf('data-editorial', undefined)).toEqual([
-      { type: 'generic', module: 'stage-list' },
-      { type: 'generic', module: 'task-list' },
-      { type: 'generic', module: 'member-roster' },
       { type: 'native', page: 'progress-matrix' },
       { type: 'native', page: 'dependency-network' },
       { type: 'native', page: 'workload-composition' },
@@ -561,25 +600,41 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     expect(usePrintPrefsStore.getState().pages['swiss-schedule']).toBeUndefined();
   });
 
-  it('期三 H 外表：2 原生 + 3 通用（M1/M2/M4 默认全选）+ 6 暂不可用', () => {
+  it('期三 H 外表：2 原生默认勾选 + 3 通用可勾默认不勾 + 6 暂不可用', () => {
     renderDialog(true);
     openSelector();
     pickTemplate('agent-poster');
 
     expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
-    // 原生 2 个（默认全选）；M10 一行标两页
+    // 原生 2 个（默认勾选）；M10 一行标两页
     expect(moduleCheckbox('agent-execution').checked).toBe(true);
     expect(moduleCheckbox('writeback-proposals').checked).toBe(true);
     expect(moduleRow('agent-execution').textContent, 'M10 = 两页，归属页提示两枚').toContain(
       'Agent 执行宣告 + 执行状态全览',
     );
-    // 期三通用 3 个：M1/M2/M4 可勾选、默认全选、行标「通用渲染」
+    // 期三通用 3 个：M1/M2/M4 可勾选、**默认不勾**（缺键默认 = 原生签名页，
+    // 她 10-09 23:38 反馈的修复）、行标「通用渲染」
     for (const m of ['stage-list', 'task-list', 'member-roster']) {
       expect(moduleCheckbox(m).disabled, `${m} 在 H 下应可勾（通用渲染）`).toBe(false);
-      expect(moduleCheckbox(m).checked, `${m} 默认应勾选`).toBe(true);
+      expect(moduleCheckbox(m).checked, `${m} 默认不应勾选（默认 = 原生签名页）`).toBe(false);
       expect(moduleRow(m).getAttribute('data-avail')).toBe('generic');
       expect(moduleRow(m).textContent, '通用行标注渲染方式').toContain('通用渲染');
     }
+    // 默认纸面 = 原生三页（M10 两页 + 写回一页），通用页不上纸
+    expect(paperPages()).toBe(3);
+    expect(
+      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
+        el.getAttribute('data-print-page'),
+      ),
+    ).toEqual(['agent-declaration', 'execution-status', 'writeback-proposals']);
+    // 手动勾一个通用模块 ⇒ 通用页按 M1→M11 序插进纸面（可勾选性保留）
+    setModuleChecked('stage-list', true);
+    expect(paperPages()).toBe(4);
+    expect(
+      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
+        el.getAttribute('data-print-page'),
+      ),
+    ).toEqual(['generic-stage-list', 'agent-declaration', 'execution-status', 'writeback-proposals']);
     // 其余 6 个暂不可用禁用带原因
     const off = Array.from(document.querySelectorAll('[data-print-module-row]')).filter(
       (el) => el.getAttribute('data-avail') === 'off',
@@ -605,36 +660,39 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     renderDialog(true);
     openSelector();
     pickTemplate('agent-poster');
-    // 默认全选可用 ⇒ H 六页（通用 M1/M2/M4 各一页 + agent-execution 两页 + 写回一页）
-    expect(paperPages()).toBe(6);
-    expect(bodyContains('预计 6 页')).toBe(true);
+    // 默认 = 原生签名页 ⇒ H 三页（agent-execution 两页 + 写回一页）
+    expect(paperPages()).toBe(3);
+    expect(bodyContains('预计 3 页')).toBe(true);
 
-    // 摘写回提案 ⇒ 5 页（M10 的两页不受影响）
+    // 摘写回提案 ⇒ 2 页（M10 的两页不受影响）
     setModuleChecked('writeback-proposals', false);
-    expect(paperPages()).toBe(5);
-    expect(bodyContains('预计 5 页')).toBe(true);
+    expect(paperPages()).toBe(2);
+    expect(bodyContains('预计 2 页')).toBe(true);
     expect(
       Array.from(document.querySelectorAll('.a4-page')).map((el) =>
         el.getAttribute('data-print-page'),
       ),
-    ).toEqual([
-      'generic-stage-list',
-      'generic-task-list',
-      'generic-member-roster',
-      'agent-declaration',
-      'execution-status',
-    ]);
+    ).toEqual(['agent-declaration', 'execution-status']);
 
     // 摘 Agent 执行 ⇒ 两页同出（1 模块 2 页，勾选粒度是模块）
     setModuleChecked('agent-execution', false);
-    expect(paperPages()).toBe(3);
-    expect(bodyContains('预计 3 页')).toBe(true);
+    expect(paperPages()).toBe(0);
+    expect(bodyContains('预计 0 页')).toBe(true);
 
     // 勾回 Agent 执行 ⇒ 两页同回
     setModuleChecked('agent-execution', true);
-    expect(paperPages()).toBe(5);
+    expect(paperPages()).toBe(2);
 
-    // 反选 / 全选（按模块）
+    // 勾通用模块 ⇒ 通用页按 M1→M11 序插进纸面（通用可勾选性保留）
+    setModuleChecked('stage-list', true);
+    expect(paperPages()).toBe(3);
+    expect(
+      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
+        el.getAttribute('data-print-page'),
+      ),
+    ).toEqual(['generic-stage-list', 'agent-declaration', 'execution-status']);
+
+    // 反选 / 全选（按模块）：全选范围 = 可用集（原生 + 通用）⇒ H 六页
     act(() => {
       document.querySelector<HTMLButtonElement>('[data-print-modules-none]')!.click();
     });
@@ -652,29 +710,41 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     setModuleChecked('task-list', false);
     expect(paperPages()).toBe(3);
 
-    // 切 D：中截按 D 重建（4 原生 + 3 通用默认全选 ⇒ 7 页），A 的勾选不动
+    // 切 D：中截按 D 重建（默认 = 4 原生签名页 ⇒ 4 页），A 的勾选不动
     pickTemplate('data-editorial');
-    expect(paperPages()).toBe(7);
-    expect(bodyContains('预计 7 页')).toBe(true);
+    expect(paperPages()).toBe(4);
+    expect(bodyContains('预计 4 页')).toBe(true);
     expect(moduleCheckbox('task-list').disabled, 'task-list 在 D 下可勾（通用渲染）').toBe(false);
-    expect(moduleCheckbox('task-list').checked, 'D 的 task-list 默认全选').toBe(true);
+    expect(moduleCheckbox('task-list').checked, 'D 的 task-list 默认不勾（默认 = 原生签名页）').toBe(false);
     for (const m of ['progress-matrix', 'dependency-network', 'workload-composition', 'milestone-acceptance']) {
-      expect(moduleCheckbox(m).checked, `D 的 ${m} 默认全选`).toBe(true);
+      expect(moduleCheckbox(m).checked, `D 的 ${m} 默认勾选`).toBe(true);
     }
-    // 期三：D 纸面 = 三通用页 + 四原生页（按 M1→M11 序）
+    // 反馈修复后：D 默认纸面 = 四原生页（第一页 = 进度矩阵，参考稿那个味道）
     expect(
       Array.from(document.querySelectorAll('.a4-page')).map((el) =>
         el.getAttribute('data-print-page'),
       ),
     ).toEqual([
-      'generic-stage-list',
-      'generic-task-list',
-      'generic-member-roster',
       'progress-matrix',
       'dependency-network',
       'workload-composition',
       'milestone-acceptance',
     ]);
+    // 手动勾通用 task-list ⇒ 通用页按 M1→M11 序插到最前
+    setModuleChecked('task-list', true);
+    expect(paperPages()).toBe(5);
+    expect(
+      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
+        el.getAttribute('data-print-page'),
+      ),
+    ).toEqual([
+      'generic-task-list',
+      'progress-matrix',
+      'dependency-network',
+      'workload-composition',
+      'milestone-acceptance',
+    ]);
+    setModuleChecked('task-list', false);
 
     // 回 A：task-list 仍被摘着（按模板分键，换模板不丢）
     pickTemplate('swiss-schedule');
@@ -724,14 +794,14 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
     ]);
   });
 
-  it('有一条映射不了 ⇒ 该模板整组回落默认全选（照现有 merge 兜底手法）', async () => {
+  it('有一条映射不了 ⇒ 该模板整组回落默认（照现有 merge 兜底手法）', async () => {
     await rehydrateLegacy({
       template: 'swiss-schedule',
       pages: { 'swiss-schedule': ['stage-overview', 'bogus-page'] },
     });
     expect(
       usePrintPrefsStore.getState().pages['swiss-schedule'],
-      '脏页名不赌：缺键 = 默认全选',
+      '脏页名不赌：缺键 = 默认原生（A 无通用模块，形状同全选）',
     ).toBeUndefined();
     // 另一套模板的干净数据不受牵连（逐模板独立兜底）
     await rehydrateLegacy({
@@ -778,14 +848,12 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       usePrintPrefsStore.getState().setModuleEnabled('agent-poster', 'delay-ledger', true);
     });
     expect(usePrintPrefsStore.getState().pages['agent-poster'], '暂不可用勾选被拒').toBeUndefined();
-    // 期三通用（M1 在 H）：收（缺键时从「默认全选可用」起手 ⇒ 五个可用模块）
+    // 期三通用（M1 在 H）：收（缺键时从「默认原生」起手 ⇒ 原生 2 个 + stage-list）
     act(() => {
       usePrintPrefsStore.getState().setModuleEnabled('agent-poster', 'stage-list', true);
     });
     expect(usePrintPrefsStore.getState().pages['agent-poster']).toEqual([
       'stage-list',
-      'task-list',
-      'member-roster',
       'agent-execution',
       'writeback-proposals',
     ]);
@@ -832,6 +900,8 @@ describe('期二+期三 · L2 静态锁', () => {
     expect(src).toContain('export function moduleAvailability');
     expect(src).toContain('export function printTemplateNativeModuleIds');
     expect(src).toContain('export function printTemplateGenericModuleIds');
+    // 默认态收敛（她 10-09 23:38 反馈）：缺键兜底 = 原生签名页
+    expect(src).toContain('export function printTemplateDefaultModuleIds');
     // 旧「页勾选」导出已退役（语义真变，不允许留第二入口）
     expect(src, 'printTemplatePages 应随页勾选一起退役').not.toContain('printTemplatePages');
     // 静态映射纪律：整个文件不允许出现模板字符串（JIT 类名 blanket 守卫）

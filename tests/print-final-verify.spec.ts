@@ -13,8 +13,9 @@
  *   ① 默认态页数：四版同 VM 真实渲染，逐页 794×1123 无裁切 + 结构标记
  *      （A 有顶/底栏、E/H 无底栏、D 有 3px 头线、H 有局部中轴）——「与
  *      设计稿比对」的可断言部分（逐像素比对设计稿是人工活，spec 锁几何
- *      与结构，A/D 的先例 spec 同口径）。期三通用渲染第一批起默认态
- *      为 21 页（A4 + D7 + E4 + H6：D/E/H 各多出通用模块页）；
+ *      与结构，A/D 的先例 spec 同口径）。她 10-09 23:38 反馈修复后默认态
+ *      收敛为 14 页（A4 + D4 + E3 + H3：全部落在原生签名页，通用模块可
+ *      手动勾选不进默认态）；
  *   ② 自定义配色变体跨模板抽 2-3 页：每版取一个预设，断言「槽位确实挂上
  *     （computed style 变色）+ DOM 骨架与默认态逐字节一致（除 .print-root
  *      的 CSS 变量）」——产品决策文档 §3.2-③ 的结构断言；
@@ -427,14 +428,14 @@ function writeHtml(name: string, html: string): string {
  * ① 14 页默认态（真 Chromium：四版同 VM，逐页无裁切 + 结构标记）
  * ==================================================================================== */
 
-describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 21 页（四版同 VM 真实渲染）', () => {
+describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 14 页（四版同 VM 真实渲染）', () => {
   let browser: Browser;
 
   beforeAll(async () => {
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('四版默认态：4 + 7 + 4 + 6 = 21 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
+  it('四版默认态：4 + 4 + 3 + 3 = 14 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
     const css = builtCss();
     const vm = adminVm();
     const cases: Array<{ tag: string; markup: string; expected: number }> = [
@@ -450,24 +451,25 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 21 页（四版同 VM 真实�
         markup: renderToStaticMarkup(
           createElement(DataEditorialDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['data-editorial'].baseline }),
         ),
-        // 期三：D 默认 = 4 原生页 + 3 通用页（M1/M2/M4 通用渲染第一批）
-        expected: 7,
+        // 她 10-09 23:38 反馈修复：D 默认 = 4 原生签名页（第一页进度矩阵，
+        // 不再是通用阶段清单表格；通用 M1/M2/M4 可手动勾选，不进默认态）
+        expected: 4,
       },
       {
         tag: 'e',
         markup: renderToStaticMarkup(
           createElement(EditorialIndexDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['editorial-index'].baseline }),
         ),
-        // 期三：E 默认 = 3 原生页 + 1 通用页（M2 任务清单）
-        expected: 4,
+        // 默认 = 3 原生页（通用 M2 任务清单默认不勾）
+        expected: 3,
       },
       {
         tag: 'h',
         markup: renderToStaticMarkup(
           createElement(AgentPosterDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['agent-poster'].baseline }),
         ),
-        // 期三：H 默认 = 3 原生页（M10 两页）+ 3 通用页（M1/M2/M4）
-        expected: 6,
+        // 默认 = 3 原生纸面（M10 两页 + 写回一页；通用 M1/M2/M4 默认不勾）
+        expected: 3,
       },
     ];
 
@@ -488,7 +490,7 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 21 页（四版同 VM 真实�
           await pages[i]!.screenshot({ path: join(OUT_DIR, `final-${c.tag}-p${i + 1}-color.png`) });
         }
       }
-      expect(totalPages, '四版合计 21 页（期三：D+3 / E+1 / H+3 通用页）').toBe(21);
+      expect(totalPages, '四版合计 14 页（默认态收敛：全部落在原生签名页）').toBe(14);
     } finally {
       await page.close();
     }

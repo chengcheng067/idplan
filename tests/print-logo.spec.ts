@@ -450,8 +450,9 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     // 左上格：在 kicker 之前（de-head__left 的第一个子元素）
     const firstInLeft = doc.querySelector('.de-head__left')!.firstElementChild;
     expect(firstInLeft!.classList.contains('de-head__logo'), 'logo 应是头部左格第一个元素').toBe(true);
-    // 期三：D 默认 = 4 原生页 + 3 通用页，每页头部左上格各一枚
-    expect(logoHeights(doc)).toEqual([28, 28, 28, 28, 28, 28, 28]);
+    // 她 10-09 23:38 反馈修复：D 默认 = 4 原生签名页，每页头部左上格各一枚
+    // （通用 M1/M2/M4 不进默认态，可手动勾选）
+    expect(logoHeights(doc)).toEqual([28, 28, 28, 28]);
   });
 
   it('E 版：logo 在每页左上角发丝线下方 ≤22px', () => {
@@ -461,14 +462,14 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
       renderToStaticMarkup(createElement(EditorialIndexDocument, { vm, palette: baseline, logo: TINY_LOGO })),
     );
     const rows = doc.querySelectorAll('.ei-logo-row img.print-logo');
-    expect(rows.length, 'E 版每物理页一枚（期三：3 原生 + 1 通用 = 4 页）').toBe(4);
+    expect(rows.length, 'E 版每物理页一枚（默认 = 3 原生签名页；通用 M2 默认不勾）').toBe(3);
     // 发丝线下方：logo 行在页头（含 .ei-head__rule）之后
     const page = doc.querySelector('.a4-page')!;
     const rule = page.querySelector('.ei-head__rule');
     const logoRow = page.querySelector('.ei-logo-row');
     expect(rule).not.toBeNull();
     expect(logoRow).not.toBeNull();
-    expect(logoHeights(doc)).toEqual([22, 22, 22, 22]);
+    expect(logoHeights(doc)).toEqual([22, 22, 22]);
   });
 
   it('H 版：P1 logo 在巨字下方左侧 ≤24px；P2/P3 左上角 ≤22px；中轴区无 logo', () => {

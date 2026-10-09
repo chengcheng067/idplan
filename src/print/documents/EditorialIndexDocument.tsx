@@ -136,7 +136,7 @@ const COMPACT_THRESHOLD = 16;
 export interface EditorialIndexDocumentProps {
   vm: PrintViewModel;
   /**
-   * 纸面页（期三：原生页 kind + 通用模块 id；缺省 = 全选可用模块）。
+   * 纸面页（期三：原生页 kind + 通用模块 id；缺省 = 默认原生模块）。
    * E 的 M2 任务清单无原生页 ⇒ 走通用渲染（该外表基础排版承接）。
    */
   sheets?: readonly PrintSheet[];

@@ -1,14 +1,17 @@
 /**
- * 选择器模块化 · 四套外表模块勾选态截图（v1.5-a 期二 · 产品决策文档 §3.3）。
+ * 选择器模块化 · 四套外表模块勾选态截图（v1.5-a 期二 · 产品决策文档 §3.3；
+ * 默认态收敛：她 10-09 23:38 反馈「做出来的东西完全不是参考稿那个味道」的修复）。
  *
  * ── 为什么这样做验收 ──
  * 期二把选择器中截从「页勾选」升级为「11 个内容模块勾选」（外表 × 模块
- * 分离）：**原生模块**可勾选（默认全选，右侧标注归属页名），**非原生
- * 模块**禁用态 + 原因（通用渲染是期三，先立产品形态、不装能打）。
+ * 分离）：**原生模块**可勾选（**默认勾选**，右侧标注归属页名），**通用
+ * 模块**（期三 M1/M2/M4 于无原生页的外表）可勾选但**默认不勾**（缺键
+ * 默认 = 原生签名页，通用模块可手动勾选或「全选」），**暂不可用模块**
+ * 禁用态 + 原因。
  * 本 spec 用**真实组件**（PrintModuleSection）+ **真实注册表数据**
  * （PRINT_MODULES / 能力表）经 renderToStaticMarkup 出静态面板，外挂
  * **真实构建产物**的 CSS（build-dist/assets/*.css——Tailwind JIT 生成的
- * 工具类都在里面），真 Chromium 逐外表截图并断言禁用态确实禁用。
+ * 工具类都在里面），真 Chromium 逐外表截图并断言三态确实三态。
  *
  * 前置：`npm run build --outDir build-dist`（产物在 build-dist/）与本机
  * chromium；缺任一则整组 skip（与 print-a4-visual.spec.ts 同口径）。
@@ -25,7 +28,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 
 import { PrintModuleSection } from '../src/components/print/PrintPreviewDialog';
-import { printTemplateModuleIds } from '../src/components/print/print-skins';
+import { printTemplateDefaultModuleIds } from '../src/components/print/print-skins';
 import type { PrintTemplateId } from '../src/components/print/print-skins';
 
 /* ------------------------------------------------------------------ 前置探测 */
@@ -109,16 +112,16 @@ describe.skipIf(!CAN_RUN)('选择器模块化 · 四套外表模块勾选态截�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('A/D/E/H 各自截图：11 行模块表单三态——原生/通用可选（默认全选）+ 暂不可用禁用带原因', async () => {
+  it('A/D/E/H 各自截图：11 行模块表单三态——原生默认勾选 / 通用可选默认不勾 / 暂不可用禁用带原因', async () => {
     const css = builtCss();
     const page = await browser.newPage({ viewport: { width: 480, height: 900 } });
     try {
       for (const c of CASES) {
-        // 真实组件 + 真实注册表：默认全选原生模块
+        // 真实组件 + 真实注册表：默认勾选原生模块（printTemplateDefaultModuleIds）
         const markup = renderToStaticMarkup(
           createElement(PrintModuleSection, {
             template: c.template,
-            enabledModules: printTemplateModuleIds(c.template),
+            enabledModules: printTemplateDefaultModuleIds(c.template),
           }),
         );
         const htmlPath = writeHtml(`selector-modules-${c.tag}.html`, shell(markup, css));
@@ -128,23 +131,23 @@ describe.skipIf(!CAN_RUN)('选择器模块化 · 四套外表模块勾选态截�
         const rows = await page.$$('[data-print-module-row]');
         expect(rows.length, `${c.tag} 外表应有 11 个模块行`).toBe(11);
 
-        // 原生计数与能力表一致；原生可勾且默认全选
+        // 原生计数与能力表一致；原生可勾且默认勾选
         const nativeCount = await page.$$eval('[data-print-module-row][data-avail="native"]', (els) => els.length);
         expect(nativeCount, `${c.tag} 外表原生模块数`).toBe(c.nativeCount);
         const nativeChecked = await page.$$eval(
           '[data-print-module-row][data-avail="native"] input[data-print-module]',
           (els) => els.filter((el) => (el as HTMLInputElement).checked).length,
         );
-        expect(nativeChecked, `${c.tag} 原生模块默认全选`).toBe(c.nativeCount);
+        expect(nativeChecked, `${c.tag} 原生模块默认勾选`).toBe(c.nativeCount);
 
-        // 期三通用：可勾 + 默认全选 + 行标「通用渲染」
+        // 期三通用：可勾 + **默认不勾**（缺键默认 = 原生签名页）+ 行标「通用渲染」
         const genericCount = await page.$$eval('[data-print-module-row][data-avail="generic"]', (els) => els.length);
         expect(genericCount, `${c.tag} 外表通用渲染模块数`).toBe(c.genericCount);
         const genericChecked = await page.$$eval(
           '[data-print-module-row][data-avail="generic"] input[data-print-module]',
           (els) => els.filter((el) => (el as HTMLInputElement).checked).length,
         );
-        expect(genericChecked, `${c.tag} 通用模块默认全选`).toBe(c.genericCount);
+        expect(genericChecked, `${c.tag} 通用模块默认不勾（可手动勾选 / 全选）`).toBe(0);
         for (const row of await page.$$('[data-print-module-row][data-avail="generic"]')) {
           const text = (await row.textContent()) ?? '';
           expect(text, '通用行标注渲染方式').toContain('通用渲染');

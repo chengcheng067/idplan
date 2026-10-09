@@ -10,6 +10,7 @@ import {
   isPrintTemplateId,
   legacySkinToTemplate,
   pageKindToModule,
+  printTemplateDefaultModuleIds,
   printTemplateModuleIds,
   type PrintModuleId,
   type PrintTemplateId,
@@ -47,8 +48,9 @@ import { normalizeHex } from '../core/color/contrast';
  *
  * ── v0.8.6 四版重建的字段增量（skin → template + pages + palette）──
  *   · `template`：模板选择（'classic' = 原 'default' 皮肤转正，决策 ⑦）；
- *   · `pages`：每模板一套勾选态，**缺键 = 默认全选**
- *     （01 §8 明文；换模板不丢勾选——两套粒度并存，决策文档 §2.2）；
+ *   · `pages`：每模板一套勾选态，**缺键 = 默认勾选原生模块**
+ *     （签名页；换模板不丢勾选——两套粒度并存，决策文档 §2.2；
+ *     默认态口径的变迁见文件头末节）；
  *   · `palette`：每模板一套三槽位自定义配色，**缺键 = 设计师基线**。
  *     setPalette 是**硬闸门**：对比度不达标直接拒绝落库并返回失败明细
  *     （产品决策文档 §3.2：禁存，不是提示）；merge 读路径同样过闸——
@@ -59,15 +61,25 @@ import { normalizeHex } from '../core/color/contrast';
  * 「启用**页**」（PrintPageKind[]）升级为「启用**模块**」
  * （PrintModuleId[]）——4 套模板是外表，11 个内容模块跨模板可选。
  * 旧持久数据在 merge 时迁移：旧页 key 逐条映射模块 key，**有一条映射
- * 不了 ⇒ 该模板整组回落默认全选**（照现有兜底手法，脏数据不赌）。
+ * 不了 ⇒ 该模板整组回落默认**（照现有兜底手法，脏数据不赌）。
  *
  * ── v1.5-b 期三第一批：可用集 = 原生 + 通用 ──
  * M1 阶段清单 / M2 任务清单 / M4 成员名册在全部 4 套外表下可输出
  * （原生页 or 通用渲染，print-skins 能力表 generic 标记）。本 store 的
  * 「可用」判定随之从原生集扩为可用集（printTemplateModuleIds 的新语义）：
- * 默认全选、勾选接受、旧数据迁移过滤都以它为准；勾选粒度仍是模块
- * （一个模块 = 一页 or 多页，纸面落页由 enabledSheetsOf + 各 Document
- * 的物理页装配决定）。
+ * 勾选接受、旧数据迁移过滤都以它为准；勾选粒度仍是模块（一个模块 = 一页
+ * or 多页，纸面落页由 enabledSheetsOf + 各 Document 的物理页装配决定）。
+ *
+ * ── 默认态收敛：缺键 = 原生签名页（她 10-09 23:38 反馈的修复） ──
+ * 她的原话：「地板参考图的甘特图是示意图这个样子的，但是比如说现在我们
+ * 做出来的东西，就完全不是这个味道，其他几个版本同理」——根因是 pages
+ * 缺键的兜底曾是「全选可用」（原生 + 通用）：D 可用 7 个里 3 个通用
+ * （M1/M2/M4）按 M1→M11 序排最前 ⇒ 打开 D 预览第一页是通用「阶段清单」
+ * 表格而不是签名页「阶段进度矩阵」。故缺键兜底改为
+ * `printTemplateDefaultModuleIds`（= 原生模块）：A 4 页 / D 4 页 /
+ * E 3 页 / H 3 纸面。通用模块仍可手动勾选、「全选」范围仍为可用集
+ * （printTemplateModuleIds）——变的只是默认态。持久化形状不变
+ * （缺键即默认，落库的永远是用户显式勾选的结果）。
  */
 
 /** localStorage key（单处定义；无首屏闪烁面，不需 index.html 引导脚本，见文件头） */
@@ -80,9 +92,10 @@ export interface PrintPrefsState {
   template: PrintTemplateId;
   /**
    * 每模板一套「启用模块」勾选态（期二：原「启用页」语义升级；期三：可用集
-   * = 原生 + 通用）。缺键 = 该模板默认全选可用模块；暂不可用的模块 id 在
-   * merge 时剔除。纸面页序由 print-skins 的 enabledSheetsOf 派生（注册表
-   * M1→M11 序，与勾选顺序无关）。
+   * = 原生 + 通用）。缺键 = 该模板默认勾选**原生**模块（签名页；她 10-09
+   * 23:38 反馈的修复，见文件头末节）；暂不可用的模块 id 在 merge 时剔除。
+   * 纸面页序由 print-skins 的 enabledSheetsOf 派生（注册表 M1→M11 序，
+   * 与勾选顺序无关）。
    */
   pages: Partial<Record<PrintTemplateId, PrintModuleId[]>>;
   /** 每模板一套自定义三槽位配色（缺键 = 设计师基线；classic 永不有条目） */
@@ -91,7 +104,7 @@ export interface PrintPrefsState {
   setBlock(key: keyof SchedulePaperBlocks, on: boolean): void;
   /** 切模板（选择器上截；即时重渲染） */
   setTemplate(id: PrintTemplateId): void;
-  /** 勾 / 消一个模块（缺键时从「默认全选可用」起手；暂不可用的模块不接受） */
+  /** 勾 / 消一个模块（缺键时从「默认原生」起手；暂不可用的模块不接受） */
   setModuleEnabled(template: PrintTemplateId, module: PrintModuleId, on: boolean): void;
   /** 整模板设启用模块集合（全选 / 反选；暂不可用的 id 忽略） */
   setTemplateModules(template: PrintTemplateId, modules: PrintModuleId[]): void;
@@ -105,7 +118,9 @@ export interface PrintPrefsState {
 /**
  * 该模板**可用**的模块 id（原生 + 通用；未知模板 / 经典 ⇒ 空集）。
  * 期三：printTemplateModuleIds 语义升级为「可用集」——M1/M2/M4 在 D/E/H
- * 经通用渲染进入可用集，勾选/全选/迁移过滤都以它为准。
+ * 经通用渲染进入可用集，勾选接受 / 全选 / 迁移过滤都以它为准。
+ * ⚠️ 可用集 ≠ 默认态：缺键默认是原生签名页（printTemplateDefaultModuleIds，
+ * 见文件头末节），本函数只回答「这个外表下哪些模块可勾选」。
  */
 function availableModules(template: PrintTemplateId): PrintModuleId[] {
   return printTemplateModuleIds(template);
@@ -121,8 +136,8 @@ function normalizeModules(template: PrintTemplateId, value: unknown): PrintModul
 
 /**
  * 旧 pages 数据迁移（期二：页粒度 → 模块粒度，决策文档 §3.3）：
- * 旧页 key 逐条映射模块 key；**有一条映射不了 ⇒ 整组回落默认全选**
- * （返回 null = 调用方不存该键 = 缺键全选，照现有 merge 兜底手法）。
+ * 旧页 key 逐条映射模块 key；**有一条映射不了 ⇒ 整组回落默认**
+ * （返回 null = 调用方不存该键 = 缺键走默认原生，照现有 merge 兜底手法）。
  * 映射成功的组按「可用 + 注册序」收编——跨模板脏页名自然滤掉
  * （期三：在某外表可用的模块——含通用渲染——不再被滤掉）。
  */
@@ -165,7 +180,10 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
           const available = availableModules(template);
           // 暂不可用的模块（能力表里没有的）不接受勾选
           if (!available.includes(module)) return {};
-          const current = s.pages[template] ?? available;
+          // 缺键时从「默认原生模块」起手（她 10-09 23:38 反馈：默认必须落到
+          // 签名原生页，通用模块不进默认态——可手动勾选，见 print-skins 的
+          // printTemplateDefaultModuleIds）
+          const current = s.pages[template] ?? printTemplateDefaultModuleIds(template);
           const next = on ? [...new Set([...current, module])] : current.filter((m) => m !== module);
           return { pages: { ...s.pages, [template]: PRINT_MODULE_IDS.filter((m) => next.includes(m)) } };
         }),
@@ -213,7 +231,7 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
           ? p.template
           : legacySkinToTemplate(p.skin) ?? current.template;
         // pages（期二）：旧「启用页」（PrintPageKind[]）逐条迁「启用模块」
-        // （PrintModuleId[]）；有一条映射不了 ⇒ 该模板回落默认全选。
+        // （PrintModuleId[]）；有一条映射不了 ⇒ 该模板回落默认（缺键走原生默认）。
         // classic 不走模块表（五块 blocks 另一套粒度）⇒ 不收它的键；
         // 未知 template id 剔除（同 palette 口径）
         const pages: Partial<Record<PrintTemplateId, PrintModuleId[]>> = {};
