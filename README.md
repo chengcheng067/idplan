@@ -26,6 +26,32 @@
 
 ---
 
+## 📸 看一眼
+
+<p align="center">
+  <img src="./docs/screenshots/calendar-month.png" alt="月历视图：2026 年 10 月——国庆假期自动灰底 + 节日名、调休补班标「班」、格内「项目色 + 项目名」条目" width="860" />
+</p>
+
+<p align="center">
+  <img src="./docs/screenshots/kanban-home.png" alt="首页看板：项目卡片 + 阶段进度 + 成员" width="425" />
+  <img src="./docs/screenshots/print-preview.png" alt="打印预览：A 版瑞士时刻表纸面" width="425" />
+</p>
+
+<p align="center">
+  <img src="./docs/screenshots/settings-policy.png" alt="设置 → 排程：休息制度编辑器（单休可自选周几 + 跳过法定节假日开关）" width="860" />
+</p>
+
+<p align="center">
+  <img src="./public/print-thumbs/A-swiss-schedule-p1.png" alt="打印模板 A · Swiss Schedule" width="205" />
+  <img src="./public/print-thumbs/D-data-editorial-p1.png" alt="打印模板 D · Data Editorial" width="205" />
+  <img src="./public/print-thumbs/E-editorial-index-p1.png" alt="打印模板 E · Editorial Index" width="205" />
+  <img src="./public/print-thumbs/H-agent-poster-p1.png" alt="打印模板 H · Agent Poster" width="205" />
+</p>
+
+> 月历截图里看得见的：国庆七天自动灰底 + 节日名、10 日调休补班标「班」、格内「项目色 + 项目名」、今天 pine 圆点；打印预览是四套模板里的 A 版（交通黄时刻表）。
+
+---
+
 ## 💡 为什么做这个
 
 这个工具从室内设计的日常工作里长出来（我自己的老本行），现在服务所有需要排期的行业。每次做项目，光是记阶段节点、排工期、跟成员对齐进度就耗掉大半天：把项目的阶段、任务、成员、排期放在一个地方，进度管理在同一次操作里完成，还能一键导出给甲方看。**阶段清晰，进度可见。**
