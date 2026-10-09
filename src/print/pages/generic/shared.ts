@@ -432,10 +432,11 @@ export function planGenericModule(
 
 /* ------------------------------------------------------------------ 行内文案 */
 
-/** M1 头部计数行（占比口径不进表格，防误读留在口径注） */
+/** M1 头部元信息行（新稿 E P1：「可见阶段 9 / 9 · 完成度 67%」口径；VM 不产
+ *  总阶段数（含隐藏）⇒ 用可见阶段数单值，任务进度由 D KPI 带 / A 卡片 meta /
+ *  H 右栏各自承载，不在此重复） */
 export function stageListCount(vm: PrintViewModel): string {
-  const done = vm.tasks.filter((t) => t.status === TaskStatus.Done).length;
-  return `${vm.stages.length} 阶段 · 完成度 ${Math.round(vm.project.percent)}% · 任务 ${done}/${vm.tasks.length}`;
+  return `可见阶段 ${vm.stages.length} · 完成度 ${Math.round(vm.project.percent)}%`;
 }
 
 /** M2 头部计数行（逾期数双编码：文字 + 加重，不靠颜色） */

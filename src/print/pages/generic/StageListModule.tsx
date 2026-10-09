@@ -175,13 +175,18 @@ function StageTableRow({ row, withProgress }: { row: StageListRow; withProgress:
             {row.startAt} — {row.endAt}
           </td>
           <td className="gm-cell-progress">
-            {/* 进度条复用原生 de-bar（D 模板域作用域）；延期阶段填充走信号色 */}
+            {/* 进度条：深色 = 已完成部分 / 浅灰 = 剩余（复用原生 de-bar 的双色编码，
+                track 浅灰 + fill 深色/信号色）；百分比 ≥15% 嵌段内白字（新稿 D P1
+                形态），更窄则落条外墨色（段内放不下，不硬塞） */}
             <span className="de-bar" role="img" aria-label={`任务完成度 ${percent}%`}>
               <span className="de-bar__track">
-                <span className="de-bar__fill" data-tone={delayed ? 'signal' : 'ink'} style={{ width: `${percent}%` }} />
+                <span className="de-bar__fill" data-tone={delayed ? 'signal' : 'ink'} style={{ width: `${percent}%` }}>
+                  {percent >= 15 && <span className="gm-bar__num">{percent}%</span>}
+                </span>
               </span>
               <span className="de-bar__num de-num">
-                {done}/{total} · {percent}%
+                {done}/{total}
+                {percent < 15 ? ` · ${percent}%` : ''}
               </span>
             </span>
           </td>
@@ -342,15 +347,32 @@ function StageBlocks({ rows }: { rows: readonly StageListRow[] }): JSX.Element {
 
 /* ------------------------------------------------------------------ staggered 变体（A×M1 ≤9） */
 
+/** 三组阶段分期（新稿 A P1：前期 / 中期 / 后期——分组语义是并列语法的可读性来源） */
+const STAGGERED_PHASES: ReadonlyArray<{ cn: string; en: string }> = [
+  { cn: '前期', en: 'PREP' },
+  { cn: '中期', en: 'BUILD' },
+  { cn: '后期', en: 'CLOSE' },
+];
+
 function StageStaggered({ rows }: { rows: readonly StageListRow[] }): JSX.Element {
-  // 三列错落：按序轮分三栏（CSS 给 2/3 栏纵向错位，同 A 原生 P1）
-  const columns: StageListRow[][] = [[], [], []];
-  rows.forEach((s, i) => columns[i % 3]!.push(s));
+  // 按 orderIndex 顺序切三组（均分；空组不进栏）——不是轮分：组即「前期/中期/后期」
+  const per = Math.ceil(rows.length / 3);
+  const groups = [0, 1, 2]
+    .map((gi) => rows.slice(gi * per, (gi + 1) * per))
+    .filter((g) => g.length > 0);
   return (
     <div className="gm-staggered">
-      {columns.map((col, ci) => (
-        <div key={ci} className="gm-staggered__col" data-col={ci + 1}>
-          {col.map((s) => (
+      {groups.map((group, gi) => (
+        <div key={gi} className="gm-staggered__col" data-col={gi + 1}>
+          {/* 组头：分期标签 + 2px 粗线（新稿「前期 / PREP」式；组间分隔靠它） */}
+          <div className="gm-phase">
+            <span className="gm-phase__label">
+              {STAGGERED_PHASES[gi]!.cn}
+              <span className="gm-phase__en">/ {STAGGERED_PHASES[gi]!.en}</span>
+            </span>
+            <span className="gm-phase__count gm-num">{group.length}</span>
+          </div>
+          {group.map((s) => (
             <div key={s.key} className="gm-card" data-state={s.status}>
               <div className="gm-card__top">
                 <span className="gm-card__no">{s.no}</span>

@@ -1066,8 +1066,161 @@
   opacity: 1;
 }
 
-/* H×M2 ≤8 卡化：状态分组卡直接复用原生 .ap-status__cards / .ap-status__card
-   （agent-poster.css 已按 H 域作用域样式化——同构不只是样子，是同一套规则） */
-.print-root.print-template-agent-poster .gm-module .ap-status__cards {
-  margin-top: 2px;
+/* ============================== ④ 期七深化（对照四张新稿） ============================== */
+
+/* ── A：staggered 分组头（新稿「前期 / PREP」式；组即分期，组间分隔靠粗线） ── */
+.print-root.print-template-swiss-schedule .gm-phase {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.print-root.print-template-swiss-schedule .gm-phase__label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-swiss-schedule .gm-phase__en {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  opacity: 0.66;
+}
+
+.print-root.print-template-swiss-schedule .gm-phase__count {
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
+/* ── D：进度条段内白字百分比（新稿 D P1 形态；fill 内右对齐，≥15% 才嵌） ── */
+.print-root.print-template-data-editorial .de-bar__fill {
+  position: relative;
+}
+
+.print-root.print-template-data-editorial .gm-bar__num {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── E：元信息行（新稿「可见阶段 9 / 9 · 完成度 67%」行——模块头下加发丝线，
+      让计数行成为独立的元信息行而非页题附庸） ── */
+.print-root.print-template-editorial-index .gm-head {
+  border-bottom: 1px solid var(--tpl-line);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+/* ── H：右栏摘要块向新稿「置信度块」靠——2px 橙顶线 + 大数字 + 说明行 ── */
+.print-root.print-template-agent-poster .gm-panel {
+  border-top: 2px solid var(--tpl-accent);
+}
+
+/* ── H×M2 ≤8 双栏状态分组卡（新稿 H P1：PENDING / RUNNING 双栏 + 橙粗线 +
+      状态标签底色；中轴是 .gm-task-cols 的 ::before，只贯穿栏区） ── */
+.print-root.print-template-agent-poster .gm-task-cols {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 28px;
+  align-items: start;
+}
+
+.print-root.print-template-agent-poster .gm-task-cols::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 2px;
+  background: var(--tpl-accent);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-agent-poster .gm-task-col__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.print-root.print-template-agent-poster .gm-task-col__label {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .gm-task-col__en {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  opacity: 0.66;
+}
+
+.print-root.print-template-agent-poster .gm-task-col__count {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
+.print-root.print-template-agent-poster .gm-task-col__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.print-root.print-template-agent-poster .gm-task-col__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--tpl-line);
+  font-size: 12px;
+}
+
+.print-root.print-template-agent-poster .gm-task-col__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--tpl-ink);
+}
+
+/* 状态标签：门控态橙底白字 / 其他墨底白字（新稿 H P1 的标签语法；mono 小字 ≥9.5px） */
+.print-root.print-template-agent-poster .gm-task-tag {
+  flex: none;
+  padding: 2px 7px;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  background: var(--tpl-ink);
+  color: #ffffff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-agent-poster .gm-task-tag[data-tone='gate'] {
+  background: var(--tpl-accent);
 }

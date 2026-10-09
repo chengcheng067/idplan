@@ -105,9 +105,10 @@ const EI_LOGO_ROW_H = 34; // 实测 34（10 上距 + 24 内容）
 const EI_FOOT_H = 46; // 实测 41（40 高 + 1 发丝线）
 const EI_BODY_PADDING = 20; // 主体上下内距 12 + 8
 const EI_NOTE_H = 46; // 口径注（10 上距 + 两行 16.5 + 1 线，取整）
-/** 每物理页主体可用高度（纸面 1123 − 页头 − logo 行 − 页脚 − 主体内距 − 口径注） */
+const EI_META_H = 37; // 元信息行（期七深化：6 上距 + 23 行高 + 10 下距，实测 ≈27+10）
+/** 每物理页主体可用高度（纸面 1123 − 页头 − logo 行 − 页脚 − 主体内距 − 口径注 − 元信息行） */
 const EI_BODY_H =
-  A4_HEIGHT_PX - EI_HEAD_H - EI_LOGO_ROW_H - EI_FOOT_H - EI_BODY_PADDING - EI_NOTE_H;
+  A4_HEIGHT_PX - EI_HEAD_H - EI_LOGO_ROW_H - EI_FOOT_H - EI_BODY_PADDING - EI_NOTE_H - EI_META_H;
 
 /**
  * 目录行估高（normal / compact 两档）。

@@ -38,8 +38,13 @@ export interface ArtifactIndexPageProps {
 }
 
 export function ArtifactIndexPage({ entries, compact }: ArtifactIndexPageProps): JSX.Element {
+  const taskCount = new Set(entries.flatMap((e) => (e.kind === 'row' ? [e.row!.task.id] : []))).size;
   return (
     <>
+      {/* 元信息行（期七深化，与 P1 阶段目录同版式） */}
+      <p className="ei-meta">
+        产出物 {entries.filter((e) => e.kind === 'row').length} 项 · 关联任务 {taskCount}
+      </p>
       <div className="ei-index" data-density={compact ? 'compact' : undefined}>
         {entries.map((entry, i) =>
           entry.kind === 'chapter' ? (

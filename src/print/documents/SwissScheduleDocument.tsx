@@ -278,9 +278,12 @@ function SwissPageBody({ kind, vm }: { kind: PrintPageKind; vm: PrintViewModel }
 
 function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
   const stages = vm.stages;
-  // 三列错落：按 orderIndex 轮分三栏（CSS 给 2/3 栏纵向错位）
-  const columns: PrintStageVM[][] = [[], [], []];
-  stages.forEach((s, i) => columns[i % 3]!.push(s));
+  // 三列错落：按 orderIndex 顺序切三组（前期/中期/后期——新稿 A P1 的分组语义，
+  // 组即分期；CSS 给 2/3 栏纵向错位）。轮分会打散分期，列首加组头标签
+  const per = Math.ceil(stages.length / 3);
+  const columns: PrintStageVM[][] = [0, 1, 2]
+    .map((gi) => stages.slice(gi * per, (gi + 1) * per))
+    .filter((col) => col.length > 0);
   const dense = stages.length > 15;
 
   return (
@@ -297,6 +300,14 @@ function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
         <div className="swiss-columns">
           {columns.map((col, ci) => (
             <div key={ci} className="swiss-column" data-col={ci + 1}>
+              {/* 组头：分期标签（新稿「前期 / PREP」式；组间分隔靠粗线） */}
+              <div className="swiss-column__head">
+                <span className="swiss-column__label">
+                  {SWISS_PHASES[ci]!.cn}
+                  <span className="swiss-column__en">/ {SWISS_PHASES[ci]!.en}</span>
+                </span>
+                <span className="swiss-column__count swiss-num">{col.length}</span>
+              </div>
               {col.map((s) => (
                 <div key={s.id} className="swiss-stage-row" data-state={s.status}>
                   <div className="swiss-stage-row__top">
@@ -328,6 +339,13 @@ function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
     </section>
   );
 }
+
+/** 三组阶段分期（新稿 A P1：前期 / 中期 / 后期） */
+const SWISS_PHASES: ReadonlyArray<{ cn: string; en: string }> = [
+  { cn: '前期', en: 'PREP' },
+  { cn: '中期', en: 'BUILD' },
+  { cn: '后期', en: 'CLOSE' },
+];
 
 function stageStatusLabel(status: StageStatus): string {
   switch (status) {

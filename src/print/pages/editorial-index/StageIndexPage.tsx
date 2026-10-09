@@ -43,6 +43,10 @@ export function StageIndexPage({ vm, entries, compact }: StageIndexPageProps): J
 
   return (
     <>
+      {/* 元信息行（期七深化，新稿 E P1「可见阶段 9 / 9 · 完成度 67%」口径） */}
+      <p className="ei-meta">
+        可见阶段 {vm.stages.length} · 完成度 {Math.round(vm.project.percent)}%
+      </p>
       <div className="ei-index" data-density={compact ? 'compact' : undefined}>
         {entries.map((entry, i) =>
           entry.kind === 'chapter' ? (

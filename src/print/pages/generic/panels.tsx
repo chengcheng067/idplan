@@ -192,27 +192,67 @@ export function SeatGatePanel({ rows }: { rows: readonly MemberRosterRow[] }): J
   );
 }
 
-/* ------------------------------------------------------------------ H×M2 ≤8 状态分组卡 */
+/* ------------------------------------------------------------------ H×M2 ≤8 双栏状态分组卡 */
+
+/** 两栏分组（新稿 H P1：PENDING / RUNNING 双栏 + 橙粗线 + 状态标签底色） */
+const TASK_CARD_GROUPS: ReadonlyArray<{
+  key: string;
+  label: string;
+  en: string;
+  statuses: readonly TaskStatus[];
+}> = [
+  {
+    key: 'inflight',
+    label: '进行中',
+    en: 'IN FLIGHT',
+    statuses: [TaskStatus.InProgress, TaskStatus.Blocked, TaskStatus.Review, TaskStatus.Claimed],
+  },
+  {
+    key: 'queued',
+    label: '待命与终局',
+    en: 'QUEUED & CLOSED',
+    statuses: [TaskStatus.Ready, TaskStatus.Draft, TaskStatus.Done],
+  },
+];
 
 /**
- * 状态分组卡（≤8 条时左栏的形态）。复用原生 `.ap-status__cards` /
- * `.ap-status__card` 类名（agent-poster.css 已按 H 域作用域样式化）——
- * 与 ExecutionStatusPage 的卡同构：glyph + 状态名 + key + 计数。
+ * 双栏状态分组卡（≤8 条时左栏的形态）。向新稿 H P1 靠：两栏 + 栏间 2px 橙粗线
+ * （中轴是 .gm-task-cols 的 ::before，只贯穿栏区——同原生 ap-status__cols 纪律），
+ * 每条任务 = 任务名 + 状态标签（**门控态橙底白字 / 其他墨底白字**，标签即双编码）。
  */
 export function TaskStatusCards({ rows }: { rows: readonly TaskListRow[] }): JSX.Element {
-  const byStatus = new Map<TaskStatus, number>();
-  for (const r of rows) byStatus.set(r.status, (byStatus.get(r.status) ?? 0) + 1);
+  const groups = TASK_CARD_GROUPS.map((g) => ({
+    ...g,
+    items: rows.filter((r) => g.statuses.includes(r.status)),
+  })).filter((g) => g.items.length > 0);
   return (
-    <div className="ap-status__cards">
-      {[...byStatus.entries()].map(([status, count]) => (
-        <div key={status} className="ap-status__card" data-status={status}>
-          <span className="ap-status__card-glyph" aria-hidden>
-            {TASK_STATUS_GLYPH[status]}
-          </span>
-          <span className="ap-status__card-name">{taskStatusLabel(status)}</span>
-          <span className="ap-status__card-key">{status}</span>
-          <span className="ap-status__card-count">{count}</span>
-        </div>
+    <div className="gm-task-cols">
+      {groups.map((g) => (
+        <section key={g.key} className="gm-task-col" data-group={g.key}>
+          <header className="gm-task-col__head">
+            <span className="gm-task-col__label">
+              {g.label}
+              <span className="gm-task-col__en">/ {g.en}</span>
+            </span>
+            <span className="gm-task-col__count gm-num">{g.items.length}</span>
+          </header>
+          <div className="gm-task-col__rows">
+            {g.items.map((r) => {
+              // 门控态（受阻 / 待审）走橙底白字标签，其余墨底白字——与 H 的治理焦点同语法
+              const gate = r.status === TaskStatus.Blocked || r.status === TaskStatus.Review;
+              return (
+                <div key={r.key} className="gm-task-col__row">
+                  <span className="gm-task-col__name" title={r.title}>
+                    {r.title}
+                  </span>
+                  <span className="gm-task-tag" data-tone={gate ? 'gate' : 'sys'}>
+                    {taskStatusLabel(r.status)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ))}
     </div>
   );

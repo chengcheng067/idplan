@@ -181,6 +181,38 @@
   margin-top: 68px;
 }
 
+/* 组头：分期标签（期七深化，新稿 A P1「前期 / PREP」式；组即分期，组间分隔靠粗线） */
+.print-root.print-template-swiss-schedule .swiss-column__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-column__label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-swiss-schedule .swiss-column__en {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  opacity: 0.66;
+}
+
+.print-root.print-template-swiss-schedule .swiss-column__count {
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
 .print-root.print-template-swiss-schedule .swiss-stage-row {
   border-bottom: 1px solid var(--tpl-ink);
   /* 行内呼吸 15→9px（密度研究 §3-A：L2 数据行按「文字行高 + 4-8px」算，

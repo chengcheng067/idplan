@@ -29,8 +29,13 @@ export interface MemberIndexPageProps {
 }
 
 export function MemberIndexPage({ vm, entries, compact }: MemberIndexPageProps): JSX.Element {
+  const agents = vm.members.filter((m) => m.actorKind === 'agent').length;
   return (
     <>
+      {/* 元信息行（期七深化，与 P1 阶段目录同版式） */}
+      <p className="ei-meta">
+        成员 {vm.members.length} 人 · Agent {agents}
+      </p>
       <div className="ei-index" data-density={compact ? 'compact' : undefined}>
         {entries.map((entry, i) =>
           entry.kind === 'chapter' ? (

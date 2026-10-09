@@ -180,6 +180,18 @@
   flex-direction: column;
 }
 
+/* 元信息行（期七深化，新稿 E P1「可见阶段 9 / 9 · 完成度 67%」口径）：
+   刊头下方的独立一行，上下发丝线夹住，mono 数字 */
+.print-root.print-template-editorial-index .ei-meta {
+  margin: 0 0 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--tpl-line);
+  border-bottom: 1px solid var(--tpl-line);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--tpl-ink);
+}
+
 /* 章头：粗章节线（2px 近黑）+ 章名 + 计数；焦点章（延期/Agent）走朱红 */
 .print-root.print-template-editorial-index .ei-chapter {
   display: flex;
