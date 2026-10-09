@@ -209,59 +209,90 @@ describe('期三 · G1 十二组合映射（M1/M2/M4 × A/D/E/H）', () => {
  * G2 · 通用模块内容（D/E/H 三套外表同一份内容组件）
  * ==================================================================================== */
 
-describe('期三 · G2 通用模块内容结构', () => {
-  it('M1 阶段清单：六列 + 四态字形双编码 + 延期焦点 + 口径注', () => {
+describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同一份内容组件）', () => {
+  it('M1 阶段清单（D：merged 表 + KPI 带 + 行内进度条）：四态双编码 + 延期焦点 + 口径注', () => {
     const vm = buildVm();
     const d = doc(renderDoc('data-editorial', vm, [{ type: 'generic', module: 'stage-list' }]));
     const page = d.querySelector('[data-print-page="generic-stage-list"]')!;
     // 模块头 + 计数行（N 阶段 · 完成度 · 任务）
     expect(page.querySelector('.gm-head__label')!.textContent).toBe('阶段清单');
     expect(page.querySelector('.gm-head__count')!.textContent).toContain('6 阶段');
-    // 六列表头
+    // 期七 D×M1：KPI 带三格（已完成/延期/占比）——复用原生 de-stat 视觉
+    const kpi = page.querySelector('.gm-kpi');
+    expect(kpi, 'D×M1 应有 KPI 带').not.toBeNull();
+    expect(kpi!.querySelectorAll('.de-stat')).toHaveLength(3);
+    expect(kpi!.textContent).toContain('阶段已完成');
+    expect(kpi!.textContent).toContain('延期阶段');
+    // merged 表：序号并入阶段单元格（同 D 原生 de-matrix），表头中英双语
     const heads = Array.from(page.querySelectorAll('.gm-table th')).map((th) => th.textContent);
-    expect(heads).toEqual(['序号', '阶段', '状态', '计划日期', '占比', '负责人']);
-    // 6 行数据；行不裂、序号补零
+    expect(heads).toEqual([
+      'STAGE 阶段',
+      'STATUS 状态',
+      'DATES 计划日期',
+      'TASK PROGRESS 阶段内任务完成度',
+      'RATIO 占比',
+      'OWNER 负责人',
+    ]);
+    // 6 行数据；行不裂、序号补零（并入阶段单元格）
     const rows = page.querySelectorAll('.gm-row');
     expect(rows).toHaveLength(6);
     expect(rows[0]!.querySelector('.gm-cell-no')!.textContent).toBe('01');
     expect(rows[0]!.querySelector('.gm-cell-date')!.textContent).toBe('2026-01-05 — 2026-01-20');
+    // 行内进度条（复用原生 de-bar；done/total · 百分比）
+    const bar = rows[0]!.querySelector('.de-bar');
+    expect(bar, 'D×M1 行内应有进度条').not.toBeNull();
+    expect(bar!.querySelector('.de-bar__num')!.textContent).toContain('1/4 · 25%');
     // 四态 = 字形 + 文字双编码（灰度可读，不靠色相）
     const glyphs = Array.from(page.querySelectorAll('.gm-glyph')).map((g) => g.textContent);
     expect(new Set(glyphs)).toEqual(new Set(['□', '◐', '●', '▲']));
-    // 延期行：data-delayed + signal 态
+    // 延期行：data-delayed + signal 态 + 进度条填充走信号色
     const delayed = page.querySelector('.gm-row[data-delayed]');
     expect(delayed).not.toBeNull();
     expect(delayed!.querySelector('.gm-state')!.getAttribute('data-tone')).toBe('signal');
+    expect(delayed!.querySelector('.de-bar__fill')!.getAttribute('data-tone')).toBe('signal');
     // 口径注：占比 ≠ 完成度（01 §3.1 防误读）
     expect(page.querySelector('.gm-note')!.textContent).toContain('占比 = 阶段工作量分配（ratioPercent），不等于完成度');
     // 空态不出现在有数据时
     expect(page.querySelector('[data-print-empty]')).toBeNull();
   });
 
-  it('M2 任务清单：读号走 formatTaskNo + 逾期文字签 + 随阶段收窄（VM 口径）', () => {
+  it('M2 任务清单（E：grid + mono 序号降级 + 按七态分章）：读号 formatTaskNo + 逾期文字签', () => {
     const vm = buildVm();
     const d = doc(renderDoc('editorial-index', vm, [{ type: 'generic', module: 'task-list' }]));
     const page = d.querySelector('[data-print-page="generic-task-list"]')!;
     expect(page.querySelector('.gm-head__label')!.textContent).toBe('任务清单');
-    const heads = Array.from(page.querySelectorAll('.gm-table th')).map((th) => th.textContent);
-    expect(heads).toEqual(['读号', '任务', '状态', '负责人', '产出物']);
-    // 读号 = T-1001 形式（formatTaskNo 唯一出处）
-    expect(page.querySelector('.gm-cell-no')!.textContent).toBe('T-1001');
-    // 逾期 = 文字「· 逾期」+ data-overdue（双编码）
-    const overdue = page.querySelector('.gm-row[data-overdue]');
+    // 期七 E×M2：grid 行（不是 table）+ mono 序号降级 + 按七态分章
+    expect(page.querySelector('.gm-grid'), 'E×M2 应是 grid 行形态').not.toBeNull();
+    expect(page.querySelector('.gm-table'), 'E×M2 不应有 table').toBeNull();
+    const rows = page.querySelectorAll('.gm-grid__row--task');
+    expect(rows).toHaveLength(8);
+    // mono 序号降级（§2.6.3：巨编号是目录身份装置，任务读号是密集表设备）
+    const firstNo = rows[0]!.querySelector('.gm-grid__no')!;
+    expect(firstNo.classList.contains('gm-grid__no--mono'), 'E×M2 序号应走 mono 降级').toBe(true);
+    // 读号 = T-1001 形式（formatTaskNo 唯一出处；分章按七态重排，取集合断言）
+    const nos = Array.from(rows).map((r) => r.querySelector('.gm-grid__no')!.textContent);
+    expect(nos).toContain('T-1001');
+    expect(firstNo.textContent).toMatch(/^T-10\d\d$/);
+    // 分章：按任务七态（章头 + 计数）
+    const chapters = page.querySelectorAll('.gm-chapter');
+    expect(chapters.length, '应按七态分章').toBeGreaterThan(0);
+    // 逾期 = 文字「· 逾期」+ data-focus（双编码）
+    const overdue = page.querySelector('.gm-grid__state[data-focus]');
     expect(overdue).not.toBeNull();
     expect(overdue!.textContent).toContain('· 逾期');
-    expect(overdue!.querySelector('.gm-state')!.getAttribute('data-tone')).toBe('signal');
     // 老数据无号 ⇒ '—'（formatTaskNo(null)）
     const noNo = doc(
       renderDoc('editorial-index', buildVm({ tasks: [taskVm(1, { taskNo: null })] }), [
         { type: 'generic', module: 'task-list' },
       ]),
     );
-    expect(noNo.querySelector('.gm-cell-no')!.textContent).toBe('—');
-    // 长任务名不越列：省略截断 + title 可访问（02 §8）
-    const nameCell = page.querySelector('.gm-cell-name') as Element;
-    expect(nameCell.getAttribute('title')).toContain('任务1');
+    expect(noNo.querySelector('.gm-grid__no')!.textContent).toBe('—');
+    // 长任务名不越列：省略截断 + title 可访问（02 §8；分章重排，按 title 找行）
+    const nameCell = Array.from(page.querySelectorAll('.gm-grid__name')).find((el) =>
+      (el.getAttribute('title') ?? '').includes('任务1'),
+    ) as Element;
+    expect(nameCell, '应存在任务1 的行').not.toBeUndefined();
+    expect(nameCell.getAttribute('title')).toContain('整理测绘图');
     // 空态：无任务 ⇒ EmptyPrintState（不用示例数据填版）
     const empty = doc(
       renderDoc('editorial-index', buildVm({ tasks: [] }), [{ type: 'generic', module: 'task-list' }]),
@@ -269,24 +300,30 @@ describe('期三 · G2 通用模块内容结构', () => {
     expect(empty.querySelector('[data-print-page="generic-task-list"] [data-print-empty="tasks"]')).not.toBeNull();
   });
 
-  it('M4 成员名册：全员口径 + Agent 文字签 + agentKind 开放字符串原样', () => {
+  it('M4 成员名册（H：blocks 双栏 + 席位与门控右栏）：全员口径 + Agent 签 + agentKind 原样', () => {
     const vm = buildVm();
     const d = doc(renderDoc('agent-poster', vm, [{ type: 'generic', module: 'member-roster' }]));
     const page = d.querySelector('[data-print-page="generic-member-roster"]')!;
     expect(page.querySelector('.gm-head__label')!.textContent).toBe('成员名册');
     expect(page.querySelector('.gm-head__count')!.textContent).toContain('3 人 · Agent 1');
-    const heads = Array.from(page.querySelectorAll('.gm-table th')).map((th) => th.textContent);
-    expect(heads).toEqual(['姓名', '类型', 'agentKind', '角色', '负责任务数']);
+    // 期七 H×M4：blocks 双栏（左明细 + 右 240px 摘要）
+    expect(page.querySelector('.gm-blocks'), 'H×M4 应是 blocks 双栏').not.toBeNull();
+    const rows = page.querySelectorAll('.gm-block-row');
+    expect(rows).toHaveLength(3);
     // Agent 行：data-agent + 「Agent」文字签（双编码，灰度可辨）
-    const agentRow = page.querySelector('.gm-row[data-agent]');
+    const agentRow = page.querySelector('.gm-block-row[data-agent]');
     expect(agentRow).not.toBeNull();
-    expect(agentRow!.querySelector('.gm-state')!.textContent).toBe('Agent');
-    // agentKind 开放字符串原样显示（01 §3.2：不收敛枚举）
-    expect(agentRow!.querySelector('.gm-cell-kind')!.textContent).toBe('brand-new-harness-9000');
-    // human 行 agentKind = '—'；负责任务数上纸
-    const humanRow = page.querySelector('.gm-row:not([data-agent])');
-    expect(humanRow!.querySelector('.gm-cell-kind')!.textContent).toBe('—');
-    expect(humanRow!.querySelector('.gm-cell-num')!.textContent).toBe('5');
+    expect(agentRow!.querySelector('.gm-block-row__state')!.textContent).toBe('Agent');
+    // agentKind 开放字符串原样显示（右栏 Agent 简列；01 §3.2：不收敛枚举）
+    expect(page.querySelector('.gm-panel__item-kind')!.textContent).toBe('brand-new-harness-9000');
+    // 右栏「席位与门控」：大号 mono 已用/上限（AGENT_SEAT_LIMIT=3）+ 门控提示行
+    const panel = page.querySelector('.gm-panel')!;
+    expect(panel.querySelector('.gm-panel__title')!.textContent).toBe('席位与门控');
+    expect(panel.querySelector('.gm-panel__big')!.textContent).toBe('01/03');
+    expect(panel.querySelector('.gm-panel__gate')!.textContent).toContain('剩余 2 席');
+    // human 行：负责任务数上纸（左栏行尾）
+    const humanRow = page.querySelector('.gm-block-row:not([data-agent])');
+    expect(humanRow!.querySelector('.gm-block-row__num')!.textContent).toBe('5');
     // 空态：无成员 ⇒ 明确空态
     const empty = doc(
       renderDoc('agent-poster', buildVm({ members: [] }), [{ type: 'generic', module: 'member-roster' }]),
@@ -294,18 +331,42 @@ describe('期三 · G2 通用模块内容结构', () => {
     expect(empty.querySelector('[data-print-page="generic-member-roster"] [data-print-empty="members"]')).not.toBeNull();
   });
 
-  it('三套外表同一份内容组件：数据逐行一致（差异只在排版层 CSS）', () => {
+  it('三套外表同一份内容组件：同一行模型三种呈现（table/grid/blocks 字段集各随其版）', () => {
     const vm = buildVm();
-    const rowsOf = (template: DocKind): string[] => {
+    // 各变体的行选择器与必备字段（D 表 = 六列含占比/负责人；E grid = 巨编号六列；
+    // H blocks = 左栏明细行 + 右栏摘要——字段集按各版原生语法，不再是同一张表）
+    const rowsOf = (template: DocKind): Element[] => {
       const d = doc(renderDoc(template, vm, [{ type: 'generic', module: 'stage-list' }]));
-      return Array.from(d.querySelectorAll('.gm-row')).map((r) => (r.textContent ?? '').replace(/\s+/g, ''));
+      const sel =
+        template === 'data-editorial'
+          ? '.gm-row'
+          : template === 'editorial-index'
+            ? '.gm-grid__row'
+            : '.gm-block-row';
+      return Array.from(d.querySelectorAll(sel));
     };
     const dRows = rowsOf('data-editorial');
     const eRows = rowsOf('editorial-index');
     const hRows = rowsOf('agent-poster');
     expect(dRows).toHaveLength(6);
-    expect(eRows).toEqual(dRows);
-    expect(hRows).toEqual(dRows);
+    expect(eRows).toHaveLength(6);
+    expect(hRows).toHaveLength(6);
+    // 同一行模型：三个变体的序号集合逐一相等（内容同源，只改呈现与排序；
+    // E 的 grid 按状态分章会重排行序，故按集合比对不按下标）
+    const noSet = (rows: Element[]): Set<string> => {
+      const s = new Set<string>();
+      for (const r of rows) {
+        const m = (r.textContent ?? '').match(/\b0[1-6]\b/);
+        if (m) s.add(m[0]);
+      }
+      return s;
+    };
+    expect(noSet(eRows)).toEqual(noSet(dRows));
+    expect(noSet(hRows)).toEqual(noSet(dRows));
+    // 各版语法差异落地：D 表含占比列、E grid 行带 data-state、H 有右栏面板
+    expect(dRows[0]!.querySelector('.gm-cell-ratio')).not.toBeNull();
+    expect(eRows[0]!.getAttribute('data-state')).not.toBeNull();
+    expect(doc(renderDoc('agent-poster', vm, [{ type: 'generic', module: 'stage-list' }])).querySelector('.gm-panel')).not.toBeNull();
   });
 
   it('G4 权限口径：VM 过滤之外的纸面零重算（隐藏阶段任务/成员不进 VM ⇒ 不上纸）', () => {
@@ -337,8 +398,9 @@ describe('期三 · G3 分页计划（纯函数）', () => {
     // 行不裂：总行数守恒
     const total = plan.chunks.reduce((n, c) => n + c.length, 0);
     expect(total).toBe(60);
-    // 每页行数 ≤ 容量（行区高 ÷ compact 行高）
-    const cap = Math.floor(GENERIC_ROWS_H['data-editorial'] / GENERIC_ROW_H['task-list'].compact);
+    // 每页行数 ≤ 容量（行区高 ÷ compact 行高；期七起行高按 rowForm 分档，
+    // D×M2 是 table 变体）
+    const cap = Math.floor(GENERIC_ROWS_H['data-editorial'] / GENERIC_ROW_H['task-list'].table!.compact);
     for (const c of plan.chunks) expect(c.length).toBeLessThanOrEqual(cap);
   });
 

@@ -466,12 +466,12 @@ describe.skipIf(!CAN_RUN)('期三 · V4 密度合规 + 外表承接（真 Chromi
     }
   });
 
-  it('四套外表承接落地：A 墨色横线 / D 硬边网格 / E 发丝线 / H 海报块头', async () => {
+  it('期七四套外表语法承接落地：A 三列错落卡片 / D KPI 带 + 进度条 / E grid 巨编号分章 / H blocks 右栏面板', async () => {
     const css = builtCss();
     const vm = buildVm();
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
-      // A：模块头 2px 墨色下划线 + 行线 1px 墨色（密集横线身份）
+      /* ── A：stage-list 6 条 ≤9 ⇒ staggered 三列错落卡片（A 原生 P1 语法） ── */
       await page.goto(
         'file://' +
           writeHtml(
@@ -485,15 +485,29 @@ describe.skipIf(!CAN_RUN)('期三 · V4 密度合规 + 外表承接（真 Chromi
       });
       expect(aHead.w, 'A 模块头 = 2px 粗线').toBe('2px');
       expect(aHead.c, 'A 头线 = 墨色（line 槽）').toBe('rgb(25, 24, 22)');
-      const aRow = await page.$eval('.gm-table td', (el) => getComputedStyle(el).borderBottomColor);
-      expect(aRow, 'A 行线 = 墨色').toBe('rgb(25, 24, 22)');
+      // staggered：三列 + 列 2/3 纵向错位 34/68（同原生 swiss-column）
+      const aCols = await page.$$('.gm-staggered__col');
+      expect(aCols.length, 'A×M1 ≤9 应三列错落').toBe(3);
+      const aCol2Mt = await page.$eval('.gm-staggered__col[data-col="2"]', (el) => getComputedStyle(el).marginTop);
+      const aCol3Mt = await page.$eval('.gm-staggered__col[data-col="3"]', (el) => getComputedStyle(el).marginTop);
+      expect(aCol2Mt, '第 2 列错位 34px').toBe('34px');
+      expect(aCol3Mt, '第 3 列错位 68px').toBe('68px');
+      // 序号 20px 粗体锚点（§2.6.2 A×M1 的 giant = 20px，不是 E 的 24px 衬线）
+      const aNo = await page.$eval('.gm-card__no', (el) => {
+        const s = getComputedStyle(el);
+        return { fs: Number.parseFloat(s.fontSize), fw: s.fontWeight };
+      });
+      expect(aNo.fs, 'A 卡片序号 = 20px').toBe(20);
+      expect(Number(aNo.fw), 'A 卡片序号加粗').toBeGreaterThanOrEqual(700);
       // A 的延期态不走 accent 色（accent = 纸面黄，作文字色不可读）——加重 + 字形
-      const aSignalColor = await page.$eval('.gm-state[data-tone="signal"]', (el) => getComputedStyle(el).color);
-      expect(aSignalColor, 'A 延期态文字仍是墨色（accent 是纸面色）').toBe('rgb(25, 24, 22)');
-      const aSignalWeight = await page.$eval('.gm-state[data-tone="signal"]', (el) => getComputedStyle(el).fontWeight);
-      expect(Number(aSignalWeight), 'A 延期态加重（双编码）').toBeGreaterThanOrEqual(700);
+      const aSignal = await page.$eval('.gm-card[data-state="delayed"] .gm-card__state', (el) => {
+        const s = getComputedStyle(el);
+        return { c: s.color, fw: s.fontWeight };
+      });
+      expect(aSignal.c, 'A 延期态文字仍是墨色（accent 是纸面色）').toBe('rgb(25, 24, 22)');
+      expect(Number(aSignal.fw), 'A 延期态加重（双编码）').toBeGreaterThanOrEqual(700);
 
-      // D：行线 = line 槽灰（非墨色）+ 等宽数字族
+      /* ── D：merged 表 + KPI 带 + 行内进度条（D 原生 ProgressMatrix 语法） ── */
       await page.goto(
         'file://' +
           writeHtml(
@@ -505,27 +519,51 @@ describe.skipIf(!CAN_RUN)('期三 · V4 密度合规 + 外表承接（真 Chromi
       expect(dRow, 'D 行线 = #C9C9C9').toBe('rgb(201, 201, 201)');
       const dTh = await page.$eval('.gm-table th', (el) => getComputedStyle(el).borderBottomColor);
       expect(dTh, 'D 表头线 = 近黑硬边').toBe('rgb(10, 10, 10)');
+      // KPI 带三格（复用原生 de-stat 视觉）
+      const kpiCells = await page.$$('.gm-kpi .de-stat');
+      expect(kpiCells.length, 'D×M1 KPI 带三格').toBe(3);
+      // 行内进度条（复用原生 de-bar；轨道 8px ≥ 密度约束 2 的 6px 下限）
+      const track = await page.$eval('.de-bar__track', (el) => el.getBoundingClientRect().height);
+      expect(track, '进度条轨道 8px（≥6px 下限）').toBeGreaterThanOrEqual(6);
 
-      // E：行线 = 发丝线色（1px #CFC8BC）+ 首列不内缩（与章头规则对齐）
+      /* ── E：grid 行 + 24px 衬线巨编号 + 按状态分章 + 发丝线 ── */
       await page.goto(
         'file://' +
           writeHtml(
             'generic-tpl-e.html',
-            shell(renderDoc('editorial-index', vm, [{ type: 'generic', module: 'task-list' }]), css, false),
+            shell(renderDoc('editorial-index', vm, [{ type: 'generic', module: 'stage-list' }]), css, false),
           ),
       );
-      const eRow = await page.$eval('.gm-table td', (el) => {
+      const eRow = await page.$eval('.gm-grid__row', (el) => {
         const s = getComputedStyle(el);
-        return { w: s.borderBottomWidth, c: s.borderBottomColor };
+        return { w: s.borderBottomWidth, c: s.borderBottomColor, display: s.display };
       });
+      expect(eRow.display, 'E 行是 grid（不是 table）').toBe('grid');
       expect(eRow.w, 'E 行线 = 1px 发丝线').toBe('1px');
       expect(eRow.c, 'E 行线 = #CFC8BC').toBe('rgb(207, 200, 188)');
-      const eFirstPad = await page.$eval('.gm-table td:first-child', (el) => getComputedStyle(el).paddingLeft);
-      expect(eFirstPad, 'E 首列不内缩（目录对齐语言）').toBe('0px');
-      const eHead = await page.$eval('.gm-head', (el) => getComputedStyle(el).borderTopWidth);
-      expect(eHead, 'E 模块头 = 2px 粗章节上线').toBe('2px');
+      // 巨编号：24px 衬线（E 的目录身份装置）
+      const eNo = await page.$eval('.gm-grid__no', (el) => {
+        const s = getComputedStyle(el);
+        return { fs: Number.parseFloat(s.fontSize), ff: s.fontFamily };
+      });
+      expect(eNo.fs, 'E 巨编号 = 24px').toBe(24);
+      expect(eNo.ff, 'E 巨编号 = 衬线').toContain('Serif');
+      // 分章：章头 2px 粗章节线 + 计数
+      const eChapter = await page.$eval('.gm-chapter', (el) => {
+        const s = getComputedStyle(el);
+        return { w: s.borderTopWidth, c: s.borderTopColor };
+      });
+      expect(eChapter.w, 'E 章头 = 2px 粗章节线').toBe('2px');
+      expect(eChapter.c, 'E 章线 = 近黑').toBe('rgb(20, 20, 20)');
+      // Agent 左签：3px 朱红（left-sign）
+      const eSign = await page.$eval('.gm-grid__row[data-agent]', (el) => {
+        const s = getComputedStyle(el);
+        return { w: s.borderLeftWidth, c: s.borderLeftColor };
+      });
+      expect(eSign.w, 'E Agent 行 = 3px 粗左边签').toBe('3px');
+      expect(eSign.c, 'E 左签 = 朱红').toBe('rgb(200, 16, 46)');
 
-      // H：模块头 = 2px 粗上线（海报块语言）
+      /* ── H：blocks 双栏 + 右栏面板（大号 mono，不借衬线巨字） ── */
       await page.goto(
         'file://' +
           writeHtml(
@@ -539,6 +577,17 @@ describe.skipIf(!CAN_RUN)('期三 · V4 密度合规 + 外表承接（真 Chromi
       });
       expect(hHead.w, 'H 模块头 = 2px 粗上线').toBe('2px');
       expect(hHead.c, 'H 头线 = 近黑').toBe('rgb(10, 10, 10)');
+      // 双栏：左明细 + 右 240px 摘要
+      const hPanelW = await page.$eval('.gm-panel', (el) => el.getBoundingClientRect().width);
+      expect(Math.abs(hPanelW - 240), 'H 右栏 = 240px').toBeLessThanOrEqual(2);
+      // 右栏大号 mono 数字（不借衬线巨字：字体族是 mono 不含 Serif）
+      const hBig = await page.$eval('.gm-panel__big', (el) => {
+        const s = getComputedStyle(el);
+        return { fs: Number.parseFloat(s.fontSize), ff: s.fontFamily };
+      });
+      expect(hBig.fs, '右栏大号数字 ≥28px').toBeGreaterThanOrEqual(28);
+      expect(hBig.ff, '右栏数字 = mono（非衬线巨字）').not.toContain('Serif');
+      expect(hBig.ff, '右栏数字 = IBM Plex Mono').toContain('IBM Plex Mono');
     } finally {
       await page.close();
     }

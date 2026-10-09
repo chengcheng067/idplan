@@ -542,9 +542,14 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
       expect(empties.length, '三个原生页整版只读空态').toBe(3);
       const text = (await page.textContent('body')) ?? '';
       expect(text).toContain('当前项目暂无 Agent 执行数据');
-      // 不许拿模拟记录填版：空态下没有任何状态卡 / 巨字 / 流程盒
+      // 不许拿模拟记录填版：空态下**原生页**没有任何状态卡 / 巨字 / 流程盒
+      // （期七起 H×M2 ≤8 通用任务卡复用 .ap-status__card 类名同构渲染——那是
+      //  真实任务数据的分布视图，属通用页；断言限定原生 execution-status 页）
       expect(await page.$('.ap-giant')).toBeNull();
-      expect(await page.$('.ap-status__card')).toBeNull();
+      expect(
+        await page.$('[data-print-page="execution-status"] .ap-status__card'),
+        '原生执行状态页不应出状态卡',
+      ).toBeNull();
       expect(await page.$('.ap-flow-box')).toBeNull();
       // 页头页脚仍在（每页可独立解释，01 §2）
       expect(text).toContain('Agent 执行宣告');
