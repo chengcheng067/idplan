@@ -16,8 +16,10 @@
  *  D4 圆角 0 · D5 iframe 打印（src/lib/print-frame.ts）· D6 PNG 导出复用。
  *
  * ── v0.8.6 四版模板重建（产品决策文档 §2.1/§2.2）──
- *  「打印内容」钮升格为「模板与模块」一个 dropdown 三截：
- *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H，全部已实现）；
+ *  「打印内容」钮升格为「模板与模块」一个**弹窗**三截（期六由 dropdown
+ *  长条改居中弹窗，见下）：
+ *    上截 阅读方式：五张模板单选卡（经典 + A/D/E/H，全部已实现；期六起
+ *          带 96×64 真缩略图，经典沿用「版本字母 + 基线三色点」占位）；
  *    中截 输出模块：经典 = 五块复选框（数据结构逐字不变，保护既有 spec）；
  *          四版 = 11 个内容模块复选框三态（期二：原生可勾选默认全选、
  *          非原生禁用态 + 原因；期三：M1/M2/M4 通用渲染落地，无原生页的
@@ -28,6 +30,18 @@
  *          仅四版显示（经典是品牌资产，不开放）。
  *  工具条另加「灰度」toggle（纸面 wrapper 套 filter:grayscale(1)）——选色时
  *  实时自查灰度可读，同时服务 02 §9 的灰度快照验收（不必真打黑白）。
+ *
+ * ── v1.5-d 期六：选择器弹窗化（dropdown 长条 → 主从式居中弹窗）──
+ * 她的两条抱怨（「没有打开全屏时显示不完整」「长条形选择方式排版不美观」，
+ * UX 研究 print-preview-ux-study-2026-10-09.md §1）：300px fixed 长条对
+ * 「单选模板 + 多选模块 + 调色」的信息量勉为其忍，锚定定位在窗口一变时
+ * 还整体收起。期六改**主从式居中弹窗**（PrintSelectorPanel + Modal center
+ * 档 + zTier 78）：左列模板列表（96×64 真缩略图，四张由她 10-09 提供落
+ * public/print-thumbs/）+ 右侧上模块勾选 / 下配色；底部状态条「当前 N 个
+ * 模块 · 预计 M 页」+ 即时生效明示（无应用/取消钮，Esc 即纯关闭）；
+ * <xl 左列转顶部横向滑动卡（同一棵树重排）。dropdown 时代的「fixed 贴
+ * 触发钮 + 面板实测高 + 窗口变化即收起」那套锚定定位机制**整体退役**
+ * （净删，spec 以标识符不在源码中出现为锁）。
  *
  * ── v1.5-c 期五：连续缩放（滑块 + Ctrl+滚轮双入口）──
  * 她的原话：「在打印预览的这个位置增加滑块，用于页面的放大与缩小；或者再
@@ -111,25 +125,187 @@ const BLOCK_ROWS: ReadonlyArray<{ key: keyof SchedulePaperBlocks; label: string;
 ];
 
 /**
- * 勾选面板定位（锚定触发钮；下方空间不够则向上翻）——范式同
- * `IndustrySelect.resolvePanelPos`（0.8.5 A 规范 §A.4）：Modal 只出
- * portal / 遮罩 / 焦点圈禁 / 滚动锁定，面板自身 fixed 定位。
+ * 选择器弹窗体（期六：dropdown 长条 → 主从式居中弹窗；UX 研究 §1.3）。
  *
- * `panelHeight` 是**实测高**（ResizeObserver 跟着内容变——配色编辑器展开时
- * 面板会长高，不重算会把底部裁出视口）。
+ * 她的两条抱怨（「没有打开全屏时显示不完整」「长条形选择方式排版不美观」）
+ * 是同一个病根：300px 宽的 fixed 长条对「单选模板 + 多选模块 + 调色」的
+ * 信息量本来就勉为其难，且锚定定位在窗口一变时就整体收起（等于没有兜底）。
+ * 弹窗契约（§1.3）：
+ *   · 形态：主从式——左列模板列表（~240px：96×64 缩略图 + 版本名 + 场景），
+ *     右侧上「输出模块」（经典 = 五块）下「配色」；整弹窗 ~680 宽、max-h 82vh，
+ *     右侧内容超出内部滚；
+ *   · <xl 降级：左列转弹窗顶部横向滑动卡（同一内容重排，不是第二套设计——
+ *     靠同一棵树的响应式类实现：`overflow-x-auto xl:flex-col`）；
+ *   · 底部状态条：「当前 N 个模块 · 预计 M 页」（M 与工具条同源 pagesCount）；
+ *   · **无「应用 / 取消」按钮**：勾选与配色即时重渲染已生效，Esc 就是纯关闭
+ *     （状态条里明示，否则用户会找「确定」）；
+ *   · Esc / 点遮罩 / ✕ 三路关 + 焦点入弹窗：Modal center 档白拿（z 档 78
+ *     由调用方传，见 PrintPreviewDialog 的接线）。
+ *
+ * 三截内容（模板单选卡组 / PrintModuleSection / PaletteSection）**原样搬**，
+ * 只换容器不加逻辑（§1.4）。提成独立导出组件：截图 spec 用
+ * renderToStaticMarkup 直接渲染它（同 PrintModuleSection 先例）。
  */
-function resolveSelectorPanelPos(
-  anchor: HTMLElement,
-  panelHeight: number,
-): { top: number; left: number; minWidth: number } {
-  const r = anchor.getBoundingClientRect();
-  const below = window.innerHeight - r.bottom;
-  const flipUp = below < panelHeight + 8 && r.top > below;
-  return {
-    top: flipUp ? Math.max(8, r.top - panelHeight - 4) : r.bottom + 4,
-    left: r.left,
-    minWidth: r.width,
-  };
+export function PrintSelectorPanel({
+  template,
+  pagesCount,
+  enabledModuleCount,
+  enabledModules,
+  onTemplatePick,
+  onToggleModule,
+  onSelectAllModules,
+  onSelectNoneModules,
+  blocks,
+  onToggleBlock,
+  onClose,
+}: {
+  template: PrintTemplateId;
+  /** 预计页数（工具条同源） */
+  pagesCount: number;
+  /** 当前启用的模块数（四版）/ 块数（经典）——状态条读数 */
+  enabledModuleCount: number;
+  enabledModules: readonly PrintModuleId[];
+  onTemplatePick(id: PrintTemplateId): void;
+  onToggleModule(module: PrintModuleId, on: boolean): void;
+  onSelectAllModules(): void;
+  onSelectNoneModules(): void;
+  blocks: SchedulePaperBlocks;
+  onToggleBlock(key: keyof SchedulePaperBlocks, on: boolean): void;
+  onClose(): void;
+}): JSX.Element {
+  const meta = printTemplateMeta(template);
+  return (
+    <div
+      role="group"
+      aria-label="模板与模块"
+      data-print-selector-panel=""
+      className="flex max-h-full w-full max-w-[680px] flex-col overflow-hidden rounded-md border border-line bg-paper shadow-overlay"
+    >
+      {/* 头：标题 + ✕（Esc / 点遮罩由 Modal center 档提供，共三路关闭） */}
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <h3 className="font-display text-sm font-semibold text-ink">模板与模块</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="关闭模板与模块"
+          className="rounded-[8px] p-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      {/* 主体：xl+ 左列模板（240px）+ 右侧内容；<xl 模板条转顶部横向滑动。
+          同一棵树两种排布——降级是重排不是第二套设计（§1.3）。 */}
+      <div className="grid min-h-0 flex-1 xl:grid-cols-[240px_minmax(0,1fr)]">
+        <div
+          role="radiogroup"
+          aria-label="阅读方式"
+          className="flex gap-2 overflow-x-auto border-b border-line p-2 xl:flex-col xl:overflow-x-visible xl:border-b-0 xl:border-r"
+        >
+          {PRINT_TEMPLATES.map((t) => {
+            const current = t.id === template;
+            const dots = t.id === 'classic' ? null : PRINT_TEMPLATE_PALETTES[t.id].baseline;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={current}
+                data-print-template-option={t.id}
+                onClick={() => onTemplatePick(t.id)}
+                className={`flex w-[220px] shrink-0 items-center gap-2.5 rounded-sm px-2 py-2 text-left transition-colors xl:w-full ${
+                  current ? 'bg-pine-soft' : 'hover:bg-sand'
+                }`}
+              >
+                {/* 缩略图 96×64：真图（期六到位）优先；经典无真图 ⇒ 版本字母 + 基线三色点占位 */}
+                <span className="h-16 w-24 shrink-0 overflow-hidden rounded-sm border border-line bg-cream">
+                  {t.thumb ? (
+                    <img
+                      src={t.thumb}
+                      alt={printTemplateName(t.id) + ' 第 1 页预览'}
+                      data-print-template-thumb={t.id}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span aria-hidden className="flex h-full w-full flex-col items-center justify-center">
+                      <span className="text-[15px] font-bold leading-none text-ink">
+                        {t.version || '经'}
+                      </span>
+                      {dots && (
+                        <span className="mt-1.5 flex gap-1">
+                          <span className="h-2 w-2 rounded-full" style={{ background: dots.accent }} />
+                          <span className="h-2 w-2 rounded-full" style={{ background: dots.ink }} />
+                          <span className="h-2 w-2 rounded-full" style={{ background: dots.line }} />
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium text-ink">
+                    {printTemplateName(t.id)}
+                  </span>
+                  <span className="block truncate text-[11px] text-mist">{t.scene}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 右侧：上「输出模块 / 五块」下「配色」；内容超出内部滚（不撑破弹窗） */}
+        <div
+          data-print-selector-content=""
+          className="flex min-h-0 flex-col overflow-y-auto"
+        >
+          {meta.usesBlocks ? (
+            <>
+              <div className="flex items-center justify-between px-3 pb-1 pt-3">
+                <span className="text-[11px] font-medium text-mist">打印内容（五块）</span>
+              </div>
+              {BLOCK_ROWS.map((row) => (
+                <label
+                  key={row.key}
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-3 py-1.5 text-[13px] text-ink hover:bg-sand"
+                >
+                  <input
+                    type="checkbox"
+                    checked={blocks[row.key]}
+                    onChange={(e) => onToggleBlock(row.key, e.target.checked)}
+                    data-print-block={row.key}
+                    className="h-3.5 w-3.5 shrink-0 accent-pine"
+                  />
+                  <span className="flex-1 whitespace-nowrap">{row.label}</span>
+                  <span className="shrink-0 text-[11px] text-mist">{row.hint}</span>
+                </label>
+              ))}
+            </>
+          ) : (
+            <PrintModuleSection
+              template={template}
+              enabledModules={enabledModules}
+              onToggle={onToggleModule}
+              onSelectAll={onSelectAllModules}
+              onSelectNone={onSelectNoneModules}
+            />
+          )}
+          {/* 配色：仅四版（经典是品牌资产不开放；未实现模板只提示） */}
+          {template === 'classic' ? null : meta.implemented ? (
+            <PaletteSection template={template} />
+          ) : (
+            <div className="border-t border-line px-3 pb-2 pt-2 text-[11px] leading-relaxed text-mist">
+              配色：{printTemplateName(template)} 页面建设中，三槽位与预设已就绪，页面落地后生效。
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 底：状态条（预计页数同源）+ 即时生效明示（无应用/取消，Esc 即纯关闭） */}
+      <div className="border-t border-line px-4 py-2 text-[11px] leading-relaxed text-mist">
+        当前 {enabledModuleCount} {meta.usesBlocks ? '块' : '个模块'} · 预计 {pagesCount} 页
+        <span className="ml-2">勾选与配色即时生效、无需确认；Esc / 点遮罩 / ✕ 均为纯关闭</span>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -347,37 +523,31 @@ export function PrintPreviewDialog({
   /** 灰度预览（纸面 wrapper 套 grayscale(1)；选色自查 + 灰度快照验收用，不真打黑白） */
   const [grayscale, setGrayscale] = useState(false);
   /**
-   * 模板与模块下拉面板（v0.8.6.0002 · 反馈 #9.2；四版重建升格为三截选择器；
-   * 期二「外表 × 模块分离」中截改模块勾选，产品决策文档 §3.3）：
+   * 模板与模块选择器（v0.8.6.0002 · 反馈 #9.2；期二「外表 × 模块分离」中截改
+   * 模块勾选；**期六 dropdown 长条 → 主从式居中弹窗**，UX 研究 §1.3）：
    * 挂预览面板内 = 勾选即时重渲染纸面（所见即所得），这是挂在这里的理由。
    * 深链路由（`*-print` 三条）没有本面板 ⇒ SchedulePaper 默认五块全开（兜底）。
+   *
+   * 期六退役：dropdown 时代「fixed 贴触发钮 + 面板实测高 + 窗口变化即收起」
+   * 那一套锚定定位（居中弹窗不需要锚点，Modal center 档白拿居中与三路关闭）
+   * ——净删代码，spec 以旧标识符不在源码中出现为锁。
    */
   const [selectorOpen, setSelectorOpen] = useState(false);
-  const [selectorPos, setSelectorPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
-  const selectorTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const selectorPanelRef = useRef<HTMLDivElement | null>(null);
-  /** 面板实测高（ResizeObserver 喂给定位：配色编辑器展开 / 模板切换都会变高） */
-  const [panelHeight, setPanelHeight] = useState(420);
 
-  /** 弹开期间窗口尺寸变化 ⇒ 锚点失效，直接收起（重开照当时锚点重算，不给陈旧坐标留路） */
+  /**
+   * 打开后焦点入模板列表首项（UX 研究 §1.3「打开焦点入弹窗（模板列表首项）」）。
+   * 为什么要延一帧：Modal 的焦点 effect 在打开时聚焦面板容器（tabIndex=-1），
+   * 而子组件 effect 先于父组件执行——不同步让位的话首项焦点会被面板焦点盖掉。
+   * Esc / 点遮罩 / ✕ 三路关闭与焦点圈禁仍是 Modal center 档的那一套。
+   */
   useEffect(() => {
     if (!selectorOpen) return;
-    const onResize = (): void => setSelectorOpen(false);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [selectorOpen]);
-
-  /** 面板实测高 → 重算定位（内容变高不 stale；只改 top/left 不会自激） */
-  useEffect(() => {
-    if (!selectorOpen) return;
-    const el = selectorPanelRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      const h = el.offsetHeight;
-      setPanelHeight((prev) => (prev === h ? prev : h));
+    const raf = requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>('[data-print-selector-panel] [data-print-template-option]')
+        ?.focus();
     });
-    ro.observe(el);
-    return () => ro.disconnect();
+    return () => cancelAnimationFrame(raf);
   }, [selectorOpen]);
 
   /**
@@ -510,6 +680,10 @@ export function PrintPreviewDialog({
 
   const paperNaturalHeight =
     Math.max(pagesCount, 1) * A4_HEIGHT_PX + Math.max(Math.max(pagesCount, 1) - 1, 0) * GAP_BETWEEN_PAGES;
+  /** 状态条读数：当前启用的模块数（四版）/ 块数（经典） */
+  const enabledModuleCount = meta.usesBlocks
+    ? BLOCK_ROWS.filter((row) => blocks[row.key]).length
+    : (pages[template] ?? printTemplateModuleIds(template)).length;
 
   return (
     <Modal open={open} onClose={onClose} placement="fullscreen" ariaLabel="打印预览">
@@ -526,18 +700,13 @@ export function PrintPreviewDialog({
             {d.project.name} · 预计 {pagesCount} 页 · A4
           </span>
           <span className="ml-auto" />
-          {/* 模板与模块（反馈 #9.2/#9.3 升格；期二中截改模块勾选）：样式照缩放钮范式，点开是三截下拉 */}
+          {/* 模板与模块（反馈 #9.2/#9.3 升格；期二中截改模块勾选；期六改弹窗） */}
           <button
             type="button"
-            ref={selectorTriggerRef}
             aria-expanded={selectorOpen}
-            aria-haspopup="true"
+            aria-haspopup="dialog"
             aria-label="模板与模块"
-            onClick={() => {
-              const el = selectorTriggerRef.current;
-              setSelectorPos(el ? resolveSelectorPanelPos(el, panelHeight) : null);
-              setSelectorOpen((v) => !v);
-            }}
+            onClick={() => setSelectorOpen((v) => !v)}
             className={`inline-flex items-center gap-1 rounded-[6px] border border-line bg-cream px-2 py-0.5 text-xs font-medium transition-colors ${
               selectorOpen ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
             }`}
@@ -708,129 +877,34 @@ export function PrintPreviewDialog({
           </div>
         </div>
 
-        {/* 模板与模块下拉：Modal dropdown 档（z-[75] 无底色遮罩，盖得住
-            fullscreen 预览但不压暗；portal / Esc / 焦点圈禁 / 滚动锁定白拿，
-            面板自身按触发钮 fixed 定位——范式同 IndustrySelect） */}
+        {/* 模板与模块弹窗（期六：dropdown 长条 → 主从式居中弹窗，UX 研究 §1.3）：
+            Modal center 档（半透明遮罩 + Esc / 点遮罩 / ✕ 三路关 + 焦点圈禁白拿），
+            zTier 78 盖 fullscreen 预览、仍低于 toast 反馈层（档位面见 Modal 映射表）；
+            三截内容搬进 PrintSelectorPanel，勾选/配色即时重渲染不变。 */}
         <Modal
           open={selectorOpen}
           onClose={() => setSelectorOpen(false)}
-          placement="dropdown"
+          placement="center"
+          zTier={78}
           ariaLabel="模板与模块"
         >
-          <div
-            role="group"
-            aria-label="模板与模块"
-            data-print-selector-panel=""
-            ref={selectorPanelRef}
-            tabIndex={-1}
-            style={
-              selectorPos
-                ? { top: selectorPos.top, left: selectorPos.left, minWidth: selectorPos.minWidth }
-                : { top: -9999, left: -9999 }
-            }
-            className="dropdown-pop-in fixed z-[1] w-[300px] rounded-md border border-line bg-paper p-1 shadow-overlay outline-none"
-          >
-            {/* 上截 · 阅读方式：模板单选卡（缩略图占位 + 版本名 + 一句话场景） */}
-            <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-mist">阅读方式</p>
-            <div role="radiogroup" aria-label="阅读方式" className="flex flex-col gap-0.5 pb-1.5">
-              {PRINT_TEMPLATES.map((t) => {
-                const current = t.id === template;
-                const dots =
-                  t.id === 'classic' ? null : PRINT_TEMPLATE_PALETTES[t.id].baseline;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={current}
-                    data-print-template-option={t.id}
-                    onClick={() => {
-                      setTemplate(t.id);
-                      // 换模板 ⇒ 旧模板收集的页面 ref 作废（PNG 导出按新模板重收）
-                      pageRefs.current = [];
-                    }}
-                    className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors ${
-                      current ? 'bg-pine-soft' : 'hover:bg-sand'
-                    }`}
-                  >
-                    {/* 缩略图占位：设计师 Ardot 导出图未到，先用「版本字母 + 基线三色点」
-                        （不假装是设计稿；图到位后换 img 即可，data 属性不变） */}
-                    <span
-                      aria-hidden
-                      className="flex h-9 w-12 shrink-0 flex-col items-center justify-center rounded-sm border border-line bg-cream"
-                    >
-                      <span className="text-[13px] font-bold leading-none text-ink">
-                        {t.version || '经'}
-                      </span>
-                      {dots && (
-                        <span className="mt-1 flex gap-0.5">
-                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: dots.accent }} />
-                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: dots.ink }} />
-                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: dots.line }} />
-                        </span>
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-medium text-ink">
-                        {printTemplateName(t.id)}
-                      </span>
-                      <span className="block truncate text-[11px] text-mist">{t.scene}</span>
-                    </span>
-                    {!t.implemented && (
-                      <span className="shrink-0 rounded-full bg-sunken px-1.5 py-0.5 text-[10px] text-mist">
-                        建设中
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* 中截 · 输出模块：经典=五块（数据结构逐字不变，保护既有 spec）；
-                四版=11 个内容模块勾选（期二「外表 × 模块分离」，决策文档 §3.3） */}
-            <div className="border-t border-line px-2 pb-1.5 pt-1">
-              {meta.usesBlocks ? (
-                <>
-                  <div className="flex items-center justify-between pb-1 pt-1">
-                    <span className="text-[11px] font-medium text-mist">打印内容（五块）</span>
-                  </div>
-                  {BLOCK_ROWS.map((row) => (
-                    <label
-                      key={row.key}
-                      className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink hover:bg-sand"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={blocks[row.key]}
-                        onChange={(e) => setBlock(row.key, e.target.checked)}
-                        data-print-block={row.key}
-                        className="h-3.5 w-3.5 shrink-0 accent-pine"
-                      />
-                      <span className="flex-1 whitespace-nowrap">{row.label}</span>
-                      <span className="shrink-0 text-[11px] text-mist">{row.hint}</span>
-                    </label>
-                  ))}
-                </>
-              ) : (
-                <PrintModuleSection
-                  template={template}
-                  enabledModules={pages[template] ?? printTemplateModuleIds(template)}
-                  onToggle={(module, on) => setModuleEnabled(template, module, on)}
-                  onSelectAll={() => setTemplateModules(template, printTemplateModuleIds(template))}
-                  onSelectNone={() => setTemplateModules(template, [])}
-                />
-              )}
-            </div>
-
-            {/* 下截 · 配色：仅四版（经典是品牌资产不开放；未实现模板只提示） */}
-            {template === 'classic' ? null : meta.implemented ? (
-              <PaletteSection template={template} />
-            ) : (
-              <div className="border-t border-line px-3 pb-2 pt-2 text-[11px] leading-relaxed text-mist">
-                配色：{printTemplateName(template)} 页面建设中，三槽位与预设已就绪，页面落地后生效。
-              </div>
-            )}
-          </div>
+          <PrintSelectorPanel
+            template={template}
+            pagesCount={pagesCount}
+            enabledModuleCount={enabledModuleCount}
+            enabledModules={pages[template] ?? printTemplateModuleIds(template)}
+            onTemplatePick={(id) => {
+              setTemplate(id);
+              // 换模板 ⇒ 旧模板收集的页面 ref 作废（PNG 导出按新模板重收）
+              pageRefs.current = [];
+            }}
+            onToggleModule={(module, on) => setModuleEnabled(template, module, on)}
+            onSelectAllModules={() => setTemplateModules(template, printTemplateModuleIds(template))}
+            onSelectNoneModules={() => setTemplateModules(template, [])}
+            blocks={blocks}
+            onToggleBlock={(key, on) => setBlock(key, on)}
+            onClose={() => setSelectorOpen(false)}
+          />
         </Modal>
 
         {/* 动作条：36px 主操作族；PDF 出口=打印对话框另存（规范 §4.2，不设重复按钮） */}

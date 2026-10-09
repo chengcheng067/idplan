@@ -719,18 +719,23 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
     expect(paper).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
-  it('PrintPreviewDialog.tsx：复用 Modal dropdown 档 + 模板/模块/配色三截接线', () => {
+  it('PrintPreviewDialog.tsx：复用 Modal 体系（center 档 + zTier 78）+ 模板/模块/配色三截接线', () => {
     const src = read('src/components/print/PrintPreviewDialog.tsx');
-    expect(src, '必须复用既有 Modal 体系（dropdown 档），不许发明新浮层').toContain(
-      'placement="dropdown"',
+    expect(src, '必须复用既有 Modal 体系（center 档），不许发明新浮层').toContain(
+      'placement="center"',
     );
+    // 期六：选择器弹窗盖 fullscreen 预览（z-[75]）又低于 toast（z-[80]）⇒ 78 档
+    expect(src, '选择器弹窗必须用 78 档盖住预览浮层').toContain('zTier={78}');
     expect(src).toContain('data-print-block');
     expect(src).toContain('data-print-template-option');
     // 期二：中截页勾选 → 模块勾选（data-print-page 是纸面页 kind 属性，
     // 在四个 Document 组件上，不在本文件）
     expect(src).toContain('data-print-module');
     expect(src).toContain('PrintModuleSection');
+    expect(src).toContain('PrintSelectorPanel');
     expect(src).toContain('data-print-selector-panel');
+    // 期六：真缩略图（四张由她提供，落 public/print-thumbs/）
+    expect(src).toContain('data-print-template-thumb');
     expect(src).toContain('data-print-grayscale-toggle');
     expect(src).toContain('usePrintPrefsStore');
     expect(src, '勾选即时喂给纸面').toContain('blocks={blocks}');
@@ -741,6 +746,10 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
     expect(src).toContain('PaletteSection');
     expect(src).toContain('data-print-template-building');
     expect(src).toContain('usePrintViewModel');
+    // 期六退役：dropdown 锚定定位机制（selectorPos/panelHeight/resize 收起）应整体删掉
+    expect(src, '居中弹窗不需要锚点定位').not.toContain('selectorPos');
+    expect(src).not.toContain('panelHeight');
+    expect(src).not.toContain('resolveSelectorPanelPos');
   });
 
   it('usePrintPrefsStore.ts：key / partialize / merge 兜底三件套 + 新字段', () => {

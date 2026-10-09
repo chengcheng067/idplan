@@ -4,6 +4,44 @@ import { createPortal } from 'react-dom';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { resolveAnchoredPosition, type Point } from '../../lib/anchoredPosition';
 
+type ModalPlacement =
+  | 'center'
+  | 'right'
+  | 'left'
+  | 'left-rail'
+  | 'right-float'
+  | 'float'
+  | 'dropdown'
+  | 'fullscreen';
+
+/**
+ * 遮罩 z 档 → 类名**静态映射**（纪律同 print-skins：不许拿档位数字拼类名——
+ * 模板串拼出来的类名不进 Tailwind 的 JIT 内容扫描，会静默丢样式）。
+ */
+const OVERLAY_Z_CLASS: Record<60 | 70 | 75 | 78, string> = {
+  60: 'z-[60]',
+  70: 'z-[70]',
+  75: 'z-[75]',
+  78: 'z-[78]',
+};
+
+/**
+ * 遮罩 z 档：缺省按 placement（既有四档语义不变——60 抽屉 / 70 居中 /
+ * 75 全屏与下拉）；`zTier` 显式指定时覆盖。
+ *
+ * 为什么需要覆盖：期六打印选择器弹窗要盖在 fullscreen 预览浮层（75 档）
+ * **之上**、又必须留在 toast 反馈层**之下**——既有档位里没有这个间隙，
+ * 故新增 78 一档。除此之外没有任何调用方需要它。
+ * （注释里不写 toast 档位的类名面——JIT 连注释都扫，且层级 spec 以源码
+ * 数值比较守「toast 高于一切 Modal」，多一个字面量就多一分误判。）
+ */
+function overlayZClass(placement: ModalPlacement, zTier?: 60 | 70 | 75 | 78): string {
+  if (zTier !== undefined) return OVERLAY_Z_CLASS[zTier];
+  if (placement === 'center') return OVERLAY_Z_CLASS[70];
+  if (placement === 'fullscreen' || placement === 'dropdown') return OVERLAY_Z_CLASS[75];
+  return OVERLAY_Z_CLASS[60];
+}
+
 /**
  * 通用浮层底座（modal-overlay 基础设施）。
  *
@@ -39,6 +77,7 @@ export function Modal({
   ariaLabel = '浮层',
   anchor = null,
   railLeft,
+  zTier,
   children,
 }: {
   open: boolean;
@@ -53,9 +92,15 @@ export function Modal({
    *               左缘让出 railLeft（常驻侧栏宽度）：抽屉贴侧栏右缘展开，
    *               侧栏不被遮罩压住、保持可见可点
    */
-  placement?: 'center' | 'right' | 'left' | 'left-rail' | 'right-float' | 'float' | 'dropdown' | 'fullscreen';
+  placement?: ModalPlacement;
   /** 无障碍标签，读屏用 */
   ariaLabel?: string;
+  /**
+   * 遮罩 z 档显式覆盖（缺省按 placement，见 overlayZClass）。**仅当时序
+   * 冲突时用**：期六打印选择器弹窗（center 几何）要盖 fullscreen 预览
+   * （预览浮层那一档）又低于 toast 反馈层 ⇒ 传 78。其余场景一律省略。
+   */
+  zTier?: 60 | 70 | 75 | 78;
   /**
    * `placement='left-rail'` 专用：遮罩（与抽屉）左缘让出的宽度，CSS 长度
    * （如 '240px' / '64px' / '0px'）。≥xl 传侧栏宽度（展开 240 / 收起 64），
@@ -219,6 +264,9 @@ export function Modal({
       // 让其内部冒出的更浅层浮层（如指派弹层 z-[65]）能盖在抽屉之上。抽屉自身不参与 center 的顶层竞争。
       // Soft UI 不用 backdrop-blur（玻璃拟态）；层次靠统一的主色遮罩 + 面板外凸阴影表达。
       // 去掉模糊后遮罩要略实一点，否则背景噪点会穿透、压不住层级。
+      // 期六新增 78 档（overlayZClass 的 zTier 覆盖）：打印选择器弹窗要盖 fullscreen
+      // 预览那一档、又留在 toast 反馈层之下——既有四档（60/70/75 + dropdown 同 75）
+      // 没有这个间隙。具体档位面见 overlayZClass 上方映射表（注释不写字面量）。
       //
       // ★ v0.8.6 壳层常驻重构：遮罩从**顶栏下缘**起始（inset-0 → top-14 xl:top-16），
       //    让出自绘三键所在的顶栏带。三键并回 header（TopBar 的 WindowControls 不再是
@@ -232,18 +280,18 @@ export function Modal({
       //    保持可见可点；抽屉是遮罩的 flex 首子项，随之贴侧栏右缘展开。
       className={`fixed inset-x-0 bottom-0 max-md:top-[100px] md:top-14 xl:top-16 ${
         placement === 'center'
-          ? 'z-[70] bg-ink/45'
+          ? 'bg-ink/45'
           : placement === 'fullscreen'
             ? // 0.8.4 打印预览：层级压过一切 Modal、低于 Toast 反馈层（数字见本行类名），遮罩同 center 浓度
-              'z-[75] bg-ink/45'
+              'bg-ink/45'
             : placement === 'dropdown'
               ? // v0.8.5 A 规范 §A.4：锚定下拉浮层。z-[75] 盖得住 center 建档弹窗
                 // （z-[70]；原生 select 本来就能盖），**无底色**——下拉不该把背后弹窗压暗。
                 // 与打印预览同值但场景互斥（下拉只出现在建档弹窗内，打印路由独立）。
-                'z-[75] bg-transparent'
+                'bg-transparent'
                 : // left / left-rail 同层同浓度（z-60 / bg-ink/25）
-                  'z-[60] bg-ink/25'
-      }`}
+                  'bg-ink/25'
+      } ${overlayZClass(placement, zTier)}`}
       style={placement === 'left-rail' ? { left: railLeft ?? '0px' } : undefined}
     >
       {/* 点击关闭判定放在锚点面板（e.currentTarget）上而非遮罩：因为面板是 flex 容器且覆盖内容区，

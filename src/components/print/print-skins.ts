@@ -188,6 +188,12 @@ export interface PrintTemplateMeta {
   label: string;
   /** 一句话场景（选择器卡片副文案） */
   scene: string;
+  /**
+   * 真缩略图（期六：需求方 10-09 提供的四张首页预览图，落
+   * `public/print-thumbs/`，vite public 语义——引用范式同 `/logo.png`）。
+   * classic 无真图 ⇒ undefined：选择器沿用「版本字母 + 基线三色点」占位。
+   */
+  thumb: string | undefined;
   /** 页面是否已实现（false ⇒ 建设中空态 + 禁打印，见文件头） */
   implemented: boolean;
   /** 经典专用：用五块开关而不是模块复选框（决策文档 §2.2） */
@@ -206,6 +212,7 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: '',
     label: '经典',
     scene: '现有排程纸面：甘特摘要 + 阶段清单，五块可摘',
+    thumb: undefined,
     implemented: true,
     usesBlocks: true,
     modules: [],
@@ -215,6 +222,7 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: 'A',
     label: 'Swiss Schedule',
     scene: '时刻表式竖读扫描：阶段 / 任务 / 延期 / 成员',
+    thumb: '/print-thumbs/A-swiss-schedule-p1.png',
     implemented: true,
     usesBlocks: false,
     // A 的 M1/M2/M4 已有原生页（时刻表/读号表/责任表）⇒ 通用标记不参与分发
@@ -246,6 +254,7 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: 'D',
     label: 'Data Editorial',
     scene: '横读矩阵与数据图形：进度 / 依赖 / 工作量 / 验收',
+    thumb: '/print-thumbs/D-data-editorial-p1.png',
     implemented: true,
     usesBlocks: false,
     // 期三第一批：M1/M2/M4 在 D 无原生页 ⇒ 通用渲染（该外表基础排版承接）
@@ -292,6 +301,7 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: 'E',
     label: 'Editorial Index',
     scene: '跳读大编号索引：阶段 / 成员 / 产出物归档',
+    thumb: '/print-thumbs/E-editorial-index-p1.png',
     implemented: true,
     usesBlocks: false,
     // 期三第一批：M2 任务清单在 E 无原生页 ⇒ 通用渲染；M1/M4 已有原生目录页
@@ -323,6 +333,7 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     version: 'H',
     label: 'Agent Poster',
     scene: '海报式跳读：Agent 执行状态与写回治理公示',
+    thumb: '/print-thumbs/H-agent-poster-p1.png',
     implemented: true,
     usesBlocks: false,
     // 期三第一批：M1/M2/M4 在 H 无原生页 ⇒ 通用渲染（去专属化的第一批落地）

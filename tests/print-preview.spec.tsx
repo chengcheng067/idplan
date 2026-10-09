@@ -21,8 +21,13 @@ const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf-8');
 describe('打印内置化 A 方案 · 规范 §7.5 验收', () => {
   it('① Modal fullscreen = z-[75]（高于 center/right 档；Toast-80 侧由 toast-above-modal.spec 钉）', () => {
     const modal = read('src/components/common/Modal.tsx');
-    expect(modal).toContain("'z-[75] bg-ink/45'");
+    // 期六重构：z 档类名收进 OVERLAY_Z_CLASS 静态映射（overlayZClass），
+    // 断言跟着改为「映射表里有 75 且 fullscreen 分支引用它」——语义不变
+    expect(modal).toContain("75: 'z-[75]'");
+    expect(modal).toContain("if (placement === 'fullscreen' || placement === 'dropdown') return OVERLAY_Z_CLASS[75];");
     expect(modal).toContain("placement === 'fullscreen'");
+    // 期六新增 78 档（选择器弹窗盖 fullscreen 预览、低于 toast 80）
+    expect(modal).toContain("78: 'z-[78]'");
     // fullscreen 容器无 padding（全屏面板）
     expect(modal).toMatch(/placement === 'fullscreen'[\s\S]{0,200}'p-0'/);
   });

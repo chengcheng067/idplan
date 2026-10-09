@@ -236,7 +236,7 @@ async function resetPrefs(): Promise<void> {
   });
 }
 
-/** 打开三截下拉（幂等） */
+/** 打开三截选择器弹窗（幂等；期六起是居中弹窗不是下拉） */
 function openSelector(): void {
   if (document.querySelector('[data-print-selector-panel]')) return;
   const btn = Array.from(document.querySelectorAll('button')).find(
@@ -246,7 +246,7 @@ function openSelector(): void {
   act(() => {
     btn.click();
   });
-  expect(document.querySelector('[data-print-selector-panel]'), '点后下拉面板应出现').not.toBeNull();
+  expect(document.querySelector('[data-print-selector-panel]'), '点后选择器弹窗应出现').not.toBeNull();
 }
 
 /** 点模板卡（选择器上截）并等中截按新外表重建 */
@@ -858,5 +858,168 @@ describe('期二+期三 · L2 静态锁', () => {
     for (const key of ['header', 'timeline', 'projectInfo', 'stageTable', 'footer']) {
       expect(paper, `SchedulePaper 的 blocks.${key} 条件渲染不动`).toContain(`blocks.${key}`);
     }
+  });
+});
+
+/* ====================================================================================
+ * 期六 · 选择器弹窗化（dropdown 长条 → 主从式居中弹窗，UX 研究 §1.3）
+ * ==================================================================================== */
+
+describe('期六 · 选择器弹窗形态（真实对话框）', () => {
+  it('居中弹窗契约：Modal center 档 dialog + data-print-selector-panel 锚点 + 状态条', () => {
+    renderDialog(true);
+    openSelector();
+
+    // Modal center 档的 dialog 语义（role/aria-modal 由 Modal 提供）。
+    // 注意页面上有两个 dialog：外层 fullscreen 预览 + 本选择器弹窗——按 aria-label 取本弹窗
+    const dialog = document.querySelector('[role="dialog"][aria-label="模板与模块"]');
+    expect(dialog, '应是 Modal 居中被弹窗').not.toBeNull();
+    expect(dialog!.getAttribute('aria-modal')).toBe('true');
+    // 面板锚点属性保留（spec 锚点，期二起就在）
+    const panel = document.querySelector('[data-print-selector-panel]');
+    expect(panel, '面板锚点属性保留').not.toBeNull();
+    expect(panel!.getAttribute('role')).toBe('group');
+
+    // 左列模板 radiogroup：5 个单选卡（经典占位 + 四版真缩略图）
+    const group = document.querySelector('[role="radiogroup"][aria-label="阅读方式"]');
+    expect(group, '左列模板列表应在').not.toBeNull();
+    expect(group!.querySelectorAll('[data-print-template-option]')).toHaveLength(5);
+
+    // 状态条：当前 N 个模块 · 预计 M 页（M 与工具条同源；夹具经典纸面 1 页）
+    const status = panel!.textContent ?? '';
+    expect(status, '状态条应报块数与预计页数').toMatch(/当前 5 块 · 预计 \d+ 页/);
+    // 即时生效明示（无应用/取消，Esc 即纯关闭）
+    expect(status).toContain('即时生效');
+    expect(status).toContain('Esc / 点遮罩 / ✕ 均为纯关闭');
+
+    // 无「应用 / 取消 / 确定」按钮（即时重渲染已生效，不设待确认态；
+    // 只在弹窗内查——动作条的「取消」是关整个预览，另一回事）
+    for (const label of ['应用', '取消', '确定', '保存']) {
+      const btn = Array.from(panel!.querySelectorAll('button')).find(
+        (b) => (b.textContent ?? '').trim() === label,
+      );
+      expect(btn, `弹窗内不应有「${label}」按钮`).toBeUndefined();
+    }
+  });
+
+  it('四版真缩略图落位（img + data 属性 + alt）；经典无真图沿用字母占位', () => {
+    renderDialog(true);
+    openSelector();
+
+    // 四张真图（她 10-09 提供，落 public/print-thumbs/）
+    for (const id of ['swiss-schedule', 'data-editorial', 'editorial-index', 'agent-poster']) {
+      const img = document.querySelector<HTMLImageElement>(`img[data-print-template-thumb="${id}"]`);
+      expect(img, `${id} 应有真缩略图`).not.toBeNull();
+      expect(img!.getAttribute('src'), 'src 走 public 静态资源（同 /logo.png 范式）').toMatch(
+        /^\/print-thumbs\/[ADEH]-.+\.png$/,
+      );
+      expect(img!.getAttribute('alt'), 'alt 指名模板与页').toContain('第 1 页预览');
+    }
+    // 经典无真图 ⇒ 占位（版本字母「经」），不出现 img
+    const classicCard = document.querySelector('[data-print-template-option="classic"]');
+    expect(classicCard!.querySelector('img'), '经典不应有真缩略图').toBeNull();
+    expect(classicCard!.textContent, '经典占位含版本字母').toContain('经');
+  });
+
+  it('焦点入弹窗：打开后焦点落模板列表首项', async () => {
+    renderDialog(true);
+    openSelector();
+    // 首项焦点延一帧（让位 Modal 的面板焦点）——排空一帧
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    const active = document.activeElement;
+    expect(
+      active?.getAttribute('data-print-template-option'),
+      '打开后焦点应在模板列表首项（classic）',
+    ).toBe('classic');
+  });
+
+  it('Esc 关闭（纯关闭：勾选态已生效，无需应用）', () => {
+    renderDialog(true);
+    openSelector();
+    pickTemplate('swiss-schedule');
+    // 关掉一个模块（即时生效）
+    setModuleChecked('task-list', false);
+    expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.querySelector('[data-print-selector-panel]'), 'Esc 后面板应消失').toBeNull();
+    // 关闭后纸面仍是改过的勾选态（即时重渲染，无待确认）
+    expect(usePrintPrefsStore.getState().pages['swiss-schedule']).toEqual([
+      'stage-list',
+      'delay-ledger',
+      'member-roster',
+    ]);
+  });
+
+  it('点遮罩关闭（Modal center 档的点击捕获层）', () => {
+    renderDialog(true);
+    openSelector();
+    // Modal 的点击捕获层 = 本弹窗 dialog 内的 flex 容器（onMouseDown 判 target===currentTarget）
+    const catcher = document.querySelector('[role="dialog"][aria-label="模板与模块"] > div');
+    expect(catcher, '点击捕获层应在').not.toBeNull();
+    act(() => {
+      catcher!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(document.querySelector('[data-print-selector-panel]'), '点遮罩应关闭').toBeNull();
+  });
+
+  it('✕ 关闭（第三路）', () => {
+    renderDialog(true);
+    openSelector();
+    const closeBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.getAttribute('aria-label') === '关闭模板与模块',
+    );
+    expect(closeBtn, '✕ 按钮应在').not.toBeUndefined();
+    act(() => {
+      closeBtn!.click();
+    });
+    expect(document.querySelector('[data-print-selector-panel]'), '✕ 后面板应消失').toBeNull();
+  });
+});
+
+/* ====================================================================================
+ * 期六 · L2 静态锁（z 档 / 退役 / <xl 降级是同一棵树）
+ * ==================================================================================== */
+
+describe('期六 · L2 静态锁', () => {
+  const ROOT = resolve(__dirname, '..');
+  const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf-8');
+
+  it('Modal.tsx：zTier 静态映射在位（78 档新增，既有四档语义不变）', () => {
+    const src = read('src/components/common/Modal.tsx');
+    expect(src).toContain("60: 'z-[60]'");
+    expect(src).toContain("70: 'z-[70]'");
+    expect(src).toContain("75: 'z-[75]'");
+    expect(src).toContain("78: 'z-[78]'");
+    // 静态映射纪律：不许拿数字拼类名（JIT 看不见动态串；拼接写法防本 spec 自咬）
+    expect(src, '禁止模板字符串拼 z 档类名').not.toContain('z-[' + '${');
+    expect(src).toContain('overlayZClass');
+    expect(src).toContain('zTier?: 60 | 70 | 75 | 78');
+  });
+
+  it('PrintPreviewDialog：锚定定位机制整体退役（净删，标识符不在源码中出现）', () => {
+    const src = read('src/components/print/PrintPreviewDialog.tsx');
+    expect(src, 'selectorPos 应整体退役').not.toContain('selectorPos');
+    expect(src, 'panelHeight 应整体退役').not.toContain('panelHeight');
+    expect(src, 'resolveSelectorPanelPos 应整体退役').not.toContain('resolveSelectorPanelPos');
+    // 退役的 resize 收起监听（居中弹窗不随窗口变化消失；文件内不应再有 resize 监听）
+    expect(src, 'resize 收起机制应整体退役').not.toContain("addEventListener('resize'");
+    // 正向：center 档 + zTier 78 + 弹窗体接线在位
+    expect(src).toContain('placement="center"');
+    expect(src).toContain('zTier={78}');
+    expect(src).toContain('<PrintSelectorPanel');
+  });
+
+  it('<xl 降级是同一棵树重排（横滑类 + xl:列类同存，不是第二套设计）', () => {
+    const src = read('src/components/print/PrintPreviewDialog.tsx');
+    expect(src, '模板列表容器应同时带横滑（<xl）与纵列（xl+）类').toContain('overflow-x-auto');
+    expect(src).toContain('xl:flex-col');
+    expect(src).toContain('xl:grid-cols-[240px_minmax(0,1fr)]');
+    // 右侧内容内部滚（不撑破弹窗）
+    expect(src).toContain('overflow-y-auto');
   });
 });
