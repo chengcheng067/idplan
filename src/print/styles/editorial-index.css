@@ -438,6 +438,15 @@
 /* ── 打印媒体：暖纸面压过 global 的 !important 规则（两条都 !important ⇒
  * 特异性高者胜：本选择器两类 > `.print-root` 一类）；填充元素锁 exact ── */
 @media print {
+  /* 纸面页头豁免（预存 bug 修复，2026-10-09 期三收尾）：global.css 的
+     `header { display: none !important }`（v0.4 `4924734` 为隐藏 TopBar 引入）
+     会命中纸面内的语义 <header>——本版中英双语刊头（页题 + 项目标识）在真机
+     打印 / 另存 PDF 时整块消失。两类 + !important ⇒ 特异性高者胜；screen 态
+     零变化，应用级 header 不受影响。 */
+  .print-root.print-template-editorial-index .a4-page .ei-head {
+    display: flex !important;
+  }
+
   .print-root.print-template-editorial-index,
   .print-root.print-template-editorial-index .a4-page {
     background: var(--ei-paper) !important;
