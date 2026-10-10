@@ -338,18 +338,20 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
     expect(row.textContent).toContain('2026-02-02 02:00');
   });
 
-  it('④d P4 成员责任表：Agent 行唯一强焦点 + agentKind 未知值原样', () => {
+  it('④d P4 成员责任表：Agent 行唯一强焦点（「类型」/ agentKind 两列已下架）', () => {
     render(['member-roster']);
     const agentRow = q('.swiss-roster__row--agent');
     expect(agentRow).not.toBeNull();
     expect(agentRow!.getAttribute('data-agent')).toBe('true');
     expect(agentRow!.textContent).toContain('小 Agent');
-    expect(agentRow!.textContent).toContain('Agent');
-    // 开放字符串：不存在的 harness 名原样上纸（01 §3.2）
-    expect(agentRow!.textContent).toContain('brand-new-harness-9000');
-    // 表头五列齐（含负责任务数列）
+    // 「类型」与 agentKind 两列按需求方要求下架（打印不出 Agent 板块）：
+    // Agent 身份改由 data-agent + 反色焦点类 + 姓名列承载，不再有
+    // 「Agent」文字签，原始 harness 名（开放字符串）也不再上纸。
+    expect(agentRow!.textContent).not.toContain('brand-new-harness-9000');
+    expect(agentRow!.querySelectorAll('td')).toHaveLength(3);
+    // 表头三列齐（含负责任务数列）
     const heads = qa('.swiss-roster thead th').map((th) => th.textContent);
-    expect(heads).toEqual(['姓名', '类型', 'agentKind', '角色', '负责任务数']);
+    expect(heads).toEqual(['姓名', '角色', '负责任务数']);
     // 人类行无焦点类（焦点唯一）
     expect(qa('.swiss-roster__row--agent')).toHaveLength(1);
   });

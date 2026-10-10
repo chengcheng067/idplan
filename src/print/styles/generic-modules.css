@@ -67,7 +67,6 @@
    收口——漏了它，序号会**横向溢出压进姓名格**（BUG 现象）。 */
 .print-root .gm-cell-name,
 .print-root .gm-cell-owner,
-.print-root .gm-cell-kind,
 .print-root .gm-cell-role,
 .print-root .gm-cell-no {
   overflow: hidden;
@@ -130,27 +129,23 @@
   width: 12%;
 }
 
-/* M4 成员名册：序号 / 姓名 / 类型 / agentKind / 角色 / 负责任务数
-   ⚠️ 六列宽度**合计必须 = 100%**：本表是 table-layout:fixed，未定义的列会与
-   「剩下的空间」一起平分——此前 `--no` 漏定义而其余五列已吃掉 100%，序号列
-   于是分到 0 宽，`01` 溢出压进姓名格（D 版 Agent 行还有 3px 左签叠上）。 */
+/* M4 成员名册：序号 / 姓名 / 角色 / 负责任务数
+   （「类型」与 agentKind 两列按需求方要求下架——打印不出 Agent 板块）
+   ⚠️ 四列宽度**合计必须 = 100%**：本表是 table-layout:fixed，未定义的列会与
+   「剩下的空间」一起平分——此前 `--no` 漏定义而其余列已吃掉 100%，序号列
+   于是分到 0 宽，`01` 溢出压进姓名格（D 版 Agent 行还有 3px 左签叠上）。
+   下架两列腾出的宽度整份并入姓名列（26% ⇒ 52%），长姓名少截一截。 */
 .print-root .gm-module[data-module='member-roster'] .gm-col-no {
   width: 8%;
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-name {
-  width: 26%;
-}
-.print-root .gm-module[data-module='member-roster'] .gm-col-state {
-  width: 12%;
-}
-.print-root .gm-module[data-module='member-roster'] .gm-col-kind {
-  width: 22%;
+  width: 52%;
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-role {
-  width: 18%;
+  width: 25%;
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-num {
-  width: 14%;
+  width: 15%;
 }
 
 /* ── 期七变体结构（行形态几何；视觉身份仍归 ② 各版块） ──

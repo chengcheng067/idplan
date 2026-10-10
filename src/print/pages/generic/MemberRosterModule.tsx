@@ -3,9 +3,10 @@
  * 产品决策文档 §3.1 M4 / UX 研究 §2.6.2）。
  *
  * ── 读法 ──
- * 行 = 成员（VM 序）。与选择器里 M4 的一句话说明逐字对应（「human /
- * agent · 角色 · 负责任务数」）。**全员口径**：无 clientName 涉权（02
- * §3：clientName 仅 admin 进 VM，本模块不消费它）；成员范围 = 可见范围
+ * 行 = 成员（VM 序）。table（A/D）上纸列 = 序号 · 姓名 · 角色 · 负责任务数：
+ * 「类型」与 agentKind 两列按需求方要求下架（打印不出 Agent 板块），human /
+ * agent 的区分由角色列 + Agent 行焦点承载。**全员口径**：无 clientName 涉权
+ * （02 §3：clientName 仅 admin 进 VM，本模块不消费它）；成员范围 = 可见范围
  * 内被引用成员（适配器 referencedIds 口径，通用渲染不重算）。
  *
  * ── 期七：按语法 token 分发三种行形态 ──
@@ -75,8 +76,9 @@ function MemberTable({ rows }: { rows: readonly MemberRosterRow[] }): JSX.Elemen
         <tr>
           <th className="gm-col-no">序号</th>
           <th className="gm-col-name">姓名</th>
-          <th className="gm-col-state">类型</th>
-          <th className="gm-col-kind">agentKind</th>
+          {/* 「类型」（human / agent）与 agentKind 两列已按需求方要求下架：
+              打印不出 Agent 板块。human/agent 的区分由角色列 + Agent 行焦点
+              （D 的 accent 姓名 + 3px 左签、A 的反色行）承载，信息不丢失。 */}
           <th className="gm-col-role">角色</th>
           <th className="gm-col-num">负责任务数</th>
         </tr>
@@ -86,13 +88,6 @@ function MemberTable({ rows }: { rows: readonly MemberRosterRow[] }): JSX.Elemen
           <tr key={r.key} className="gm-row" data-agent={r.isAgent || undefined}>
             <td className="gm-num gm-cell-no">{r.no}</td>
             <td className="gm-cell-name" title={r.name}>{r.name}</td>
-            <td>
-              <span className="gm-state" data-tone={r.isAgent ? 'signal' : undefined}>
-                {r.isAgent ? 'Agent' : 'human'}
-              </span>
-            </td>
-            {/* agentKind 开放字符串：未知值原样显示，不收敛枚举（01 §3.2） */}
-            <td className="gm-num gm-cell-kind">{r.agentKind ?? '—'}</td>
             <td className="gm-cell-role">{r.role}</td>
             <td className="gm-num gm-cell-num">{r.taskCount}</td>
           </tr>

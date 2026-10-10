@@ -497,8 +497,8 @@ function TeamDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
           <thead>
             <tr>
               <th>姓名</th>
-              <th>类型</th>
-              <th>agentKind</th>
+              {/* 「类型」（human / agent）与 agentKind 两列已按需求方要求下架：
+                  打印不出 Agent 板块。区分仍由角色列 + Agent 行反色焦点承载 */}
               <th>角色</th>
               <th className="swiss-register__no">负责任务数</th>
             </tr>
@@ -514,9 +514,6 @@ function TeamDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
                   className={isAgent ? 'swiss-roster__row--agent' : undefined}
                 >
                   <td>{m.name}</td>
-                  <td>{isAgent ? 'Agent' : 'human'}</td>
-                  {/* agentKind 是开放字符串：未知值原样显示，不收敛枚举 */}
-                  <td className="swiss-num">{m.agentKind ?? '—'}</td>
                   <td>{m.role}</td>
                   <td className="swiss-num">{m.taskCount}</td>
                 </tr>

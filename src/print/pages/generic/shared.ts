@@ -128,7 +128,12 @@ export interface TaskListRow {
   dueDate: string | null;
 }
 
-/** M4 行：序号 / 姓名 / 类型 / agentKind / 角色 / 负责任务数 */
+/**
+ * M4 行：序号 / 姓名 / 角色 / 负责任务数。
+ * `isAgent` / `agentKind` 仍在行上，但**表形态（A/D）已不上纸**（需求方：
+ * 打印不出 Agent 板块）；它们只被 E grid 的 `data-agent` 左签/着色与 H blocks
+ * 右栏的 Agent 简列消费——删字段前先确认这两处也一并下架。
+ */
 export interface MemberRosterRow {
   key: string;
   /** 补零序号（'01'；E 巨编号与 H mono 编号列消费） */
