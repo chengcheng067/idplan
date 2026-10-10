@@ -431,7 +431,6 @@ export function ProjectDetailPage(): JSX.Element {
           stages={visibleStages}
           members={members}
           memberView={memberView}
-          tasks={tasks}
         />
       )}
 
