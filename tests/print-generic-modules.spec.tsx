@@ -31,7 +31,7 @@ import { EditorialIndexDocument } from '../src/print/documents/EditorialIndexDoc
 import { AgentPosterDocument } from '../src/print/documents/AgentPosterDocument';
 import { printPhysicalPageCount } from '../src/print/documents/physical-pages';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
-import type { PrintModuleId } from '../src/components/print/print-skins';
+import type { PrintModuleId } from '../src/components/print/print-templates';
 import type {
   PrintMemberVM,
   PrintSheet,

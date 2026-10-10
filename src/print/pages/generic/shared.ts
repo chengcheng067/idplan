@@ -24,7 +24,7 @@
  * 复核实际行高，实测超出估高时回调常量（只许往大调）。
  */
 
-import type { PrintModuleId, PrintTemplateId } from '../../../components/print/print-skins';
+import type { PrintModuleId, PrintTemplateId } from '../../../components/print/print-templates';
 import { formatTaskNo } from '../../../core/lib/task-no';
 import { MemberActorKind, StageStatus, TASK_STATUS_LABELS, TaskStatus } from '../../../core/types/enums';
 import type { PrintMemberVM, PrintStageVM, PrintTaskVM, PrintViewModel } from '../../model/print-view-model';

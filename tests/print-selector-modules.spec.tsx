@@ -64,8 +64,8 @@ import {
   printTemplateModuleIds,
   printTemplateModules,
   printTemplateNativeModuleIds,
-} from '../src/components/print/print-skins';
-import type { PrintModuleId, PrintTemplateId } from '../src/components/print/print-skins';
+} from '../src/components/print/print-templates';
+import type { PrintModuleId, PrintTemplateId } from '../src/components/print/print-templates';
 import { AGENT_POSTER_PAGES } from '../src/print/documents/AgentPosterDocument';
 import { DATA_EDITORIAL_PAGES } from '../src/print/documents/DataEditorialDocument';
 import { EDITORIAL_INDEX_PAGES } from '../src/print/documents/EditorialIndexDocument';
@@ -890,8 +890,8 @@ describe('期二+期三 · L2 静态锁', () => {
   const ROOT = resolve(__dirname, '..');
   const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf-8');
 
-  it('print-skins.ts：模块能力表在位 + 原生/通用两类 + 静态类映射纪律保留（零模板串）', () => {
-    const src = read('src/components/print/print-skins.ts');
+  it('print-templates.ts：模块能力表在位 + 原生/通用两类 + 静态类映射纪律保留（零模板串）', () => {
+    const src = read('src/components/print/print-templates.ts');
     expect(src).toContain('export type PrintModuleId');
     expect(src).toContain('export const PRINT_MODULES');
     expect(src).toContain('export interface PrintModuleCapability');

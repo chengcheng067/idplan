@@ -28,8 +28,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 
 import { PrintModuleSection } from '../src/components/print/PrintPreviewDialog';
-import { printTemplateDefaultModuleIds } from '../src/components/print/print-skins';
-import type { PrintTemplateId } from '../src/components/print/print-skins';
+import { printTemplateDefaultModuleIds } from '../src/components/print/print-templates';
+import type { PrintTemplateId } from '../src/components/print/print-templates';
 
 /* ------------------------------------------------------------------ 前置探测 */
 

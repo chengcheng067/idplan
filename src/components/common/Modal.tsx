@@ -15,7 +15,7 @@ type ModalPlacement =
   | 'fullscreen';
 
 /**
- * 遮罩 z 档 → 类名**静态映射**（纪律同 print-skins：不许拿档位数字拼类名——
+ * 遮罩 z 档 → 类名**静态映射**（纪律同 print-templates：不许拿档位数字拼类名——
  * 模板串拼出来的类名不进 Tailwind 的 JIT 内容扫描，会静默丢样式）。
  */
 const OVERLAY_Z_CLASS: Record<60 | 70 | 75 | 78, string> = {

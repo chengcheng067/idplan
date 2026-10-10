@@ -30,7 +30,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 
 import { PrintSelectorPanel } from '../src/components/print/PrintPreviewDialog';
-import { printTemplateModuleIds } from '../src/components/print/print-skins';
+import { printTemplateModuleIds } from '../src/components/print/print-templates';
 
 /* ------------------------------------------------------------------ 前置探测 */
 

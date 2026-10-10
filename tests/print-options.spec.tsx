@@ -32,7 +32,7 @@
  *   改动 2：持久值断言 `parsed.state.skin` → `parsed.state.template`；
  *   改动 3：「打印内容」钮升格为「模板与页面」（三截下拉），点击 helper 跟着改；
  *   改动 4：L2 静态锁里 `skin={skin}` → `skin="default"`（SchedulePaper 主体
- *           不碰，classic 恒default 皮肤；print-skins.ts 锁增补模板注册表断言）。
+ *           不碰，classic 恒default 皮肤；print-templates.ts 锁增补模板注册表断言）。
  *   **未动**：五块开关的 data-print-block 契约、经典纸面全部行为断言、
  *   paginateSections 纯函数口径、`.print-root` 挂类断言（classic 类名冻结）。
  *
@@ -98,7 +98,7 @@ import {
   printTemplateClass,
   type PrintSkinId,
   type PrintTemplateId,
-} from '../src/components/print/print-skins';
+} from '../src/components/print/print-templates';
 import { PRINT_PREFS_STORAGE_KEY, usePrintPrefsStore } from '../src/store/usePrintPrefsStore';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useMembersStore } from '../src/store/useMembersStore';
@@ -700,8 +700,8 @@ describe('打印内容自定义 + 模板选择 · L2 静态锁与纯函数契约
   const ROOT = resolve(__dirname, '..');
   const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf-8');
 
-  it('print-skins.ts：模板注册表 / 静态类映射在位，禁止模板拼类名；legacy 皮肤出口保留', () => {
-    const src = read('src/components/print/print-skins.ts');
+  it('print-templates.ts：模板注册表 / 静态类映射在位，禁止模板拼类名；legacy 皮肤出口保留', () => {
+    const src = read('src/components/print/print-templates.ts');
     // 类型契约住在 src/print/model（02 §2），注册表再导出（消费方一处取）
     expect(src).toContain('export type { PrintPageKind, PrintTemplateId }');
     expect(src).toContain('export const PRINT_TEMPLATES');

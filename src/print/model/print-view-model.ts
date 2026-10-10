@@ -4,7 +4,7 @@
  * ── 本文件为什么在 model/ 而不是组件层 ──
  * 02 文档 §1 的目录契约把「数据投影」与「视觉布局」分开：视图模型是**只读投影**，
  * 不把展示字段写回 Dexie。类型放在零依赖的 model 层，适配器（adapters/）、
- * 注册表（components/print/print-skins.ts）、store（usePrintPrefsStore）都能 import
+ * 注册表（components/print/print-templates.ts）、store（usePrintPrefsStore）都能 import
  * 而不牵出 React / 组件。
  *
  * ── 权限口径（02 §3，实现见 adapters/project-print-adapter.ts）──

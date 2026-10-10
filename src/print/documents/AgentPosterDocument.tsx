@@ -35,8 +35,8 @@
 import type { CSSProperties, Ref } from 'react';
 
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
-import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-skins';
-import type { PrintSheet } from '../../components/print/print-skins';
+import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-templates';
+import type { PrintSheet } from '../../components/print/print-templates';
 
 import type { PrintPageKind, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';

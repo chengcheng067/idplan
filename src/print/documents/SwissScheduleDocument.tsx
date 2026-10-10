@@ -27,8 +27,8 @@ import { MemberActorKind, StageStatus, TASK_STATUS_LABELS } from '../../core/typ
 import { formatTaskNo } from '../../core/lib/task-no';
 import { relativeLuminance } from '../../core/color/contrast';
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
-import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-skins';
-import type { PrintSheet } from '../../components/print/print-skins';
+import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-templates';
+import type { PrintSheet } from '../../components/print/print-templates';
 
 import type {
   PrintPageKind,

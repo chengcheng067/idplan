@@ -35,7 +35,7 @@ import { DataEditorialDocument } from '../src/print/documents/DataEditorialDocum
 import { EditorialIndexDocument } from '../src/print/documents/EditorialIndexDocument';
 import { AgentPosterDocument } from '../src/print/documents/AgentPosterDocument';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
-import type { PrintModuleId } from '../src/components/print/print-skins';
+import type { PrintModuleId } from '../src/components/print/print-templates';
 import type {
   PrintMemberVM,
   PrintSheet,

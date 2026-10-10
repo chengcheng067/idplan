@@ -94,8 +94,8 @@ import {
   printTemplateModuleIds,
   printTemplateModules,
   printTemplateName,
-} from './print-skins';
-import type { PrintModuleId, PrintSheet } from './print-skins';
+} from './print-templates';
+import type { PrintModuleId, PrintSheet } from './print-templates';
 import { usePrintViewModel } from '../../print/adapters/use-print-view-model';
 import { usePrintLogo } from '../../print/adapters/use-print-logo';
 import { SwissScheduleDocument } from '../../print/documents/SwissScheduleDocument';
@@ -331,7 +331,7 @@ export function PrintSelectorPanel({
  *   · **原生**（该外表能力表内有原生页）：可勾选、**默认勾选**，右侧标注
  *     原生页名（H 的 Agent 执行 = 两页，标「Agent 执行宣告 + 执行状态全览」）；
  *   · **通用**（期三：M1/M2/M4 于无原生页的外表）：可勾选、**默认不勾**
- *     （缺键默认 = 原生签名页，见 print-skins 的 printTemplateDefaultModuleIds；
+ *     （缺键默认 = 原生签名页，见 print-templates 的 printTemplateDefaultModuleIds；
  *     用户可手动勾选或点「全选」），右侧标注「通用渲染」——该外表的基础排版
  *     承接（字体阶/色板/密度/表格形态），不套标志布局；
  *   · **暂不可用**（M3/M5-M11 于非原生外表）：禁用态 + 原因，等后续批次。

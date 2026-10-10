@@ -14,7 +14,7 @@ import {
   printTemplateModuleIds,
   type PrintModuleId,
   type PrintTemplateId,
-} from '../components/print/print-skins';
+} from '../components/print/print-templates';
 import {
   checkPrintPalette,
   templatePaletteSpec,
@@ -69,7 +69,7 @@ import { normalizeHex } from '../core/color/contrast';
  *
  * ── v1.5-b 期三第一批：可用集 = 原生 + 通用 ──
  * M1 阶段清单 / M2 任务清单 / M4 成员名册在全部 4 套外表下可输出
- * （原生页 or 通用渲染，print-skins 能力表 generic 标记）。本 store 的
+ * （原生页 or 通用渲染，print-templates 能力表 generic 标记）。本 store 的
  * 「可用」判定随之从原生集扩为可用集（printTemplateModuleIds 的新语义）：
  * 勾选接受、旧数据迁移过滤都以它为准；勾选粒度仍是模块（一个模块 = 一页
  * or 多页，纸面落页由 enabledSheetsOf + 各 Document 的物理页装配决定）。
@@ -98,7 +98,7 @@ export interface PrintPrefsState {
    * 每模板一套「启用模块」勾选态（期二：原「启用页」语义升级；期三：可用集
    * = 原生 + 通用）。缺键 = 该模板默认勾选**原生**模块（签名页；她 10-09
    * 23:38 反馈的修复，见文件头末节）；暂不可用的模块 id 在 merge 时剔除。
-   * 纸面页序由 print-skins 的 enabledSheetsOf 派生（注册表 M1→M11 序，
+   * 纸面页序由 print-templates 的 enabledSheetsOf 派生（注册表 M1→M11 序，
    * 与勾选顺序无关）。
    *
    * ★ 命名债清偿（架构审查 2026-10-10 债②）：内存字段从 `pages` 改为
@@ -191,7 +191,7 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
           // 暂不可用的模块（能力表里没有的）不接受勾选
           if (!available.includes(module)) return {};
           // 缺键时从「默认原生模块」起手（她 10-09 23:38 反馈：默认必须落到
-          // 签名原生页，通用模块不进默认态——可手动勾选，见 print-skins 的
+          // 签名原生页，通用模块不进默认态——可手动勾选，见 print-templates 的
           // printTemplateDefaultModuleIds）
           const current = s.modules[template] ?? printTemplateDefaultModuleIds(template);
           const next = on ? [...new Set([...current, module])] : current.filter((m) => m !== module);

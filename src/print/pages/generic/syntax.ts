@@ -27,8 +27,8 @@
  * 生产走通用路径的是 D×M1/M2/M4、E×M2、H×M1/M2/M4 七个组合。
  */
 
-import type { PrintModuleId } from '../../../components/print/print-skins';
-import type { PrintTemplateId } from '../../../components/print/print-skins';
+import type { PrintModuleId } from '../../../components/print/print-templates';
+import type { PrintTemplateId } from '../../../components/print/print-templates';
 
 /** 结构语法 token（§2.4 六字段；extraEncodings 是 D 专属的视觉编码开关） */
 export interface TemplateSyntax {

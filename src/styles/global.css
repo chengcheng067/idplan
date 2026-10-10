@@ -969,10 +969,10 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 
 /* ── 打印皮肤预留（v0.8.6.0002 · 反馈 #9.3）──
  * 机制已到位：SchedulePaper 根 div 挂 printSkinClass(skin)（v1 恒为
- * `print-skin-default`，类映射见 src/components/print/print-skins.ts）。
+ * `print-skin-default`，类映射见 src/components/print/print-templates.ts）。
  * v1 **不写任何皮肤规则**——default 皮肤 = 现有纸面视觉本身，谁给
  * .print-skin-default 加改动默认外观的规则，谁就是回归。
- * 第二套皮肤落地时：print-skins.ts 的 PrintSkinId 加成员 + 注册表加一条，
+ * 第二套皮肤落地时：print-templates.ts 的 PrintSkinId 加成员 + 注册表加一条，
  * 在这里补 `.print-root.print-skin-<id> { … }`。⚠️ 皮肤规则**必须同时命中
  * .print-root**（不能只写 .print-skin-<id>）——否则该子树的令牌解析回不到
  * 亮色锁上，暗色主题下打印稿直接废掉（机理见上方「:root, .print-root」注释）。 */

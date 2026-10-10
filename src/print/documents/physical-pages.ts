@@ -13,8 +13,8 @@
  * 直接用 d.pages.length）。
  */
 
-import type { PrintSheet } from '../../components/print/print-skins';
-import type { PrintTemplateId } from '../../components/print/print-skins';
+import type { PrintSheet } from '../../components/print/print-templates';
+import type { PrintTemplateId } from '../../components/print/print-templates';
 import type { PrintViewModel } from '../model/print-view-model';
 import { agentPosterPhysical } from './AgentPosterDocument';
 import { dataEditorialPhysical } from './DataEditorialDocument';

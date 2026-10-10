@@ -65,7 +65,7 @@ import {
   DEFAULT_SCHEDULE_PAPER_BLOCKS,
 } from '../../lib/schedule-print';
 import type { Project, Stage } from '../../core/types/entities';
-import { printSkinClass, type PrintSkinId } from './print-skins';
+import { printSkinClass, type PrintSkinId } from './print-templates';
 import { PrintLogoMark } from '../../print/parts/PrintLogoMark';
 
 /** 母本同款：打印纸面需要的最小项目面（ Pick 而非全量，预览面板同样喂得起 ） */
