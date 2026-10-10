@@ -485,4 +485,36 @@ describe('期三 · G5 静态锁', () => {
       );
     }
   });
+
+  /**
+   * M4 列宽静态锁（BUG：序号压进姓名格）。
+   *
+   * 为什么必须静态锁：`.gm-table` 是 `table-layout:fixed`，**未定义宽度的列会与
+   * 「剩余空间」一起平分**——其余列已吃掉 100% 时它就分到 0 宽，内容横向溢出。
+   * 这个失效是纯布局行为，jsdom 不做布局 ⇒ 任何渲染断言都看不见它（此前
+   * member-roster 漏定义 `.gm-col-no` 就是这么溜过去的）。所以只有两把锁：
+   *   ① 表头用到的每个列类，在 member-roster 作用域里必须有宽度定义；
+   *   ② 这些宽度合计 = 100%（多一列少一列都必须重新配平）。
+   */
+  it('M4 成员名册：表头每个列类都有列宽定义，且合计 = 100%（fixed 表不许出现 0 宽列）', () => {
+    const css = read('src/print/styles/generic-modules.css');
+    const tsx = read('src/print/pages/generic/MemberRosterModule.tsx');
+    // ① 表头列类（gm-col-* 只出现在 table 变体的 thead 上）
+    const cols = [...new Set([...tsx.matchAll(/gm-col-([\w-]+)/g)].map((m) => m[1]!))];
+    expect(cols.length, 'M4 表头应有列类').toBeGreaterThan(0);
+    for (const c of cols) {
+      expect(
+        css,
+        `member-roster 的 .gm-col-${c} 缺列宽定义 ⇒ fixed 表里该列会被压成 0 宽`,
+      ).toContain(`.gm-module[data-module='member-roster'] .gm-col-${c}`);
+    }
+    // ② 合计 = 100%
+    const widths = [
+      ...css.matchAll(
+        /\.gm-module\[data-module='member-roster'\]\s+\.gm-col-[\w-]+\s*\{\s*width:\s*([\d.]+)%/g,
+      ),
+    ].map((m) => Number(m[1]));
+    expect(widths).toHaveLength(cols.length);
+    expect(widths.reduce((a, b) => a + b, 0)).toBe(100);
+  });
 });

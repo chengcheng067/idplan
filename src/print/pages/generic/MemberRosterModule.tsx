@@ -85,7 +85,7 @@ function MemberTable({ rows }: { rows: readonly MemberRosterRow[] }): JSX.Elemen
         {rows.map((r) => (
           <tr key={r.key} className="gm-row" data-agent={r.isAgent || undefined}>
             <td className="gm-num gm-cell-no">{r.no}</td>
-            <td className="gm-cell-name">{r.name}</td>
+            <td className="gm-cell-name" title={r.name}>{r.name}</td>
             <td>
               <span className="gm-state" data-tone={r.isAgent ? 'signal' : undefined}>
                 {r.isAgent ? 'Agent' : 'human'}
@@ -135,7 +135,7 @@ function MemberGridRow({ row }: { row: MemberRosterRow }): JSX.Element {
     >
       {/* 巨编号：成员序号（E 原生 MemberIndex 最重的身份列） */}
       <span className="gm-grid__no">{row.no}</span>
-      <span className="gm-grid__name" data-agent={row.isAgent || undefined}>
+      <span className="gm-grid__name" data-agent={row.isAgent || undefined} title={row.name}>
         {row.name}
       </span>
       <span className="gm-grid__state" data-agent={row.isAgent || undefined}>
@@ -158,7 +158,7 @@ function MemberBlocks({ rows }: { rows: readonly MemberRosterRow[] }): JSX.Eleme
           {rows.map((r) => (
             <div key={r.key} className="gm-block-row" data-agent={r.isAgent || undefined}>
               <span className="gm-num gm-block-row__no">{r.no}</span>
-              <span className="gm-block-row__name">{r.name}</span>
+              <span className="gm-block-row__name" title={r.name}>{r.name}</span>
               <span className="gm-block-row__state">{r.isAgent ? 'Agent' : 'human'}</span>
               <span className="gm-block-row__role">{r.role}</span>
               <span className="gm-num gm-block-row__num">{r.taskCount}</span>

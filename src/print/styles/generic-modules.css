@@ -61,18 +61,21 @@
   table-layout: fixed;
 }
 
-/* 长文本单行省略 + title 可访问（02 §8：不挤邻字段；行高因此确定，分页估高不漂） */
+/* 长文本单行省略 + title 可访问（02 §8：不挤邻字段；行高因此确定，分页估高不漂）。
+   序号列也在组内：它只有两位数字、正常情况下不会触发省略号，但 table-layout:fixed
+   下只要任一路径给它窄到装不下的宽度（见下 M4 的 --no 注释），省略号是唯一的
+   收口——漏了它，序号会**横向溢出压进姓名格**（BUG 现象）。 */
 .print-root .gm-cell-name,
 .print-root .gm-cell-owner,
 .print-root .gm-cell-kind,
-.print-root .gm-cell-role {
+.print-root .gm-cell-role,
+.print-root .gm-cell-no {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.print-root .gm-cell-date,
-.print-root .gm-cell-no {
+.print-root .gm-cell-date {
   white-space: nowrap;
 }
 
@@ -127,21 +130,27 @@
   width: 12%;
 }
 
-/* M4 成员名册：姓名 / 类型 / agentKind / 角色 / 负责任务数 */
+/* M4 成员名册：序号 / 姓名 / 类型 / agentKind / 角色 / 负责任务数
+   ⚠️ 六列宽度**合计必须 = 100%**：本表是 table-layout:fixed，未定义的列会与
+   「剩下的空间」一起平分——此前 `--no` 漏定义而其余五列已吃掉 100%，序号列
+   于是分到 0 宽，`01` 溢出压进姓名格（D 版 Agent 行还有 3px 左签叠上）。 */
+.print-root .gm-module[data-module='member-roster'] .gm-col-no {
+  width: 8%;
+}
 .print-root .gm-module[data-module='member-roster'] .gm-col-name {
-  width: 18%;
+  width: 26%;
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-state {
   width: 12%;
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-kind {
-  width: 24%;
+  width: 22%;
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-role {
-  width: 26%;
+  width: 18%;
 }
 .print-root .gm-module[data-module='member-roster'] .gm-col-num {
-  width: 20%;
+  width: 14%;
 }
 
 /* ── 期七变体结构（行形态几何；视觉身份仍归 ② 各版块） ──
