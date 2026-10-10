@@ -41,10 +41,11 @@ import { cn } from '../../lib/cn';
  * D3 要求的是「默认值」差异，纯 CSS 无法表达「默认值 + 用户切换后持久化」的叠加。
  *
  * ── 打印页互斥（R20 · 三重保险）──
- *   ① 路由层：命中 `/project/:id/(schedule|calendar)-print` → **`return null`**
+ *   ① 路由层：命中 `/project/:id/(schedule|calendar|itinerary)-print` → **`return null`**
  *   ② CSS 类层：根节点 / 抽屉面板带 `print:hidden`
  *   ③ 全局 CSS 层：global.css `@media print` 段的 `[data-app-sidebar]{display:none}`
- *   注意：两条打印路由的 `max-w-[900px]` 是 A4 预览**刻意保留**的，不并入 1440。
+ *   注意：日程表 / 月历两条打印路由的 `max-w-[900px]` 是 A4 预览**刻意保留**的，
+ *   不并入 1440（行程单打印页自带 `max-w-4xl`，不在这一档里）。
  *
  * ── 抽屉复用 `Modal`（§3.3.4）──
  * 采纳 Modal（`createPortal` + 遮罩点击关闭 + Escape + 焦点圈禁 + body 滚动锁定
@@ -76,8 +77,27 @@ import { cn } from '../../lib/cn';
  *      白名单 token、零裸 hex、随 <html data-theme> 自动换肤。
  */
 
-/** 打印路由正则：与 main.tsx 的两条 *-print 子路由严格对应 */
-const PRINT_ROUTE_RE = /\/project\/[^/]+\/(schedule|calendar)-print$/;
+/**
+ * 打印路由正则：与 main.tsx 的**三条** `*-print` 子路由严格对应
+ * （`schedule-print` / `itinerary-print` / `calendar-print`；同口径的还有
+ * AppShell 的 `/(schedule|calendar|itinerary)-print$/`）。
+ *
+ * ⚠️ 此处曾漏 `itinerary-print`：三条路由只覆盖两条 ⇒ 行程单打印窗口里侧栏
+ * **漏渲染**（三重保险的 ① 层失效；②③ 层在屏幕态兜不住——保险 ② 的
+ * `print:hidden` 只在真打印时生效，③ 同理）。所以本常量与那两条路由的
+ * **条数**是绑死的：路由新增一条打印页，这里必须同步加一个分支。
+ * 该对应关系由 `tests/sidebar-print-route.spec.ts` 的纯函数断言锁住
+ * （此前零引用，正是这条漏网能溜过去的直接原因）。
+ */
+const PRINT_ROUTE_RE = /\/project\/[^/]+\/(schedule|calendar|itinerary)-print$/;
+
+/**
+ * 打印路由判定（保险 ① 的唯一入口）。抽成导出的纯函数是为了能被单测直接锁
+ * 「三条路由一条不漏」——组件本身在 jsdom 里不挂载侧栏就测不出这条语义。
+ */
+export function isPrintRoute(pathname: string): boolean {
+  return PRINT_ROUTE_RE.test(pathname);
+}
 
 /** 侧栏容器 id（折叠开关的 aria-controls 目标） */
 const SIDEBAR_ID = 'app-sidebar';
@@ -88,7 +108,7 @@ const SIDEBAR_ID = 'app-sidebar';
  */
 export function Sidebar(): JSX.Element | null {
   const { pathname } = useLocation();
-  if (PRINT_ROUTE_RE.test(pathname)) return null;
+  if (isPrintRoute(pathname)) return null;
   return <SidebarBody pathname={pathname} />;
 }
 
