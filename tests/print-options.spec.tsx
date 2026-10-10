@@ -270,7 +270,7 @@ async function resetPrefs(): Promise<void> {
     usePrintPrefsStore.setState({
       blocks: { ...DEFAULT_SCHEDULE_PAPER_BLOCKS },
       template: 'classic',
-      pages: {},
+      modules: {},
       palette: {},
     });
     await Promise.resolve();

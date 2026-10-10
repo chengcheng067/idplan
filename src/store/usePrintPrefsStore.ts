@@ -57,11 +57,15 @@ import { normalizeHex } from '../core/color/contrast';
  *     脏 localStorage 里的踩线配色在 hydrate 时就被丢弃，不进纸面。
  *
  * ── v1.5-a 期二：pages 语义升级（页粒度 → 模块粒度，决策文档 §3.3）──
- * 字段名沿用 `pages`（持久键不变，免一次 key 迁移），值的语义由
+ * 当时字段名沿用 `pages`（持久键不变，免一次 key 迁移），值的语义由
  * 「启用**页**」（PrintPageKind[]）升级为「启用**模块**」
  * （PrintModuleId[]）——4 套模板是外表，11 个内容模块跨模板可选。
  * 旧持久数据在 merge 时迁移：旧页 key 逐条映射模块 key，**有一条映射
  * 不了 ⇒ 该模板整组回落默认**（照现有兜底手法，脏数据不赌）。
+ * ★ 后续（架构审查 2026-10-10 债②）：内存字段名已改为 `modules`；
+ *   持久键双写（pages + modules）保既有读者零变化，读优先 modules、
+ *   缺时回落 pages 跑上述迁移——本节描述的期二迁移逻辑仍活着，只是
+ *   它现在住在「旧 pages 键 → modules」这条兜底路径上。
  *
  * ── v1.5-b 期三第一批：可用集 = 原生 + 通用 ──
  * M1 阶段清单 / M2 任务清单 / M4 成员名册在全部 4 套外表下可输出
@@ -96,8 +100,14 @@ export interface PrintPrefsState {
    * 23:38 反馈的修复，见文件头末节）；暂不可用的模块 id 在 merge 时剔除。
    * 纸面页序由 print-skins 的 enabledSheetsOf 派生（注册表 M1→M11 序，
    * 与勾选顺序无关）。
+   *
+   * ★ 命名债清偿（架构审查 2026-10-10 债②）：内存字段从 `pages` 改为
+   * `modules`——装的一直是 PrintModuleId[]，字段名却叫 pages，每个消费点都要
+   * 在脑子里翻译一次。**持久化键保持 `pages` 不变**（partialize 双写：旧键
+   * `pages` + 新键 `modules`），merge 读优先 `modules` 键、缺时回落 `pages`
+   * 键并跑旧页→模块迁移；任何既有用户数据零丢失、零迁移脚本。
    */
-  pages: Partial<Record<PrintTemplateId, PrintModuleId[]>>;
+  modules: Partial<Record<PrintTemplateId, PrintModuleId[]>>;
   /** 每模板一套自定义三槽位配色（缺键 = 设计师基线；classic 永不有条目） */
   palette: Partial<Record<PrintTemplateId, PrintPalette>>;
   /** 摘/贴一块（即时重渲染纸面 = 所见即所得） */
@@ -169,7 +179,7 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
     (set) => ({
       blocks: { ...DEFAULT_SCHEDULE_PAPER_BLOCKS },
       template: 'classic',
-      pages: {},
+      modules: {},
       palette: {},
 
       setBlock: (key, on) =>
@@ -183,15 +193,15 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
           // 缺键时从「默认原生模块」起手（她 10-09 23:38 反馈：默认必须落到
           // 签名原生页，通用模块不进默认态——可手动勾选，见 print-skins 的
           // printTemplateDefaultModuleIds）
-          const current = s.pages[template] ?? printTemplateDefaultModuleIds(template);
+          const current = s.modules[template] ?? printTemplateDefaultModuleIds(template);
           const next = on ? [...new Set([...current, module])] : current.filter((m) => m !== module);
-          return { pages: { ...s.pages, [template]: PRINT_MODULE_IDS.filter((m) => next.includes(m)) } };
+          return { modules: { ...s.modules, [template]: PRINT_MODULE_IDS.filter((m) => next.includes(m)) } };
         }),
       setTemplateModules: (template, modules) =>
         set((s) => {
           const next = normalizeModules(template, modules);
           if (next === null) return {};
-          return { pages: { ...s.pages, [template]: next } };
+          return { modules: { ...s.modules, [template]: next } };
         }),
       setPalette: (template, palette) => {
         const spec = templatePaletteSpec(template);
@@ -220,25 +230,49 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
       partialize: (s) => ({
         blocks: s.blocks,
         template: s.template,
-        pages: s.pages,
+        // 双写（债② 兼容）：旧键 `pages` 继续写 ⇒ 任何只认 pages 的既有读者
+        // （含测试手写夹具、降级路径）零变化；新键 `modules` 是正主。
+        pages: s.modules,
+        modules: s.modules,
         palette: s.palette,
       }),
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<PrintPrefsState> & { skin?: unknown };
+        const {
+          skin: legacySkin,
+          pages: legacyPages,
+          modules: persistedModules,
+          ...p
+        } = (persisted ?? {}) as Partial<PrintPrefsState> & {
+          skin?: unknown;
+          pages?: unknown;
+          modules?: unknown;
+        };
         // 旧 skin 键迁移（决策文档 §2.3 第 3 条）：'default' → 'classic'；
         // 脏值 / 缺键 ⇒ 回落现模板（classic）
         const template = isPrintTemplateId(p.template)
           ? p.template
-          : legacySkinToTemplate(p.skin) ?? current.template;
-        // pages（期二）：旧「启用页」（PrintPageKind[]）逐条迁「启用模块」
-        // （PrintModuleId[]）；有一条映射不了 ⇒ 该模板回落默认（缺键走原生默认）。
+          : legacySkinToTemplate(legacySkin) ?? current.template;
+        // 勾选态读路径（债② 双写兼容，决策文档 §3.3 语义不变）：
+        //   · 有 `modules` 键 ⇒ 正主，normalizeModules 收形（期二旧「启用页」
+        //     键的数据早在期二 merge 已迁走，这里只处理模块形）；
+        //   · 只有旧 `pages` 键（债② 之前的持久值）⇒ 回落 migrateLegacyPages
+        //     把「启用页」（PrintPageKind[]）逐条迁「启用模块」；有一条映射
+        //     不了 ⇒ 该模板回落默认（缺键走原生默认）。
         // classic 不走模块表（五块 blocks 另一套粒度）⇒ 不收它的键；
         // 未知 template id 剔除（同 palette 口径）
-        const pages: Partial<Record<PrintTemplateId, PrintModuleId[]>> = {};
-        for (const id of Object.keys(p.pages ?? {}) as PrintTemplateId[]) {
+        const rawSource = persistedModules ?? legacyPages ?? {};
+        const raw: Record<string, unknown> =
+          typeof rawSource === 'object' && rawSource !== null
+            ? (rawSource as Record<string, unknown>)
+            : {};
+        const fromModulesKey = persistedModules != null;
+        const modules: Partial<Record<PrintTemplateId, PrintModuleId[]>> = {};
+        for (const id of Object.keys(raw) as PrintTemplateId[]) {
           if (id === 'classic' || !isPrintTemplateId(id)) continue;
-          const next = migrateLegacyPages(id, (p.pages ?? {})[id]);
-          if (next !== null) pages[id] = next;
+          const next = fromModulesKey
+            ? normalizeModules(id, raw[id])
+            : migrateLegacyPages(id, raw[id]);
+          if (next !== null) modules[id] = next;
         }
         // palette：三槽位合法 hex **且过闸门**才收——脏数据里的踩线配色在
         // hydrate 时丢弃（禁存在读路径同样生效，不进纸面）
@@ -254,7 +288,7 @@ export const usePrintPrefsStore = create<PrintPrefsState>()(
           // 旧持久值缺新键 ⇒ 回落默认（缺键 = undefined = 渲染层当关，会静默少块）
           blocks: { ...current.blocks, ...(p.blocks ?? {}) },
           template,
-          pages,
+          modules,
           palette,
         };
       },

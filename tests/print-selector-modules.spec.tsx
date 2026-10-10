@@ -235,7 +235,7 @@ async function resetPrefs(): Promise<void> {
         footer: true,
       },
       template: 'classic',
-      pages: {},
+      modules: {},
       palette: {},
     });
     await Promise.resolve();
@@ -598,7 +598,7 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
       expect(moduleRow(m).textContent, '禁用行带原因').toContain('该外表下暂不可用');
     }
     // 禁用行点不动：store 不收暂不可用模块的勾选
-    expect(usePrintPrefsStore.getState().pages['swiss-schedule']).toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toBeUndefined();
   });
 
   it('期三 H 外表：2 原生默认勾选 + 3 通用可勾默认不勾 + 6 暂不可用', () => {
@@ -757,8 +757,10 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     await flush();
     const raw = localStorage.getItem(PRINT_PREFS_STORAGE_KEY);
     expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!) as { state: { pages: Record<string, string[]> } };
-    expect(parsed.state.pages['swiss-schedule']).toEqual(['stage-list', 'delay-ledger', 'member-roster']);
+    const parsed = JSON.parse(raw!) as { state: { pages: Record<string, string[]>; modules: Record<string, string[]> } };
+    // 债② 双写：modules 是正主，pages 是兼容旧读者的镜像键，两键同值
+    expect(parsed.state.modules['swiss-schedule']).toEqual(['stage-list', 'delay-ledger', 'member-roster']);
+    expect(parsed.state.pages['swiss-schedule']).toEqual(parsed.state.modules['swiss-schedule']);
   });
 });
 
@@ -778,7 +780,7 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       template: 'swiss-schedule',
       pages: { 'swiss-schedule': ['task-register', 'stage-overview'] },
     });
-    expect(usePrintPrefsStore.getState().pages['swiss-schedule']).toEqual(['stage-list', 'task-list']);
+    expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toEqual(['stage-list', 'task-list']);
   });
 
   it('H 旧两页独立勾选 ⇒ 合并为一个 agent-execution 模块（1 模块 2 页）', async () => {
@@ -787,9 +789,9 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       // 旧形状：只勾了执行宣告一页（状态全览被摘）
       pages: { 'agent-poster': ['agent-declaration'] },
     });
-    expect(usePrintPrefsStore.getState().pages['agent-poster']).toEqual(['agent-execution']);
+    expect(usePrintPrefsStore.getState().modules['agent-poster']).toEqual(['agent-execution']);
     // 迁移后纸面 = M10 两页（页粒度升级模块粒度的既定语义）
-    expect(enabledPagesOf('agent-poster', usePrintPrefsStore.getState().pages['agent-poster'])).toEqual([
+    expect(enabledPagesOf('agent-poster', usePrintPrefsStore.getState().modules['agent-poster'])).toEqual([
       'agent-declaration',
       'execution-status',
     ]);
@@ -801,7 +803,7 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       pages: { 'swiss-schedule': ['stage-overview', 'bogus-page'] },
     });
     expect(
-      usePrintPrefsStore.getState().pages['swiss-schedule'],
+      usePrintPrefsStore.getState().modules['swiss-schedule'],
       '脏页名不赌：缺键 = 默认原生（A 无通用模块，形状同全选）',
     ).toBeUndefined();
     // 另一套模板的干净数据不受牵连（逐模板独立兜底）
@@ -809,8 +811,8 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       template: 'swiss-schedule',
       pages: { 'data-editorial': ['progress-matrix'], 'swiss-schedule': ['bogus'] },
     });
-    expect(usePrintPrefsStore.getState().pages['data-editorial']).toEqual(['progress-matrix']);
-    expect(usePrintPrefsStore.getState().pages['swiss-schedule']).toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['data-editorial']).toEqual(['progress-matrix']);
+    expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toBeUndefined();
   });
 
   it('跨模板脏页名按可用性收编（期三：D 可用含通用 ⇒ stage-list 不再被滤掉）', async () => {
@@ -819,7 +821,7 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       // stage-overview 是 A 的页，映射出的 stage-list 期三起在 D 可用（通用渲染）
       pages: { 'data-editorial': ['stage-overview', 'progress-matrix'] },
     });
-    expect(usePrintPrefsStore.getState().pages['data-editorial']).toEqual([
+    expect(usePrintPrefsStore.getState().modules['data-editorial']).toEqual([
       'stage-list',
       'progress-matrix',
     ]);
@@ -830,8 +832,8 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       template: 'swiss-schedule',
       pages: { 'swiss-schedule': [] },
     });
-    expect(usePrintPrefsStore.getState().pages['swiss-schedule']).toEqual([]);
-    expect(enabledPagesOf('swiss-schedule', usePrintPrefsStore.getState().pages['swiss-schedule'])).toEqual([]);
+    expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toEqual([]);
+    expect(enabledPagesOf('swiss-schedule', usePrintPrefsStore.getState().modules['swiss-schedule'])).toEqual([]);
   });
 
   it('classic 键不收（不走模块表）；未知模板 id 剔除', async () => {
@@ -839,8 +841,8 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
       template: 'classic',
       pages: { classic: ['stage-overview'], 'compact-x': ['stage-overview'] },
     });
-    expect(usePrintPrefsStore.getState().pages['classic']).toBeUndefined();
-    expect(usePrintPrefsStore.getState().pages['compact-x' as PrintTemplateId]).toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['classic']).toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['compact-x' as PrintTemplateId]).toBeUndefined();
   });
 
   it('实时设置路径：暂不可用模块不接受勾选 / 不进整组设置；通用模块放行', () => {
@@ -848,12 +850,12 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
     act(() => {
       usePrintPrefsStore.getState().setModuleEnabled('agent-poster', 'delay-ledger', true);
     });
-    expect(usePrintPrefsStore.getState().pages['agent-poster'], '暂不可用勾选被拒').toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['agent-poster'], '暂不可用勾选被拒').toBeUndefined();
     // 期三通用（M1 在 H）：收（缺键时从「默认原生」起手 ⇒ 原生 2 个 + stage-list）
     act(() => {
       usePrintPrefsStore.getState().setModuleEnabled('agent-poster', 'stage-list', true);
     });
-    expect(usePrintPrefsStore.getState().pages['agent-poster']).toEqual([
+    expect(usePrintPrefsStore.getState().modules['agent-poster']).toEqual([
       'stage-list',
       'agent-execution',
       'writeback-proposals',
@@ -867,7 +869,7 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
         'writeback-proposals',
       ]);
     });
-    expect(usePrintPrefsStore.getState().pages['agent-poster']).toEqual([
+    expect(usePrintPrefsStore.getState().modules['agent-poster']).toEqual([
       'stage-list',
       'agent-execution',
       'writeback-proposals',
@@ -876,7 +878,7 @@ describe('期二 · L1-d 旧 pages 数据迁移（hydrate 时页粒度 → 模�
     act(() => {
       usePrintPrefsStore.getState().setModuleEnabled('classic', 'stage-list', true);
     });
-    expect(usePrintPrefsStore.getState().pages['classic']).toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['classic']).toBeUndefined();
   });
 });
 
@@ -1019,7 +1021,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     });
     expect(document.querySelector('[data-print-selector-panel]'), 'Esc 后面板应消失').toBeNull();
     // 关闭后纸面仍是改过的勾选态（即时重渲染，无待确认）
-    expect(usePrintPrefsStore.getState().pages['swiss-schedule']).toEqual([
+    expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toEqual([
       'stage-list',
       'delay-ledger',
       'member-roster',

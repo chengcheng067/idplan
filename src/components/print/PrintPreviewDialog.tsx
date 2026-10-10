@@ -507,8 +507,8 @@ export function PrintPreviewDialog({
   /** 打印偏好（个人偏好，localStorage 持久化；无角色门控——成员也打印） */
   const blocks = usePrintPrefsStore((s) => s.blocks);
   const template = usePrintPrefsStore((s) => s.template);
-  /** 每模板一套「启用模块」勾选态（期二：pages 语义 = 模块，见 store 文件头） */
-  const pages = usePrintPrefsStore((s) => s.pages);
+  /** 每模板一套「启用模块」勾选态（store 字段已随语义改名 modules，债②） */
+  const modules = usePrintPrefsStore((s) => s.modules);
   const palette = usePrintPrefsStore((s) => s.palette);
   const setBlock = usePrintPrefsStore((s) => s.setBlock);
   const setTemplate = usePrintPrefsStore((s) => s.setTemplate);
@@ -651,8 +651,8 @@ export function PrintPreviewDialog({
    * 与勾选顺序无关。
    */
   const enabledSheets = useMemo<PrintSheet[]>(
-    () => enabledSheetsOf(template, pages[template] ?? printTemplateDefaultModuleIds(template)),
-    [template, pages],
+    () => enabledSheetsOf(template, modules[template] ?? printTemplateDefaultModuleIds(template)),
+    [template, modules],
   );
 
   /** 预计页数：经典 = 分页产物；四版 = 物理纸面数（原生 1:1 + 通用模块分页产物） */
@@ -712,7 +712,7 @@ export function PrintPreviewDialog({
   /** 状态条读数：当前启用的模块数（四版）/ 块数（经典）；四版缺键 = 默认原生模块 */
   const enabledModuleCount = meta.usesBlocks
     ? BLOCK_ROWS.filter((row) => blocks[row.key]).length
-    : (pages[template] ?? printTemplateDefaultModuleIds(template)).length;
+    : (modules[template] ?? printTemplateDefaultModuleIds(template)).length;
 
   return (
     <Modal
@@ -927,7 +927,7 @@ export function PrintPreviewDialog({
             template={template}
             pagesCount={pagesCount}
             enabledModuleCount={enabledModuleCount}
-            enabledModules={pages[template] ?? printTemplateDefaultModuleIds(template)}
+            enabledModules={modules[template] ?? printTemplateDefaultModuleIds(template)}
             onTemplatePick={(id) => {
               setTemplate(id);
               // 换模板 ⇒ 旧模板收集的页面 ref 作废（PNG 导出按新模板重收）
