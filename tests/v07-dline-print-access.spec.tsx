@@ -41,7 +41,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 
 /* act 环境开关由 `tests/setup.ts` 统一置位（本文件不再自行置位）——
  * 逐文件置位会把告警 / 状态转嫁给同进程的下游 spec，理由详见 setup.ts。 */
@@ -168,6 +168,13 @@ const PROJECT: Project = {
   revision: 1,
   updatedAt: '2026-01-01T00:00:00Z',
 };
+
+/**
+ * 第二个项目：只为「换项目 ⇒ 预览必须收口」用例存在。
+ * 名字刻意与 PROJECT 不同，好让「页面主体切过去了没有」可判。
+ */
+const PROJECT_B_ID = 'proj_dl2_b';
+const PROJECT_B: Project = { ...PROJECT, id: PROJECT_B_ID, name: '另一处·湖畔茶室' };
 
 /** 阶段负责人 = 成员本人 → 成员在详情页有「相关阶段」（否则会先撞受限空态，看不到操作栏） */
 const STAGE: Stage = {
@@ -330,11 +337,11 @@ type Actor = 'admin' | 'member' | 'none';
  */
 function setActor(
   actor: Actor,
-  opts: { hydrated?: boolean; stages?: Stage[]; tasks?: Task[] } = {},
+  opts: { hydrated?: boolean; stages?: Stage[]; tasks?: Task[]; projects?: Project[] } = {},
 ): void {
   act(() => {
     useProjectsStore.getState().replaceAll({
-      projects: [PROJECT],
+      projects: opts.projects ?? [PROJECT],
       // 默认三段，**刻意覆盖两支撑的全部三种组合**（这是「范围收窄」组的自变量完整性）：
       //   · STAGE           → ownerId 支 ✅ + 任务支 ✅（两支都成立，无法单独归因）
       //   · TASK_ONLY_STAGE → ownerId 支 🚫 + 任务支 ✅（**仅任务支成立** → 任务的唯一自变量）
@@ -412,6 +419,36 @@ const redirectedHome = (h: ParentNode): boolean => h.querySelector('[data-home-m
 
 /** 打印子树是否真的上屏（两页共同的稳定锚点：`.print-root`） */
 const printed = (h: ParentNode): boolean => h.querySelector('.print-root') !== null;
+
+/* ------------------------------------------------------------------ 真路由跳转（换项目） */
+
+/**
+ * 程序化导航探针：把 `useNavigate` 抬到测试手里。
+ *
+ * 为什么必须走**真路由跳转**而不能换个 `initialEntries` 重挂：要复现的 BUG
+ * 前提正是「`/project/:id` 是同一个不带 `key` 的 route element，同路由内只换
+ * 参数 ⇒ React 复用组件实例、`useState` 原样保留」。重挂会把实例一起换掉，
+ * 恰好绕开了要测的那条路径（测试会恒绿，量不出任何东西）。
+ */
+let navigateTo: ((to: string) => void) | null = null;
+
+function NavProbe(): null {
+  const navigate = useNavigate();
+  navigateTo = (to: string): void => navigate(to);
+  return null;
+}
+
+/** 只挂详情页路由 + 导航探针（换项目用例专用；其余用例仍走 `renderAt`） */
+function renderDetailWithNav(path: string): HTMLDivElement {
+  return mount(
+    <MemoryRouter initialEntries={[path]}>
+      <NavProbe />
+      <Routes>
+        <Route path="/project/:id" element={<ProjectDetailPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 /**
  * jsdom 缺 `matchMedia` / `ResizeObserver`（实测 undefined），而 `ProjectDetailPage`
@@ -584,6 +621,47 @@ describe('v0.7-D · 打印入口门控（ProjectDetailPage / ProjectCard）', ()
     expect(findScheduleEntry(h)).toBeTruthy();
     const labels = Array.from(h.querySelectorAll('button')).map((b) => (b.textContent ?? '').trim());
     expect(labels).toContain('归档'); // ← 放开打印不得把管理员既有能力改掉
+  });
+
+  /**
+   * ★ 换项目 ⇒ 预览必须收口（BUG 回归锁）。
+   *
+   * 现象：浮层开着时用侧栏/路由切到另一个项目，页面主体（h1/面包屑）已换新项目，
+   * 预览里却仍是**旧项目**的纸面（`printPreviewId` 是局部 state，同路由元素不重挂
+   * ⇒ useState 原样保留，没有任何东西把它复位）。
+   *
+   * 这条是**行为**断言（真页面挂载 + 真路由跳转 + 真点入口），比源码锁强：
+   * 源码锁只能证明"写了复位 effect"，证明不了"复位真的发生且发生在换项目那一刻"。
+   */
+  it('★ 换项目：浮层开着时路由切到另一个项目，预览必须收口（不许停留在旧项目纸面）', () => {
+    setActor('admin', { projects: [PROJECT, PROJECT_B] });
+    const h = renderDetailWithNav(`/project/${PROJECT_ID}`);
+
+    // ⚠️ 纸面在 Modal 里，而 Modal 经 createPortal 挂 `document.body`——
+    //    不在 `h` 子树内，故下面的纸面断言一律查 `document`。
+    const paper = (): Element | null => document.querySelector('.print-root');
+
+    // 前提：真的画了第一个项目，且未点入口前没有纸面（否则下面的断言是空过）
+    expect(h.textContent).toContain(PROJECT.name);
+    expect(paper(), '未点入口前不该有纸面').toBeNull();
+
+    const entry = findScheduleEntry(h);
+    expect(entry, '管理员应看到详情页的日程表入口').toBeTruthy();
+    act(() => {
+      entry!.click();
+    });
+    expect(paper(), '点入口后应用内面板应出纸面').not.toBeNull();
+
+    // 同一 route element 只换 `:id` —— 组件实例被复用，这正是 BUG 的发生条件
+    act(() => {
+      navigateTo!(`/project/${PROJECT_B_ID}`);
+    });
+
+    expect(h.textContent, '页面主体应已切到新项目（否则前提不成立）').toContain(PROJECT_B.name);
+    expect(
+      paper(),
+      '换项目后浮层必须收口：否则纸面仍是旧项目的快照（浮层里的项目名/数据都来自旧 id）',
+    ).toBeNull();
   });
 
   it('★ 未进入身份（role=null）在项目详情页看不到「日程表」入口（与打印页守卫同档）', () => {

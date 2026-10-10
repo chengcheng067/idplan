@@ -103,6 +103,24 @@ export function ProjectDetailPage(): JSX.Element {
   const [printPreviewId, setPrintPreviewId] = useState<string | null>(null);
 
   /*
+   * ★ BUG：浮层开着时用侧栏切到另一个项目，预览内容不跟着变。
+   *
+   * 根因是**同路由元素不重挂**：`/project/:id` 是一个不带 `key` 的 route
+   * element（main.tsx），同一个路由内只有参数变化 ⇒ React 复用组件实例、
+   * `useState` 原样保留 ⇒ 面包屑与侧栏高亮已换到新项目（它们从 `id` 派生），
+   * 预览却仍拿着**旧项目 id** 渲染旧项目的纸面——用户看到的是"上一个项目
+   * 的日程表"，而页面上没有任何东西提示这件事。
+   *
+   * 修法是让预览显式跟随路由参数：换项目即收口（不跨项目续开——浮层里的
+   * 项目名/数据都是旧 id 的快照，续开等于当着新项目给用户看旧项目的纸）。
+   * 依赖必须是 `id` 本身，而不是 `project` 对象：后者在 store 任何一次写入
+   * （改期、归档、任务状态流转）后都会换引用，会**顺手把开着预览的用户踢出浮层**。
+   */
+  useEffect(() => {
+    setPrintPreviewId(null);
+  }, [id]);
+
+  /*
    * ★ v0.8 T04-B · 接管弹窗的数据源（PRD B11 / B12 / D5）。
    *
    * 三份数据全部走**隔离漏斗的合法出口**，不直读 store.projects：

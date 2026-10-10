@@ -6,6 +6,9 @@
  *   ① z 分层：打印预览 = Modal fullscreen z-[75]，高于既有 Modal(center)、低于 Toast（80）；
  *   ② **入口回潮锁**：ProjectDetailPage / ProjectCard 源码不得再出现
  *      `window.open(...schedule-print...)`（itinerary 的新窗口入口按规范 §7.3 保留，不误伤）；
+ *   ②b **换项目收口锁**：预览复位 effect 必须依赖路由参数 `id`
+ *      （BUG：同路由元素不重挂 ⇒ 切项目后面板仍渲染旧项目的纸面）；
+ *      行为断言在 tests/v07-dline-print-access.spec.tsx；
  *   ③ iframe 隔离：`printViaFrame` 克隆面 = `.print-root` 子树且 `.no-print` 被剔除；
  *   ④ 纸面组件结构钉：`.print-root` / `.a4-page` / `.schedule-bar-segment` 等规范 §7.1
  *      选择器在 SchedulePaper 源码里（抽组件时的搬运完整性）；
@@ -41,6 +44,26 @@ describe('打印内置化 A 方案 · 规范 §7.5 验收', () => {
       // 正向：入口改为 setPrintPreviewId（state 驱动应用内面板）
       expect(src, `${f} 缺少 printPreviewId state`).toContain('setPrintPreviewId');
     }
+  });
+
+  /**
+   * ②b 换项目收口锁（BUG：浮层开着时切项目，预览仍渲染旧项目）。
+   *
+   * 为什么入口锁不够：`/project/:id` 是**同一个不带 key 的 route element**
+   * （main.tsx），同路由内只换参数 ⇒ React 复用实例、`useState` 原样保留。
+   * 入口锁只钉住"面板由 state 驱动"，钉不住"state 会跟着路由参数复位"。
+   *
+   * 这里锁的是**依赖声明**（`[id]` 而不是 `[project]`）：行为断言在
+   * tests/v07-dline-print-access.spec.tsx（真路由跳转 + 真页面挂载）里，
+   * 本文件只做源码级契约钉，与同文件其余四条同款。
+   */
+  it('②b 换项目必须收口：ProjectDetailPage 有依赖路由参数 id 的预览复位 effect', () => {
+    const src = read('src/pages/ProjectDetailPage.tsx');
+    expect(src, '缺少「换项目 ⇒ 关闭预览」的复位 effect').toMatch(
+      /useEffect\(\(\)\s*=>\s*\{\s*setPrintPreviewId\(null\);\s*\},\s*\[id\]\)/,
+    );
+    // 反向：不得把依赖写成 project 对象（store 每次写入都换引用 ⇒ 会把用户踢出浮层）
+    expect(src).not.toMatch(/setPrintPreviewId\(null\);\s*\},\s*\[project\]\)/);
   });
 
   it('③ iframe 隔离：克隆面=.print-root 子树、.no-print 剔除（结构隔离 > CSS 拦截）', async () => {
