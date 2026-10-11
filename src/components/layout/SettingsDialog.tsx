@@ -239,10 +239,41 @@ export function SettingsDialog({
    * 判定与休息制度同源（useRoleGuard().isAdmin），不另造角色口径。
    */
   const visibleZones = useMemo(() => ZONES.filter((z) => !z.adminOnly || isAdmin), [isAdmin]);
+  /** 可见分区的第一项 —— 分区复位时的落点（所有角色都看得见「外观」，故必存在） */
+  const firstVisibleZone: ZoneKey = visibleZones[0]?.key ?? 'appearance';
   // 仅桌面端生效：浏览器/NAS 端 isDesktop() 为 false，下方更新区整块不渲染、从不发起请求。
   const { status, payload, error, check } = useUpdateCheck();
   /** 当前所在分区（反馈 #7：默认「外观」——最轻、最高频的一项） */
   const [zone, setZone] = useState<ZoneKey>('appearance');
+  /**
+   * 右栏**实际渲染**的分区。
+   *
+   * ★ F5（team-lead 2026-10-12）：修前 `zone` 只在用户点击左导航时被写（全文件
+   *   仅 `setZone` 一处调用点），关闭抽屉与身份切换都不复位，而设置组件的挂载点
+   *   （Sidebar 底部 / MobileMoreMenu）**不随身份切换卸载** ⇒ 状态跨会话保留。
+   *   症状：管理员 → 设置 → 选「排程」→ 关闭 → 顶栏切成**成员** → 重开设置
+   *   ⇒ 右栏仍是排程内容（含打印标识上传、品牌词编辑），而左导航里既没有「排程」
+   *   这一项、也没有任何高亮；成员看到管理员专属界面并且**可以直接操作**。
+   *
+   * 根因是 `ZONES` 的 `adminOnly` 只喂给了 `visibleZones`（**导航**），没有喂给
+   * **内容分支** —— 于是「导航藏起来」被当成了"权限做到了"。这里把判据收成一条：
+   * 渲染只看可见集。`zone` 不在可见集里（身份变了）就渲染第一可见分区。
+   *
+   * 为什么渲染期另算一次、而不是只靠下面的复位 effect：effect 在 **paint 之后**
+   * 才跑，只靠它会让成员**闪一帧**排程面板（含 logo 上传按钮）。这里是零帧泄漏，
+   * effect 负责把 `zone` 状态本身也搬正（左导航高亮 / data-* 钩子随之一致）。
+   */
+  const activeZone: ZoneKey = visibleZones.some((z) => z.key === zone) ? zone : firstVisibleZone;
+  /**
+   * 把 `zone` 状态与「抽屉开合 / 角色」对齐 —— 渲染期的 `activeZone` 已挡住泄漏，
+   * 本条负责**状态本身**不残留（否则下次打开时左导航高亮与右栏会短暂不一致，
+   * 且 `data-settings-zone-panel` 钩子会指向一个渲染不出来的分区）。
+   * 两条判据：抽屉关着 ⇒ 归零；开着但当前分区已不可见（身份刚切换）⇒ 同样归零。
+   */
+  useEffect(() => {
+    if (open && visibleZones.some((z) => z.key === zone)) return;
+    setZone(firstVisibleZone);
+  }, [open, zone, visibleZones, firstVisibleZone]);
   /**
    * 插件区内的当前子段（图 5 第 1 点：Agent 与自动化是插件区的二级分组）。
    * 默认「插件」——第三方功能包管理是这个区的主业；Agent 段收在它下面。
@@ -252,7 +283,8 @@ export function SettingsDialog({
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     panelRef.current?.scrollTo({ top: 0 });
-  }, [zone, pluginSub]);
+    // 盯 activeZone 而不是 zone：回顶要对齐**实际换掉的那块内容**
+  }, [activeZone, pluginSub]);
 
   // 打开时实时读一次日志条数（抽屉每次打开都刷新，避免静态旧值）
   const count = useMemo(() => dump().length, [open]);
@@ -396,7 +428,7 @@ export function SettingsDialog({
               className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-2 xl:w-[168px] xl:flex-col xl:overflow-y-auto xl:border-b-0 xl:border-r xl:px-3 xl:py-4"
             >
               {visibleZones.map((z) => {
-                const active = zone === z.key;
+                const active = activeZone === z.key;
                 return (
                   <button
                     key={z.key}
@@ -423,11 +455,11 @@ export function SettingsDialog({
             {/* 右内容（当前分区；切换分区即整块换血，滚动位置随之重置） */}
             <div
               ref={panelRef}
-              data-settings-zone-panel={zone}
+              data-settings-zone-panel={activeZone}
               className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5"
             >
               {/* ① 外观 */}
-              {zone === 'appearance' && (
+              {activeZone === 'appearance' && (
                 <>
                   {/* 主题区（从原一列到底首屏迁入） */}
                   <section>
@@ -479,7 +511,7 @@ export function SettingsDialog({
                 口径，成员身份下从左导航消失（见 ZONES 的 adminOnly）。区内
                 两块内容一并对成员消失（说明见下方注释），不为了留内容破坏整区收。
               */}
-              {zone === 'schedule' && (
+              {activeZone === 'schedule' && (
                 <>
                   {/* 休息制度区（嵌入原 RestPolicyDialog 编辑主体）——仅管理员可见 */}
                   {isAdmin && (
@@ -531,7 +563,7 @@ export function SettingsDialog({
               )}
 
               {/* ③ 数据与备份（反馈 #7：备份是高频路径，排第 3 区） */}
-              {zone === 'data' && (
+              {activeZone === 'data' && (
                 <>
                   {/* 数据存放说明（一句人话：桌面=本机 / NAS=你的 NAS） */}
                   <section>
@@ -691,7 +723,7 @@ export function SettingsDialog({
                 和插件不应该是平级关系」。一级分区只有「插件」一枚，顶部两段
                 子导航（插件 / Agent 与自动化）把 Agent 三项收成它的二级。
               */}
-              {zone === 'plugins' && (
+              {activeZone === 'plugins' && (
                 <>
                   {/* 插件区二级导航（ segmented 两段；role=tablist 供验收与读屏） */}
                   <div
@@ -813,10 +845,10 @@ export function SettingsDialog({
               )}
 
               {/* ⑤ 行业与模板（仅管理员：反馈 #11 成员身份下整分区不渲染） */}
-              {zone === 'industry' && isAdmin && <CustomLibrarySection />}
+              {activeZone === 'industry' && isAdmin && <CustomLibrarySection />}
 
               {/* ⑥ 关于 */}
-              {zone === 'about' && (
+              {activeZone === 'about' && (
                 <>
                   <section>
                     <div className="mb-2 flex items-center gap-1.5">
