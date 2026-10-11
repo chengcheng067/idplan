@@ -17,7 +17,7 @@ export const PRINT_EMPTY_TEXTS = {
   /** 无产出物（E P3） */
   artifacts: '当前可见任务暂无产出物',
   /** 无 Agent 数据（H 全版） */
-  agent: '当前项目暂无 Agent 执行数据',
+  agent: '当前项目暂无执行数据',
   /** 无可见阶段（A P1） */
   stages: '当前可见范围内无阶段',
   /** 无可见任务（A P2） */

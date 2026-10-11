@@ -320,21 +320,21 @@ describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同�
     expect(empty.querySelector('[data-print-page="generic-task-list"] [data-print-empty="tasks"]')).not.toBeNull();
   });
 
-  it('M4 成员名册（H：blocks 双栏 + 席位与门控右栏）：全员口径 + Agent 签 + agentKind 原样', () => {
+  it('M4 成员名册（H：blocks 双栏 + 席位与门控右栏）：全员口径 + 执行体签 + agentKind 原样', () => {
     const vm = buildVm();
     const d = doc(renderDoc('agent-poster', vm, [{ type: 'generic', module: 'member-roster' }]));
     const page = d.querySelector('[data-print-page="generic-member-roster"]')!;
     expect(page.querySelector('.gm-head__label')!.textContent).toBe('成员名册');
-    expect(page.querySelector('.gm-head__count')!.textContent).toContain('3 人 · Agent 1');
+    expect(page.querySelector('.gm-head__count')!.textContent).toContain('3 人 · 执行体 1');
     // 期七 H×M4：blocks 双栏（左明细 + 右 240px 摘要）
     expect(page.querySelector('.gm-blocks'), 'H×M4 应是 blocks 双栏').not.toBeNull();
     const rows = page.querySelectorAll('.gm-block-row');
     expect(rows).toHaveLength(3);
-    // Agent 行：data-agent + 「Agent」文字签（双编码，灰度可辨）
+    // 执行体行：data-agent + 「执行体」文字签（双编码，灰度可辨）
     const agentRow = page.querySelector('.gm-block-row[data-agent]');
     expect(agentRow).not.toBeNull();
-    expect(agentRow!.querySelector('.gm-block-row__state')!.textContent).toBe('Agent');
-    // agentKind 开放字符串原样显示（右栏 Agent 简列；01 §3.2：不收敛枚举）
+    expect(agentRow!.querySelector('.gm-block-row__state')!.textContent).toBe('执行体');
+    // agentKind 开放字符串原样显示（右栏执行体简列；01 §3.2：不收敛枚举）
     expect(page.querySelector('.gm-panel__item-kind')!.textContent).toBe('brand-new-harness-9000');
     // 右栏「席位与门控」：大号 mono 已用/上限（AGENT_SEAT_LIMIT=3）+ 门控提示行
     const panel = page.querySelector('.gm-panel')!;

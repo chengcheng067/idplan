@@ -638,7 +638,7 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     for (const dead of ['执行宣告', '写回提案', 'runId', 'confidence', '白名单']) {
       expect(hText, `Agent 载荷「${dead}」不得再上纸`).not.toContain(dead);
     }
-    // 人类内容照常上纸：不出「暂无 Agent 执行数据」整版空态，巨字装置在位
+    // 人类内容照常上纸：不出「暂无执行数据」整版空态，巨字装置在位
     expect(document.querySelectorAll('[data-print-empty="agent"]')).toHaveLength(0);
     expect(document.querySelector('.ap-giant'), '页顶出血巨字（人类化后载荷 = 品牌词）').not.toBeNull();
     expect(document.querySelector('.ap-block'), '阶段块上纸').not.toBeNull();

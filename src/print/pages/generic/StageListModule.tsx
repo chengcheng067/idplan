@@ -297,7 +297,7 @@ function StageGridRow({ row }: { row: StageListRow }): JSX.Element {
       </span>
       <span className="gm-grid__owner" data-agent={row.ownerIsAgent || undefined}>
         {row.ownerName ?? '—'}
-        {row.ownerIsAgent && <span className="gm-grid__agent-tag">Agent</span>}
+        {row.ownerIsAgent && <span className="gm-grid__agent-tag">执行体</span>}
       </span>
       <span className="gm-grid__ratio gm-num">{row.ratioPercent}%</span>
     </div>

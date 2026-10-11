@@ -3,12 +3,12 @@
  *
  * ── 目录读法 ──
  * 行 = 成员执行体（human / agent）。VM 已把 Agent 行排在前（适配器排序），
- * 本目录按「执行体类型」分两章：Agent 执行体 / 人类成员。每行：
+ * 本目录按「执行体类型」分两章：执行体 / 人类成员。每行：
  * [目录号 | 姓名 + 类型签 | 角色 | agentKind | 负责任务数]。
  *
  * ── 朱红纪律（01 §6：Agent 行朱红强调，整页不许单色红）──
  * 朱红只给 Agent 章：章头、行首粗签、行号描边。人类章一律近黑 + 灰。
- * 灰度下朱红变中灰 ⇒ Agent 行同时带「AGENT」文字签与粗左边线，
+ * 灰度下朱红变中灰 ⇒ 执行体行同时带「执行体」文字签与粗左边线，
  * 不靠色相单独表意（01 §2）。agentKind 是开放字符串，未知值原样显示。
  *
  * ── 大编号 ──
@@ -34,7 +34,7 @@ export function MemberIndexPage({ vm, entries, compact }: MemberIndexPageProps):
     <>
       {/* 元信息行（期七深化，与 P1 阶段目录同版式） */}
       <p className="ei-meta">
-        成员 {vm.members.length} 人 · Agent {agents}
+        成员 {vm.members.length} 人 · 执行体 {agents}
       </p>
       <div className="ei-index" data-density={compact ? 'compact' : undefined}>
         {entries.map((entry, i) =>
@@ -47,7 +47,7 @@ export function MemberIndexPage({ vm, entries, compact }: MemberIndexPageProps):
       </div>
       {/* 口径注（压到主体底部）：责任数口径 + agentKind 开放字符串纪律 */}
       <p className="ei-note">
-        口径：负责任务数 = 被指派 + 本人产出的可见阶段任务数（Agent 常见「产出者不在指派人里」）；
+        口径：负责任务数 = 被指派 + 本人产出的可见阶段任务数（执行体常见「产出者不在指派人里」）；
         <strong>agentKind 为开放字符串，未知值原样显示</strong>，不收敛枚举。
       </p>
     </>
@@ -91,7 +91,7 @@ function MemberRow({ member, index }: { member: PrintMemberVM; index: number }):
         <span className="ei-row__glyph" aria-hidden>
           {isAgent ? '◆' : '○'}
         </span>
-        {isAgent ? 'Agent' : 'human'}
+        {isAgent ? '执行体' : 'human'}
       </span>
       <span className="ei-row__role">{member.role}</span>
       {/* agentKind 开放字符串：未知值原样显示，不收敛枚举（01 §3.2） */}
@@ -113,7 +113,7 @@ export function buildMemberIndexEntries(vm: PrintViewModel): EiEntry<PrintMember
     .map((m, i) => ({ ...m, seq: i + 1 }))
     .filter((m) => m.actorKind !== MemberActorKind.Agent);
   if (agents.length > 0) {
-    entries.push({ kind: 'chapter', chapter: { kind: 'agent', label: 'Agent 执行体', count: agents.length } });
+    entries.push({ kind: 'chapter', chapter: { kind: 'agent', label: '执行体', count: agents.length } });
     for (const row of agents) entries.push({ kind: 'row', row });
   }
   if (humans.length > 0) {

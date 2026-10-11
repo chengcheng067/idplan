@@ -311,7 +311,7 @@ describe('期七 · F4 H×M2 双栏状态分组卡化（≤8 条，新稿 H P1 �
  * ==================================================================================== */
 
 describe('期七 · F5 三变体结构（grid / blocks / staggered）', () => {
-  it('grid（E×M1）：六列 grid 行 + 巨编号独立列 + 发丝线类名 + Agent 左签标记', () => {
+  it('grid（E×M1）：六列 grid 行 + 巨编号独立列 + 发丝线类名 + 执行体左签标记', () => {
     const vm = buildVm();
     const d = doc(renderDoc('editorial-index', vm, genericSheet('stage-list')));
     const page = d.querySelector('[data-print-page="generic-stage-list"]')!;
@@ -325,10 +325,10 @@ describe('期七 · F5 三变体结构（grid / blocks / staggered）', () => {
     expect(row.querySelector('.gm-grid__date')).not.toBeNull();
     expect(row.querySelector('.gm-grid__owner')).not.toBeNull();
     expect(row.querySelector('.gm-grid__ratio')).not.toBeNull();
-    // Agent 负责阶段（ownerId = 小 Agent）：左签 + 姓名标记 + Agent 文字签
+    // 执行体负责阶段（ownerId = 小 Agent）：左签 + 姓名标记 + 执行体文字签
     const agentRow = page.querySelector('.gm-grid__row[data-agent]');
     expect(agentRow, '阶段 2 由 Agent 负责').not.toBeNull();
-    expect(agentRow!.querySelector('.gm-grid__agent-tag')!.textContent).toBe('Agent');
+    expect(agentRow!.querySelector('.gm-grid__agent-tag')!.textContent).toBe('执行体');
   });
 
   it('blocks（H×M1）：左栏明细行 + 右栏面板；行带 mono 编号/状态/日期', () => {
@@ -405,17 +405,17 @@ describe('期七 · F6 blocks 右栏三模块（字段级）', () => {
     expect(flag.textContent).toContain('最早 2026-10-01');
   });
 
-  it('H×M4「席位与门控」：大号 mono 已用/上限 + 人类/Agent 分栏 + Agent 简列 + 门控行', () => {
+  it('H×M4「席位与门控」：大号 mono 已用/上限 + 人类/执行体 分栏 + 执行体简列 + 门控行', () => {
     const vm = buildVm();
     const d = doc(renderDoc('agent-poster', vm, genericSheet('member-roster')));
     const panel = d.querySelector('.gm-panel')!;
     expect(panel.querySelector('.gm-panel__title')!.textContent).toBe('席位与门控');
     expect(panel.querySelector('.gm-panel__big')!.textContent).toBe('01/03');
-    expect(panel.querySelector('.gm-panel__caption')!.textContent).toBe('Agent 席位已用');
-    // 人类 / Agent 分栏计数
+    expect(panel.querySelector('.gm-panel__caption')!.textContent).toBe('执行体席位已用');
+    // 人类 / 执行体 分栏计数
     const items = Array.from(panel.querySelectorAll('.gm-panel__item')).map((el) => el.textContent ?? '');
     expect(items.some((t) => t.includes('人类成员') && t.includes('2'))).toBe(true);
-    expect(items.some((t) => t.includes('Agent 执行体') && t.includes('1'))).toBe(true);
+    expect(items.some((t) => t.includes('执行体') && t.includes('1'))).toBe(true);
     // Agent 简列：编号 + 名 + agentKind（开放字符串原样）
     expect(panel.textContent).toContain('brand-new-harness-9000');
     // 门控提示行（未满席）
@@ -489,7 +489,7 @@ describe('期七 · F8 新稿签名特性补齐（分组 / 双色条 / 元信息
     expect(n1.querySelector('.ei-meta')!.textContent).toBe('可见阶段 6 · 完成度 50%');
     // 原生 P2/P3：同版式元信息行
     const n2 = doc(renderDoc('editorial-index', vm, [{ type: 'native', page: 'member-index' }]));
-    expect(n2.querySelector('.ei-meta')!.textContent).toBe('成员 3 人 · Agent 1');
+    expect(n2.querySelector('.ei-meta')!.textContent).toBe('成员 3 人 · 执行体 1');
     const n3 = doc(renderDoc('editorial-index', vm, [{ type: 'native', page: 'artifact-index' }]));
     expect(n3.querySelector('.ei-meta')!.textContent).toContain('产出物');
     expect(n3.querySelector('.ei-meta')!.textContent).toContain('关联任务');

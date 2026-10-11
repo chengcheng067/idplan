@@ -364,7 +364,7 @@ function paginateFlat<T>(rows: readonly T[], rowHeight: number, rowsHeight: numb
   return pages.length > 0 ? pages : [[]];
 }
 
-/** M4 分章序列（人类 / Agent 两章——E 原生 MemberIndexPage 的章法） */
+/** M4 分章序列（人类 / 执行体 两章——E 原生 MemberIndexPage 的章法） */
 function paginateMemberChapters(
   rows: readonly MemberRosterRow[],
   rowHeight: number,
@@ -379,7 +379,7 @@ function paginateMemberChapters(
     for (const row of humans) entries.push({ kind: 'row', row });
   }
   if (agents.length > 0) {
-    entries.push({ kind: 'chapter', chapter: { kind: 'agent', label: 'Agent 执行体', count: agents.length } });
+    entries.push({ kind: 'chapter', chapter: { kind: 'agent', label: '执行体', count: agents.length } });
     for (const row of agents) entries.push({ kind: 'row', row });
   }
   return paginateEiEntries({ entries, rowHeight, chapterHeight, bodyHeight }).map(toItems);
@@ -473,7 +473,7 @@ export function taskListCount(vm: PrintViewModel): string {
 /** M4 头部计数行 */
 export function memberRosterCount(vm: PrintViewModel): string {
   const agents = vm.members.filter((m) => m.actorKind === MemberActorKind.Agent).length;
-  return agents > 0 ? `${vm.members.length} 人 · Agent ${agents}` : `${vm.members.length} 人`;
+  return agents > 0 ? `${vm.members.length} 人 · 执行体 ${agents}` : `${vm.members.length} 人`;
 }
 
 /** 口径注（每页可独立解释，01 §2；L3 附属信息：9.5-10px + 灰度一档） */
@@ -483,5 +483,5 @@ export const GENERIC_NOTES: Record<'stage-list' | 'task-list' | 'member-roster',
   'task-list':
     '口径：任务随阶段可见性收窄（隐藏阶段的任务不进本表）；逾期 = 到期日早于今天且状态未完成；产出物数为该任务归档条数。',
   'member-roster':
-    '口径：成员为可见范围内被引用的成员（阶段负责人 / 任务指派人 / Agent 产出者）；负责任务数按可见阶段统计。',
+    '口径：成员为可见范围内被引用的成员（阶段负责人 / 任务指派人 / 执行体产出者）；负责任务数按可见阶段统计。',
 };

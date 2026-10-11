@@ -76,7 +76,7 @@ const DE_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
   'stage-index': { cn: '阶段目录', en: 'STAGE INDEX' },
   'member-index': { cn: '成员执行体目录', en: 'MEMBER INDEX' },
   'artifact-index': { cn: '产出物清单', en: 'ARTIFACT INDEX' },
-  'agent-declaration': { cn: 'Agent 执行宣告', en: 'AGENT DECLARATION' },
+  'agent-declaration': { cn: '执行宣告', en: 'AGENT DECLARATION' },
   'execution-status': { cn: '执行状态全览', en: 'EXECUTION STATUS' },
   'writeback-proposals': { cn: '写回提案公示', en: 'WRITEBACK PROPOSALS' },
 };

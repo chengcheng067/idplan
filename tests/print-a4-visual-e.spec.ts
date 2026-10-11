@@ -556,13 +556,13 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
         els.filter((e) => getComputedStyle(e).color === 'rgb(20, 20, 20)').length,
       );
       expect(inkCount, '近黑正文元素仍在（整页不许单色红）').toBeGreaterThan(0);
-      // Agent 负责阶段：负责人名赭红 + 「Agent」文字签（双编码，灰度可辨）
+      // 执行体负责阶段：负责人名赭红 + 「执行体」文字签（双编码，灰度可辨）
       const agentOwner = await p1!.$eval('.ei-row__owner[data-agent]', (el) => ({
         color: getComputedStyle(el).color,
         text: el.textContent ?? '',
       }));
       expect(agentOwner.color).toBe('rgb(176, 74, 47)');
-      expect(agentOwner.text).toContain('Agent');
+      expect(agentOwner.text, '执行体行须带「执行体」文字签（双编码，灰度可辨）').toContain('执行体');
 
       // ③ 无底部黑栏：页脚背景透明，且页内无「通栏近黑填充」元素
       const footBg = await p1!.$eval('.ei-foot', (el) => getComputedStyle(el).backgroundColor);
@@ -602,10 +602,10 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       const p1Text = (await p1!.textContent()) ?? '';
       expect(p1Text).toContain('占比 = 阶段工作量分配（ratioPercent），不等于完成度');
 
-      // ⑦ Agent 签字号 ≥9.5px（accent 文字下限，密度研究 §4 约束 3：
-      //    Agent 签随负责人行走朱红；原 9px 的登记项已清）
+      // ⑦ 执行体签字号 ≥9.5px（accent 文字下限，密度研究 §4 约束 3：
+      //    执行体签随负责人行走朱红；原 9px 的登记项已清）
       const tagFs = await p1!.$eval('.ei-row__agent-tag', (el) => Number.parseFloat(getComputedStyle(el).fontSize));
-      expect(tagFs, 'Agent 签字号应 ≥9.5px（accent 文字下限）').toBeGreaterThanOrEqual(9.5);
+      expect(tagFs, '执行体签字号应 ≥9.5px（accent 文字下限）').toBeGreaterThanOrEqual(9.5);
     } finally {
       await page.close();
     }

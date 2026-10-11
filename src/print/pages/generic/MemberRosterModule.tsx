@@ -18,7 +18,7 @@
  *
  * ── Agent 行焦点（密度研究规则 1「焦点必须松」的轻量版） ──
  * Agent 行是页内焦点：各版给各自的焦点语法（A 反色行 / D·E 左侧 accent
- * 粗签 + 姓名着色 / H 姓名 accent 加重），**同时带「Agent」文字签**——
+ * 粗签 + 姓名着色 / H 姓名 accent 加重），**同时带「执行体」文字签**——
  * 双编码，灰度下不靠色相。agentKind 是开放字符串：未知值原样显示，
  * 不收敛枚举（01 §3.2）。
  */
@@ -107,7 +107,7 @@ function MemberGrid({ items }: { items: readonly GenericItem<MemberRosterRow>[] 
           <div key={`ch-${i}`} className="gm-chapter" data-continued={item.continued || undefined}>
             <span className="gm-chapter__label">
               <span className="gm-chapter__glyph" aria-hidden>
-                {item.label === 'Agent 执行体' ? '▲' : '●'}
+                {item.label === '执行体' ? '▲' : '●'}
               </span>
               {item.label}
             </span>
@@ -134,7 +134,7 @@ function MemberGridRow({ row }: { row: MemberRosterRow }): JSX.Element {
         {row.name}
       </span>
       <span className="gm-grid__state" data-agent={row.isAgent || undefined}>
-        {row.isAgent ? 'Agent' : 'human'}
+        {row.isAgent ? '执行体' : 'human'}
       </span>
       <span className="gm-grid__kind gm-num">{row.agentKind ?? '—'}</span>
       <span className="gm-grid__role">{row.role}</span>
@@ -154,7 +154,7 @@ function MemberBlocks({ rows }: { rows: readonly MemberRosterRow[] }): JSX.Eleme
             <div key={r.key} className="gm-block-row" data-agent={r.isAgent || undefined}>
               <span className="gm-num gm-block-row__no">{r.no}</span>
               <span className="gm-block-row__name" title={r.name}>{r.name}</span>
-              <span className="gm-block-row__state">{r.isAgent ? 'Agent' : 'human'}</span>
+              <span className="gm-block-row__state">{r.isAgent ? '执行体' : 'human'}</span>
               <span className="gm-block-row__role">{r.role}</span>
               <span className="gm-num gm-block-row__num">{r.taskCount}</span>
             </div>

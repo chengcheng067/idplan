@@ -644,12 +644,12 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
       expect(p2Text, '任务图例').toContain('任务 7 态，本页列示 2 态');
 
       const p3Text = (await (await page.$('[data-print-page="member-roster"]'))!.textContent()) ?? '';
-      expect(p3Text, '成员分栏 = 人类 / Agent').toContain('人类成员');
-      expect(p3Text, '成员分栏 = 人类 / Agent').toContain('Agent 执行体');
+      expect(p3Text, '成员分栏 = 人类 / 执行体').toContain('人类成员');
+      expect(p3Text, '成员分栏 = 人类 / 执行体').toContain('执行体');
       expect(p3Text).toContain('负责人甲');
       expect(p3Text).toContain('小 Agent');
       expect(p3Text, '成员口径行').toContain('Member.roleKind');
-      expect(p3Text, '成员图例如实写明不登 agentKind 的理由（每页可独立解释）').toContain('不登 agentKind');
+      expect(p3Text, '成员图例如实写明不登执行体类型的理由（每页可独立解释）').toContain('不登执行体类型');
       expect(p3Text, 'agentKind 值本身不上纸').not.toContain('brand-new-harness-9000');
 
       // ── ⑧ Agent 载荷整块下纸（项目里**确实有**执行单与写回提案）──
@@ -657,7 +657,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
       for (const dead of ['run_h4_001', 'task.status', '写回', '仅供参考', 'confidence', 'runId']) {
         expect(text, `Agent 载荷「${dead}」不得再上纸（规格 §1.3）`).not.toContain(dead);
       }
-      expect(text).not.toContain('当前项目暂无 Agent 执行数据');
+      expect(text, 'H 纸面不得回落整版空态文案').not.toContain('当前项目暂无执行数据');
     } finally {
       await page.close();
     }

@@ -10,7 +10,7 @@
  * 数据；参考稿 H 只贡献版式与配色权威，它那份 Agent 数据口径作废）。
  *
  * ── 颜色语义（构件不动，语义按人类口径重述）──
- *   橙 = **需要人动作**（阶段：延期 / 未开始；任务：受阻 / 待验收；成员：Agent 执行体）
+ *   橙 = **需要人动作**（阶段：延期 / 未开始；任务：受阻 / 待验收；成员：执行体）
  *   墨 = **在轨推进**（进行中 / 已完成 / 已认领…）
  * ⚠️ accent 在新纸底 `#DEDDD4` 上只有 **2.812:1**（< 3 的图形级阈值，
  * 见 `agent-poster.css` 头注释的「闸门与登记偏离」）⇒ 只作**实底标签 / 栏头 /
@@ -130,7 +130,7 @@ export const TASK_POSTER_COLUMNS: readonly PosterStatusColumn<TaskStatus>[] = [
     en: 'IN FLIGHT',
     statuses: [TaskStatus.Claimed, TaskStatus.InProgress],
     tone: 'ink',
-    note: '已认领与进行中：有人 / Agent 在推',
+    note: '已认领与进行中：有人 / 执行体在推',
   },
   {
     key: 'human-action',
@@ -150,7 +150,7 @@ export const TASK_POSTER_COLUMNS: readonly PosterStatusColumn<TaskStatus>[] = [
   },
 ];
 
-/** P3 成员两栏（规格 §1.2.4：左「人类成员」墨 / 右「Agent 执行体」橙） */
+/** P3 成员两栏（规格 §1.2.4：左「人类成员」墨 / 右「执行体」橙） */
 export interface PosterMemberColumn {
   key: 'human' | 'agent';
   label: string;
@@ -169,10 +169,10 @@ export const MEMBER_POSTER_COLUMNS: readonly PosterMemberColumn[] = [
   },
   {
     key: 'agent',
-    label: 'Agent 执行体',
+    label: '执行体',
     en: 'AGENTS',
     tone: 'gate',
-    note: 'Agent 执行体：自动产出的责任方（本页的治理焦点）',
+    note: '执行体：自动产出的责任方（本页的治理焦点）',
   },
 ];
 
@@ -289,9 +289,9 @@ export function taskPosterMeta(vm: PrintViewModel, s: TaskPosterStats): string {
   return `${vm.project.name} · 任务 ${s.total}  进行中 ${s.inProgress}  受阻 ${s.blocked}`;
 }
 
-/** P3 meta 行（人类 / Agent 构成是成员事实，不是治理面板，故照登） */
+/** P3 meta 行（人类 / 执行体 构成是成员事实，不是治理面板，故照登） */
 export function memberPosterMeta(vm: PrintViewModel, s: MemberPosterStats): string {
-  return `${vm.project.name} · 成员 ${s.total}  人类 ${s.humans}  Agent ${s.agents}`;
+  return `${vm.project.name} · 成员 ${s.total}  人类 ${s.humans}  执行体 ${s.agents}`;
 }
 
 /** 居中摘要块（规格 §1.1 D1：主数值大号 mono，**不借巨字**——借了每页都是海报） */
@@ -323,7 +323,7 @@ export function memberPosterSummary(s: MemberPosterStats): PosterSummary {
   return {
     label: '成员构成',
     big: `${s.humans} / ${s.agents}`,
-    sub: `人类 ${s.humans} 人 · Agent 执行体 ${s.agents} 个（共 ${s.total} 位成员）`,
+    sub: `人类 ${s.humans} 人 · 执行体 ${s.agents} 个（共 ${s.total} 位成员）`,
   };
 }
 
@@ -348,7 +348,7 @@ export function taskPosterLegend(vm: PrintViewModel): string {
 
 export function memberPosterLegend(vm: PrintViewModel): string {
   const s = memberPosterStats(vm);
-  return `橙标签=Agent 执行体  黑标签=人类成员 | 本页列示 ${s.total} 位（人类 ${s.humans} · Agent ${s.agents}）；不登 agentKind（2026-10-11 产品拍板）`;
+  return `橙标签=执行体  黑标签=人类成员 | 本页列示 ${s.total} 位（人类 ${s.humans} · 执行体 ${s.agents}）；不登执行体类型（2026-10-11 产品拍板）`;
 }
 
 /** 脚注（两行：口径 + 数据来源；每页可独立解释，宪法 7） */
@@ -368,7 +368,7 @@ export function taskPosterNotes(vm: PrintViewModel): readonly string[] {
 
 export function memberPosterNotes(vm: PrintViewModel): readonly string[] {
   return [
-    '口径：成员为可见范围内被引用的成员（阶段负责人 / 任务指派人 / Agent 产出者）；负责任务数按可见阶段统计。',
+    '口径：成员为可见范围内被引用的成员（阶段负责人 / 任务指派人 / 执行体产出者）；负责任务数按可见阶段统计。',
     `数据来源 ID Plan 排程库 ${stampOf(vm.generatedAt)} 同步`,
   ];
 }
@@ -515,12 +515,12 @@ function taskBlock(r: TaskListRow): PosterBlock {
   };
 }
 
-/** 成员块：`成员 {两位序号}` + 实底类型标签（人类成员 / Agent 执行体）+ 角色 / 任务数 */
+/** 成员块：`成员 {两位序号}` + 实底类型标签（人类成员 / 执行体）+ 角色 / 任务数 */
 function memberBlock(r: MemberRosterRow): PosterBlock {
   return {
     key: r.key,
     title: `成员 ${r.no}`,
-    tag: r.isAgent ? 'Agent 执行体' : '人类成员',
+    tag: r.isAgent ? '执行体' : '人类成员',
     tagTone: r.isAgent ? 'gate' : 'ink',
     glyph: r.isAgent ? '◉' : '●',
     meta: `${r.name} · ${r.role} · 负责任务 ${r.taskCount}`,
@@ -607,7 +607,7 @@ function taskPosterSheets(vm: PrintViewModel): PosterSheet[] {
   });
 }
 
-/** P3 成员海报：载荷 = `vm.members`，分组 = 人类 / Agent 两栏 */
+/** P3 成员海报：载荷 = `vm.members`，分组 = 人类 / 执行体 两栏 */
 function memberPosterSheets(vm: PrintViewModel): PosterSheet[] {
   const rows = buildMemberRosterRows(vm);
   const stats = memberPosterStats(vm);

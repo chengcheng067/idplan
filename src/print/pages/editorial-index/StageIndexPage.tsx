@@ -103,7 +103,7 @@ function StageRow({ stage, agentOwned }: { stage: PrintStageVM; agentOwned: bool
       </span>
       <span className="ei-row__owner" data-agent={agentOwned || undefined}>
         {stage.ownerName ?? '—'}
-        {agentOwned && <span className="ei-row__agent-tag">Agent</span>}
+        {agentOwned && <span className="ei-row__agent-tag">执行体</span>}
       </span>
       <span className="ei-row__ratio">{stage.ratioPercent}%</span>
     </div>

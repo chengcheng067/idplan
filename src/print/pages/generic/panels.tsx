@@ -161,7 +161,7 @@ export function SeatGatePanel({ rows }: { rows: readonly MemberRosterRow[] }): J
     <PanelFrame
       title="席位与门控"
       big={`${String(agents.length).padStart(2, '0')}/${String(AGENT_SEAT_LIMIT).padStart(2, '0')}`}
-      caption="Agent 席位已用"
+      caption="执行体席位已用"
     >
       <ul className="gm-panel__list">
         <li className="gm-panel__item">
@@ -169,7 +169,7 @@ export function SeatGatePanel({ rows }: { rows: readonly MemberRosterRow[] }): J
           <span className="gm-num gm-panel__item-num">{humans}</span>
         </li>
         <li className="gm-panel__item">
-          <span className="gm-panel__item-name">Agent 执行体</span>
+          <span className="gm-panel__item-name">执行体</span>
           <span className="gm-num gm-panel__item-num">{agents.length}</span>
         </li>
       </ul>
@@ -186,7 +186,7 @@ export function SeatGatePanel({ rows }: { rows: readonly MemberRosterRow[] }): J
       )}
       {rest > 0 && <MoreRow count={rest} />}
       <p className="gm-panel__gate" data-full={full || undefined}>
-        {full ? `席位已满 ${agents.length}/${AGENT_SEAT_LIMIT} · 新增 Agent 需管理员审批` : `剩余 ${AGENT_SEAT_LIMIT - agents.length} 席`}
+        {full ? `席位已满 ${agents.length}/${AGENT_SEAT_LIMIT} · 新增执行体需管理员审批` : `剩余 ${AGENT_SEAT_LIMIT - agents.length} 席`}
       </p>
     </PanelFrame>
   );
