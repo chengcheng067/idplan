@@ -154,14 +154,58 @@ export const GATE_STATUSES: ReadonlySet<ExecutionStatus> = new Set<ExecutionStat
   'awaiting_review',
 ]);
 
-/** 巨字档位：按焦点状态词长度分三档（长词不许撑破纸面） */
-export function giantTier(word: string): 'xl' | 'lg' | 'md' {
-  if (word.length <= 8) return 'xl';
-  if (word.length <= 13) return 'lg';
-  return 'md';
+/**
+ * 巨字估宽（em）：CJK / 全角按 1em，其余按西文大写 0.65em。
+ * 系数来自参考稿实测：5 字符 `AGENT` 墨迹宽 569px ÷ 字号 175 ≈ 0.65em/字符；
+ * CJK 是方块字，直接 1em。
+ *
+ * ⚠️ 估值**只用于选档**，不参与渲染；宁可高估（多降一档），不可低估（撑破纸面）。
+ * 用码点区间判宽，不用正则字面量——E 版踩过「正则里塞全角字符」的坑。
+ */
+function charEm(ch: string): number {
+  const cp = ch.codePointAt(0) ?? 0;
+  const wide =
+    (cp >= 0x1100 && cp <= 0x115f) || // 谚文字母
+    (cp >= 0x2e80 && cp <= 0xa4cf) || // CJK 部首 / 表意文字 / 假名
+    (cp >= 0xac00 && cp <= 0xd7a3) || // 谚文音节
+    (cp >= 0xf900 && cp <= 0xfaff) || // CJK 兼容表意
+    (cp >= 0xfe30 && cp <= 0xfe6f) || // CJK 兼容形式
+    (cp >= 0xff00 && cp <= 0xff60) || // 全角形式
+    (cp >= 0xffe0 && cp <= 0xffe6);
+  return wide ? 1 : 0.65;
 }
 
-/** 状态键 → 巨字（下划线转空格；纸面巨字语言） */
+/** 品牌词的估宽（em）；导出供选档单测直接钉边界 */
+export function estimateGiantEmWidth(word: string): number {
+  return [...word].reduce((sum, ch) => sum + charEm(ch), 0);
+}
+
+/**
+ * 页顶巨字档位：按**估宽**分四档（规格 §1.4 规则 6：长词不许撑破纸面，且可见
+ * 部分仍要读得出词义，故必须降档而不是任其裁掉）。字号住在 `agent-poster.css`
+ * 的 `.ap-giant[data-tier=…]`（xl 171 / lg 118 / md 88 / sm 61）。
+ *
+ * ── 边界怎么来的（不是拍的）──
+ * 可用墨迹宽 ≈ 794 − 8（文字原点）≈ 786px，四档各留 ~55px 余量取 730px：
+ *   xl 730/171 = 4.3em ／ lg 730/118 = 6.2em ／ md 730/88 = 8.3em ／ 其余 61px（12em 上限 ⇒ 732px）。
+ * 参考稿锚点：5 字符 `AGENT` 估宽 3.25em ⇒ xl，与「参考稿那颗巨字就是 xl 档」一致。
+ * 长度上限 12 字符（`PRINT_BRAND_WORD_MAX_CHARS`）保证估宽 ≤12em ⇒ sm 是地板档。
+ */
+export function giantTier(word: string): 'xl' | 'lg' | 'md' | 'sm' {
+  const w = estimateGiantEmWidth(word);
+  if (w <= 4.3) return 'xl';
+  if (w <= 6.2) return 'lg';
+  if (w <= 8.3) return 'md';
+  return 'sm';
+}
+
+/**
+ * 状态键 → 巨字（下划线转空格；全大写）。
+ *
+ * ⚠️ **纸面已解绑**（规格 §1.4 拍板）：页顶巨字载荷换成用户自定义品牌词
+ * （`print.brandWord`，默认 `PLAN`），状态表达归双栏栏头。本函数不再被
+ * agent-poster 纸面消费，**保留供其他出口使用**（不删业务常量）。
+ */
 export function statusToGiantWord(status: ExecutionStatus): string {
   return status.replace(/_/g, ' ').toUpperCase();
 }

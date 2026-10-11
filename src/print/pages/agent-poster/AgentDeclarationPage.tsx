@@ -1,9 +1,11 @@
 /**
  * H 版 P1 · Agent 执行宣告（01 文档 §7 / 02 文档 §6）。
  *
- * ── 海报读法 ──
- * 出血巨字 = 焦点执行的状态（英文巨字，黑 = 系统推进/当前主状态；橙 = 等待
- * 人工介入）。焦点执行的选取是**确定性**的（pickFocusExecution：
+ * ── 海报读法（载荷已按规格 §1.4 拍板改口径）──
+ * 页顶出血巨字**不再承担状态**——它是页级品牌装置，载荷 = 用户自定义品牌词
+ * （`print.brandWord`，默认 `PLAN`，规格 §1.4）。焦点执行的状态改由本页
+ * 「焦点行」陈述（`ap-declare__focus`）；分组栏头承担状态表达属人类化批
+ * （§1.2.2）。焦点执行的选取仍是**确定性**的（pickFocusExecution：
  * running → needs_attention → … → 终态），治理公示稿的「当前主状态」
  * 必须唯一，不随排序漂移。
  *
@@ -28,10 +30,8 @@ import {
   EXECUTION_STATUS_LABELS,
   EXECUTION_STATUS_TONE,
   formatConfidence,
-  giantTier,
   pickFocusExecution,
   stampOf,
-  statusToGiantWord,
   WRITEBACK_READONLY_NOTE,
   WRITEBACK_WHITELIST_ITEMS,
 } from './shared';
@@ -48,7 +48,6 @@ export function AgentDeclarationPage({
   if (!focus) return <></>;
 
   const tone = EXECUTION_STATUS_TONE[focus.status];
-  const giant = statusToGiantWord(focus.status);
   // confidence 住在提案上（执行单无此字段，01 §3.3）：取该执行最新提案的
   // 自报置信度；无提案 ⇒ '—'。仅展示，旁标「仅供参考」。
   const focusTask = vm.tasks.find((t) => t.id === focus.taskId) ?? null;
@@ -58,16 +57,15 @@ export function AgentDeclarationPage({
 
   return (
     <div className="ap-declare">
-      {/* 出血巨字：当前主状态（黑）/ 等待人工介入（橙）；超宽由 overflow 裁切 */}
-      <div className="ap-giant" data-tone={tone} data-tier={giantTier(giant)}>
-        <span className="ap-giant__word">{giant}</span>
-        <span className="ap-giant__cn">
-          <span className="ap-giant__glyph" aria-hidden>
-            {EXECUTION_STATUS_GLYPH[focus.status]}
-          </span>
-          {EXECUTION_STATUS_LABELS[focus.status]} · 当前主状态
+      {/* 焦点行：当前主状态（黑）/ 等待人工介入（橙）。
+          页顶出血巨字是**页级品牌装置**（载荷 = 品牌词，规格 §1.4），
+          它住在文档层（AgentPosterDocument 的 .ap-giant），不在这里出。 */}
+      <p className="ap-declare__focus" data-tone={tone}>
+        <span className="ap-declare__glyph" aria-hidden>
+          {EXECUTION_STATUS_GLYPH[focus.status]}
         </span>
-      </div>
+        {EXECUTION_STATUS_LABELS[focus.status]} · 当前主状态
+      </p>
 
       {/* logo：巨字下方左侧（≤24px；未上传 = 「ID Plan」文字标） */}
       <div className="ap-declare__logo">

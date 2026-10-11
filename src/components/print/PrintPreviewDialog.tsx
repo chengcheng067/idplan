@@ -98,6 +98,7 @@ import {
 import type { PrintModuleId, PrintSheet } from './print-templates';
 import { usePrintViewModel } from '../../print/adapters/use-print-view-model';
 import { usePrintLogo } from '../../print/adapters/use-print-logo';
+import { usePrintBrandWord } from '../../print/adapters/use-print-brand-word';
 import { SwissScheduleDocument } from '../../print/documents/SwissScheduleDocument';
 import { DataEditorialDocument } from '../../print/documents/DataEditorialDocument';
 import { EditorialIndexDocument } from '../../print/documents/EditorialIndexDocument';
@@ -519,6 +520,8 @@ export function PrintPreviewDialog({
   const printVm = usePrintViewModel(projectId);
   /** 全局打印 logo（settings KV；null = 未上传 ⇒ 四版统一「ID Plan」文字标） */
   const { logo } = usePrintLogo();
+  /** H 版页顶出血巨字的载荷（settings KV `print.brandWord`；缺省 PLAN） */
+  const { brandWord } = usePrintBrandWord();
   const meta = printTemplateMeta(template);
   /**
    * 预览遮罩左缘让出的宽度 = 侧栏宽度（她 10-09 23:38 反馈：「日程表打印
@@ -890,6 +893,7 @@ export function PrintPreviewDialog({
                     palette['agent-poster'] ?? PRINT_TEMPLATE_PALETTES['agent-poster'].baseline
                   }
                   logo={logo}
+                  brandWord={brandWord}
                   pageRef={(idx) => (el: HTMLDivElement | null) => {
                     pageRefs.current[idx] = el;
                   }}

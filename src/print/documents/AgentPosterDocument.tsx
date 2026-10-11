@@ -15,6 +15,13 @@
  *   出血巨字、大字号状态分组、双栏 + 局部中轴（轴 = 双栏容器的 ::before，
  *   禁绝对定位贯穿整页——02 §6）；三页均无底部黑栏（留白与巨字收口）。
  *
+ * ── 页级出血巨字（规格 §1.1 B1/B3 + P0-18；§1.4 载荷拍板）──
+ * 两块巨字都是**页级装置**（绝对定位在 .a4-page 上，越出内容框与纸缘）：
+ *   · 页顶 = 用户自定义**品牌词**（settings KV `print.brandWord`，缺省 `PLAN`）。
+ *     载荷与状态解绑（规格 §1.4）——原 `statusToGiantWord` 不再上纸面；
+ *     状态表达归页内焦点行与双栏栏头（后者属人类化批）。
+ *   · 页底 = 固定品牌装置 `IDPLAN`，三页同构，**不随自定义变**（规则 5）。
+ *
  * ── 口径纪律（治理公示稿，出错是对外事故）──
  *   · ExecutionStatus 10 态按四组流程组织、running 为主焦点（P2）；
  *   · confidence **仅展示**且旁标「仅供参考」，不做任何阈值判定；
@@ -52,9 +59,13 @@ import {
 import { AgentDeclarationPage } from '../pages/agent-poster/AgentDeclarationPage';
 import { ExecutionStatusPage } from '../pages/agent-poster/ExecutionStatusPage';
 import { WritebackProposalPage } from '../pages/agent-poster/WritebackProposalPage';
-import { stampOf } from '../pages/agent-poster/shared';
+import { giantTier, stampOf } from '../pages/agent-poster/shared';
+import { DEFAULT_PRINT_BRAND_WORD, normalizeBrandWord } from '../adapters/use-print-brand-word';
 // H 版样式（Vite 随组件 chunk 进包；全部规则带 .print-root.print-template-* 前缀）
 import '../styles/agent-poster.css';
+
+/** 页底品牌装置词：固定 `IDPLAN`，不随自定义品牌词变（规格 §1.4 规则 5） */
+export const AP_FOOTWORD_TEXT = 'IDPLAN';
 
 /** H 版三页（02 §6 组件映射；顺序即纸面顺序） */
 export const AGENT_POSTER_PAGES: readonly PrintPageKind[] = [
@@ -93,6 +104,11 @@ export interface AgentPosterDocumentProps {
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，显示「ID Plan」文字标） */
   logo?: string | null;
+  /**
+   * 页顶出血巨字的载荷 = 用户自定义品牌词（settings KV `print.brandWord`）。
+   * 缺省 / 空值 ⇒ `PLAN`（规格 §1.4 规则 1-2）。页底 `IDPLAN` 不受其影响。
+   */
+  brandWord?: string | null;
   /** 导出 PNG 的页面元素收集（ref callback 数组，宿主持有） */
   pageRef?: (idx: number) => Ref<HTMLDivElement>;
 }
@@ -134,12 +150,17 @@ export function AgentPosterDocument({
   sheets,
   palette,
   logo = null,
+  brandWord = null,
   pageRef,
 }: AgentPosterDocumentProps): JSX.Element {
   const physical = agentPosterPhysical(vm, sheets ?? enabledSheetsOf('agent-poster', undefined));
   // 整版空态判定：执行与提案皆空（非 Agent 项目 / 无 Agent 数据）——只作用于原生页
   const hasAgentData = vm.executions.length > 0 || vm.proposals.length > 0;
   const total = physical.length;
+  // 页顶巨字载荷：同一真值源做归一（去空白 + ≤12 字符截断），空值回落缺省词。
+  // 截断在**渲染口**再做一遍，保证「传进来的超长词也不会撑破纸面」——
+  // 单次归一，逐页复用。
+  const topWord = normalizeBrandWord(brandWord ?? '') || DEFAULT_PRINT_BRAND_WORD;
 
   return (
     <div
@@ -159,6 +180,7 @@ export function AgentPosterDocument({
           vm={vm}
           hasAgentData={hasAgentData}
           logo={logo}
+          brandWord={topWord}
           pageIndex={idx}
           pageTotal={total}
           pageRef={pageRef?.(idx)}
@@ -175,6 +197,7 @@ function ApPage({
   vm,
   hasAgentData,
   logo,
+  brandWord,
   pageIndex,
   pageTotal,
   pageRef,
@@ -183,6 +206,7 @@ function ApPage({
   vm: PrintViewModel;
   hasAgentData: boolean;
   logo: string | null;
+  brandWord: string;
   pageIndex: number;
   pageTotal: number;
   pageRef?: Ref<HTMLDivElement>;
@@ -197,6 +221,11 @@ function ApPage({
   // （左上角发丝线下方，≤22px）。空态下 P1 也走页级行——整版空态时每页
   // 都要有标识，不留空。
   const pageLevelLogo = page.type === 'generic' || page.kind !== 'agent-declaration' || !hasAgentData;
+  // 页顶出血巨字只在 P1（页锚点装置的原址，规格 §1.1 B1）；空态整版只读，
+  // 不出巨字（与「空态不用模拟记录填版」同一口径）。页底巨字是纸级品牌装置，
+  // 三页同构、空态照出。
+  const showTopWord =
+    page.type === 'native' && page.kind === 'agent-declaration' && hasAgentData;
 
   return (
     <div
@@ -206,6 +235,13 @@ function ApPage({
       className="a4-page ap-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
     >
+      {/* 页顶出血巨字：品牌词（默认 PLAN），从纸面 x=0 起、行盒越出纸顶被裁 */}
+      {showTopWord && (
+        <div className="ap-giant" data-tier={giantTier(brandWord)} aria-hidden>
+          <span className="ap-giant__word">{brandWord}</span>
+        </div>
+      )}
+
       {/* 页头：英文栏 kicker + 中文页题；右侧项目标识；底部发丝线 */}
       <header className="ap-head">
         <div className="ap-head__left">
@@ -256,6 +292,11 @@ function ApPage({
           {title.cn} · 第 {pageIndex + 1} / {pageTotal} 页 · 数据时间 {stampOf(vm.generatedAt)}
         </span>
       </footer>
+
+      {/* 页底出血巨字：品牌装置 IDPLAN（固定词，不随自定义品牌词变；三页同构） */}
+      <div className="ap-footword" aria-hidden>
+        <span className="ap-footword__word">{AP_FOOTWORD_TEXT}</span>
+      </div>
     </div>
   );
 }

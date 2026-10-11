@@ -39,8 +39,12 @@
   --ap-pad-x: 44px;
 }
 
-/* ── 纸面：灰白底海报；overflow hidden 承载出血巨字（裁切在纸缘）── */
+/* ── 纸面：灰白底海报；overflow hidden 承载出血巨字（裁切在纸缘）──
+ * position: relative 是**页级出血巨字**（.ap-giant / .ap-footword）的定位上下文：
+ * 两块巨字绝对定位在纸面上，必须相对**每一张纸**而非 .print-root 定位（多页时
+ * 相对 .print-root 会让第 2/3 页的巨字飞到第 1 页）。 */
 .print-root.print-template-agent-poster .a4-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -179,58 +183,142 @@
   flex-direction: column;
 }
 
-/* 出血巨字：超宽由 .a4-page 的 overflow hidden 在纸缘裁切（bleed） */
-.print-root.print-template-agent-poster .ap-giant {
+/* ========================= 页级出血巨字（页锚点装置） =========================
+ * @see 规格 §1.1 B1/B3 + P0-18。两块巨字都是**页级装置**：绝对定位在纸面上，
+ * 越出 --ap-pad-x 内容框、越出纸缘（.a4-page 的 overflow:hidden 是第二道裁切）。
+ *
+ * 参考稿实测（794×1123 CSS px；规格附录 H 列的数值权威是参考原稿，本次按原稿
+ * 像素级复核后取用）：
+ *   页顶  cap 线 y=12.5、基线 y=134.5（cap 122）、墨迹左缘 x=18
+ *   页底  cap 线 y=1004、基线 y=1112.5（cap 108.5）、墨迹 x24..554.5
+ * 字号由 cap 高反解：171px（页顶）/ 152px（页底），cap 比 0.714 取本机解析字体
+ * 的实测值（--ap-font-en 栈里没有随包字体，见该 token 的注释）。
+ *
+ * ── 与「被页顶/页底裁切」的关系（实测口径）──
+ * 复核原稿发现：两块巨字**都没有可见裁切**——页顶 'G' 的圆弧顶在 cap 线以上
+ * 2px、页底 'D' 的圆弧底同样过冲，圆字形两个方向的过冲都在，说明字形是完整
+ * 渲染的；「AGENT 顶端是平的」是 IBM Plex 家族的**平顶 A**字形本身，不是切线。
+ * 真正成立的是：巨字的**行盒**越出纸缘（DOM 上 .ap-giant__word 的 top < 0、
+ * .ap-footword__word 的 bottom > 1123），墨迹距纸缘仅 ~11px，视觉上就是出血。
+ * 故本实现按「行盒出血 + 墨迹贴纸缘」还原，不额外制造一条假切线。
+ *
+ * ── 载荷纪律 ──
+ * 页顶 = 用户自定义品牌词（默认 PLAN，规格 §1.4；不再取状态词）；
+ * 页底 = 固定品牌装置 IDPLAN，**不随自定义变**（规格 §1.4 规则 5）。
+ * 两者都由 CSS text-transform 恒大写（规则 4）。
+ */
+.print-root.print-template-agent-poster .ap-giant,
+.print-root.print-template-agent-poster .ap-footword {
+  position: absolute;
+  left: 0;
+  right: 0;
   overflow: hidden;
-  margin: 6px 0 0;
-}
-
-.print-root.print-template-agent-poster .ap-giant__word {
-  display: block;
-  font-family: var(--ap-font-en);
-  font-weight: 700;
-  line-height: 0.92;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  color: var(--tpl-ink);
+  /* 页级装饰装置：不吃鼠标、不参与正文可访问性树（内容在 aria-hidden 侧） */
+  pointer-events: none;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
-/* 巨字三档（焦点状态词长度分级：长词降档，不许撑破纸面） */
-.print-root.print-template-agent-poster .ap-giant[data-tier='xl'] .ap-giant__word {
-  font-size: 104px;
+/* 页顶：装置贴纸顶（窗口 = 纸顶 → 基线下方 2px，含圆字形下过冲） */
+.print-root.print-template-agent-poster .ap-giant {
+  top: 0;
+  height: 137px;
 }
 
-.print-root.print-template-agent-poster .ap-giant[data-tier='lg'] .ap-giant__word {
-  font-size: 72px;
+/* 页底：装置贴纸底（窗口高度含基线下方 10.5px 的纸面留白，与原稿同） */
+.print-root.print-template-agent-poster .ap-footword {
+  bottom: 0;
+  height: 123px;
 }
 
-.print-root.print-template-agent-poster .ap-giant[data-tier='md'] .ap-giant__word {
-  font-size: 52px;
-}
-
-/* 等待人工介入的焦点态：巨字转橙（治理焦点） */
-.print-root.print-template-agent-poster .ap-giant[data-tone='gate'] .ap-giant__word {
+.print-root.print-template-agent-poster .ap-giant__word,
+.print-root.print-template-agent-poster .ap-footword__word {
+  display: block;
+  /* 盒宽贴字：巨字盒 = 文本推进宽度，不再因负 margin 被拉成通栏
+     （DOM 断言的 right 因此等于文本右缘，而纸缘裁切交给 overflow） */
+  width: max-content;
+  font-family: var(--ap-font-en);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  white-space: nowrap;
   color: var(--tpl-accent);
 }
 
-.print-root.print-template-agent-poster .ap-giant__cn {
+/* ── 页顶巨字：字号/边距由**参考稿实测**反解（不靠猜）──
+ * 装置是页级元素（父级无 --ap-pad-x 内缩），故文字原点直接取纸面 x 坐标；
+ * 内容框在 x=44 起 ⇒ 原点落在 8px 即越出内容框，出血成立。
+ * 两个派生量（本机解析字体的实测度量，见 commit 说明）：
+ *   cap 线距盒顶 = 0.1057 × 字号      ⇒ margin-top = 12.5 − 0.1057×字号
+ *   墨迹左缘 = 原点 + 左侧边距(≈0.0571×字号)
+ *     ⇒ margin-left = 参考墨迹左缘 − 0.0571×字号
+ * 字号由「参考稿 cap 122px」反解：122 / 0.714（本字体 cap 比）= 171px。
+ * 三档的 margin-top 各自解出，保证**每档 cap 线都落在 y=12.5**（换档不跳基准线）。 */
+.print-root.print-template-agent-poster .ap-giant[data-tier='xl'] .ap-giant__word {
+  font-size: 171px;
+  margin-top: -5.6px;
+  margin-left: 8.2px;
+}
+
+.print-root.print-template-agent-poster .ap-giant[data-tier='lg'] .ap-giant__word {
+  font-size: 118px;
+  margin-top: 0px;
+  margin-left: 11.3px;
+}
+
+.print-root.print-template-agent-poster .ap-giant[data-tier='md'] .ap-giant__word {
+  font-size: 88px;
+  margin-top: 3.2px;
+  margin-left: 13px;
+}
+
+/* 第四档：12 字符上限下仍可能装不下的（如 9-12 个汉字）。地板档，
+   保证「可见部分读得出词义」而不是被纸缘裁掉半截（规格 §1.4 规则 6）。 */
+.print-root.print-template-agent-poster .ap-giant[data-tier='sm'] .ap-giant__word {
+  font-size: 61px;
+  margin-top: 6.1px;
+  margin-left: 14.5px;
+}
+
+/* ── 页底巨字：同法反解 ──
+ * 参考稿 cap 108.5 ⇒ 字号 152；窗口贴纸底（bottom:0，高 123）⇒ 盒顶恒定 y=1000；
+ * cap 线 1004 ⇒ margin-top = 1004 − 1000 − 0.1057×152 = −12；
+ * 墨迹左缘 24 ⇒ margin-left = 24 − 0.0571×152 = 16.2。 */
+.print-root.print-template-agent-poster .ap-footword__word {
+  font-size: 152px;
+  margin-top: -12px;
+  margin-left: 16.2px;
+}
+
+/* 页级巨字在流式内容之下：页头/页脚/主体文字压在其上，中间态不牺牲可读性。
+   参考稿的「巨字压页眉」是它那套**细 mono 页眉**的副产品；页眉改版属人类化批
+   （§1.2.2），届时翻 z 序即可（此处一行）。 */
+.print-root.print-template-agent-poster .ap-head,
+.print-root.print-template-agent-poster .ap-logo-row,
+.print-root.print-template-agent-poster .ap-body,
+.print-root.print-template-agent-poster .ap-foot {
+  position: relative;
+  z-index: 1;
+}
+
+/* P1 页内焦点行：焦点执行的状态陈述（巨字已不承担状态，规格 §1.4 表格末行） */
+.print-root.print-template-agent-poster .ap-declare__focus {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-top: 8px;
+  margin: 0 0 10px;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--tpl-ink);
 }
 
-.print-root.print-template-agent-poster .ap-giant[data-tone='gate'] .ap-giant__cn {
+.print-root.print-template-agent-poster .ap-declare__focus[data-tone='gate'] {
   color: var(--tpl-accent);
 }
 
-.print-root.print-template-agent-poster .ap-giant__glyph {
+.print-root.print-template-agent-poster .ap-declare__glyph {
   font-size: 12px;
 }
 

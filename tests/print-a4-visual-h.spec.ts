@@ -85,6 +85,17 @@ function builtCss(): string {
     .join('\n');
 }
 
+/**
+ * `#RRGGBB` → `rgb(r, g, b)`（与 getComputedStyle 的返回格式一致）。
+ * 用途：断言「元素取的是 palette 里那枚色」而不把色值抄第二遍——
+ * palette 是单一真值源，抄一遍色值 = 造第二真值源（P0-17 判据里的
+ * 「accent = #E2522B」由 print-palette 侧的 spec 负责钉死）。
+ */
+function hexRgb(hex: string): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
+
 /* ------------------------------------------------------------------ 夹具（真实形状） */
 
 const TODAY = '2026-10-09';
@@ -680,7 +691,13 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
       const p1 = await page.$('[data-print-page="agent-declaration"]');
       const p1Text = (await p1!.textContent()) ?? '';
       expect(p1Text, 'confidence 旁标「仅供参考」').toContain('仅供参考');
-      expect(p1Text, '巨字 = 焦点执行状态 RUNNING').toContain('RUNNING');
+      // 页顶巨字载荷 = 品牌词（规格 §1.4：与状态解绑）——不再是状态词 RUNNING
+      const topWord = await p1!.$eval('.ap-giant__word', (el) => el.textContent);
+      expect(topWord, '页顶巨字 = 品牌词 PLAN（规格 §1.4，不再是焦点状态词）').toBe('PLAN');
+      // 状态表达归页内焦点行（§1.4 表格末行）——状态没丢，只是换了装置
+      const focusRow = await p1!.$eval('.ap-declare__focus', (el) => el.textContent ?? '');
+      expect(focusRow, '当前主状态归页内焦点行陈述').toContain('当前主状态');
+      expect(p1Text, '状态仍在页内（执行状态字段行）').toContain('running');
       expect(p1Text).toContain('run_h4_001');
       expect(p1Text).toContain('第 2 次');
       for (const field of WRITEBACK_WRITABLE_FIELDS) {
@@ -690,9 +707,11 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
       // 白名单恰好四项（ol 四行，不多不少）
       const wlCount = await p1!.$$eval('.ap-whitelist__item', (els) => els.length);
       expect(wlCount, '写回白名单仅四项').toBe(4);
-      // 巨字颜色 = 近黑（running = 系统推进/当前主状态，非橙）
+      // 巨字颜色 = 身份色 accent（参考稿页顶 AGENT 为橙；品牌装置不随状态变，
+      // 故不再有「running ⇒ 近黑」的分支）。期望值取自 palette，单一真值源。
       const giantColor = await p1!.$eval('.ap-giant__word', (el) => getComputedStyle(el).color);
-      expect(giantColor, 'running 巨字应为近黑（当前主状态）').toBe('rgb(10, 10, 10)');
+      expect(giantColor, '页顶巨字 = accent（品牌装置，不随状态变）').toBe(hexRgb(baseline.accent));
+      expect(giantColor, '巨字不应再是墨色近黑').not.toBe('rgb(10, 10, 10)');
 
       // ③ P3：五态 + confidence 列 + 白名单 + 只读注 + 提案四行
       const p3 = await page.$('[data-print-page="writeback-proposals"]');
@@ -746,6 +765,149 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
       // 纸面仍是灰白底（paper 不开槽位，H 的身份）
       const paper = await page.$eval('.a4-page', (el) => getComputedStyle(el).backgroundColor);
       expect(paper).toBe('rgb(245, 245, 245)');
+    } finally {
+      await page.close();
+    }
+  });
+
+  /**
+   * B1/B3 · 页级出血巨字（规格 §1.1 B1/B3 + §1.4 载荷拍板 + P0-18）。
+   *
+   * ── 数值权威：参考原稿 PNG 的像素复核（本次实测，非转述）──
+   * 原稿 1588×2246 ⇒ ×0.5 折算回 794×1123 CSS px：
+   *   页顶巨字  墨迹左缘 x=18、顶缘 y=11、底缘 y=137
+   *   页底巨字  墨迹左缘 x=24、顶缘 y=1023.5、底缘 y=1113
+   *   纸底 #DEDDD4（85.7% 面积）、橙 #E2522B（10.7% 面积）
+   *
+   * ── 两个口径一起断（这是本 spec 的关键设计）──
+   * 原稿两块巨字的**墨迹都没有真的被切**（第 0 行与末行均无墨）——所谓
+   * 「被页顶/页底裁切」的本体是**行盒**越出纸缘：.ap-giant__word 的 top < 0、
+   * .ap-footword__word 的 bottom > 1123；墨迹停在离纸缘约 11px 处，视觉即出血。
+   * 故分两层断言：装置（.ap-giant / .ap-footword）贴纸缘；行盒越出纸缘。
+   * 规格 §1.1 B1 / P0-18 写的「从 x=0 起 / left ≤ 0」指**装置**（x=0 成立）；
+   * 墨迹左缘 18px 是原稿实测值（附录速查表）——两者不矛盾，别把装置当文字盒。
+   *
+   * ── 载荷纪律（§1.4 规则 1-6）──
+   * 页顶 = 品牌词（默认 PLAN，可自定义、恒大写、超长截断）；页底 = 固定 IDPLAN，
+   * **不随自定义变**（规则 5）。
+   */
+  it('B1/B3 · 页级出血巨字：页顶 = 品牌词 / 页底 = 固定 IDPLAN（真 Chromium 几何自证 + 截图）', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
+    const dir = join(OUT_DIR, 'h-giant-2026-10-11');
+    mkdirSync(dir, { recursive: true });
+
+    /** 量一张纸上两块巨字（坐标relative 纸面左上角，CSS px） */
+    const measure = (el: Element) => {
+      const pg = el.getBoundingClientRect();
+      const box = (sel: string) => {
+        const t = el.querySelector(sel) as HTMLElement | null;
+        if (!t) return null;
+        const r = t.getBoundingClientRect();
+        const s = getComputedStyle(t);
+        return {
+          top: +(r.top - pg.top).toFixed(2),
+          left: +(r.left - pg.left).toFixed(2),
+          right: +(r.right - pg.left).toFixed(2),
+          bottom: +(r.bottom - pg.top).toFixed(2),
+          text: (t.textContent ?? '').trim(),
+          tt: s.textTransform,
+          color: s.color,
+          fs: s.fontSize,
+          tier: (t.closest('[data-tier]') as HTMLElement | null)?.dataset.tier ?? null,
+        };
+      };
+      return {
+        page: { w: +pg.width.toFixed(2), h: +pg.height.toFixed(2) },
+        giant: box('.ap-giant'),
+        word: box('.ap-giant__word'),
+        foot: box('.ap-footword'),
+        footWord: box('.ap-footword__word'),
+      };
+    };
+
+    /** 载入一版纸面（同一 page 复用，只换 HTML） */
+    const open = async (file: string, markup: string): Promise<void> => {
+      await page.goto('file://' + writeHtml(file, shell(markup, css, false)));
+    };
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      // ── ① 默认品牌词（不传 brandWord ⇒ 回落 PLAN）──
+      await open(
+        'h-giant-default.html',
+        renderToStaticMarkup(createElement(AgentPosterDocument, { vm, palette: baseline })),
+      );
+      const p1 = (await page.$('[data-print-page="agent-declaration"]'))!;
+      const m = await p1.evaluate(measure);
+
+      // 装置贴纸缘：出血的「画布」就是整张纸
+      expect(m.giant!.top, '巨字装置贴纸顶').toBeLessThanOrEqual(1);
+      expect(m.giant!.left, '巨字装置从纸面 x=0 起（越出 44px 内容框）').toBeLessThanOrEqual(0);
+      expect(m.giant!.right, '巨字装置满宽（右缘贴纸缘）').toBeGreaterThanOrEqual(790);
+      // 行盒越出纸顶 ⇒ 被纸缘裁切（P0-18 的 DOM 判据）
+      expect(m.word!.top, '巨字行盒须越出纸顶（出血）').toBeLessThan(0);
+      // 墨迹级贴边：行盒左缘 = 墨迹左缘 18px − 该字号左侧边距 ⇒ 必落在 [0, 20)
+      expect(m.word!.left, '巨字应贴纸左缘（墨迹左缘 ≈18px，原稿实测）').toBeGreaterThanOrEqual(0);
+      expect(m.word!.left, '巨字不得被推进内容框（44px）').toBeLessThan(20);
+      expect(m.word!.text, '页顶巨字载荷 = 默认品牌词 PLAN（§1.4 规则 1）').toBe('PLAN');
+      expect(m.word!.tt, '巨字恒大写（§1.4 规则 4）').toBe('uppercase');
+      expect(m.word!.color, '页顶巨字取身份色 accent').toBe(hexRgb(baseline.accent));
+
+      // 页底：装置贴纸底、行盒越出纸底（被裁），词固定
+      expect(m.foot!.bottom, '页底巨字装置贴纸底').toBeGreaterThanOrEqual(1120);
+      expect(m.footWord!.bottom, '页底巨字行盒须越出纸底（出血）').toBeGreaterThan(1123);
+      expect(m.footWord!.text, '页底巨字 = 固定品牌装置 IDPLAN').toBe('IDPLAN');
+      expect(m.footWord!.tt).toBe('uppercase');
+      expect(m.footWord!.color, '页底巨字同为身份色').toBe(hexRgb(baseline.accent));
+
+      await p1.screenshot({ path: join(dir, 'h-p1-after.png') });
+
+      // 页顶巨字只在 P1（页锚点装置原址）；页底是纸级品牌装置，三页同构
+      const p2 = (await page.$('[data-print-page="execution-status"]'))!;
+      expect(await p2.$('.ap-giant__word'), '页顶巨字只出在 P1').toBeNull();
+      expect(await p2.$('.ap-footword__word'), '页底品牌装置三页同构').not.toBeNull();
+
+      // ── ② 自定义品牌词：页顶跟着变，页底**不跟着变**（§1.4 规则 5）──
+      await open(
+        'h-giant-custom.html',
+        renderToStaticMarkup(
+          createElement(AgentPosterDocument, { vm, palette: baseline, brandWord: '云栖茶室' }),
+        ),
+      );
+      const p1b = (await page.$('[data-print-page="agent-declaration"]'))!;
+      const m2 = await p1b.evaluate(measure);
+      expect(m2.word!.text, '页顶巨字 = 自定义品牌词').toBe('云栖茶室');
+      expect(m2.word!.top, '换词后仍出血').toBeLessThan(0);
+      expect(m2.word!.right, '4 个汉字仍须在纸宽内').toBeLessThanOrEqual(794);
+      expect(m2.footWord!.text, '页底 IDPLAN 不随自定义变（§1.4 规则 5）').toBe('IDPLAN');
+      await p1b.screenshot({ path: join(dir, 'h-p1-custom.png') });
+
+      // ── ③ 超上限长词：渲染口再截断一次 + 降档后仍不撑破纸面（规则 3/6）──
+      await open(
+        'h-giant-long.html',
+        renderToStaticMarkup(
+          createElement(AgentPosterDocument, {
+            vm,
+            palette: baseline,
+            brandWord: '云栖·湖畔茶室综合改造项目A', // 14 字符 > 上限 12
+          }),
+        ),
+      );
+      const p1c = (await page.$('[data-print-page="agent-declaration"]'))!;
+      const m3 = await p1c.evaluate(measure);
+      expect(m3.word!.text, '超上限词在渲染口被截断到 12 字符').toBe('云栖·湖畔茶室综合改造项');
+      expect(m3.word!.tier, '长词降到地板档 sm').toBe('sm');
+      expect(m3.word!.right, '地板档仍须在纸宽内').toBeLessThanOrEqual(794);
+      await p1c.screenshot({ path: join(dir, 'h-p1-long.png') });
+
+      console.log(
+        `[H 巨字实测] 默认 left=${m.word!.left} right=${m.word!.right} fs=${m.word!.fs}` +
+          `(${m.word!.tier}) 越顶=${m.word!.top}｜页底 left=${m.footWord!.left}` +
+          ` right=${m.footWord!.right} 越底=${m.footWord!.bottom}｜` +
+          `自定义 right=${m2.word!.right}(${m2.word!.tier})｜长词 right=${m3.word!.right}(${m3.word!.tier})`,
+      );
     } finally {
       await page.close();
     }
