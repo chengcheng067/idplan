@@ -430,7 +430,9 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
       expect(rules.length, '三页都应有栏头规则线').toBeGreaterThan(0);
       for (const r of rules) {
         expect(r.h, '分组线 3px（参考稿实测 y404.5..407）').toBe('3px');
-        expect(r.bg, `分组线不许中灰（tone=${r.tone}）`).not.toBe('rgb(191, 191, 191)');
+        // 中灰 = line 槽（2026-10-11 P1-3 起为参考稿实测 #91918A）——从 palette 取，
+        // 不抄色值：分组线一旦用上「线色槽」就已经退化成中灰承担分组职责。
+        expect(r.bg, `分组线不许中灰/线色（tone=${r.tone}）`).not.toBe(hexRgb(BASELINE.line));
       }
       expect(rules.some((r) => r.bg === hexRgb(BASELINE.accent) && r.tone === 'gate'), 'gate 组线走 accent').toBe(true);
       expect(rules.some((r) => r.bg === 'rgb(10, 10, 10)' && r.tone === 'ink'), 'ink 组线走墨').toBe(true);

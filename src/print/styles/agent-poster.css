@@ -22,21 +22,30 @@
  *       ⚠️ 本文件的值是**设计师基线默认**；渲染时由 `.print-root` 上的 inline
  *       `--tpl-accent`（palette.accent）覆盖（AgentPosterDocument.tsx），真值源是
  *       print-palette.ts 的 AGENT_POSTER_PALETTE.baseline，两处必须同值。
- *   --tpl-line   #BFBFBF 发丝线（槽位）—— A4：**值不动，分工收紧**
- *       只作「块下 / 页眉下 1px 发丝线」；**分组线（3px）走 --tpl-ink 或
- *       --tpl-accent**，不许用中灰承担分组职责（审计 §1.4 ③）。
+ *   --tpl-line   #91918A 发丝线（槽位）—— **值取自参考稿实测**（2026-10-11 P1-3 复核）
+ *       只作 **1px 分隔**，两种形态：① **块底分隔线**（`.ap-block` 的 border-bottom，
+ *       **每栏各一条**：左栏 340px / 右栏 336px；栏内相邻块之间它就是「行间分隔」，
+ *       参考稿同一像素行上两栏同高对齐 ⇒ 该行覆盖比 = (340+336)/794 = **0.851**，
+ *       与参考稿实测的 0.851 逐位吻合）；② **内容框全宽线**两条（`.ap-head__rule`
+ *       与 `.ap-notes` 的上边，各 706px）。**分组线（3px）不在此列**——走
+ *       --tpl-ink 或 --tpl-accent，不许用中灰承担分组职责（审计 §1.4 ③）。
  *
- * ── 闸门与**登记偏离**（规格 P0-17 裁决，2026-10-11）──
- * H 是四套里唯一「参考稿自测值本身过不了闸门」的一套：纸底 #DEDDD4 一压深，
- * accent **2.812**（<3）、line **1.348**（<1.5）双双跌破（ink 14.518 仍过）。
+ * ── 闸门与**登记偏离**（规格 P0-17 裁决；2026-10-11 P1-3 复核后偏离只剩一条）──
+ * H 的纸底 #DEDDD4 一压深，accent **2.812**（<3）跌破闸门，而 line **不跌破**：
+ *   · ink    #0A0A0A vs paper = 14.518（✅）
+ *   · accent #E2522B vs paper = 2.812（❌）
+ *   · line   **#91918A** vs paper = **2.3258**（✅，余量 55%）
  * 裁决 = **忠于参考稿 + 显式登记偏离**，分界是「**闸门管用户自定义配色，不管
  * 设计师基线**」：
- *   · **基线**照参考稿写死（#DEDDD4 / #E2522B / #BFBFBF），
+ *   · **基线**照参考稿写死（#DEDDD4 / #E2522B / #91918A），
  *     `checkPrintPalette('agent-poster', baseline).ok === false` 是**故意的**——
+ *     失败对只有「状态色 vs 纸底」一条（accent 是身份色，改它=改模板身份）。
  *     print-palette.ts 有实测登记，tests/print-palette.spec.ts ①c 钉住比值。
  *     **不许把它"修"成能过闸的值**（同 D 基线 line #C9C9C9 的先例）。
- *   · **用户可选的四个预设全部过闸**（预设共享线 #B4B4B4 / signal-orange
- *     accent #DA4B21）。
+ *   · **line 不登记偏离**：参考稿自己的发丝线取色实测 = #91918A（全像素扫描：
+ *     旧写法 #BFBFBF 在参考稿里 **0 处命中**），且本身即过闸 ⇒ 无例外。
+ *   · **用户可选的四个预设全部过闸，且线色与基线同值**（#91918A）；
+ *     仅 signal-orange 的 accent 取 #DA4B21（3.074 ✅，最小位移解）。
  *
  * ── 实底标签的文字色为什么是墨不是白（本批决定，带算式）──
  * 实底标签（.ap-block__tag）两档：gate = accent 实底、其余 = ink 实底。
@@ -68,7 +77,7 @@
   --ap-paper: #deddd4;
   --tpl-accent: #e2522b;
   --tpl-ink: #0a0a0a;
-  --tpl-line: #bfbfbf;
+  --tpl-line: #91918a;
   /* 字体三族（栈内离线回落，不强拉网络字体） */
   --ap-font-cn: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif;
   --ap-font-en: 'IBM Plex Sans Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
@@ -356,7 +365,16 @@
 
 /* ── 双栏 + 局部橙中轴（规格 §1.1 C1：x396.5、2px、橙；只在栏区贯穿）──
  * 栏宽取自参考稿实测：左 x40..380（340）、右 x418..754（336）、栏间 38。
- * 任务页是 4 组 2×2 ⇒ 同一套列宽自然换行（row-gap 18）。 */
+ * 任务页是 4 组 2×2 ⇒ 同一套列宽自然换行（row-gap 18）。
+ *
+ * ⚠️ **已知待裁的 8px 溢出（2026-10-11 P1-3 量出，未自作主张改）**：三轨合计
+ * 340+38+336 = **714**，是参考稿的绝对坐标（内容区 x40..754）；本版 `--ap-pad-x`
+ * 取 44 ⇒ 内容框只有 **706**（794 − 88）。实测：右栏右缘落在页面 x1001，比内容框
+ * 右缘（x993）**多出 8px**——于是右栏的块底分隔线比 `.ap-head__rule` /
+ * `.ap-notes` 这类全宽件长 8px（36px 出血 vs 44px 内缩）。参考稿的内缩是 40
+ * （橙色通栏线实测 x40..754），故**正解很可能是 `--ap-pad-x: 44 → 40`**（三轨恰好
+ * 落满内容框，轴心 x396 也与参考稿 x396.5 对齐）；改前先报 team-lead 定夺——
+ * 它同时影响页眉/logo 行/主体的横向内缩，属版面级改动，要重拍截图。 */
 .print-root.print-template-agent-poster .ap-cols {
   position: relative;
   display: grid;
@@ -444,7 +462,9 @@
   opacity: 0.66;
 }
 
-/* ── 块：标题 + 实底状态标签（错落）+ 一行 meta；块下 1px 发丝线 ── */
+/* ── 块：标题 + 实底状态标签（错落）+ 一行 meta ──
+ * 块底 1px 线 = 栏内**行间分隔线**（每栏各一条，左 340 / 右 336；两栏同高对齐
+ * 时同一像素行的覆盖比 = (340+336)/794 = 0.851，与参考稿实测逐位吻合）。 */
 .print-root.print-template-agent-poster .ap-col__rows {
   display: flex;
   flex-direction: column;
