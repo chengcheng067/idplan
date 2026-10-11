@@ -196,10 +196,19 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   /** <xl 时强制收起（R13：xl 以下强制折叠，忽略持久值，但不污染持久值本身） */
   const collapsed = xl ? !sidebarExpanded : true;
 
+  /**
+   * 折叠态**无条件同步**到 `<html data-sidebar-collapsed>`（CSS 侧唯一宽度真值源）。
+   *
+   * ⚠️ 这里曾经是 `if (xl) return;` —— 只在 <xl 写属性，回到 ≥xl 就什么都不写。
+   * 那会变成**两条口径打架**：React 侧 `collapsed`（上一行）在回到 ≥xl 后按持久值
+   * 渲染「展开内容」，而 DOM 属性**停在** <xl 时写下的 `'true'` ⇒ CSS 走
+   * `html[data-sidebar-collapsed='false']` 之外的分支，栏宽被锁在 64px，
+   * 于是 240px 的内容挤进 64px 的盒子。**拉窄到 <1280 再拉回即复现。**
+   * 现在两边共用同一个派生值 `collapsed`，DOM 属性退化为它的纯函数输出。
+   */
   useEffect(() => {
-    if (xl) return;
-    document.documentElement.dataset.sidebarCollapsed = 'true';
-  }, [xl]);
+    document.documentElement.dataset.sidebarCollapsed = collapsed ? 'true' : 'false';
+  }, [collapsed]);
 
   /** 换页时自动收起抽屉（<1280），否则点导航跳转后抽屉仍盖在新页面上 */
   useEffect(() => {
