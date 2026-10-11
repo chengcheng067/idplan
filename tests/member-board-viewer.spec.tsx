@@ -601,6 +601,68 @@ describe('成员身份：看不到别人的看板（隐私边界，不是功能�
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════
+ * ②-ter 冷载深链的就绪门（0.9.x）——「装载中不许下判决」的**完整时序**验证
+ *
+ * 病灶：冷载 `?member=<id>` 首帧 members 还没读进来 ⇒ isAdmin=false ⇒ 判 denied ⇒
+ * `<Navigate replace>` **把参数静默剥掉**，落地成「看自己」。上面那条用例 seed 的是
+ * `hydrated: true`（就绪态），**永远走不到这个时序**——所以必须在同一棵树里把
+ * 「装载中 → 就绪」两步都演一遍（这正是真机冷载发生的事）。
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+describe('冷载深链 ?member= 必须等数据装载完成再判决（就绪门）', () => {
+  /*
+    ⚠️ 忠实时序：冷载首帧的真实形态是 **members 尚未读入**（不是「已读入但 hydrated=false」
+    ——那样 isAdmin 一上来就是 true，测不到病灶）。故初始态显式 `setAll([])`，就绪时再
+    按 `bootstrapAllStores` 的真实次序（`setAll(members)` 先于 `hydrate()`）补齐。
+  */
+  it('★ 装载中（members 未读入）不判决：参数原样 + 占位；就绪后成员身份 ⇒ 仍 denied', () => {
+    seedStores({ currentMemberId: PCY_ID, hydrated: false });
+    const f = buildFixtures();
+    act(() => {
+      useMembersStore.getState().setAll([]);
+      useSettingsStore.setState({ hydrateError: null });
+    });
+    const { host, location } = renderAt(`/member-board?member=${ADMIN_ID}`);
+
+    // ① 装载中：不剥参数、渲染占位（修复前这一步已被 replace 成 /member-board）
+    expect(location(), '装载中不得剥参数').toBe(`/member-board?member=${ADMIN_ID}`);
+    expect(textOf(host), '装载中应渲染就绪占位').toContain('正在装载本地数据');
+    expect(textOf(host), '装载中不得渲染别人看板的标题').not.toContain('齐活林 的项目看板');
+
+    // ② 就绪（成员身份 + 别人的 id）⇒ 仍然 denied：剥回无参，回她自己的板
+    act(() => {
+      useMembersStore.getState().setAll(f.members);
+      useSettingsStore.setState({ hydrated: true });
+    });
+    expect(location(), '就绪后隐私边界照旧：剥掉参数').toBe('/member-board');
+    expect(textOf(host)).toContain('项目看板');
+    expect(textOf(host)).toContain('仅显示与我相关的项目');
+    expect(textOf(host)).not.toContain('齐活林 的项目看板');
+  });
+
+  it('★ 管理员：装载中间态不得吃掉深链，就绪后落到该成员', () => {
+    seedStores({ currentMemberId: ADMIN_ID, hydrated: false });
+    const f = buildFixtures();
+    act(() => {
+      useMembersStore.getState().setAll([]);
+      useSettingsStore.setState({ hydrateError: null });
+    });
+    const { host, location } = renderAt(`/member-board?member=${PCY_ID}`);
+
+    expect(location(), '装载中不得剥参数（修复前这里已被剥成无参 ⇒ 深链丢失）').toBe(
+      `/member-board?member=${PCY_ID}`,
+    );
+
+    act(() => {
+      useMembersStore.getState().setAll(f.members);
+      useSettingsStore.setState({ hydrated: true });
+    });
+    expect(location(), '就绪后参数仍在（深链不丢目标）').toBe(`/member-board?member=${PCY_ID}`);
+    expect(textOf(host)).toContain('朴彩英 的项目看板');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
  * ②-bis 首页搜索 → 点成员 → 跳转（管理员）
  * ══════════════════════════════════════════════════════════════════════════════ */
 
