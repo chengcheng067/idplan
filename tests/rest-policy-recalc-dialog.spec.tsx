@@ -45,7 +45,12 @@ const h = vi.hoisted(() => {
   const stageLogs: Array<Record<string, unknown>> = [];
   const settingsSets: Array<[string, unknown]> = [];
   const rescheduleCalls: Array<{ id: string; startAt: string; endAt: string }> = [];
-  return { stages, projects, tasks, stageLogs, settingsSets, rescheduleCalls };
+  /**
+   * F1-④ 用：这些 stageId 的写入会**抛错**（模拟「部分写入失败」）。
+   * 默认空集 ⇒ 既有用例行为零变化。
+   */
+  const failStageWrites = new Set<string>();
+  return { stages, projects, tasks, stageLogs, settingsSets, rescheduleCalls, failStageWrites };
 });
 
 vi.mock('../src/hooks/useRepos', () => ({
@@ -59,6 +64,8 @@ vi.mock('../src/hooks/useRepos', () => ({
     stages: {
       get: async (id: string) => h.stages.get(id) ?? null,
       reschedule: async (id: string, startAt: string, endAt: string, status?: StageStatus) => {
+        // F1-④：可注入的写入失败（逐条失败不中断 —— applyRestPolicyRecalc 的既有语义）
+        if (h.failStageWrites.has(id)) throw new Error('probe: 写入失败');
         const prev = h.stages.get(id)!;
         const next: Stage = {
           ...prev,
@@ -206,6 +213,27 @@ function render(draft: RestPolicyConfig = SINGLE): void {
   });
 }
 
+/**
+ * F1-④ 专用：复刻外层 `RestPolicyDialog` 的真实接线 —— `oldPolicy` **取自 store**
+ * （`savedEffective`）。用常量 props 渲染是测不出「弹窗自己把旧制度改掉」这个耦合的。
+ */
+function renderLive(draft: RestPolicyConfig = SINGLE): void {
+  function LiveOldPolicyHarness(): JSX.Element {
+    const liveOldPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
+    return (
+      <RestPolicyRecalcDialog
+        draft={draft}
+        oldPolicy={liveOldPolicy}
+        onClose={onClose}
+        onConfirmed={onConfirmed}
+      />
+    );
+  }
+  act(() => {
+    root.render(<LiveOldPolicyHarness />);
+  });
+}
+
 function clickText(text: string): HTMLButtonElement {
   const btn = Array.from(document.body.querySelectorAll('button')).find((b) =>
     b.textContent?.includes(text),
@@ -232,6 +260,7 @@ beforeEach(() => {
   h.stageLogs.length = 0;
   h.settingsSets.length = 0;
   h.rescheduleCalls.length = 0;
+  h.failStageWrites.clear();
   onClose.mockClear();
   onConfirmed.mockClear();
 
@@ -441,6 +470,86 @@ describe('确认应用：制度落库 + 逐阶段留痕（预览与应用同一�
     expect(s2call.endAt).toBe('2026-09-14T23:59:59.000Z');
     expect(s3call.startAt).toBe('2026-09-15T00:00:00.000Z');
     expect(s3call.endAt).toBe('2026-09-19T23:59:59.000Z');
+  });
+
+  /*
+    ══════════════════════ F1-④ 旧制度快照（审计） ══════════════════════
+
+    缺陷原文：外层 `RestPolicyDialog` 传的是 `oldPolicy={savedEffective}`
+    （每次渲染从 store 现取），而 `onConfirm` 第一步就把 store 的生效制度改成新制度
+    ⇒ 弹窗重渲染时 oldPolicy 已经等于 newPolicy ⇒ `plan.hasChanges === false`
+    ⇒ `confirmDisabled` 恒为 true。偏偏**部分写入失败**时弹窗故意不关（要让用户看到
+    「N 条写入失败，请重试」）——于是提示让他重试，按钮却永远灰着，半迁移彻底卡死。
+
+    下面用 `LiveOldPolicyHarness` 复刻外层的真实接线（oldPolicy 取自 store），
+    所以才测得出这个耦合；直接给常量 props 是测不出来的。
+  */
+  it('F1-④ 部分写入失败后：预览行逐字节不变、按钮还能点、重试写的就是用户批准的那份', async () => {
+    /*
+      本用例**自带夹具**（不动共享夹具，避免牵动上面全部既有断言的日期算术）：
+        S1 09-07~09-11  →  S2 09-23~09-25（刻意留大间隙）  →  S3 09-28~09-30
+      为什么必须留间隙：链式推算 chainSteps(prevEnd, thisStart, oldPolicy) 是按
+      **旧制度**数工作日的（双休 09-11→09-23 = 8 步、单休 = 10 步）。只有这种形状，
+      「旧制度有没有被快照化」才会体现在 S2 的**新区间**上 —— 否则两种旧制度算出同一个
+      结果，测出来的是巧合，不是契约。
+    */
+    const s1 = stage('stg_snap_1', WD_PROJECT.id, 1, '2026-09-07', '2026-09-11');
+    const s2 = stage('stg_snap_2', WD_PROJECT.id, 2, '2026-09-23', '2026-09-25');
+    const s3 = stage('stg_snap_3', WD_PROJECT.id, 3, '2026-09-28', '2026-09-30');
+    act(() => {
+      useProjectsStore.getState().replaceAll({
+        projects: [WD_PROJECT],
+        stages: [s1, s2, s3],
+        tasks: [],
+      });
+    });
+    h.stages.clear();
+    h.stages.set(s1.id, s1);
+    h.stages.set(s2.id, s2);
+    h.stages.set(s3.id, s3);
+    h.failStageWrites.add(s2.id); // 只让 S2 那条写失败
+
+    renderLive();
+    act(() => {
+      clickText('工作日制项目').click(); // 默认收起 → 展开逐阶段对照表
+    });
+    const rowText = (): string =>
+      document.body.querySelector('[data-testid="recalc-stage-stg_snap_2"]')!.textContent ?? '';
+    const approvedPreview = rowText();
+    const ranges = approvedPreview.match(/\d{4}-\d{2}-\d{2} ~ \d{4}-\d{2}-\d{2}/g) ?? [];
+    expect(ranges, '展开行应有 before→after 两段日期').toHaveLength(2);
+    const approvedNewDates = ranges[1]!;
+
+    const confirm = (): HTMLButtonElement => clickText('确认重算并保存制度') as HTMLButtonElement;
+    expect(confirm().disabled).toBe(false);
+    await act(async () => {
+      confirm().click();
+    });
+
+    // 制度已落库、S2 写入失败 ⇒ 弹窗不关（用户必须看得到「N 条写入失败，请重试」）
+    expect(onConfirmed).not.toHaveBeenCalled();
+    expect(h.settingsSets.map(([k]) => k)).toContain('restPolicy');
+    expect(
+      useSettingsStore.getState().restPolicy.kind,
+      '弹窗自己把 store 的生效制度改成了新制度 —— 旧制度必须靠快照才守得住',
+    ).toBe(RestPolicyKind.SingleOff);
+
+    // ★ 缺陷点（修复前）：预览行会跟着 store 一起变，用户看到的 after 列自己改了；
+    //   更糟的形状下 plan 直接算成零变化 ⇒ 确认按钮灰死、toast 里的「请重试」点不动。
+    expect(rowText(), '预览行必须逐字节不变').toBe(approvedPreview);
+    expect(confirm().disabled, '失败后必须还能重试').toBe(false);
+
+    // 重试真的兑现：修好写入 → 再次确认 → 写进去的正是预览里那一行
+    h.failStageWrites.clear();
+    await act(async () => {
+      confirm().click();
+    });
+    expect(onConfirmed).toHaveBeenCalledTimes(1);
+    const retried = h.rescheduleCalls.filter((c) => c.id === s2.id);
+    expect(retried, 'S2 的写入补上了').toHaveLength(1);
+    const [expStart, expEnd] = approvedNewDates.split(' ~ ');
+    expect(retried[0]!.startAt.startsWith(expStart!)).toBe(true);
+    expect(retried[0]!.endAt.startsWith(expEnd!)).toBe(true);
   });
 
   it('取消 → 零写入 + onClose', () => {

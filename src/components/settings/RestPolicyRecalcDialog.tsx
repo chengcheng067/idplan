@@ -135,7 +135,11 @@ const STATUS_LABELS: Record<StageStatus, string> = {
 export interface RestPolicyRecalcDialogProps {
   /** 新制度草稿（用户已选、尚未落库） */
   draft: RestPolicyConfig;
-  /** 旧制度（生效口径：store.effectiveRestPolicy，已合并节假日） */
+  /**
+   * 旧制度（生效口径：store.effectiveRestPolicy，已合并节假日）。
+   * ★ **只在弹窗打开时读一次**（见下方 `oldPolicyAtOpen`）——外层传进来的值会随
+   *   store 变化，本弹窗不接受「跟着变」的旧制度（审计 F1-④）。
+   */
   oldPolicy: RestPolicyConfig;
   /** 取消：不保存制度、不重算 */
   onClose(): void;
@@ -150,6 +154,26 @@ export function RestPolicyRecalcDialog({
   onConfirmed,
 }: RestPolicyRecalcDialogProps): JSX.Element {
   const repos = useRepos();
+  /**
+   * ★ 旧制度快照（审计 F1-④）：**挂载时取一次**，此后不再跟随 store 变化。
+   *
+   * 缺陷原文：这里直接用 props.oldPolicy，而外层传的是 `savedEffective`
+   * （每次渲染从 `useSettingsStore` 现取）。而 `onConfirm` 的第一步就是
+   * `repos.settings.set('restPolicy', draft)` + `setRestPolicy(draft)` ——
+   * **弹窗自己把 oldPolicy 改成了 newPolicy**，于是：
+   *   · 重渲染后 `plan = planRestPolicyRecalc({oldPolicy: new, newPolicy: new})`
+   *     ⇒ `hasChanges === false` ⇒ `confirmDisabled` 恒为 true；
+   *   · 而部分写入失败（`result.failed > 0`）时弹窗**故意不关**
+   *     （否则用户看不到「N 条写入失败，请重试」）—— 结果就是：提示让他重试，
+   *     重试按钮却永远灰着，且预览表整片变成「无变化」。半迁移状态彻底卡死，
+   *     用户只能重开设置重选一次制度（那时 oldPolicy 已是新制度，
+   *     真正的旧→新 diff 再也算不出来，剩余阶段永久留在旧口径上）。
+   *
+   * 快照化后：确认 → 部分失败 → 预览与按钮都还在（plan 仍算出同样的变化）
+   * ⇒ 「重试」这句话是真的能兑现的。快照同时保证预览表、reason 文案里的
+   * 「旧制度」在确认前后逐字一致（不然用户会看到 before 列自己变了）。
+   */
+  const [oldPolicyAtOpen] = useState<RestPolicyConfig>(() => oldPolicy);
   // projects 走 visibility 漏斗（隔离纪律：store.projects 原始读只允许在
   // visibility.ts——公司级制度作用于人类侧项目）；stages/tasks 无 kind 字段，
   // 直读是设计认可口径（isolation-guard spec 注释明示）。
@@ -198,11 +222,11 @@ export function RestPolicyRecalcDialog({
     () =>
       planRestPolicyRecalc({
         projects: inputs,
-        oldPolicy,
+        oldPolicy: oldPolicyAtOpen,
         newPolicy,
         durationOverrides: mode === 'custom' ? overrides : undefined,
       }),
-    [inputs, oldPolicy, newPolicy, mode, overrides],
+    [inputs, oldPolicyAtOpen, newPolicy, mode, overrides],
   );
 
   const confirmDisabled = applying || !plan.hasChanges;
@@ -230,7 +254,7 @@ export function RestPolicyRecalcDialog({
       const result = await applyRestPolicyRecalc(plan, {
         repos,
         operatorName,
-        reason: restPolicyRecalcReason(oldPolicy, newPolicy),
+        reason: restPolicyRecalcReason(oldPolicyAtOpen, newPolicy),
         alignTaskDueDates: alignDue,
       });
       // store 镜像（铁律 11 的乐观更新位）
@@ -272,7 +296,7 @@ export function RestPolicyRecalcDialog({
             <div>
               <h2 className="font-display text-display-md text-ink">切换休息制度后重算</h2>
               <p className="mt-1 text-xs text-mist">
-                {REST_POLICY_LABELS[oldPolicy.kind]} →{' '}
+                {REST_POLICY_LABELS[oldPolicyAtOpen.kind]} →{' '}
                 <span className="text-ink">{REST_POLICY_LABELS[draft.kind]}</span>
                 {draft.kind === RestPolicyKind.SingleOff &&
                   `（单休休息日 = 周${WEEKDAY_LABELS[draft.singleRestWeekday ?? 6]}）`}
