@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { ProjectCard } from '../components/project/ProjectCard';
 import { StatCard } from '../components/project/StatCard';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
-import { DataGate } from '../components/layout/DataGate';
+import { DataGate, useDataReadiness } from '../components/layout/DataGate';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -94,6 +94,8 @@ export function MemberBoardPage(): JSX.Element {
   const members = useMembersStore((s) => s.members);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const { isAdmin, isMember } = useRoleGuard();
+  // 数据就绪态（唯一出口）：下方「就绪门」用它决定**能否**下 denied/missing 判决
+  const readiness = useDataReadiness();
   const selectedProjectId = useUiStore((s) => s.selectedProjectId);
   const setSelectedProjectId = useUiStore((s) => s.setSelectedProjectId);
   // 视图模式偏好（独立持久化键 idplan.memberBoardView，**不复用**管理员首页的 idplan.homeView）
@@ -110,6 +112,9 @@ export function MemberBoardPage(): JSX.Element {
      · 管理员 + ?member=朴彩英  → 看朴彩英的相关项目与任务（搜索框/成员面板点进来）；
      · 成员身份 + ?member=别人  → denied ⇒ 下方 `<Navigate>` 剥掉参数回她自己（隐私边界）；
      · 管理员 + ?member=不存在  → missing ⇒ 显式空态（不静默回落成看自己）。
+
+    ⚠️ 这三条判决**必须等数据装载完成**再下（`readiness === 'ready'`），见下方「就绪门」注释：
+    冷载首帧 members 还是空的 ⇒ `isAdmin=false` ⇒ 会把**管理员的深链误判成 denied 并剥掉参数**。
 
     为什么用 URL 参数而不是给 useUiStore 加「当前查看的成员」：深链可分享、
     刷新/返回键行为自然，且瞬态 store 一刷新就错——那是把导航目标当成 UI 状态。
@@ -237,10 +242,39 @@ export function MemberBoardPage(): JSX.Element {
   const isCalendar = memberBoardView === 'calendar';
 
   /*
+    ★ 就绪门（0.9.x · 反馈「深链/刷新进来看到的是自己的板，不是链接里那个成员」）。
+
+    病灶（真机实测）：冷载带 `?member=<id>` 时，首帧 members 尚未读入（IndexedDB 异步装载），
+    于是 `isAdmin === false` ⇒ `resolveMemberBoardSubject` 判 **denied** ⇒ 下方
+    `<Navigate to="/member-board" replace />` **把参数静默剥掉**，落地成「看自己」。
+    即：**一个可分享的深链会静默丢掉目标**，而且不报错、无异常——正是要杀的那类
+    「静默错误状态」。管理员自己点进成员看板（客户端路由）不受影响，只有深链/刷新中招。
+
+    修法（**不是**放宽 denied）：**在数据装载完成前不下这两条判决**。判据用
+    `useDataReadiness()`（本仓就绪态唯一出口，勿自行拼 hydrated/hydrateError）；
+    装载完成的定义有本仓既有保证：`bootstrapAllStores` 内 `setAll(members)` **先于**
+    `hydrate()`（见 useRepos.ts 与 useFirstRunGate 的「时序保证」注释）⇒
+    `readiness === 'ready'` 时 members 必已就绪，isAdmin 判定才可信。
+    装载中/失败时这里渲染占位（`<DataGate>` 的 loading/failed 两档），URL 原样保留，
+    等就绪后按真实角色重判——三条隐私语义一条没松：
+      · 成员身份 + ?member=别人 ⇒ 就绪后仍 denied（剥参数回她自己）；
+      · 管理员 + 存在的 id     ⇒ 就绪后 member（深链/刷新都落到该成员）；
+      · 管理员 + 不存在的 id   ⇒ 就绪后 missing（显式空态，不静默回落看自己）。
+  */
+  if (readiness !== 'ready' && (subject.kind === 'denied' || subject.kind === 'missing')) {
+    return (
+      <div className="flex flex-col gap-4 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
+        <DataGate>{null}</DataGate>
+      </div>
+    );
+  }
+
+  /*
     两个「到此为止」分支放在**所有 hook 之后**（hook 顺序铁律），语义见
     `resolveMemberBoardSubject` 的注释：
       · denied（成员身份带 ?member=）→ 剥掉参数回她自己，**不展示别人的任何数据**；
       · missing（管理员深链到已删除的成员）→ 显式空态，不静默回落成看自己。
+    ⚠️ 两条都必须等 `readiness === 'ready'`（见上方就绪门），否则会把管理员的深链误判成 denied。
   */
   if (subject.kind === 'denied') {
     return <Navigate to="/member-board" replace />;
