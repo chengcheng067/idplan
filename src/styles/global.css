@@ -577,12 +577,28 @@
   /* ---------------- Soft UI 全局手感兜底（第 2 阶段） ----------------
      全库 48 个组件文件不可能逐个手改，这里在 base 层给所有可交互元素补上
      Cloud Float / Pillow Press / Halo Focus 的默认行为。
-     全部用 :where() 把特异性压到 0 —— 任何组件自己的 Tailwind utility
-     或 .soft-* 类都能随时覆盖，不会打架。 */
+     用 :where() 把特异性压到最低 —— 组件自己的 Tailwind utility
+     或 .soft-* 类都能随时覆盖，不会打架。
+     ⚠️ 唯一例外是第 1 条 Halo Focus：它必须比 `shadow-*`/`.glass-*` 高一级
+     （理由与实测见该条注释），除此之外都不许加特异性。 */
 
   /* 1. Halo Focus：键盘聚焦时的主色光晕，取代旧版 2px 硬描边。
-        叠加写法保留元素原有阴影，避免聚焦瞬间「塌陷」。 */
-  :where(*):focus-visible {
+        叠加写法保留元素原有阴影，避免聚焦瞬间「塌陷」。
+
+     ⚠️ 选择器**必须带 `:root` 前缀**（特异性 0,2,0），不能用裸 `:where(*):focus-visible`
+     （0,1,0）——后者会被任何 `shadow-*` utility（0,1,0，且在产物里更靠后）以及
+     `.glass-*`（0,1,0 的 unlayered 类）整类覆盖，于是「带阴影的可交互元素」聚焦时
+     既没有光晕（box-shadow 被覆盖）也没有浏览器默认描边（本规则已 outline:none）
+     ⇒ **零焦点指示**。真机实测（真 Chromium，等 --dur-base 过渡走完再读）：
+       · 无阴影按钮            → rgba(99,102,241,.32) 0 0 0 3px  ✅
+       · shadow-soft 的身份按钮 → 只剩 shadow-soft，无 3px 光晕     ❌（修前）
+     为什么提到 0,2,0 刚好够用、又不会越界：
+       · 压过 `shadow-*` / `glass-*`（0,1,0）⇒ 光晕回到所有可交互元素；
+       · 仍**低于** `focus-visible:ring-*`（0,2,0 且在产物里更靠后）⇒ 显式指定了
+         ring 的组件（如侧栏导航项、项目卡）观感一字不变；
+       · 与 `.soft-focus-halo:focus-visible`（0,2,0，unlayered 更靠后）同值不同源，
+         那条仍赢，优先顺序不变。 */
+  :root :where(*):focus-visible {
     outline: none;
     box-shadow: var(--focus-ring), var(--tw-shadow, 0 0 #0000);
   }
