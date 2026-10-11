@@ -127,7 +127,7 @@ export const PRINT_MODULES: ReadonlyArray<PrintModuleMeta> = [
   { id: 'stage-list', label: '阶段清单', hint: 'Stage 四态 / 日期 / 占比 / 负责人' },
   { id: 'task-list', label: '任务清单', hint: 'taskNo / 七态 / 负责人 / 产出物数' },
   { id: 'delay-ledger', label: '延期台账', hint: 'StageLog 改期 · 旧 / 新结束日 / 原因' },
-  { id: 'member-roster', label: '成员名册', hint: 'human / agent · 角色 · 负责任务数' },
+  { id: 'member-roster', label: '成员名册', hint: '角色 · 负责任务数' },
   { id: 'progress-matrix', label: '进度矩阵', hint: '阶段内任务完成度 / 日期 / 占比' },
   { id: 'dependency-network', label: '依赖网络', hint: 'dependsOn 有向图 · 环与缺失引用' },
   { id: 'workload-composition', label: '工作量构成', hint: 'ratioPercent 堆叠条 · 分期汇总' },
