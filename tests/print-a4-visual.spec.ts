@@ -358,6 +358,62 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
     }
   });
 
+  it('A 版板头完成度巨字（P0-3）：82px 定值 / 右对齐至内容框右缘 / 等宽数字', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const markup = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, {
+        vm,
+        palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+      }),
+    );
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      const htmlPath = writeHtml('a-masthead-anchor.html', shell(markup, css, false));
+      await page.goto('file://' + htmlPath);
+
+      // 坐标一律换算到「页内原点」（页左上为 0,0），免得受视口/外框影响
+      const m = await page.evaluate(() => {
+        const first = document.querySelector('.a4-page')!;
+        const pct = first.querySelector('.swiss-masthead__pct') as HTMLElement;
+        const anchor = first.querySelector('.swiss-masthead__anchor') as HTMLElement;
+        const rule = first.querySelector('.swiss-masthead__rule') as HTMLElement;
+        const cs = getComputedStyle(pct);
+        const pageX = first.getBoundingClientRect().x;
+        return {
+          text: pct.textContent ?? '',
+          fontSize: Number.parseFloat(cs.fontSize),
+          fontVariantNumeric: cs.fontVariantNumeric,
+          anchorTextAlign: getComputedStyle(anchor).textAlign,
+          rightEdge: pct.getBoundingClientRect().right - pageX,
+          ruleRightEdge: rule.getBoundingClientRect().right - pageX,
+        };
+      });
+
+      expect(m.text, '板头巨字应是完成度百分数').toMatch(/^\d+%$/);
+      // 定值断言（不是 ≥ 下界）：参考稿 A P1 实测巨字 cap 61px ⇒ 规格 §2.A P0-3 落值 82px。
+      // 此前这条值**没有任何断言守着**——2026-10-11 独立验证 worker 把它腰斩到 40px，
+      // print-a4-visual + swiss-schedule-document + print-final-verify + print-palette
+      // 4 文件 / 32 tests 全绿。故这里钉死，不用区间。
+      expect(m.fontSize, '板头完成度巨字应 82px（参考稿 cap 61px ⇒ 82px，规格 §2.A P0-3）').toBe(82);
+      expect(m.fontVariantNumeric, '巨字应等宽数字（P0-3 数字纪律）').toBe('tabular-nums');
+      expect(m.anchorTextAlign, '巨字块应右对齐（P0-3）').toBe('right');
+      // 右缘：参考稿实测 x753.5（页面 794 宽 − 内容框内缩 40 ⇒ 754），容差 1px
+      expect(
+        Math.abs(m.rightEdge - 753.5),
+        `巨字右缘应在参考稿的 x753.5 上（实测 ${m.rightEdge}）`,
+      ).toBeLessThanOrEqual(1);
+      // 与 2px 通栏线右端齐平：这是「右对齐」的版面判据，比绝对坐标更抗布局微调
+      expect(
+        Math.abs(m.rightEdge - m.ruleRightEdge),
+        '巨字右缘应与 2px 通栏线右端齐平（同一内容框右缘）',
+      ).toBeLessThanOrEqual(0.5);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('配色硬闸门：踩线组合被禁存（UI 呈现 + store 拒绝，双证据）', async () => {
     const css = builtCss();
     // 踩线草稿：三枚都取浅色（浅黄纸 + 白字 + 白栏）。经 initialPalette 进编辑器——
