@@ -172,6 +172,13 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   const [selectedDate, setSelectedDate] = useState(meta.todayIso);
 
   /**
+   * ★ F7 · roving tabindex 的「上一次聚焦的日期」（null = 还没用键盘走过）。
+   * 只是**停靠点记忆**，不参与选中（选中仍是 selectedDate，两条互不代偿：
+   * 键盘把焦点移到别的格 ≠ 改选中）。停靠点派生规则见下方 grid()。
+   */
+  const [rovingDate, setRovingDate] = useState<string | null>(null);
+
+  /**
    * 「当日条目浮层」状态（画布定稿 2026-10-08 · 规格 §5：点「+N」弹全量清单）。
    *
    * 为什么住在 view 级而不是格子里：浮层是 body portal 的跨格浮层（格子 overflow:hidden，
@@ -256,6 +263,14 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
     const onKey = (e: KeyboardEvent): void => {
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      /*
+       * ★ F7：焦点在日格（或其格内条目）上时，←/→ 归网格（移动 roving 焦点），
+       * 不再切月。本监听挂在 window 上、**不看 defaultPrevented**，所以格子里的
+       * preventDefault 拦不住它 —— 两边同时生效会出现「焦点跳到相邻格 + 整个月翻页」
+       * （真机实测：ArrowRight 后选中日期从 2026-10-12 变成 2026-11-01）。
+       * 焦点不在网格里时，←/→ 切月的既有行为一字未改。
+       */
+      if (el && el.closest('[data-day-cell]')) return;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         setCalendarMonth(shiftMonth(calendarMonth, -1));
@@ -334,25 +349,45 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
     </div>
   );
 
-  const grid = (days: GridDay[], cols = 'grid-cols-7'): JSX.Element => (
-    <div className={cn('grid', cols, 'gap-px overflow-hidden overflow-x-hidden rounded-[12px] bg-line')}>
-      {days.map((day) => (
-        <MonthDayCell
-          key={day.date}
-          day={day}
-          items={entriesOnDate(day.date)}
-          /* ★ 休息日一律走公司制度判定，不硬编码周六周日（画板 14 的「六/日」是双休语境）。
-             此处 restPolicy = effectiveRestPolicy：skipHolidays 开时节假日自动落休息底纹。 */
-          isRest={isRestDay(day.date, restPolicy)}
-          isMobile={isMobile}
-          holidayLabel={holidayLabelFn?.(day.date) ?? null}
-          onSelect={() => setSelectedDate(day.date)}
-          onOpen={open}
-          onOpenDay={(items, anchorEl) => setDayPopover({ day, items, anchorEl })}
-        />
-      ))}
-    </div>
-  );
+  const grid = (days: GridDay[], cols = 'grid-cols-7'): JSX.Element => {
+    /*
+      ★ F7 · roving tabindex 的**停靠点唯一出处**（父层持有，格只上报）：
+
+      规则（顺序敏感）：上次聚焦过的日期（若仍在本次网格里）→ 今天 → 本月第一天 → 第一格。
+      · 只留**一格** tabIndex=0：42 格全进 Tab 序列会把键盘用户困在日历里；
+      · 必须有兜底：换月/切换月↔周密度后 `rovingDate` 可能已不在网格里，
+        此时若不兜底就没有任何格进 Tab 序列 —— 网格会整个从键盘上消失。
+      · 状态住组件内且**不随换页复位**（与 Sidebar 的 projectsExpanded 同一取舍：
+        用户用键盘走到哪儿，回来还在哪儿）。
+    */
+    const tabStop =
+      (rovingDate && days.some((d) => d.date === rovingDate) ? rovingDate : null) ??
+      days.find((d) => d.isToday)?.date ??
+      days.find((d) => d.inMonth)?.date ??
+      days[0]?.date ??
+      null;
+    return (
+      <div className={cn('grid', cols, 'gap-px overflow-hidden overflow-x-hidden rounded-[12px] bg-line')}>
+        {days.map((day) => (
+          <MonthDayCell
+            key={day.date}
+            day={day}
+            items={entriesOnDate(day.date)}
+            /* ★ 休息日一律走公司制度判定，不硬编码周六周日（画板 14 的「六/日」是双休语境）。
+               此处 restPolicy = effectiveRestPolicy：skipHolidays 开时节假日自动落休息底纹。 */
+            isRest={isRestDay(day.date, restPolicy)}
+            isMobile={isMobile}
+            holidayLabel={holidayLabelFn?.(day.date) ?? null}
+            tabStop={day.date === tabStop}
+            onCellFocus={() => setRovingDate(day.date)}
+            onSelect={() => setSelectedDate(day.date)}
+            onOpen={open}
+            onOpenDay={(items, anchorEl) => setDayPopover({ day, items, anchorEl })}
+          />
+        ))}
+      </div>
+    );
+  };
 
   return (
     /*

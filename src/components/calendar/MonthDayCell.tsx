@@ -19,7 +19,7 @@
  *   对比度均 ≥ 3（实心块角色本就是为小面积设计的），无需描边。
  */
 
-import { useRef } from 'react';
+import { useRef, type KeyboardEvent } from 'react';
 
 import { cn } from '../../lib/cn';
 import {
@@ -90,6 +90,8 @@ export function MonthDayCell({
   isRest,
   isMobile,
   holidayLabel,
+  tabStop,
+  onCellFocus,
   onSelect,
   onOpen,
   onOpenDay,
@@ -105,6 +107,16 @@ export function MonthDayCell({
    * 与底纹同源：节假日 isRestDay 自动 true 落 bg-rest-day，补班日落 bg-paper。
    */
   holidayLabel?: string | null;
+  /**
+   * ★ F7（键盘可达）：本格是不是整张网格里**唯一**的 Tab 停靠点（roving tabindex）。
+   * 由调用方按「上次聚焦的日期 → 今天 → 本月第一天」派生，保证任何月份下恰有一格可 Tab 到。
+   */
+  tabStop: boolean;
+  /**
+   * 本格**自身**获得焦点时上报（roving 停靠点随之移动，避免 42 格全进 Tab 序列）。
+   * 注意：只在 `e.target === e.currentTarget` 时调用 —— 见下方 onFocus 的说明。
+   */
+  onCellFocus(): void;
   onSelect(): void;
   onOpen(projectId: string): void;
   /**
@@ -120,11 +132,93 @@ export function MonthDayCell({
   const crowded = items.length > limit;
   const hiddenCount = Math.max(0, items.length - limit);
 
+  /**
+   * ★ F7 · 网格键盘导航（修前：日格是 `<div onClick>` —— 无 role/tabIndex/键处理，
+   * Tab 永远落不到格子上，日格选中这条主路径**纯鼠标**；同伴范式见
+   * ProjectCard.tsx:289-297 的 `role="button" + tabIndex + Enter/Space`）。
+   *
+   * 规则：
+   *   ←/→ 前后一格；↑/↓ 上下跳一行；Home/End 到本行首/尾；Enter/Space = 选中（同 onSelect）。
+   * 两个刻意的实现选择：
+   *   ① **列数从计算样式读**（`grid-template-columns` 的轨道数），不写死 7 ——
+   *      月视图 42 格（6×7）与周视图 7 格共用本组件，写死 7 在别处会越界。
+   *      jsdom 无布局 ⇒ 计算样式为空串，回落 7（单测据此断言 ↑/↓ = ±7）。
+   *   ② 焦点移动**只碰 DOM**（`cells[next].focus()`），不往父层塞第二份「当前格」真相：
+   *      roving 停靠点由 `onFocus` 上报，React 状态始终是唯一真相源。
+   */
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      onSelect();
+      return;
+    }
+    const self = cellRef.current;
+    const grid = self?.parentElement;
+    if (!self || !grid) return;
+    const cells = Array.from(grid.querySelectorAll<HTMLElement>('[data-day-cell]'));
+    const idx = cells.indexOf(self);
+    if (idx < 0) return;
+    const colsRaw = getComputedStyle(grid).gridTemplateColumns.trim();
+    const cols = colsRaw ? colsRaw.split(/\s+/).filter(Boolean).length : 7;
+    const rowStart = idx - (idx % cols);
+    let next: number;
+    switch (e.key) {
+      case 'ArrowRight':
+        next = idx + 1;
+        break;
+      case 'ArrowLeft':
+        next = idx - 1;
+        break;
+      case 'ArrowDown':
+        next = idx + cols;
+        break;
+      case 'ArrowUp':
+        next = idx - cols;
+        break;
+      case 'Home':
+        next = rowStart;
+        break;
+      case 'End':
+        next = rowStart + cols - 1;
+        break;
+      default:
+        return;
+    }
+    if (next < 0 || next >= cells.length) return;
+    e.preventDefault();
+    cells[next]?.focus();
+  };
+
   return (
     <div
       ref={cellRef}
       data-day-cell=""
+      data-day-date={day.date}
+      /*
+       * ★ F7：`aria-label` 此前挂在一个**不可聚焦**的 div 上（等于白写）；补 role+tabIndex
+       * 之后它才真正被读屏播报。role 用 button（本仓既有范式）而非 gridcell：
+       * 42 格无 row 包裹（`grid-cols-7` 要求格是容器的直接子元素），
+       * 挂 gridcell 会得到「有格无行」的半套 ARIA，反而更差。
+       */
+      role="button"
+      tabIndex={tabStop ? 0 : -1}
+      aria-pressed={day.isSelected}
       onClick={onSelect}
+      /*
+       * ★ 只在**格子自身**拿到焦点时才上报 roving 停靠点。
+       *
+       * 为什么必须加这个 target 判断（真机实测踩到的坑）：React 的 onFocus 走 focusin，
+       * **会冒泡** —— 格内条目按钮（EntryRow / 「…+N」）获得焦点时事件也会冒到格子上。
+       * 不判断的话，键盘用户从网格前面 Tab 进来时：焦点先落到「10-01 格内第一个条目」
+       * → 停靠点被改写成 10-01 → 之后所有 42 格再重渲染时，唯一 tabIndex=0 的变成
+       * 10-01（已经**在用户身后**），于是「今天」那一格变成 -1 —— 结果是
+       * **正向 Tab 永远落不到任何日格**（实测：130 次 Tab 遍历整页 1.25 轮，一次都没落到）。
+       * 加了判断后停靠点只在格子本体被聚焦（含方向键移动）时移动，Tab 才能落进网格。
+       */
+      onFocus={(e) => {
+        if (e.target === e.currentTarget) onCellFocus();
+      }}
+      onKeyDown={onKeyDown}
       className={cn(
         'relative flex cursor-pointer flex-col gap-[4px] overflow-hidden p-[4px] transition-colors md:p-[6px]',
         // 格底色三分：当月 paper / 休息日 rest-day / 非当月 cream
@@ -133,6 +227,13 @@ export function MonthDayCell({
         'hover:bg-sand/40',
         // 选中格高亮（既有功能保留）
         day.isSelected && 'ring-1 ring-inset ring-pine',
+        /*
+         * ★ F7 焦点指示**必须内描边**：格子是不透明底、彼此紧邻，且整张网格带
+         * `overflow-hidden` —— 全局那圈 3px 外描边会被右侧/下方后画的兄弟格盖掉、
+         * 在网格边缘还会被裁掉。内描边画在格内，任何位置都完整可见，
+         * 也与选中态的 `ring-inset` 同一套视觉语言。
+         */
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pine/70',
       )}
       /* 恒高走常量（单一来源）：桌面 86 / 窄窗 78。
          用 height 而非 min-height —— 定稿铁律 1「格子高度恒定」：内容超限裁掉，
