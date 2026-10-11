@@ -282,6 +282,32 @@ export function needsPreMigrationBackup(verno: number | null): verno is number {
   return verno !== null && verno < SCHEMA_VERSION;
 }
 
+/**
+ * 降级安装判据：**库版本比当前程序版本更新**（例：装过 v0.9 的库，回退到本版应用）。
+ *
+ * ── 为什么必须显式判别（审计 F1-②）──
+ * 此前这条路径唯一的出口是 `db.open()` 抛 Dexie `VersionError`，而
+ * `openDatabase()` 把**所有**打开异常归一成「本地数据库打开失败，请检查浏览器隐私
+ * 模式或存储空间。」，致命页又补一句「请确认未处于浏览器无痕/隐私模式，或为站点启用
+ * 站点数据后刷新重试」——于是「版本不匹配」被冒充成「隐私模式」。
+ * 用户照做无效（隐私模式不是原因），最自然的下一步就是**删站点数据 / 重装应用**，
+ * 那会真的丢掉整库数据；而正确答案只是「换回新版本应用打开」。
+ *
+ * 所以判据在**探测结果**上做（`detectLocalDbVersion` 的返回值，唯一出处），
+ * 不靠 catch 里嗅异常类名：异常路径要经过多层包装（Dexie → openDatabase → 工厂），
+ * 任何一层改写都会让嗅探静默失效，且失败的表现形式是「又退回隐私模式话术」——
+ * 一个只有真机降级才暴露的假绿。
+ *
+ * 与 `needsPreMigrationBackup` 互补且互斥（`<` / `>`），两者都只做判定，
+ * **绝不**自动降级、删库或"修复"——那三种动作都会毁掉用户手里更新的数据。
+ *
+ * 类型谓词写法和上一函数同款：进入分支后 `verno` 收窄为非空数字，
+ * 于是「印出实际库版本号」的文案不可能渲染出 `vnull`。
+ */
+export function isDbAheadOfApp(verno: number | null): verno is number {
+  return verno !== null && verno > SCHEMA_VERSION;
+}
+
 /** 表名清单（备份整库替换时遍历用；单一出处见 schema/current.ts） */
 export const ALL_TABLE_NAMES = ALL_STORE_NAMES;
 

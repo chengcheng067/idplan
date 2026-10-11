@@ -4,7 +4,7 @@ import { appEnv } from '../config/env';
 import { createRepositories } from '../core/repositories';
 import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
-import { detectLocalDbVersion, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
+import { detectLocalDbVersion, isDbAheadOfApp, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
 import { recoverZombieExecutions } from '../core/execution/execution-recovery';
 import { exportPreMigrationBackupToFile } from '../components/layout/useBackupIo';
@@ -31,9 +31,23 @@ const RepoContext = createContext<IRepositoryBundle | null>(null);
 /** 闸门状态：pending=等待用户导出；exporting=导出中；failed=导出失败（可重试） */
 type GateState = 'pending' | 'exporting' | 'failed';
 
+/**
+ * 致命态（数据不可用，必须停下来把原因说清楚）。
+ *
+ * ★ 为什么要分两支（审计 F1-②）：
+ *   修复前只有一个 `fatalError: string`，无论什么原因都渲染同一句
+ *   「请确认未处于浏览器无痕/隐私模式，或为站点启用站点数据后刷新重试」。
+ *   于是**降级安装**（库版本比程序新）被冒充成隐私模式问题：用户按提示折腾无效，
+ *   下一步最可能就是删站点数据/重装——而数据其实完好，正确动作只是换回新版应用。
+ *   两支对症下药，且两支都不提供「降级/删库/修复」任何按钮（只提示 + 允许用户自己决定）。
+ */
+type FatalState =
+  | { kind: 'storage'; message: string }
+  | { kind: 'db-ahead'; dbVersion: number; appVersion: number };
+
 export function RepoProvider({ children }: { children: React.ReactNode }): JSX.Element {
   const [bundle, setBundle] = useState<IRepositoryBundle | null>(null);
-  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [fatal, setFatal] = useState<FatalState | null>(null);
   const [gate, setGate] = useState<GateState | null>(null);
   /**
    * 进入闸门时探测到的**实际库版本**（Dexie verno）。
@@ -64,7 +78,7 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
         err instanceof ChangxiaError
           ? err.userMessage
           : '本地数据库初始化失败（可能是隐私模式禁用了存储）。';
-      setFatalError(msg);
+      setFatal({ kind: 'storage', message: msg });
     }
   }, []);
 
@@ -93,6 +107,18 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
         //   闸门从不弹出、老库静默升级、没有任何回滚凭据。
         const verno = await detectLocalDbVersion();
         if (cancelledRef.current) return;
+        /*
+          ★ 降级安装分支（审计 F1-②）：**优先于**备份闸门与隐私模式归因。
+          库比程序新 ⇒ 这份数据已被更高版本的应用改写过，本版代码既读不懂也不该碰；
+          绝不自动降级/删库/"修复"（那会毁掉更新的数据），只把事实与正确动作说清楚。
+          ★ 判据走 `isDbAheadOfApp`（唯一出处），不在 catch 里嗅 VersionError 类名：
+            异常要穿过 Dexie → openDatabase → 工厂三层包装，任何一层改写都会让嗅探
+            静默失效，且失效表现是「又退回隐私模式话术」——只有真机降级才暴露的假绿。
+        */
+        if (isDbAheadOfApp(verno)) {
+          setFatal({ kind: 'db-ahead', dbVersion: verno, appVersion: SCHEMA_VERSION });
+          return;
+        }
         if (needsPreMigrationBackup(verno)) {
           setGateFromVersion(verno);
           setGate('pending');
@@ -167,13 +193,43 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     );
   }
 
-  if (fatalError) {
-    // 存储不可用的兜底画面：不白屏、给出可操作指引
+  if (fatal) {
+    // 存储/版本不可用的兜底画面：不白屏、给出**对症**的可操作指引
+    if (fatal.kind === 'db-ahead') {
+      /*
+        ★ 降级安装（审计 F1-②）：库版本比程序新。
+        这一页存在的唯一理由：让用户**不要**去做那件会毁数据的事（删站点数据 / 重装），
+        并知道正确动作是「换回不低于该版本的应用」。两边版本号都要印出来——
+        「你的数据是 v6、这个应用只到 v5」比「版本不匹配」有用得多（可截图给技术同学）。
+      */
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-cream p-8">
+          <div className="max-w-md rounded-md border border-clay-soft bg-paper p-6 text-ink shadow-soft">
+            <h1 className="mb-2 font-display text-display-md">本地数据比当前应用更新</h1>
+            <p className="text-sm leading-6 text-mist">
+              这份数据是用更新版本的 ID Plan 打开过的：
+              <span className="mx-1 font-medium text-ink">数据 v{fatal.dbVersion}</span>
+              ，当前应用只支持到
+              <span className="mx-1 font-medium text-ink">v{fatal.appVersion}</span>
+              。为避免把新格式的数据改坏，本次<strong>没有打开它，也没有做任何修改</strong>。
+            </p>
+            <p className="mt-3 text-sm leading-6">
+              正确做法：更新到不低于数据版本的 ID Plan 再打开。如果你是刚刚从新版本
+              换回了旧版本，请换回新版本——数据一直都在，换回去就能看到。
+            </p>
+            <p className="mt-3 rounded-2xl bg-cream px-4 py-3 text-[11px] leading-5 text-mist">
+              请<strong className="text-ink">不要</strong>删除浏览器/站点数据，也不要重装应用来
+              「修」它：那会真的把这份数据删掉，而它现在完好无损。
+            </p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-screen items-center justify-center bg-cream p-8">
         <div className="max-w-md rounded-md border border-clay-soft bg-paper p-6 text-ink shadow-soft">
           <h1 className="mb-2 font-display text-display-md">无法访问本地数据</h1>
-          <p className="text-sm leading-6 text-mist">{fatalError}</p>
+          <p className="text-sm leading-6 text-mist">{fatal.message}</p>
           <p className="mt-3 text-sm leading-6">
             请确认未处于浏览器无痕/隐私模式，或为站点启用站点数据后刷新重试。
           </p>
