@@ -222,14 +222,29 @@ function renderDoc(template: DocKind, vm: PrintViewModel, sheets: readonly Print
 }
 
 /** 十二组合（隔离渲染：只开该模块；A/E 的 M1/M4 是原生页） */
-const COMBOS: ReadonlyArray<{ module: PrintModuleId; template: DocKind; pageAttr: string }> = [
+/**
+ * 十二组合（隔离渲染：只开该模块；A/E 的 M1/M4 是原生页）。
+ * `pages` = 该组合在**本夹具规模**下的物理页数。
+ * 2026-10-11：`task-list × editorial-index` 由 1 → 2 页。原因是 P0-12 把 E 的
+ * 刊头从「单行 27px」还原成「两行 92px 衬线巨题」，页壳 chrome 由 ≈95px 长到
+ * ≈330px，行区可用高度从 ≈940px 降到 ≈647px（真 Chromium 实测，见
+ * qa-scratch/e-generic-probe.mts）。8 任务 7 章的真实行区消耗是 650.25px，
+ * 已超上限 ⇒ 必须跨页。这是「向参考稿还原」的必然结果，不是缺陷：
+ * 内容一条不丢、不裁切（下面逐页断言 794×1123），只是多出一张纸。
+ */
+const COMBOS: ReadonlyArray<{
+  module: PrintModuleId;
+  template: DocKind;
+  pageAttr: string;
+  pages?: number;
+}> = [
   { module: 'stage-list', template: 'swiss-schedule', pageAttr: 'stage-overview' },
   { module: 'stage-list', template: 'data-editorial', pageAttr: 'generic-stage-list' },
   { module: 'stage-list', template: 'editorial-index', pageAttr: 'stage-index' },
   { module: 'stage-list', template: 'agent-poster', pageAttr: 'generic-stage-list' },
   { module: 'task-list', template: 'swiss-schedule', pageAttr: 'task-register' },
   { module: 'task-list', template: 'data-editorial', pageAttr: 'generic-task-list' },
-  { module: 'task-list', template: 'editorial-index', pageAttr: 'generic-task-list' },
+  { module: 'task-list', template: 'editorial-index', pageAttr: 'generic-task-list', pages: 2 },
   { module: 'task-list', template: 'agent-poster', pageAttr: 'generic-task-list' },
   { module: 'member-roster', template: 'swiss-schedule', pageAttr: 'member-roster' },
   { module: 'member-roster', template: 'data-editorial', pageAttr: 'generic-member-roster' },
@@ -253,12 +268,13 @@ describe.skipIf(!CAN_RUN)('期三 · V1 十二组合默认态（真 Chromium + �
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('M1/M2/M4 × A/D/E/H：每组合一页，彩 + 灰全量截图，794×1123 无裁切', async () => {
+  it('M1/M2/M4 × A/D/E/H：每组合在本夹具规模下的页数（默认 1 页，E×M2 因长刊头 2 页），彩 + 灰全量截图，逐页 794×1123 无裁切', async () => {
     const css = builtCss();
     const vm = buildVm();
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
       for (const c of COMBOS) {
+        const expected = c.pages ?? 1;
         const markup = renderDoc(c.template, vm, sheetsOf(c));
         for (const gray of [false, true]) {
           const htmlPath = writeHtml(
@@ -267,20 +283,23 @@ describe.skipIf(!CAN_RUN)('期三 · V1 十二组合默认态（真 Chromium + �
           );
           await page.goto('file://' + htmlPath);
           const pages = await page.$$('.a4-page');
-          expect(pages.length, `${c.module} × ${c.template} 应恰好一页`).toBe(1);
-          const el = pages[0]!;
-          expect(await el.getAttribute('data-print-page'), '页属性').toBe(c.pageAttr);
-          const box = await el.boundingBox();
-          expect(box, '应有布局盒').not.toBeNull();
-          expect(Math.abs(box!.width - 794), `${c.module} × ${c.template} 页宽应 794`).toBeLessThanOrEqual(1);
-          expect(box!.height, `${c.module} × ${c.template} 溢出即红`).toBeLessThanOrEqual(1124);
-          expect(box!.height, `${c.module} × ${c.template} 不得低于 1123`).toBeGreaterThanOrEqual(1122);
-          await el.screenshot({
-            path: join(
-              OUT_DIR,
-              `generic-${c.module}-${c.template}-p1-${gray ? 'gray' : 'color'}.png`,
-            ),
-          });
+          expect(pages.length, `${c.module} × ${c.template} 应 ${expected} 页`).toBe(expected);
+          for (let i = 0; i < pages.length; i++) {
+            const el = pages[i]!;
+            expect(await el.getAttribute('data-print-page'), '页属性').toBe(c.pageAttr);
+            expect(await el.getAttribute('data-page-index'), '页码按物理页连续').toBe(String(i));
+            const box = await el.boundingBox();
+            expect(box, '应有布局盒').not.toBeNull();
+            expect(Math.abs(box!.width - 794), `${c.module} × ${c.template} 第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
+            expect(box!.height, `${c.module} × ${c.template} 第 ${i + 1} 页溢出即红`).toBeLessThanOrEqual(1124);
+            expect(box!.height, `${c.module} × ${c.template} 第 ${i + 1} 页不得低于 1123`).toBeGreaterThanOrEqual(1122);
+            await el.screenshot({
+              path: join(
+                OUT_DIR,
+                `generic-${c.module}-${c.template}-p${i + 1}-${gray ? 'gray' : 'color'}.png`,
+              ),
+            });
+          }
         }
       }
     } finally {
@@ -540,7 +559,7 @@ describe.skipIf(!CAN_RUN)('期三 · V4 密度合规 + 外表承接（真 Chromi
       });
       expect(eRow.display, 'E 行是 grid（不是 table）').toBe('grid');
       expect(eRow.w, 'E 行线 = 1px 发丝线').toBe('1px');
-      expect(eRow.c, 'E 行线 = #CFC8BC').toBe('rgb(207, 200, 188)');
+      expect(eRow.c, 'E 行线 = #CFC6B4（P0-15 参考稿实测；原 #CFC8BC 对新纸底 1.487:1 过不了 1.5 闸门）').toBe('rgb(207, 198, 180)');
       // 巨编号：24px 衬线（E 的目录身份装置）
       const eNo = await page.$eval('.gm-grid__no', (el) => {
         const s = getComputedStyle(el);
@@ -555,13 +574,13 @@ describe.skipIf(!CAN_RUN)('期三 · V4 密度合规 + 外表承接（真 Chromi
       });
       expect(eChapter.w, 'E 章头 = 2px 粗章节线').toBe('2px');
       expect(eChapter.c, 'E 章线 = 近黑').toBe('rgb(20, 20, 20)');
-      // Agent 左签：3px 朱红（left-sign）
+      // Agent 左签：3px 赭红（left-sign；P0-15 参考稿实测 #B04A2F）
       const eSign = await page.$eval('.gm-grid__row[data-agent]', (el) => {
         const s = getComputedStyle(el);
         return { w: s.borderLeftWidth, c: s.borderLeftColor };
       });
       expect(eSign.w, 'E Agent 行 = 3px 粗左边签').toBe('3px');
-      expect(eSign.c, 'E 左签 = 朱红').toBe('rgb(200, 16, 46)');
+      expect(eSign.c, 'E 左签 = 赭红').toBe('rgb(176, 74, 47)');
 
       /* ── H：blocks 双栏 + 右栏面板（大号 mono，不借衬线巨字） ── */
       await page.goto(

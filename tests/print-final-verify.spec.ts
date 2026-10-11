@@ -14,8 +14,9 @@
  *      （A 有顶/底栏、E/H 无底栏、D 有 3px 头线、H 有局部中轴）——「与
  *      设计稿比对」的可断言部分（逐像素比对设计稿是人工活，spec 锁几何
  *      与结构，A/D 的先例 spec 同口径）。她 10-09 23:38 反馈修复后默认态
- *      收敛为 14 页（A4 + D4 + E3 + H3：全部落在原生签名页，通用模块可
- *      手动勾选不进默认态）；
+ *      收敛为 15 页（A4 + D4 + E4 + H3：全部落在原生签名页，通用模块可
+ *      手动勾选不进默认态；2026-10-11 P0-12 E 的刊头还原成长高 ≈330px 的
+ *      两行巨题，E 本夹具多出 1 页）；
  *   ② 自定义配色变体跨模板抽 2-3 页：每版取一个预设，断言「槽位确实挂上
  *     （computed style 变色）+ DOM 骨架与默认态逐字节一致（除 .print-root
  *      的 CSS 变量）」——产品决策文档 §3.2-③ 的结构断言；
@@ -425,17 +426,17 @@ function writeHtml(name: string, html: string): string {
 }
 
 /* ====================================================================================
- * ① 14 页默认态（真 Chromium：四版同 VM，逐页无裁切 + 结构标记）
+ * ① 15 页默认态（真 Chromium：四版同 VM，逐页无裁切 + 结构标记）
  * ==================================================================================== */
 
-describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 14 页（四版同 VM 真实渲染）', () => {
+describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实渲染）', () => {
   let browser: Browser;
 
   beforeAll(async () => {
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('四版默认态：4 + 4 + 3 + 3 = 14 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
+  it('四版默认态：4 + 4 + 4 + 3 = 15 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
     const css = builtCss();
     const vm = adminVm();
     const cases: Array<{ tag: string; markup: string; expected: number }> = [
@@ -460,8 +461,10 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 14 页（四版同 VM 真实�
         markup: renderToStaticMarkup(
           createElement(EditorialIndexDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['editorial-index'].baseline }),
         ),
-        // 默认 = 3 原生页（通用 M2 任务清单默认不勾）
-        expected: 3,
+        // 默认 = 3 原生逻辑页；2026-10-11 P0-12 刊头还原后页壳 chrome 由
+        // ≈95px 长到 ≈330px（两行 92px 衬线巨题），本夹具的产出物目录
+        // （12 行 + 6 章头）由 1 页撑成 2 页 ⇒ 物理纸面 3 → 4
+        expected: 4,
       },
       {
         tag: 'h',
@@ -490,7 +493,7 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 14 页（四版同 VM 真实�
           await pages[i]!.screenshot({ path: join(OUT_DIR, `final-${c.tag}-p${i + 1}-color.png`) });
         }
       }
-      expect(totalPages, '四版合计 14 页（默认态收敛：全部落在原生签名页）').toBe(14);
+      expect(totalPages, '四版合计 15 页（默认态收敛：全部落在原生签名页）').toBe(15);
     } finally {
       await page.close();
     }

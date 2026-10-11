@@ -7,10 +7,10 @@
  * 纸面（白底甘特 + 清单表）、A 版（交通黄时刻表）、D 版（白底数据网格）
  * 零共享结构。可共享的只有 `.a4-page` 纸面类与打印分页规则。
  *
- * ── 视觉契约（01 §6 / 02 §6 token）──
- *   纸面 #FAF7F2（--ei-paper 固定，不开槽位——纸面性格是模板身份）
- *   主文字 #141414（= --tpl-ink 槽位）；朱红 #C8102E（= --tpl-accent 槽位）
- *   发丝线 #CFC8BC（= --tpl-line 槽位）；粗章节线 2px 近黑
+ * ── 视觉契约（01 §6 / 02 §6 token；纸底与焦点色 2026-10-11 P0-15 按参考稿校准）──
+ *   纸面 #F5F2EC（--ei-paper 固定，不开槽位——纸面性格是模板身份）
+ *   主文字 #141414（= --tpl-ink 槽位）；赭红 #B04A2F（= --tpl-accent 槽位）
+ *   发丝线 #CFC6B4（= --tpl-line 槽位）；章节粗线 5px 近黑
  *   大编号独立列（真实 DOM，禁伪元素——02 §6：分页与可访问性稳定）
  *   不用卡片；三页均无底部黑栏（页脚只有发丝线 + 署名 + 页码）。
  *
@@ -100,26 +100,24 @@ const EI_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
  * 实测值对齐——分页估高偏大会早分页、偏小会溢出，两边必须同源）。
  * 各项取「实测值 + 余量」：估高只允许偏保守（大），不允许小于实测。
  */
-const EI_HEAD_H = 112; // 实测 ≈95（刊头两行 + 发丝线）
-const EI_LOGO_ROW_H = 34; // 实测 34（10 上距 + 24 内容）
+const EI_HEAD_H = 334; // 刊头：logo 格 + 双语刊头 + 两行巨题（2×106）+ 5px 章节粗线（实测 ≈331，取 334 偏保守）
 const EI_FOOT_H = 46; // 实测 41（40 高 + 1 发丝线）
 const EI_BODY_PADDING = 20; // 主体上下内距 12 + 8
 const EI_NOTE_H = 46; // 口径注（10 上距 + 两行 16.5 + 1 线，取整）
 const EI_META_H = 37; // 元信息行（期七深化：6 上距 + 23 行高 + 10 下距，实测 ≈27+10）
-/** 每物理页主体可用高度（纸面 1123 − 页头 − logo 行 − 页脚 − 主体内距 − 口径注 − 元信息行） */
-const EI_BODY_H =
-  A4_HEIGHT_PX - EI_HEAD_H - EI_LOGO_ROW_H - EI_FOOT_H - EI_BODY_PADDING - EI_NOTE_H - EI_META_H;
+/** 每物理页主体可用高度（纸面 1123 − 页头 − 页脚 − 主体内距 − 口径注 − 元信息行） */
+const EI_BODY_H = A4_HEIGHT_PX - EI_HEAD_H - EI_FOOT_H - EI_BODY_PADDING - EI_NOTE_H - EI_META_H;
 
 /**
  * 目录行估高（normal / compact 两档）。
- * normal 实测 37px（padding 6/6 + 巨编号 24px line-height:1 + 1px 发丝线，
- * 2026-10-09 密度修订后真 Chromium 量）；取 40 偏保守（大）= 早分页白留一截，
- * 不允许小于实测（小 = 溢出）。compact 实测 ≈30，取 31。
+ * normal 实测 69px（padding 9/9 + 巨编号 50px line-height:1 + 1px 发丝线，
+ * 2026-10-11 P0-14 巨编号 24→50px 后真 Chromium 量）；取 70 偏保守（大）
+ * = 早分页白留一截，不允许小于实测（小 = 溢出）。compact 实测 ≈30，取 31。
  */
 const EI_ROW_H = {
-  stage: { normal: 40, compact: 31 },
-  member: { normal: 40, compact: 31 },
-  artifact: { normal: 40, compact: 31 },
+  stage: { normal: 70, compact: 31 },
+  member: { normal: 70, compact: 31 },
+  artifact: { normal: 70, compact: 31 },
 } as const;
 /**
  * 章头估高。normal 实测槽位 59.75px（margin-top 22 + 元素 37.75：2px 粗线
@@ -272,6 +270,22 @@ function countRows<T>(entries: readonly EiEntry<T>[]): number {
   return entries.filter((e) => e.kind === 'row').length;
 }
 
+/**
+ * 页题拆行（2026-10-11 P0-12 向参考稿还原）。
+ *
+ * 参考稿 E P1 的刊头是**两行巨字**：「阶段」（墨）/「目录」（焦点色），
+ * 行节距 106px、每行 cap ≈92px；「目录」是**类型词**，用焦点色落第二行。
+ * 三页与通用模块的页题都是「<主题词> + <类型词 2 字>」结构
+ * （阶段目录 / 成员执行体目录 / 产出物清单 / 阶段清单…），故按「末二字
+ * 单起一行」拆——拆出的两段**顺序拼接仍等于原页题**（textContent 不变，
+ * 既有「纸面应含页题『阶段目录』」一类断言继续成立）。
+ * 不足 4 字的短题不拆（拆了会得到单字行）。
+ */
+export function eiTitleLines(cn: string): string[] {
+  if (cn.length < 4) return [cn];
+  return [cn.slice(0, -2), cn.slice(-2)];
+}
+
 /* ------------------------------------------------------------------ 纸面外壳 */
 
 function EiPage({
@@ -295,6 +309,7 @@ function EiPage({
       ? GENERIC_TITLES[page.module]
       : (EI_PAGE_TITLES[page.kind] ?? EI_PAGE_TITLES['stage-index']!);
   const pageAttr = page.kind === 'generic' ? `generic-${page.module}` : page.kind;
+  const titleLines = eiTitleLines(title.cn);
   return (
     <div
       ref={pageRef}
@@ -303,14 +318,30 @@ function EiPage({
       className="a4-page ei-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
     >
-      {/* 页头：中英双语刊头 + 项目标识；底部发丝线（E 的分组语言） */}
+      {/* 页头：中英双语刊头 + 项目标识 + 页签；底部章节粗线（E 的分组语言）。
+          logo 就住在本页头左上格（2026-10-11 P0-16：内容区那处重复 logo 已删，
+          参考稿的内容区没有 logo；产品要求每页仍须有且只有一枚）。
+          页题拆两行（P0-12）：行1 墨 / 行2 焦点色，衬线巨字。 */}
       <header className="ei-head">
         <div className="ei-head__left">
+          <div className="ei-head__logo">
+            <PrintLogoMark logo={logo} height={22} />
+          </div>
           <p className="ei-head__kicker">
             <span className="ei-head__signal" aria-hidden />
             {title.en}
           </p>
-          <h1 className="ei-head__title">{title.cn}</h1>
+          <h1 className="ei-head__title">
+            {titleLines.map((line, i) => (
+              <span
+                key={`${line}-${i}`}
+                className="ei-head__title-line"
+                data-tone={i === titleLines.length - 1 ? 'accent' : 'ink'}
+              >
+                {line}
+              </span>
+            ))}
+          </h1>
         </div>
         <div className="ei-head__right">
           {/* 项目名最多两行，超出截断；完整文本经 title 可访问（02 §8） */}
@@ -324,11 +355,6 @@ function EiPage({
         </div>
         <div className="ei-head__rule" aria-hidden />
       </header>
-
-      {/* logo 行：每页左上角、发丝线下方（≤22px；未上传 = 「ID Plan」文字标） */}
-      <div className="ei-logo-row">
-        <PrintLogoMark logo={logo} height={22} />
-      </div>
 
       {/* 主体：目录条目（分页产物）/ 通用模块（期三）；空逻辑页走明确空态 */}
       <div className="ei-body">

@@ -250,7 +250,15 @@ export const GENERIC_ROWS_H: Record<PrintTemplateId, number> = {
   classic: 0, // 经典不走模块表（五块 blocks 另一套粒度）；不会进本表，占位
   'swiss-schedule': 820,
   'data-editorial': 840,
-  'editorial-index': 780,
+  // 2026-10-11 P0-12 连带：E 的刊头由「单行 27px」还原成「两行 92px 衬线
+  // 巨题」，页壳 chrome 实测由 ≈95px 长到 ≈330px，通用模块页共用同一个
+  // EiPage 外壳 ⇒ 行区可用高度必须同源缩小。真 Chromium 实测（qa-scratch/
+  // e-generic-probe.mts，与 print-generic-modules-a4.spec.ts 逐字同夹具）：
+  //   页高 1126.47（溢出 3.47）→ 刊头 329.97 + 模块头 42.75 + 行区 650.25
+  //   + 口径注 27.5 + 页脚 41 + 主体内距 20
+  // ⇒ 行区真实上限 ≈ 646.8。取 620 偏保守（估高偏大只白留一截，偏小即溢出）。
+  // 原值 780 是「短刊头」时代的标定（那时真实行区 ≈ 940，本身已留 160px 余量）。
+  'editorial-index': 620,
   'agent-poster': 800,
 };
 

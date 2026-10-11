@@ -279,14 +279,14 @@ describe.skipIf(!CAN_RUN)('期七 · S2 新变体配色跟随（切预设 ⇒ co
       };
       const eBase = await probeE('baseline', PRINT_TEMPLATE_PALETTES['editorial-index'].baseline);
       const eIndigo = await probeE('indigo', ePreset.palette);
-      expect(eBase.focusNo, 'E 基线延期编号 = 朱红').toBe('rgb(200, 16, 46)');
+      expect(eBase.focusNo, 'E 基线延期编号 = 赭红（P0-15 参考稿实测 #B04A2F）').toBe('rgb(176, 74, 47)');
       expect(eIndigo.focusNo, 'E 预设延期编号 = 靛蓝（accent 槽跟随）').toBe('rgb(43, 74, 203)');
-      expect(eBase.chapter.c).toBe('rgb(200, 16, 46)');
+      expect(eBase.chapter.c).toBe('rgb(176, 74, 47)');
       expect(eIndigo.chapter.c).toBe('rgb(43, 74, 203)');
       expect(eIndigo.chapter.rule).toBe('rgb(43, 74, 203)');
-      // 纸面不开槽位：仍是暖浅纸
+      // 纸面不开槽位：仍是暖浅纸（P0-15 参考稿实测 #F5F2EC）
       const paper = await page.$eval('.a4-page', (el) => getComputedStyle(el).backgroundColor);
-      expect(paper).toBe('rgb(250, 247, 242)');
+      expect(paper).toBe('rgb(245, 242, 236)');
 
       /* ── H×M1：信号橙基线 vs 朱红预设 ── */
       const hPreset = PRINT_TEMPLATE_PALETTES['agent-poster'].presets.find((p) => p.id === 'vermilion')!;
@@ -357,13 +357,13 @@ describe.skipIf(!CAN_RUN)('期七 · S3 变体几何与密度（真 Chromium）'
       // 行 padding ≥3px（密度约束 1）
       const ePad = await page.$eval('.gm-grid__row', (el) => getComputedStyle(el).paddingTop);
       expect(Number.parseFloat(ePad)).toBeGreaterThanOrEqual(3);
-      // Agent 左签 3px 朱红（left-sign）
+      // Agent 左签 3px 赭红（left-sign；P0-15 参考稿实测 #B04A2F）
       const eSign = await page.$eval('.gm-grid__row[data-agent]', (el) => {
         const s = getComputedStyle(el);
         return { w: s.borderLeftWidth, c: s.borderLeftColor };
       });
       expect(eSign.w).toBe('3px');
-      expect(eSign.c).toBe('rgb(200, 16, 46)');
+      expect(eSign.c).toBe('rgb(176, 74, 47)');
 
       /* ── H blocks：左栏行高 26-36 + 右栏 240px + 大数字 mono ── */
       await page.goto(

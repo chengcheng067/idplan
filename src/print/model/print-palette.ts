@@ -182,20 +182,32 @@ const DATA_EDITORIAL_PALETTE: PrintTemplatePaletteSpec = {
   ],
 };
 
-/** E · Editorial Index：暖浅纸面 + 朱红焦点 + 发丝线 */
+/**
+ * E · Editorial Index：暖浅纸面 + 赭红焦点 + 发丝线。
+ *
+ * 2026-10-11（P0-15 向参考稿还原）：纸底 `#FAF7F2 → #F5F2EC`、accent
+ * `#C8102E → #B04A2F`（参考稿实测；原色相 H≈352° 偏冷正红，参考 H≈16°），
+ * 并**连带**把 line 由 `#CFC8BC → #CFC6B4`（同样是参考稿实测值）。连带原因
+ * 是硬闸门：纸底压深后原线色对新纸底只有 **1.487:1**，低于 `line` 的 1.5
+ * 阈值（宪法 5：闸门不是建议），而参考稿自己的发丝线实测值正好是
+ * `#CFC6B4`。改后三对实测（仓库 `contrast()` 实算）：
+ *   · ink `#141414` vs paper `#F5F2EC` = **16.488**（≥4.5 ✅）
+ *   · accent `#B04A2F` vs paper `#F5F2EC` = **4.861**（≥3 ✅）
+ *   · line `#CFC6B4` vs paper `#F5F2EC` = **1.517**（≥1.5 ✅，压线但过）
+ */
 const EDITORIAL_INDEX_PALETTE: PrintTemplatePaletteSpec = {
-  paper: '#FAF7F2',
-  baseline: { accent: '#C8102E', ink: '#141414', line: '#CFC8BC' },
+  paper: '#F5F2EC',
+  baseline: { accent: '#B04A2F', ink: '#141414', line: '#CFC6B4' },
   pairs: [
     { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, label: '主文字 vs 纸底' },
     { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, label: '焦点色 vs 纸底' },
     { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, label: '发丝线 vs 纸底' },
   ],
   presets: [
-    { id: 'vermilion', name: '朱红', palette: { accent: '#C8102E', ink: '#141414', line: '#CFC8BC' } },
-    { id: 'indigo', name: '靛蓝', palette: { accent: '#2B4ACB', ink: '#141414', line: '#CFC8BC' } },
-    { id: 'pine-green', name: '墨绿', palette: { accent: '#1F7A4D', ink: '#141414', line: '#CFC8BC' } },
-    { id: 'sienna', name: '赭石', palette: { accent: '#A0522D', ink: '#141414', line: '#CFC8BC' } },
+    { id: 'vermilion', name: '赭红', palette: { accent: '#B04A2F', ink: '#141414', line: '#CFC6B4' } },
+    { id: 'indigo', name: '靛蓝', palette: { accent: '#2B4ACB', ink: '#141414', line: '#CFC6B4' } },
+    { id: 'pine-green', name: '墨绿', palette: { accent: '#1F7A4D', ink: '#141414', line: '#CFC6B4' } },
+    { id: 'sienna', name: '赭石', palette: { accent: '#A0522D', ink: '#141414', line: '#CFC6B4' } },
   ],
 };
 

@@ -319,7 +319,7 @@ describe.skipIf(!CAN_RUN)('期七深化 · D2 新特性 computed style（真 Chr
       expect(meta.text).toBe('可见阶段 6 · 完成度 50%');
       expect(meta.top, '元信息行上发丝线 = 1px').toBe('1px');
       expect(meta.bottom, '元信息行下发丝线 = 1px').toBe('1px');
-      expect(meta.topColor, '发丝线 = line 槽').toBe('rgb(207, 200, 188)');
+      expect(meta.topColor, '发丝线 = line 槽（P0-15 参考稿实测 #CFC6B4）').toBe('rgb(207, 198, 180)');
     } finally {
       await page.close();
     }

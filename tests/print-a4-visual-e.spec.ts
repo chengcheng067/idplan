@@ -13,9 +13,22 @@
  *    锁都在里面），保证测的是打包后的规则而不是源码顺序；
  * ③ 真 Chromium 逐页截图，并断言每页 794×1123 **无裁切**（盒子超高即红）。
  *
- * 夹具覆盖批 3 点名的面：9 阶段四态齐全（默认三页）、**30 阶段长目录**
- * （跨页分页：续头 / 页码连续 / 行不裂）、Agent 行朱红 + 文字签、
+ * 夹具覆盖批 3 点名的面：9 阶段四态齐全（默认三页）、**30+ 阶段长目录**
+ * （跨页分页：行不裂 / 页码连续 / 每页自带刊头）、Agent 行赭红 + 文字签、
  * 无产出物空态、预设变体（靛蓝）。
+ *
+ * 2026-10-11 P0-12~P0-16 向参考稿还原后本 spec 的新语义：
+ *   · 页题由单行 27px 无衬线 → **两行 92px 衬线**（行1 墨 / 行2 焦点色）；
+ *   · 刊头下的章节线由 1px 发丝线 → **5px 近黑**；
+ *   · 巨编号 24 → **50px**，且**行序回到 orderIndex 连续 01→09**
+ *     ⇒ 阶段目录上**不再有 `.ei-chapter` 章头与「（续）」续头**，
+ *        跨页身份改由「每页自带的刊头 + 页脚第 N / M 页」承担（规格 §3.3
+ *        「登四态 + 行序连续」）；
+ *   · 纸底 `#FAF7F2 → #F5F2EC`、焦点色 `#C8102E → #B04A2F`、
+ *     发丝线 `#CFC8BC → #CFC6B4`（连带：原线色对新纸底只有 1.487:1，
+ *     过不了 `PALETTE_MIN_CONTRAST.line` 的 1.5 硬闸门）；
+ *   · 内容区那处多余的 `ID Plan` 文字标已删（页头左格保留唯一一枚）。
+ * `paginateEiEntries` 的章头断言仍在（纯函数用例，服务成员/产出物目录页）。
  *
  * 前置：`npm run build --outDir build-dist`（产物在 build-dist/）与本机
  * chromium；缺任一则整组 skip（与另两份视觉 spec 同口径）。
@@ -375,7 +388,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('E 版默认态：3 原生签名页 = 4 纸面（artifact 保守跨页），彩色 4 张 + 灰度 4 张；794×1123 无裁切（她 10-09 23:38 反馈：默认收敛到签名页；期七深化：元信息行占流高，artifact 页保守跨页）', async () => {
+  it('E 版默认态：3 原生签名页 = 4 纸面（产出物目录 12 行 + 6 章头超一页，保守跨页），彩色 4 张 + 灰度 4 张；794×1123 无裁切（她 10-09 23:38 反馈：默认收敛到签名页；2026-10-11 P0-12 刊头长高后阶段/成员目录仍各 1 页，产出物目录仍 2 页）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['editorial-index'].baseline;
@@ -398,7 +411,7 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
     }
   });
 
-  it('E 版长目录分页：31 阶段 ⇒ 阶段目录跨页稳定（续头只标真跨页 / 页码连续 / 行不裂）', async () => {
+  it('E 版长目录分页：31 阶段 ⇒ 阶段目录跨页稳定（行序连续 / 每页自带刊头 / 页码连续 / 行不裂）', async () => {
     const css = builtCss();
     const vm = buildVm(31);
     const baseline = PRINT_TEMPLATE_PALETTES['editorial-index'].baseline;
@@ -423,22 +436,37 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
         await pages[i]!.screenshot({ path: join(OUT_DIR, `e-longlist-p${i + 1}-color.png`) });
       }
 
-      // 跨页续头：第二阶段顶部有「（续）」章头（翻页读者看得见自己在哪一章）
+      // 跨页身份（2026-10-11 P0-14② 新语义）：行序回到 orderIndex 连续，章头
+      // 分组整体退役 ⇒ 跨页断点不再靠「（续）」章头，而靠**每页自带的刊头 +
+      // 页脚「第 N / M 页」**（宪法 7「每页独立解释」）。故此处改为断言：
+      // ① 阶段页上不存在 .ei-chapter；② 每张物理页都带完整两行巨题刊头；
+      // ③ 页脚页码连续。
       const stagePages = await page.$$('[data-print-page="stage-index"]');
       expect(stagePages.length, '阶段目录应占 ≥2 个物理页').toBeGreaterThanOrEqual(2);
-      const p2Text = (await stagePages[1]!.textContent()) ?? '';
-      expect(p2Text, '跨页章补「（续）」续头').toContain('（续）');
-      // 续头只标真跨页：恰好一枚（未开始章跨页）；齐页边界整章开始的章不标续
-      const contHeads = await stagePages[1]!.$$eval('.ei-chapter', (els) =>
-        els.filter((e) => (e.textContent ?? '').includes('（续）')).length,
+      const chapterCount = await page.$$eval(
+        '[data-print-page="stage-index"] .ei-chapter',
+        (els) => els.length,
       );
-      expect(contHeads, '续头只标真跨页的章（恰好 1 枚）').toBe(1);
-      const p1Text = (await stagePages[0]!.textContent()) ?? '';
-      expect(p1Text, '第一页不得出现续头').not.toContain('（续）');
+      expect(chapterCount, 'P0-14②：行序连续后阶段目录不再有章头分组').toBe(0);
+      for (let i = 0; i < stagePages.length; i++) {
+        // 每页自带刊头：两行巨题 + 5px 章节粗线（跨页读者看得见自己在哪一页）
+        const headLines = await stagePages[i]!.$$eval('.ei-head__title-line', (els) =>
+          els.map((e) => e.textContent ?? ''),
+        );
+        expect(headLines, `第 ${i + 1} 阶段页应带两行巨题刊头`).toEqual(['阶段', '目录']);
+        const rule = await stagePages[i]!.$eval('.ei-head__rule', (el) => {
+          const s = getComputedStyle(el);
+          return { h: s.height, bg: s.backgroundColor };
+        });
+        expect(rule.h, '每页刊头粗线 5px').toBe('5px');
+        expect(rule.bg).toBe('rgb(20, 20, 20)');
+      }
 
       // 页码连续：第 2 阶段页的物理页码 = 2（第 1 页是阶段目录首页）
       const pageIdx = await stagePages[1]!.getAttribute('data-page-index');
       expect(pageIdx).toBe('1');
+      const p1Text = (await stagePages[0]!.textContent()) ?? '';
+      const p2Text = (await stagePages[1]!.textContent()) ?? '';
       expect(p2Text).toContain('第 2 / ');
       // 首页页码 1 / 总数一致；第二页与总数相同（连续编号）
       expect(p1Text).toContain('第 1 / ');
@@ -446,25 +474,25 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       expect(totalMatch, '首页应带「第 1 / N 页」').not.toBeNull();
       expect(p2Text).toContain(`第 2 / ${totalMatch![1]} 页`);
 
-      // 行不裂：两页的阶段行都在（31 行全部上纸，无丢行）
+      // 行不裂：两页的阶段行都在（31 行全部上纸，无丢行）；行序 = orderIndex 连续
       const rows = await page.$$eval('[data-print-page="stage-index"] .ei-row', (els) => els.length);
       expect(rows, '31 个阶段行全部上纸').toBe(31);
+      const stageNos = await page.$$eval('[data-print-page="stage-index"] .ei-row__no', (els) =>
+        els.map((e) => e.textContent ?? ''),
+      );
+      expect(stageNos).toEqual(Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')));
 
-      // 章头不孤儿：每个物理页的章头后面都有行（章头不是页尾最后一个元素）
+      // 每张阶段页都有行（不出现「只有刊头没有行」的空页）
       for (let i = 0; i < stagePages.length; i++) {
-        const lastIsChapter = await stagePages[i]!.evaluate((el) => {
-          const rowsIn = el.querySelectorAll('.ei-row');
-          const chapters = el.querySelectorAll('.ei-chapter');
-          return chapters.length > 0 && rowsIn.length === 0;
-        });
-        expect(lastIsChapter, `第 ${i + 1} 阶段页不得只有章头没有行`).toBe(false);
+        const rowsIn = await stagePages[i]!.$$eval('.ei-row', (els) => els.length);
+        expect(rowsIn, `第 ${i + 1} 阶段页应有行`).toBeGreaterThan(0);
       }
     } finally {
       await page.close();
     }
   });
 
-  it('E 版视觉纪律：大编号独立列 / 朱红有界 / 无底部黑栏 / 发丝线分组', async () => {
+  it('E 版视觉纪律：两行巨标题 / 大编号独立列 / 赭红有界 / 无底部黑栏 / 发丝线与 5px 粗线', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['editorial-index'].baseline;
@@ -479,71 +507,95 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       const p1 = await page.$('[data-print-page="stage-index"]');
       expect(p1, 'P1 阶段目录页应在').not.toBeNull();
 
+      // ⓪ 两行巨标题（2026-10-11 P0-12）：行1 墨 / 行2 焦点色；行节距 ≈106px
+      //    （参考稿 y124..210 / y230..316）；字号按规格「两行总高 192px」反推
+      const titleLines = await p1!.$$eval('.ei-head__title-line', (els) =>
+        els.map((e) => ({
+          text: e.textContent ?? '',
+          color: getComputedStyle(e).color,
+          top: (e as HTMLElement).offsetTop,
+          fs: Number.parseFloat(getComputedStyle(e).fontSize),
+        })),
+      );
+      expect(titleLines.map((l) => l.text), '页题拆两行：阶段 / 目录').toEqual(['阶段', '目录']);
+      expect(titleLines[0]!.color, '行1 近黑').toBe('rgb(20, 20, 20)');
+      expect(titleLines[1]!.color, '行2 = accent 槽位 #B04A2F').toBe('rgb(176, 74, 47)');
+      expect(titleLines[0]!.fs, '两行巨字字号 ≥80px（规格：两行总高 192px 反推）').toBeGreaterThanOrEqual(80);
+      // 行节距 = 单行槽高 = 字号 × line-height（规格判据「两行 offsetTop 差 ≈106px」）
+      expect(Math.abs(titleLines[1]!.top - titleLines[0]!.top), '两行 offsetTop 差 ≈106px').toBeGreaterThanOrEqual(100);
+      expect(Math.abs(titleLines[1]!.top - titleLines[0]!.top)).toBeLessThanOrEqual(112);
+      // 衬线族真解析（P0-12 判据：审计 §5 明说「未验证字形是否为衬线」）
+      const titleFont = await p1!.$eval('.ei-head__title', (el) => getComputedStyle(el).fontFamily);
+      expect(titleFont, 'E 的页题必须落在衬线族').toMatch(/Serif|Song|Sun/i);
+
       // ① 大编号是**独立 DOM 列**（02 §6 禁伪元素）：.ei-row__no 元素存在且
       //    文本 = 补零 orderIndex；伪元素生成的编号进不了 DOM（可访问性/分页稳定）
+      //    2026-10-11 P0-14②：行序回到 orderIndex 连续 01→09（不再被四态重排）
       const nos = await p1!.$$eval('.ei-row__no', (els) => els.map((e) => e.textContent ?? ''));
       expect(nos.length, '9 个阶段行各一枚编号').toBe(9);
-      // 章序 = 进行中 → 延期 → 未开始 → 已完成（目录跳读优先级）；章内按 orderIndex
-      expect(nos, '编号列按章序排列，巨编号即真实 orderIndex').toEqual([
+      expect(nos, '编号列 = orderIndex 连续 01→09（参考稿口径；P0-14② 行序重排已退役）').toEqual([
         '01',
-        '04',
-        '07',
         '02',
-        '05',
         '03',
+        '04',
+        '05',
         '06',
+        '07',
         '08',
         '09',
       ]);
-      // 编号列的字体确实变大（视觉锚点）：≥20px
+      // 编号列的字体确实变大（视觉锚点）：P0-14 判据 ≥46px（参考 cap 38px ⇒ ≈50px）
       const noFont = await p1!.$eval('.ei-row__no', (el) => parseFloat(getComputedStyle(el).fontSize));
-      expect(noFont, '巨编号 ≥20px').toBeGreaterThanOrEqual(20);
+      expect(noFont, '巨编号 ≥46px（P0-14 判据）').toBeGreaterThanOrEqual(46);
 
-      // ② 朱红有界：延期章/Agent 行走朱红，但整页不是单色红（近黑元素仍在）
-      const accent = await p1!.$eval('.ei-chapter[data-focus] .ei-chapter__label', (el) =>
-        getComputedStyle(el).color,
-      );
-      expect(accent, '延期章头应为朱红 #C8102E').toBe('rgb(200, 16, 46)');
+      // ② 赭红有界：延期行 / Agent 行走焦点色，但整页不是单色红（近黑元素仍在）
+      const accent = await p1!.$eval('.ei-row__no[data-focus]', (el) => getComputedStyle(el).color);
+      expect(accent, '延期/Agent 行巨编号应为赭红 #B04A2F').toBe('rgb(176, 74, 47)');
       const inkCount = await p1!.$$eval('.ei-row__name', (els) =>
         els.filter((e) => getComputedStyle(e).color === 'rgb(20, 20, 20)').length,
       );
       expect(inkCount, '近黑正文元素仍在（整页不许单色红）').toBeGreaterThan(0);
-      // Agent 负责阶段：负责人名朱红 + 「Agent」文字签（双编码，灰度可辨）
+      // Agent 负责阶段：负责人名赭红 + 「Agent」文字签（双编码，灰度可辨）
       const agentOwner = await p1!.$eval('.ei-row__owner[data-agent]', (el) => ({
         color: getComputedStyle(el).color,
         text: el.textContent ?? '',
       }));
-      expect(agentOwner.color).toBe('rgb(200, 16, 46)');
+      expect(agentOwner.color).toBe('rgb(176, 74, 47)');
       expect(agentOwner.text).toContain('Agent');
 
       // ③ 无底部黑栏：页脚背景透明，且页内无「通栏近黑填充」元素
       const footBg = await p1!.$eval('.ei-foot', (el) => getComputedStyle(el).backgroundColor);
       expect(footBg, '页脚无黑栏（背景透明）').toBe('rgba(0, 0, 0, 0)');
+      // 刊头下的 5px 章节粗线是近黑且通栏（>600px），是唯一允许的通栏近黑块
       const blackBars = await p1!.$$eval('*', (els) =>
         els.filter((e) => {
           const s = getComputedStyle(e);
-          return s.backgroundColor === 'rgb(20, 20, 20)' && e.clientWidth > 600;
+          return (
+            s.backgroundColor === 'rgb(20, 20, 20)' &&
+            e.clientWidth > 600 &&
+            !e.classList.contains('ei-head__rule')
+          );
         }).length,
       );
-      expect(blackBars, 'E 版任何页面不得出现通栏黑栏').toBe(0);
+      expect(blackBars, 'E 版除刊头粗线外不得出现通栏黑栏').toBe(0);
 
-      // ④ 发丝线分组：条目行底线 1px 线色；章头 2px 近黑粗章节线
+      // ④ 线：条目行底线 1px 线色；刊头章节粗线 5px 近黑（P0-13：1px 发丝线 → 5px）
       const rowBorder = await p1!.$eval('.ei-row', (el) => {
         const s = getComputedStyle(el);
         return { w: s.borderBottomWidth, c: s.borderBottomColor };
       });
       expect(rowBorder.w).toBe('1px');
-      expect(rowBorder.c).toBe('rgb(207, 200, 188)');
-      const chapterBorder = await p1!.$eval('.ei-chapter', (el) => {
+      expect(rowBorder.c).toBe('rgb(207, 198, 180)');
+      const chapterBorder = await p1!.$eval('.ei-head__rule', (el) => {
         const s = getComputedStyle(el);
-        return { w: s.borderTopWidth, c: s.borderTopColor };
+        return { w: s.height, c: s.backgroundColor };
       });
-      expect(chapterBorder.w).toBe('2px');
+      expect(chapterBorder.w, 'P0-13：刊头章节线 5px').toBe('5px');
       expect(chapterBorder.c).toBe('rgb(20, 20, 20)');
 
-      // ⑤ 纸面是暖浅纸面 #FAF7F2（模板身份，不开槽位）
+      // ⑤ 纸面是暖浅纸面 #F5F2EC（模板身份，不开槽位；P0-15 向参考稿还原）
       const paper = await p1!.evaluate((el) => getComputedStyle(el).backgroundColor);
-      expect(paper, 'E 版纸面应为暖浅纸 #FAF7F2').toBe('rgb(250, 247, 242)');
+      expect(paper, 'E 版纸面应为暖浅纸 #F5F2EC').toBe('rgb(245, 242, 236)');
 
       // ⑥ 口径注上纸：占比 ≠ 完成度（01 §3.1 防误读，每页可独立解释）
       const p1Text = (await p1!.textContent()) ?? '';
@@ -578,14 +630,17 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
         expect(box!.height).toBeLessThanOrEqual(1124);
         await pages[i]!.screenshot({ path: join(OUT_DIR, `e-preset-p${i + 1}-color.png`) });
       }
-      // 预设真的挂上了：延期章头取靛蓝 #2B4ACB（不是默认朱红）
-      const accent = await page.$eval('.ei-chapter[data-focus] .ei-chapter__label', (el) =>
+      // 预设真的挂上了：页题第二行（类型词）取靛蓝 #2B4ACB（不是默认赭红）
+      const accent = await page.$eval('.ei-head__title-line[data-tone="accent"]', (el) =>
         getComputedStyle(el).color,
       );
-      expect(accent, '靛蓝预设的焦点色应为 #2B4ACB').toBe('rgb(43, 74, 203)');
+      expect(accent, '靛蓝预设的类型词行应为 #2B4ACB').toBe('rgb(43, 74, 203)');
+      // 且焦点行的巨编号也跟随槽位
+      const noAccent = await page.$eval('.ei-row__no[data-focus]', (el) => getComputedStyle(el).color);
+      expect(noAccent, '靛蓝预设的焦点巨编号应为 #2B4ACB').toBe('rgb(43, 74, 203)');
       // 纸面仍是暖浅纸（paper 不开槽位，E 的身份）
       const paper = await page.$eval('.a4-page', (el) => getComputedStyle(el).backgroundColor);
-      expect(paper).toBe('rgb(250, 247, 242)');
+      expect(paper).toBe('rgb(245, 242, 236)');
     } finally {
       await page.close();
     }

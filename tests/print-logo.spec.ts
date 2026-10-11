@@ -455,20 +455,23 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     expect(logoHeights(doc)).toEqual([28, 28, 28, 28]);
   });
 
-  it('E 版：logo 在每页左上角发丝线下方 ≤22px', () => {
+  it('E 版：logo 在每页页头左上格 ≤22px（全页只此一枚）', () => {
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['editorial-index'].baseline;
     const doc = parse(
       renderToStaticMarkup(createElement(EditorialIndexDocument, { vm, palette: baseline, logo: TINY_LOGO })),
     );
-    const rows = doc.querySelectorAll('.ei-logo-row img.print-logo');
-    expect(rows.length, 'E 版每物理页一枚（默认 = 3 原生签名页；通用 M2 默认不勾）').toBe(3);
-    // 发丝线下方：logo 行在页头（含 .ei-head__rule）之后
+    // 2026-10-11 P0-16：内容区那处重复 logo 已删（参考稿内容区无 logo），
+    // logo 收回页头左格 ⇒ 每物理页仍恰好一枚，且不再出现在章节粗线之下
+    const logos = doc.querySelectorAll('.a4-page .print-logo');
+    expect(logos.length, 'E 版每物理页一枚（默认 = 3 原生签名页；通用 M2 默认不勾）').toBe(3);
     const page = doc.querySelector('.a4-page')!;
-    const rule = page.querySelector('.ei-head__rule');
-    const logoRow = page.querySelector('.ei-logo-row');
-    expect(rule).not.toBeNull();
-    expect(logoRow).not.toBeNull();
+    const head = page.querySelector('.ei-head')!;
+    const logo = head.querySelector('.ei-head__logo .print-logo');
+    expect(logo, 'logo 应在页头（.ei-head）内').not.toBeNull();
+    // 内容区不得再有 logo（章节粗线之下的主体区）
+    expect(page.querySelector('.ei-body .print-logo'), '内容区不得再有 logo').toBeNull();
+    expect(doc.querySelectorAll('.ei-logo-row').length, '独立的「内容区 logo 行」已退役').toBe(0);
     expect(logoHeights(doc)).toEqual([22, 22, 22]);
   });
 

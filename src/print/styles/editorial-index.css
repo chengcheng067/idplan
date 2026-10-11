@@ -6,13 +6,19 @@
  * 亮色锁，暗色主题下打印稿直接废掉（机理见 global.css「:root, .print-root」）。
  * 故本文件所有选择器以 `.print-root.print-template-editorial-index` 起头。
  *
- * ── token（01 §6）──
- *   --ei-paper #FAF7F2 暖浅纸面（**固定不开槽位**——纸面性格是模板身份，
+ * ── token（01 §6；纸底与焦点色按参考稿实测校准，2026-10-11 P0-15）──
+ *   --ei-paper #F5F2EC 暖浅纸面（**固定不开槽位**——纸面性格是模板身份，
  *     配色三槽位只给 accent / ink / line，产品决策文档 §3.2）
- *   --tpl-ink     #141414 近黑正文（槽位）
- *   --tpl-accent  #C8102E 朱红焦点（槽位）
- *   --tpl-line    #CFC8BC 发丝线（槽位）
- *   粗章节线 = 2px 近黑（章与章的分组语言）；发丝线 = 1px 线色（条目分组）
+ *   --tpl-ink     #141414 近黑正文（槽位；参考稿 #1F1E1B，审计判「近似可接受」故不动）
+ *   --tpl-accent  #B04A2F 赭红/砖红焦点（槽位；参考稿实测 #B04A2F，原 #C8102E
+ *     是正红/洋红偏冷，色相偏离 12–15°）
+ *   --tpl-line    #CFC6B4 发丝线（槽位；参考稿实测值）。为什么必须同时动它：
+ *     纸底由 #FAF7F2 改到参考真值 #F5F2EC 后，原线色 #CFC8BC 对纸底只有
+ *     **1.487:1**，低于 `PALETTE_MIN_CONTRAST.line` 的 1.5 硬闸门（宪法 5
+ *     「对比度是闸门不是建议」⇒ checkPrintPalette ok:false ⇒ 界面禁存）；
+ *     取参考稿自己的发丝线实测值 #CFC6B4 后实测 **1.517:1 ≥ 1.5**，过闸。
+ *     （对比度实测登记见 print-palette.ts 的 EDITORIAL_INDEX_PALETTE）
+ *   粗章节线 = 5px 近黑（刊头下，参考 y322..326）；发丝线 = 1px 线色（条目分组）
  *
  * ── 版式语言 ──
  * 目录索引：中英双语刊头 + 巨编号独立列 + 发丝线/粗章节线分组；**不用卡片**；
@@ -26,11 +32,13 @@
  */
 
 .print-root.print-template-editorial-index {
-  /* 纸面与三槽位（槽位缺省 = 设计师基线；自定义经 .print-root style 进入） */
-  --ei-paper: #faf7f2;
-  --tpl-accent: #c8102e;
+  /* 纸面与三槽位（槽位缺省 = 设计师基线；自定义经 .print-root style 进入）
+     2026-10-11 P0-15：纸底与焦点色按参考稿实测校准；线色随之取参考实测值
+     （原 #CFC8BC 对新纸底只有 1.487:1，过不了 1.5 硬闸门） */
+  --ei-paper: #f5f2ec;
+  --tpl-accent: #b04a2f;
   --tpl-ink: #141414;
-  --tpl-line: #cfc8bc;
+  --tpl-line: #cfc6b4;
   /* 字体三族（栈内离线回落，不强拉网络字体） */
   --ei-font-display: 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
   --ei-font-body: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif;
@@ -51,14 +59,24 @@
   print-color-adjust: exact;
 }
 
-/* ── 页头：中英双语刊头 + 项目标识；底部发丝线 ── */
+/* ── 页头：中英双语刊头 + 两行巨题 + 项目标识；底部章节粗线 ──
+   2026-10-11 P0-12：页题由「单行 27px 无衬线」改成参考稿的「两行 92px
+   衬线巨字」（硬目标两行总墨高 192px，见 .ei-head__title 推导），页头随之
+   长高（实测刊头总高由 ~95px 变为 ~330px，与 EditorialIndexDocument.tsx 的
+   EI_HEAD_H 同源估高）。 */
 .print-root.print-template-editorial-index .ei-head {
   position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
-  padding: 30px var(--ei-pad-x) 13px;
+  gap: 20px;
+  padding: 40px var(--ei-pad-x) 2px;
+}
+
+.print-root.print-template-editorial-index .ei-head__left {
+  /* 巨题是 nowrap 的固定宽度内容：左栏按内容占位，右栏（项目标识）让路 */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .print-root.print-template-editorial-index .ei-head__kicker {
@@ -82,20 +100,42 @@
   print-color-adjust: exact;
 }
 
-/* 页题：衬线（编辑索引的锚点字体；整题一种字体，不拆拼接） */
+/* 页题：两行巨字，衬线（编辑索引的锚点字体；整题一种字体，不拆拼接）。
+   2026-10-11 P0-12 向参考稿还原——参考稿是两行 ≈120px 衬线（行1 墨
+   / 行2 焦点色），现状是单行 27px 无衬线，字号差 4.4 倍。
+   字号**按规格指定的硬目标反推**（规格原文：「以两行总高 = 316 − 124 =
+   192px 为硬目标反推字号，比抠 cap 比更稳」），并用本机实测的字体字面比
+   校正（Noto Serif SC 的方块字墨高 ≈ 字号 × 0.952，真 Chromium 像素实测）：
+     · 行节距 = 参考实测 107px（行1 墨顶 y123 → 行2 墨顶 y230）
+     · 两行总墨高 = 节距 + 单行墨高 = 107 + 0.952F = 192 ⇒ F ≈ 92px
+   故 92px × line-height 1.163 = 107.0px 节距、两行槽 214px、墨跨 194.6px。
+   （规格给的「≈120px」是审计按「cap 92px ÷ 0.86 字面比」推的；本机对参考稿
+   逐像素复测的单行墨高是 88px 而非 92px，按 88/0.952 ≈ 92px 落。两把尺子
+   「行节距 ≈106px」「两行墨跨 ≈192px」在本值下同时成立） */
 .print-root.print-template-editorial-index .ei-head__title {
-  margin: 7px 0 0;
+  margin: 32px 0 0;
   font-family: var(--ei-font-display);
-  font-size: 27px;
+  font-size: 92px;
   font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: 0.04em;
+  line-height: 1.163;
+  letter-spacing: 0.01em;
   color: var(--tpl-ink);
   white-space: nowrap;
 }
 
+/* 两行各占一行：行1 墨、行2 焦点色（类型词） */
+.print-root.print-template-editorial-index .ei-head__title-line {
+  display: block;
+}
+
+.print-root.print-template-editorial-index .ei-head__title-line[data-tone='accent'] {
+  color: var(--tpl-accent);
+}
+
 .print-root.print-template-editorial-index .ei-head__right {
-  max-width: 330px;
+  /* 巨题 nowrap：右栏宽度收在 160px，保证 5 字巨题行（520px）不与项目名相撞 */
+  flex: 0 0 auto;
+  max-width: 160px;
   text-align: right;
 }
 
@@ -121,22 +161,25 @@
   opacity: 0.72;
 }
 
-/* 页头发丝线（logo 行的上边界——「发丝线下方」的版式锚点） */
+/* 刊头章节粗线（5px 近黑）——2026-10-11 P0-13：参考稿是 **5px 近黑
+   `#1F1E1B`**（实测 y322..326，x48..746），现状退化成 1px 发丝线。
+   位置在**两行巨题之下**（本元素是页头 flex 柱的收口项，页头高度由巨题列
+   决定 ⇒ 线自然落在题末）。 */
 .print-root.print-template-editorial-index .ei-head__rule {
   position: absolute;
   left: var(--ei-pad-x);
   right: var(--ei-pad-x);
   bottom: 0;
-  height: 1px;
-  background: var(--tpl-line);
+  height: 5px;
+  background: var(--tpl-ink);
 }
 
-/* ── logo 行：每页左上角、发丝线下方（≤22px）── */
-.print-root.print-template-editorial-index .ei-logo-row {
+/* logo 格：每页左上角一格（≤22px）。2026-10-11 P0-16：原先独立成「内容区 logo
+   行」（页头线之下一整行），参考稿的内容区没有 logo ⇒ 收回页头左格，全页只此一枚 */
+.print-root.print-template-editorial-index .ei-head__logo {
   display: flex;
   align-items: center;
-  padding: 10px var(--ei-pad-x) 0;
-  min-height: 24px;
+  margin-bottom: 6px;
 }
 
 /* 未上传时的文字标：衬线（与页题同族），近黑 */
@@ -250,16 +293,17 @@
   text-overflow: ellipsis;
 }
 
-/* 目录行：发丝线分组（条目之间 1px 线色） */
+/* 目录行：发丝线分组（条目之间 1px 线色）
+   2026-10-11 P0-14 + 规格配套：巨编号 24→50px（行高主导），行内呼吸随之上调
+   ——参考稿行节距 **70px**（巨编号 50px + 上下 9px + 1px 发丝线 = 69px），
+   规格明文「编号与行距必须同时改，只改一个都会破坏节奏」。
+   EI_ROW_H.normal 估高随 CSS 同源联动（EditorialIndexDocument.tsx）。 */
 .print-root.print-template-editorial-index .ei-row {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) 92px 158px minmax(0, 1fr) 60px;
+  grid-template-columns: 66px minmax(0, 1fr) 92px 158px minmax(0, 1fr) 60px;
   align-items: center;
-  /* 行内呼吸 16→12px（密度研究 §3-E：目录行实测约 42px，与章头几乎等高，
-     分组语言靠 2px 粗线硬撑；紧 L2 行、把呼吸赎回到章头界面）。
-     EI_ROW_H.normal 估高随 CSS 同源联动（EditorialIndexDocument.tsx）。 */
   gap: 10px;
-  padding: 6px 0;
+  padding: 9px 0;
   border-bottom: 1px solid var(--tpl-line);
   font-size: 12.5px;
 }
@@ -280,10 +324,16 @@
   padding-left: 9px;
 }
 
-/* 巨编号：独立列（真实 DOM 元素；02 §6 禁伪元素）；衬线锚点字体 */
+/* 巨编号：独立列（真实 DOM 元素；02 §6 禁伪元素）；衬线锚点字体。
+   2026-10-11 P0-14：24 → **50px**（参考实测 cap 38px、字号 ≈50px）。
+   现状 24px 撑不起「巨编号」这个页锚点装置（审计：字号差 2.1 倍）。
+   `color` 保持既有焦点色用法：延期阶段 / Agent 负责行落焦点色，其余近黑
+   ——参考稿 9 枚编号都是赭红，但 `01 §6` 的「朱红纪律（只出现在延期章、
+   Agent 来源、占比提醒词三处）」是产品硬要求，优先于参考稿的取色
+   （规格 P0-14 原文也是「`color` 保持焦点色用法」）。 */
 .print-root.print-template-editorial-index .ei-row__no {
   font-family: var(--ei-font-display);
-  font-size: 24px;
+  font-size: 50px;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;

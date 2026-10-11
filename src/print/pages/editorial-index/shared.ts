@@ -37,14 +37,6 @@ export const STAGE_GLYPH: Record<StageStatus, string> = {
   [StageStatus.Delayed]: '▲',
 };
 
-/** 章节顺序（目录跳读：进行中 → 延期 → 未开始 → 已完成；延期章是朱红焦点） */
-export const EI_CHAPTER_ORDER: readonly StageStatus[] = [
-  StageStatus.InProgress,
-  StageStatus.Delayed,
-  StageStatus.NotStarted,
-  StageStatus.Completed,
-];
-
 /** 任务七态中文标签（复用全仓唯一出处 TASK_STATUS_LABELS） */
 export function taskStatusLabel(status: TaskStatus): string {
   return TASK_STATUS_LABELS[status];
