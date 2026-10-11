@@ -214,7 +214,9 @@ function makeTask(
       url: null,
       note: null,
     })),
-    source: 'manual',
+    // `TaskSource = 'human' | 'agent'`（src/core/types/enums.ts:205）——历史夹具误写
+    // `'manual'`，只是被这个 spec 不在 tsconfig 的检查范围内掩盖了。
+    source: 'human',
     runId: null,
     revision: 1,
     updatedAt: '2026-01-01T00:00:00Z',
