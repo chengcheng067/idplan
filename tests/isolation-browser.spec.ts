@@ -43,6 +43,7 @@ import {
 } from '../src/core/color/custom-color-registry';
 import { deriveStageColors } from '../src/core/color/derive-stage-colors';
 import { stageColorAttrs, stageColorKeyOf } from '../src/components/timeline/stageColorKey';
+import { builtJs } from './helpers/built-css';
 import { listenOnSafePort } from './helpers/safe-listen';
 
 /**
@@ -504,14 +505,16 @@ describe.skipIf(!CAN_RUN)('T02-BROWSER · 通路 B（自定义阶段色）真 Ch
   });
 
   it('B-10 · 真实构建产物确实包含本模块（防"源码改了但产物是旧的"这类假绿）', () => {
-    const assets = join(resolve(__dirname, '..'), 'build-dist', 'assets');
-    const js = existsSync(assets)
-      ? readdirSync(assets).filter((f) => f.endsWith('.js'))
-      : [];
-    expect(js.length).toBeGreaterThan(0);
-    const bundle = js
-      .map((f) => readFileSync(join(assets, f), 'utf8'))
-      .join('\n');
+    // ⚠️ 2026-10-11 P1-3 修掉本用例自带的一个**假绿洞**（讽刺但真实：一个专门
+    // 防假绿的用例，自己带着假绿）。原实现 `readdirSync(assets).filter(endsWith
+    // ('.js'))` **拼全部 11 份 .js**，而 `index.html` 只引用 1 份 ⇒ 判定集合是
+    // **历次构建的并集**：任何一轮曾经包含过的字面量都能让 toContain 通过，
+    // 「这一版到底有没有」根本没被验证。现在只读「本次构建真正会加载的 JS」
+    // （index.html 的 module script + 其懒加载分块），并带**残留门禁**——
+    // 盘上有本次构建不加载的 JS 就 loud fail（判据同 P1-1 的 CSS 口径，
+    // 见 tests/helpers/built-css.ts 的文件头）。
+    const bundle = builtJs(resolve(__dirname, '..'));
+
     // 通路 B 的属性名与变量名必须出现在产物里（字面量常量，不是拼接出来的）
     expect(bundle).toContain(STAGE_COLOR_KEY_ATTR);
     expect(bundle).toContain('--stage-local-band');
