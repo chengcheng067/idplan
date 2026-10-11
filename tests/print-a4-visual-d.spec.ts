@@ -637,6 +637,95 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     }
   });
 
+  it('D 版页头报告装置（P1-7 右半）：REPORT nn / nn + 点分日期，mono 小字、逐页联动、不改变页头高', async () => {
+    const css = builtCss();
+    // 用 30 阶段长夹具：矩阵 2 页 ⇒ 能同时验「首页 01 / 02」与「次页 02 / 02」
+    const stages: Stage[] = Array.from({ length: 30 }, (_, i) => {
+      const tpl = STAGES[i % 9]!;
+      return {
+        ...tpl,
+        id: `stg_d4_r_${i + 1}`,
+        orderIndex: i + 1,
+        name: `阶段${i + 1}·${i % 2 === 0 ? '方案深化' : '现场勘查'}`,
+      };
+    });
+    const tasks: Task[] = stages.map((s, i) => ({
+      ...TASKS[i % TASKS.length]!,
+      id: `tsk_d4_r_${i + 1}`,
+      stageId: s.id,
+      taskNo: 4000 + i + 1,
+    }));
+    const vm = buildPrintViewModel({
+      project: PROJECT,
+      stages,
+      tasks,
+      members: [HUMAN, AGENT],
+      stageLogs: LOGS,
+      role: MemberRoleKind.Admin,
+      currentMemberId: HUMAN.id,
+      todayIso: TODAY,
+      now: new Date('2026-10-09T07:30:00Z'),
+    });
+    const markup = renderToStaticMarkup(
+      createElement(DataEditorialDocument, {
+        vm,
+        sheets: [{ type: 'native', page: 'progress-matrix' }],
+        palette: PRINT_TEMPLATE_PALETTES['data-editorial'].baseline,
+      }),
+    );
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      const htmlPath = writeHtml('d-head-report.html', shell(markup, css, false));
+      await page.goto('file://' + htmlPath);
+      const pages = await page.$$('.a4-page');
+      expect(pages.length, '30 阶段矩阵应 2 页（本用例只需多页夹具）').toBe(2);
+
+      // 点分日期：与 generatedAt 同源（不是另造的时刻）
+      const ymd = vm.generatedAt.slice(0, 10).replace(/-/g, '.');
+      for (let i = 0; i < pages.length; i++) {
+        const el = pages[i]!;
+        const rp = await el.$eval('.de-head__report', (node) => {
+          const s = getComputedStyle(node);
+          const r = node.getBoundingClientRect();
+          return {
+            text: (node.textContent ?? '').replace(/\s+/g, ' ').trim(),
+            ff: s.fontFamily,
+            fs: s.fontSize,
+            color: s.color,
+            align: s.textAlign,
+            x: r.left,
+            right: r.right,
+            bw: node.parentElement!.getBoundingClientRect().right,
+          };
+        });
+        // ① 文本形状：`REPORT 01 / 02 2026.10.09`（两位补零 + 空格分隔 + 点分日期）
+        expect(rp.text, `第 ${i + 1} 页报告号形状`).toMatch(
+          new RegExp(`^REPORT 0${i + 1} / 02 ${ymd.replace(/\./g, '\\.')}$`),
+        );
+        // ② 它是「报告身份」那一档：等宽数字 + 小字 + 右下角退后一档灰
+        expect(rp.ff, `第 ${i + 1} 页报告号等宽族`).toContain('mono');
+        expect(rp.fs, `第 ${i + 1} 页报告号 9.5px`).toBe('9.5px');
+        expect(rp.color, `第 ${i + 1} 页报告号退后一档灰`).toBe('rgb(115, 115, 115)');
+        // ③ 右对齐：右缘与右栏同缘（页心右边界 − 40px 内距）
+        expect(Math.abs(rp.right - rp.bw), `第 ${i + 1} 页报告号右对齐`).toBeLessThanOrEqual(1);
+      }
+
+      // ④ 纯加法：页头总高仍是 210px（P0-8 定下的常数，估高与 CSS 同源的前提）
+      for (let i = 0; i < pages.length; i++) {
+        const head = await pages[i]!.$eval('.de-head', (el) =>
+          +(el.getBoundingClientRect().bottom - el.closest('.a4-page')!.getBoundingClientRect().top).toFixed(1),
+        );
+        expect(head, `第 ${i + 1} 页页头高不得因报告行变化（P0-8 常数 210）`).toBeCloseTo(210, 0);
+      }
+      // ⑤ 原有右侧两行仍在（是加法不是替换）
+      expect(await pages[0]!.$('.de-head__project'), '项目标识行必须保留').not.toBeNull();
+      expect(await pages[0]!.$('.de-head__meta'), '排期口径行必须保留').not.toBeNull();
+    } finally {
+      await page.close();
+    }
+  });
+
   it('D 版 P2 依赖网络：环、缺失引用、20+ 任务全部上纸（DOM 断言）', async () => {
     const css = builtCss();
     const vm = buildVm();

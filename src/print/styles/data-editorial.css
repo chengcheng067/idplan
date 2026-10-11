@@ -146,6 +146,22 @@
   text-align: right;
 }
 
+/* 报告装置右半（2026-10-11 P1-7 裁决）：`REPORT nn / nn  YYYY.MM.DD`。
+   0.10em 字距 + 9.5px 是「报告身份」一档的字号（与页脚 `.de-foot` 同档，
+   比 `.de-head__meta` 的 10px 再收半档，读起来退到项目标识之后）。
+   行高钉死 1.4：页头总高必须是可预测常数（同 `.de-head__kicker` 的纪律，
+   估高与 CSS 同源的前提）；它只在右栏内堆高，左栏（logo+标题+副标 ≈154px）
+   才是页头高度的决定项 ⇒ 本行不改变 210px 页头高。
+   右侧三行的从属关系：报告号（最弱）→ 项目名 → 排期口径（`.de-head__meta`）。 */
+.print-root.print-template-data-editorial .de-head__report {
+  margin: 0 0 6px;
+  font-size: 9.5px;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+  color: var(--de-gray-500);
+  white-space: nowrap;
+}
+
 /* 项目名最多两行，超出截断；完整文本经 title 属性可访问（02 §8） */
 .print-root.print-template-data-editorial .de-head__project {
   margin: 0;

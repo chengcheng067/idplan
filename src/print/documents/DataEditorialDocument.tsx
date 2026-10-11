@@ -49,7 +49,10 @@ import { DependencyNetworkPage } from '../pages/data-editorial/DependencyNetwork
 import { WorkloadCompositionPage } from '../pages/data-editorial/WorkloadCompositionPage';
 import { MilestoneAcceptancePage } from '../pages/data-editorial/MilestoneAcceptancePage';
 import { planMatrixPages, type MatrixPlan } from '../pages/data-editorial/shared';
-import { stampOf } from '../pages/data-editorial/shared';
+import { reportStampOf, stampOf } from '../pages/data-editorial/shared';
+
+/** 两位补零（页头报告号 `REPORT 01 / 04` 的定宽形状，P1-7 右半） */
+const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 /** D 版四页（02 §6 组件映射；顺序即纸面顺序） */
 export const DATA_EDITORIAL_PAGES: readonly PrintPageKind[] = [
@@ -244,6 +247,15 @@ function DePage({
           </p>
         </div>
         <div className="de-head__right">
+          {/* 报告装置右半（2026-10-11 P1-7 裁决）：`REPORT nn / nn` + 点分日期，
+              mono 小字、右对齐，置于项目标识之上。
+              为什么要它：P1-7 的「页眉改 mono 小字一行」与 P0-8 的「副标移到
+              标题下 + 转橙」冲突，team-lead 裁决按 P0-8、但**右半是纯加法**必须补
+              ——E 有页码、H 有 `SHEET nn / nn`，D 缺这一块会让四套的「报告身份」
+              不齐。日期取 `generatedAt`（与页脚的数据时间同源，不另造时刻）。 */}
+          <p className="de-head__report de-num">
+            REPORT {pad2(pageIndex + 1)} / {pad2(pageTotal)}　{reportStampOf(vm.generatedAt)}
+          </p>
           {/* 项目名最多两行，超出截断；完整文本经 title 可访问（02 §8） */}
           <p className="de-head__project" title={vm.project.name}>
             {vm.project.name}

@@ -102,6 +102,18 @@ export function stampOf(iso: string): string {
   return iso.slice(0, 10) + ' ' + iso.slice(11, 16);
 }
 
+/**
+ * ISO 时间串 → 页头报告号的「yyyy.MM.dd」（点分，P1-7 右半）。
+ *
+ * 为什么另开一个函数而不是复用 `stampOf`：`stampOf` 是**数据时间**的口径
+ * （`yyyy-MM-dd HH:mm`，出现在页脚与正文注里），页头报告号是**报告身份**
+ * 的口径（点分日期、无时刻，与参考稿页眉 `REPORT nn / nn YYYY.MM.DD` 同形）。
+ * 两者语义不同、形状不同，合并会逼着其中一处将就另一处。
+ */
+export function reportStampOf(iso: string): string {
+  return iso.slice(0, 10).replace(/-/g, '.');
+}
+
 /** 百分比整数（四舍五入；0-100 的展示口径） */
 export function pct(done: number, total: number): number {
   return total === 0 ? 0 : Math.round((done / total) * 100);
