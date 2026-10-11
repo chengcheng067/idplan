@@ -10,7 +10,7 @@
  * 只依赖 react-dom/client 原生渲染，不引入 testing-library（与仓库其余 tsx spec 一致）。
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 // 与仓库其余 tsx spec 一致：用 react-dom/test-utils 的 act（理由见 modal-focus-ime.spec.tsx）
 import { act } from 'react-dom/test-utils';
@@ -306,5 +306,74 @@ describe('presence · 无障碍与清理', () => {
     expect(isExiting()).toBe(true);
     fireAnimEnd(surface()!);
     expect(surface()).toBeNull();
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 在场判定的**时序**（回归：晚一帧 = 真机上焦点进不去弹层）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 与 `Modal` 同构的组件：焦点入场写成 `useEffect(..., [open])` + `panelRef.current?.focus()`
+ * ——这正是 `src/components/common/Modal.tsx` 里那段（且它**必须**保持 `[open]` 依赖，
+ * 否则会在每次击键时重跑、抢走输入框焦点造成 IME 吞字）。
+ */
+function ModalLike({ open }: { open: boolean }): JSX.Element | null {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // 刻意声明在 usePresence **之前**（与 Modal 一致）：同一次提交里本 effect 先跑。
+  useEffect(() => {
+    if (open) panelRef.current?.focus();
+  }, [open]);
+
+  const p = usePresence(open, { exitClass: EXIT, enterClass: ENTER });
+  if (!p.mounted) return null;
+  return (
+    <div
+      data-testid="panel"
+      tabIndex={-1}
+      ref={(node) => {
+        panelRef.current = node;
+        p.exitRef(node);
+      }}
+      className={ENTER}
+    />
+  );
+}
+
+describe('presence · 在场判定必须发生在渲染期（不许晚一帧）', () => {
+  it('打开的那一次提交里元素就已在 DOM ⇒ 依赖 [open] 的聚焦 effect 抓得到它', () => {
+    /*
+     * 这条断言的是**时序**，不是「最终在不在」。所以不能只查 DOM 里有元素
+     * （那样新旧实现都过：旧的靠 effect 里 setMounted 追一次重渲染，`act()` 返回时
+     * 元素也已经在了）。要区分两者，只能问「聚焦 effect 跑的那一刻 ref 有没有值」——
+     * 而依赖 `[open]` 的 effect 不会再跑第二次，所以最终焦点落在谁身上就是答案。
+     */
+    act(() => {
+      root.render(<ModalLike open={false} />);
+    });
+    expect(document.querySelector('[data-testid="panel"]')).toBeNull();
+
+    act(() => {
+      root.render(<ModalLike open />);
+    });
+
+    const panel = document.querySelector<HTMLElement>('[data-testid="panel"]');
+    expect(panel, '打开后元素应在 DOM').not.toBeNull();
+    expect(document.activeElement, '打开的当帧焦点就必须能进面板（Modal 的焦点入场靠这个）').toBe(
+      panel,
+    );
+  });
+
+  it('关闭仍是渲染期决定：当帧不卸载（否则出口动画没机会播）', () => {
+    // 与上一条同一机制的关向：保留标记若等到 effect 才置上，元素已经先被卸载了。
+    act(() => {
+      root.render(<ModalLike open />);
+    });
+    act(() => {
+      root.render(<ModalLike open={false} />);
+    });
+    const panel = document.querySelector<HTMLElement>('[data-testid="panel"]');
+    expect(panel, '关闭后**当帧**仍应在 DOM').not.toBeNull();
+    expect(panel!.classList.contains(EXIT)).toBe(true);
   });
 });

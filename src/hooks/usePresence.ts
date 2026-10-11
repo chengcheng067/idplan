@@ -44,28 +44,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   动画在面板上，但**拦住点击的是遮罩**，两者都必须是 `pointer-events: none`，
  *   否则用户点到的还是那个正在淡出的遮罩。两者同一个元素时（Toast 就是）
  *   只挂 `exitRef` 即可。
- * - 调用方必须用 `mounted` 做渲染门，否则「卸载」无从发生。
+ * - 调用方必须用 `mounted` 做渲染门，否则「卸载」无从发生。`mounted` 的翻转是
+ *   **渲染期同步**的（打开当帧就在场、关闭当帧就被扣住），不晚一帧 —— 晚一帧会
+ *   同时坏两件事：① 元素晚一帧才交给 React，依赖 `[open]` 的 effect（Modal 的
+ *   焦点入场）只跑那一次，抓到的是 null ref；② 关闭时元素先被卸载，动画没机会播。
+ *   完整时序与实测见 `tests/use-presence.spec.tsx` 的「在场判定必须发生在渲染期」。
  */
 export function usePresence(
   active: boolean,
   { exitClass, enterClass, exitMs = DEFAULT_EXIT_MS }: PresenceOptions,
 ): Presence {
-  const [mounted, setMounted] = useState(active);
+  /**
+   * 出口期「保留」标记：本次关闭要不要把元素扣在 DOM 里等动画。
+   *
+   * ★ 这个标记**必须在这一帧的渲染期**算出来，不能等 effect（原因见下方 `if` 块）。
+   */
+  const [retain, setRetain] = useState(false);
+  /** 上一帧的 `active`，用来在渲染期识别「翻转方向」 */
+  const [prevActive, setPrevActive] = useState(active);
   const [exiting, setExiting] = useState(false);
-
-  /** 与 `mounted` 同步的镜像：effect 里要读它，但**不能**进依赖（否则出口期会被自己打断） */
-  const aliveRef = useRef(active);
   const exitElRef = useRef<HTMLElement | null>(null);
   const blockElRef = useRef<HTMLElement | null>(null);
   /** 两个元素被改成 `none` 之前的内联值（'' = 本来没有内联值，还原成空串即恢复样式表口径） */
   const prevPeRef = useRef<{ exit: string; block: string } | null>(null);
   /** 本次出口是否摘过 `enterClass`（决定重开时要不要补回） */
   const strippedRef = useRef(false);
-
-  const alive = useCallback((next: boolean) => {
-    aliveRef.current = next;
-    setMounted(next);
-  }, []);
 
   /** 打上「不拦输入」。幂等：重复调用不会用已经被改成 none 的值覆盖原值。 */
   const block = useCallback(() => {
@@ -99,20 +102,24 @@ export function usePresence(
       strippedRef.current = false;
       if (el && exitClass) el.classList.remove(exitClass);
       setExiting(false);
-      alive(true);
       return;
     }
 
-    if (!aliveRef.current) return;
+    /*
+     * 没进入出口期就无事可做。两种情形都会落到这里：
+     *   · 本次关闭「不值得等」（无出口动画 / reduce）—— 渲染期就没扣住，元素当帧已卸载；
+     *   · 出口已经收尾（`finish()` 把 `retain` 放掉）。
+     */
+    if (!retain) return;
 
-    // 要求 1：reduce 下不等 —— CSS 的 `animation: none` 永不给 animationend。
-    // 元素没挂上（调用方漏了 exitRef）同样立即卸载：宁可少一次动画，也绝不留在 DOM。
-    //
-    // 第三种情形：**本形态根本没有出口动画**（调用方没给 exitClass）——
-    // 那就没有值得等的东西，立即卸载。等一个不存在的动画 = 让元素白活 200ms。
-    if (prefersReducedMotion() || !el || !exitClass) {
+    /*
+     * 要求 1 的兜底复检：保留标记是**渲染期**算的，从这里到 effect 之间系统开关
+     * 仍可能被改（reduce 可以在应用运行中打开）。宁可少一次动画，也绝不留在 DOM。
+     * `!el` 同理 —— 调用方漏接 `exitRef` 时没有可等的东西，直接收尾（绝不会滞留在 DOM）。
+     */
+    if (!el || !exitClass || prefersReducedMotion()) {
       setExiting(false);
-      alive(false);
+      setRetain(false);
       return;
     }
 
@@ -131,7 +138,7 @@ export function usePresence(
       el.classList.remove(exitClass);
       unblock();
       setExiting(false);
-      alive(false);
+      setRetain(false);
     };
     const onEnd = (e: AnimationEvent): void => {
       // 只认出口元素**自己**的动画结束：子元素冒泡上来的 animationend 不算数，
@@ -147,7 +154,32 @@ export function usePresence(
       el.removeEventListener('animationend', onEnd);
       window.clearTimeout(timer);
     };
-  }, [active, exitClass, enterClass, exitMs, alive, block, unblock]);
+  }, [active, retain, exitClass, enterClass, exitMs, block, unblock]);
+
+  /*
+   * ── 两个方向都在**渲染期**定，不能等到 effect ───────────────────────────
+   * · 打开必须同步：`mounted` 若晚一帧变 true，用 `mounted` 做渲染门的调用方就会晚
+   *   一帧才把元素交给 React；而依赖 `[open]` 的 `useEffect`（Modal 的焦点入场正是
+   *   这一形态：`panelRef.current?.focus()`）**只会跑那一次** —— 它跑的时候 ref 还是
+   *   null，之后不会再跑，焦点就永远进不去（真机症状：打开设置后焦点还留在触发钮上）。
+   * · 关闭必须当帧决定扣不扣：等 effect 才决定的话，元素已经先被卸载掉了，
+   *   出口动画没有机会播。
+   * 用 React 官方的「渲染期调 state」写法：它会在**提交之前**重跑一次渲染，
+   * 所以外部看到的仍是同一次提交的最终结果，中间没有可观察的帧。
+   */
+  if (prevActive !== active) {
+    setPrevActive(active);
+    /*
+     * 保留的三个条件缺一不可：
+     *   · 是「关」而不是「开」（开向一律立即在场）；
+     *   · 本形态有出口动画 —— 没有就没什么可等的，白活 200ms 是纯负债；
+     *   · 用户没要求减弱动效 —— reduce 下 `*-out` 的 `animation` 是 `none`，
+     *     `animationend` 永不来，「等」就等于把元素永久留在 DOM 里（要求 1）。
+     */
+    setRetain(!active && !!exitClass && !prefersReducedMotion());
+  }
+  /** 在场 = 打开中 **或** 出口期被扣住。消费方拿它做渲染门（`if (!mounted) return null`）。 */
+  const mounted = active || retain;
 
   const exitRef = useCallback((node: HTMLElement | null) => {
     exitElRef.current = node;
