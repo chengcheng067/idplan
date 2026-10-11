@@ -246,4 +246,42 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
     expect(settingsSet).not.toHaveBeenCalled();
     expect(container.textContent).toContain('第 1 个阶段（选址）的key');
   });
+
+  /*
+    ★ F1-③（审计）：**落库失败**必须有反馈。
+    修复前 `onPick` 只有 try/finally 没有 catch —— `repos.settings.set` 抛错时 Promise
+    静默 reject，界面一声不吭，而 finally 已把 file input 清空。用户看到的是
+    「选完文件 → 框空了 → 什么都没发生」，重试多少次都一样（错误只进本地日志）。
+    本用例与 ⑥-4 是同一动作的两条相反结论：**校验没过**（不落库、报校验错）
+    vs **校验全过但没落盘**（必须报「未导入」）。
+  */
+  it('⑥-5 落库失败必须有反馈：失败卡说明「未导入」，且不出现成功确认卡', async () => {
+    settingsSet.mockRejectedValueOnce(new Error('QuotaExceededError'));
+    await renderInto(container);
+    await pickFile(container, makeFile('good.json', JSON.stringify(GOOD_LIB)));
+    const text = container.textContent ?? '';
+    expect(text, '必须说清楚「行业包未导入」').toContain('写入本地存储失败');
+    expect(text).toContain('行业包未导入');
+    expect(text, '不得给出「导入成功」的假象').not.toContain('导入了');
+    // 既有形态不变：失败卡仍是文件级卡（复用，不是新 UI），且清单里没有这个包
+    expect(text).not.toContain('已导入的行业库（1）');
+    expect(logUserSpy).not.toHaveBeenCalled();
+    // 文件选择框照旧清空（finally 语义未变，重试路径不受影响）
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.value).toBe('');
+  });
+
+  it('⑥-6 落库失败后仍可再次导入（busy 复位、错误卡不锁死流程）', async () => {
+    settingsSet.mockRejectedValueOnce(new Error('QuotaExceededError'));
+    await renderInto(container);
+    await pickFile(container, makeFile('good.json', JSON.stringify(GOOD_LIB)));
+    expect(container.textContent).toContain('写入本地存储失败');
+
+    settingsSet.mockResolvedValueOnce(undefined);
+    await pickFile(container, makeFile('good.json', JSON.stringify(GOOD_LIB)));
+    const text = container.textContent ?? '';
+    expect(settingsSet).toHaveBeenCalledTimes(2);
+    expect(text, '第二次成功：失败卡让位给成功确认卡').not.toContain('写入本地存储失败');
+    expect(text).toContain('新库');
+  });
 });

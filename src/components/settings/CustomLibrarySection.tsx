@@ -134,7 +134,11 @@ export function CustomLibrarySection(): JSX.Element {
     );
   }, [failure]);
 
-  /** ③ 导回校验：文件级 / schema 级失败分流，成功落确认卡 */
+  /**
+   * ③ 导回校验：文件级 / schema 级失败分流，成功落确认卡。
+   * ④（F1-③）**落库失败**也是失败：settings.set 抛错 → 复用文件级失败卡说明「未导入」，
+   *   不再出现「选完文件、框空了、什么都没发生」的静默面。
+   */
   const onPick = useCallback(
     async (file: File | undefined) => {
       if (!file) return;
@@ -182,6 +186,21 @@ export function CustomLibrarySection(): JSX.Element {
           domain: result.library.domain,
         });
         logUser('行业库', `导入「${result.library.name}」（${result.library.items.length} 阶段 / ${result.library.presets.length} 套餐）`);
+      } catch {
+        /*
+          ★ 落库失败零反馈的修复（审计 F1-③）。
+          修复前：`finally` 之前没有 catch —— `repos.settings.set` 抛错（IndexedDB 配额
+          用满、库被降级、隐私模式禁用存储…）时，onPick 的 Promise 静默 reject，界面
+          什么也不说，而 finally 已经把文件选择框清空。用户看到的是「选完文件、框空了、
+          什么都没发生」，只能再选一次、再空一次——永远查不出原因（错误只进本地日志，
+          要专门去导出才看得见）。
+          这里复用**既有的**文件级失败卡（零新 UI），文案把「没导入」说死：校验全过了
+          但没落盘，最可能的解释就是空间不足。
+        */
+        setFailure({
+          kind: 'file',
+          message: '写入本地存储失败（可能空间不足），行业包未导入。',
+        });
       } finally {
         setBusy(false);
         if (fileRef.current) fileRef.current.value = '';
