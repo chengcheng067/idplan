@@ -75,14 +75,32 @@ export function StageDrawer({
     }
   }, [stageId, repos]);
 
+  /*
+   * ★ F6-B：`stageId` 有值、但在**本项目**里找不到对应阶段 ⇒ **直接把抽屉合上**。
+   *
+   * 修前这里渲染的是一句「该阶段不存在或已被移除。」—— 但那个画面**用户从来没有
+   * 主动要走进去**。它只由两种情况产生，两种都不该让用户看见一个错误的抽屉：
+   *   ① 换页遗留：`stageDrawerStageId` 住在全局 store，离开项目页时没人清，
+   *      再进任意项目详情页抽屉自动弹出；换到别的项目就是「阶段不存在」
+   *      （真正的复位点已补在 `AppShell` 的路由 effect，本效果是**第二道**）；
+   *   ② 抽屉开着时该阶段被删/被移除（并发编辑）—— 你正看着的东西没了，
+   *      合上抽屉是唯一有意义的反应，让用户自己去关一个写着「已移除」的空壳没有价值。
+   *
+   * ⚠️ 位置在**所有 hook 之后、下方 `if (!stageId) return null` 之前**：本文件有
+   * `tests/stage-drawer-hook-order.spec.tsx` 守着的 React #310 回归（hook 数量在
+   * `stageId` null↔非空之间必须恒定），这个 effect 无条件执行，不参与那个开关。
+   */
+  useEffect(() => {
+    if (stageId && !stage) close();
+  }, [stageId, stage, close]);
+
   if (!stageId) return null;
-  if (!stage) {
-    return (
-      <DrawerFrame onClose={close} title="阶段详情">
-        <p className="text-sm text-mist">该阶段不存在或已被移除。</p>
-      </DrawerFrame>
-    );
-  }
+  /**
+   * `stageId` 指向的阶段不在本项目里：交给上面的 effect 合上抽屉，本帧先**不渲染
+   * 任何东西**。为什么不是「渲染一句提示、等 effect 再关」——那会先闪一帧
+   * 「该阶段不存在或已被移除」再消失，正是要消灭的那个画面。
+   */
+  if (!stage) return null;
 
   return (
     <Modal open onClose={close} placement="right" ariaLabel={`阶段详情：${stage.name}`}>
@@ -130,30 +148,6 @@ export function StageDrawer({
             <DelayHistoryTimeline logs={logs ?? []} />
           </section>
         </div>
-      </aside>
-    </Modal>
-  );
-}
-
-function DrawerFrame({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose(): void;
-}): JSX.Element {
-  return (
-    <Modal open onClose={onClose} placement="right" ariaLabel={title}>
-      <aside className="flex h-full w-full flex-col border-l border-line bg-paper p-6 shadow-raised-lg rounded-l-3xl dark:rounded-l-2xl sm:max-w-[520px]">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-display-md">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="关闭" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sunken text-mist transition-colors hover:bg-sand">
-            <X size={18} />
-          </button>
-        </div>
-        {children}
       </aside>
     </Modal>
   );

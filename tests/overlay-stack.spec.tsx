@@ -297,5 +297,30 @@ describe('浮层栈 · 静态接线锁', () => {
     expect(src).not.toContain("if (placement === 'fullscreen' || placement === 'dropdown') return OVERLAY_Z_CLASS[75];");
   });
 
+  it('Sidebar.tsx：侧栏层态必须问浮层栈，不许在本地再写一个 z 常量', () => {
+    const src = read('src/components/layout/Sidebar.tsx');
+    expect(src).toContain('const railYielded = useRailYielded();');
+    expect(src).toContain("RAIL_Z_CLASS[railYielded ? 'yielded' : 'covered'],");
+    // 反面：本地写死的 z-[61] 会让 60 档右抽屉再次穿不过去（F6-A 原样复发）
+    expect(src, '侧栏不许再自持 z-[61] 常量').not.toContain("'z-[61]");
+  });
 
+  it('AppShell.tsx：路由变化必须复位阶段抽屉状态（F6-B）', () => {
+    const src = read('src/components/layout/AppShell.tsx');
+    expect(src).toContain('useUiStore.getState().closeStageDrawer();');
+  });
+
+  it('StageDrawer.tsx：找不到阶段时合上抽屉，不再渲染占位提示', () => {
+    const src = read('src/components/stage-detail/StageDrawer.tsx');
+    expect(src).toContain('if (stageId && !stage) close();');
+    /*
+     * 比「源码里没有这串文案」再准一步：**剥掉注释**再判。
+     * 原因同 toast-above-modal.spec.ts 里 shellLines 的注释 —— 本仓已被"行扫描认字样"
+     * 呛过三次。这里刚改完的代码旁边就有一句解释"修前渲染的是哪句话"的注释，
+     * 按裸源码判会当场假红，逼后来的人删掉解释（那才是真损失）。
+     * 剥注释后判的是**还渲染不渲染**，正是这条要守的东西。
+     */
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code, '占位文案应从渲染路径上退役').not.toContain('该阶段不存在或已被移除');
+  });
 });

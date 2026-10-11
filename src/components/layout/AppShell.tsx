@@ -57,6 +57,10 @@ import { useUiStore } from '../../store/useUiStore';
  *    真机实测过：交给 React 就发不出 unmount 消息）。打印路由
  *    （schedule/calendar/itinerary-print）刻意不让位——打印是宿主文档流，
  *    不该被插件模式截走。
+ * 9. 路由变化同时复位**浮层残留状态**（F6-B）：`stageDrawerStageId` 住在全局
+ *    useUiStore，而 StageDrawer 只在项目详情页渲染 —— 离开项目页没人清它，再进
+ *    任意详情页抽屉就会自动弹出来。与滚动复位同源（都是「属于上一页的瞬态」），
+ *    故并进同一个 effect。
  */
 export function AppShell(): JSX.Element {
   useProjectsBootstrap();
@@ -108,6 +112,23 @@ export function AppShell(): JSX.Element {
   */
   useLayoutEffect(() => {
     mainRef.current?.scrollTo(0, 0);
+    /*
+     * ★ F6-B：换页时把**浮层残留状态**一并复位。
+     *
+     * 病灶：`stageDrawerStageId` 住在 `useUiStore`（全局），而 `StageDrawer` 只在
+     * `ProjectDetailPage` 里渲染。打开阶段抽屉 → 点顶栏面包屑离开 → 这个 id 没人清，
+     * 于是**再进任意项目详情页时抽屉会自动弹出来**；若是另一个项目，`StageDrawer`
+     * 按新的 projectId 收窄后 find 不到那个 stage，就地渲染「该阶段不存在或已被移除」
+     * （用户没做任何操作，一进页面就看到一句错误）。
+     *
+     * 为什么复位点选在这里：与滚动复位同源 —— 都是「路由变了，属于上一页的瞬态
+     * 必须归零」。本 effect 是**唯一**覆盖全部路由切换的地方（逐页修必漏，理由见
+     * 上方滚动修复的注释 ②），而「离开这个项目就该合上它的抽屉」正是路由级语义。
+     *
+     * 用 `getState()` 现取而不是订阅 store：这里只需要「触发一次动作」，
+     * 订阅 `stageDrawerStageId` 会让本组件在每次开合抽屉时白白重渲染一次整壳。
+     */
+    useUiStore.getState().closeStageDrawer();
   }, [location.pathname]);
 
   return (

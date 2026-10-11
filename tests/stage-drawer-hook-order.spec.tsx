@@ -205,7 +205,7 @@ describe('StageDrawer 点击彩条不得因 hook 顺序变化而崩溃', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it('打开不存在的阶段仍走占位分支，且不抛 hook 顺序错误', () => {
+  it('打开不存在的阶段：不抛 hook 顺序错误，且**自动合上**抽屉（不再渲染错误提示）', () => {
     act(() => {
       root.render(<StageDrawer projectId={PROJECT_ID} members={[]} />);
     });
@@ -214,8 +214,27 @@ describe('StageDrawer 点击彩条不得因 hook 顺序变化而崩溃', () => {
       act(() => useUiStore.getState().openStageDrawer('stg_not_exist'));
     }).not.toThrow();
 
-    const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog).toBeTruthy();
-    expect(dialog!.textContent).toContain('该阶段不存在或已被移除');
+    /*
+     * ★ 2026-10-12 · F6-B 改了本用例的**断言**（hook 顺序这条不变量不变）。
+     *
+     * 修前：`!stage` 走一个占位分支，渲染 `[role="dialog"]` + 文本
+     * 「该阶段不存在或已被移除。」—— 本用例断言的就是那两行。
+     *
+     * 改后：`!stage` 直接 `close()`，本帧渲染 null。理由见 StageDrawer 里的注释：
+     * 那个画面用户从来没有主动要走进去（换页遗留 / 阶段被删），让他自己去关一个
+     * 写着「已移除」的空壳没有价值。
+     *
+     * 所以这条用例的证据换成**同一件事的两个可观察后果**：
+     *   ① 仍然 not.toThrow —— 它守的那条不变量（stageId 由 null 变非空时 hook 数量
+     *      不变）在这一支里被完整走过：`!stage` 分支不再提前 return 出不同的 hook 数，
+     *      而是与 `!stageId` 一起排在所有 hook 之后；
+     *   ② 抽屉自己合上了 —— `stageDrawerStageId` 被复位成 null，且没有 dialog 残留。
+     *      这比原来那句文本更强：原文案只能证明「它渲染了什么」，现在证明「它退场了」。
+     */
+    expect(document.querySelector('[role="dialog"]'), '不应残留任何抽屉').toBeNull();
+    expect(
+      useUiStore.getState().stageDrawerStageId,
+      '找不到阶段时应把抽屉状态复位，否则下次进项目详情页会自动弹出',
+    ).toBeNull();
   });
 });

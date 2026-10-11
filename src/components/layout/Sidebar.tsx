@@ -11,6 +11,7 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useXlViewport } from '../../hooks/useXlViewport';
 import { useAgentProjects, useHumanProjects, useHumanStages } from '../../core/project/visibility';
 import { usePluginEnabled } from '../../core/plugin/PluginRegistryProvider';
+import { RAIL_Z_CLASS, useRailYielded } from '../../core/overlay/overlayStack';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore } from '../../store/useLayoutStore';
@@ -178,6 +179,25 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   const hasUpdate = status === 'has-update';
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /**
+   * 常驻侧栏此刻该待在**哪一层** —— 由浮层栈按**顶层内容浮层**的几何决定
+   * （`isRailYielded()`），不是本组件自己拍的数。
+   *
+   * ★ F6-A（team-lead 2026-10-12 裁决 A）：修前这里是**无条件**的 `z-[61]`。
+   *   那个数当初是为**唯一**的消费者（left-rail 设置抽屉）挑的，理由是「抽屉
+   *   glass-strong 的外凸投影会溅到侧栏右缘、形成两块拼起来的观感」。理由本身没错，
+   *   错在它被写死成了常量 —— 于是 60 档的**右抽屉**（阶段详情 / 任务详情）压上来时，
+   *   侧栏照样浮在它上面：不被压暗、点击照样生效 ⇒ 开着阶段抽屉点另一个项目，
+   *   路由换了、抽屉没关，`StageDrawer` 按新 projectId 收窄后 find 不到那个 stage，
+   *   就地变成「该阶段不存在或已被移除」。
+   *
+   *   正解不是「再给侧栏加一条 z 规则」（那只会长出第三个特例），而是**问栈顶**：
+   *   · 栈顶内容浮层让出了侧栏带（left-rail / fullscreen+railLeft）⇒ 抬到 61，
+   *     保持原色可点、投影零互溅（既有观感不变）；
+   *   · 否则 ⇒ **落回普通流**（不带 z），被内容遮罩压暗、点击被遮罩吃掉。
+   *   类名面见 overlayStack 的 RAIL_Z_CLASS（静态映射，不拼字符串）。
+   */
+  const railYielded = useRailYielded();
   /**
    * 项目列表是否已「展开全部」（v0.7 增量 · 用户反馈「还有 N 个项目…」点不到）。
    * 默认 false：仍按 SIDEBAR_PROJECT_LIMIT 截断（画板 02/04 的截断是**刻意设计**，
@@ -769,18 +789,14 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           'glass-strong print:hidden',
           // v0.8.6 壳层常驻重构：根容器已 h-screen + overflow-hidden，侧栏随 flex 链
           // 撑满视口高（h-full），sticky top-0 不再需要，一并移除。
-          // z-[61]（v0.8.6.0002 · 图 5 第 2 点修正，原 z-30）：常驻侧栏抬到
-          // **抽屉浮层**（z-[60]）之上、浮层内弹层（z-[65]）/ 居中弹窗
-          // （z-[70]）/ toast（z-[80]）之下。为何敢抬：设置抽屉贴侧栏右缘
-          // 展开、二者空间上零重叠（<xl 侧栏自身是 Modal、持久栏 display:none，
-          // 本就不相交）。抬层只为一件事——让抽屉的 glass-strong 外凸投影
-          // **不溅到侧栏上**。修前实测（暗色主题）：投影把侧栏右缘约 35px
-          // 压深一档（#1f2126→#181a1e），叠加接缝两道 1px line，侧栏与抽屉
-          // 像两块拼起来的面板。她的原话：「弹出的设置窗颜色和侧边栏的颜色
-          // 差别过大，我认为这个时候不应该有这个色差。」实测两侧底色本来就
-          // 是同一个 paper token（glass-strong）——差别全在接缝，所以修的是
-          // 接缝（描边 + 投影），不是换底色。
-          'z-[61] h-full rounded-none border-y-0 border-l-0',
+          //
+          // ★ 层态**不在这里写死**（F6-A）：`RAIL_Z_CLASS[railYielded ? 'yielded' : 'covered']`
+          //   —— yielded 抬到 61（让出侧栏带的设置抽屉 / 打印预览：保持原色可点、投影零互溅）；
+          //   covered 落回普通流（60 档右抽屉 / 居中弹窗压上来时被压暗、点击被遮罩吃掉，
+          //   不再「开着阶段抽屉点侧栏换页」）。判定权在浮层栈（顶层内容浮层），见上方注释。
+          //   ⚠️ 那张映射表在 `src/core/overlay/overlayStack.ts`，改档位改那一处，别在本地加 z。
+          RAIL_Z_CLASS[railYielded ? 'yielded' : 'covered'],
+          'h-full rounded-none border-y-0 border-l-0',
           // 设置抽屉贴着侧栏右缘展开时，接缝侧（右描边）+ 投影整体让位
           // （global.css 的 .sidebar-settings-open，与 .glass-strong 同层才压得动）；
           // 抽屉左描边已由 SettingsDialog 侧的 .settings-rail-drawer 清零——
