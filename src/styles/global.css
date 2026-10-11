@@ -275,13 +275,44 @@
   --elevation-1: var(--shadow-soft);
   --elevation-2: var(--shadow-raised);
   --elevation-3: var(--shadow-raised-lg);
-  --liquid-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  /* 旧名保留：9 处引用（含 1 处 Tailwind 任意值 ease-[var(--liquid-ease)]）不动。
+     改为指向 --ease-standard 后求值**仍等于** cubic-bezier(0.4, 0, 0.2, 1)，
+     单一来源、将来改标准缓动不会漏掉旧名。 */
+  --liquid-ease: var(--ease-standard);
   --aura-glow: var(--shadow-accent);
   --aura-selected: var(--shadow-accent-hover);
   --aura-glow-weak: var(--shadow-soft);
   --glow-card-hover: var(--shadow-raised-lg);
   --shadow-glass: var(--shadow-raised);
   --soft-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1); /* stylekit --soft-shadow */
+
+  /* ================== 动效地基：时长阶梯 + 缓动组（team-lead 2026-10-11 定） ==================
+   * ⚠️ 本批**只定义、不改现有实现** —— 下面这些 token 目前没有任何消费方。
+   *    现有 8 个 @keyframes 与全部 animation / transition 声明一字未动，
+   *    把散落在四处的 150 / 160 / 180 / 200 / 300ms 迁到下面四档是**下一批**的事。
+   *
+   * 为什么时长只分四档：ID Plan 是桌面工具，动效存在感必须弱于内容。
+   * 档位再多就会出现「凭手感选一个」的情况，那是抖机灵不是体系。
+   * ------------------------------------------------------------------ */
+  /** 悬停 / 按下这类即时反馈：快到几乎不被察觉，只用来确认「点到了」 */
+  --dur-fast: 120ms;
+  /** 默认档：面板入场、状态切换、浮层淡出 —— 不指定档位时就用它 */
+  --dur-base: 200ms;
+  /** 需要被看清的变化：内容替换、列表重排后的落位 */
+  --dur-slow: 320ms;
+  /** 结构性展开：抽屉 / 侧栏 / 手风琴这类改变布局骨架的动作 */
+  --dur-structural: 480ms;
+
+  /* 缓动组。`--ease-standard` 与原 `--liquid-ease` 全等（旧名上面那一行仍指向它），
+     因此把既有声明迁移到 token 是零视觉变化的。 */
+  /** 标准：进入与退出同速，中性动作的默认值 */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  /** 进入（快起慢收）：元素从无到有时用，起手快、收尾稳，读起来「干脆」 */
+  --ease-enter: cubic-bezier(0.2, 0, 0, 1);
+  /** 离开（慢起快走）：元素从有到无时用，起手慢留出辨认，末尾快速脱开 */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  /** 强调：需要「郑重」一下的地方（弹层、确认类反馈）。无过冲，符合产品克制品格 */
+  --ease-emphasis: cubic-bezier(0.2, 0.8, 0.2, 1);
 
   /* ================== 布局尺寸 token（v0.7 · T16） ==================
    * 只定义**骨架几何**，不含任何颜色（铁律「零新色」）。
@@ -885,7 +916,15 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 
 /* ------------------------------ 浮层形态动效（反馈 #3：弹窗要有动画） ------------------------------ */
 
-/* 右侧抽屉：从右缘滑入（关闭仍由卸载完成，不做退场以免阻塞交互） */
+/* 右侧抽屉：从右缘滑入。
+ *
+ * 【出口动画的存在前提（team-lead 2026-10-11 定）】
+ * 出口动画**绝不允许拦输入**。
+ * 「退场会阻塞交互」这个结论只在「你**等**它结束」时才成立 —— 旧注释把因果搞反了，
+ * 正确做法是**视觉余韵与可操作性解耦**：
+ *   关闭动作一触发就立刻让遮罩 pointer-events: none（用户马上能点下一页），
+ *   面板 / 抽屉的淡出只是**剩余的视觉余韵**，不承载任何交互等待。
+ * 本批只提供下方 `*-out` 的定义；接线（元素存活到动画结束）属下一批。 */
 @keyframes drawer-slide-in {
   from {
     opacity: 0;
@@ -931,6 +970,172 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 
 .float-pop-in {
   animation: float-pop-in 160ms ease-out both;
+}
+
+/* ============================================================================
+ * 出口动效 + 持续态动效（team-lead 2026-10-11 定 · 本批只定义不接线）
+ * ----------------------------------------------------------------------------
+ * ① 出口与上方入口**逐一配对、几何镜像**：
+ *    入口的 `to` 帧 == 出口的 `from` 帧，入口的 `from` 帧 == 出口的 `to` 帧。
+ *    这样「开」和「关」走的是同一条轨迹的反向，观众感知为同一个动作的两次呼吸，
+ *    而不是两个不相关的小动画。
+ * ② 缓动也成对：入口用 --ease-enter（快起慢收），出口用 --ease-exit（慢起快走）。
+ * ③ 时长一律走 --dur-base（200ms）。toast 入口是 180ms，出口仍取 base 档 ——
+ *    退场比入场略慢一点更耐看，且避免出现「第五档特殊值」。
+ * ④ ⚠️ 这些类**目前零消费方**。接线需要「元素存活到动画结束」的前置机制
+ *    （见上方「出口动画的存在前提」）：关闭触发即 `pointer-events: none` 让出输入，
+ *    元素淡出只是视觉余韵。缺这一步就接，等于把交互卡在动画上。
+ * ========================================================================== */
+
+/* --- menu-fade-in（translateY(6px) scale(0.97)）↔ menu-fade-out --- */
+@keyframes menu-fade-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+.menuFadeOut {
+  animation: menu-fade-out var(--dur-base) var(--ease-exit) both;
+}
+
+/* --- toast-in（translateY(8px)）↔ toast-out --- */
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.toast-exit {
+  animation: toast-out var(--dur-base) var(--ease-exit) both;
+}
+
+/* --- dialog-pop（translateY(6px) scale(0.985)）↔ dialog-pop-out --- */
+@keyframes dialog-pop-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+.dialog-pop-out {
+  animation: dialog-pop-out var(--dur-base) var(--ease-exit) both;
+}
+
+/* --- drawer-slide-in（translateX(24px)）↔ drawer-out-right --- */
+@keyframes drawer-out-right {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+.drawer-out-right {
+  animation: drawer-out-right var(--dur-base) var(--ease-exit) both;
+}
+
+/* --- drawer-in-left（translateX(-24px)）↔ drawer-out-left --- */
+@keyframes drawer-out-left {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+.drawer-out-left {
+  animation: drawer-out-left var(--dur-base) var(--ease-exit) both;
+}
+
+/* --- float-pop-in（translateY(-4px) scale(0.98)）↔ float-pop-out --- */
+@keyframes float-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.float-pop-out {
+  animation: float-pop-out var(--dur-base) var(--ease-exit) both;
+}
+
+/* ----------------------------------------------------------------------------
+ * 持续态动效：本批之前全项目一个都没有（只有 animate-spin 在转圈）。
+ * 只做两个，覆盖「正在工作」与「正在加载」两种真实语义，不堆。
+ * -------------------------------------------------------------------------- */
+
+/* 状态脉冲：语义是「**正在工作**」，不是「等待你输入」。
+   ⚠️ 必须平滑往复：不要写成 steps(1) / step-end 的硬切。
+   硬切是终端光标语感，桌面工具里会显出毛刺般的闪烁 —— 参考包
+   （glass-motion-kit 的 todayai-caret-blink / imad-blink）就是这个写法，**不采用**。
+   只动 opacity 不动 transform：同一元素上常还挂着入场动画或 hover transform，
+   再加 transform 会和它们抢同一属性。 */
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.status-pulse {
+  animation: status-pulse 1.6s ease-in-out infinite;
+}
+
+/* 骨架占位脉冲：起始值与终值都取 1（满不透明），最低只到 0.45。
+   不贴 0 是刻意的 —— 从近 0 起跳会读成「闪一下」而不是「在加载」。 */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.skeleton-pulse {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* 上述新增类的 reduced-motion 关停（独立成段，不改上方既有清单） */
+@media (prefers-reduced-motion: reduce) {
+  .menuFadeOut,
+  .toast-exit,
+  .dialog-pop-out,
+  .drawer-out-right,
+  .drawer-out-left,
+  .float-pop-out,
+  .status-pulse,
+  .skeleton-pulse {
+    animation: none;
+  }
 }
 
 /* ------------------------------ 无障碍：prefers-reduced-motion 关闭重动效 ------------------------------ */
