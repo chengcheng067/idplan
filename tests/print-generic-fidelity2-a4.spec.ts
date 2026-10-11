@@ -67,6 +67,20 @@ function builtCss(): string {
     .join('\n');
 }
 
+/**
+ * `#RRGGBB` → `rgb(r, g, b)`（与 getComputedStyle 的返回格式一致）。
+ * H 的 accent 用取值而非字面量：它在 P0-17 已经从 `#E8590C` 改成参考稿实测的
+ * `#E2522B`，抄成字面量就会造出第二真值源（改 palette 时这里静默过期）。
+ * 色值本身由 print-palette.spec.ts 的 ①c/①d 钉死。
+ */
+function hexRgb(hex: string): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
+
+/** H 基线身份色（= agent-poster 的 accent 槽） */
+const H_ACCENT = hexRgb(PRINT_TEMPLATE_PALETTES['agent-poster'].baseline.accent);
+
 /* ------------------------------------------------------------------ 夹具 */
 
 type DocKind = 'swiss-schedule' | 'data-editorial' | 'editorial-index' | 'agent-poster';
@@ -339,7 +353,7 @@ describe.skipIf(!CAN_RUN)('期七深化 · D2 新特性 computed style（真 Chr
         return { w: s.borderTopWidth, c: s.borderTopColor };
       });
       expect(panel.w, '右栏顶线 = 2px').toBe('2px');
-      expect(panel.c, '右栏顶线 = 治理焦点橙（置信度块权重）').toBe('rgb(232, 89, 12)');
+      expect(panel.c, '右栏顶线 = 治理焦点橙（置信度块权重）').toBe(H_ACCENT);
 
       // H×M2 双栏卡：中轴 2px 橙 + 标签底色（门控橙 / 其他墨）
       await page.goto(
@@ -351,7 +365,7 @@ describe.skipIf(!CAN_RUN)('期七深化 · D2 新特性 computed style（真 Chr
         return { w: s.width, bg: s.backgroundColor };
       });
       expect(axis.w, '双栏中轴 = 2px').toBe('2px');
-      expect(axis.bg, '中轴 = 橙').toBe('rgb(232, 89, 12)');
+      expect(axis.bg, '中轴 = 橙').toBe(H_ACCENT);
       const sysTag = await page.$eval('.gm-task-tag[data-tone="sys"]', (el) => {
         const s = getComputedStyle(el);
         return { bg: s.backgroundColor, color: s.color, fs: Number.parseFloat(s.fontSize) };
@@ -362,7 +376,7 @@ describe.skipIf(!CAN_RUN)('期七深化 · D2 新特性 computed style（真 Chr
       const gateTag = await page.$eval('.gm-task-tag[data-tone="gate"]', (el) =>
         getComputedStyle(el).backgroundColor,
       );
-      expect(gateTag, '门控态标签 = 橙底').toBe('rgb(232, 89, 12)');
+      expect(gateTag, '门控态标签 = 橙底').toBe(H_ACCENT);
     } finally {
       await page.close();
     }

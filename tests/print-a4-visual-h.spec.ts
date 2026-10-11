@@ -685,7 +685,8 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
         const s = getComputedStyle(el);
         return { border: s.borderTopColor, color: s.color };
       });
-      expect(gateCard.border, '人工门控卡应为橙边 #E8590C').toBe('rgb(232, 89, 12)');
+      // 色值从 palette 读（不复制字面量 —— 避开第二真值源；P0-17 后基线是 #E2522B）
+      expect(gateCard.border, '人工门控卡应为身份色 accent').toBe(hexRgb(baseline.accent));
 
       // ② P1：confidence 仅展示 + 旁标「仅供参考」；白名单四项 + 其余字段只读
       const p1 = await page.$('[data-print-page="agent-declaration"]');

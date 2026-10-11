@@ -69,6 +69,20 @@ function builtCss(): string {
     .join('\n');
 }
 
+/**
+ * `#RRGGBB` → `rgb(r, g, b)`（与 getComputedStyle 的返回格式一致）。
+ * H 的 accent 用取值而非字面量：它在 P0-17 已从 `#E8590C` 改成参考稿实测的
+ * `#E2522B`，抄成字面量就是第二真值源（改 palette 时这里静默过期）。
+ * 色值本身由 print-palette.spec.ts 的 ①c/①d 钉死。
+ */
+function hexRgb(hex: string): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
+
+/** H 基线身份色（= agent-poster 的 accent 槽） */
+const H_ACCENT = hexRgb(PRINT_TEMPLATE_PALETTES['agent-poster'].baseline.accent);
+
 /* ------------------------------------------------------------------ 夹具 */
 
 type DocKind = 'swiss-schedule' | 'data-editorial' | 'editorial-index' | 'agent-poster';
@@ -311,9 +325,9 @@ describe.skipIf(!CAN_RUN)('期七 · S2 新变体配色跟随（切预设 ⇒ co
       };
       const hBase = await probeH('baseline', PRINT_TEMPLATE_PALETTES['agent-poster'].baseline);
       const hVermilion = await probeH('vermilion', hPreset.palette);
-      expect(hBase.panelDelayed, 'H 基线面板延期行 = 信号橙').toBe('rgb(232, 89, 12)');
+      expect(hBase.panelDelayed, 'H 基线面板延期行 = 信号橙（accent 槽）').toBe(H_ACCENT);
       expect(hVermilion.panelDelayed, 'H 预设面板延期行 = 朱红（accent 槽跟随）').toBe('rgb(200, 16, 46)');
-      expect(hBase.rowDelayed).toBe('rgb(232, 89, 12)');
+      expect(hBase.rowDelayed).toBe(H_ACCENT);
       expect(hVermilion.rowDelayed).toBe('rgb(200, 16, 46)');
       // 大数字走 ink 槽（两预设的 ink 同为近黑 ⇒ 不变，证明没被 accent 污染）
       expect(hBase.big).toBe('rgb(10, 10, 10)');
