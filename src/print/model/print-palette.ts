@@ -211,20 +211,52 @@ const EDITORIAL_INDEX_PALETTE: PrintTemplatePaletteSpec = {
   ],
 };
 
-/** H · Agent Poster：灰白底 + 橙 + 近黑 */
+/**
+ * H · Agent Poster：暖灰米纸面 + 橙红焦点 + 近黑。
+ *
+ * 2026-10-11（P0-17 向参考稿还原）：纸底 `#F5F5F5 → #DEDDD4`、accent
+ * `#E8590C → #E2522B`，两枚都是参考稿像素实测值（旧纸底是中性灰、参考稿是暖灰米，
+ * 纸色是模板身份故取值必须精确，规格 A1）。
+ *
+ * ⚠️ **H 是四套里唯一「参考稿自测值本身过不了闸门」的一套**——纸底一压深，
+ * accent 与 line **双双跌破**（仓库 `contrast()` 实算，非推断）：
+ *   · ink    `#0A0A0A` vs paper `#DEDDD4` = **14.518**（≥4.5 ✅）
+ *   · accent `#E2522B` vs paper `#DEDDD4` = **2.812**（≥3 ❌；旧纸底上 3.284）
+ *   · line   `#BFBFBF` vs paper `#DEDDD4` = **1.348**（≥1.5 ❌；旧纸底上 1.687）
+ *
+ * **裁决（规格 P0-17，2026-10-11 产品在场的口径）：忠于参考稿 + 显式登记偏离。**
+ * 分界是「**闸门管用户自定义配色，不管设计师基线**」——D/E 的先例都是「改值过闸」
+ * （D line `#D4D4D4→#C9C9C9`、E line `#CFC8BC→#CFC6B4`），H 套不上：跌破闸门的
+ * 是**身份色**而不是发丝线，改它等于改模板身份。故分工如下：
+ *   · **基线 = 参考稿实测值写死**（`#DEDDD4` / `#E2522B` / `#BFBFBF`），
+ *     `checkPrintPalette('agent-poster', baseline).ok === false`——这是**已登记的
+ *     有意偏离**，`tests/print-palette.spec.ts` 的 ①c 用例把三枚值与实测比值一起
+ *     钉住，**不许当成缺陷去"修"**（同 D 的 `#C9C9C9` 先例：审美标准 §4 末条）。
+ *   · **四个预设必须逐一过闸**（规格明示「用户在 H 上改色时拿不到 2.81 那种组合」）：
+ *     预设共享的发丝线 `#BFBFBF` 在新纸底上只剩 1.348，故合法化为 `#B4B4B4`
+ *     （**1.520 ✅**，与 E 的 1.517 同余量档）；`signal-orange` 的 accent 取
+ *     `#DA4B21`（**3.074 ✅**）——同色相逐级加深的**最小位移解**，与参考橙
+ *     `#E2522B` 肉眼无法区分（再浅一档 `#DC4E24` 就只有 2.985 ❌）。
+ *     这条**覆盖**了规格 §1.2.6「基线与预设同值」的旧写法：它与「预设仍必须过闸」
+ *     在算术上不可兼得——预设是**用户可达组合**，基线不是（见上条分界）。
+ *   · 配套语义纪律已写进 `agent-poster.css` 头部：accent 只用于**大面积实底 /
+ *     栏头 / 粗线 / 中轴**（**不得用于小字正文**，2.812 撑不起正文）；line 只作
+ *     **块下 1px 发丝**（**不承载分组职责**，分组线走 ink / accent）。
+ */
 const AGENT_POSTER_PALETTE: PrintTemplatePaletteSpec = {
-  paper: '#F5F5F5',
-  baseline: { accent: '#E8590C', ink: '#0A0A0A', line: '#BFBFBF' },
+  paper: '#DEDDD4',
+  baseline: { accent: '#E2522B', ink: '#0A0A0A', line: '#BFBFBF' },
   pairs: [
     { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, label: '主文字 vs 纸底' },
     { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, label: '状态色 vs 纸底' },
     { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, label: '分隔线 vs 纸底' },
   ],
+  // line 与 signal-orange.accent 的合法化理由见上（预设是用户可达组合，必须真过闸）
   presets: [
-    { id: 'signal-orange', name: '橙', palette: { accent: '#E8590C', ink: '#0A0A0A', line: '#BFBFBF' } },
-    { id: 'vermilion', name: '朱红', palette: { accent: '#C8102E', ink: '#0A0A0A', line: '#BFBFBF' } },
-    { id: 'indigo', name: '靛蓝', palette: { accent: '#3B5BDB', ink: '#0A0A0A', line: '#BFBFBF' } },
-    { id: 'pine-green', name: '墨绿', palette: { accent: '#1F7A4D', ink: '#0A0A0A', line: '#BFBFBF' } },
+    { id: 'signal-orange', name: '橙', palette: { accent: '#DA4B21', ink: '#0A0A0A', line: '#B4B4B4' } },
+    { id: 'vermilion', name: '朱红', palette: { accent: '#C8102E', ink: '#0A0A0A', line: '#B4B4B4' } },
+    { id: 'indigo', name: '靛蓝', palette: { accent: '#3B5BDB', ink: '#0A0A0A', line: '#B4B4B4' } },
+    { id: 'pine-green', name: '墨绿', palette: { accent: '#1F7A4D', ink: '#0A0A0A', line: '#B4B4B4' } },
   ],
 };
 

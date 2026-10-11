@@ -15,6 +15,10 @@
  *   --tpl-accent #E2522B 橙红（槽位；需要人动作 = 延期 / 未开始 / 等人介入）
  *       A2 参考稿实测焦点色（8.6% 面积）。旧值 #E8590C 偏纯橙 —— 与纸底同属
  *       四套里唯一「连纸色都错」的一套（P0-17）。
+ *       ⚠️ **用量纪律（P0-17 裁决的配套）**：accent 只用于**大面积实底 / 栏头 /
+ *       粗线 / 中轴**，**不得用于小字正文** —— 本模板 accent 对新纸底只有
+ *       **2.812:1**（低于 3 的图形级阈值，见下「闸门与登记偏离」），正文撑不住。
+ *       accent 色文字一律 ≥9.5px（PRINT_DENSITY_FLOORS.accentFontSizeMin）。
  *       ⚠️ 本文件的值是**设计师基线默认**；渲染时由 `.print-root` 上的 inline
  *       `--tpl-accent`（palette.accent）覆盖（AgentPosterDocument.tsx:168-174），
  *       真值源是 print-palette.ts 的 AGENT_POSTER_PALETTE.baseline，两处必须同值。
@@ -23,6 +27,19 @@
  *       --tpl-accent**，不许再用中灰（审计 §1.4 ③：一条中灰发丝线承担不了
  *       参考稿的分组职责）。本文件现存 --tpl-line 用法已复核为**全部 1px**
  *       （.ap-head__rule / .ap-status__cols::before / 各 1px 边框），无中灰分组线。
+ *
+ * ── 闸门与**登记偏离**（规格 P0-17 裁决，2026-10-11）──
+ * H 是四套里唯一「参考稿自测值本身过不了闸门」的一套：纸底 #DEDDD4 一压深，
+ * accent **2.812**（<3）、line **1.348**（<1.5）双双跌破（ink 14.518 仍过）。
+ * 裁决 = **忠于参考稿 + 显式登记偏离**，分界是「**闸门管用户自定义配色，不管
+ * 设计师基线**」：
+ *   · **基线**照参考稿写死（#DEDDD4 / #E2522B / #BFBFBF），
+ *     `checkPrintPalette('agent-poster', baseline).ok === false` 是**故意的**——
+ *     print-palette.ts 的 AGENT_POSTER_PALETTE 有实测登记，
+ *     `tests/print-palette.spec.ts` 的 ①c 用例钉住比值。**不许把它"修"成能过闸
+ *     的值**（同 D 基线 line #C9C9C9 的先例，审美标准 §4 末条）。
+ *   · **用户可选的四个预设全部过闸**（改色拿不到 2.81 那种组合）：预设共享的线色
+ *     合法化为 #B4B4B4（1.520），signal-orange 的 accent 取 #DA4B21（3.074）。
  *
  * ── 中轴纪律（02 §6 明文）──
  * 中轴是 `.ap-status__cols` 双栏容器的 ::before 伪元素（inset-block: 0;

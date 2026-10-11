@@ -19,6 +19,10 @@
  *       inline 优先级高于 agent-poster.css 里的基线默认 ⇒ 改 accent 必须
  *       CSS + print-palette.ts（AGENT_POSTER_PALETTE.baseline / signal-orange
  *       预设）**两处同改**，否则纸面仍渲染旧色（P0-17 点名的三处同步）。
+ *       ⚠️ **闸门登记**：H 基线在新纸底上是 accent 2.812（<3）、line 1.348（<1.5）
+ *       双双跌破——规格 P0-17 裁决为**已登记的有意偏离**（闸门管用户自定义配色，
+ *       不管设计师基线），故 `checkPrintPalette('agent-poster', baseline).ok ===
+ *       false` 是故意的，**别当 bug 修**；四个**预设**则全部合法化过闸。
  *   分隔线 #BFBFBF（= --tpl-line 槽位）—— A4：**值不动、分工收紧**，只作
  *       块下 1px 发丝；分组线（3px）必须走 --tpl-ink 或 --tpl-accent。
  *   出血巨字、大字号状态分组、双栏 + 局部中轴（轴 = 双栏容器的 ::before，

@@ -2,8 +2,10 @@
  * 配色架构 · 对比度硬闸门单测（产品决策文档 §3.2 / §3.2-②）。
  *
  * 锁四件事：
- *   ① 四套的设计师基线 + 全部预设变体**实测过闸**（预设是主路径，必须真过，
- *      不是「应该能过」——这里用仓库现成 contrast() 逐组量）；
+ *   ① 三套的设计师基线 + 全部预设变体**实测过闸**（预设是主路径，必须真过，
+ *      不是「应该能过」——这里用仓库现成 contrast() 逐组量）；H 的基线是**唯一
+ *      一处显式登记的偏离**（参考稿实测值本身过不了闸，规格 P0-17 裁决），
+ *      由 ①c 单独钉住其值与实测比值，①d 保证该偏离**不外溢到用户可达的预设**；
  *   ② 边界值：刚好达标放行、差一点禁存（三对各自一对边界灰度）；
  *   ③ 禁存提示**指名**哪一对不达标、当前比值多少（不许打折成泛泛一句）；
  *   ④ A 版是三对（accent 兼纸面 ⇒ accent-vs-paper 是自比对，假闸门不要），
@@ -34,11 +36,14 @@ const FOUR: ReadonlyArray<Exclude<PrintTemplateId, 'classic'>> = [
 ];
 
 describe('配色架构 · 硬闸门（禁存，不是提示）', () => {
-  it('① 四套基线 + 全部预设变体实测过闸（预设是主路径，逐组量）', () => {
+  it('① 三套基线 + 全部预设变体实测过闸（预设是主路径，逐组量；H 基线的偏离见 ①c）', () => {
     for (const id of FOUR) {
       const spec = PRINT_TEMPLATE_PALETTES[id];
-      const base = checkPrintPalette(id, spec.baseline);
-      expect(base.ok, `${id} 基线应过闸：${base.message ?? ''}`).toBe(true);
+      // H 基线是**已登记的有意偏离**（参考稿实测值本身过不了闸，见 ①c）——全表唯一豁免项
+      if (id !== 'agent-poster') {
+        const base = checkPrintPalette(id, spec.baseline);
+        expect(base.ok, `${id} 基线应过闸：${base.message ?? ''}`).toBe(true);
+      }
       for (const preset of spec.presets) {
         const r = checkPrintPalette(id, preset.palette);
         expect(r.ok, `${id} 预设「${preset.name}」应过闸：${r.message ?? ''}`).toBe(true);
@@ -50,6 +55,58 @@ describe('配色架构 · 硬闸门（禁存，不是提示）', () => {
     expect(templatePaletteSpec('classic')).toBeNull();
     expect(effectivePalette('classic')).toBeNull();
     for (const id of FOUR) expect(effectivePalette(id)).not.toBeNull();
+  });
+
+  it('①c H 版基线 = 参考稿实测值，**显式登记偏离**（闸门管用户自定义配色，不管设计师基线）', () => {
+    // 「不许静默踩线」的落地（审美标准 §4 末条 D 的 #C9C9C9 是先例）：H 的参考稿
+    // 像素实测值**本身**过不了闸门——纸底 #DEDDD4 一压深，accent 与 line 双双跌破。
+    // 规格 P0-17 裁决「忠于参考稿 + 显式登记偏离」，故这里把三枚值与实测比值一起
+    // 钉死：谁要是把基线"修"成能过闸的值（或悄悄放行别的模板），这里先红。
+    const spec = PRINT_TEMPLATE_PALETTES['agent-poster'];
+    expect(spec.paper).toBe('#DEDDD4');
+    expect(spec.baseline).toEqual({ accent: '#E2522B', ink: '#0A0A0A', line: '#BFBFBF' });
+
+    const paper = '#DEDDD4';
+    expect(contrast(spec.baseline.ink, paper), '主文字 vs 纸底').toBeCloseTo(14.517879, 4);
+    expect(contrast(spec.baseline.accent, paper), '状态色 vs 纸底').toBeCloseTo(2.812355, 4);
+    expect(contrast(spec.baseline.line, paper), '分隔线 vs 纸底').toBeCloseTo(1.348451, 4);
+
+    const gate = checkPrintPalette('agent-poster', spec.baseline);
+    expect(gate.ok, 'H 基线的偏离是**登记的**：ok 必须为 false，不是意外踩线').toBe(false);
+    expect(
+      gate.failures.map((f) => f.label),
+      '偏离的正是这两对（accent / line），不许再多',
+    ).toEqual(['状态色 vs 纸底', '分隔线 vs 纸底']);
+    expect(gate.message).toContain('已禁止保存'); // 闸门语义未被"登记"稀释
+
+    // 没跌破的那一对仍要守——免得「登记偏离」变成整张闸门作废
+    expect(gate.pairs.find((p) => p.label === '主文字 vs 纸底')!.pass).toBe(true);
+  });
+
+  it('①d H 版四个预设不许继承基线的偏离：逐个实测过闸，signal-orange 取最小位移的合法橙', () => {
+    // 规格 P0-17：「用户在 H 上改色时拿不到 2.81 那种组合」——预设是**用户可达组合**，
+    // 必须真过闸。故预设与基线刻意不同值（该模板是全表唯一一处）。
+    const spec = PRINT_TEMPLATE_PALETTES['agent-poster'];
+    for (const preset of spec.presets) {
+      expect(
+        contrast(preset.palette.line, '#DEDDD4'),
+        `${preset.name} 的发丝线需 ≥1.5（基线那枚 #BFBFBF 在此纸底只有 1.348）`,
+      ).toBeGreaterThanOrEqual(1.5);
+      expect(
+        checkPrintPalette('agent-poster', preset.palette).ok,
+        `${preset.name} 预设应过闸`,
+      ).toBe(true);
+    }
+
+    const orange = spec.presets.find((p) => p.id === 'signal-orange')!;
+    expect(orange.palette.accent).toBe('#DA4B21');
+    expect(
+      orange.palette.accent,
+      '预设不得与基线同值——否则用户能直接选中 2.812 的组合',
+    ).not.toBe(spec.baseline.accent);
+    // 取的是**最小位移解**（不是为了好看随便挑的）：再浅一档就跌破 3
+    expect(contrast('#DC4E24', '#DEDDD4')).toBeLessThan(3);
+    expect(contrast(orange.palette.accent, '#DEDDD4')).toBeCloseTo(3.074012, 4);
   });
 
   it('② 边界：刚好达标放行、差一点禁存（D 版白底，三对各一对边界灰度）', () => {
