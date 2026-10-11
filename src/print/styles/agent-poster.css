@@ -1,5 +1,5 @@
 /**
- * H 版 · Agent Poster 样式（02 文档 §5/§6；设计源 01 文档 §7）。
+ * H 版 · Agent Poster 样式（人类化后：阶段 / 任务 / 成员海报）。
  *
  * ── 前缀纪律（02 §5 继承 print-skins-brief §2.3）──
  * 每条规则必须同时命中 `.print-root` 与模板类——只写 `.ap-*` 会解析不回
@@ -10,9 +10,9 @@
  *   --ap-paper #DEDDD4 暖灰米（**固定不开槽位**——纸面性格是模板身份）
  *       参考稿实测纸底（79% 面积）。A1 明示「纸色是模板身份 ⇒ 取值必须精确，
  *       不许取近似灰」，故旧值 #F5F5F5（中性灰）改为参考稿的暖灰米。
- *   --tpl-ink    #0A0A0A 近黑（槽位；系统推进 / 当前主状态）
+ *   --tpl-ink    #0A0A0A 近黑（槽位；在轨推进 / 已在轨的块实底）
  *       A3 判定 #1F1E1C「近似（可接受）」⇒ **本批不改 ink 值**。
- *   --tpl-accent #E2522B 橙红（槽位；需要人动作 = 延期 / 未开始 / 等人介入）
+ *   --tpl-accent #E2522B 橙红（槽位；**需要人动作**）
  *       A2 参考稿实测焦点色（8.6% 面积）。旧值 #E8590C 偏纯橙 —— 与纸底同属
  *       四套里唯一「连纸色都错」的一套（P0-17）。
  *       ⚠️ **用量纪律（P0-17 裁决的配套）**：accent 只用于**大面积实底 / 栏头 /
@@ -20,13 +20,11 @@
  *       **2.812:1**（低于 3 的图形级阈值，见下「闸门与登记偏离」），正文撑不住。
  *       accent 色文字一律 ≥9.5px（PRINT_DENSITY_FLOORS.accentFontSizeMin）。
  *       ⚠️ 本文件的值是**设计师基线默认**；渲染时由 `.print-root` 上的 inline
- *       `--tpl-accent`（palette.accent）覆盖（AgentPosterDocument.tsx:168-174），
- *       真值源是 print-palette.ts 的 AGENT_POSTER_PALETTE.baseline，两处必须同值。
+ *       `--tpl-accent`（palette.accent）覆盖（AgentPosterDocument.tsx），真值源是
+ *       print-palette.ts 的 AGENT_POSTER_PALETTE.baseline，两处必须同值。
  *   --tpl-line   #BFBFBF 发丝线（槽位）—— A4：**值不动，分工收紧**
- *       只作「块下 1px 发丝线」；**分组线（3px）必须走 --tpl-ink 或
- *       --tpl-accent**，不许再用中灰（审计 §1.4 ③：一条中灰发丝线承担不了
- *       参考稿的分组职责）。本文件现存 --tpl-line 用法已复核为**全部 1px**
- *       （.ap-head__rule / .ap-status__cols::before / 各 1px 边框），无中灰分组线。
+ *       只作「块下 / 页眉下 1px 发丝线」；**分组线（3px）走 --tpl-ink 或
+ *       --tpl-accent**，不许用中灰承担分组职责（审计 §1.4 ③）。
  *
  * ── 闸门与**登记偏离**（规格 P0-17 裁决，2026-10-11）──
  * H 是四套里唯一「参考稿自测值本身过不了闸门」的一套：纸底 #DEDDD4 一压深，
@@ -35,23 +33,34 @@
  * 设计师基线**」：
  *   · **基线**照参考稿写死（#DEDDD4 / #E2522B / #BFBFBF），
  *     `checkPrintPalette('agent-poster', baseline).ok === false` 是**故意的**——
- *     print-palette.ts 的 AGENT_POSTER_PALETTE 有实测登记，
- *     `tests/print-palette.spec.ts` 的 ①c 用例钉住比值。**不许把它"修"成能过闸
- *     的值**（同 D 基线 line #C9C9C9 的先例，审美标准 §4 末条）。
- *   · **用户可选的四个预设全部过闸**（改色拿不到 2.81 那种组合）：预设共享的线色
- *     合法化为 #B4B4B4（1.520），signal-orange 的 accent 取 #DA4B21（3.074）。
+ *     print-palette.ts 有实测登记，tests/print-palette.spec.ts ①c 钉住比值。
+ *     **不许把它"修"成能过闸的值**（同 D 基线 line #C9C9C9 的先例）。
+ *   · **用户可选的四个预设全部过闸**（预设共享线 #B4B4B4 / signal-orange
+ *     accent #DA4B21）。
+ *
+ * ── 实底标签的文字色为什么是墨不是白（本批决定，带算式）──
+ * 实底标签（.ap-block__tag）两档：gate = accent 实底、其余 = ink 实底。
+ * 白字在 accent 上只有 **3.81:1**（< 4.5 的正文阈值，宪法 5 是闸门）；
+ * 墨字在 accent 上是 **5.20:1** ✓、白字在 ink 上是 **19.81:1** ✓
+ * ⇒ gate 档取墨字、ink 档取白字（对比度各取其高者；实底 + 文字 + 字形三重编码
+ * 都在，灰度下不靠色相）。
  *
  * ── 中轴纪律（02 §6 明文）──
- * 中轴是 `.ap-status__cols` 双栏容器的 ::before 伪元素（inset-block: 0;
- * left: 50%），**只贯穿栏区**；禁绝对定位贯穿整页——轴下方的说明文字
- * （.ap-status__note）在容器外，轴穿不到它。视觉 spec 有几何断言。
+ * 轴是 `.ap-cols` 双栏容器的 ::before（`inset-block: 0; left: calc(50% - 1px)`），
+ * **只贯穿栏区**；禁绝对定位贯穿整页——轴下方的说明文字在容器外，轴穿不到它。
+ * 轴高随栏内容自然收口（参考稿「止于 y≈600」是它那一页内容的高度，不是定值）。
  *
  * ── 无底部黑栏（01 §7）──
- * 三页页脚只有发丝线 + 署名 + 页码；信息以纸面留白和巨字收口。
+ * 参考稿无品牌页脚带 ⇒ 本版**没有页脚元素**（规格 §1.2.2 末行）：页序在页眉右
+ * 的 `SHEET nn/NN`、数据时间在脚注。原 P0-23 的巨字让位量
+ * `--ap-footword-reserve` 因此搬到**正文流**（`.ap-body` 的 margin-bottom）——
+ * 落点不能改 `.ap-page` 的 padding-bottom：padding 会把绝对定位子元素
+ * （`.ap-footword { bottom: 0 }`）的包含块从 border-box 缩到 padding-box，
+ * 巨字会跟着上移 129px、直接毁掉页底出血（已实测）。
  *
  * ── 打印色准（02 §5）──
- * 纸面 / 实心卡 / 巨字一律 `print-color-adjust: exact`（-webkit- 双写）；
- * 颜色关闭时仍有边框 + 字形 + 文字语义（状态双编码在组件层）。
+ * 纸面 / 实心标签 / 巨字 / 中轴一律 `print-color-adjust: exact`（-webkit- 双写）；
+ * 颜色关闭时仍有边框/字形/文字语义（状态双编码在组件层）。
  */
 
 .print-root.print-template-agent-poster {
@@ -64,18 +73,11 @@
   --ap-font-cn: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif;
   --ap-font-en: 'IBM Plex Sans Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
   --ap-font-mono: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
-  /* 版心内缩（页头/logo 行/页脚共用） */
+  /* 版心内缩（页头 / logo 行 / 主体共用） */
   --ap-pad-x: 44px;
   /* 页底巨字**墨迹带**的让位量（规格 P0-23 / §1.1 B3 实测墨迹 y1004..1113）。
      巨字是页级装饰装置（绝对定位、不占流），正文流不让位它就会压字：
-     实测页脚底线 1123、墨迹顶 1004 ⇒ 重叠 29px。让位后页脚底线 =
-     1123 − 129 = **994**，距墨迹顶留 **10px** 呼吸（规格要求 8–12px）。
-     落点选 `.ap-foot` 的 margin-bottom 而非 `.ap-page` 的 padding-bottom：
-     后者会把**绝对定位子元素的包含块**从 border-box 缩到 padding-box，
-     `.ap-footword { bottom: 0 }` 会跟着上移 129px、直接毁掉页底出血。
-     ⚠️ 人类化批次 P1 会整块删掉 `.ap-foot`（规格 §1.3 行 181：参考稿无品牌
-     页脚带）——删的时候**必须把这个让位量搬到正文流上**（如 `.ap-body`
-     的 margin-bottom），否则正文会重新压到巨字。 */
+     实测重叠 29px。让位后正文底线 = 1123 − 129 = **994**，距墨迹顶留 10px 呼吸。 */
   --ap-footword-reserve: 129px;
 }
 
@@ -96,20 +98,33 @@
   print-color-adjust: exact;
 }
 
-/* ── 页头：英文栏 kicker + 中文页题；右侧项目标识；底部发丝线 ── */
+/* ================================ 页眉 ================================
+ * 结构（规格 §1.2.2）：左 `ID PLAN · {英文页题}` / 右 `SHEET nn / NN · A4`；
+ * 续页在下方出常规小页题 `{中文页题}（续）`；最下是 meta 行（项目名 + 真实计数）。
+ * `[data-first]` = 本页出页顶巨字 ⇒ 页眉给它让出墨迹高度（min-height 顶到
+ * meta 行落在 y≈235..250，即参考稿 y≈242 那位）；不出巨字的页（续页 / 空态）
+ * 高度由内容决定。
+ * ⚠️ **页眉被巨字压住是设计如此**（§1.1 明写，参考原稿同款）——页眉在 z 序上
+ * 压在巨字墨迹之上，别按「重叠」当缺陷修（P0-23 的同族反向确认）。 */
 .print-root.print-template-agent-poster .ap-head {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 26px var(--ap-pad-x) 0;
+}
+
+.print-root.print-template-agent-poster .ap-head[data-first] {
+  min-height: 250px;
+}
+
+.print-root.print-template-agent-poster .ap-head__top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 26px var(--ap-pad-x) 12px;
 }
 
 .print-root.print-template-agent-poster .ap-head__kicker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 0;
   font-family: var(--ap-font-en);
   font-size: 11px;
@@ -118,48 +133,37 @@
   color: var(--tpl-ink);
 }
 
-/* 信号方块：海报的身份记号（每页一枚） */
-.print-root.print-template-agent-poster .ap-head__signal {
-  width: 10px;
-  height: 10px;
-  background: var(--tpl-accent);
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-}
-
-.print-root.print-template-agent-poster .ap-head__title {
-  margin: 6px 0 0;
-  font-size: 24px;
-  font-weight: 900;
-  line-height: 1.1;
-  letter-spacing: 0.02em;
-  color: var(--tpl-ink);
-  white-space: nowrap;
-}
-
-.print-root.print-template-agent-poster .ap-head__right {
-  max-width: 320px;
-  text-align: right;
-}
-
-.print-root.print-template-agent-poster .ap-head__project {
+.print-root.print-template-agent-poster .ap-head__tab {
+  flex: none;
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.25;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-all;
-}
-
-.print-root.print-template-agent-poster .ap-head__meta {
-  margin: 4px 0 0;
   font-family: var(--ap-font-mono);
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   color: var(--tpl-ink);
-  opacity: 0.66;
+}
+
+/* 续页的常规小页题（替代巨字；规格 §1.2.2 分页口径） */
+.print-root.print-template-agent-poster .ap-head__cont {
+  margin: 8px 0 0;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: var(--tpl-ink);
+}
+
+/* meta 行（项目名 + 真实计数）：出巨字的页压到页眉底部，其余页跟随流 */
+.print-root.print-template-agent-poster .ap-head__meta {
+  margin: auto 0 0;
+  font-family: var(--ap-font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-head:not([data-first]) .ap-head__meta {
+  margin: 10px 0 0;
 }
 
 .print-root.print-template-agent-poster .ap-head__rule {
@@ -171,12 +175,14 @@
   background: var(--tpl-line);
 }
 
-/* ── logo 行：P2/P3 左上角、发丝线下方（≤22px）── */
+/* ── logo 行：每页一枚（左上角、页眉下 ≤22px）。
+ * 参考稿 H 没有 logo，但全局 logo 是**产品必登项**（§3.3：内容必登、形态服从
+ * 参考稿）⇒ 保留，放在巨字墨迹（止于 y134.5）下方的空档里。 ── */
 .print-root.print-template-agent-poster .ap-logo-row {
   display: flex;
   align-items: center;
-  padding: 10px var(--ap-pad-x) 0;
-  min-height: 24px;
+  padding: 8px var(--ap-pad-x) 0;
+  min-height: 30px;
 }
 
 /* 未上传时的文字标：英文栏字体（海报语言），近黑 */
@@ -188,59 +194,30 @@
   white-space: nowrap;
 }
 
-/* ── 主体 / 页脚 ── */
+/* ── 主体：让出页底巨字墨迹带（P0-23 的让位量搬到正文流）── */
 .print-root.print-template-agent-poster .ap-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px var(--ap-pad-x) 10px;
-}
-
-.print-root.print-template-agent-poster .ap-foot {
-  /* P0-23：让出页底巨字墨迹带，否则页脚压在 IDPLAN 上（实测重叠 29px）。
-     见 --ap-footword-reserve 的推导。 */
-  margin: 0 var(--ap-pad-x) var(--ap-footword-reserve);
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid var(--tpl-line);
-  font-size: 10px;
-  color: var(--tpl-ink);
-  opacity: 0.66;
-}
-
-.print-root.print-template-agent-poster .ap-foot__page {
-  font-family: var(--ap-font-mono);
-}
-
-/* ============================ P1 · 执行宣告 ============================ */
-
-.print-root.print-template-agent-poster .ap-declare {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  padding: 10px var(--ap-pad-x) 0;
+  margin-bottom: var(--ap-footword-reserve);
 }
 
 /* ========================= 页级出血巨字（页锚点装置） =========================
  * @see 规格 §1.1 B1/B3 + P0-18。两块巨字都是**页级装置**：绝对定位在纸面上，
  * 越出 --ap-pad-x 内容框、越出纸缘（.a4-page 的 overflow:hidden 是第二道裁切）。
  *
- * 参考稿实测（794×1123 CSS px；规格附录 H 列的数值权威是参考原稿，本次按原稿
- * 像素级复核后取用）：
+ * 参考稿实测（794×1123 CSS px；本次按原稿像素级复核后取用）：
  *   页顶  cap 线 y=12.5、基线 y=134.5（cap 122）、墨迹左缘 x=18
  *   页底  cap 线 y=1004、基线 y=1112.5（cap 108.5）、墨迹 x24..554.5
  * 字号由 cap 高反解：171px（页顶）/ 152px（页底），cap 比 0.714 取本机解析字体
  * 的实测值（--ap-font-en 栈里没有随包字体，见该 token 的注释）。
  *
  * ── 与「被页顶/页底裁切」的关系（实测口径）──
- * 复核原稿发现：两块巨字**都没有可见裁切**——页顶 'G' 的圆弧顶在 cap 线以上
- * 2px、页底 'D' 的圆弧底同样过冲，圆字形两个方向的过冲都在，说明字形是完整
- * 渲染的；「AGENT 顶端是平的」是 IBM Plex 家族的**平顶 A**字形本身，不是切线。
- * 真正成立的是：巨字的**行盒**越出纸缘（DOM 上 .ap-giant__word 的 top < 0、
+ * 两块巨字**都没有可见裁切**——圆字形两个方向的过冲都在，说明字形是完整渲染的；
+ * 「AGENT 顶端是平的」是 IBM Plex 家族的**平顶 A**字形本身，不是切线。
+ * 真正成立的是：行盒越出纸缘（DOM 上 .ap-giant__word 的 top < 0、
  * .ap-footword__word 的 bottom > 1123），墨迹距纸缘仅 ~11px，视觉上就是出血。
  * 故本实现按「行盒出血 + 墨迹贴纸缘」还原，不额外制造一条假切线。
  *
@@ -261,10 +238,10 @@
   print-color-adjust: exact;
 }
 
-/* 页顶：装置贴纸顶（窗口 = 纸顶 → 基线下方 2px，含圆字形下过冲） */
+/* 页顶：装置贴纸顶（窗口 = 纸顶 → 基线下方，够装下叠字的下伸部） */
 .print-root.print-template-agent-poster .ap-giant {
   top: 0;
-  height: 137px;
+  height: 152px;
 }
 
 /* 页底：装置贴纸底（窗口高度含基线下方 10.5px 的纸面留白，与原稿同） */
@@ -291,7 +268,7 @@
 /* ── 页顶巨字：字号/边距由**参考稿实测**反解（不靠猜）──
  * 装置是页级元素（父级无 --ap-pad-x 内缩），故文字原点直接取纸面 x 坐标；
  * 内容框在 x=44 起 ⇒ 原点落在 8px 即越出内容框，出血成立。
- * 两个派生量（本机解析字体的实测度量，见 commit 说明）：
+ * 两个派生量（本机解析字体的实测度量）：
  *   cap 线距盒顶 = 0.1057 × 字号      ⇒ margin-top = 12.5 − 0.1057×字号
  *   墨迹左缘 = 原点 + 左侧边距(≈0.0571×字号)
  *     ⇒ margin-left = 参考墨迹左缘 − 0.0571×字号
@@ -323,6 +300,32 @@
   margin-left: 14.5px;
 }
 
+/* ── 巨字右下叠字：英文页主题词（参考稿 `Execution` 的同位替换）──
+ * 参考稿实测：黑 `Execution`，x397..643、cap ≈31px、**与巨字基线齐平**（同一条
+ * 基线 y=134.5）⇒ 字号 41px（41×0.714 ≈ 29.3 cap，规格 §1.2.2 行 184 的推断值）。
+ *
+ * 定位取**绝对**而不是规格建议的流内 `margin-top: -34px`：巨字盒高随档位变
+ * （xl 157 / lg 109 / md 81 / sm 56），流内负 margin 会让叠字**逐档下浮**，
+ * 而参考稿的叠字位置是纸面绝对量。绝对定位下 left/top 与档位解耦：
+ *   left 397 = 规格的 `margin-left: 50%`（窗口通栏 794 ⇒ 50% = 397，同一落点）
+ *   top 100.9 = 基线 134.5 − 0.8197×41（本机字体的 cap+上边距系数，见上方推导）
+ * ⇒ 现值直接命中参考稿的 cap 线 y≈105、基线 y≈134.5。
+ *
+ * 载荷纪律：叠字 = **页主题词**（Stages / Tasks / Members），不是状态词、也不借
+ * 巨字的品牌词——「模块内不得借巨字」（`syntax.ts:80-81`）在这颗上同样生效。 */
+.print-root.print-template-agent-poster .ap-giant__subword {
+  position: absolute;
+  left: 397px;
+  top: 100.9px;
+  font-family: var(--ap-font-en);
+  font-weight: 700;
+  font-size: 41px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--tpl-ink);
+}
+
 /* ── 页底巨字：同法反解 ──
  * 参考稿 cap 108.5 ⇒ 字号 152；窗口贴纸底（bottom:0，高 123）⇒ 盒顶恒定 y=1000；
  * cap 线 1004 ⇒ margin-top = 1004 − 1000 − 0.1057×152 = −12；
@@ -333,286 +336,107 @@
   margin-left: 16.2px;
 }
 
-/* 页级巨字在流式内容之下：页头/页脚/主体文字压在其上，中间态不牺牲可读性。
-   参考稿的「巨字压页眉」是它那套**细 mono 页眉**的副产品；页眉改版属人类化批
-   （§1.2.2），届时翻 z 序即可（此处一行）。 */
+/* 页级巨字在流式内容之下：页眉 / logo 行 / 主体文字压在其上，中间态不牺牲可读性
+ * （参考稿的「巨字压页眉」正是这条 z 序的反面用法，见 .ap-head 注释）。 */
 .print-root.print-template-agent-poster .ap-head,
 .print-root.print-template-agent-poster .ap-logo-row,
-.print-root.print-template-agent-poster .ap-body,
-.print-root.print-template-agent-poster .ap-foot {
+.print-root.print-template-agent-poster .ap-body {
   position: relative;
   z-index: 1;
 }
 
-/* P1 页内焦点行：焦点执行的状态陈述（巨字已不承担状态，规格 §1.4 表格末行） */
-.print-root.print-template-agent-poster .ap-declare__focus {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-declare__focus[data-tone='gate'] {
-  color: var(--tpl-accent);
-}
-
-.print-root.print-template-agent-poster .ap-declare__glyph {
-  font-size: 12px;
-}
-
-/* logo：巨字下方左侧（≤24px） */
-.print-root.print-template-agent-poster .ap-declare__logo {
+/* ============================ 海报主体（三页共用） ============================
+ * 构件（规格 §1.2.2 逐项）：双栏 + 局部橙中轴 → 栏头（组名 + 3px 规则线 + 组注）
+ * → 实底状态标签块（错落）→ 居中摘要块（大号 mono，不借巨字）→ 通栏 3px 橙线
+ * → mono 平铺口径行 → 图例行 → 两行脚注。铺版在 PosterSheetBody.tsx。 */
+.print-root.print-template-agent-poster .ap-poster {
   display: flex;
-  align-items: center;
-  padding: 12px 0 14px;
+  flex-direction: column;
 }
 
-/* 双栏宣告：左执行单 / 右白名单 */
-.print-root.print-template-agent-poster .ap-declare__cols {
+/* ── 双栏 + 局部橙中轴（规格 §1.1 C1：x396.5、2px、橙；只在栏区贯穿）──
+ * 栏宽取自参考稿实测：左 x40..380（340）、右 x418..754（336）、栏间 38。
+ * 任务页是 4 组 2×2 ⇒ 同一套列宽自然换行（row-gap 18）。 */
+.print-root.print-template-agent-poster .ap-cols {
+  position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 28px;
+  grid-template-columns: 340px 336px;
+  gap: 18px 38px;
 }
 
-.print-root.print-template-agent-poster .ap-declare__block {
-  border-top: 2px solid var(--tpl-ink);
-  padding-top: 10px;
-}
-
-/* 白名单块 = 治理焦点：橙头线 */
-.print-root.print-template-agent-poster .ap-declare__block[data-focus='gate'] {
-  border-top-color: var(--tpl-accent);
-}
-
-.print-root.print-template-agent-poster .ap-declare__block-title {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  /* L1 块题 → L2 字段行界面 8→12px（密度研究规则 2：L1↔L2 16-24 区间下沿，
-     块题上方已有 2px 头线 + 10px padding 分担分组呼吸；P1 口径注 auto 压底，
-     余量吸收这 4px，不碰 1123 上限） */
-  margin: 0 0 12px;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-declare__block[data-focus='gate'] .ap-declare__block-title {
-  color: var(--tpl-accent);
-}
-
-.print-root.print-template-agent-poster .ap-declare__block-note {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--tpl-ink);
-  opacity: 0.66;
-}
-
-/* 字段行：label / value 两列网格 */
-.print-root.print-template-agent-poster .ap-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px 14px;
-  margin: 0;
-}
-
-.print-root.print-template-agent-poster .ap-field {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.print-root.print-template-agent-poster .ap-field[data-wide] {
-  grid-column: 1 / -1;
-}
-
-.print-root.print-template-agent-poster .ap-field__label {
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  color: var(--tpl-ink);
-  opacity: 0.6;
-}
-
-.print-root.print-template-agent-poster .ap-field__value {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tpl-ink);
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  word-break: break-all;
-}
-
-.print-root.print-template-agent-poster .ap-field__value[data-mono] {
-  font-family: var(--ap-font-mono);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.print-root.print-template-agent-poster .ap-field__value[data-tone='gate'] {
-  color: var(--tpl-accent);
-}
-
-/* 「仅供参考」字段：虚线框 + 小注（不引入第三色） */
-.print-root.print-template-agent-poster .ap-field[data-note] .ap-field__value {
-  border: 1px dashed var(--tpl-line);
-  padding: 3px 6px;
-}
-
-/* 白名单四项（等宽字段名；编号 + 字段双列） */
-.print-root.print-template-agent-poster .ap-whitelist {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.print-root.print-template-agent-poster .ap-whitelist__item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border: 1px solid var(--tpl-accent);
-  padding: 6px 9px;
-}
-
-.print-root.print-template-agent-poster .ap-whitelist__no {
-  font-family: var(--ap-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--tpl-accent);
-}
-
-.print-root.print-template-agent-poster .ap-whitelist__field {
-  font-family: var(--ap-font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-whitelist__readonly {
-  margin: 10px 0 0;
-  font-size: 10.5px;
-  line-height: 1.6;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-whitelist__readonly strong {
-  color: var(--tpl-accent);
-}
-
-/* 页底口径注（压到主体底部；中轴区在 P2，本页无轴） */
-.print-root.print-template-agent-poster .ap-declare__note {
-  margin: auto 0 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--tpl-line);
-  font-size: 10px;
-  line-height: 1.6;
-  color: var(--tpl-ink);
-  opacity: 0.72;
-}
-
-/* ============================ P2 · 执行状态全览 ============================ */
-
-.print-root.print-template-agent-poster .ap-status {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 摘要带：巨号总数 + 标签 */
-.print-root.print-template-agent-poster .ap-status__summary {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  /* L0 巨号摘要 → L2 状态卡界面 14→20px（密度研究规则 2：L0↔L1/L2 20-28
-     区间下沿；P2 说明文字 auto 压底、余量 ~395px，吸收这 6px 不碰上限） */
-  padding: 2px 0 20px;
-}
-
-.print-root.print-template-agent-poster .ap-status__total {
-  font-family: var(--ap-font-en);
-  font-size: 56px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--tpl-ink);
+.print-root.print-template-agent-poster .ap-cols::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: var(--tpl-accent);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
-.print-root.print-template-agent-poster .ap-status__total-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--tpl-ink);
+/* 只剩一栏（该页只有一组有内容）时不出轴：50% 处那根线会落在栏右侧的空区里 */
+.print-root.print-template-agent-poster .ap-cols[data-cols='1']::before {
+  display: none;
 }
 
-/* 双栏 + 局部中轴：轴是本容器的伪元素，只贯穿栏区（02 §6） */
-.print-root.print-template-agent-poster .ap-status__cols {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 40px;
-}
-
-.print-root.print-template-agent-poster .ap-status__cols::before {
-  content: '';
-  position: absolute;
-  inset-block: 0;
-  left: 50%;
-  width: 1px;
-  background: var(--tpl-line);
-}
-
-/* 组：大字号状态分组 */
-.print-root.print-template-agent-poster .ap-status__group {
+/* ── 栏：栏头（组名 19px/900 + 3px 规则线 + 一行组注）──
+ * 参考稿实测线 y404.5..407（3px），组名在线上方且**先着色**
+ * （gate 组 = 组名与线都走 accent）。 */
+.print-root.print-template-agent-poster .ap-col {
   min-width: 0;
 }
 
-.print-root.print-template-agent-poster .ap-status__group-head {
-  /* 组头与状态卡的固定间距：人工门控标题不得压住状态卡（01 §7 P2） */
-  margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-status__group-title {
+.print-root.print-template-agent-poster .ap-col__head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin: 0;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.print-root.print-template-agent-poster .ap-col__label {
   font-size: 19px;
   font-weight: 900;
   letter-spacing: 0.06em;
   color: var(--tpl-ink);
 }
 
-/* 人工门控组：橙（治理焦点） */
-.print-root.print-template-agent-poster .ap-status__group[data-tone='gate'] .ap-status__group-head {
-  border-bottom-color: var(--tpl-accent);
+.print-root.print-template-agent-poster .ap-col__en {
+  margin-left: 8px;
+  font-family: var(--ap-font-en);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--tpl-ink);
+  opacity: 0.56;
 }
 
-.print-root.print-template-agent-poster .ap-status__group[data-tone='gate'] .ap-status__group-title {
+.print-root.print-template-agent-poster .ap-col__count {
+  font-family: var(--ap-font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tpl-ink);
+  opacity: 0.72;
+}
+
+/* 3px 分组规则线（**走 ink / accent，不许中灰**——审计 §1.4 ③） */
+.print-root.print-template-agent-poster .ap-col__rule {
+  height: 3px;
+  background: var(--tpl-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-agent-poster .ap-col[data-tone='gate'] .ap-col__label {
   color: var(--tpl-accent);
 }
 
-.print-root.print-template-agent-poster .ap-status__group-glyph {
-  font-size: 13px;
+.print-root.print-template-agent-poster .ap-col[data-tone='gate'] .ap-col__rule {
+  background: var(--tpl-accent);
 }
 
-.print-root.print-template-agent-poster .ap-status__group-note {
+.print-root.print-template-agent-poster .ap-col__note {
   margin: 4px 0 0;
   font-size: 9.5px;
   line-height: 1.5;
@@ -620,350 +444,167 @@
   opacity: 0.66;
 }
 
-/* 状态卡 */
-.print-root.print-template-agent-poster .ap-status__cards {
+/* ── 块：标题 + 实底状态标签（错落）+ 一行 meta；块下 1px 发丝线 ── */
+.print-root.print-template-agent-poster .ap-col__rows {
   display: flex;
   flex-direction: column;
-  gap: 7px;
 }
 
-.print-root.print-template-agent-poster .ap-status__card {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto 34px;
+.print-root.print-template-agent-poster .ap-block {
+  padding: 6px 0 7px;
+  border-bottom: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-agent-poster .ap-block__row {
+  display: flex;
   align-items: center;
-  gap: 9px;
-  border: 1px solid var(--tpl-line);
-  background: #ffffff;
-  /* L2 数据行收紧（密度研究规则 1：26-36px/行）：上下 padding 8→5px，
-     卡高 42→36px（内容最高子元素 = 16px 计数 24px + 2×5 + 2×1 边框）。
-     原 42px 超出 L2 区间上界——细条不配宽跑道，同经典甘特轨道修订。 */
-  padding: 5px 11px;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
+  gap: 10px;
 }
 
-.print-root.print-template-agent-poster .ap-status__card-glyph {
-  font-size: 13px;
-  text-align: center;
-  color: var(--tpl-ink);
+/* 错落：奇偶块交替把标签推到右缘（参考稿 1001 左 / 1002 右 / 1003 左）——
+ * 标签不连成整齐边界，就不会退化成表格 */
+.print-root.print-template-agent-poster .ap-block[data-stagger='end'] .ap-block__tag {
+  margin-left: auto;
 }
 
-.print-root.print-template-agent-poster .ap-status__card-name {
+.print-root.print-template-agent-poster .ap-block__title {
   font-size: 12.5px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   color: var(--tpl-ink);
   white-space: nowrap;
 }
 
-.print-root.print-template-agent-poster .ap-status__card-key {
-  font-family: var(--ap-font-mono);
-  /* 9→9.5px：gate 态卡（等待人工介入）此签随卡变 accent 色——密度研究 §4
-     约束 3「accent 文字 ≥9.5px」的登记项，本轮清掉 H 这处（E/D 两处仍
-     登记在 print-palette.ts 常量注释，待后续专项）。非最高子元素，不影响
-     卡高。 */
-  font-size: 9.5px;
-  color: var(--tpl-ink);
-  opacity: 0.56;
-  white-space: nowrap;
-}
-
-.print-root.print-template-agent-poster .ap-status__card-count {
-  font-family: var(--ap-font-mono);
-  font-size: 16px;
-  font-weight: 700;
-  text-align: right;
-  color: var(--tpl-ink);
-}
-
-/* running = 当前主焦点：全页唯一实心黑卡 */
-.print-root.print-template-agent-poster .ap-status__card[data-focus] {
-  background: var(--tpl-ink);
-  border-color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-status__card[data-focus] .ap-status__card-glyph,
-.print-root.print-template-agent-poster .ap-status__card[data-focus] .ap-status__card-name,
-.print-root.print-template-agent-poster .ap-status__card[data-focus] .ap-status__card-key,
-.print-root.print-template-agent-poster .ap-status__card[data-focus] .ap-status__card-count {
-  color: #ffffff;
-}
-
-/* 人工门控态卡：橙边橙字（等待人工介入） */
-.print-root.print-template-agent-poster .ap-status__card[data-tone='gate'] {
-  border-color: var(--tpl-accent);
-}
-
-.print-root.print-template-agent-poster .ap-status__card[data-tone='gate'] .ap-status__card-glyph,
-.print-root.print-template-agent-poster .ap-status__card[data-tone='gate'] .ap-status__card-name,
-.print-root.print-template-agent-poster .ap-status__card[data-tone='gate'] .ap-status__card-key,
-.print-root.print-template-agent-poster .ap-status__card[data-tone='gate'] .ap-status__card-count {
-  color: var(--tpl-accent);
-}
-
-/* 终局卡：灰（只读归档） */
-.print-root.print-template-agent-poster .ap-status__card[data-tone='term'] .ap-status__card-name {
-  color: var(--tpl-ink);
-  opacity: 0.72;
-}
-
-/* 说明文字：在轴容器**之外**（中轴不穿说明文字，01 §7） */
-.print-root.print-template-agent-poster .ap-status__note {
-  margin: auto 0 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--tpl-line);
-  font-size: 10px;
-  line-height: 1.65;
-  color: var(--tpl-ink);
-  opacity: 0.72;
-}
-
-.print-root.print-template-agent-poster .ap-status__note strong {
-  color: var(--tpl-accent);
-  opacity: 1;
-}
-
-/* ============================ P3 · 写回提案公示 ============================ */
-
-.print-root.print-template-agent-poster .ap-writeback {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-/* 五态带（大字号状态分组） */
-.print-root.print-template-agent-poster .ap-wb-states {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
-}
-
-.print-root.print-template-agent-poster .ap-wb-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  border: 1px solid var(--tpl-line);
-  background: #ffffff;
-  padding: 9px 11px;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-}
-
-.print-root.print-template-agent-poster .ap-wb-state__glyph {
-  font-size: 12px;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-wb-state__count {
-  font-family: var(--ap-font-mono);
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-wb-state__name {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-wb-state__key {
-  font-family: var(--ap-font-mono);
-  font-size: 9px;
-  color: var(--tpl-ink);
-  opacity: 0.56;
-}
-
-/* Proposed / Conflict = 治理焦点：橙 */
-.print-root.print-template-agent-poster .ap-wb-state[data-tone='gate'] {
-  border-color: var(--tpl-accent);
-  border-width: 2px;
-}
-
-.print-root.print-template-agent-poster .ap-wb-state[data-tone='gate'] .ap-wb-state__glyph,
-.print-root.print-template-agent-poster .ap-wb-state[data-tone='gate'] .ap-wb-state__count,
-.print-root.print-template-agent-poster .ap-wb-state[data-tone='gate'] .ap-wb-state__name {
-  color: var(--tpl-accent);
-}
-
-/* 人工门控流程（盒式流程图） */
-.print-root.print-template-agent-poster .ap-wb-flow__title,
-.print-root.print-template-agent-poster .ap-wb-whitelist__title,
-.print-root.print-template-agent-poster .ap-wb-list__title {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-wb-flow__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 4px 0;
-}
-
-.print-root.print-template-agent-poster .ap-flow-box {
+/* 实底状态标签：**标签里一定有字**（宪法 4），并带形状互异的字形；
+ * 文字色按「对比度取其高者」定档（墨配橙 5.20:1 / 白配墨 19.81:1），见文件头。 */
+.print-root.print-template-agent-poster .ap-block__tag {
+  flex: none;
   display: inline-flex;
-  flex-direction: column;
-  gap: 1px;
-  border: 2px solid var(--tpl-ink);
-  padding: 6px 12px;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-}
-
-.print-root.print-template-agent-poster .ap-flow-box__label {
-  font-family: var(--ap-font-en);
-  font-size: 12px;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: nowrap;
+  background: var(--tpl-ink);
+  color: #ffffff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-agent-poster .ap-block__tag[data-tone='gate'] {
+  background: var(--tpl-accent);
   color: var(--tpl-ink);
 }
 
-.print-root.print-template-agent-poster .ap-flow-box__sub {
+.print-root.print-template-agent-poster .ap-block__glyph {
   font-size: 9.5px;
+}
+
+.print-root.print-template-agent-poster .ap-block__meta {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--tpl-ink);
+  opacity: 0.72;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 居中摘要块（规格 §1.1 D1：主数值用**大号 mono**，不借巨字）── */
+.print-root.print-template-agent-poster .ap-sum {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.print-root.print-template-agent-poster .ap-sum__label {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   color: var(--tpl-ink);
   opacity: 0.66;
 }
 
-.print-root.print-template-agent-poster .ap-flow-box[data-tone='gate'] {
-  border-color: var(--tpl-accent);
+.print-root.print-template-agent-poster .ap-sum__big {
+  margin: 2px 0 0;
+  font-family: var(--ap-font-mono);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--tpl-ink);
 }
 
-.print-root.print-template-agent-poster .ap-flow-box[data-tone='gate'] .ap-flow-box__label {
-  color: var(--tpl-accent);
+.print-root.print-template-agent-poster .ap-sum__sub {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--tpl-ink);
+  opacity: 0.66;
 }
 
-.print-root.print-template-agent-poster .ap-flow-arrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.print-root.print-template-agent-poster .ap-flow-arrow__line {
-  width: 42px;
-  height: 2px;
-  background: var(--tpl-ink);
+/* ── 通栏 3px 橙线（规格 §1.1 D2：参考稿 x40..754、y730..732.5）── */
+.print-root.print-template-agent-poster .ap-rule {
+  margin-top: 22px;
+  height: 3px;
+  background: var(--tpl-accent);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
-.print-root.print-template-agent-poster .ap-flow-arrow__label {
-  font-size: 9.5px;
+/* ── 一行 mono 平铺口径行（规格 §1.1 D3：标签 + 同行平铺字段名，标签末二字橙）── */
+.print-root.print-template-agent-poster .ap-scope {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 12px 0 0;
+}
+
+.print-root.print-template-agent-poster .ap-scope__label {
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--tpl-ink);
-  white-space: nowrap;
 }
 
-.print-root.print-template-agent-poster .ap-flow-branch {
-  display: inline-flex;
-  gap: 10px;
+.print-root.print-template-agent-poster .ap-scope__tail {
+  color: var(--tpl-accent);
 }
 
-.print-root.print-template-agent-poster .ap-wb-flow__note {
-  margin: 6px 0 0;
-  font-size: 10px;
-  line-height: 1.6;
-  color: var(--tpl-ink);
-  opacity: 0.72;
-}
-
-/* 白名单公示 */
-.print-root.print-template-agent-poster .ap-wb-whitelist__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px 12px;
-}
-
-.print-root.print-template-agent-poster .ap-wb-whitelist__list li {
+.print-root.print-template-agent-poster .ap-scope__item {
   font-family: var(--ap-font-mono);
   font-size: 11.5px;
   font-weight: 700;
-  border: 1px solid var(--tpl-accent);
-  padding: 5px 9px;
   color: var(--tpl-ink);
 }
 
-.print-root.print-template-agent-poster .ap-wb-whitelist__readonly {
+/* ── 图例行（规格 §1.1 D4：单行 9.5px、降一档灰；态数按真实数据算）── */
+.print-root.print-template-agent-poster .ap-legend {
   margin: 8px 0 0;
-  font-size: 10.5px;
-  line-height: 1.6;
-}
-
-.print-root.print-template-agent-poster .ap-wb-whitelist__readonly strong {
-  color: var(--tpl-accent);
-}
-
-/* 提案清单表 */
-.print-root.print-template-agent-poster .ap-wb-list {
-  margin-top: auto;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table th {
-  font-family: var(--ap-font-en);
   font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-align: left;
+  line-height: 1.5;
+  color: var(--tpl-ink);
+  opacity: 0.66;
+}
+
+/* ── 脚注（两行：口径 + 数据来源；参考稿 y831..867）── */
+.print-root.print-template-agent-poster .ap-notes {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-agent-poster .ap-notes__line {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.6;
   color: var(--tpl-ink);
   opacity: 0.72;
-  border-bottom: 2px solid var(--tpl-ink);
-  padding: 5px 8px;
-  white-space: nowrap;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table td {
-  border-bottom: 1px solid var(--tpl-line);
-  padding: 6px 8px;
-  vertical-align: middle;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table__task,
-.print-root.print-template-agent-poster .ap-wb-table__conf {
-  font-family: var(--ap-font-mono);
-  white-space: nowrap;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table__fields {
-  font-family: var(--ap-font-mono);
-  font-size: 10px;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table__status[data-tone='gate'] {
-  color: var(--tpl-accent);
-}
-
-.print-root.print-template-agent-poster .ap-wb-table__conf-note {
-  font-size: 9px;
-  opacity: 0.6;
-}
-
-.print-root.print-template-agent-poster .ap-wb-table__decided {
-  font-size: 10px;
-  white-space: nowrap;
 }
 
 /* ── 空态（02 §8 标准文案由 EmptyPrintState 提供）── */
@@ -982,19 +623,14 @@
  * 特异性高者胜：本选择器两类 > `.print-root` 一类）；填充元素锁 exact ── */
 @media print {
   /* 纸面页头豁免（预存 bug 修复，2026-10-09 期三收尾）：global.css 的
-     `header { display: none !important }`（v0.4 `4924734` 为隐藏 TopBar 引入）
-     会命中纸面内的语义 <header>——本版页头（英文栏 kicker + 中文页题）在真机
-     打印 / 另存 PDF 时整块消失。两类 + !important ⇒ 特异性高者胜；screen 态
-     零变化，应用级 header 不受影响。
-     ⚠️ 分组头（.ap-status__group-head）也是 <header>，但它是 **block 布局**
-     （h3 组题 + p 组注纵排）——不能跟 blanket 的 display:flex（会把两者并排，
-     压坏 P2 双栏），故显式还原为 block。 */
+     `header { display: none !important }`（v0.4 为隐藏 TopBar 引入）会命中
+     纸面内的语义 <header>——本版页头在真机打印 / 另存 PDF 时整块消失。
+     两类 + !important ⇒ 特异性高者胜；screen 态零变化，应用级 header 不受影响。
+     ⚠️ 页内其余分组头（.ap-col__head）**刻意用 div 不用 <header>**——纸面内每多
+     一个语义 <header> 就多一处要豁免的坑（旧的 .ap-status__group-head 豁免已随
+     人类化一并退役）。 */
   .print-root.print-template-agent-poster .a4-page .ap-head {
     display: flex !important;
-  }
-
-  .print-root.print-template-agent-poster .a4-page .ap-status__group-head {
-    display: block !important;
   }
 
   .print-root.print-template-agent-poster,
@@ -1005,14 +641,13 @@
     print-color-adjust: exact;
   }
 
-  .print-root.print-template-agent-poster .ap-head__signal,
   .print-root.print-template-agent-poster .ap-giant__word,
-  .print-root.print-template-agent-poster .ap-status__total,
-  .print-root.print-template-agent-poster .ap-status__card,
-  .print-root.print-template-agent-poster .ap-status__card[data-focus],
-  .print-root.print-template-agent-poster .ap-wb-state,
-  .print-root.print-template-agent-poster .ap-flow-box,
-  .print-root.print-template-agent-poster .ap-flow-arrow__line {
+  .print-root.print-template-agent-poster .ap-giant__subword,
+  .print-root.print-template-agent-poster .ap-footword__word,
+  .print-root.print-template-agent-poster .ap-cols::before,
+  .print-root.print-template-agent-poster .ap-col__rule,
+  .print-root.print-template-agent-poster .ap-block__tag,
+  .print-root.print-template-agent-poster .ap-rule {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

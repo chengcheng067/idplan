@@ -1056,11 +1056,11 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
      （公文头，flex）自 v0.4 起真机打印 / 另存 PDF 时页头整块消失（既有视觉
      spec 全走 screen 媒体故未红）。两条豁免都是两类 + !important ⇒ 特异性
      高者胜；screen 态零变化，应用 chrome（.print-root 外）仍走裸规则。
-     ⚠️ block 布局的纸面 header 不能跟第一条的 flex：H 分组头
-     （.ap-status__group-head，h3+p 纵排）在 agent-poster.css 以更高特异性
-     还原为 block；行程打印页的抬头是 .print-root 直接子元素且无 flex 类，
-     单独一条还原 block。新增纸面 header 时按它的**实际布局**接一条，
-     不要默认 flex。 */
+     ⚠️ block 布局的纸面 header 不能跟第一条的 flex（新增纸面 header 时按它的
+     **实际布局**接一条，不要默认 flex）：行程打印页的抬头是 .print-root 直接
+     子元素且无 flex 类，单独一条还原 block。H 的栏头（`.ap-col__head`）人类化
+     后**刻意用 div 不用 <header>** ⇒ 它不再需要任何豁免；旧的
+     `.ap-status__group-head` 还原规则已随该页退役。 */
   .print-root .a4-page header {
     display: flex !important;
   }

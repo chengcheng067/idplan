@@ -4,8 +4,8 @@
  * ── 为什么不再取状态词 ──
  * 原实现纸面巨字取 `statusToGiantWord(focus.status)`。拍板后巨字**与状态解绑**：
  * 参考稿那颗 `AGENT` 是「主题词位」而不是状态位，人类化后由品牌词填充；状态
- * 表达归双栏栏头（规格 §1.4 表格末行）。`statusToGiantWord` 保留在 core 供他
- * 用，不删业务常量。
+ * 表达归双栏栏头（规格 §1.4 表格末行）。`statusToGiantWord` 已随人类化批次在
+ * `pages/agent-poster/shared.ts` 里删除（无消费方；业务常量不在此列，不受影响）。
  *
  * ── 存储口径（照同区的打印 logo 抄，不另发明）──
  * settings KV 表 `key='print.brandWord'`，valueJson = 字符串。KV 表整体进备份

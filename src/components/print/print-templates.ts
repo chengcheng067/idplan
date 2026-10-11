@@ -27,7 +27,9 @@
  *   · A：阶段清单 / 任务清单 / 延期台账 / 成员名册（4 原生）
  *   · D：进度矩阵 / 依赖网络 / 工作量构成 / 里程碑验收（4 原生）
  *   · E：阶段清单 / 成员名册 / 产出物清单（3 原生）
- *   · H：Agent 执行 / 写回提案（2 原生；Agent 执行 = 1 模块 2 页，1:N）
+ *   · H：阶段清单 / 任务清单 / 成员名册（3 原生）——人类化批次把 M1/M2/M4
+ *     由「通用渲染」升格为 H 的原生海报页（原生的 M10/M11 = Agent 治理公示
+ *     已从能力表移除，见该模板条目；「外表 × 模块」形态不变）
  *   · classic 不走模块表（另一套粒度：五块 blocks，决策文档 §2.2）⇒ 恒空
  * 11 个模块里不在某外表能力表中的 = **非原生**：选择器呈禁用态 + 原因
  * （通用渲染是期三分期补；本表先立「模块跨模板选」的产品形态，
@@ -161,7 +163,8 @@ export interface PrintNativePage {
  *   · `pages` 非空 ⇒ 该外表**原生渲染**该模块（标志布局，优先）；
  *   · `pages` 空 + `generic` ⇒ 该外表下该模块走**通用渲染**（基础排版承接）；
  *   · 两者皆无 ⇒ 该外表下暂不可用（选择器禁用态 + 原因，后续批次补）。
- * 模型容纳 1:N（H 的 Agent 执行 = 执行宣告 + 执行状态全览两页）。
+ * 模型容纳 1:N（H 的 Agent 执行曾是「执行宣告 + 执行状态全览」两页；人类化后
+ * H 的三页已 1:1，1:N 仍由本模型容纳，能力表结构不变）。
  */
 export interface PrintModuleCapability {
   module: PrintModuleId;
@@ -332,41 +335,31 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     id: 'agent-poster',
     version: 'H',
     label: 'Agent Poster',
-    scene: '海报式跳读：Agent 执行状态与写回治理公示',
+    // 人类化批次（规格 §1.2.5）：用户可见文案必须改——旧文案是「H 默认纸面
+    // 100% 是 Agent」的证据链之一。
+    scene: '海报式跳读：阶段 / 任务 / 成员的公告板',
     thumb: '/print-thumbs/H-agent-poster-p1.png',
     implemented: true,
     usesBlocks: false,
-    // 期三第一批：M1/M2/M4 在 H 无原生页 ⇒ 通用渲染（去专属化的第一批落地）
+    // 人类化批次：M1/M2/M4 由「通用渲染」**升格为 H 的原生海报页**
+    // （顺序即纸面页序 = PRINT_MODULES 的 M1→M2→M4 ⇒ 默认 3 页）。
+    // `generic: true` 保留：pages 非空时原生优先、该标记不参与分发（见 :176），
+    // 成本为零；且它是「显式勾选通用渲染」的兜底路径。
     modules: [
       {
         module: 'stage-list',
-        pages: [],
+        pages: [{ id: 'stage-overview', label: '阶段海报' }],
         generic: true,
       },
       {
         module: 'task-list',
-        pages: [],
+        pages: [{ id: 'task-register', label: '任务海报' }],
         generic: true,
       },
       {
         module: 'member-roster',
-        pages: [],
+        pages: [{ id: 'member-roster', label: '成员海报' }],
         generic: true,
-      },
-      {
-        // M10 = 1 模块 2 页（执行宣告 + 状态全览）：模型容纳 1:N，
-        // 勾选态是模块粒度，纸面落两页（决策文档 §3.3）
-        module: 'agent-execution',
-        pages: [
-          { id: 'agent-declaration', label: 'Agent 执行宣告' },
-          { id: 'execution-status', label: '执行状态全览' },
-        ],
-        generic: false,
-      },
-      {
-        module: 'writeback-proposals',
-        pages: [{ id: 'writeback-proposals', label: '写回提案公示' }],
-        generic: false,
       },
     ],
   },
