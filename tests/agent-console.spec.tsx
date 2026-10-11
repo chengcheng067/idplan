@@ -672,3 +672,118 @@ describe('Agent 执行控制台 · 导航接线', () => {
     expect(Array.from(src.matchAll(/match: \(p\) =>/g)).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+/* ================================================================== *
+ * 6. 动效接线：持续态只给「还在跑」（team-lead 2026-10-11）
+ * ================================================================== */
+
+describe('Agent 执行控制台 · 等待态脉动（只给「还在跑」）', () => {
+  /**
+   * 定义层的 `status-pulse` / `skeleton-pulse` 是「还有事在发生」的专用语言，
+   * 接线纪律是**只接真实存在的等待**、且不往已有真实内容上盖骨架。
+   * 本页真正存在的等待就是「执行中」：用户盯这张表时唯一的问题是
+   * 「它卡住了还是在干活」，脉动只回答这一句。
+   */
+  it('「执行中」的执行单左缘色条脉动，其它状态一律不脉动', async () => {
+    await seedProject('p_pulse', '脉动项目');
+    for (const [i, s] of [
+      ExecutionStatus.Running,
+      ExecutionStatus.Queued,
+      ExecutionStatus.Completed,
+    ].entries()) {
+      await seedExecution({
+        projectId: 'p_pulse',
+        objective: `脉动目标 ${s}`,
+        idempotencyKey: `kp-${i}`,
+        status: s,
+      });
+    }
+    await render();
+
+    const cards = Array.from(container.querySelectorAll<HTMLElement>('li.soft-card'));
+    expect(cards).toHaveLength(3);
+    const cardOf = (label: string): HTMLElement => {
+      const hit = cards.find((c) => (c.textContent ?? '').includes(label));
+      if (!hit) throw new Error(`未找到「${label}」的执行单卡片`);
+      return hit;
+    };
+    /** 左缘色条（aria-hidden 的 1px 装饰件） */
+    const railOf = (c: HTMLElement): HTMLElement =>
+      c.querySelector<HTMLElement>('span[aria-hidden="true"]')!;
+
+    expect(railOf(cardOf('执行中')).classList.contains('status-pulse')).toBe(true);
+    expect(railOf(cardOf('排队中')).classList.contains('status-pulse')).toBe(false);
+    expect(railOf(cardOf('已完成')).classList.contains('status-pulse')).toBe(false);
+
+    // 全场恰有 1 处在脉动 —— 脉动一旦到处都是就等于没有信号
+    expect(container.querySelectorAll('.status-pulse')).toHaveLength(1);
+  });
+
+  it('「执行中」的尝试徽章同样脉动（状态徽章是文字，脉动不承载信息）', async () => {
+    await seedProject('p_attempt', '尝试脉动项目');
+    const execId = await seedExecution({
+      projectId: 'p_attempt',
+      objective: '跑一个尝试',
+      idempotencyKey: 'ka',
+      status: ExecutionStatus.Running,
+    });
+    /*
+     * 落一条终态 attempt 再落一条 running —— 这个**顺序不能反**：
+     * 仓储边界强制「同一 execution 同时最多一个非终态 attempt」（`canStartAttempt`，
+     * 见 local.execution.repo.ts），先落 running 会让第二条直接撞 Conflict。
+     * 所以这里的形态是「#1 跑成功、#2 接着跑」，既是合法的重试形态，
+     * 也顺带覆盖了「同一条执行单里终态与非终态并存」的渲染。
+     */
+    await bundle.executions.createAttempt({ executionId: execId, attemptNo: 1, status: 'succeeded' });
+    await bundle.executions.createAttempt({ executionId: execId, attemptNo: 2, status: 'running' });
+
+    await render();
+    await click(buttonByText('跑一个尝试'));
+    await pump();
+
+    /*
+     * 必须**从 attempt 行本身**取徽章，不能在整棵树上按文案找：
+     * 执行单卡片自己的状态徽章文案也是「执行中」（同一个 EXEC_STATUS_LABEL），
+     * 按文案 find 会先命中卡片徽章 —— 那个不该脉动，于是本用例会假红。
+     */
+    const attemptBadge = (no: number): HTMLElement => {
+      const anchor = Array.from(container.querySelectorAll<HTMLElement>('span')).find(
+        (s) => (s.textContent ?? '') === `尝试 #${no}`,
+      );
+      if (!anchor) throw new Error(`未找到「尝试 #${no}」行`);
+      const badge = anchor.nextElementSibling as HTMLElement | null;
+      if (!badge) throw new Error(`「尝试 #${no}」行没有状态徽章`);
+      return badge;
+    };
+
+    const runningBadge = attemptBadge(2);
+    const succeededBadge = attemptBadge(1);
+    expect(runningBadge.textContent, '尝试 #2 应是「执行中」徽章').toBe('执行中');
+    expect(succeededBadge.textContent, '尝试 #1 应是「成功」徽章').toBe('成功');
+    expect(runningBadge.classList.contains('status-pulse')).toBe(true);
+    expect(succeededBadge.classList.contains('status-pulse')).toBe(false);
+  });
+
+  it('骨架脉动（skeleton-pulse）目前**零消费方** —— 全仓没有骨架屏，不许在真实内容上盖骨架', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const { readdirSync, statSync } = await import('node:fs');
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const n of readdirSync(dir)) {
+        if (n === 'node_modules' || n.startsWith('.')) continue;
+        const abs = resolve(dir, n);
+        if (statSync(abs).isDirectory()) walk(abs);
+        else if (/\.(ts|tsx)$/.test(n)) files.push(abs);
+      }
+    };
+    walk(resolve(__dirname, '..', 'src'));
+    const users = files.filter((f) => readFileSync(f, 'utf8').includes('skeleton-pulse'));
+    // 这条断言红了意味着有人接了骨架脉动：请确认接的是**真骨架屏**（占位块），
+    // 而不是往已有真实内容上盖一层会呼吸的皮 —— 后者是把「在加载」演成「加载完了」。
+    expect(
+      users.map((f) => f.slice(resolve(__dirname, '..').length + 1)),
+      'skeleton-pulse 出现了消费方，请复核接的是真骨架屏',
+    ).toEqual([]);
+  });
+});

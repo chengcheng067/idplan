@@ -343,7 +343,12 @@ function AttemptRow({ a }: { a: ExecutionAttempt }) {
     <li className="flex flex-col gap-1 rounded-2xl bg-sunken px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-ink">尝试 #{a.attemptNo}</span>
-        <Badge className={ATTEMPT_STATUS_BADGE_CLASS[a.status]}>
+        {/* 同一条规矩：脉动只给「执行中」这一种尝试状态（同页 Rail 处有完整理由） */}
+        <Badge
+          className={`${ATTEMPT_STATUS_BADGE_CLASS[a.status]}${
+            a.status === AttemptStatus.Running ? ' status-pulse' : ''
+          }`}
+        >
           {ATTEMPT_STATUS_LABEL[a.status]}
         </Badge>
         <span className="ml-auto text-xs text-mist">
@@ -560,9 +565,15 @@ function ExecutionCard({
     >
       <div className={`flex items-stretch ${isTerminal(execution.status) ? 'opacity-90' : ''}`}>
         <span
+          /*
+           * status-pulse 只给**还在跑**的这一个状态（不给出所有的状态加动效）：
+           * 用户盯着这张表时唯一真正的问题是「它卡住了还是在干活」。脉动只回答这一句，
+           * 且只叠在已有的左缘色条上（1px 宽、aria-hidden 的装饰件，零布局影响、
+           * 不承载信息 —— 状态本身仍由旁边的徽章文字表达）。reduce 下已由 CSS 关停。
+           */
           className={`w-1 shrink-0 ${
             contradiction !== null ? 'bg-clay' : EXEC_STATUS_RAIL_CLASS[execution.status]
-          }`}
+          } ${execution.status === ExecutionStatus.Running ? 'status-pulse' : ''}`}
           aria-hidden="true"
         />
         <button
