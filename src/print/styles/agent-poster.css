@@ -6,11 +6,23 @@
  * 亮色锁，暗色主题下打印稿直接废掉（机理见 global.css「:root, .print-root」）。
  * 故本文件所有选择器以 `.print-root.print-template-agent-poster` 起头。
  *
- * ── token（01 §7）──
- *   --ap-paper #F5F5F5 灰白底（**固定不开槽位**——纸面性格是模板身份）
+ * ── token（规格 §1.1 A 组 / P0-17 改值）──
+ *   --ap-paper #DEDDD4 暖灰米（**固定不开槽位**——纸面性格是模板身份）
+ *       参考稿实测纸底（79% 面积）。A1 明示「纸色是模板身份 ⇒ 取值必须精确，
+ *       不许取近似灰」，故旧值 #F5F5F5（中性灰）改为参考稿的暖灰米。
  *   --tpl-ink    #0A0A0A 近黑（槽位；系统推进 / 当前主状态）
- *   --tpl-accent #E8590C 橙（槽位；等待人工介入 / 治理焦点）
- *   --tpl-line   #BFBFBF 分隔线（槽位）
+ *       A3 判定 #1F1E1C「近似（可接受）」⇒ **本批不改 ink 值**。
+ *   --tpl-accent #E2522B 橙红（槽位；需要人动作 = 延期 / 未开始 / 等人介入）
+ *       A2 参考稿实测焦点色（8.6% 面积）。旧值 #E8590C 偏纯橙 —— 与纸底同属
+ *       四套里唯一「连纸色都错」的一套（P0-17）。
+ *       ⚠️ 本文件的值是**设计师基线默认**；渲染时由 `.print-root` 上的 inline
+ *       `--tpl-accent`（palette.accent）覆盖（AgentPosterDocument.tsx:168-174），
+ *       真值源是 print-palette.ts 的 AGENT_POSTER_PALETTE.baseline，两处必须同值。
+ *   --tpl-line   #BFBFBF 发丝线（槽位）—— A4：**值不动，分工收紧**
+ *       只作「块下 1px 发丝线」；**分组线（3px）必须走 --tpl-ink 或
+ *       --tpl-accent**，不许再用中灰（审计 §1.4 ③：一条中灰发丝线承担不了
+ *       参考稿的分组职责）。本文件现存 --tpl-line 用法已复核为**全部 1px**
+ *       （.ap-head__rule / .ap-status__cols::before / 各 1px 边框），无中灰分组线。
  *
  * ── 中轴纪律（02 §6 明文）──
  * 中轴是 `.ap-status__cols` 双栏容器的 ::before 伪元素（inset-block: 0;
@@ -27,8 +39,8 @@
 
 .print-root.print-template-agent-poster {
   /* 纸面与三槽位（槽位缺省 = 设计师基线；自定义经 .print-root style 进入） */
-  --ap-paper: #f5f5f5;
-  --tpl-accent: #e8590c;
+  --ap-paper: #deddd4;
+  --tpl-accent: #e2522b;
   --tpl-ink: #0a0a0a;
   --tpl-line: #bfbfbf;
   /* 字体三族（栈内离线回落，不强拉网络字体） */
@@ -39,7 +51,7 @@
   --ap-pad-x: 44px;
 }
 
-/* ── 纸面：灰白底海报；overflow hidden 承载出血巨字（裁切在纸缘）──
+/* ── 纸面：暖灰米（#DEDDD4）海报；overflow hidden 承载出血巨字（裁切在纸缘）──
  * position: relative 是**页级出血巨字**（.ap-giant / .ap-footword）的定位上下文：
  * 两块巨字绝对定位在纸面上，必须相对**每一张纸**而非 .print-root 定位（多页时
  * 相对 .print-root 会让第 2/3 页的巨字飞到第 1 页）。 */

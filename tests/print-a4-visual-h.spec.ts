@@ -762,9 +762,9 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
         getComputedStyle(el).borderTopColor,
       );
       expect(border, '朱红预设的状态色应为 #C8102E').toBe('rgb(200, 16, 46)');
-      // 纸面仍是灰白底（paper 不开槽位，H 的身份）
+      // 纸面仍是暖灰米（paper 不开槽位 = H 的身份，规格 §1.1 A1 / P0-17）
       const paper = await page.$eval('.a4-page', (el) => getComputedStyle(el).backgroundColor);
-      expect(paper).toBe('rgb(245, 245, 245)');
+      expect(paper, '纸底应为参考稿实测暖灰米 #DEDDD4').toBe('rgb(222, 221, 212)');
     } finally {
       await page.close();
     }
