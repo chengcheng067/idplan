@@ -396,6 +396,86 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
     try {
       await page.goto('file://' + writeHtml('h-hum-color.html', shell(markupOf(vm), css, false)));
 
+      // ── ⓪ 横向几何：三轨 340+38+336 = **714** 必须恰好落满内容框（P1-3 修 8px 溢出）──
+      // 三轨与橙色通栏线都是**参考稿 40px 内缩下的绝对坐标**（内容区 x40..754）。
+      // `--ap-pad-x` 曾取 44 ⇒ 内容框只有 706，右栏右缘溢出 8px（实测 x1001 vs x993），
+      // 表现为「右栏块底分隔线比页眉线/脚注线长 8px」。改回 40 后两者必须逐位对齐。
+      //
+      // ⚠️ 坐标系：getBoundingClientRect() 给的是**视口坐标**，而 794 宽的 a4 页在 shell 里
+      // 被居中（1000 视口 ⇒ 每侧留白 103）。所以「x40/x754/x396.5」这类参考稿数字只能与
+      // **页内坐标**（减去 pageLeft）比，不能直接与视口坐标比 —— 首版这里写成视口值 397，
+      // 实测 500 而误报红（103 的差正好是 shell 留白）。下面一律用 pageLeft 归一化。
+      const geo = await page.$eval('[data-print-page="stage-overview"] .ap-cols', (cols) => {
+        const bodyEl = cols.closest('.ap-body') as HTMLElement;
+        const bs = getComputedStyle(bodyEl);
+        const bodyBox = bodyEl.getBoundingClientRect();
+        const box = cols.getBoundingClientRect();
+        const tracks = [...cols.children].map((c) => c.getBoundingClientRect());
+        const pg = cols.closest('.a4-page') as HTMLElement;
+        const pgBox = pg.getBoundingClientRect();
+        const fullWidth = (sel: string) => {
+          const el = pg.querySelector(sel) as HTMLElement | null;
+          return el ? el.getBoundingClientRect() : null;
+        };
+        return {
+          padX: parseFloat(bs.paddingLeft),
+          pageLeft: +pgBox.left.toFixed(2),
+          pageRight: +pgBox.right.toFixed(2),
+          contentLeft: +(bodyBox.left + parseFloat(bs.paddingLeft)).toFixed(2),
+          contentRight: +(bodyBox.right - parseFloat(bs.paddingRight)).toFixed(2),
+          colsLeft: +box.left.toFixed(2),
+          colsWidth: +box.width.toFixed(2),
+          // 参考稿口径（页内坐标）
+          contentLeftRel: +(bodyBox.left + parseFloat(bs.paddingLeft) - pgBox.left).toFixed(2),
+          contentRightRel: +(bodyBox.right - parseFloat(bs.paddingRight) - pgBox.left).toFixed(2),
+          rightColRightRel: +(tracks[1]!.right - pgBox.left).toFixed(2),
+          axisCxRel: +(box.left - pgBox.left + box.width / 2).toFixed(2),
+          headRuleRightRel: fullWidth('.ap-head__rule')
+            ? +(fullWidth('.ap-head__rule')!.right - pgBox.left).toFixed(2)
+            : null,
+          notesRightRel: fullWidth('.ap-notes')
+            ? +(fullWidth('.ap-notes')!.right - pgBox.left).toFixed(2)
+            : null,
+          leftTrack: +tracks[0]!.width.toFixed(2),
+          rightTrack: +tracks[1]!.width.toFixed(2),
+          gutter: +(tracks[1]!.left - tracks[0]!.right).toFixed(2),
+          rightColRight: +tracks[1]!.right.toFixed(2),
+          notesRight: fullWidth('.ap-notes') ? +fullWidth('.ap-notes')!.right.toFixed(2) : null,
+          headRuleRight: fullWidth('.ap-head__rule')
+            ? +fullWidth('.ap-head__rule')!.right.toFixed(2)
+            : null,
+          ruleWidth: fullWidth('.ap-head__rule') ? +fullWidth('.ap-head__rule')!.width.toFixed(2) : null,
+        };
+      });
+      // eslint-disable-next-line no-console
+      console.log(
+        `[H 横向几何] pad-x=${geo.padX}｜页内内容框 ${geo.contentLeftRel}..${geo.contentRightRel}` +
+          `（宽 ${geo.colsWidth}）｜三轨 左 ${geo.leftTrack} + 栏间 ${geo.gutter} + 右 ${geo.rightTrack}` +
+          `｜页内右栏右缘 ${geo.rightColRightRel}｜页内轴心 ${geo.axisCxRel}` +
+          `｜页内全宽件右缘 页眉线 ${geo.headRuleRightRel} / 脚注 ${geo.notesRightRel}` +
+          `｜视口坐标 内容框 ${geo.contentLeft}..${geo.contentRight}（页左缘 ${geo.pageLeft}）`,
+      );
+      expect(geo.padX, '版心内缩 = 参考稿 40px（三轨的绝对坐标基准）').toBe(40);
+      expect(geo.colsWidth, '内容框全宽 = 794 − 2×40 = 714').toBeCloseTo(714, 1);
+      expect(geo.leftTrack, '左栏 = 参考稿 x40..380').toBeCloseTo(340, 1);
+      expect(geo.gutter, '栏间 = 参考稿 38').toBeCloseTo(38, 1);
+      expect(geo.rightTrack, '右栏 = 参考稿 x418..754').toBeCloseTo(336, 1);
+      // 参考稿对齐（页内坐标）：内容区 x40..754、轴心 x396.5
+      expect(geo.contentLeftRel, '内容框左缘 = 参考稿 x40').toBeCloseTo(40, 1);
+      expect(geo.contentRightRel, '内容框右缘 = 参考稿 x754').toBeCloseTo(754, 1);
+      expect(
+        geo.axisCxRel,
+        '轴心 = 内容区左缘 40 + 714/2 = 397（参考稿 x396.5）⇒ 中轴居中于内容框',
+      ).toBeCloseTo(397, 0);
+      // 溢出判据（P1-3：修前这里差 8px）
+      expect(geo.rightColRight, '右栏右缘不得超内容框右缘（修前超 8px）').toBeLessThanOrEqual(
+        geo.contentRight + 0.5,
+      );
+      expect(geo.rightColRight, '右栏右缘须与内容框右缘对齐').toBeCloseTo(geo.contentRight, 1);
+      expect(geo.headRuleRight, '页眉全宽线右缘须与内容框右缘对齐').toBeCloseTo(geo.contentRight, 1);
+      expect(geo.notesRight, '脚注全宽线右缘须与内容框右缘对齐').toBeCloseTo(geo.contentRight, 1);
+      expect(geo.ruleWidth, '页眉全宽线宽 = 内容框 714').toBeCloseTo(714, 1);
+
       // ── ① 中轴：容器伪元素、2px、accent、只贯穿栏区（不穿下方说明文字）──
       const axis = await page.$eval('[data-print-page="stage-overview"]', (el) => {
         const cols = el.querySelector('.ap-cols') as HTMLElement;
@@ -797,7 +877,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
       // 装置贴纸缘：出血的「画布」就是整张纸
       expect(m.word!.top, '巨字行盒须越出纸顶（出血）').toBeLessThan(0);
       expect(m.word!.left, '巨字应贴纸左缘（墨迹左缘 ≈18px，参考稿实测）').toBeGreaterThanOrEqual(0);
-      expect(m.word!.left, '巨字不得被推进内容框（44px）').toBeLessThan(20);
+      expect(m.word!.left, '巨字不得被推进内容框（--ap-pad-x = 40px）').toBeLessThan(20);
       expect(m.word!.text, '页顶巨字载荷 = 默认品牌词 PLAN（§1.4 规则 1）').toBe('PLAN');
       expect(m.word!.tt, '巨字恒大写（§1.4 规则 4）').toBe('uppercase');
       expect(m.word!.color, '页顶巨字取身份色 accent').toBe(hexRgb(BASELINE.accent));
