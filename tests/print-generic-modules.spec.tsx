@@ -137,15 +137,22 @@ function renderDoc(template: DocKind, vm: PrintViewModel, sheets: readonly Print
 
 const doc = (markup: string): Document => new JSDOM(markup).window.document;
 
-/** 12 组合：模块 × 外表（A/D/E/H） */
-const COMBOS: ReadonlyArray<{ module: PrintModuleId; template: DocKind; pageAttr: string }> = [
+/** 12 组合：模块 × 外表（A/D/E/H）
+ *
+ *  `pages`：本组合在本夹具规模下的物理页数（缺省 1）。
+ *  只有 `task-list × editorial-index`（E×M2）是 2 页——2026-10-11 P0-12 把 E 的
+ *  刊头由「单行 27px」还原成「两行 92px 衬线巨题」，页壳 chrome 由 ≈95px 长到
+ *  ≈330px ⇒ `GENERIC_ROWS_H['editorial-index']` 同源缩小（780 → 620，真 Chromium
+ *  实测行区上限 646.8；E×M2 的 grid 行 31.75px × 8 + 4 个章头已 656.9 > 646.8，
+ *  故 8 任务本来就装不进一页）。行不裂：8 行 ⇒ 7 + 1。 */
+const COMBOS: ReadonlyArray<{ module: PrintModuleId; template: DocKind; pageAttr: string; pages?: number }> = [
   { module: 'stage-list', template: 'swiss-schedule', pageAttr: 'stage-overview' },
   { module: 'stage-list', template: 'data-editorial', pageAttr: 'generic-stage-list' },
   { module: 'stage-list', template: 'editorial-index', pageAttr: 'stage-index' },
   { module: 'stage-list', template: 'agent-poster', pageAttr: 'generic-stage-list' },
   { module: 'task-list', template: 'swiss-schedule', pageAttr: 'task-register' },
   { module: 'task-list', template: 'data-editorial', pageAttr: 'generic-task-list' },
-  { module: 'task-list', template: 'editorial-index', pageAttr: 'generic-task-list' },
+  { module: 'task-list', template: 'editorial-index', pageAttr: 'generic-task-list', pages: 2 },
   { module: 'task-list', template: 'agent-poster', pageAttr: 'generic-task-list' },
   { module: 'member-roster', template: 'swiss-schedule', pageAttr: 'member-roster' },
   { module: 'member-roster', template: 'data-editorial', pageAttr: 'generic-member-roster' },
@@ -158,7 +165,7 @@ const COMBOS: ReadonlyArray<{ module: PrintModuleId; template: DocKind; pageAttr
  * ==================================================================================== */
 
 describe('期三 · G1 十二组合映射（M1/M2/M4 × A/D/E/H）', () => {
-  it('每组合隔离渲染：恰好一页、页属性与页题就位、模板类正确', () => {
+  it('每组合隔离渲染：页数就位、页属性与页题就位、模板类正确', () => {
     const vm = buildVm();
     for (const c of COMBOS) {
       // 通用组合给 generic sheet；原生组合（A/E 的 M1/M4）给原生页 kind
@@ -167,16 +174,21 @@ describe('期三 · G1 十二组合映射（M1/M2/M4 × A/D/E/H）', () => {
         : [{ type: 'native', page: c.pageAttr as 'stage-overview' }];
       const d = doc(renderDoc(c.template, vm, sheets));
       const pages = d.querySelectorAll('.a4-page');
-      expect(pages.length, `${c.module} × ${c.template} 应恰好一页`).toBe(1);
-      expect(pages[0]!.getAttribute('data-print-page'), `${c.module} × ${c.template} 页属性`).toBe(c.pageAttr);
+      expect(pages.length, `${c.module} × ${c.template} 页数`).toBe(c.pages ?? 1);
+      // 每页都带同一个页属性（续页也自证是哪一页）
+      for (let i = 0; i < pages.length; i++) {
+        expect(pages[i]!.getAttribute('data-print-page'), `${c.module} × ${c.template} 第 ${i + 1} 页属性`).toBe(
+          c.pageAttr,
+        );
+      }
+      // 项目名上纸（每页可独立解释）
+      expect(pages[0]!.textContent).toContain('云栖·湖畔茶室综合改造项目');
       // 模板类（外表）就位
       const root = d.querySelector('.print-root');
       expect(root!.className).toContain(`print-template-${c.template}`);
       // 页题（通用页 = 模块名；原生页 = 各版原生页题）
       const title = pages[0]!.querySelector('h1, .swiss-topbar__title');
       expect(title, `${c.module} × ${c.template} 应有页题元素`).not.toBeNull();
-      // 项目名上纸（每页可独立解释）
-      expect(pages[0]!.textContent).toContain('云栖·湖畔茶室综合改造项目');
     }
   });
 
@@ -200,7 +212,8 @@ describe('期三 · G1 十二组合映射（M1/M2/M4 × A/D/E/H）', () => {
     const vm = buildVm();
     expect(printPhysicalPageCount('swiss-schedule', vm, [{ type: 'native', page: 'stage-overview' }])).toBe(1);
     expect(printPhysicalPageCount('data-editorial', vm, [{ type: 'generic', module: 'task-list' }])).toBe(1);
-    expect(printPhysicalPageCount('editorial-index', vm, [{ type: 'generic', module: 'task-list' }])).toBe(1);
+    // E×M2：长刊头（P0-12）⇒ 行区 620，8 任务 + 4 章头装不下一页（行不裂 7+1）
+    expect(printPhysicalPageCount('editorial-index', vm, [{ type: 'generic', module: 'task-list' }])).toBe(2);
     expect(printPhysicalPageCount('agent-poster', vm, [{ type: 'generic', module: 'member-roster' }])).toBe(1);
   });
 });
@@ -266,8 +279,13 @@ describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同�
     // 期七 E×M2：grid 行（不是 table）+ mono 序号降级 + 按七态分章
     expect(page.querySelector('.gm-grid'), 'E×M2 应是 grid 行形态').not.toBeNull();
     expect(page.querySelector('.gm-table'), 'E×M2 不应有 table').toBeNull();
-    const rows = page.querySelectorAll('.gm-grid__row--task');
-    expect(rows).toHaveLength(8);
+    // 2026-10-11：E 刊头还原成两行巨题后行区缩到 620 ⇒ 8 任务跨 2 页。
+    // 本用例断的是**内容结构**，故按**全纸面**取值；页数/行不裂另断（7 + 1）。
+    const pages = d.querySelectorAll('[data-print-page="generic-task-list"]');
+    expect(pages.length, '8 任务 + 4 章头 ⇒ 行不裂跨 2 页').toBe(2);
+    const rows = d.querySelectorAll('.gm-grid__row--task');
+    expect(rows, '全纸面 8 行恒等（分页不丢行）').toHaveLength(8);
+    expect(page.querySelectorAll('.gm-grid__row--task').length, '第 1 页 7 行').toBe(7);
     // mono 序号降级（§2.6.3：巨编号是目录身份装置，任务读号是密集表设备）
     const firstNo = rows[0]!.querySelector('.gm-grid__no')!;
     expect(firstNo.classList.contains('gm-grid__no--mono'), 'E×M2 序号应走 mono 降级').toBe(true);
@@ -276,10 +294,10 @@ describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同�
     expect(nos).toContain('T-1001');
     expect(firstNo.textContent).toMatch(/^T-10\d\d$/);
     // 分章：按任务七态（章头 + 计数）
-    const chapters = page.querySelectorAll('.gm-chapter');
+    const chapters = d.querySelectorAll('.gm-chapter');
     expect(chapters.length, '应按七态分章').toBeGreaterThan(0);
     // 逾期 = 文字「· 逾期」+ data-focus（双编码）
-    const overdue = page.querySelector('.gm-grid__state[data-focus]');
+    const overdue = d.querySelector('.gm-grid__state[data-focus]');
     expect(overdue).not.toBeNull();
     expect(overdue!.textContent).toContain('· 逾期');
     // 老数据无号 ⇒ '—'（formatTaskNo(null)）
@@ -290,7 +308,7 @@ describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同�
     );
     expect(noNo.querySelector('.gm-grid__no')!.textContent).toBe('—');
     // 长任务名不越列：省略截断 + title 可访问（02 §8；分章重排，按 title 找行）
-    const nameCell = Array.from(page.querySelectorAll('.gm-grid__name')).find((el) =>
+    const nameCell = Array.from(d.querySelectorAll('.gm-grid__name')).find((el) =>
       (el.getAttribute('title') ?? '').includes('任务1'),
     ) as Element;
     expect(nameCell, '应存在任务1 的行').not.toBeUndefined();
