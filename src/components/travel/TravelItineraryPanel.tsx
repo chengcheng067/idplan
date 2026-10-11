@@ -8,6 +8,29 @@ import { useRepos } from '../../hooks/useRepos';
 import { createTaskActions, useProjectsStore } from '../../store/useProjectsStore';
 import { dayjs } from '../../lib/date';
 import { cn } from '../../lib/cn';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+
+/** 金额显示（'' 与 null 都显示破折号；汇总条与删除确认共用同一格式出口） */
+function moneyText(n: number | null): string {
+  return n === null ? '—' : `¥${n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * 「该日已填」摘要（审计 F1-⑤ 的删除确认文案）。
+ *
+ * 为什么确认框里要复述内容：这张卡上的交通/住宿/预算/实际是**手输后没有别处可查**的
+ * 记录（删掉就只剩备份里有）。用户点垃圾桶时看到的如果只是「确认删除？」，他无法判断
+ * 这一下删掉的是一张空卡还是一整天已经核过的账——复述金额就是让他一眼认出来。
+ * 空卡返回空串（调用方据此不渲染这一句）。
+ */
+function filledSummary(day: ItineraryDay): string {
+  const parts: string[] = [];
+  if (day.transport) parts.push(`交通「${day.transport}」`);
+  if (day.accommodation) parts.push(`住宿「${day.accommodation}」`);
+  if (day.budgetAmount !== null) parts.push(`预算 ${moneyText(day.budgetAmount)}`);
+  if (day.actualAmount !== null) parts.push(`实际 ${moneyText(day.actualAmount)}`);
+  return parts.join('、');
+}
 
 /**
  * 旅游每日行程面板（v0.9 旅游二期 · UI 唯一入口）。
@@ -30,6 +53,10 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
   const loadGeneration = useRef(0);
   /** 行内编辑缓冲：key = `${dayId}:${field}`，空串 = 无缓冲 */
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  /** 待删除的行程卡（非 null = 确认框打开）——删除不可撤销，故先停在确认框 */
+  const [removeTarget, setRemoveTarget] = useState<ItineraryDay | null>(null);
+  /** 确认框里那句「该日已填：…」（空卡为空串，调用方据此不渲染） */
+  const removeSummary = removeTarget ? filledSummary(removeTarget) : '';
 
   const projectTasks = useMemo(
     () => tasks.filter((t) => t.projectId === project.id),
@@ -100,18 +127,30 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
     }
   };
 
+  /**
+   * ★ 删除行程卡（审计 F1-⑤）：**先确认、再落库、失败要说**。
+   *
+   * 缺陷原文：按钮点一下就 `await repos.itineraries.remove(day.id)` ——
+   *   ① 无二次确认（同仓 danger 操作都走 ConfirmDialog，如 ProjectCard 的归档/删除）；
+   *   ② 无 try/catch：写库失败时 Promise 静默 reject、`setDays` 不执行，
+   *      界面**连一条 toast 都没有**，用户看到「点了没反应」，会以为是自己没点中。
+   * 两句都按既有范式补齐：确认框照抄 ProjectCard.tsx 的 danger 变体，
+   * 失败反馈照抄同文件 `saveField`（:76-78）的 pushToast。
+   */
   const removeDay = async (day: ItineraryDay): Promise<void> => {
     const attached = projectTasks.filter((t) => t.itineraryDate === day.date);
     if (attached.length > 0) {
       pushToast('error', '该日还有任务，请先移走或删除任务。');
       return;
     }
-    await repos.itineraries.remove(day.id);
-    setDays((prev) => prev.filter((d) => d.id !== day.id));
+    try {
+      await repos.itineraries.remove(day.id);
+      setDays((prev) => prev.filter((d) => d.id !== day.id));
+    } catch {
+      pushToast('error', '删除行程卡失败，请重试。');
+    }
   };
 
-  const fmtMoney = (n: number | null): string =>
-    n === null ? '—' : `¥${n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`;
 
   const totalBudget = days.reduce((a, d) => a + (d.budgetAmount ?? 0), 0);
   const totalActual = days.reduce((a, d) => a + (d.actualAmount ?? 0), 0);
@@ -136,11 +175,11 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
         {hasAnyAmount && (
           <>
             <span className="flex items-center gap-1.5">
-              <Coins size={14} className="text-mist" aria-hidden /> 预算 <b className="text-ink">{fmtMoney(totalBudget)}</b>
+              <Coins size={14} className="text-mist" aria-hidden /> 预算 <b className="text-ink">{moneyText(totalBudget)}</b>
             </span>
-            <span>实际 <b className="text-ink">{fmtMoney(totalActual)}</b></span>
+            <span>实际 <b className="text-ink">{moneyText(totalActual)}</b></span>
             <span className={cn(totalActual > totalBudget ? 'text-clay' : 'text-pine')}>
-              差额 <b>{fmtMoney(totalBudget - totalActual)}</b>
+              差额 <b>{moneyText(totalBudget - totalActual)}</b>
             </span>
           </>
         )}
@@ -186,7 +225,7 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
               <button
                 type="button"
                 aria-label={`删除 ${day.date} 行程卡`}
-                onClick={() => void removeDay(day)}
+                onClick={() => setRemoveTarget(day)}
                 disabled={dayTasks.length > 0}
                 className="ml-auto rounded-md p-1 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
               >
@@ -304,6 +343,31 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
           </ul>
         </div>
       )}
+
+      {/*
+        ★ 删除行程卡确认（审计 F1-⑤）：danger 变体，照抄 ProjectCard.tsx:592-605 的形态。
+        文案复述该日已填内容（filledSummary）——那几张手输的金额/交通/住宿删掉后
+        除了备份没有别处可查，用户必须在点下去之前看清自己删的是什么。
+        onConfirm 里的 `void removeDay(...)` 走的是同一条落库路径（失败会 toast）。
+      */}
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title="删除行程卡"
+        confirmText="删除"
+        danger
+        onConfirm={() => {
+          const target = removeTarget;
+          setRemoveTarget(null);
+          if (target) void removeDay(target);
+        }}
+        onCancel={() => setRemoveTarget(null)}
+      >
+        确认删除 {removeTarget?.date} 的行程卡？
+        {removeSummary && <> 该日已填：{removeSummary}。</>}
+        <br />
+        <span className="font-medium text-clay">删除后不可恢复</span>
+        （该日已排的任务不会被删除，只会回到「待排任务」）。
+      </ConfirmDialog>
     </div>
   );
 }
