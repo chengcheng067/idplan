@@ -25,6 +25,16 @@
  *   "同一页量两遍"的假绿）。用户实际路径（首页搜索点成员 → `navigate()`）是客户端路由，
  *   不受影响，故这里用同一条客户端路由路径复现。
  *
+ * ── 变异自证（两条断言不是摆设：把修复分别退回两步，看谁红）──
+ *   M1 把实现退回 `deriveColumns(projects)`（列集合重新变成「可见子集」的函数）：
+ *      本 spec **两条红** —— 红在 `expect(b.columnCount).toBe(a.columnCount)`，
+ *      报错是 `expected 4 to be 9`；同时纯函数单测（member-board-columns.spec.ts）红 4 条。
+ *   M2 **只**把调用点退回 `groupByColumn(active, active, …)`（= 她原本看到的世界）：
+ *      本 spec **两条红**，而纯函数单测 **5 条全绿** —— 单测看不见「调用点怎么接线」。
+ *   ⇒ 两条闸缺一不可：只锁几何的话「列集合漂移但两用例恰好同宽」仍会绿；
+ *     只锁语义的话 M2 这种接线错误单测抓不到。（两次变异构建产物均已还原，
+ *     重建产物 md5 与修复后首次构建逐字节一致。）
+ *
  * 前置：`npx vite build`（产物在 build-dist/）与本机 chromium；产物缺失/过期则整组 skip。
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
