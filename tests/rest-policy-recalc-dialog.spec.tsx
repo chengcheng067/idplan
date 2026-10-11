@@ -14,6 +14,13 @@
  *   ⑦ **预览与应用同一结果**：apply 消费弹窗内同一份 plan——写入库的起止
  *      与 diff 表展示的新起止逐字节一致；
  *   ⑧ 取消 → 零写入。
+ *
+ * ── ★ 变异自证纪律（全队共识，写在这里免得下次又踩）──
+ * 「改坏源码，用例却没红」**不等于**代码没问题 —— 很可能是**夹具让两种实现算出同一结果**。
+ * 本文件 F1-④ 就踩过：第一版夹具 S1/S2/S3 首尾相接，链式起点被新制度重新吸附，
+ * 于是「旧制度有没有被快照化」在 S2 的新区间上体现不出来，两种实现结果相同 ⇒ 红不了。
+ * 对策：夹具要**刻意留大间隙**，让被断言的性质真正出现在结果里；红不了时先怀疑夹具，
+ * 别先下「代码没问题」的结论。
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -550,6 +557,101 @@ describe('确认应用：制度落库 + 逐阶段留痕（预览与应用同一�
     const [expStart, expEnd] = approvedNewDates.split(' ~ ');
     expect(retried[0]!.startAt.startsWith(expStart!)).toBe(true);
     expect(retried[0]!.endAt.startsWith(expEnd!)).toBe(true);
+  });
+
+  /*
+    ══════════════ F1-④-b 「重试会不会给已成功阶段重复改期」判定用例 ══════════════
+
+    【team-lead 指派】就 F1-④ 后续的两种说法做一次**判定性实测**：
+      · team-lead 的说法：重试时已成功阶段会被 `if (!sp.changed) continue;`（:86）
+        挡住 ⇒ 不会再 append，流水恒 1 条 ⇒ 我原报告的「重复流水」担心不成立；
+      · 我原先的说法：会被再 append 一条 ⇒ 流水 2 条。
+
+    【实测结论：两种说法都不完整 —— 真实情况比两者都糟】
+      轮 1（S2 写失败、S3 写成功）：
+        · S2 未被改动（写失败），无流水；S3 被正确改到**用户批准的那份** 09-24~09-26，流水 1 条。
+      重试（修好写入源后再点确认）：
+        · S2 补上了 09-21~09-23 ✓（这部分是好的）；
+        · **S3 被二次改期**：reschedule 调用 2 次、Rescheduled 流水 **2 条**
+          —— 所以 team-lead 的 `!sp.changed` 拦截**没有生效**；
+        · **而且落库值漂移成 09-24~09-25**（末段少一天），**不再是用户批准的那份**
+          —— 所以「重复流水」还不是最严重的，真正的问题是**重试把已经写对的阶段改错了**。
+
+    【为什么 `!sp.changed` 拦不住】`planProject` 的链游标 `prev.oldEndAt` 取的是
+      **当前库值**（restPolicyRecalc.ts:285，`oldEndAt` 来自 `stage.endAt`）：
+        · S2 写失败 ⇒ 库值仍是旧 end（09-25）；
+        · S3 已改到新日期（09-24~09-26），其 `oldStartAt` 变成 09-24 ⇒ 09-24 <= 09-25
+          ⇒ `chainSteps` 塌成 1 步（:153）⇒ S3 的 newStart 被重算成 09-24（与当前相同，
+          但 newEnd 不同）⇒ `changed === true` ⇒ 拦不住；
+        · 更根本的是**工期被重新计量**：`workdays = countWorkdays(当前起止, 旧制度)`（:236）。
+          S3 已在新制度日期上（09-24~09-26），再按**旧制度（双休）**去数是 2 个工作日，
+          而原始 09-28~09-30 按旧制度数是 3 ⇒ 每重试一次工期就少一天 ⇒ 日期持续漂移。
+
+    【注：这条路是 F1-④ 修复后才存在的】修复前确认按钮在失败后恒灰，重试根本点不动，
+      这个 latent bug 不可达；本轮的快照修复把按钮点活了，于是它变成可达。
+      ⇒ 正确修法（v1.1）：重试应当**复用用户批准的那份 plan 快照**，而不是从
+      半迁移的当前状态重算（现行为 `:221-230` 的 `useMemo` 每次渲染重算）。
+  */
+  it('F1-④-b 判定：重试时已成功阶段被二次改期 + 落库值漂移（★ 已知缺陷，待 v1.1 修）', async () => {
+    const s1 = stage('stg_retry_1', WD_PROJECT.id, 1, '2026-09-07', '2026-09-11');
+    const s2 = stage('stg_retry_2', WD_PROJECT.id, 2, '2026-09-23', '2026-09-25');
+    const s3 = stage('stg_retry_3', WD_PROJECT.id, 3, '2026-09-28', '2026-09-30');
+    act(() => {
+      useProjectsStore.getState().replaceAll({ projects: [WD_PROJECT], stages: [s1, s2, s3], tasks: [] });
+    });
+    h.stages.clear();
+    h.stages.set(s1.id, s1);
+    h.stages.set(s2.id, s2);
+    h.stages.set(s3.id, s3);
+    h.failStageWrites.add(s2.id); // 只让 S2 第一次写失败
+
+    /** 仓储真值（不是 DOM 预览）：apply 实际写进去的是什么 */
+    const repoVal = (s: Stage): string => {
+      const cur = h.stages.get(s.id)!;
+      return `${cur.startAt.slice(0, 10)} ~ ${cur.endAt.slice(0, 10)}`;
+    };
+    const logsOf = (s: Stage): number => h.stageLogs.filter((l) => l.stageId === s.id).length;
+    const callsOf = (s: Stage): number => h.rescheduleCalls.filter((c) => c.id === s.id).length;
+
+    renderLive();
+    act(() => {
+      clickText('工作日制项目').click();
+    });
+    const confirm = (): HTMLButtonElement => clickText('确认重算并保存制度') as HTMLButtonElement;
+
+    /* ── 轮 1：S2 写失败、S3 成功 ── */
+    await act(async () => {
+      confirm().click();
+    });
+    expect(repoVal(s2), 'S2 写失败 → 库值未动').toBe('2026-09-23 ~ 2026-09-25');
+    expect(callsOf(s2), 'S2 的写入被拒绝，没有留下调用').toBe(0);
+    expect(logsOf(s2), 'S2 写失败 → 没有流水（不是「改了期没流水」，是整条没落）').toBe(0);
+    expect(repoVal(s3), 'S3 已按用户批准的那份改期').toBe('2026-09-24 ~ 2026-09-26');
+    expect(logsOf(s3), 'S3 轮 1 留痕 1 条').toBe(1);
+    expect(repoVal(s1), 'S1 无变化 → 全程未被触碰').toBe('2026-09-07 ~ 2026-09-11');
+    expect(callsOf(s1)).toBe(0);
+    expect(onConfirmed).not.toHaveBeenCalled(); // 有失败 → 弹窗不关
+
+    /* ── 重试：修好写入源，再点一次确认 ── */
+    h.failStageWrites.clear();
+    await act(async () => {
+      confirm().click();
+    });
+
+    // ✓ 好的部分：S2 真的补上了，且写的是预览里那一份
+    expect(repoVal(s2), 'S2 补上了').toBe('2026-09-21 ~ 2026-09-23');
+    expect(logsOf(s2), 'S2 补留痕 1 条').toBe(1);
+    expect(onConfirmed).toHaveBeenCalledTimes(1);
+
+    // ★ 缺陷 1：已成功的 S3 被**二次**改期（team-lead 预期的 `!sp.changed` 拦截没生效）
+    expect(callsOf(s3), '★ S3 被写了第二次').toBe(2);
+    expect(logsOf(s3), '★ S3 留下第二条 Rescheduled 流水（重复留痕）').toBe(2);
+
+    // ★ 缺陷 2（更严重）：S3 的落库值**漂移**，不再是用户批准的那份 09-24~09-26
+    expect(repoVal(s3), '★ S3 末段落库值被改坏：批准的是 09-24~09-26').toBe('2026-09-24 ~ 2026-09-25');
+    // ↑ 正确行为应为 '2026-09-24 ~ 2026-09-26'（= 用户批准的那份，重试不得改动它）。
+    //   本条断言刻意钉住**当前错误行为**：它是可执行的缺陷复现，修好后此断言会红，
+    //   提醒必须连同上面三条一起翻转（详见本用例上方注释块）。
   });
 
   it('取消 → 零写入 + onClose', () => {
