@@ -21,13 +21,27 @@ export function MemberIdentityPicker(): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
+  /*
+   * 外点关闭 + Escape 关闭（★ F10）。
+   *
+   * 修前只有 mousedown：键盘用户按 Esc 关不掉这个菜单，只能 Tab 走掉或用鼠标点别处；
+   * 而同样形态的 MobileMoreMenu（同文件族的顶栏菜单）早就两样都有 —— 这里补齐对齐
+   * （`MobileMoreMenu.tsx:88-103` 是既有范式，两处实现刻意保持逐字同构）。
+   */
   useEffect(() => {
     if (!menuOpen) return;
     const onDocClick = (e: MouseEvent): void => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
     document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [menuOpen]);
 
   if (!isEntered) {
@@ -52,6 +66,15 @@ export function MemberIdentityPicker(): JSX.Element {
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
+        /*
+         * ★ F10：这个按钮是**菜单触发器**，读屏必须能播报「菜单、已展开/已收起」
+         * （修前只有 title，读屏不会把它当菜单入口）。与 MobileMoreMenu 同口径
+         * （`MobileMoreMenu.tsx:114-117`），且面板侧本来就有 role="menu" 语义可配。
+         * 刻意**不加 aria-label**：按钮自身的可访问名（头像首字 + 姓名 + 管理员徽标）
+         * 已经足够，再写一个反而会遮掉可见文本、且会改掉既有按名字查询按钮的用例口径。
+         */
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
         className="flex items-center gap-2 rounded-md border border-line bg-paper px-2 py-1.5 text-sm shadow-soft transition-colors hover:bg-sand sm:px-3"
         title="当前身份（点击切换/退出）"
       >
@@ -72,9 +95,16 @@ export function MemberIdentityPicker(): JSX.Element {
       </button>
 
       {menuOpen && (
-        <div className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-line py-1 shadow-soft">
+        /* role="menu"：让触发按钮上的 aria-haspopup="menu" 有真实落点（同 MobileMoreMenu /
+           ProjectCard 的面板口径），否则读屏会播报「菜单」却找不到菜单 */
+        <div
+          role="menu"
+          aria-label="身份操作"
+          className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-line py-1 shadow-soft"
+        >
           <button
             type="button"
+            role="menuitem"
             onClick={() => {
               setMenuOpen(false);
               setCurrentMember(null);
@@ -88,6 +118,7 @@ export function MemberIdentityPicker(): JSX.Element {
           </button>
           <button
             type="button"
+            role="menuitem"
             onClick={() => {
               setMenuOpen(false);
               setCurrentMember(null);
