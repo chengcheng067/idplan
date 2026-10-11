@@ -39,6 +39,11 @@ import { cn } from '../lib/cn';
  *
  * 看板分桶逻辑（deriveColumns / groupByColumn）保留导出：
  *   成员看板页（MemberBoardPage）仍依赖它按行业派生列，契约不变，此处仅不再渲染四列看板。
+ *   ⚠️ 本页**不渲染看板列**（看板档是 `flex-wrap` 的项目卡网格，见下方 `filtered.map`）——
+ *   所以「成员看板的列几何与首页同源」这句话在本仓**没有对应物**，别再照抄：
+ *   两处只共享「按行业派生列」这两条纯函数（本文件的 `deriveColumns`/`groupByColumn`），
+ *   不共享任何 CSS 几何。列几何的唯一出处是 `MemberBoardPage.BOARD_COLUMN_TEMPLATE`。
+ *   ⚠️ `groupByColumn` 自 0.9.x 起要求**显式传列集合来源**（板级宇宙），理由见其函数注释。
  *
  * 建档入口（v0.7 增量 · 用户要求去重）：
  *   本页页头**不再**渲染「新建项目」按钮。全站建档入口收敛为三处，全部带
@@ -524,12 +529,42 @@ function columnOf(
   return cols[slot].key;
 }
 
+/**
+ * 项目 → 看板列（**列集合与分桶分离**）。
+ *
+ * ── ★ 为什么列集合不从 `projects` 派生（0.9.x 反馈「成员看板变成 3 列」）──
+ *
+ * 本函数原先只有三个参数，列集合直接 `deriveColumns(projects)` —— 于是**列集合是
+ * 「眼下可见项目子集」的函数**。成员看板的入参是「该成员相关项目」（`myRelatedProjects`），
+ * 而管理员的入参是他自己的相关项目，两边的行业集合天然不同 ⇒ **同一块板，看谁就换列**
+ * （实测：室内+软件两个项目的库里，管理员视 9 列、看朴彩英视 4 列）。屏幕上「一行看得见
+ * 几个列盒」= **min(列数, 该宽度放得下的轨道数)**，所以列数一少，整行就只剩那么几个列盒
+ * ——用户看到的「成员的板变成 3 列、管理员都是 4 列」就是这个（同一视口下两用例的
+ * section 宽与轨道数恒等，所以差异只能来自列数，实测记录见 member-board-consistency spec）。
+ *
+ * 判定：**列是「板」的属性，不是「眼下恰好可见哪些项目」的函数**。一块板上有哪些列，
+ * 应当由**这块板覆盖的项目宇宙**（调用方传入的 `columnSource`，成员看板 = 全部 active
+ * 人类项目）决定；只有**分桶**才用可能已被过滤的 `projects`。
+ * 于是「管理员看自己」与「管理员看某成员」的列集合恒等 ⇒ 排版恒等。
+ *
+ * 代价（有意接受）：成员只参与 1 个行业时，板上的其它行业列会空着（列头 + 「暂无项目」）。
+ * 这是「一致性」的对价；反过来把空列藏掉就等于让列集合重新随筛选漂移——那是本函数
+ * 刚修掉的病，不做。
+ *
+ * ⚠️ 落列口径纪律（勿破坏）：分桶用的板块与 `deriveColumns` **必须同源**（同一个
+ * `effectiveDomainOf`，见下），否则会出现"派生了一列但没有项目能落进去"或
+ * "项目落进了不存在的列（走兜底）"。
+ *
+ * @param projects     分桶用（可已被过滤：成员的「相关项目」、搜索命中等）
+ * @param columnSource 列集合用（板级、**未过滤**的项目宇宙；须与 `projects` 同一板块口径）
+ */
 export function groupByColumn(
   projects: Project[],
+  columnSource: Project[],
   stagesOf: (p: Project) => Stage[],
   todayIso: string,
 ): { columns: KanbanColumn[]; buckets: Record<ColumnKey, Project[]> } {
-  const columns = deriveColumns(projects);
+  const columns = deriveColumns(columnSource);
   const buckets: Record<ColumnKey, Project[]> = {};
   for (const c of columns) buckets[c.key] = [];
 
