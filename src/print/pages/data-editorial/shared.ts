@@ -135,39 +135,54 @@ import type { PrintStageVM } from '../../model/print-view-model';
  * 纪律与经典 `paginateSections`（schedule-print.ts，f428902）同源：**实测
  * 校准、只许偏大不许偏小、幅度 ≤+10%**（偏大 = 早分页白留一截，偏小 =
  * 内容溢出 794×1123 即红）。下列实测值均为真 Chromium 量：
- *   页壳 chrome：de-head 125.6 + de-foot 40 + de-body 内距 26 = 191.6
- *   KPI 带：normal 74.6 / compact 51.3（阈值同 ProgressMatrixPage：15+ 阶段）
- *   表头 thead：normal 27.3 / compact 23.3
- *   数据行：normal 48.5 / compact 42.8（行高由 stage 格 no+name 行盒主导，
- *           ~35px 内容 vs 16.5px 行高——既有布局特性，分页只估不改）
- *   口径注 41；board 子项间距 20；续表头（border 2 + padding 8 + 文字）≈25
- * ⚠️ 若将来收紧矩阵行高（如给 no/name 定 line-height），必须同步重估这里。
+ *
+ * 2026-10-11 P0-7 骨架重做后重标（6 列表格 → 两段式通栏条）：
+ *   页壳 chrome 合计 346 = 页头 213（3px 分隔线底）+ 主体上内距 39
+ *                        + 页尾完成度横带 42 + 脚注 52（含 8px 上距）
+ *   行：normal 90（段1 16 + 间隙 6 + 条 32 + 下距 36，参考稿实测节距 90）
+ *       compact 49（段1 13 + 间隙 3 + 条 20 + 下距 13）
+ *   **每页最后一行的下距不计**（CSS `.de-row:last-child { margin-bottom: 0 }`）
+ *   ⇒ 容量判据是 `Σ行高 − 尾行下距 ≤ usable`，页壳已经把这 36px 让给了
+ *   横带，所以这里必须把「尾行免下距」写进预算，否则 9 行会被切成 8+1
+ *   （参考稿 P1 恰好 9 行一整页）。
+ *   续表页另扣续表头 28（第一页没有）。
+ *
+ * ── 两档容量与切档点（2026-10-11 重算，必须一起看）──
+ *   usable = 1123 − 213 − 39 − 42 − 52 = 777
+ *     normal 预算 = 777 + 36 = 813 ⇒ ⌊813/90⌋ = **9 行**（= 参考稿 P1 行数）
+ *     compact 预算 = 777 + 13 = 790 ⇒ ⌊790/49⌋ = **16 行**
+ *   切档点 `MATRIX_COMPACT_AT = 9`：**normal 容量刚好是 9**，所以「normal 装不
+ *   下」与「切 compact」是同一条线（10 阶段起走 compact）——不留任何「normal
+ *   装不下却仍在 normal 档」的区间，否则 10 阶段会切成 9+1 两页、第二页只剩
+ *   一行（参考稿节距 90 是硬设计值，9 行就是 normal 的上限）。
+ *   compact 容量 16 ≥ 切档点 9 + 1 ⇒ 旧纪律「切档后不出现页数断崖」保持成立
+ *  （原实现记的是「normal 容量 14 / compact 容量 16 / 切档 15」）。
+ * ⚠️ 若将来再动行高/横带高，必须同步重估这里与 `ProgressMatrixPage` 的档位
+ * 判定（后者直接 import 本常量，不再各写一份）。
  */
 const MATRIX_EST = {
-  /** 纸面可用高 = 1123 − 页头 130 − 页脚 42 − body 内距 27 */
-  usable: 1123 - 130 - 42 - 27,
-  /** board 子项间距（stats/续表头/table/note 之间） */
-  boardGap: 21,
-  /** KPI 摘要带（**仅第一页**——产品原则「焦点必须松」，续表不重复） */
-  kpiNormal: 78,
-  kpiCompact: 54,
-  /** 表头 */
-  theadNormal: 29,
-  theadCompact: 25,
-  /** 数据行（一行 = 一个阶段的完整记录，行不裂） */
-  rowNormal: 52,
-  rowCompact: 46,
-  /** 口径注（每页都有——每页可独立解释，01 §2） */
-  note: 44,
-  /** 续表头（仅续表页；D 硬边语法：2px 线 + kicker） */
+  /** 纸面可用高 = 1123 − 页头 213 − 主体上内距 39 − 横带 42 − 脚注 52
+      （52 = 8 上距 + 44 脚注行高）。全部是 CSS 里**钉死的常数**（页头 logo 行
+      28 + 下距 36 + 标题 64×1 + 副标 6+15×1.5 + 内距 40/16），
+      所以这里不需要额外「字体余量」；只留 3px 收整。 */
+  usable: 1123 - 213 - 39 - 42 - 52,
+  /** 每页**尾行免掉的**下距（与 CSS `.de-row:last-child` 同源） */
+  lastRowFree: 36,
+  lastRowFreeCompact: 13,
+  /** 数据行（一段 = 一个阶段的完整记录：段1 标签行 + 段2 通栏条，行不裂） */
+  rowNormal: 90,
+  rowCompact: 49,
+  /** 续表头（仅续表页；D 硬边语法：2px 线 + kicker + 20px 下距） */
   contHead: 28,
 } as const;
 
-/** 15+ 阶段转紧凑档（与 ProgressMatrixPage 的 dense 判定同源）。
- *  为什么是 15 而不是密度批的 16：分页估高下 normal 行容量 14——15 阶段若走
- *  normal 会被切 14+1 两页，而修复前 15 阶段本来能一页装下（不回归）；紧凑档
- *  容量 16，15/16 阶段都守一页。 */
-const MATRIX_COMPACT_AT = 14;
+/**
+ * 转紧凑档的阶段数阈值（> 此值即 compact）。
+ * = normal 档容量（9）：normal 装不下的第一个规模就切 compact。
+ * `ProgressMatrixPage` 直接 import 本常量（原先是两处各写一个 14，注释声称
+ * 「同源」但没有实际同源——本轮顺手消掉）。
+ */
+export const MATRIX_COMPACT_AT = 9;
 
 /** 一个物理纸面的矩阵行分块（行不裂：行是原子单位） */
 export interface MatrixChunk {
@@ -181,17 +196,16 @@ export interface MatrixPlan {
 
 /**
  * 阶段行 ⇒ 分块计划（贪心装页，确定性）。
- * 第一页预算扣 KPI 带（焦点只首页）；续表页扣续表头、不扣 KPI。
- * 行数 0 ⇒ 单空块（调用方走空态，不出表格纸面）。
+ * 每页预算 = `usable + 尾行免下距`（第一页与续表页同；续表页另扣续表头）。
+ * 行数 0 ⇒ 单空块（调用方走空态，不出行区纸面）。
  */
 export function planMatrixPages(stages: readonly PrintStageVM[]): MatrixPlan {
   const compact = stages.length > MATRIX_COMPACT_AT;
   const row = compact ? MATRIX_EST.rowCompact : MATRIX_EST.rowNormal;
-  const thead = compact ? MATRIX_EST.theadCompact : MATRIX_EST.theadNormal;
-  const kpi = compact ? MATRIX_EST.kpiCompact : MATRIX_EST.kpiNormal;
-  const chrome = thead + MATRIX_EST.note + MATRIX_EST.boardGap * 2;
-  const firstBudget = MATRIX_EST.usable - kpi - chrome;
-  const laterBudget = MATRIX_EST.usable - MATRIX_EST.contHead - chrome;
+  const free = compact ? MATRIX_EST.lastRowFreeCompact : MATRIX_EST.lastRowFree;
+  // 容量口径：Σ行高 − 尾行下距 ≤ usable ⇒ 判据写成 `used + row > usable + free`
+  const firstBudget = MATRIX_EST.usable + free;
+  const laterBudget = firstBudget - MATRIX_EST.contHead;
 
   const chunks: MatrixChunk[] = [];
   let current: PrintStageVM[] = [];

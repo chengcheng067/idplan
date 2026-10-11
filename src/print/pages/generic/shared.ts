@@ -249,7 +249,19 @@ export const GENERIC_COMPACT_THRESHOLD = 16;
 export const GENERIC_ROWS_H: Record<PrintTemplateId, number> = {
   classic: 0, // 经典不走模块表（五块 blocks 另一套粒度）；不会进本表，占位
   'swiss-schedule': 820,
-  'data-editorial': 840,
+  // 2026-10-11 P0-7 连带：D 的页壳由「kicker + 26px 标题 / 2 行口径注段 + 品牌
+  // 页脚带」改成「logo 行 + 64px 巨题 + 橙副标 / 单行脚注」——页头 130 → 210、
+  // 主体上内距 27 → 39、页脚 8+44，通用模块页共用同一个 DePage 外壳 ⇒ 行区可用
+  // 高度必须同源缩小。真 Chromium 实测（qa-scratch/d-generic-probe.mts，夹具与
+  // print-generic-modules-a4.spec.ts 逐字同形）：
+  //   页壳：页头 210 + 主体上内距 39 + 页脚（8 + 44）= 301
+  //   主体内容底 1071 − 列表顶 − 口径注自然高 25 ⇒ 行区上限：
+  //     M1 阶段清单 691.7（模块头 27.25 + KPI 带 178，最紧的那个）
+  //     M2 任务清单 761、M4 成员名册 761
+  //   一个模板只有一个常量 ⇒ 取三者的**最小值**再留余量，落 680。
+  // 原值 840 是「短页头」时代的标定，真 Chromium 实测红：60 任务 D 外表
+  // 第 1 页 1190.5px（溢出 67.5）。
+  'data-editorial': 680,
   // 2026-10-11 P0-12 连带：E 的刊头由「单行 27px」还原成「两行 92px 衬线
   // 巨题」，页壳 chrome 实测由 ≈95px 长到 ≈330px，通用模块页共用同一个
   // EiPage 外壳 ⇒ 行区可用高度必须同源缩小。真 Chromium 实测（qa-scratch/

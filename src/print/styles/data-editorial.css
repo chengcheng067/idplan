@@ -59,14 +59,17 @@
   print-color-adjust: exact;
 }
 
-/* ── 页头：英文栏 kicker + 完整单行中文标题；右侧项目标识 ── */
+/* ── 页头：logo 行 + 单行黑体大标题 + **标题之下**的橙英文副标；右侧项目标识 ──
+   2026-10-11 P0-8：标题 26px → 64px（参考稿实测，见 .de-head__title 注），
+   英文副标由「标题上方 kicker（#404040 + 橙方块）」改成「标题下方橙副标
+   （15px / 字距 2.2px）」；右侧项目标识与副标同底对齐（参考稿 y172..182）。 */
 .print-root.print-template-data-editorial .de-head {
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 26px 40px 14px;
+  padding: 40px 40px 16px;
 }
 
 .print-root.print-template-data-editorial .de-head__left {
@@ -78,7 +81,7 @@
 .print-root.print-template-data-editorial .de-head__logo {
   display: flex;
   align-items: center;
-  margin-bottom: 9px;
+  margin-bottom: 36px;
 }
 
 .print-root.print-template-data-editorial .print-logo--text {
@@ -89,16 +92,20 @@
   white-space: nowrap;
 }
 
+/* 英文副标：**在标题下方**（参考稿 y174..185），橙、15px、字距 2.2px。
+   信号方块是 D 的页头身份记号（每页一枚），随之落到副标行首。 */
 .print-root.print-template-data-editorial .de-head__kicker {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0;
+  margin: 6px 0 0;
   font-family: var(--de-font-en);
-  font-size: 11px;
+  font-size: 15px;
+  /* 行高钉死：页头总高必须是可预测的常数（估高与 CSS 同源的前提） */
+  line-height: 1.5;
   font-weight: 700;
-  letter-spacing: 0.22em;
-  color: var(--de-gray-700);
+  letter-spacing: 0.146em; /* ≈2.2px @15px */
+  color: var(--tpl-accent);
 }
 
 /* 信号方块：D 版的身份记号（每页页头一枚） */
@@ -111,19 +118,30 @@
   print-color-adjust: exact;
 }
 
-/* 完整单行中文标题（Black 字重；不拆两种字体拼接，01 §5） */
+/* 完整单行中文标题（Black 字重；不拆两种字体拼接，01 §5）。
+   2026-10-11 P0-8 向参考稿还原：**字号 64px**。
+   ⚠️ 与规格文档的「≈96px」不一致，以**参考原稿实测为准**（规格 §2.D 的
+   那一格是从「cap 73px ÷ 0.76」推来的，而那个 cap 73 是**被标题下的橙副标
+   污染的 bbox**）。本机对原稿（1588×2246 = A4 的 2×）逐像素实测：
+     · 6 个字的字列段 x44 / 105 / 169 / 233 / 297.5 / 363.5 ⇒ 字距 ≈64px
+     · 全题墨宽 378.5px（正好 6×63 ≈ 5×64 + 末字墨宽）
+     · 第 6 字「阵」墨高 61px ⇒ 字面比 61/64 = 0.953（与 E 的 Noto Serif SC
+       0.952 同源）
+   ⇒ 字号 ≈64px（若真取 96px，六个字会排到 x616，几乎顶满页心，与参考稿
+   的 53% 页宽明显不符）。 */
 .print-root.print-template-data-editorial .de-head__title {
-  margin: 6px 0 0;
+  margin: 0;
   font-family: var(--de-font-cn);
-  font-size: 26px;
+  font-size: 64px;
   font-weight: 900;
-  line-height: 1.1;
-  letter-spacing: 0.02em;
+  line-height: 1;
+  letter-spacing: -0.01em;
   color: var(--tpl-ink);
   white-space: nowrap;
 }
 
 .print-root.print-template-data-editorial .de-head__right {
+  align-self: flex-end;
   max-width: 320px;
   text-align: right;
 }
@@ -148,11 +166,13 @@
   color: var(--de-gray-500);
 }
 
-/* 3px 近黑硬边全出血分隔线（编辑网格身份） */
+/* 3px 近黑硬边分隔线：**内缩 40px**（P0-9 ①）。
+   参考稿实测 x40..753.5 y210..212.5 ⇒ 与内容框同宽，不是通版出血。
+   （原实现写死 `left:0; right:0` = 通版，是审计点名的 5 条 D 版差异之一。） */
 .print-root.print-template-data-editorial .de-head__rule {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 40px;
+  right: 40px;
   bottom: 0;
   height: 3px;
   background: var(--tpl-ink);
@@ -160,14 +180,16 @@
   print-color-adjust: exact;
 }
 
-/* ── 主体 / 页脚 ── */
+/* ── 主体 / 页脚 ──
+   2026-10-11 P0-7：主体内距上 41px（页头线 y213 → 第 01 行字面 y254）；
+   横向 40px（行块自己再内缩 16px，见 .de-row）。 */
 .print-root.print-template-data-editorial .de-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 40px 10px;
+  gap: 0;
+  padding: 39px 40px 0;
 }
 
 .print-root.print-template-data-editorial .de-board {
@@ -175,26 +197,39 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* 章节间距 12→20px（密度研究 §3-D：KPI 带 ↔ 矩阵是 L1↔L2 界面，规则 2
-     给 16-24px，取 20 统一；口径注被 margin:auto 压到板块底部，此间距是
-     下限不是实际视觉距） */
-  gap: 20px;
+  /* 行块之间的呼吸由 .de-row 的 margin 承担（行节距 90px 是设计值，
+     不是一个可以「按需调松」的间距）——这里必须是 0 */
+  gap: 0;
 }
 
+/* ── 页脚：通版 1px 发丝线 + **单行**脚注（左）+ 页序/数据时间（右，P0-9 ②）
+   参考稿：线 y1078（通版出血 x0..794）、脚注墨行 y1090..1097。
+   口径注是产品必登项（§3.3），形态收成参考稿那样的一行（9.5px + 降一档灰）。 */
 .print-root.print-template-data-editorial .de-foot {
-  margin: 0 40px;
-  height: 40px;
+  margin: 8px 0 0;
+  height: 44px;
+  padding: 0 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 20px;
   border-top: 1px solid var(--tpl-line);
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--de-gray-500);
 }
 
+/* 口径注：强制单行（P0-9 验收判据 getClientRects().length === 1） */
+.print-root.print-template-data-editorial .de-foot__note {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .print-root.print-template-data-editorial .de-foot__page {
+  flex: 0 0 auto;
   font-family: var(--de-font-mono);
+  white-space: nowrap;
 }
 
 /* ── 共用小件 ── */
@@ -284,23 +319,23 @@
   background: var(--de-gray-100);
 }
 
-/* ── P1 阶段进度矩阵 ── */
-.print-root.print-template-data-editorial .de-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border: 1px solid var(--tpl-ink);
-  border-radius: var(--de-radius);
-}
-
+/* ── KPI 统计格（`.de-stat` 三件套）──
+   2026-10-11 修订说明：这一组**不是**页头 4 宫格 KPI 带的专属样式。
+   P0-7 删掉的是**容器** `.de-stats`（`grid repeat(4,1fr)` + 四边框）和它在
+   进度矩阵页里的用法（审计 §1.2「现状有、参考没有的块」）；但通用模块
+   D×M1「阶段清单」的三格 KPI 带（`StageListModule.tsx:88-108`）用的是
+   `.gm-kpi` 当容器 + **原生 `.de-stat` 当格子**，且
+   `tests/print-generic-fidelity-a4.spec.ts:430-435` 逐值锁死
+   `de-stat__value = 22px / mono`。故 `.de-stat` / `__value` / `__caption`
+   必须保留——删掉容器 `.de-stats` 不能连坐格子。
+   密度纪律（原注释，继续有效）：22px mono 大数字是 D「数据编辑」版性的
+   锚点 + 产品判据「焦点必须松」⇒ KPI 带**不参与任何收紧**，紧凑档也不动它
+   （旧文件里那两条 `.de-board[data-density='compact'] .de-stat*` 规则从来没有
+   生效过：`.de-board` 只包 D 四个原生页，通用模块在 `.de-body` 下，已删）。 */
 .print-root.print-template-data-editorial .de-stat {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* KPI 带**不参与本轮收紧**（密度研究 §5 拿不准处 + 产品原则拍板）：
-     22px mono 大数字是 D「数据编辑」版性的锚点，且产品判据「焦点必须松」
-     （每页唯一焦点留白加倍）+ 研究自己的规则 1 把 KPI 带归 L1（分组、应松）
-     ⇒ 原案的微压（22→20、padding 10→8）**撤回**，「紧」全交给矩阵数据行。
-     动它等于动版性，要动先过产品原则评审。 */
   padding: 10px 12px;
   border-right: 1px solid var(--tpl-ink);
 }
@@ -328,8 +363,118 @@
   color: var(--de-gray-700);
 }
 
+/* ── P1 阶段进度矩阵（2026-10-11 P0-7 骨架重做：6 列表格 → 两段式通栏条）──
+   参考稿实测（原稿 1588×2246 = A4 的 2×）：
+     行块 x56..737（= 内容框 x40..754 再内缩 16px）
+     段1 字面 y254..268（高 15）→ 段2 条 y275..308（高 32）→ 下一行段1 y344
+     ⇒ **行节距 90px**；条 682×32；无表格竖线、无行分隔线
+   行块用 margin 承担节距（不是 gap）：90 = 段1 15 + 间隙 6 + 条 32 + 下距 36，
+   末行不下距（页尾横带紧接着来）。 */
+
+/* 行区容器：参考稿没有表格语义 ⇒ 用 div 列（<table> 在本页已不存在） */
 .print-root.print-template-data-editorial .de-matrix {
-  table-layout: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.print-root.print-template-data-editorial .de-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 16px 36px;
+}
+
+/* 末行不下距：页尾横带紧接其后（参考稿 y1027 条底 → y1040 横带字面） */
+.print-root.print-template-data-editorial .de-row:last-child {
+  margin-bottom: 0;
+}
+
+/* 紧凑档（10+ 阶段）：同一套两段式骨架按比例收一档，节距 90 → 49px
+   （段1 13 + 间隙 3 + 条 20 + 下距 13）。收的是呼吸与条高，**不收结构**——
+   参考稿的形（两段式 + 通栏条 + 四色填充）在任何规模下都在。
+   ⚠️ 49 不是随手取的：它让紧凑档容量正好 **16 行**（usable 777 + 尾行免下距
+   13 = 790 ⇒ ⌊790/49⌋ = 16），于是 10~16 阶段都守一页、不出现「切档反而多
+   一页」的断崖（旧实现记的纪律：normal 容量 14 / compact 容量 16 / 切档 15）。
+   估高同源：pages/data-editorial/shared.ts 的 MATRIX_EST.rowCompact 与
+   MATRIX_COMPACT_AT。 */
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-row {
+  gap: 3px;
+  margin-bottom: 13px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-row:last-child {
+  margin-bottom: 0;
+}
+
+/* 段1 高度随字号收到 13px（行节距 = 13 + 3 + 20 + 13 = 49） */
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-row__head {
+  height: 13px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-matrix .de-bar__track {
+  height: 20px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-row__no,
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-row__name {
+  font-size: 13px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-row__meta {
+  font-size: 10.5px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-bar__num {
+  font-size: 10px;
+}
+
+.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-band__pct {
+  font-size: 32px;
+}
+
+.print-root.print-template-data-editorial .de-row__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  /* 段1 高度钉死 16px：行节距 = 16 + 6 + 32 + 36 = 90（参考稿实测节距） */
+  height: 16px;
+  line-height: 1;
+}
+
+.print-root.print-template-data-editorial .de-row__id {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 读号：15px mono（参考稿实测字高 11、字距 7.5 ⇒ ≈15px） */
+.print-root.print-template-data-editorial .de-row__no {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--de-gray-500);
+}
+
+/* 阶段名：15px 黑体（参考稿实测字距 15px）；单行省略 + title 可访问（02 §8） */
+.print-root.print-template-data-editorial .de-row__name {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tpl-ink);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 日期 · 占比：11.5px mono 灰（参考稿实测字高 8、字距 7.3） */
+.print-root.print-template-data-editorial .de-row__meta {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--de-gray-500);
+  white-space: nowrap;
 }
 
 /* ── P1 矩阵续表模块头（2026-10-09 分页修复；D 硬边语法：2px 近黑线 +
@@ -341,6 +486,7 @@
   gap: 12px;
   border-top: 2px solid var(--tpl-ink);
   padding: 8px 0 0;
+  margin-bottom: 20px;
 }
 
 .print-root.print-template-data-editorial .de-matrix__cont-kicker {
@@ -371,43 +517,14 @@
   white-space: nowrap;
 }
 
-/* ── P1 矩阵列宽（2026-10-09 收尾：日期列溢出修复）──
-   原 date 18%（≈128.5px）装不下等宽日期串「2026-01-05 — 2026-01-20」
-   （23 字符 × 11px mono：Consolas 实测 139.1px；最坏等宽回落 IBM Plex
-   Mono / Courier New 0.6em ⇒ 151.8px）＋左右 padding 16px ⇒ 需 ≥167.8px。
-   date 18%→24%（≈171.4px）全覆盖三种等宽回落；宽度 3% 取进度列
-   （28→25%，bar 仍 ≈110px）、3% 取阶段列（23→20%）：不全取阶段列是
-   因为它有「名字 ≈136px」的设计意图（文件下方 max-width 注释），取 6%
-   会把名字挤到 ~87px。nowrap 日期不再溢进进度列（彩/灰截图 + spec
-   实测断言「列宽 ≥ 日期串宽」双保险）。 */
-.print-root.print-template-data-editorial .de-matrix__stage {
-  width: 20%;
-}
-
-.print-root.print-template-data-editorial .de-matrix__date {
-  width: 24%;
-  white-space: nowrap;
-}
-
-.print-root.print-template-data-editorial .de-matrix__progress {
-  width: 25%;
-}
-
-.print-root.print-template-data-editorial .de-matrix__ratio {
-  width: 8%;
-  white-space: nowrap;
-}
-
+/* ── P3 工作量构成里复用的读号 / 阶段名（全宽表内的小号变体）──
+   P1 矩阵改造后不再用它们（改 .de-row__no / .de-row__name），保留给 P3。 */
 .print-root.print-template-data-editorial .de-matrix__no {
   font-size: 11px;
   color: var(--de-gray-500);
   margin-right: 6px;
 }
 
-/* 阶段名一至两行不挤入邻列（02 §8）：单行省略 + title 可访问。
-   列宽 20%（≈142.8px，2026-10-09 日期列加宽后从 23% 让出 3%）扣除读号与
-   间距后可给名字 ~109px；max-width 136px 是历史上限，实际可用 ~109px，
-   更宽就压进 STATUS 列（82px 已无余量） */
 .print-root.print-template-data-editorial .de-matrix__name {
   display: inline-block;
   max-width: 136px;
@@ -418,7 +535,18 @@
   font-weight: 600;
 }
 
-/* 进度条：硬边轨道 + 填充（信号色仅延期阶段） */
+/* ── 进度条：两套几何共存于同一组类名 ──
+   `.de-bar*` 有**两个消费方**：
+     ① 原生 P1 进度矩阵（两段式的第二段，通栏 682×32）——P0-7/P0-10 参考稿几何；
+     ② 通用模块 D×M1「阶段清单」的表格单元格内窄条
+        （`StageListModule.tsx:178-192`，期七定稿：8px 轨道 + #F5F5F5 + 1px 线 +
+        `data-tone='signal'` + 条外墨色数字，`print-generic-fidelity2-a4.spec.ts`
+        逐值锁死）。
+   P0-7 重做时把**基础规则**直接改成了原生那套几何 ⇒ 通用模块连带被改：
+   行高 26-36px 涨到 62px（60 行溢出纸面 1190.5px）、`data-tone` 属性名失配
+   （延期条变黑）、条外数字变白字（白底上看不见）。
+   故这里把**基础规则还原为期七那一版**（通用模块 + 其它消费方的既有契约），
+   原生矩阵的新几何全部**下移到 `.de-matrix` 作用域**——两边互不干扰。 */
 .print-root.print-template-data-editorial .de-bar {
   display: flex;
   align-items: center;
@@ -453,12 +581,97 @@
   color: var(--de-gray-700);
 }
 
-.print-root.print-template-data-editorial .de-matrix__flags {
+/* ── P1 原生矩阵的通栏条（P0-7 / P0-10：682×32；轨道 #E5E5E5、填充分四色；
+   最小填充宽 96px 在**页组件**里算，见 ProgressMatrixPage.deBarFillWidth）──
+   作用域 `.de-matrix`（= 进度矩阵的行区容器）把它与通用模块的窄条隔开。 */
+.print-root.print-template-data-editorial .de-matrix .de-bar {
   display: block;
-  margin-top: 2px;
-  font-size: 9.5px;
+}
+
+.print-root.print-template-data-editorial .de-matrix .de-bar__track {
+  display: block;
+  flex: none;
+  height: 32px;
+  background: var(--de-gray-200);
+  /* 参考稿的通栏条无描边（对比度靠 #E5E5E5 自身 1.28 的白底差 + 32px 面积，
+     线槽不受影响）——通用模块的 1px 线只属于那里 */
+  border: none;
+}
+
+/* 填充：标签白字**右对齐贴填充右端**（参考稿 100% / 65% / 12% 的读法） */
+.print-root.print-template-data-editorial .de-matrix .de-bar__fill {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  padding-right: 10px;
+  background: var(--tpl-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* 进行中 / 延期（重点状态）：信号橙红 */
+.print-root.print-template-data-editorial .de-matrix .de-bar__fill[data-fill='signal'] {
+  background: var(--tpl-accent);
+}
+
+/* 未开始：中灰 #737373（参考稿实测 1.3% 面积） */
+.print-root.print-template-data-editorial .de-matrix .de-bar__fill[data-fill='idle'] {
+  background: var(--de-gray-500);
+}
+
+.print-root.print-template-data-editorial .de-matrix .de-bar__num {
+  flex: 0 0 auto;
+  font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
+  color: #ffffff;
+}
+
+/* ── P1 页尾横带（P0-9 ②）：项目完成度 + 已完成 N/M 个阶段 + 右对齐巨字 % ──
+   参考稿实测：左带字面 x56..289、巨字墨盒 x649..735 y1032..1060（墨高 30）。
+   ⚠️ 规格文档写「巨字 ≈100px（cap 78px）」——那个 cap 78 是把**整条横带**
+   （含左侧 13px 标签行）当成一个字形量出来的；本机逐像素实测：`67%` 墨盒
+   87×30px ⇒ 若取 100px，三个字符会宽到 ~210px（参考稿只有 87px）。故按
+   参考稿落 **42px**（30/0.72 ≈ 42，宽度 2.1×42 ≈ 88 ✓）。 */
+.print-root.print-template-data-editorial .de-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 42px;
+  margin: 0 16px;
+}
+
+.print-root.print-template-data-editorial .de-band__left {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 24px;
+  min-width: 0;
+}
+
+.print-root.print-template-data-editorial .de-band__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tpl-ink);
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-band__caption {
+  font-size: 12px;
+  color: var(--de-gray-500);
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-band__pct {
+  flex: 0 0 auto;
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
   color: var(--tpl-accent);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 /* ── P2 任务依赖网络 ── */
@@ -1081,17 +1294,14 @@
   padding: 4px 8px;
 }
 
-.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-stat {
-  padding: 7px 10px;
-}
-
-.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-stat__value {
-  font-size: 18px;
-}
-
-.print-root.print-template-data-editorial .de-board[data-density='compact'] .de-bar__track {
-  height: 6px;
-}
+/* ⚠️ 这里曾有一条 `.de-board[data-density='compact'] .de-bar__track { height: 6px }`
+   ——它是**列内窄条时代**（条高 15px、轨道 6px）的遗留，P0-7 把条改成通栏
+   32px 后它与上面那条 compact 20px 规则**同特异性**、排在后面 ⇒ 实际生效的
+   是 6px（真 Chromium 实测确认）。已整条删除：紧凑档的轨道高度只由上面那一
+   处决定，且与 `MATRIX_EST.rowCompact` 的 20 同源。
+   同理删掉了两条 `.de-stat` 的 compact 规则——P0-7 已把页头 4 宫格 KPI 带
+   （`.de-stats` / `.de-stat`）整块移除（审计 §1.2「现状有、参考没有的块」），
+   留着就是死规则。 */
 
 /* ── 打印媒体：白纸面压过 global 的 !important 规则（两条都 !important ⇒
  * 特异性高者胜：本选择器两类 > `.print-root` 一类）；填充元素锁 exact ── */

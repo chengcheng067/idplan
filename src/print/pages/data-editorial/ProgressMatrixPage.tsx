@@ -1,37 +1,76 @@
 /**
  * D 版 P1 · 阶段进度矩阵（01 文档 §5 / 02 文档 §6）。
  *
- * ── 矩阵读法 ──
- * 行 = 阶段（orderIndex 序）；列 = 状态 / 计划日期 / 阶段内任务完成度 /
- * ratioPercent / 负责人。阶段内任务完成度**直接取 VM 的 taskProgress**
- * （适配器已复用 computeStageTaskProgress，02 §4 纪律：不重算）。
+ * ── 矩阵读法（2026-10-11 P0-7 骨架重做：6 列表格 → 两段式 + 通栏大条）──
+ * 参考稿 D P1 的行是**两段式**：
+ *   段1  行首 `[号码 + 阶段名]`（左）＋ `[起止日期 · 占比]`（右，mono 灰）；
+ *   段2  一条**通栏条**（682 × 32），起点比内容框再内缩 16px（x56..737）。
+ * 行节距 **90px**（= 段1 15px + 间隙 6 + 条 32 + 下距 36）。
+ * **无表格竖线、无行分隔线**（参考稿没有）；`STATUS` / `OWNER` 两列删除
+ * ——状态改由**条的颜色**承载（图形编码），负责人不在 `01 §5` 的字段清单里。
+ *
+ * ── 条的口径（哪一根数字进条）──
+ * 条长 = **阶段内任务完成度**（`taskProgress.done / total`，产品必登项，
+ * 规格 §3.3）；行首右侧的百分比 = **ratioPercent（工作量占比）**。
+ * 两个数字紧邻出现正是 `01 §3.1` 要防的误读点，故页脚脚注把口径写死。
+ * 填充色按阶段四态（P0-10）：已完成 `#0A0A0A` / 进行中·延期 `#EF4B23` /
+ * 未开始 `#737373`；轨道一律 `#E5E5E5`。
+ * 填充宽度 = `max(百分比, 96px)`（P0-11：0/3/4/12 四档都要有可见底桩，
+ * 参考实测四档填充全是 96px；**实现在本组件，不写进 CSS**）。
  *
  * ── 橙红纪律（01 §5：橙红仅用于重点状态）──
- * 信号色只出现在：延期阶段的状态标记与进度条、逾期/阻塞任务计数、
- * 「延期阶段」统计格。其余一律灰阶 + 近黑——灰度打印下信号色变中灰，
- * 所以每个信号色元素都同时带字形（▲）或文字，不靠色相单独表意。
+ * 信号色只出现在：进行中/延期阶段的条填充、页尾「项目完成度」巨字、
+ * 页头英文副标。其余一律灰阶 + 近黑——灰度打印下信号色变中灰，所以
+ * 每处信号色都同时带数字或字形，不靠色相单独表意。
  *
  * ── 占比口径 ──
- * ratioPercent 是工作量占比、不是完成度（01 §3.1）；页脚注释把这条口径
- * 与完成度算式并排写出，避免读稿人把 11% 当成「完成了 11%」。
+ * ratioPercent 是工作量占比、不是完成度（01 §3.1）；脚注把这两条口径
+ * 并排写出（**单行**，参考稿的脚注是单行）。
  *
  * ── 跨页分页（2026-10-09「原生矩阵无分页」修复）──
- * 阶段行按页预算 chunk（planMatrixPages，实测估高）：第一页带 KPI 摘要带
- * （产品原则「焦点必须松」——焦点只首页，续表不重复），续表页带「续表」
- * 模块头 + 重复表头；口径注每页都有（每页可独立解释，01 §2）。行是原子
- * 单位（行不裂）；本页无行时不渲染表格（不出孤单表头）。
+ * 阶段行按页预算 chunk（planMatrixPages，实测估高）：续表页带「续表」
+ * 模块头；页尾完成度横带**每页都有**（每页可独立解释，01 §2）。
+ * 行是原子单位（行不裂）；本页无行时不渲染行区（不出孤单续表头）。
  */
 
 import { StageStatus } from '../../../core/types/enums';
-import type { PrintStageVM, PrintTaskVM, PrintViewModel } from '../../model/print-view-model';
+import type { PrintStageVM, PrintViewModel } from '../../model/print-view-model';
 import { EmptyPrintState } from '../../parts/EmptyPrintState';
-import { STAGE_GLYPH, pct, stageStatusLabel } from './shared';
+import { MATRIX_COMPACT_AT, pct } from './shared';
+
+/**
+ * 条填充最小宽度（px；P0-11）。
+ * 参考稿实测：12% / 4% / 3% / 0% 四档的填充全是 **96px**（14.1–14.7% 轨宽），
+ * 即「比例再小也留一根看得见的底桩」。96 是**绝对 px**，而轨道是通栏固定
+ * 682px ⇒ 安全；若将来轨道宽度可变，须改成比例式 `max(占比, 14%)`。
+ * 用 CSS `max()` 表达 `max(trackWidth × pct/100, 96px)`——页组件层实现
+ * （审计点名：不要写进 CSS 的固定 width）。
+ */
+export const DE_BAR_MIN_FILL_PX = 96;
+
+/** 填充宽度（CSS `max()`）：小比例钳到 96px，大比例按百分比 */
+export function deBarFillWidth(percent: number): string {
+  return `max(${percent}%, ${DE_BAR_MIN_FILL_PX}px)`;
+}
+
+/** 条的填充档（P0-10：按阶段四态分色；进行中与延期同走重点状态橙红） */
+export function deBarFillTone(status: StageStatus): 'ink' | 'signal' | 'idle' {
+  switch (status) {
+    case StageStatus.Completed:
+      return 'ink';
+    case StageStatus.InProgress:
+    case StageStatus.Delayed:
+      return 'signal';
+    default:
+      return 'idle';
+  }
+}
 
 export interface ProgressMatrixPageProps {
   vm: PrintViewModel;
   /** 本物理页的阶段行（planMatrixPages 的一个 chunk；行不裂） */
   rows: readonly PrintStageVM[];
-  /** 本页是矩阵的第几 chunk（0 起；>0 ⇒ 续表页：无 KPI、带续表头） */
+  /** 本页是矩阵的第几 chunk（0 起；>0 ⇒ 续表页：带续表头） */
   chunkIndex: number;
   /** chunk 总数（续表标识用） */
   chunkTotal: number;
@@ -39,56 +78,15 @@ export interface ProgressMatrixPageProps {
 
 export function ProgressMatrixPage({ vm, rows, chunkIndex, chunkTotal }: ProgressMatrixPageProps): JSX.Element {
   const stages = vm.stages;
-  const tasks = vm.tasks;
-  // 15+ 阶段转紧凑档（与 planMatrixPages 的 MATRIX_COMPACT_AT 同源；分页修复
-  // 把阈值从 16 微调到 15：估高下 normal 容量 14 行，15 阶段走 normal 会被切
-  // 14+1，而修复前 15 阶段本可一页装下——不回归）
-  const dense = stages.length > 14;
-
+  // 档位判定与分页同源（同一个常量，不是两处各写一个数字）：
+  // normal 容量 9 行 ⇒ 10 阶段起转紧凑档（见 shared.ts 的 MATRIX_EST 注释）
+  const dense = stages.length > MATRIX_COMPACT_AT;
   const doneStages = stages.filter((s) => s.status === StageStatus.Completed).length;
-  const delayedStages = stages.filter((s) => s.status === StageStatus.Delayed);
-  const doneTasks = tasks.filter((t) => t.status === 'done').length;
-  const overdueTasks = tasks.filter((t) => t.overdue).length;
-  const blockedTasks = tasks.filter((t) => t.status === 'blocked').length;
 
   return (
     <section className="de-board" data-density={dense ? 'compact' : undefined}>
-      {/* 统计带：四格硬边矩形，数字优先（Data Editorial 的数据图形气质）。
-          **仅第一页**——产品原则「焦点必须松」：每页唯一焦点，续表页不重复
-          KPI（焦点每页都出现就不再是焦点，且白占续页预算） */}
-      {chunkIndex === 0 && (
-        <div className="de-stats">
-          <div className="de-stat">
-            <span className="de-stat__value de-num">{Math.round(vm.project.percent)}%</span>
-            <span className="de-stat__caption">
-              项目完成度 · 已完成可见阶段 {doneStages}/{stages.length}
-            </span>
-          </div>
-          <div className="de-stat">
-            <span className="de-stat__value de-num">{stages.length}</span>
-            <span className="de-stat__caption">可见阶段 · 任务 {tasks.length} 条</span>
-          </div>
-          <div className="de-stat">
-            <span className="de-stat__value de-num">
-              {doneTasks}/{tasks.length}
-            </span>
-            <span className="de-stat__caption">
-              任务完成 {tasks.length === 0 ? 0 : pct(doneTasks, tasks.length)}%
-              {blockedTasks > 0 ? ` · 阻塞 ${blockedTasks}` : ''}
-            </span>
-          </div>
-          <div className="de-stat" data-signal={delayedStages.length > 0 || overdueTasks > 0 || undefined}>
-            <span className="de-stat__value de-num">
-              {delayedStages.length + overdueTasks}
-            </span>
-            <span className="de-stat__caption">
-              重点状态 · 延期阶段 {delayedStages.length} · 逾期任务 {overdueTasks}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* 续表模块头（D 硬边语法：2px 近黑线 + 英文栏 kicker + 信号方） */}
+      {/* 续表模块头（D 硬边语法：2px 近黑线 + 英文栏 kicker + 信号方）。
+          第一页没有——参考稿 P1 的页头线之后直接是第 01 行。 */}
       {chunkIndex > 0 && (
         <div className="de-matrix__cont">
           <p className="de-matrix__cont-kicker">
@@ -104,78 +102,60 @@ export function ProgressMatrixPage({ vm, rows, chunkIndex, chunkTotal }: Progres
       {rows.length === 0 ? (
         <EmptyPrintState kind="stages" />
       ) : (
-        <table className="de-table de-matrix">
-          <thead>
-            <tr>
-              <th className="de-matrix__stage">STAGE 阶段</th>
-              <th>STATUS 状态</th>
-              <th className="de-matrix__date">DATES 计划日期</th>
-              <th className="de-matrix__progress">TASK PROGRESS 阶段内任务完成度</th>
-              <th className="de-matrix__ratio">RATIO 占比</th>
-              <th>OWNER 负责人</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((s) => (
-              <MatrixRow key={s.id} stage={s} tasks={tasks} />
-            ))}
-          </tbody>
-        </table>
+        <div className="de-matrix" data-print-matrix>
+          {rows.map((s) => (
+            <MatrixRow key={s.id} stage={s} />
+          ))}
+        </div>
       )}
 
-      <p className="de-note">
-        口径：完成度 = 已完成可见阶段数 ÷ 可见阶段总数（不按占比加权）；占比 = 阶段工作量分配
-        （ratioPercent），<strong>占比不等于完成度</strong>；阶段内任务完成度 = 该阶段已完成任务数
-        ÷ 任务总数。隐藏阶段不进入本表，也不参与任何统计。
-      </p>
+      {/* 页尾横带（P0-9）：项目完成度 + 已完成 N/M 个阶段 + 右对齐巨字百分比。
+          每页都有（每页可独立解释，01 §2；参考稿 P1 的巨字 67% 与
+          「已完成 2 / 9 个阶段」是同一根口径）。 */}
+      <div className="de-band">
+        <span className="de-band__left">
+          <span className="de-band__label">项目完成度</span>
+          <span className="de-band__caption">
+            已完成 {doneStages} / {stages.length} 个阶段
+          </span>
+        </span>
+        <span className="de-band__pct de-num">{Math.round(vm.project.percent)}%</span>
+      </div>
     </section>
   );
 }
 
-function MatrixRow({ stage, tasks }: { stage: PrintStageVM; tasks: readonly PrintTaskVM[] }): JSX.Element {
+/** 目录行：段1 [号码 + 阶段名] / [日期 · 占比]；段2 通栏条（填充分色 = 四态） */
+function MatrixRow({ stage }: { stage: PrintStageVM }): JSX.Element {
   const { done, total } = stage.taskProgress;
   const percent = pct(done, total);
-  const delayed = stage.status === StageStatus.Delayed;
-  const stageTasks = tasks.filter((t) => t.stageId === stage.id);
-  const blocked = stageTasks.filter((t) => t.status === 'blocked').length;
-  const overdue = stageTasks.filter((t) => t.overdue).length;
-  const flags = [
-    blocked > 0 ? `阻塞 ${blocked}` : '',
-    overdue > 0 ? `逾期 ${overdue}` : '',
-  ].filter(Boolean);
-
+  const tone = deBarFillTone(stage.status);
   return (
-    <tr data-state={stage.status} data-delayed={delayed || undefined}>
-      <td className="de-matrix__stage">
-        <span className="de-matrix__no de-num">{String(stage.orderIndex).padStart(2, '0')}</span>
-        <span className="de-matrix__name" title={stage.name}>
-          {stage.name}
-        </span>
-      </td>
-      <td>
-        <span className="de-state" data-tone={delayed ? 'signal' : stage.status}>
-          <span className="de-state__glyph" aria-hidden>
-            {STAGE_GLYPH[stage.status]}
-          </span>
-          {stageStatusLabel(stage.status)}
-        </span>
-      </td>
-      <td className="de-matrix__date de-num">
-        {stage.startAt} — {stage.endAt}
-      </td>
-      <td className="de-matrix__progress">
-        <span className="de-bar" role="img" aria-label={`任务完成度 ${percent}%`}>
-          <span className="de-bar__track">
-            <span className="de-bar__fill" data-tone={delayed ? 'signal' : 'ink'} style={{ width: `${percent}%` }} />
-          </span>
-          <span className="de-bar__num de-num">
-            {done}/{total} · {percent}%
+    <div className="de-row" data-state={stage.status} data-testid={`de-matrix-row-${stage.orderIndex}`}>
+      <div className="de-row__head">
+        <span className="de-row__id">
+          <span className="de-row__no de-num">{String(stage.orderIndex).padStart(2, '0')}</span>
+          <span className="de-row__name" title={stage.name}>
+            {stage.name}
           </span>
         </span>
-        {flags.length > 0 && <span className="de-matrix__flags">{flags.join(' · ')}</span>}
-      </td>
-      <td className="de-matrix__ratio de-num">{stage.ratioPercent}%</td>
-      <td className="de-matrix__owner">{stage.ownerName ?? '—'}</td>
-    </tr>
+        <span className="de-row__meta de-num">
+          {stage.startAt} → {stage.endAt} · {stage.ratioPercent}%
+        </span>
+      </div>
+      <span className="de-bar" role="img" aria-label={`阶段内任务完成度 ${percent}%（${done}/${total}）`}>
+        <span className="de-bar__track">
+          <span
+            className="de-bar__fill"
+            data-fill={tone}
+            style={{ width: deBarFillWidth(percent) }}
+          >
+            <span className="de-bar__num de-num">
+              {done}/{total} · {percent}%
+            </span>
+          </span>
+        </span>
+      </span>
+    </div>
   );
 }

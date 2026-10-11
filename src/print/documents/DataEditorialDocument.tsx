@@ -78,6 +78,22 @@ const DE_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
   'writeback-proposals': { cn: '写回提案公示', en: 'WRITEBACK PROPOSALS' },
 };
 
+/**
+ * 页脚**单行**口径注（P0-9 ② / 规格 §3.3「口径注必登，形态收成一行」）。
+ *
+ * 参考稿 D 的脚注是一行图例（`深色=已完成部分 浅色=剩余 · 百分比 = 阶段任务完成度`）
+ * + 右「01」；我们的产品口径注比它长，故压到 9.5px 并逐条保留**每一条**口径
+ * 声明（不删内容，只压措辞）：
+ *   · 完成度算式 = 已完成可见阶段 ÷ 可见阶段总数（不按占比加权）
+ *   · 占比 ≠ 完成度（`01 §3.1` 防误读的硬要求）
+ *   · 条的读法 = 阶段内任务完成度（产品必登字段，规格 §3.3）
+ *   · 隐藏阶段的可见性口径
+ * `white-space: nowrap` + ellipsis（`.de-foot__note`）保证它**恒为一行**
+ * （验收判据 `getClientRects().length === 1`）。
+ */
+const DE_FOOT_NOTE =
+  '口径：完成度=已完成可见阶段÷可见阶段（不加权）；占比=ratioPercent≠完成度；条=阶段内任务完成度；隐藏阶段不入表不计';
+
 export interface DataEditorialDocumentProps {
   vm: PrintViewModel;
   /**
@@ -208,7 +224,10 @@ function DePage({
       className="a4-page de-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
     >
-      {/* 页头：英文栏 kicker + 完整单行中文标题；右侧项目标识与周期 */}
+      {/* 页头（2026-10-11 P0-8 结构重排）：logo 行 → **单行黑体大标题** →
+          **标题之下的橙英文副标**；右侧项目标识与副标同底对齐。
+          参考稿实测：标题字面 y104..165、副标 y174..185、右栏 y172..182、
+          3px 分隔线 y210..212.5（内缩 40px）。 */}
       <header className="de-head">
         <div className="de-head__left">
           {/* logo：每页头部左上格（≤28px；D 的 radius=0 身份 ⇒ 不加圆角不加底）。
@@ -216,12 +235,13 @@ function DePage({
           <div className="de-head__logo">
             <PrintLogoMark logo={logo} height={28} />
           </div>
+          {/* 完整单行中文标题（Noto Sans SC Black；不拆字体拼接，01 §5） */}
+          <h1 className="de-head__title">{title.cn}</h1>
+          {/* 英文副标：在标题下发，橙（P0-8：原在标题上方且是 #404040 kicker） */}
           <p className="de-head__kicker">
             <span className="de-head__signal" aria-hidden />
             {title.en}
           </p>
-          {/* 完整单行中文标题（Noto Sans SC Black；不拆字体拼接） */}
-          <h1 className="de-head__title">{title.cn}</h1>
         </div>
         <div className="de-head__right">
           {/* 项目名最多两行，超出截断；完整文本经 title 可访问（02 §8） */}
@@ -233,7 +253,7 @@ function DePage({
             {vm.project.clientName ? ` · 委托人 ${vm.project.clientName}` : ''}
           </p>
         </div>
-        {/* 3px 近黑硬边全出血分隔线（D 的编辑网格身份） */}
+        {/* 3px 近黑硬边分隔线（**内缩 40px**，P0-9 ①；原为通版出血） */}
         <div className="de-head__rule" aria-hidden />
       </header>
 
@@ -241,9 +261,12 @@ function DePage({
         <DePageBody page={page} vm={vm} />
       </div>
 
-      {/* 页脚：发丝线 + 署名 + 页码/数据时间（每页可独立解释，01 §2） */}
+      {/* 页脚（2026-10-11 P0-9 ②）：通版 1px 发丝线 + **单行**脚注（左）+
+          页序/数据时间（右）。口径注是产品必登项（§3.3），形态收成参考稿
+          那样的一行（9.5px + 降一档灰）；原「口径注段落 + 品牌页脚带」两段
+          在审计里被登记为「现状有、参考没有的块」，本批合并成一行。 */}
       <footer className="de-foot">
-        <span className="de-foot__brand">ID Plan · 项目排期与交付管理</span>
+        <span className="de-foot__note">{DE_FOOT_NOTE}</span>
         <span className="de-foot__page de-num">
           第 {pageIndex + 1} / {pageTotal} 页 · 数据时间 {stampOf(vm.generatedAt)}
         </span>
