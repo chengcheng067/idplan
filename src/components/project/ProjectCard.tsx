@@ -239,6 +239,32 @@ export function ProjectCard({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [menuOpen]);
 
+  /*
+   * 滚动 / 窗口缩放时关闭菜单（★ F9）。
+   *
+   * 菜单是 portal 到 body 的 **fixed** 浮层，坐标在打开那一刻由 `openMenu` 量一次
+   * （`getBoundingClientRect`）算死；它不会跟着卡片走。而卡片住在 `main` 这个全站
+   * 唯一滚动容器里 —— 打开菜单后滚动页面，菜单会**悬在原地**与触发按钮彻底错位
+   * （用户看到的是「菜单跟卡片分家了」）。
+   * 修法与既有范式一致（`TaskChecklist.tsx:111-128` 的指派浮层同款）：
+   *   · `scroll` 用**捕获阶段**（`true`）挂 window —— 页面滚动的 `scroll` 事件不冒泡，
+   *     只有捕获阶段能收到，否则监听形同虚设；
+   *   · `resize` 同样要关（窗口尺寸变了，`menuPos` 的夹取结果也失效）。
+   * 本菜单面板是 `overflow-hidden`、内部没有可滚区域，故无需像指派浮层那样再排掉
+   * 「弹层内部滚动」（那一条是给 `max-h-48 overflow-y-auto` 的成员列表用的）。
+   */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onScroll = (): void => setMenuOpen(false);
+    const onResize = (): void => setMenuOpen(false);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [menuOpen]);
+
   const confirmRename = (): void => {
     const v = renameValue.trim();
     if (v && v !== project.name) void actions.updateProject(project.id, { name: v });
