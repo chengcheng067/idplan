@@ -500,6 +500,36 @@
     @apply font-display text-ink;
   }
 
+  /* ---------------- 打印树标题隔离（2026-10-11 · 四套模板 P0 前置） ----------------
+     上面的 `h1..h4 { @apply font-display text-ink }` 是**应用 UI 的标题皮肤**。
+     纸面里的语义标题（.print-root 子树内的 h1..h4）不该继承它——否则纸面标题
+     的墨色会漏成 UI 蓝灰（`--ink-rgb` 亮色 #1F2937，实测把 A 版板头标题染成
+     `#1F2937`，参考稿应为 A 墨 `#191816`），且后续每新增一个 `<h2>` 都会重踩。
+
+     隔离手法与为什么这样最稳：
+       ① **一处生效、四套共享**：落在 global.css 而不是各模板 CSS，避免
+          「四个文件各抄一条、第五套又漏一条」；也只写这一条，不动任何 UI 规则。
+       ② **用 `--tpl-ink` 做闸门，而不是裸 `color: inherit`**：
+          `var(--tpl-ink, …)` 的回落值 = 本元素解析出的 `--ink-rgb`（.print-root
+          内已锁亮色），所以
+            · 四套新模板（都声明 `--tpl-ink`）⇒ 纸面标题拿到**模板自己的墨**；
+            · 经典版 / 行程单（不声明 `--tpl-ink`）⇒ 回落到今天的行为，零变化；
+          若写 `color: inherit`，经典纸面在暗色主题下会继承 body 的**暗色**字色
+          （`--ink-rgb` 在 body 上解析），纸面标题会变成浅色 —— 那是新 bug 不是修复。
+       ③ **特异性 0,1,1 > 0,0,1**：`.print-root h2` 天然压过 `h2`；而各模板自己的
+          标题规则（`.print-root.print-template-x .y-title`＝0,3,0）仍压过本条，
+          「纸面标题只受模板自己的 CSS 控制」成立。
+       ④ `font-family: inherit` 对现状**零像素影响**：`font-display` 与 `font-body`
+          在 tailwind.config.ts 里是同一套系统栈；这条只为防将来两栈分叉。
+       ⑤ 不改 @media print：屏幕预览与真机打印同一套级联，纸面在预览里就是成品。 */
+  .print-root h1,
+  .print-root h2,
+  .print-root h3,
+  .print-root h4 {
+    color: var(--tpl-ink, rgb(var(--ink-rgb) / 1));
+    font-family: inherit;
+  }
+
   ::selection {
     background: rgb(var(--pine-rgb) / 0.18);
     color: rgb(var(--ink-rgb) / 1);
