@@ -6,10 +6,12 @@ import { Sidebar } from './Sidebar';
 import { IdentityDialog } from './IdentityDialog';
 import { FirstRunGuide } from './FirstRunGuide';
 import { ManualFallbackForm } from '../contract-wizard/ManualFallbackForm';
+import { ToastItem } from '../common/Toast';
 import { PluginFrameHost, useActiveInstalledPlugin } from '../../core/plugin/PluginSandboxFrame';
 import { useProjectsBootstrap } from '../../hooks/useProjectsBootstrap';
 import { useFirstRunGate } from '../../hooks/useFirstRunGate';
 import { useAgentLoopbackReceiver } from '../../hooks/useAgentLoopbackReceiver';
+import { useExitRetained } from '../../hooks/useExitRetained';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useUiStore } from '../../store/useUiStore';
 
@@ -65,8 +67,15 @@ export function AppShell(): JSX.Element {
    * 挂在页面会导致用户不在该页时面板显示「可连通」但写入要等满 10s 超时。
    */
   useAgentLoopbackReceiver();
-  const toasts = useProjectsStore((s) => s.toasts);
+  const storeToasts = useProjectsStore((s) => s.toasts);
   const dismissToast = useProjectsStore((s) => s.dismissToast);
+  /*
+   * 出口期保留：`dismissToast` 把条目从 store 摘掉之后，它并不会立刻从画面上消失，
+   * 而是带着 `leaving` 再渲染到 `toast-exit` 播完（详见 useExitRetained 文件头）。
+   * 变量名沿用 `toasts` —— 渲染列表就是它（数据源现役 + 出口期保留），
+   * 层级 spec（tests/toast-above-modal.spec.ts）以 `toasts.map` 定位本容器。
+   */
+  const { rows: toasts, forget: forgetToast } = useExitRetained(storeToasts);
   const manualFormOpen = useUiStore((s) => s.manualFormOpen);
   const closeManualForm = useUiStore((s) => s.closeManualForm);
   // L2：启用中的已安装插件（沙箱 iframe 全屏承载，替代路由出口）
@@ -162,20 +171,15 @@ export function AppShell(): JSX.Element {
       */}
       <div className="pointer-events-none fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
-          <button
+          <ToastItem
             key={t.id}
-            type="button"
-            onClick={() => dismissToast(t.id)}
-            className={`toast-enter glass-medium pointer-events-auto rounded-lg px-4 py-2 text-sm shadow-soft ${
-              t.kind === 'success'
-                ? 'text-moss'
-                : t.kind === 'error'
-                  ? 'text-clay'
-                  : 'text-ink'
-            }`}
-          >
-            {t.message}
-          </button>
+            toast={t}
+            leaving={t.leaving}
+            onDismiss={dismissToast}
+            onGone={() => forgetToast(t.id)}
+            variant="glass"
+            className="glass-medium rounded-lg"
+          />
         ))}
       </div>
     </div>

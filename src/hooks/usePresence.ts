@@ -97,7 +97,7 @@ export function usePresence(
       unblock();
       if (el && strippedRef.current && enterClass) el.classList.add(enterClass);
       strippedRef.current = false;
-      if (el) el.classList.remove(exitClass);
+      if (el && exitClass) el.classList.remove(exitClass);
       setExiting(false);
       alive(true);
       return;
@@ -107,7 +107,10 @@ export function usePresence(
 
     // 要求 1：reduce 下不等 —— CSS 的 `animation: none` 永不给 animationend。
     // 元素没挂上（调用方漏了 exitRef）同样立即卸载：宁可少一次动画，也绝不留在 DOM。
-    if (prefersReducedMotion() || !el) {
+    //
+    // 第三种情形：**本形态根本没有出口动画**（调用方没给 exitClass）——
+    // 那就没有值得等的东西，立即卸载。等一个不存在的动画 = 让元素白活 200ms。
+    if (prefersReducedMotion() || !el || !exitClass) {
       setExiting(false);
       alive(false);
       return;
@@ -176,8 +179,14 @@ export function prefersReducedMotion(): boolean {
 }
 
 export interface PresenceOptions {
-  /** 出口动画类名（定义层已有，如 `toast-exit`）。由 hook 在出口期挂到 `exitRef` 元素上。 */
-  exitClass: string;
+  /**
+   * 出口动画类名（定义层已有，如 `toast-exit`）。由 hook 在出口期挂到 `exitRef` 元素上。
+   *
+   * **不传 = 本形态没有出口动画 ⇒ 关闭即卸载**（与接线前行为一致）。定义层只有六组
+   * `*-out`，没有出口动画的形态（下拉浮层、全屏打印预览）就该走这条路，
+   * 而不是随便挑一个类名凑数或白等 200ms。
+   */
+  exitClass?: string;
   /**
    * 入场动画类名（如 `toast-enter`）。首帧仍由调用方的 JSX 负责；hook 只在出口启动时
    * 摘掉、重开时补回。不传 = 调用方自己用 `exiting` 切换类名。

@@ -30,6 +30,23 @@ function zValues(source: string): number[] {
   return out;
 }
 
+/**
+ * 剥掉注释后的行数组 —— 定位「toast 渲染处」必须用它。
+ *
+ * 病灶（2026-10-11 出口接线时实测踩到）：`shellSrc.split('\n').find(l => l.includes('toasts.map'))`
+ * 是**行扫描认字样**，注释里出现同样的字样就会把定位带跑 —— 当时只是在新加的说明注释里
+ * 提了一句「层级 spec 以 toasts.map 定位本容器」，定位就落到了注释行上，
+ * 往上 12 行当然找不到 z / fixed，两条断言同时假红。
+ * 本仓已有三次同类教训（Modal z 数字 / useBackupIo 旧文件名 / 本 spec 自己的修因注释），
+ * 所以这里统一剥注释后再找。
+ */
+function shellLines(source: string): string[] {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((l) => !/^\s*\/\//.test(l));
+}
+
 describe('Toast 层级：必须高于任何模态层（弹窗反馈不被压在置灰层下）', () => {
   it('★ toast 容器 z 值 > Modal 全部层级的最大值', () => {
     const modalSrc = readFileSync(resolve(ROOT, 'src/components/common/Modal.tsx'), 'utf8');
@@ -38,14 +55,12 @@ describe('Toast 层级：必须高于任何模态层（弹窗反馈不被压在�
     const modalZs = zValues(modalSrc);
     expect(modalZs.length, 'Modal.tsx 里应该摸得到 z-index 分层').toBeGreaterThan(0);
 
-    // toast 容器 = AppShell 里含 toasts.map 的那个 fixed 容器
-    const toastLine = shellSrc
-      .split('\n')
-      .find((l) => l.includes('toasts.map'));
+    // toast 容器 = AppShell 里含渲染列表 map 的那个 fixed 容器
+    const toastLine = shellLines(shellSrc).find((l) => l.includes('toasts.map'));
     expect(toastLine, 'AppShell 里没找到 toast 渲染处（结构被改了？）').toBeTruthy();
 
     // 取 toast 容器声明行（往上找最近的固定定位 div）里的 z 值
-    const lines = shellSrc.split('\n');
+    const lines = shellLines(shellSrc);
     const idx = lines.findIndex((l) => l.includes('toasts.map'));
     let toastZ: number | null = null;
     for (let i = idx; i >= 0 && i > idx - 12; i -= 1) {
@@ -66,9 +81,8 @@ describe('Toast 层级：必须高于任何模态层（弹窗反馈不被压在�
 
   it('toast 容器是 fixed 全视口浮层（不随内容流滚动）', () => {
     const shellSrc = readFileSync(resolve(ROOT, 'src/components/layout/AppShell.tsx'), 'utf8');
-    const idx = shellSrc.split('\n').findIndex((l) => l.includes('toasts.map'));
-    const containerLine = shellSrc
-      .split('\n')
+    const idx = shellLines(shellSrc).findIndex((l) => l.includes('toasts.map'));
+    const containerLine = shellLines(shellSrc)
       .slice(Math.max(0, idx - 12), idx)
       .reverse()
       .find((l) => l.includes('fixed'));

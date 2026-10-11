@@ -932,7 +932,8 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
  * 正确做法是**视觉余韵与可操作性解耦**：
  *   关闭动作一触发就立刻让遮罩 pointer-events: none（用户马上能点下一页），
  *   面板 / 抽屉的淡出只是**剩余的视觉余韵**，不承载任何交互等待。
- * 本批只提供下方 `*-out` 的定义；接线（元素存活到动画结束）属下一批。 */
+ * 机制已落地（2026-10-11）：`src/hooks/usePresence.ts` 让元素活到出口动画结束再卸载，
+ * 并在进入出口期的**同一帧**给动画元素与遮罩都打上 `pointer-events: none`。 */
 @keyframes drawer-slide-in {
   from {
     opacity: 0;
@@ -987,12 +988,23 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
  *    入口的 `to` 帧 == 出口的 `from` 帧，入口的 `from` 帧 == 出口的 `to` 帧。
  *    这样「开」和「关」走的是同一条轨迹的反向，观众感知为同一个动作的两次呼吸，
  *    而不是两个不相关的小动画。
- * ② 缓动也成对：入口用 --ease-enter（快起慢收），出口用 --ease-exit（慢起快走）。
- * ③ 时长一律走 --dur-base（200ms）。toast 入口是 180ms，出口仍取 base 档 ——
- *    退场比入场略慢一点更耐看，且避免出现「第五档特殊值」。
- * ④ ⚠️ 这些类**目前零消费方**。接线需要「元素存活到动画结束」的前置机制
- *    （见上方「出口动画的存在前提」）：关闭触发即 `pointer-events: none` 让出输入，
- *    元素淡出只是视觉余韵。缺这一步就接，等于把交互卡在动画上。
+ * ② 缓动的**目标**是入口 --ease-enter（快起慢收）、出口 --ease-exit（慢起快走）。
+ *    出口已全部统一到 --ease-exit；⚠️ 入口仍各按原样（`var(--liquid-ease)` / `ease-out`）——
+ *    换成 --ease-enter 是**看得见**的手感变化（ease-out 起手更快），不属「等值 token 化」，
+ *    留给产品拍板，别顺手改。
+ * ③ 时长一律走 --dur-base。入口原本散着 200 / 180 / 160 三个数（toast 180、
+ *    dialog-pop 与 float-pop-in 160），已统一到 base 档 —— 进出同档 + 几何镜像，
+ *    开与关才是同一个动作的两次呼吸；也顺手消掉了那三个「第五档特殊值」。
+ *    （缓动仍各按原样：入口 `var(--liquid-ease)` / `ease-out`，出口 `--ease-exit`。）
+ * ④ 接线（2026-10-11 已落地）：「元素存活到动画结束」的机制是
+ *    `src/hooks/usePresence.ts`（含 reduce 立即卸载、出口期 pointer-events:none、
+ *    兜底 cap）。消费方 = Modal 底座四档（center/right/left/left-rail/float）
+ *    与 Toast（`ToastItem` + `useExitRetained`）。
+ *    ⚠️ `dropdown` / `fullscreen` / `right-float` 三档**没有**配套出口 keyframes，
+ *       接线时一律走「关闭即卸载」—— 别拿别的档的类名凑数（会看到下拉菜单
+ *       按抽屉轨迹飞出去）。补它们属新造动效，要先定轨迹。
+ *    ⚠️ `menu-fade-out` 目前仍无消费方（menuFadeIn 的 6 处都是各组件手搓的
+ *       绝对定位浮层，不经过 Modal 底座）；接线它们属另一批。
  * ========================================================================== */
 
 /* --- menu-fade-in（translateY(6px) scale(0.97)）↔ menu-fade-out --- */

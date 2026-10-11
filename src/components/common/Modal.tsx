@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { createPortal } from 'react-dom';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { resolveAnchoredPosition, type Point } from '../../lib/anchoredPosition';
+import { usePresence } from '../../hooks/usePresence';
 
 type ModalPlacement =
   | 'center'
@@ -41,6 +42,23 @@ function overlayZClass(placement: ModalPlacement, zTier?: 60 | 70 | 75 | 78): st
   if (placement === 'fullscreen' || placement === 'dropdown') return OVERLAY_Z_CLASS[75];
   return OVERLAY_Z_CLASS[60];
 }
+
+/**
+ * placement → 出口动画类名（定义层六组 `*-out` 里属于本档的那一个）。
+ *
+ * **没列进来的档位就是「没有出口动画」**：`dropdown` 与 `fullscreen` 在定义层里
+ * 没有配套的出口 keyframes，`right-float` 连入口都没有，那就关闭即卸载
+ * （`usePresence` 收到 `exitClass: undefined` 的直接后果），而不是随便挑一个
+ * 类名凑数 —— 挑错了就是「下拉菜单按抽屉的轨迹飞出去」。
+ * 补这两档的出口动画属**新造动效**（要设计师定轨迹），不在本批范围。
+ */
+const EXIT_CLASS: Partial<Record<ModalPlacement, string>> = {
+  center: 'dialog-pop-out',
+  right: 'drawer-out-right',
+  left: 'drawer-out-left',
+  'left-rail': 'drawer-out-left',
+  float: 'float-pop-out',
+};
 
 /**
  * 通用浮层底座（modal-overlay 基础设施）。
@@ -126,9 +144,9 @@ export function Modal({
   anchor?: Point | null;
   children: React.ReactNode;
 }): JSX.Element | null {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   /** 锚定浮动卡本体（`placement='float'`）；定位需要实测它的尺寸 */
-  const floatRef = useRef<HTMLDivElement>(null);
+  const floatRef = useRef<HTMLDivElement | null>(null);
   const [floatPos, setFloatPos] = useState<{ top: number; left: number } | null>(null);
   const anchorX = anchor?.x ?? null;
   const anchorY = anchor?.y ?? null;
@@ -265,13 +283,59 @@ export function Modal({
       ro?.disconnect();
     };
   }, [open, placement, anchorX, anchorY]);
-  if (!open) return null;
+
+  /*
+   * ── 出口接线（team-lead 2026-10-11）───────────────────────────────────
+   * 关闭不再等于「立刻 return null」：元素活到出口动画播完再撤（详见 usePresence）。
+   * 出口动画落在**锚点容器**上（float 档落在面板自己身上）—— 见 attachPanel 的注释。
+   * 出口期两个元素都 `pointer-events: none`：用户关了抽屉马上就能点下一页，
+   * 面板的淡出只是**剩余的视觉余韵**。
+   */
+  const exitClass = EXIT_CLASS[placement];
+  const presence = usePresence(open, {
+    exitClass,
+    /*
+     * 只有 float 档的入场类是 Modal 自己挂的（下方 `float-pop-in`），能交回给 hook
+     * 在出口启动时摘掉；center / right / left 的 `dialog-pop` / `drawer-*` 挂在
+     * **调用方的子面板**上，Modal 碰不到 —— 所幸两者是不同元素，各自的 `animation`
+     * 互不干扰（子面板那条早已播完并停在 `both` 的终态）。
+     */
+    enterClass: placement === 'float' ? 'float-pop-in' : undefined,
+  });
+
+  const attachPanel = useCallback(
+    (node: HTMLDivElement | null): void => {
+      panelRef.current = node;
+      /*
+       * 出口动画打在**锚点容器**而不是调用方的子面板上：
+       * ① 子面板是调用方的 JSX，Modal 够不着，也改不了它的 className；
+       * ② 锚点在四种非 float 档位里都是「全尺寸透明容器 + flex 定位子面板」，
+       *    对容器做 translate/opacity 与对子面板做**视觉等价**（位移是刚性的；
+       *    center 档子面板本就居中，缩放中心也重合）。
+       * ⚠️ 代价：出口期容器上有 transform ⇒ 期间它成为 `position: fixed` 后代的
+       *    包含块。Modal 自身及所有走 createPortal 的嵌套浮层都挂在 document.body，
+       *    不受影响；真正嵌在面板里的 fixed 元素目前没有。
+       */
+      if (placement !== 'float') presence.exitRef(node);
+    },
+    [placement, presence.exitRef],
+  );
+  const attachFloat = useCallback(
+    (node: HTMLDivElement | null): void => {
+      floatRef.current = node;
+      if (placement === 'float') presence.exitRef(node);
+    },
+    [placement, presence.exitRef],
+  );
+
+  if (!presence.mounted) return null;
 
   return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
+      ref={presence.blockRef}
       // z-index 分层：居中弹窗(center)=z-[70] 最高可盖一切；右侧抽屉(right)=z-[60] 属二级浮层，
       // 让其内部冒出的更浅层浮层（如指派弹层 z-[65]）能盖在抽屉之上。抽屉自身不参与 center 的顶层竞争。
       // Soft UI 不用 backdrop-blur（玻璃拟态）；层次靠统一的主色遮罩 + 面板外凸阴影表达。
@@ -330,7 +394,7 @@ export function Modal({
           不再扣容器 padding。center 档保持 p-4 sm:p-6 不变（它不贴边）。
           ⚠️ 仅改此处 padding / className，切勿触碰下方焦点 effect 的 [open] 依赖（IME 吞字根治）。 */}
       <div
-        ref={panelRef}
+        ref={attachPanel}
         tabIndex={-1}
         className={`outline-none flex h-full w-full ${
           placement === 'center'
@@ -371,7 +435,7 @@ export function Modal({
       >
         {placement === 'float' ? (
           <div
-            ref={floatRef}
+            ref={attachFloat}
             data-anchored-float=""
             className="float-pop-in fixed"
             style={{

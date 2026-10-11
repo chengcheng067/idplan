@@ -997,6 +997,27 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     ).toBe('classic');
   });
 
+  /**
+   * 关闭三路的公共收尾：**替浏览器把出口动画播完**，让浮层真正退场。
+   *
+   * 2026-10-11 出口接线后，「关闭」不再等于「立刻从 DOM 消失」——元素会活到
+   * `dialog-pop-out` 播完再卸载（presence 机制，见 src/hooks/usePresence.ts），
+   * 否则出口动画永远没机会播。jsdom 不跑 CSS 动画、**永不派发 `animationend`**，
+   * 所以这里手动派一次：比干等 320ms 兜底更快，也更贴近真实时序。
+   *
+   * 顺带把「关闭确实生效」的证据升级了一步：先断言浮层已进入出口期，
+   * 再断言它退干净了 —— 只断言「最后没了」是分不清「关闭生效」与「压根没打开」的。
+   */
+  function settleExit(why: string): void {
+    const dialog = document.querySelector('[role="dialog"][aria-label="模板与模块"]');
+    // 出口动画落在 Modal 自己的锚点容器上（dialog 的首个子元素），不是面板本身
+    const exitEl = dialog?.firstElementChild as HTMLElement | null;
+    expect(exitEl?.classList.contains('dialog-pop-out'), `${why}：应进入出口期`).toBe(true);
+    act(() => {
+      exitEl!.dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+  }
+
   it('Esc 关闭（纯关闭：勾选态已生效，无需应用）', () => {
     renderDialog(true);
     openSelector();
@@ -1008,6 +1029,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
+    settleExit('Esc');
     expect(document.querySelector('[data-print-selector-panel]'), 'Esc 后面板应消失').toBeNull();
     // 关闭后纸面仍是改过的勾选态（即时重渲染，无待确认）
     expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toEqual([
@@ -1026,6 +1048,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     act(() => {
       catcher!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
+    settleExit('点遮罩');
     expect(document.querySelector('[data-print-selector-panel]'), '点遮罩应关闭').toBeNull();
   });
 
@@ -1039,6 +1062,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     act(() => {
       closeBtn!.click();
     });
+    settleExit('✕');
     expect(document.querySelector('[data-print-selector-panel]'), '✕ 后面板应消失').toBeNull();
   });
 
