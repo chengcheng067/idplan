@@ -28,9 +28,18 @@ import { listenOnSafePort } from './helpers/safe-listen';
  *     标题可用宽 ≥120、卡内无纵向溢出」。**「标题不截断」在新设计下不成立**（232 宽的卡片装不下
  *     长标题；标题与委托方是本卡仅有的两个允许单行省略的字段），护城河改由「单行 + 可用宽下限」
  *     承接 —— 下限 120 正是为了守住 #10.4 的「105px 窄卡全面报废」那条线。
- *   · M-02 旧契约「1152 档 ≥280」→ 新契约「3 列 / 232、委托方行不被压成 0 高」。
+ *   · M-02 旧契约「1152 档 ≥280」→ 新契约「3 列 / 232×**168**、委托方行不被压成 0 高」。
  * 卡内**逐元素**约束（到期日不截断 / 胶囊不折行 / 头像不越界 / 进度条贴合 / 无纵向溢出）
  * 见 `tests/member-board-narrow-card.spec.ts`（新增，1400 档）。
+ *
+ * ═══ v1.0.x 补丁（差口①：非 xl 档卡片高度 + 溢出口径）═══
+ * 1) 非 xl 档（视口 ≤1279）看板列卡片从**共用首页的 124** 改为**本档专属的 168**
+ *    （`ProjectCard` 的「非 xl 高度」注释里有算式与四档实测）⇒ M-02 的旧数字 124 必须换。
+ *    124 的实测后果是内容越出卡片边框盒 **26px**（= 21% 卡高 ⇒ 压到下一张卡上）。
+ * 2) ⚠️ **溢出口径换过**：原用的 `scrollHeight − clientHeight` 经真机反证**不可靠** ——
+ *    卡高 156 时它报 0，而按几何算内容仍越出内容盒 10px（卡高 124 时它又恰好等于真实值 26）。
+ *    现在两条用例都用几何口径：「**最靠下的子元素下边缘 − 卡片边框盒下边缘**」（> 0 = 真越界）。
+ *    证据：`qa-scratch/mbcols/probe17.mjs` 的 9 档扫描。
  */
 
 /** 探测已安装的 chromium（与 v07-board-acceptance.spec.ts 同一实现） */
@@ -256,7 +265,24 @@ describe.skipIf(!CAN_RUN_FRESH)(
             avatars.length >= 2
               ? avatars[0].getBoundingClientRect().top === avatars[1].getBoundingClientRect().top
               : null,
-          verticalOverflow: card.scrollHeight - card.clientHeight,
+          /*
+           * 纵向溢出的**几何口径**（> 0 = 内容真的戳出卡外 ⇒ 压到下一张卡上）。
+           * ⚠️ 刻意**不用** `scrollHeight − clientHeight`：真机反证它在 flex 容器上不可靠
+           *    （卡高 156 时报 0，而几何算仍越出内容盒 10px；见 probe17 的 9 档扫描）。
+           * contentOverflow 另外给出「内容是否越入下内边距」，供人工复核用。
+           */
+          boxOverflow:
+            Math.round(
+              (Math.max(...Array.from(card.children).map((k) => k.getBoundingClientRect().bottom)) -
+                card.getBoundingClientRect().bottom) *
+                10,
+            ) / 10,
+          contentOverflow:
+            Math.round(
+              (Math.max(...Array.from(card.children).map((k) => k.getBoundingClientRect().bottom)) -
+                (card.getBoundingClientRect().bottom - parseFloat(getComputedStyle(card).paddingBottom))) *
+                10,
+            ) / 10,
         };
       });
     }
@@ -286,7 +312,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         expect(m!.avatarsSameRow, '头像必须横排（修复前被挤成竖排/报废）').toBe(true);
         expect(m!.delegatorNode, '窄版（layout=column）的委托方行必须是 div（要挂头像组）').toBe('div');
         expect(m!.delegatorH, '委托方行不得被压成 0 高（旧 1152 档实测过这种塌陷）').toBeGreaterThanOrEqual(19);
-        expect(m!.verticalOverflow, 'xl 档卡内不得纵向溢出').toBeLessThanOrEqual(0);
+        expect(m!.boxOverflow, 'xl 档卡内不得纵向溢出（几何口径：子元素不得越过卡片边框盒）').toBeLessThanOrEqual(0);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow, '页面不应出现横向滚动').toBeLessThanOrEqual(0);
         await page.screenshot({ path: resolve(SHOT_DIR, 'M-01-member-board-1440.png') });
@@ -303,17 +329,18 @@ describe.skipIf(!CAN_RUN_FRESH)(
         const m = await firstCardMetrics(page);
         expect(m).not.toBeNull();
         // 旧数字：≥280（当时是 360 轨道 ⇒ 卡片 330）。新数字：定宽 262 ⇒ 卡片恒 **232**。
-        // ⚠️ 这一档（视口 ≤1279）卡片走**紧凑档**（`h-[124px]`，xl 断点未到），
-        //    旧版实测该卡内纵向溢出 4px 且委托方行被 flex 压成 **0 高**（客户名完全不可见）；
-        //    新窄版把头像组移进委托方行后，该行有了 24px 的不可压缩下限 ⇒ 溢出增到 **26px**
-        //    （委托方恢复可见）。这一档不在本批产品决策范围（默认窗口 1400 已 ≥ xl），
-        //    溢出量已登记在报告里待 team-lead 定档；此处**刻意不钉溢出数值**
-        //    （钉住一个已知破损的数字＝把破损写进契约）。
+        // ⚠️ 这一档（视口 ≤1279）走**非 xl 档**：旧版与首页共用 `h-[124px]`，实测后果是
+        //    委托方行被 flex 压成 **0 高**（客户名完全不可见）、且内容越出卡片边框盒 **26px**
+        //    （= 21% 卡高 ⇒ 压到下一张卡上）。v1.0.x 差口① 已修：本档改成**专属的 168**
+        //    （= 逐行实测的自然高度 166 向上取 4 的整数档，算式见 `ProjectCard` 的
+        //    「非 xl 高度」注释）⇒ 旧数字 124 换 168，并把「无溢出」正式钉住
+        //    （修好之后就该钉；此前不钉是因为"钉一个已知破损的数字等于把破损写进契约"）。
         expect(m!.colCount, '1152 档（section 1088）看板应为 3 列').toBe(3);
         expect(m!.tracks.every((t) => t === 262), '1152 档轨道同样恒 262').toBe(true);
-        expect(m!.h, 'xl 以下仍是紧凑档 124').toBe(124);
+        expect(m!.h, '非 xl 档卡片应为本档专属高度 168（旧：与首页共用 124 ⇒ 溢出 26px）').toBe(168);
         expect(m!.w, 'xl 以下卡片同样应撑满列宽（修复前被 md:w-[50%-10px] 压到 105px）').toBe(232);
         expect(m!.delegatorH, '委托方行不得被压成 0 高（旧版实测塌陷）').toBeGreaterThanOrEqual(19);
+        expect(m!.boxOverflow, '非 xl 档卡内不得纵向溢出（几何口径；旧 124 档实测 +26）').toBeLessThanOrEqual(0);
         expect(m!.avatarsSameRow, '头像必须横排').toBe(true);
         await page.screenshot({ path: resolve(SHOT_DIR, 'M-02-member-board-1152.png') });
       } finally {
