@@ -320,7 +320,7 @@ export function ProjectCard({
          *   hover 只动 translate + shadow，显式列属性后 width 即时跟随，拖影消失。
          *   全仓其余 7 处 transition-all 是定尺寸小控件（width 不变），无害保留。
          */
-        'transition-[transform,box-shadow] duration-300 ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
+        'transition-[transform,box-shadow] duration-slow ease-in-out hover:-translate-y-1 hover:shadow-raised-lg',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/50',
         /*
          * 菜单已改为 `createPortal` 送到 `document.body`（见 `renderMenu`），
@@ -352,7 +352,7 @@ export function ProjectCard({
             }}
             aria-label="导出日程表"
             title="打印预览（应用内面板，只读导出）"
-            className="shrink-0 rounded-full p-1.5 text-mist transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
+            className="shrink-0 rounded-full p-1.5 text-mist transition-all duration-base ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
           >
             <CalendarRange size={16} aria-hidden />
           </button>
@@ -365,7 +365,7 @@ export function ProjectCard({
               aria-label="项目更多操作"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="rounded-full p-1.5 text-mist transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
+              className="rounded-full p-1.5 text-mist transition-all duration-base ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
             >
               <MoreHorizontal size={16} aria-hidden />
             </button>
@@ -547,7 +547,7 @@ export function ProjectCard({
             <button
               type="button"
               onClick={() => setRenameOpen(false)}
-              className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-200 ease-in-out hover:-translate-y-0.5"
+              className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-base ease-in-out hover:-translate-y-0.5"
             >
               取消
             </button>

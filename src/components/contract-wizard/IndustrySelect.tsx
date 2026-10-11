@@ -275,7 +275,7 @@ export function IndustrySelect({
           size={14}
           aria-hidden
           className={cn(
-            'ml-auto shrink-0 text-mist transition-transform duration-150',
+            'ml-auto shrink-0 text-mist transition-transform duration-fast',
             open && 'rotate-180',
           )}
         />

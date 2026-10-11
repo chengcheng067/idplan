@@ -809,13 +809,13 @@ export function PrintPreviewDialog({
           <div
             style={
               scale === 1
-                ? { transition: 'transform 150ms' }
+                ? { transition: 'transform var(--dur-fast)' }
                 : {
                     transform: `scale(${scale})`,
                     transformOrigin: 'top center',
                     width: A4_WIDTH_PX,
                     marginBottom: -(1 - scale) * paperNaturalHeight,
-                    transition: 'transform 150ms',
+                    transition: 'transform var(--dur-fast)',
                   }
             }
             className="mx-auto print-zoom-layer"

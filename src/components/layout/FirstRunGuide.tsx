@@ -211,7 +211,7 @@ export function FirstRunGuide(): JSX.Element | null {
                   }}
                   className={cn(
                     'flex min-h-[152px] flex-col items-start gap-2 rounded-2xl border border-line bg-paper p-3 text-left',
-                    'transition-[border-color,background-color,transform] duration-150 ease-[var(--liquid-ease)] hover:-translate-y-px hover:border-pine',
+                    'transition-[border-color,background-color,transform] duration-base ease-[var(--liquid-ease)] hover:-translate-y-px hover:border-pine',
                     'outline-none focus-visible:ring-2 focus-visible:ring-pine/40',
                     importing && 'pointer-events-none opacity-50',
                   )}

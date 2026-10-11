@@ -23,7 +23,7 @@
 
 /* §3.5 预览入场动效（关停清单见下方 reduced-motion 段） */
 .print-preview {
-  animation: preview-in 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation: preview-in var(--dur-base) cubic-bezier(0.4, 0, 0.2, 1);
 }
 @keyframes preview-in {
   from {
@@ -35,7 +35,14 @@
     transform: none;
   }
 }
-/* v0.8.5 规范 C.5：Agent 二级侧边栏子组入场（150ms 快速档） */
+/* v0.8.5 规范 C.5：Agent 二级侧边栏子组入场的**意图**是走快速档（→ --dur-fast）。
+ *
+ * ⚠️ 现状登记（2026-10-11 时长迁移时发现）：`.sidebar-sub-in` 这个类名住在
+ *    SidebarNav.tsx，但全仓**没有任何规则给它 `animation`** —— 只有上方这个
+ *    @keyframes 与下方 reduced-motion 关停段。也就是说这个入场动画目前不会播。
+ *    补一条 `.sidebar-sub-in { animation: sidebar-sub-in var(--dur-fast) … }`
+ *    是**行为变更**（凭空多出一个动画），不属时长迁移范围，留给产品拍板。
+ *    在那之前这句话里的「快速档」只是意图，不是事实。 */
 @keyframes sidebar-sub-in {
   from {
     opacity: 0;
@@ -287,12 +294,13 @@
   --soft-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1); /* stylekit --soft-shadow */
 
   /* ================== 动效地基：时长阶梯 + 缓动组（team-lead 2026-10-11 定） ==================
-   * ⚠️ 本批**只定义、不改现有实现** —— 下面这些 token 目前没有任何消费方。
-   *    现有 8 个 @keyframes 与全部 animation / transition 声明一字未动，
-   *    把散落在四处的 150 / 160 / 180 / 200 / 300ms 迁到下面四档是**下一批**的事。
+   * 下面四档是**全仓唯一的时长来源**。类名层同名同值（tailwind.config.ts 的
+   * transitionDuration → `duration-fast/base/slow/structural`）。
    *
    * 为什么时长只分四档：ID Plan 是桌面工具，动效存在感必须弱于内容。
    * 档位再多就会出现「凭手感选一个」的情况，那是抖机灵不是体系。
+   * 落地时清掉的散值（→ 映射理由见 commit）：250 / 180 / 160 / 150 / 300ms 各若干处，
+   * 一律就近归入下表四档，不再保留第五档特例。
    * ------------------------------------------------------------------ */
   /** 悬停 / 按下这类即时反馈：快到几乎不被察觉，只用来确认「点到了」 */
   --dur-fast: 120ms;
@@ -579,10 +587,10 @@
     box-shadow: var(--focus-ring), var(--tw-shadow, 0 0 #0000);
   }
 
-  /* 2. 统一过渡：可交互元素默认 200ms 缓动，避免生硬的瞬变 */
+  /* 2. 统一过渡：可交互元素默认走 base 档，避免生硬的瞬变 */
   :where(button, [role='button'], a[href], summary, input, select, textarea) {
     transition-property: color, background-color, border-color, box-shadow, transform, opacity;
-    transition-duration: 200ms;
+    transition-duration: var(--dur-base);
     transition-timing-function: var(--liquid-ease);
   }
 
@@ -666,7 +674,7 @@
    断点纪律：本段只用 `xl`(1280) 的媒体查询，与 Tailwind 的 xl 严格同值（D3）。 */
 .app-sidebar {
   width: var(--sidebar-w-collapsed);
-  transition: width 180ms var(--liquid-ease);
+  transition: width var(--dur-base) var(--liquid-ease);
 }
 html[data-sidebar-collapsed='false'] .app-sidebar {
   width: var(--sidebar-w);
@@ -727,8 +735,8 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 /* 3. 悬浮上浮（Cloud Float）：hover 微微抬起 + 阴影扩散 */
 .soft-hover-float {
   transition:
-    transform 200ms var(--liquid-ease),
-    box-shadow 200ms var(--liquid-ease);
+    transform var(--dur-base) var(--liquid-ease),
+    box-shadow var(--dur-base) var(--liquid-ease);
 }
 
 .soft-hover-float:hover {
@@ -736,11 +744,11 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   box-shadow: var(--shadow-raised-lg);
 }
 
-/* 卡片版：幅度更大、时长更长 */
+/* 卡片版：幅度更大、时长更长（slow 档：这类位移要让人**看见**，不是一闪而过） */
 .soft-hover-lift {
   transition:
-    transform 300ms var(--liquid-ease),
-    box-shadow 300ms var(--liquid-ease);
+    transform var(--dur-slow) var(--liquid-ease),
+    box-shadow var(--dur-slow) var(--liquid-ease);
 }
 
 .soft-hover-lift:hover {
@@ -782,8 +790,8 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   color: #fff;
   box-shadow: var(--shadow-accent);
   transition:
-    transform 200ms var(--liquid-ease),
-    box-shadow 200ms var(--liquid-ease);
+    transform var(--dur-base) var(--liquid-ease),
+    box-shadow var(--dur-base) var(--liquid-ease);
 }
 
 .soft-btn-primary:hover {
@@ -798,7 +806,7 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 .soft-btn-ghost {
   background: rgb(var(--sunken-rgb) / 1);
   color: rgb(var(--ink-rgb) / 1);
-  transition: background-color 200ms var(--liquid-ease);
+  transition: background-color var(--dur-base) var(--liquid-ease);
 }
 
 .soft-btn-ghost:hover {
@@ -810,8 +818,8 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   border: 1px solid transparent;
   box-shadow: var(--shadow-pressed);
   transition:
-    box-shadow 200ms var(--liquid-ease),
-    background-color 200ms var(--liquid-ease);
+    box-shadow var(--dur-base) var(--liquid-ease),
+    background-color var(--dur-base) var(--liquid-ease);
 }
 
 .soft-input:focus {
@@ -839,7 +847,7 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 }
 
 .menuFadeIn {
-  animation: menu-fade-in 200ms var(--liquid-ease) both;
+  animation: menu-fade-in var(--dur-base) var(--liquid-ease) both;
 }
 
 /* 主行动按钮：旧名 btn-aura 保留，从紫蓝渐变改为 Indigo 实心 + 主色柔光 */
@@ -848,8 +856,8 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   color: #fff;
   box-shadow: var(--shadow-accent);
   transition:
-    transform 200ms var(--liquid-ease),
-    box-shadow 200ms var(--liquid-ease);
+    transform var(--dur-base) var(--liquid-ease),
+    box-shadow var(--dur-base) var(--liquid-ease);
 }
 
 .btn-aura:hover {
@@ -895,7 +903,7 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 }
 
 .toast-enter {
-  animation: toast-in 180ms ease-out both;
+  animation: toast-in var(--dur-base) ease-out both;
 }
 
 /* 轻对话框出现动画 */
@@ -911,7 +919,7 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 }
 
 .dialog-pop {
-  animation: dialog-pop 160ms ease-out both;
+  animation: dialog-pop var(--dur-base) ease-out both;
 }
 
 /* ------------------------------ 浮层形态动效（反馈 #3：弹窗要有动画） ------------------------------ */
@@ -937,7 +945,7 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 }
 
 .drawer-slide-in {
-  animation: drawer-slide-in 200ms var(--liquid-ease) both;
+  animation: drawer-slide-in var(--dur-base) var(--liquid-ease) both;
 }
 
 /* 左侧抽屉：从左缘滑入（v0.8.6 反馈 #4 设置抽屉 + 导航抽屉同族） */
@@ -953,7 +961,7 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 }
 
 .drawer-in-left {
-  animation: drawer-in-left 200ms var(--liquid-ease) both;
+  animation: drawer-in-left var(--dur-base) var(--liquid-ease) both;
 }
 
 /* 锚定浮动卡：从锚点方向轻微展开 */
@@ -969,7 +977,7 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
 }
 
 .float-pop-in {
-  animation: float-pop-in 160ms ease-out both;
+  animation: float-pop-in var(--dur-base) ease-out both;
 }
 
 /* ============================================================================

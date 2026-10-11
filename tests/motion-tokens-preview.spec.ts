@@ -178,15 +178,30 @@ const PAIRS: Array<{ in: string; out: string; inClass: string; outClass: string 
   { in: 'float-pop-in', out: 'float-pop-out', inClass: 'float-pop-in', outClass: 'float-pop-out' },
 ];
 
-/** 6 个既有入口类的 animation 声明 —— 本批**一个字都不许改** */
-const ENTRANCE_ANIMATION_FROZEN: Record<string, string> = {
-  '.menuFadeIn': 'animation: menu-fade-in 200ms var(--liquid-ease) both;',
-  '.toast-enter': 'animation: toast-in 180ms ease-out both;',
-  '.dialog-pop': 'animation: dialog-pop 160ms ease-out both;',
-  '.drawer-slide-in': 'animation: drawer-slide-in 200ms var(--liquid-ease) both;',
-  '.drawer-in-left': 'animation: drawer-in-left 200ms var(--liquid-ease) both;',
-  '.float-pop-in': 'animation: float-pop-in 160ms ease-out both;',
+/**
+ * 6 个既有入口类的 animation 声明。
+ *
+ * 批次一（动效地基）这批是「一个字都不许改」的**冻结**证据；批次二（时长迁移）
+ * 起，写成「时长必须引用 --dur-base」的**形态**断言 —— 冻结值里那 5 个裸 ms
+ * （200/180/160）正是被迁移掉的东西，继续冻结反而会把「第五档特例」锁死。
+ * 缓动仍是原样（`var(--liquid-ease)` / `ease-out`）：本批只动时长，不动缓动。
+ */
+const ENTRANCE_ANIMATION: Record<string, string> = {
+  '.menuFadeIn': 'animation: menu-fade-in var(--dur-base) var(--liquid-ease) both;',
+  '.toast-enter': 'animation: toast-in var(--dur-base) ease-out both;',
+  '.dialog-pop': 'animation: dialog-pop var(--dur-base) ease-out both;',
+  '.drawer-slide-in': 'animation: drawer-slide-in var(--dur-base) var(--liquid-ease) both;',
+  '.drawer-in-left': 'animation: drawer-in-left var(--dur-base) var(--liquid-ease) both;',
+  '.float-pop-in': 'animation: float-pop-in var(--dur-base) ease-out both;',
 };
+
+/** 允许在 animation / transition 里写裸时长的**非过渡**例外（逐条给理由） */
+const LITERAL_DURATION_ALLOW: Array<{ selector: string; why: string }> = [
+  { selector: '.status-pulse', why: '持续态回路（infinite），不是过渡：1.6s 是节奏不是档位' },
+  { selector: '.skeleton-pulse', why: '同上，1.4s 是节奏不是档位' },
+];
+/** reduce 关停档把过渡压到 1ms —— 那是「关掉」的写法，不是第五档时长 */
+const REDUCED_KILL = '1ms';
 
 /* ------------------------------------------------------------------ 静态断言 */
 
@@ -249,10 +264,65 @@ describe('动效地基 · 源码定义', () => {
     }
   });
 
-  it('6 个既有入口类的 animation 声明逐字未变（零行为变化）', () => {
-    for (const [selector, expected] of Object.entries(ENTRANCE_ANIMATION_FROZEN)) {
+  it('6 个既有入口类的 animation 声明：时长一律引用 --dur-base（不再写裸 ms）', () => {
+    for (const [selector, expected] of Object.entries(ENTRANCE_ANIMATION)) {
       expect(ruleBody(css, selector), `${selector} 被改动了`).toBe(expected);
     }
+  });
+
+  it('★ 全 CSS 闸门：animation / transition 声明里不再出现裸时长（四档 token 是唯一来源）', () => {
+    // 剥注释后再扫：注释里写「180ms 够用」这类说明不该算命中
+    // （教训：源码级断言行扫描不剥注释 = 迟早抓到注释里的字样假红）。
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const offenders: string[] = [];
+    // 只吃**最内层**规则（body 里没有花括号），@media 里嵌的规则也能被吃到
+    for (const m of stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const body = m[2]!;
+      if (!/animation\s*:|transition/.test(body)) continue;
+      const sel = m[1]!.split('\n').pop()!.trim();
+      if (LITERAL_DURATION_ALLOW.some((a) => sel.includes(a.selector))) continue;
+      for (const t of body.matchAll(/\b\d*\.?\d+m?s\b/g)) {
+        if (t[0] === REDUCED_KILL) continue;
+        offenders.push(`${sel} → ${t[0]}`);
+      }
+    }
+    expect(
+      offenders,
+      `这些声明还在写裸时长，应改引用 --dur-*：${offenders.join(' / ')}`,
+    ).toEqual([]);
+  });
+
+  it('★ 类名层闸门：src/ 里不再出现裸数值 duration 类（只许 duration-fast/base/slow/structural）', () => {
+    // 与上一条同源：CSS 层的裸 ms 与类名层的裸 duration-* 是同一件事的两种写法。
+    // 只扫 src/ —— tests/ 里出现这些字样往往是**断言用的字符串**（如
+    // responsive-card-track.spec 的 `transition-all duration-300`），扫进来会假红。
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        if (name === 'node_modules' || name.startsWith('.')) continue;
+        const abs = join(dir, name);
+        if (statSync(abs).isDirectory()) walk(abs);
+        else if (/\.(ts|tsx)$/.test(name)) files.push(abs);
+      }
+    };
+    walk(join(ROOT, 'src'));
+    expect(files.length).toBeGreaterThan(100);
+
+    const offenders: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/\/\/.*$/gm, ' ');
+      for (const m of src.matchAll(/\bduration-(\[[^\]\s]+\]|\d+)/g)) {
+        // 只放行「引用四档 token」的任意值写法
+        if (/^\[var\(--dur-(fast|base|slow|structural)\)\]$/.test(m[1]!)) continue;
+        offenders.push(`${f.slice(ROOT.length + 1)} → duration-${m[1]}`);
+      }
+    }
+    expect(
+      offenders,
+      `这些地方还在写裸 duration，应改用四档：${offenders.join(' / ')}`,
+    ).toEqual([]);
   });
 
   it('6 个出口类用 --dur-base + --ease-exit + fill-mode both', () => {

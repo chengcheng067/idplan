@@ -151,7 +151,7 @@ export function ProjectAppearanceDialog({
               setColorTouched(true);
             }}
             className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-200 ease-in-out hover:-translate-y-0.5',
+              'flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-base ease-in-out hover:-translate-y-0.5',
               color === null ? 'border-pine ring-2 ring-pine/40' : 'border-line',
             )}
           >
@@ -182,7 +182,7 @@ export function ProjectAppearanceDialog({
                 setColorTouched(true);
               }}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-200 ease-in-out hover:-translate-y-0.5',
+                'flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-base ease-in-out hover:-translate-y-0.5',
                 color === token.key ? 'border-pine ring-2 ring-pine/40' : 'border-line',
               )}
             >
@@ -214,7 +214,7 @@ export function ProjectAppearanceDialog({
           <button
             type="button"
             onClick={onClose}
-            className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-200 ease-in-out hover:-translate-y-0.5"
+            className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-base ease-in-out hover:-translate-y-0.5"
           >
             取消
           </button>

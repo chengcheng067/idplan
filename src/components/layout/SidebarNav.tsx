@@ -184,7 +184,7 @@ export function SidebarNav({
                   size={14}
                   aria-hidden
                   className={cn(
-                    'ml-auto shrink-0 transition-transform duration-[120ms]',
+                    'ml-auto shrink-0 transition-transform duration-fast',
                     agentOpen && 'rotate-90',
                   )}
                 />

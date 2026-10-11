@@ -20,7 +20,7 @@ export function ThemeToggle(): JSX.Element {
       onClick={toggleTheme}
       aria-label={`切换到${target}主题`}
       title={`切换到${target}主题`}
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunken text-mist transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:text-pine hover:shadow-raised soft-focus-halo"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunken text-mist transition-all duration-base ease-in-out hover:-translate-y-0.5 hover:text-pine hover:shadow-raised soft-focus-halo"
     >
       {theme === 'dark' ? (
         <Sun size={16} aria-hidden />

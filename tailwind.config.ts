@@ -232,6 +232,29 @@ export default {
         pressed: 'var(--shadow-pressed)',
         accent: 'var(--shadow-accent)',
       },
+      /**
+       * 动效时长四档（2026-10-11 定，唯一真相源在 global.css 的 `--dur-*`）。
+       *
+       * 为什么必须接进 Tailwind：类名层（`duration-*`）与 CSS 层（`transition:` /
+       * `animation:`）是同一件事的两种写法。token 只在 CSS 里可用时，组件里就会继续
+       * 长出 `duration-150` / `duration-300` 这类「凭手感选一个」的裸值 —— 接进来之前
+       * 实测组件里散着 11 处。接进来之后两边同名同值，写裸值会显眼到不用问。
+       *
+       * 四档语义（与 global.css 的定义段逐字一致）：
+       *   fast(120)       指针一动就该跟上的：图标翻转、纯色描边反馈
+       *   base(200)       默认档：面板入场、状态切换、悬浮位移
+       *   slow(320)       需要被看清的变化：卡片抬起、较大幅度的位移
+       *   structural(480) 结构性展开：抽屉 / 侧栏 / 手风琴
+       *
+       * ⚠️ Tailwind 默认那套 duration-75/100/150/200/300/500… 未删（保留逃生舱，
+       *    也不是本批范围），但新代码一律走四档。
+       */
+      transitionDuration: {
+        fast: 'var(--dur-fast)',
+        base: 'var(--dur-base)',
+        slow: 'var(--dur-slow)',
+        structural: 'var(--dur-structural)',
+      },
       borderRadius: {
         // Soft UI 大圆角：卡片 rounded-3xl(24) / 按钮·输入 rounded-2xl(16) / 图标 rounded-full
         sm: '8px',
