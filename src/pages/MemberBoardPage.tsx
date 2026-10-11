@@ -152,8 +152,31 @@ export function MemberBoardPage(): JSX.Element {
 
   const active = myRelatedProjects;
 
-  // 看板分桶（列随项目所属行业派生，与首页同一套逻辑）
-  const { columns, buckets } = groupByColumn(active, stagesOf, todayIso);
+  /*
+    ★ 0.9.x 反馈「成员的看板排版变成 3 列，管理员都是 4 列」——列集合的**板级来源**。
+
+    病灶：这里原先写 `groupByColumn(active, …)`，而 `groupByColumn` 内部拿 `active` 派生列
+    ⇒ **列集合 = 「该成员恰好参与了哪些项目」的函数**。于是同一块板上「看谁」就换列：
+    室内+软件两个项目的库里，管理员自看 = 9 列、看朴彩英 = 4 列（真机实测，见
+    tests/member-board-column-consistency.spec.ts）。用户侧的表现就是"排版不一样"。
+
+    修法（口径）：**列是板的属性，不是可见项目子集的函数**——列集合取自「板级宇宙」
+    = 全部 **active 人类项目**（`useHumanProjects()` 已把 Agent 看板滤在外面，与统计卡、
+    月历同源），分桶仍用该成员的相关项目。于是「自己看」与「管理员看某成员」列集合恒等。
+
+    为什么是「全部 active 人类项目」而不是「该成员的项目」或「某个配置项」：
+      · 该平板就是这家工作室自己的板（成员看板是它的只读视图），行业集合属于板；
+      · 不做「隐藏空列」——那等于让列集合重新随筛选漂移，正是本条要修的病；
+      · 现在没有「板块配置」这个数据面（要新增设置项），不为一条排版反馈发明新契约。
+    代价（有意接受、已量过）：成员只参与 1 个行业时，板上其它行业列会显示「暂无项目」。
+  */
+  const boardUniverse = useMemo(
+    () => projects.filter((p) => p.status === 'active'),
+    [projects],
+  );
+
+  // 看板分桶：列集合来自板级宇宙（不随"看谁"漂移），分桶用该成员的相关项目
+  const { columns, buckets } = groupByColumn(active, boardUniverse, stagesOf, todayIso);
 
   // 指标卡（仅统计与我相关的 active 项目）
   const weekStart = startOfWeekIso(today);
@@ -316,9 +339,11 @@ export function MemberBoardPage(): JSX.Element {
         仅看板档渲染：月历档是另一套数据视图（V1-26 纪律：只挂一棵数据树）。
 
         v0.8.6.0003 · 反馈「宽窗空白」：列几何从 `lg:grid-cols-3`（3×1fr 无限拉伸，
-        1920 实测每列 448px）改为与看板列**同款**的 BOARD_COLUMN_TEMPLATE
+        1920 实测每列 448px）改为与看板列**共用同一常量**的 BOARD_COLUMN_TEMPLATE
         （基准 340 / 上限 360 / auto-fit 换行 + justify-center 居中消化余量）——
-        同一页两处列几何必须同源，否则「看板列收窄了、任务块还抻着」更难看。
+        同一页两处列几何只能有一个出处，否则「看板列收窄了、任务块还抻着」更难看。
+        ⚠️ 这里说的「同源」仅指**本页两处共用 `BOARD_COLUMN_TEMPLATE`**；首页不渲染看板，
+        跨页没有共用物（见该常量注释）。
       */}
       {!isCalendar && (
         <MemberTaskTriage
@@ -350,6 +375,14 @@ export function MemberBoardPage(): JSX.Element {
           /* 列数与 HomePage 同源（项目所属行业派生），不能写死 grid-cols-4。
              注释放属性位：三元括号内直接写花括号注释是表达式位，会编译错。
 
+             ⚠️ 这句「同源」指的是**派生逻辑**（同一个 `groupByColumn`/`deriveColumns`
+             纯函数、同一个 `effectiveDomainOf` 口径），**不是**列几何或 CSS——
+             `HomePage` 不渲染看板（它的看板档是 `flex-wrap` 项目卡网格），跨页没有任何
+             共用几何。本页列几何的唯一出处是下方 `BOARD_COLUMN_TEMPLATE`（两处共用）。
+
+             列集合本身**不随"看谁"变化**：来自板级宇宙（全部 active 人类项目），
+             见组件上方 `boardUniverse` 注释 + `groupByColumn` 的入参契约。
+
              v0.8.6.0002 · 反馈 #10.4：列基准 260→340。260 是「与卡片设计宽度
              脱节」的旧值——ProjectCard 的 340 是首页 3 列布局的校准基准
              （见 ProjectCard.tsx 注释），列窄于它，卡内标题/进度条/头像行/Tag
@@ -359,8 +392,8 @@ export function MemberBoardPage(): JSX.Element {
 
              v0.8.6.0003 · 反馈「宽窗空白」：列上限 360 + auto-fit 换行 +
              justify-center 居中消化余量（旧 1fr 会把 3 列抻到 448px，比设计宽
-             32%，列内容顶对齐 ⇒ 大片空洞）。列几何与任务三块同源，见
-             BOARD_COLUMN_TEMPLATE 注释。 */
+             32%，列内容顶对齐 ⇒ 大片空洞）。列几何与任务三块共用同一常量，见
+             BOARD_COLUMN_TEMPLATE 注释（内含「上限 360 决定了每行最多几列」的实测机制）。 */
           className="grid items-start justify-center gap-3 sm:gap-4"
           style={{ gridTemplateColumns: BOARD_COLUMN_TEMPLATE }}
         >
@@ -416,19 +449,66 @@ export function MemberBoardPage(): JSX.Element {
 /**
  * 看板列与「任务三块」共用的列几何（v0.8.6.0003 · 反馈「窗口拉宽后看板空白太多」）。
  *
+ * ── 唯一出处 ──
+ * 本常量是**本仓唯一的看板列几何定义**，只在本文件被两处消费（看板列 section / 任务三块
+ * section）。`HomePage` **不渲染看板**（它的看板档是 `flex-wrap` 项目卡网格），所以
+ * 历史注释里「与 HomePage 同源」的说法**没有对应物**，已删；跨页唯一共享的东西是
+ * 「按行业派生列」的那两条纯函数（`groupByColumn`/`deriveColumns`），与 CSS 几何无关。
+ *
+ * ── T04 旧注（保留其结论，纠正其算术）──
  * 她的截图（宽窗）：看板列被横向拉得很宽、列内容顶对齐、下半大片空白。
- * 根因：列模板是 `minmax(min(100%, 340px), 1fr)`——`1fr` 让轨道**无限拉伸**：
+ * 根因：列模板曾是 `minmax(min(100%, 340px), 1fr)`——`1fr` 让轨道**无限拉伸**：
  * 1440 以上 main 封顶 1440 ⇒ section ≤1376，只放得下 3 条 340 轨道，于是 3 列
  * 各分到 448px（1920 实测），比 ProjectCard 的设计宽 340 宽出 32%，卡片跟着被
  * 抻宽；列内内容不随宽度增长 ⇒ 又宽又空。
  *
- * 新几何（三段都有出处，不是拍脑袋）：
+ * ── ⚠️ 实测机制（0.9.x 重测，纠正上面「只放得下 3 条 340 轨道」的归因）──
+ * 现行模板 `minmax(min(100%, 340px), 360px)` 的**每行轨道数由「确定的 max」决定**，
+ * 而不是 min：`repeat(auto-fit, …)` 的重复数按「不会溢出的最大整数」算，其中每条轨道
+ * 取**确定的 max 轨道尺寸**（360px 是固定长度 ⇒ 确定）。于是在内容宽 W、gap 16 下：
+ *
+ *     每行轨道数 = floor((W + 16) / (360 + 16))
+ *
+ * 真 Chromium 实测（1920/1440/1280 视口 ⇒ section 1376/1136/976）依次得 **3 / 3 / 2**，
+ * 与公式逐条吻合；而**与 340 基准无关**——把基准从 260 一路换到 340（max 保持定值 360），
+ * 轨道数一动不动（探针矩阵 result8.json 的 T1/T3–T8）。
+ *
+ * 推论（这套算术就是「成员的板是 3 列、管理员都是 4 列」的根源）：
+ *   · 「一行几列」只由**计数依据**决定：max 是定值 ⇒ 用 max 计数；max 不定（`1fr`）⇒ 用 min
+ *     计数。现行 `minmax(min(100%,340px), 360px)` 在 1376 下恒为 floor(1392/376) = **3 轨**。
+ *   · 要在 1376 下出 4 轨：定值 max 写法需 **max ≤ 332**；或 max 不定 + **min ≤ 332**
+ *     （1136 下需 min ≤ 272）。两者都会把每轨压到 340 基准以下 ⇒ 撞 #10.4 的教训
+ *     （卡内标题/进度条/头像行在窄卡上报废）。
+ *   · 「4 列」并非从未存在：≤ v0.8.6.0001 的 `minmax(min(100%, 260px), 1fr)` 按 min 260
+ *     计数 ⇒ 实测 **976 出 3 轨 / 1096 出 4 轨 / 1136 出 4 轨 / 1376 出 5 轨**（默认窗口
+ *     1400 ⇒ section 1096 出 4 轨）——**「管理员都是 4 列」是那个年代的实物**。
+ *     消灭它的是 v0.8.6.0002 把基准 260→340（治窄卡，#10.4）：同宽实测 1400/1440 档
+ *     当场 4 轨 → 3 轨；**与 v0.8.6.0003 的「上限 360」无关**（该次只治拉伸 448，
+ *     轨道数 3 → 3 不变）。
+ *   ⇒ 「要 4 列」与「别拉伸」是两条正交诉求，现行模板选了后者。能否两者兼得，只取决于
+ *     **内容宽上限**（`main` 的 `max-w-[1440px]`）能不能抬。
+ *
+ * 几何口令（待 product 拍板，勿擅自改）。实测决策表（1920 视口 / 列基准 340 / gap 16 /
+ * 两用例数字一致）：
+ *   · 维持 `main` 上限 1440（现行）：**3 列** × 360px，卡片 330。4 列在算术上不可能
+ *     —— 4×339 + 3×16 = 1404 > 1376（section 上限）。
+ *   · 上限抬到 1520：1920 档 **4 列** × 352px、卡片 322；4 列从 **1712** 视口起出现
+ *     （1600 视口仍是 3 列）。未撞 B-01（列宽 ∈[339,372]），但卡片比 340 基准窄 8px。
+ *   · 上限抬到 1600：1920 档 **4 列** × 360px、卡片仍是 330；4 列从 **1840** 视口起出现。
+ *   · 三个方案在默认窗口 1400×900（section 1096）下**都是 3 列**——她当前窗口尺寸下
+ *     「4 列」不可能。
+ * 两点代价须知：① `main` 上限是全站唯一出处（`AppShell.tsx` 的 `max-w-[1440px]`，
+ * v0.7 §6.2 定的），抬它对所有页面生效；② 「计数按基准 340、轨宽封顶 360」用 `auto-fit`
+ * 表达不出来（它按定值 max 计数），得改成由容器宽反算轨数的写法。
+ *
+ * 现行几何的三段出处：
  *   · 基准 340 = ProjectCard 设计宽（首页 3 列布局的校准基准，见 ProjectCard.tsx
  *     注释；列窄于它，卡内标题/进度条/头像行/Tag 全在超设计宽度下运行——
  *     反馈 #10.4 的实测教训：105–130px 窄卡全面报废）；
  *   · 上限 360 = 宽窗时列**不无限拉伸**（360 下卡片 ≈332，贴设计宽；再宽就是空洞）；
- *   · auto-fit = 列数随容器宽度换行，与首页 ProjectCard 的 flex-wrap 同源，
- *     不写死列数（列集合由项目所属行业派生，见 deriveColumns）；
+ *   · auto-fit = 列数随容器宽度换行，**不写死列数**（列集合由项目所属行业派生，
+ *     见 `deriveColumns`/`groupByColumn`）。注意：这与首页项目卡的 `flex-wrap`
+ *     只是"行为相似"，不复用代码、也不共用基准常量；
  *   · min(100%, …) = 容器窄于基准时坍缩为 100%（手机单列，不被 340 撑破）；
  *   · 横向余量由外层 grid 的 `justify-center` **居中消化**——刻意不用「拉伸卡片
  *     高度填满列高」那种糊法（产品负责人明令禁止；等高是数据该有的样子，不是排版）。
@@ -530,8 +610,9 @@ function MemberTaskTriage({
 
   return (
     <section
-      /* v0.8.6.0003 · 反馈「宽窗空白」：三块列几何与看板列同源（BOARD_COLUMN_TEMPLATE），
-         宽窗不拉伸到 448、窄窗 auto-fit 换行、余量 justify-center 居中消化。 */
+      /* v0.8.6.0003 · 反馈「宽窗空白」：三块列几何与看板列**共用同一常量**
+         （BOARD_COLUMN_TEMPLATE，本文件唯一出处），宽窗不拉伸到 448、
+         窄窗 auto-fit 换行、余量 justify-center 居中消化。 */
       className="grid items-start justify-center gap-3 sm:gap-4"
       style={{ gridTemplateColumns: BOARD_COLUMN_TEMPLATE }}
     >
