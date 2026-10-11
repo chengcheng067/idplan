@@ -181,8 +181,9 @@
 .print-root.print-template-swiss-schedule .swiss-masthead {
   display: flex;
   flex-direction: column;
-  /* 板头 → 下方主体（栏头/表头）的界面间距：参考稿巨字说明行 ink 349.5 → 栏头 ink 393.5 */
-  margin-bottom: 38px;
+  /* 板头 → 下方主体（栏头/表头）的界面间距：参考稿巨字说明行 ink 349.5 → 栏头 ink 393.5
+     ⇒ 栏头盒顶 = 391（33px）。38 会让栏头整体低 5px（实测反算，2026-10-11）。 */
+  margin-bottom: 33px;
 }
 
 .print-root.print-template-swiss-schedule .swiss-masthead__name {
@@ -266,23 +267,32 @@
   align-items: start;
 }
 
+/* ── P1 三列错落（按参考稿墨行带实测校准）──
+   参考稿列 1/2/3 的「卡 1 号码行 ink 顶」= 490 / 524 / 456 ⇒ 错落 = 0 / +34 / **-34**。
+   列 1、列 2 的栏头 ink 顶 393.5 / 427.5 同样证实 +34；列 3 是**向上**错落（原本写
+   +68 = 一路向下，方向反了，2026-10-11 实测修正）。 */
 .print-root.print-template-swiss-schedule .swiss-column[data-col='2'] {
   margin-top: 34px;
 }
 
 .print-root.print-template-swiss-schedule .swiss-column[data-col='3'] {
-  margin-top: 68px;
+  margin-top: -34px;
 }
 
-/* 组头：分期标签（期七深化，新稿 A P1「前期 / PREP」式；组即分期，组间分隔靠粗线） */
+/* 组头：分期标签（期七深化，新稿 A P1「前期 / PREP」式；组即分期，组间分隔靠粗线）
+   参考稿：标签 ink y393.5..402.5 → 2px 粗线 y410..412.5 → 卡 1 号码行 ink y490。
+   故 padding-bottom 由 6 收到 1（line box 18.75 + 1 + 2 = 21.75 ⇒ 盒 390..412，线落
+   410..412），margin-bottom 71 补回「粗线 → 首卡盒顶」的 74px 呼吸（首卡自带 3px
+   padding-top，71 + 3 = 74）。原先 8px 把粗线和首卡黏在一起，是审计漏列但实测
+   差 65px 的一处）。 */
 .print-root.print-template-swiss-schedule .swiss-column__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
   border-bottom: 2px solid var(--tpl-ink);
-  padding-bottom: 6px;
-  margin-bottom: 8px;
+  padding-bottom: 1px;
+  margin-bottom: 71px;
 }
 
 .print-root.print-template-swiss-schedule .swiss-column__label {
@@ -307,11 +317,24 @@
 }
 
 /* ── P1 阶段卡（P0-6）：四段结构 = 号码行 → 胶囊行（胶囊 + 右对齐日期）→ 占比/负责人行
-   → 1px 发丝线；行节距目标 ≈96px（参考稿卡顶实测 490.5 / 586.5 / 682.5 ⇒ 96）。
-   纵向值按 66.5px 内容 + 15/14px 上下 padding + 1px 发丝线 = 96.5px 反算。 */
+   → 1px 发丝线。
+   行节距 96px 与卡内留白按参考稿**墨行带**实测反算（列 1：号码 ink 490 / 胶囊 ink 518 /
+   占比 ink 545.5 / 发丝线 570 / 下卡号码 ink 586）：
+     卡内 号码→胶囊 28、胶囊→占比 27.5、占比→发丝线 24.5（合计 80）
+     卡间「发丝线 → 下卡号码 ink」15.5 ⇒ 由 3px padding-top + 7.5px margin-bottom 供出。
+     **padding-top 不得为 0**：`PRINT_DENSITY_FLOORS.rowPaddingMin = 3` 是密度研究
+     §4 的硬下限（print-palette.spec.ts 从 CSS 源实读该规则），把间距挪给 margin 后
+     仍必须留满 3px。 */
 .print-root.print-template-swiss-schedule .swiss-stage-row {
   border-bottom: 1px solid var(--tpl-ink);
-  padding: 15px 0 14px;
+  padding: 3px 0 13px;
+  margin-bottom: 7.5px;
+}
+
+/* 末卡不配「卡间」间距：否则 7.5px 会算进列内容高，把口径行/黑块整段压低 7.5
+   （grid 项的外边距不折叠，实测 口径行 808.5 → 797）。 */
+.print-root.print-template-swiss-schedule .swiss-stage-row:last-child {
+  margin-bottom: 0;
 }
 
 .print-root.print-template-swiss-schedule .swiss-stage-row__top {
@@ -345,7 +368,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 8px;
+  /* 号码行 ink → 胶囊 ink = 28（参考稿实测），号码行 line box 19.2 ⇒ 13 */
+  margin-top: 13px;
 }
 
 /* 状态胶囊：四态靠**文字 + 明度 + 形状**三重编码（宪法 4 灰度硬约束），颜色只作
@@ -405,7 +429,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 3px 12px;
-  margin-top: 6px;
+  /* 胶囊 ink → 占比 ink = 27.5（参考稿实测）；胶囊行高 20 ⇒ 4.5 */
+  margin-top: 4.5px;
   /* 行内 meta 降档（密度研究规则 4）：与主信息 13px 差 3.5px 字号 + 一档灰度。
      9.5px 是 accent 文字下限（密度研究 §4 约束 3），禁止再小 */
   font-size: 9.5px;
@@ -414,8 +439,9 @@
 
 /* ── P1 页尾：口径行 + 休息制度黑块 + 数据来源行（P0-4）── */
 .print-root.print-template-swiss-schedule .swiss-board__note {
-  /* 末条卡发丝线（参考 y762）→ 口径行 ink（y799.5）= 约 24px */
-  margin: 24px 0 0;
+  /* 最高一列（列 2，错落 +34）的末条发丝线（参考 y796）→ 口径行 ink（y799.5）只差
+     3.5px ⇒ 间距归 0（原先 24 让口径行低 17px、黑块低 18px）。 */
+  margin: 0;
   font-size: 10px;
   line-height: 1.5;
   opacity: 0.72;
@@ -424,7 +450,8 @@
 /* 休息制度黑块：参考稿 y832..915.5（h 84）、x40..754、内缩 20px；
    行1 ink y851（块顶 +19）、行2 ink y875.5。黑底黄字与顶/底栏同一语法。 */
 .print-root.print-template-swiss-schedule .swiss-rest {
-  margin-top: 22px;
+  /* 口径行盒底（参考 y812）→ 黑块顶（y832）= 20 */
+  margin-top: 20px;
   min-height: 84px;
   box-sizing: border-box;
   padding: 16px 20px;
@@ -571,14 +598,15 @@
    同步收到 9px。
    P0-6 后卡片长出「胶囊行」，compact 的压缩预算改从三处取：卡内 padding / 卡间
    margin、胶囊行/占比行的界面间距、胶囊自身的内边距——**不压字号**（9px 已是下限）。
-   P0-6 后卡片长出「胶囊行」，compact 的压缩预算改从三处取：行 padding、
-   胶囊行/占比行的界面间距、胶囊自身的内边距——**不压字号**（9px 已是下限）。 */
+   2026-10-11 normal 档改用「3px padding-top + margin-bottom」组合后，compact 同步
+   收到 3px padding-top（下限），节距仍是 70.5（与改前 71 同档）。 */
 .print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row {
-  padding: 6px 0 5px;
+  padding: 3px 0 6px;
+  margin-bottom: 0;
 }
 
 .print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__capsule-row {
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
 .print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__no {
