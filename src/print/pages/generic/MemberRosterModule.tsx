@@ -134,7 +134,7 @@ function MemberGridRow({ row }: { row: MemberRosterRow }): JSX.Element {
         {row.name}
       </span>
       <span className="gm-grid__state" data-agent={row.isAgent || undefined}>
-        {row.isAgent ? '执行体' : 'human'}
+        {row.isAgent ? '执行体' : '人类'}
       </span>
       <span className="gm-grid__kind gm-num">{row.agentKind ?? '—'}</span>
       <span className="gm-grid__role">{row.role}</span>
@@ -154,7 +154,7 @@ function MemberBlocks({ rows }: { rows: readonly MemberRosterRow[] }): JSX.Eleme
             <div key={r.key} className="gm-block-row" data-agent={r.isAgent || undefined}>
               <span className="gm-num gm-block-row__no">{r.no}</span>
               <span className="gm-block-row__name" title={r.name}>{r.name}</span>
-              <span className="gm-block-row__state">{r.isAgent ? '执行体' : 'human'}</span>
+              <span className="gm-block-row__state">{r.isAgent ? '执行体' : '人类'}</span>
               <span className="gm-block-row__role">{r.role}</span>
               <span className="gm-num gm-block-row__num">{r.taskCount}</span>
             </div>

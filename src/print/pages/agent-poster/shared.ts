@@ -170,7 +170,7 @@ export const MEMBER_POSTER_COLUMNS: readonly PosterMemberColumn[] = [
   {
     key: 'agent',
     label: '执行体',
-    en: 'AGENTS',
+    en: 'EXECUTORS',
     tone: 'gate',
     note: '执行体：自动产出的责任方（本页的治理焦点）',
   },

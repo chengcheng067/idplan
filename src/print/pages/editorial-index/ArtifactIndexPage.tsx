@@ -56,7 +56,7 @@ export function ArtifactIndexPage({ entries, compact }: ArtifactIndexPageProps):
       </div>
       {/* 口径注（压到主体底部）：来源口径 + 不打上纸的字段 */}
       <p className="ei-note">
-        口径：来源 = 任务的产生方（human / Agent）；仅列软件真实存在的产出物，
+        口径：来源 = 任务的产生方（人类 / 执行体）；仅列软件真实存在的产出物，
         <strong>本地路径与外链不打上纸</strong>；无产出物的任务不进本清单。
       </p>
     </>

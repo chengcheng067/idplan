@@ -341,9 +341,15 @@ describe('期三+期七 · G2 通用模块内容结构（D/E/H 三套外表同�
     expect(panel.querySelector('.gm-panel__title')!.textContent).toBe('席位与门控');
     expect(panel.querySelector('.gm-panel__big')!.textContent).toBe('01/03');
     expect(panel.querySelector('.gm-panel__gate')!.textContent).toContain('剩余 2 席');
-    // human 行：负责任务数上纸（左栏行尾）
+    // human 行：负责任务数上纸（左栏行尾）+ 类型签右半边（成对钉住，别只钉 agent 半边）
     const humanRow = page.querySelector('.gm-block-row:not([data-agent])');
     expect(humanRow!.querySelector('.gm-block-row__num')!.textContent).toBe('5');
+    expect(humanRow!.querySelector('.gm-block-row__state')!.textContent, '人类行类型签').toBe('人类');
+    const humanStates = Array.from(page.querySelectorAll('.gm-block-row:not([data-agent]) .gm-block-row__state')).map(
+      (el) => (el.textContent ?? '').trim(),
+    );
+    expect(humanStates, '两位人类成员的类型签').toEqual(['人类', '人类']);
+    expect(page.textContent, '左半边 Latin `human` 已消失').not.toContain('human');
     // 空态：无成员 ⇒ 明确空态
     const empty = doc(
       renderDoc('agent-poster', buildVm({ members: [] }), [{ type: 'generic', module: 'member-roster' }]),

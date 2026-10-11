@@ -606,6 +606,76 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       //    执行体签随负责人行走朱红；原 9px 的登记项已清）
       const tagFs = await p1!.$eval('.ei-row__agent-tag', (el) => Number.parseFloat(getComputedStyle(el).fontSize));
       expect(tagFs, '执行体签字号应 ≥9.5px（accent 文字下限）').toBeGreaterThanOrEqual(9.5);
+
+      // ⑧ 类型签「执行体 / 人类」在成员行 92px 定宽列里不溢出、不换行（2026-10-11 team-lead 追问：
+      //    改词把 `human`(5 Latin) 换成 `人类`(2 CJK)，CJK 字宽更大，须实测而非肉眼推断）。
+      //    静态读 CSS 只能证明「没有 width 声明」；能不能换行、撑不撑破列由真实排版决定，
+      //    所以这里量四组硬量：① 计算样式 nowrap ② Range 联合框高度 = 单行高
+      //    ③ 所有 Range 矩形落在同一行带内 ④ 内容实宽 vs 列内容宽（含余量）。
+      //    `rects`（矩形个数）只作账本字段**不作判据** —— 见下方注释里的反例。
+      const kindLedger = await page.evaluate(() => {
+        const rows = Array.from(
+          document.querySelectorAll('.ei-row--member .ei-row__kind'),
+        ) as HTMLElement[];
+        return rows.map((el) => {
+          const s = getComputedStyle(el);
+          const box = el.getBoundingClientRect();
+          const padX = Number.parseFloat(s.paddingLeft) + Number.parseFloat(s.paddingRight);
+          const rng = document.createRange();
+          rng.selectNodeContents(el);
+          const textRect = rng.getBoundingClientRect();
+          const index = el.closest('.ei-index') as HTMLElement | null;
+          return {
+            agent: el.hasAttribute('data-agent'),
+            text: (el.textContent ?? '').trim(),
+            colW: +box.width.toFixed(2), // = 网格轨道宽（92px）
+            contentW: +(box.width - padX).toFixed(2),
+            textW: +textRect.width.toFixed(2),
+            textH: +textRect.height.toFixed(2),
+            lineH: Number.parseFloat(s.lineHeight) || Number.parseFloat(s.fontSize) * 1.2,
+            clientW: el.clientWidth,
+            scrollW: el.scrollWidth,
+            clientH: el.clientHeight,
+            scrollH: el.scrollHeight,
+            rects: rng.getClientRects().length,
+            rectTops: Array.from(rng.getClientRects()).map((r) => +r.top.toFixed(2)),
+            whiteSpace: s.whiteSpace,
+            overflowsIndexRight: index ? +((box.right - index.getBoundingClientRect().right).toFixed(2)) : null,
+          };
+        });
+      });
+      console.log('[E 类型签实测] ' + JSON.stringify(kindLedger));
+      expect(kindLedger.length, '成员页每位成员一枚类型签').toBeGreaterThan(1);
+      const agentKind = kindLedger.find((r) => r.agent)!;
+      const humanKind = kindLedger.find((r) => !r.agent)!;
+      expect(agentKind.text.replace(/\s+/g, ''), '执行体行的类型签 = 字形 + 「执行体」').toBe('◆执行体');
+      expect(humanKind.text.replace(/\s+/g, ''), '人类行的类型签 = 字形 + 「人类」').toBe('○人类');
+      expect(humanKind.text, '改词后左半边的 Latin `human` 已消失（口径：人类 / 执行体 成对）').not.toContain('human');
+      // 变异自证（4 例，各注明「红了哪一条」，证明这些断言是活探针而不是恒绿）：
+      //   ① `.ei-row__kind { width:40px }`      ⇒ 「无横向溢出」红（scrollW 48 > clientW 41）
+      //   ② `.ei-row__kind { white-space:normal }` ⇒ 「nowrap」红
+      //   ③ 收窄 30px（逼出真换行）              ⇒ 「单行高」红（textH 32.5 > 17.5）
+      //   ④ `width:30px + flex-wrap:wrap`（**保持 nowrap**）⇒ 「单行高」红（textH 36）而
+      //      「nowrap」仍绿 ⇒ 横向探针与换行探针**互相独立**，不是同一条断言的两种说法。
+      for (const r of kindLedger) {
+        const who = r.text.replace(/\s+/g, '');
+        expect(r.whiteSpace, `${who}：类型签 nowrap`).toBe('nowrap');
+        // 换行判据一：Range 联合框高度 ≈ 单行高（换行会变成两行高）。
+        expect(r.textH, `${who}：单行高（textH ${r.textH} ≤ lineH ${r.lineH}）`).toBeLessThanOrEqual(r.lineH + 1);
+        // 换行判据二：所有矩形落在同一行带内。实测标定 —— 正常态跨度 0.75px（字形 span 10px
+        //    与文本 11px 在 align-items:center 下的顶差），真换行态跨度 20px（变异④实测），
+        //    故取 lineH/2 ≈ 8.25px 为界：两边各有 ≈11× / 2.4× 余量，不是贴边判据。
+        // ⚠️ 别拿「矩形个数」当换行判据：Range 跨「字形 span + 文本节点」本来就出多个矩形，
+        //    同基线也会 >1 —— 实测正常态 ◆执行体 = 3 个矩形且全在同一行，用它判会假红。
+        const topSpan = Math.max(...r.rectTops) - Math.min(...r.rectTops);
+        expect(topSpan, `${who}：矩形全在同一行带内（跨度 ${topSpan} < 半行高 ${(r.lineH / 2).toFixed(2)}）`).toBeLessThan(r.lineH / 2);
+        expect(r.scrollW, `${who}：无横向溢出`).toBeLessThanOrEqual(r.clientW + 1);
+        expect(r.scrollH, `${who}：无纵向溢出（未换行、未撑高）`).toBeLessThanOrEqual(r.clientH + 1);
+        expect(r.textW, `${who}：内容实宽 ${r.textW} ≤ 列内容宽 ${r.contentW}`).toBeLessThanOrEqual(r.contentW + 0.5);
+        // 「没有 width 声明」的静态结论 → 这里补动态半边：内容实宽必须真的小于列宽（有余量）
+        expect(r.contentW - r.textW, `${who}：列内留有余量（证明 92px 列不是靠临界值撑住）`).toBeGreaterThan(10);
+        expect(r.overflowsIndexRight, `${who}：列右缘不越出 .ei-index 内容框`).toBeLessThanOrEqual(0.5);
+      }
     } finally {
       await page.close();
     }

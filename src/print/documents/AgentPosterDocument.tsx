@@ -130,7 +130,7 @@ const AP_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
   'member-index': { cn: '成员执行体目录', en: 'MEMBER INDEX' },
   'artifact-index': { cn: '产出物清单', en: 'ARTIFACT INDEX' },
   // legacy kind（无渲染器）
-  'agent-declaration': { cn: '执行宣告', en: 'AGENT DECLARATION' },
+  'agent-declaration': { cn: '执行宣告', en: 'EXECUTION DECLARATION' },
   'execution-status': { cn: '执行状态全览', en: 'EXECUTION STATUS' },
   'writeback-proposals': { cn: '写回提案公示', en: 'WRITEBACK PROPOSALS' },
 };

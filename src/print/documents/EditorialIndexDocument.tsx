@@ -88,7 +88,7 @@ const EI_PAGE_TITLES: Record<PrintPageKind, { cn: string; en: string }> = {
   'dependency-network': { cn: '任务依赖网络', en: 'DEPENDENCY NETWORK' },
   'workload-composition': { cn: '阶段工作量构成', en: 'WORKLOAD COMPOSITION' },
   'milestone-acceptance': { cn: '里程碑与验收', en: 'MILESTONE & ACCEPTANCE' },
-  'agent-declaration': { cn: '执行宣告', en: 'AGENT DECLARATION' },
+  'agent-declaration': { cn: '执行宣告', en: 'EXECUTION DECLARATION' },
   'execution-status': { cn: '执行状态全览', en: 'EXECUTION STATUS' },
   'writeback-proposals': { cn: '写回提案公示', en: 'WRITEBACK PROPOSALS' },
 };

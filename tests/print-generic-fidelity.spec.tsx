@@ -256,6 +256,18 @@ describe('期七 · F3 E×M2 巨编号降级 mono', () => {
     const d4 = doc(renderDoc('editorial-index', vm, genericSheet('member-roster')));
     const no4 = d4.querySelector('.gm-grid__no')!;
     expect(no4.classList.contains('gm-grid__no--mono'), 'E×M4 不应降级').toBe(false);
+    // 类型签成对：改词把 Latin `human` 换成 `人类`，右半边必须钉住，
+    // 否则「执行体 / 人类」这对双编码会退化成半边（只钉 agent 半边是漏网）。
+    const kind4 = Array.from(d4.querySelectorAll('.gm-grid__row--member')).map((row) => ({
+      agent: row.hasAttribute('data-agent'),
+      state: (row.querySelector('.gm-grid__state')!.textContent ?? '').trim(),
+    }));
+    expect(kind4.find((r) => r.agent)?.state, '执行体行的类型签').toBe('执行体');
+    expect(kind4.filter((r) => !r.agent).map((r) => r.state), '人类行的类型签').toEqual([
+      '人类',
+      '人类',
+    ]);
+    expect(kind4.every((r) => !r.state.includes('human')), '左半边 Latin `human` 已消失').toBe(true);
   });
 
   it('E×M1 按状态分章（进行中→延期→未开始→已完成）；章头带计数', () => {

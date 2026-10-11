@@ -48,7 +48,7 @@ export function MemberIndexPage({ vm, entries, compact }: MemberIndexPageProps):
       {/* 口径注（压到主体底部）：责任数口径 + agentKind 开放字符串纪律 */}
       <p className="ei-note">
         口径：负责任务数 = 被指派 + 本人产出的可见阶段任务数（执行体常见「产出者不在指派人里」）；
-        <strong>agentKind 为开放字符串，未知值原样显示</strong>，不收敛枚举。
+        <strong>执行体类型为开放字符串，未知值原样显示</strong>，不收敛枚举。
       </p>
     </>
   );
@@ -91,7 +91,7 @@ function MemberRow({ member, index }: { member: PrintMemberVM; index: number }):
         <span className="ei-row__glyph" aria-hidden>
           {isAgent ? '◆' : '○'}
         </span>
-        {isAgent ? '执行体' : 'human'}
+        {isAgent ? '执行体' : '人类'}
       </span>
       <span className="ei-row__role">{member.role}</span>
       {/* agentKind 开放字符串：未知值原样显示，不收敛枚举（01 §3.2） */}

@@ -62,7 +62,7 @@ export function stampOf(iso: string): string {
 
 /** 任务来源标签（TaskSource 二值：human / agent；01 §3.2） */
 export function taskSourceLabel(source: 'human' | 'agent'): string {
-  return source === 'agent' ? '执行体' : 'human';
+  return source === 'agent' ? '执行体' : '人类';
 }
 
 /* ------------------------------------------------------------------ 长列表分页 */
