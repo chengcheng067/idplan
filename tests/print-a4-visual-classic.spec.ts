@@ -52,6 +52,7 @@ import {
   TaskStatus,
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -89,11 +90,7 @@ const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 拼接全部构建产物 CSS（Tailwind 工具类 + 主题令牌 + 亮色锁都在里面） */
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /* ------------------------------------------------------------------ 夹具（真实形状） */

@@ -58,6 +58,7 @@ import {
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, StageLog, Task } from '../src/core/types/entities';
 import { createElement } from 'react';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -95,11 +96,7 @@ const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 拼接全部构建产物 CSS（E 版样式 + 亮色锁 + 主题令牌都在里面） */
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /* ------------------------------------------------------------------ 夹具（真实形状） */

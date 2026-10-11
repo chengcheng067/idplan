@@ -31,6 +31,7 @@ import { createElement } from 'react';
 
 import { PrintSelectorPanel } from '../src/components/print/PrintPreviewDialog';
 import { printTemplateModuleIds } from '../src/components/print/print-templates';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -68,11 +69,7 @@ const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 拼接全部构建产物 CSS（Tailwind 工具类 + 主题令牌都在里面） */
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /** 弹窗 markup（A 外表 + 全选原生模块）；缩略图 src 改写成 file:// 可加载的相对路径 */

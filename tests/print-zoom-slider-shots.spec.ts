@@ -23,6 +23,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 
 import { PrintZoomControls } from '../src/components/print/PrintPreviewDialog';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -60,11 +61,7 @@ const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 拼接全部构建产物 CSS（Tailwind 工具类 + 主题令牌都在里面） */
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /** 工具条外壳（照 PrintPreviewDialog 工具条的类；缩放控件是主角，其余从简） */

@@ -43,6 +43,7 @@ import {
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 import { createElement } from 'react';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -79,11 +80,7 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /**

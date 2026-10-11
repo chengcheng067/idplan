@@ -44,6 +44,7 @@ import type {
   PrintViewModel,
 } from '../src/print/model/print-view-model';
 import { MemberActorKind, MemberRoleKind, StageStatus, TaskStatus } from '../src/core/types/enums';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -80,11 +81,7 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /* ------------------------------------------------------------------ 夹具（VM 字面量） */

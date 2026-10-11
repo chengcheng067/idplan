@@ -21,11 +21,13 @@
  * 前置：`npm run build --outDir build-dist`（产物在 build-dist/）与本机
  * chromium；缺任一则整组 skip（与 print-a4-visual.spec.ts 同口径）。
  *
- * ⚠️ **构建产物必须先清空**：`vite.config.ts` 是 `emptyOutDir: false`（沙箱
- * 环境的删除 shim 会 ETIMEDOUT），`builtCss()` 又是「assets 下所有 .css 拼起来」
- * ⇒ 上一轮的哈希 CSS 会留在目录里、**排在后面**，把同一选择器的规则覆盖回旧值
- * （2026-10-11 实测踩到：compact 轨道被旧文件的 6px 规则盖掉）。跑之前
- * `rm -rf build-dist && npx vite build --outDir build-dist`。
+ * ⚠️ 构建产物残留（2026-10-11 已治本，此处保留来龙去脉）：`vite.config.ts` 是
+ * `emptyOutDir: false`（沙箱环境的删除 shim 会 ETIMEDOUT，见那里的注释），
+ * 所以上一轮的哈希 CSS 会留在 `build-dist/assets/` 里。历史上 `builtCss()` 是
+ * 「assets 下所有 .css 拼起来」，旧文件排在后面时会把同一选择器的规则覆盖回旧值
+ * （实测踩到：compact 轨道被旧文件的 6px 规则盖掉；E 版巨字 92→79px 静默全绿）。
+ * 现在 `builtCss()` 收敛到 `tests/helpers/built-css.ts`：**只读 index.html 引用的
+ * 那几份**，并对残留 CSS loud fail。故不再要求跑前手工 `rm -rf build-dist`。
  *
  * ── 2026-10-11 P0-7~P0-11（批次 5 · D 骨架重做）后的断言迁移 ──
  * `.de-matrix__date` / `.de-matrix thead th` / `.de-stats`（页头 4 宫格 KPI 带）
@@ -59,6 +61,7 @@ import {
 import type { Member, Project, Stage, StageLog, Task } from '../src/core/types/entities';
 import type { PrintStageVM } from '../src/print/model/print-view-model';
 import { createElement } from 'react';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -96,11 +99,7 @@ const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 拼接全部构建产物 CSS（D 版样式 + 亮色锁 + 主题令牌都在里面） */
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /* ------------------------------------------------------------------ 夹具（真实形状） */

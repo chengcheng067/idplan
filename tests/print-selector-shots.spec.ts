@@ -30,6 +30,7 @@ import { createElement } from 'react';
 import { PrintModuleSection } from '../src/components/print/PrintPreviewDialog';
 import { printTemplateDefaultModuleIds } from '../src/components/print/print-templates';
 import type { PrintTemplateId } from '../src/components/print/print-templates';
+import { builtCss as readBuiltCss } from './helpers/built-css';
 
 /* ------------------------------------------------------------------ 前置探测 */
 
@@ -67,11 +68,7 @@ const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 拼接全部构建产物 CSS（Tailwind 工具类 + 主题令牌都在里面） */
 function builtCss(): string {
-  const assets = join(ROOT, 'build-dist', 'assets');
-  return readdirSync(assets)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(join(assets, f), 'utf-8'))
-    .join('\n');
+  return readBuiltCss(ROOT);
 }
 
 /* ------------------------------------------------------------------ 四套外表 */
