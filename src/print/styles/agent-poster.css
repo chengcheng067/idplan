@@ -66,6 +66,17 @@
   --ap-font-mono: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
   /* 版心内缩（页头/logo 行/页脚共用） */
   --ap-pad-x: 44px;
+  /* 页底巨字**墨迹带**的让位量（规格 P0-23 / §1.1 B3 实测墨迹 y1004..1113）。
+     巨字是页级装饰装置（绝对定位、不占流），正文流不让位它就会压字：
+     实测页脚底线 1123、墨迹顶 1004 ⇒ 重叠 29px。让位后页脚底线 =
+     1123 − 129 = **994**，距墨迹顶留 **10px** 呼吸（规格要求 8–12px）。
+     落点选 `.ap-foot` 的 margin-bottom 而非 `.ap-page` 的 padding-bottom：
+     后者会把**绝对定位子元素的包含块**从 border-box 缩到 padding-box，
+     `.ap-footword { bottom: 0 }` 会跟着上移 129px、直接毁掉页底出血。
+     ⚠️ 人类化批次 P1 会整块删掉 `.ap-foot`（规格 §1.3 行 181：参考稿无品牌
+     页脚带）——删的时候**必须把这个让位量搬到正文流上**（如 `.ap-body`
+     的 margin-bottom），否则正文会重新压到巨字。 */
+  --ap-footword-reserve: 129px;
 }
 
 /* ── 纸面：暖灰米（#DEDDD4）海报；overflow hidden 承载出血巨字（裁切在纸缘）──
@@ -187,7 +198,9 @@
 }
 
 .print-root.print-template-agent-poster .ap-foot {
-  margin: 0 var(--ap-pad-x);
+  /* P0-23：让出页底巨字墨迹带，否则页脚压在 IDPLAN 上（实测重叠 29px）。
+     见 --ap-footword-reserve 的推导。 */
+  margin: 0 var(--ap-pad-x) var(--ap-footword-reserve);
   height: 40px;
   display: flex;
   align-items: center;

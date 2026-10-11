@@ -819,12 +819,49 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
           tier: (t.closest('[data-tier]') as HTMLElement | null)?.dataset.tier ?? null,
         };
       };
+      /**
+       * 元素内文字的**真实墨迹**矩形（在页内用字体度量算，不抄实现里的系数）。
+       *
+       * 为什么不能只断元素矩形：巨字的**行盒**比墨迹高一圈（上有多余行距、
+       * 下有过冲），行盒相交 ≠ 墨迹相交。P0-23 要守的是「页脚压到看得见的字」，
+       * 判据必须落在墨迹上。算法：半行距 + 字体上下度量 ⇒ 基线，基线 ∓ 实际
+       * 墨迹上下缘 ⇒ 墨迹矩形。
+       *
+       * 自证：调用方会拿它去复核「页底 IDPLAN 墨迹 ≈ y1004..1113」（规格 §1.1 B3
+       * 的原稿实测值）——若 canvas 与 DOM 解出了不同字体，这条会先红，不会静默。
+       */
+      const inkOf = (sel: string) => {
+        const t = el.querySelector(sel) as HTMLElement | null;
+        if (!t) return null;
+        const r = t.getBoundingClientRect();
+        const s = getComputedStyle(t);
+        const cv = document.createElement('canvas').getContext('2d')!;
+        cv.font = `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+        const mt = cv.measureText((t.textContent ?? '').trim());
+        const fs = Number.parseFloat(s.fontSize);
+        const lh = s.lineHeight === 'normal' ? fs * 1.2 : Number.parseFloat(s.lineHeight);
+        const baseline =
+          r.top -
+          pg.top +
+          (lh - (mt.fontBoundingBoxAscent + mt.fontBoundingBoxDescent)) / 2 +
+          mt.fontBoundingBoxAscent;
+        return {
+          top: +(baseline - mt.actualBoundingBoxAscent).toFixed(2),
+          bottom: +(baseline + mt.actualBoundingBoxDescent).toFixed(2),
+          baseline: +baseline.toFixed(2),
+          fs,
+        };
+      };
       return {
         page: { w: +pg.width.toFixed(2), h: +pg.height.toFixed(2) },
+        head: box('.ap-head'),
         giant: box('.ap-giant'),
         word: box('.ap-giant__word'),
+        wordInk: inkOf('.ap-giant__word'),
         foot: box('.ap-footword'),
         footWord: box('.ap-footword__word'),
+        footWordInk: inkOf('.ap-footword__word'),
+        footRow: box('.ap-foot'),
       };
     };
 
@@ -862,6 +899,21 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
       expect(m.footWord!.text, '页底巨字 = 固定品牌装置 IDPLAN').toBe('IDPLAN');
       expect(m.footWord!.tt).toBe('uppercase');
       expect(m.footWord!.color, '页底巨字同为身份色').toBe(hexRgb(baseline.accent));
+
+      // ── P0-23：页脚不得压在页底巨字上（本批新引入装置造成的缺陷）──
+      // 自证 ①：墨迹量法与规格 §1.1 B3 的原稿实测值对齐（页底 IDPLAN y1004..1113）
+      // 若 canvas 与 DOM 解出了不同字体，这两条会先红 —— 不会静默放行
+      expect(m.footWordInk!.top, 'IDPLAN 墨迹顶须复现原稿实测 y≈1004').toBeGreaterThan(1000);
+      expect(m.footWordInk!.top, 'IDPLAN 墨迹顶须复现原稿实测 y≈1004').toBeLessThan(1008);
+      expect(m.footWordInk!.bottom, 'IDPLAN 墨迹底须复现原稿实测 y≈1113').toBeGreaterThan(1109);
+      expect(m.footWordInk!.bottom, 'IDPLAN 墨迹底须复现原稿实测 y≈1113').toBeLessThan(1117);
+      // 自证 ②：页脚与巨字墨迹**不相交**，且留 8–12px 呼吸（规格 P0-23 验收判据）
+      expect(m.footRow!.bottom, '页脚底线须在巨字墨迹之上（改前实测重叠 29px）').toBeLessThan(
+        m.footWordInk!.top,
+      );
+      const breath = +(m.footWordInk!.top - m.footRow!.bottom).toFixed(2);
+      expect(breath, '页脚↔巨字墨迹呼吸须 8–12px').toBeGreaterThanOrEqual(8);
+      expect(breath, '页脚↔巨字墨迹呼吸须 8–12px').toBeLessThanOrEqual(12);
 
       await p1.screenshot({ path: join(dir, 'h-p1-after.png') });
 
@@ -905,8 +957,11 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
 
       console.log(
         `[H 巨字实测] 默认 left=${m.word!.left} right=${m.word!.right} fs=${m.word!.fs}` +
-          `(${m.word!.tier}) 越顶=${m.word!.top}｜页底 left=${m.footWord!.left}` +
-          ` right=${m.footWord!.right} 越底=${m.footWord!.bottom}｜` +
+          `(${m.word!.tier}) 越顶=${m.word!.top} 顶墨迹=${m.wordInk!.top}..${m.wordInk!.bottom}｜` +
+          `页底 left=${m.footWord!.left} right=${m.footWord!.right} 越底=${m.footWord!.bottom}` +
+          ` 底墨迹=${m.footWordInk!.top}..${m.footWordInk!.bottom}｜` +
+          `P0-23 页脚底线=${m.footRow!.bottom} 呼吸=${breath}px｜` +
+          `页头框 ${m.head!.top}..${m.head!.bottom}（顶巨字墨迹 ${m.wordInk!.top}..${m.wordInk!.bottom}）｜` +
           `自定义 right=${m2.word!.right}(${m2.word!.tier})｜长词 right=${m3.word!.right}(${m3.word!.tier})`,
       );
     } finally {
