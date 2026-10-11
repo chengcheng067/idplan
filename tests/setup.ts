@@ -10,6 +10,8 @@
 import { indexedDB as fakeIndexedDB, IDBKeyRange as FakeIDBKeyRange } from 'fake-indexeddb';
 import { afterEach } from 'vitest';
 
+import { resetOverlayStack } from '../src/core/overlay/overlayStack';
+
 const g = globalThis as unknown as Record<string, unknown>;
 if (g.indexedDB === undefined) {
   g.indexedDB = fakeIndexedDB;
@@ -66,6 +68,25 @@ if (g.IS_REACT_ACT_ENVIRONMENT !== true) {
 if (typeof afterEach === 'function' && typeof document !== 'undefined') {
   afterEach(() => {
     document.body.innerHTML = '';
+  });
+}
+
+/**
+ * ★ 2026-10-12：浮层栈的进程级复位 —— 与上面那条 DOM 清理**同源同因**，必须成对存在。
+ *
+ * 上面那条把 `document.body` 清空的写法有个副作用：它摘掉 DOM 却**不 unmount React
+ * 树**，于是 Modal 的 open effect 的 cleanup（`popOverlay`）**不会跑** —— 而
+ * `pool: 'threads' + singleThread: true` 让全部 spec 共用一个进程，浮层栈是
+ * **模块级单例**。残留的栈条目会让下一个 spec 里 `isTopOverlay(myId)` 判成 false：
+ *   · Esc 关不掉本该关的那一层（表现是「Esc 没反应」）；
+ *   · `isRailYielded()` 被上一个 spec 的浮层带偏（侧栏层级错）。
+ * 这正是本仓已出过三次的「单跑绿 / 全量红」，且报错指向无辜的下游 spec。
+ * 清理点选在这里而不是让每个 spec 自己收：理由与 DOM 清理逐字相同 ——
+ * 依赖「每个 spec 作者记得清理」迟早复发，而清理本身零成本零副作用。
+ */
+if (typeof afterEach === 'function') {
+  afterEach(() => {
+    resetOverlayStack();
   });
 }
 

@@ -199,9 +199,16 @@ function seedStores(): void {
 let container: HTMLDivElement;
 let root: Root;
 
-function renderDialog(open: boolean): void {
+/**
+ * 挂上预览对话框。
+ *
+ * `onClose` 可选（2026-10-12 · F3 浮层栈）：预览的 `open` 由本 spec 的入参控制、
+ * 不是自持 state，所以「Esc 打到预览身上了吗」**不能**靠 DOM 消失来观察 ——
+ * 得从 onClose 被调用这件事上看。默认仍是空实现，既有调用点零改动。
+ */
+function renderDialog(open: boolean, onClose: () => void = () => {}): void {
   act(() => {
-    root.render(<PrintPreviewDialog projectId={PROJECT_ID} open={open} onClose={() => {}} />);
+    root.render(<PrintPreviewDialog projectId={PROJECT_ID} open={open} onClose={onClose} />);
   });
 }
 
@@ -1019,7 +1026,11 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
   }
 
   it('Esc 关闭（纯关闭：勾选态已生效，无需应用）', () => {
-    renderDialog(true);
+    // 预览的 open 由本 spec 控制（不入 state），故用计数观察「Esc 有没有打到预览身上」
+    let previewCloseCalls = 0;
+    renderDialog(true, () => {
+      previewCloseCalls += 1;
+    });
     openSelector();
     pickTemplate('swiss-schedule');
     // 关掉一个模块（即时生效）
@@ -1031,6 +1042,33 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     });
     settleExit('Esc');
     expect(document.querySelector('[data-print-selector-panel]'), 'Esc 后面板应消失').toBeNull();
+    /*
+     * ★ 2026-10-12 · F3 补强的**下半句**：Esc 只该关掉栈顶（选择器），
+     *   底下那层（打印预览）必须还活着。
+     *
+     * 修前本用例只有上面那一行断言 —— 而修前的 Modal 是「谁 open 谁响应 Esc」，
+     * 一次按键把**两层一起关掉**，上面那行照样绿。也就是说：这条用例在修复前
+     * 全量全绿，却完全测不出它名字里承诺的那件事（真实事故形态：「打印预览里
+     * 开模板选择器，按一次 Esc 预览也一起没了」）。
+     * 现在起，缺了下层存活的证据就不算关对了 —— 单独断言「选择器没了」是分不清
+     * 「关对了」与「整摞一起塌了」的。
+     */
+    expect(
+      document.querySelector('[role="dialog"][aria-label="打印预览"]'),
+      'Esc 只应关掉栈顶：下层的打印预览必须仍存活',
+    ).not.toBeNull();
+    expect(previewCloseCalls, '第一次 Esc 不该打到预览身上').toBe(0);
+
+    /*
+     * 再按一次 Esc：选择器已退场，预览成为栈顶 ⇒ 这次才轮到它。
+     * 预览的 open 是外部入参（不因 onClose 而变），所以"关了没"由 onClose 计数证明，
+     * 而不是看 DOM —— 这条正是「栈顶判定随出栈而转移」的证据。
+     */
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(previewCloseCalls, '第二次 Esc 才轮到下层（栈顶随出栈转移到预览）').toBe(1);
+
     // 关闭后纸面仍是改过的勾选态（即时重渲染，无待确认）
     expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toEqual([
       'stage-list',

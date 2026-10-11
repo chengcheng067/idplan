@@ -25,9 +25,15 @@ describe('打印内置化 A 方案 · 规范 §7.5 验收', () => {
   it('① Modal fullscreen = z-[75]（高于 center/right 档；Toast-80 侧由 toast-above-modal.spec 钉）', () => {
     const modal = read('src/components/common/Modal.tsx');
     // 期六重构：z 档类名收进 OVERLAY_Z_CLASS 静态映射（overlayZClass），
-    // 断言跟着改为「映射表里有 75 且 fullscreen 分支引用它」——语义不变
+    // 断言跟着改为「映射表里有 75 且 fullscreen 分支引用它」——语义不变。
+    // 2026-10-12 · F3 浮层栈接线：placement→档位 的映射从 overlayZClass 里的
+    // if 分支**上移成唯一一张表** `PLACEMENT_TIER`（类名面由它查表得出）。
+    // 语义零变化，只是断言从「分支里写了 75」改成「表里写了 75 且类名由表查得」——
+    // 动因是浮层栈需要**数值**比大小判栈顶，而从前只有类名一条路，再配一张数值表
+    // 就是两份真相、会静默漂移。下两条是同一条不变量的新写法。
     expect(modal).toContain("75: 'z-[75]'");
-    expect(modal).toContain("if (placement === 'fullscreen' || placement === 'dropdown') return OVERLAY_Z_CLASS[75];");
+    expect(modal).toContain('fullscreen: 75,');
+    expect(modal).toContain('return OVERLAY_Z_CLASS[overlayTier(placement, zTier)];');
     expect(modal).toContain("placement === 'fullscreen'");
     // 期六新增 78 档（选择器弹窗盖 fullscreen 预览、低于 toast 80）
     expect(modal).toContain("78: 'z-[78]'");

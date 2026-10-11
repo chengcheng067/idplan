@@ -4,6 +4,13 @@ import { createPortal } from 'react-dom';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { resolveAnchoredPosition, type Point } from '../../lib/anchoredPosition';
 import { usePresence } from '../../hooks/usePresence';
+import {
+  CHROME_OVERLAY_TIER,
+  isTopOverlay,
+  popOverlay,
+  pushOverlay,
+  type OverlayTier,
+} from '../../core/overlay/overlayStack';
 
 type ModalPlacement =
   | 'center'
@@ -18,12 +25,41 @@ type ModalPlacement =
 /**
  * 遮罩 z 档 → 类名**静态映射**（纪律同 print-templates：不许拿档位数字拼类名——
  * 模板串拼出来的类名不进 Tailwind 的 JIT 内容扫描，会静默丢样式）。
+ *
+ * 79 档（team-lead 2026-10-12 裁决 A/B · F2）：**顶栏 chrome 的自持浮层**
+ * （身份菜单 / ⋮ 面板）专用。chrome 是常驻界面的一部分，任何时候都该压在内容
+ * 浮层之上；78 已被**内容**浮层（打印选择器）占用，挤在一起又会退化成「谁后开
+ * 谁赢」。78 与 toast 之间正好空着一级，落在这一级语义自洽：chrome 在内容之上、
+ * 反馈在一切之上。消费方见 `CHROME_OVERLAY_Z_CLASS`。
  */
-const OVERLAY_Z_CLASS: Record<60 | 70 | 75 | 78, string> = {
+const OVERLAY_Z_CLASS: Record<60 | 70 | 75 | 78 | 79, string> = {
   60: 'z-[60]',
   70: 'z-[70]',
   75: 'z-[75]',
   78: 'z-[78]',
+  79: 'z-[79]',
+};
+
+/**
+ * placement → 档位数值。**唯一映射表**：类名面由它查 {@link OVERLAY_Z_CLASS} 得出。
+ *
+ * ★ 为什么把「档位」与「类名」拆成两步（2026-10-12 · F3 浮层栈接线）：
+ *   浮层栈要靠**数值**比大小判栈顶（`topOverlayOf` 取 tier 最大者），而渲染要靠
+ *   **类名**。从前只有类名这一条路（`return OVERLAY_Z_CLASS[75]`），栈就只能
+ *   另配一份「placement → 数值」的表——两份表迟早漂移，而且是**静默**漂移：
+ *   类名改了、数值没改，界面照旧、Esc 关错层，没人看得出来。
+ *   现在数值是唯一真相、类名是它的查表结果，物理上不可能不一致。
+ *   ⚠️ 新增档位只加这里 + 上面那张类名表，别在别处再写一遍数字。
+ */
+const PLACEMENT_TIER: Record<ModalPlacement, 60 | 70 | 75> = {
+  center: 70,
+  fullscreen: 75,
+  dropdown: 75,
+  right: 60,
+  left: 60,
+  'left-rail': 60,
+  'right-float': 60,
+  float: 60,
 };
 
 /**
@@ -36,12 +72,22 @@ const OVERLAY_Z_CLASS: Record<60 | 70 | 75 | 78, string> = {
  * （注释里不写 toast 档位的类名面——JIT 连注释都扫，且层级 spec 以源码
  * 数值比较守「toast 高于一切 Modal」，多一个字面量就多一分误判。）
  */
-function overlayZClass(placement: ModalPlacement, zTier?: 60 | 70 | 75 | 78): string {
-  if (zTier !== undefined) return OVERLAY_Z_CLASS[zTier];
-  if (placement === 'center') return OVERLAY_Z_CLASS[70];
-  if (placement === 'fullscreen' || placement === 'dropdown') return OVERLAY_Z_CLASS[75];
-  return OVERLAY_Z_CLASS[60];
+function overlayTier(placement: ModalPlacement, zTier?: 60 | 70 | 75 | 78): OverlayTier {
+  return zTier ?? PLACEMENT_TIER[placement];
 }
+
+function overlayZClass(placement: ModalPlacement, zTier?: 60 | 70 | 75 | 78): string {
+  return OVERLAY_Z_CLASS[overlayTier(placement, zTier)];
+}
+
+/**
+ * 顶栏 chrome 自持浮层的 z 类名（身份菜单 / ⋮ 面板）。
+ *
+ * **必须由这里出**，不要在顶栏组件里自己写一个类名：那样就把「chrome 高于内容浮层」
+ * 这条规则复制成了两份，下次调档位只会改到一份。本常量是 {@link OVERLAY_Z_CLASS}
+ * 的查表结果（不是拼字符串），静态映射纪律照旧（JIT 扫得到 79 这个字面量）。
+ */
+export const CHROME_OVERLAY_Z_CLASS: string = OVERLAY_Z_CLASS[CHROME_OVERLAY_TIER];
 
 /**
  * placement → 出口动画类名（定义层六组 `*-out` 里属于本档的那一个）。
@@ -159,6 +205,21 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
 
+    /*
+     * 上栈。**必须与下面的 cleanup 严格配对** —— 栈条目就是「这一层还在场」的定义。
+     * 用渲染期刷新的 ref 取入栈参数（而不是把 placement / zTier 塞进依赖数组）：
+     * 本 effect 的 `[open]` 依赖是 IME 吞字的修因（见尾部注释），加参数进去会让
+     * 父组件重渲染时多跑一次「焦点还原 + 重新聚焦面板」，重新引入吞字。
+     * 这三个值在本仓不会在打开期间变化，取打开那一刻的快照即正确。
+     */
+    const overlayId = pushOverlay({
+      tier: overlayTier(placement, zTier),
+      kind: 'content',
+      // 「让出侧栏」只对这两档成立（left-rail 设置抽屉 / 传了 railLeft 的打印预览），
+      // 与下方遮罩左缘的几何判定同源（见 render 里的 style）。
+      railExempt: placement === 'left-rail' || (placement === 'fullscreen' && railLeft !== undefined),
+    });
+
     // 记录打开前的焦点元素，关闭后还原。
     lastFocusRef.current = document.activeElement as HTMLElement | null;
     // 打开后聚焦面板（保证 Tab 循环起始点 + 可读屏聚焦）。
@@ -166,7 +227,17 @@ export function Modal({
 
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
-        onCloseRef.current();
+        /*
+         * ★ F3：**只有栈顶那一层响应 Esc**。
+         *
+         * 修前这里是无条件的 `onCloseRef.current()` —— 每个 open 的 Modal 都挂了
+         * 一个 document keydown，于是「设置抽屉里开确认框按 Esc」把两层一起关掉，
+         * 「打印预览里开模板选择器按 Esc」把预览一起关掉。用户只按了一下。
+         *
+         * 判定放到事件**当下**现读（普通函数，不是 hook）：Esc 是事件时刻的问题，
+         * 不需要为了知道「我是不是栈顶」而让每层 Modal 在别人开合时重渲染。
+         */
+        if (isTopOverlay(overlayId)) onCloseRef.current();
         return;
       }
       // 焦点圈禁：Tab / Shift+Tab 在面板内循环。
@@ -202,6 +273,7 @@ export function Modal({
 
     return () => {
       document.removeEventListener('keydown', onKey);
+      popOverlay(overlayId);
       document.body.style.overflow = prevOverflow;
       document.body.style.paddingRight = prevPaddingRight;
       // 关闭后把焦点还原给触发元素。
