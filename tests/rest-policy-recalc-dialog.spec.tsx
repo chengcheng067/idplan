@@ -14,6 +14,8 @@
  *   ⑦ **预览与应用同一结果**：apply 消费弹窗内同一份 plan——写入库的起止
  *      与 diff 表展示的新起止逐字节一致；
  *   ⑧ 取消 → 零写入。
+ *   ⑨ **重试幂等（F1-④-c）**：部分失败 → 修好 → 重试 与 一次全成功，最终库状态与流水
+ *      逐字段全等（含「恰好一次写入 / 恰好一条留痕」，防重复改期与日期漂移）。
  *
  * ── ★ 变异自证纪律（全队共识，写在这里免得下次又踩）──
  * 「改坏源码，用例却没红」**不等于**代码没问题 —— 很可能是**夹具让两种实现算出同一结果**。
@@ -99,6 +101,8 @@ vi.mock('../src/hooks/useRepos', () => ({
       listStageLogsByStage: async () => [],
     },
     projects: {
+      // F1-④-c：幂等闸门要先读当前库值再决定写不写 —— mock 必须实现接口里的 get
+      get: async (id: string) => h.projects.get(id) ?? null,
       update: async (id: string, cmd: Partial<Project>) => {
         const prev = h.projects.get(id)!;
         const next = { ...prev, ...cmd } as Project;
@@ -107,6 +111,8 @@ vi.mock('../src/hooks/useRepos', () => ({
       },
     },
     tasks: {
+      // 同上：缺 get 会让幂等闸门抛错、被逐条 catch 吞成「写入失败」（本 spec 真踩过）
+      get: async (id: string) => h.tasks.get(id) ?? null,
       update: async (id: string, cmd: Partial<Task>) => {
         const prev = h.tasks.get(id)!;
         const next = { ...prev, ...cmd } as Task;
@@ -560,98 +566,173 @@ describe('确认应用：制度落库 + 逐阶段留痕（预览与应用同一�
   });
 
   /*
-    ══════════════ F1-④-b 「重试会不会给已成功阶段重复改期」判定用例 ══════════════
+    ══════════════ F1-④-c 幂等性判定（team-lead 定的验收性质） ══════════════
 
-    【team-lead 指派】就 F1-④ 后续的两种说法做一次**判定性实测**：
-      · team-lead 的说法：重试时已成功阶段会被 `if (!sp.changed) continue;`（:86）
-        挡住 ⇒ 不会再 append，流水恒 1 条 ⇒ 我原报告的「重复流水」担心不成立；
-      · 我原先的说法：会被再 append 一条 ⇒ 流水 2 条。
+    【性质】**重试必须幂等**：
+      路径 A：第一次部分失败（第 2 条 `reschedule` 抛错）→ 修掉错误源 → 重试 → 成功
+      路径 B：第一次就全部成功
+      断言：两条路径结束时的**最终库状态与流水逐字段完全一致**。
+    这比「S3 恰好等于 09-24~09-26」更强 —— 后者钉一个具体答案，前者钉一个**性质**；
+    将来谁改了重算算法，只要破坏幂等就会红。
 
-    【实测结论：两种说法都不完整 —— 真实情况比两者都糟】
-      轮 1（S2 写失败、S3 写成功）：
-        · S2 未被改动（写失败），无流水；S3 被正确改到**用户批准的那份** 09-24~09-26，流水 1 条。
-      重试（修好写入源后再点确认）：
-        · S2 补上了 09-21~09-23 ✓（这部分是好的）；
-        · **S3 被二次改期**：reschedule 调用 2 次、Rescheduled 流水 **2 条**
-          —— 所以 team-lead 的 `!sp.changed` 拦截**没有生效**；
-        · **而且落库值漂移成 09-24~09-25**（末段少一天），**不再是用户批准的那份**
-          —— 所以「重复流水」还不是最严重的，真正的问题是**重试把已经写对的阶段改错了**。
+    【为什么需要这两条实现（缺一不可）】
+      ① 弹窗侧把确认那一刻的 plan **冻结成已批准快照**（`approvedPlan`），重试复用它；
+      ② `applyRestPolicyRecalc` 落库前与**当前库值**比一次，已一致就跳过。
+      只做①：回放同一份 plan 会把已写对的阶段再写一遍、**再 append 一条流水**；
+      只做②：plan 本身已经漂了（见下），比的是「基于漂移后计划」算出的目标。
 
-    【为什么 `!sp.changed` 拦不住】`planProject` 的链游标 `prev.oldEndAt` 取的是
-      **当前库值**（restPolicyRecalc.ts:285，`oldEndAt` 来自 `stage.endAt`）：
-        · S2 写失败 ⇒ 库值仍是旧 end（09-25）；
-        · S3 已改到新日期（09-24~09-26），其 `oldStartAt` 变成 09-24 ⇒ 09-24 <= 09-25
-          ⇒ `chainSteps` 塌成 1 步（:153）⇒ S3 的 newStart 被重算成 09-24（与当前相同，
-          但 newEnd 不同）⇒ `changed === true` ⇒ 拦不住；
-        · 更根本的是**工期被重新计量**：`workdays = countWorkdays(当前起止, 旧制度)`（:236）。
-          S3 已在新制度日期上（09-24~09-26），再按**旧制度（双休）**去数是 2 个工作日，
-          而原始 09-28~09-30 按旧制度数是 3 ⇒ 每重试一次工期就少一天 ⇒ 日期持续漂移。
+    ── ★ 机理留痕：为什么「靠 `!sp.changed` 拦住重试」不成立（误判典型，下一个人别再踩）──
+      直觉：上一轮已成功改期的阶段，其当前日期已等于目标 ⇒ 应判 `changed === false`
+      ⇒ 被 `if (!sp.changed) continue;` 跳过、流水恒 1 条。
+      **实测三种夹具形状全都不成立**（S3 紧邻间隙 / 远后 / 跨两周）：
+        · 链游标 `prev.oldEndAt` 取的是**当前库值**（restPolicyRecalc.ts:285 的 `oldEndAt`
+          来自 `stage.endAt`）。F1-④-b 现场：S2 写失败 ⇒ 库值仍是旧 end 09-25；而 S3 已迁到
+          新日期 09-24~09-26，其 `oldStartAt` 落到旧 end 之前 ⇒ `09-24 <= 09-25`
+          ⇒ `chainSteps` 在 restPolicyRecalc.ts:153 **塌成 1 步** ⇒ S3 的 newStart 重算后与当前
+          相同、**但 newEnd 不同** ⇒ `changed === true` ⇒ 拦不住；
+        · 更根本的是**工期被重新计量**：`workdays` 恒按 `countWorkdays(当前起止, 旧制度)` 现算
+          （restPolicyRecalc.ts:236）。S3 已在**新制度**日期上（09-24~09-26），再按**旧制度**
+          （双休）去数只剩 2 个工作日（09-26 周六），而原始 09-28~09-30 是 3
+          ⇒ 每重试一次工期就少一截、日期**持续漂移、不收敛**。
+      实测原缺陷（F1-④-c 修复前）：S3 被二次改期（reschedule 2 次、流水 2 条），
+      且落库值从用户批准的 09-24~09-26 漂成 **09-24~09-25**（末段少一天）。
+      纯函数层隔离复现（与 UI/仓储无关）：把 S3 换成 ① 算出的目标 09-24~09-26，
+      `planRestPolicyRecalc` 给出 `09-24~09-26 → 09-24~09-25`、`workdays 3→2`、
+      `changed` 仍为 true。
 
-    【注：这条路是 F1-④ 修复后才存在的】修复前确认按钮在失败后恒灰，重试根本点不动，
-      这个 latent bug 不可达；本轮的快照修复把按钮点活了，于是它变成可达。
-      ⇒ 正确修法（v1.1）：重试应当**复用用户批准的那份 plan 快照**，而不是从
-      半迁移的当前状态重算（现行为 `:221-230` 的 `useMemo` 每次渲染重算）。
+    【这条路是本轮改动开出来的】F1-④ 修复前确认按钮在失败后恒灰、重试根本点不动，
+      这个 latent bug **不可达**；是 F1-④ 的快照修复把按钮点活，才让它变成可达。
+      team-lead 裁决：不回退 F1-④，**就地修 (c) 并进 v1.0**（自己开出来的数据损坏路径
+      不能带进 1.0），验收标准就取本条「幂等性」。
+
+    【本用例的变异自证】把 ① 或 ② 任一做掉 → 本用例转红（见交付报告）。
   */
-  it('F1-④-b 判定：重试时已成功阶段被二次改期 + 落库值漂移（★ 已知缺陷，待 v1.1 修）', async () => {
-    const s1 = stage('stg_retry_1', WD_PROJECT.id, 1, '2026-09-07', '2026-09-11');
-    const s2 = stage('stg_retry_2', WD_PROJECT.id, 2, '2026-09-23', '2026-09-25');
-    const s3 = stage('stg_retry_3', WD_PROJECT.id, 3, '2026-09-28', '2026-09-30');
-    act(() => {
-      useProjectsStore.getState().replaceAll({ projects: [WD_PROJECT], stages: [s1, s2, s3], tasks: [] });
-    });
-    h.stages.clear();
-    h.stages.set(s1.id, s1);
-    h.stages.set(s2.id, s2);
-    h.stages.set(s3.id, s3);
-    h.failStageWrites.add(s2.id); // 只让 S2 第一次写失败
+  it('F1-④-c 幂等性：部分失败后重试 == 一次全成功（最终库状态与流水逐字段全等）', async () => {
+    const a1 = stage('stg_idem_1', WD_PROJECT.id, 1, '2026-09-07', '2026-09-11');
+    const a2 = stage('stg_idem_2', WD_PROJECT.id, 2, '2026-09-23', '2026-09-25');
+    const a3 = stage('stg_idem_3', WD_PROJECT.id, 3, '2026-09-28', '2026-09-30');
 
-    /** 仓储真值（不是 DOM 预览）：apply 实际写进去的是什么 */
-    const repoVal = (s: Stage): string => {
-      const cur = h.stages.get(s.id)!;
-      return `${cur.startAt.slice(0, 10)} ~ ${cur.endAt.slice(0, 10)}`;
+    /** 恢复「干净起点」并**全新挂载**（组件态 approvedPlan 必须清零，否则两路径会互相污染） */
+    const reset = (): void => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+      h.stages.clear();
+      h.projects.clear();
+      h.tasks.clear();
+      h.stageLogs.length = 0;
+      h.settingsSets.length = 0;
+      h.rescheduleCalls.length = 0;
+      h.failStageWrites.clear();
+      h.projects.set(WD_PROJECT.id, WD_PROJECT);
+      h.stages.set(a1.id, a1);
+      h.stages.set(a2.id, a2);
+      h.stages.set(a3.id, a3);
+      act(() => {
+        useProjectsStore.getState().replaceAll({ projects: [WD_PROJECT], stages: [a1, a2, a3], tasks: [] });
+        // 路径 A 会把生效制度改成新制度 —— 不重置则路径 B 的 oldPolicy 就不同了，比的是两回事
+        useSettingsStore.setState({
+          restPolicy: DEFAULT_REST_POLICY,
+          effectiveRestPolicy: DEFAULT_REST_POLICY,
+        });
+      });
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      root = createRoot(container);
+      renderLive();
+      act(() => {
+        clickText('工作日制项目').click();
+      });
     };
-    const logsOf = (s: Stage): number => h.stageLogs.filter((l) => l.stageId === s.id).length;
-    const callsOf = (s: Stage): number => h.rescheduleCalls.filter((c) => c.id === s.id).length;
 
-    renderLive();
-    act(() => {
-      clickText('工作日制项目').click();
-    });
-    const confirm = (): HTMLButtonElement => clickText('确认重算并保存制度') as HTMLButtonElement;
+    type Snapshot = {
+      stages: Array<{ id: string; startAt: string; endAt: string; status: string; revision: number }>;
+      logs: Array<{ id: string; rows: Array<Record<string, unknown>> }>;
+      rescheduleCalls: Array<{ id: string; startAt: string; endAt: string }>;
+      plannedEndAt: string;
+      finalPolicy: string;
+    };
 
-    /* ── 轮 1：S2 写失败、S3 成功 ── */
-    await act(async () => {
-      confirm().click();
-    });
-    expect(repoVal(s2), 'S2 写失败 → 库值未动').toBe('2026-09-23 ~ 2026-09-25');
-    expect(callsOf(s2), 'S2 的写入被拒绝，没有留下调用').toBe(0);
-    expect(logsOf(s2), 'S2 写失败 → 没有流水（不是「改了期没流水」，是整条没落）').toBe(0);
-    expect(repoVal(s3), 'S3 已按用户批准的那份改期').toBe('2026-09-24 ~ 2026-09-26');
-    expect(logsOf(s3), 'S3 轮 1 留痕 1 条').toBe(1);
-    expect(repoVal(s1), 'S1 无变化 → 全程未被触碰').toBe('2026-09-07 ~ 2026-09-11');
-    expect(callsOf(s1)).toBe(0);
-    expect(onConfirmed).not.toHaveBeenCalled(); // 有失败 → 弹窗不关
+    /** 跑一条路径，返回「最终库状态 + 流水」快照 */
+    const run = async (injectFailure: boolean): Promise<Snapshot> => {
+      reset();
+      if (injectFailure) h.failStageWrites.add(a2.id);
+      const confirm = (): HTMLButtonElement => clickText('确认重算并保存制度') as HTMLButtonElement;
 
-    /* ── 重试：修好写入源，再点一次确认 ── */
-    h.failStageWrites.clear();
-    await act(async () => {
-      confirm().click();
-    });
+      await act(async () => {
+        confirm().click();
+      });
+      if (injectFailure) {
+        expect(onConfirmed, '有失败时弹窗不得关闭').not.toHaveBeenCalled();
+        h.failStageWrites.clear();
+        await act(async () => {
+          confirm().click();
+        });
+      }
 
-    // ✓ 好的部分：S2 真的补上了，且写的是预览里那一份
-    expect(repoVal(s2), 'S2 补上了').toBe('2026-09-21 ~ 2026-09-23');
-    expect(logsOf(s2), 'S2 补留痕 1 条').toBe(1);
-    expect(onConfirmed).toHaveBeenCalledTimes(1);
+      const ids = [a1.id, a2.id, a3.id];
+      return {
+        stages: ids.map((id) => {
+          const s = h.stages.get(id)!;
+          return { id, startAt: s.startAt, endAt: s.endAt, status: s.status, revision: s.revision };
+        }),
+        logs: ids.map((id) => ({
+          id,
+          rows: h.stageLogs
+            .filter((l) => l.stageId === id)
+            .map((l) => ({
+              type: l.type,
+              oldStartAt: l.oldStartAt,
+              newStartAt: l.newStartAt,
+              oldEndAt: l.oldEndAt,
+              newEndAt: l.newEndAt,
+              fromStatus: l.fromStatus,
+              toStatus: l.toStatus,
+              reason: l.reason,
+              operatorName: l.operatorName,
+              projectId: l.projectId,
+            }))
+            .sort((x, y) => String(x.newStartAt).localeCompare(String(y.newStartAt))),
+        })),
+        rescheduleCalls: h.rescheduleCalls
+          .map((c) => ({ id: c.id, startAt: c.startAt, endAt: c.endAt }))
+          .sort((x, y) => x.id.localeCompare(y.id)),
+        plannedEndAt: h.projects.get(WD_PROJECT.id)!.plannedEndAt,
+        finalPolicy: useSettingsStore.getState().restPolicy.kind,
+      };
+    };
 
-    // ★ 缺陷 1：已成功的 S3 被**二次**改期（team-lead 预期的 `!sp.changed` 拦截没生效）
-    expect(callsOf(s3), '★ S3 被写了第二次').toBe(2);
-    expect(logsOf(s3), '★ S3 留下第二条 Rescheduled 流水（重复留痕）').toBe(2);
+    const pathA = await run(true);
+    const pathB = await run(false);
 
-    // ★ 缺陷 2（更严重）：S3 的落库值**漂移**，不再是用户批准的那份 09-24~09-26
-    expect(repoVal(s3), '★ S3 末段落库值被改坏：批准的是 09-24~09-26').toBe('2026-09-24 ~ 2026-09-25');
-    // ↑ 正确行为应为 '2026-09-24 ~ 2026-09-26'（= 用户批准的那份，重试不得改动它）。
-    //   本条断言刻意钉住**当前错误行为**：它是可执行的缺陷复现，修好后此断言会红，
-    //   提醒必须连同上面三条一起翻转（详见本用例上方注释块）。
+    /* 锚点：两条路径都**真的**完成了迁移。没有这一段，两边「啥也没干」也会被 toEqual 判成相等。 */
+    const anchors: Array<[string, Snapshot]> = [
+      ['A（部分失败→重试）', pathA],
+      ['B（一次全成功）', pathB],
+    ];
+    for (const [tag, snap] of anchors) {
+      const s1 = snap.stages.find((s) => s.id === a1.id)!;
+      const s2 = snap.stages.find((s) => s.id === a2.id)!;
+      const s3 = snap.stages.find((s) => s.id === a3.id)!;
+      // 未改动的阶段保持夹具原样（仓储没写过它 ⇒ 字符串仍是夹具里那个，无毫秒位）
+      expect(s1.startAt, `${tag} S1 无变化`).toBe('2026-09-07T00:00:00Z');
+      expect(s2.startAt, `${tag} S2 已迁到新制度日期`).toBe('2026-09-21T00:00:00.000Z');
+      expect(s2.endAt, `${tag} S2 已迁到新制度日期`).toBe('2026-09-23T23:59:59.000Z');
+      expect(s3.startAt, `${tag} S3 迁到用户批准的那份`).toBe('2026-09-24T00:00:00.000Z');
+      expect(s3.endAt, `${tag} S3 末段**不得少一天**（原缺陷正是这里漂成 09-25）`).toBe(
+        '2026-09-26T23:59:59.000Z',
+      );
+      // 每条恰好一次写入、一条留痕 —— 直接钉住原缺陷的三个症状（重复调用/重复留痕/漂移）
+      expect(snap.rescheduleCalls.filter((c) => c.id === a2.id), `${tag} S2 恰好写 1 次`).toHaveLength(1);
+      expect(snap.rescheduleCalls.filter((c) => c.id === a3.id), `${tag} S3 恰好写 1 次`).toHaveLength(1);
+      expect(snap.logs.find((l) => l.id === a1.id)!.rows, `${tag} S1 无变化不留痕`).toHaveLength(0);
+      expect(snap.logs.find((l) => l.id === a2.id)!.rows, `${tag} S2 恰好留痕 1 条`).toHaveLength(1);
+      expect(snap.logs.find((l) => l.id === a3.id)!.rows, `${tag} S3 恰好留痕 1 条`).toHaveLength(1);
+    }
+
+    /* ★★ 定义性判据：重试幂等 —— 最终库状态与流水逐字段全等 */
+    expect(pathA, '重试必须幂等：最终库状态与流水逐字段全等').toEqual(pathB);
   });
 
   it('取消 → 零写入 + onClose', () => {

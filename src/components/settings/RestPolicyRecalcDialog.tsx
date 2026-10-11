@@ -19,6 +19,9 @@
  * 逐阶段走**既有** StageService.reschedule()（自带 StageLogType.Rescheduled
  * 留痕 + reason 必填校验），不新开批量写口；项目 plannedEndAt 拖出时才更新；
  * 每阶段一条 reason='休息制度切换：双休→单休'（新制度名）。
+ * ★ 幂等（F1-④-c）：确认时把预览的那份 plan **冻结成已批准快照**，重试复用同一份；
+ *   落库前再与**当前库值**比对，已达成的条目跳过（不写、不留痕）。
+ *   两件缺一不可 —— 机理与取舍见 `applyRestPolicyRecalc` 上方注释。
  */
 
 import { useMemo, useState } from 'react';
@@ -41,6 +44,7 @@ import {
   restPolicyRecalcReason,
   type RecalcPlan,
 } from '../../lib/restPolicyRecalc';
+import { toIsoDate } from '../../lib/date';
 import { useRepos } from '../../hooks/useRepos';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -64,12 +68,55 @@ export interface ApplyRecalcResult {
   updatedStages: Stage[];
   updatedProjects: Project[];
   updatedTasks: Task[];
+  /** 逐条写入失败的条数（既有语义：逐条计数不中断） */
   failed: number;
+  /**
+   * 幂等跳过的条数（F1-④-c）：计划目标与**当前库值**已一致 ⇒ 不写、不留痕。
+   * 重试时「上一轮已写成功的那些」走这里，所以它>0 是**正常**的，不是失败。
+   */
+  skipped: number;
 }
 
 /**
  * 应用一份 RecalcPlan（预览即演算：弹窗把**同一份 plan** 传进来）。
  * 逐阶段走 StageService.reschedule（留痕 + reason 闸门）；失败逐条计数不中断。
+ *
+ * ── ★ 幂等性（F1-④-c 验收性质，team-lead 拍板）──
+ * **重试必须幂等**：同一份夹具，「第一次部分失败 → 修好 → 重试」与「第一次就全成功」
+ * 两条路径，结束时的最终库状态与流水**逐字段全等**。
+ *
+ * 为此需要**两件一起做**（缺一不可）：
+ *   ① 弹窗侧：确认时把当时预览的那份 plan **冻结成已批准快照**，重试复用同一份，
+ *      不从半迁移的当前状态重算（见下方 `approvedPlan`）；
+ *   ② 本函数侧：落库前与**当前库值**比一次，已一致就跳过（下方 `alreadyApplied`）。
+ *   只做①不做②：回放同一份 plan 会把上一轮已写对的阶段**再写一遍**、再 append 一条
+ *   Rescheduled 流水（日期对了，重复留痕仍在）。
+ *   只做②不做①：plan 本身就已经漂了（见下），比的是「按漂移后的计划」算出的目标。
+ *
+ * ── 为什么「靠 `!sp.changed` 拦住重试」不成立（误判留痕，下一个人别再踩）──
+ * 直觉是：上一轮已成功改期的阶段，其当前日期已等于目标 ⇒ `planStageShift` 应判
+ * `changed === false` ⇒ 被 `continue` 跳过。**实测三种夹具形状全都不成立**：
+ *   · 链游标 `prev.oldEndAt` 取的是**当前库值**（restPolicyRecalc.ts:285 的 `oldEndAt`
+ *     来自 `stage.endAt`）。部分失败时前一个阶段停在旧 end，而它后面那个已迁到新日期的
+ *     阶段，其 `oldStartAt` 落到了旧 end 之前 ⇒ `chainSteps` 在 restPolicyRecalc.ts:153
+ *     塌成 1 步 ⇒ 该阶段 newStart 重算后与当前相同、**但 newEnd 不同** ⇒ `changed === true`
+ *     ⇒ 拦不住；
+ *   · 更根本的是**工期被重新计量**：`workdays` 恒按 `countWorkdays(当前起止, 旧制度)`
+ *     现算（restPolicyRecalc.ts:236）。已迁到新制度日期的阶段再按**旧制度**去数，工作日
+ *     天数会变（实测 3 → 2）⇒ 每重试一次工期就少一截、日期持续漂移、**不收敛**。
+ *   复现见 tests/rest-policy-recalc-dialog.spec.tsx 的 F1-④-c（幂等性判定）与 F1-④-b。
+ *
+ * ── ★ 取舍：本闸门会让 (a)「改了期、没流水」成为**永久**（必须显式知情）──
+ * 若某阶段上一次是「阶段写成功、日志写失败」，则它的当前值已等于目标 ⇒ 重试时**被跳过**
+ * ⇒ 那条缺失的 Rescheduled 流水**再也不会被补上**。
+ *   · 改之前：重试会重跑 reschedule ⇒ 缺的流水会被补上（代价是漂移 + 重复留痕）；
+ *   · 改之后：不漂移、不重复，但**缺流水成为永久**。
+ * team-lead 裁决**选后者**：日期正确 > 台账完整 —— 日期错会沿链式平移一路传染到后续阶段，
+ * 而缺一条流水是单点、且可从 stage 的 revision/updatedAt 反查。
+ * 未顺手「检测并补写缺失流水」的理由（评估过，见交付报告）：补写只能拿到
+ * old/new 起止（计划里有），但 **`fromStatus` 与 `operatorName` 拿不回来**（原操作人未必
+ * 是当前用户；stage 写成功时 status 可能已联动成 delayed，前态不可还原）⇒ 只能伪造审计
+ * 记录，比缺记录更坏。(a) 的正解是 v1.1 的 `recalcJob`（在**写之前**就记下意图与操作人）。
  */
 export async function applyRestPolicyRecalc(
   plan: RecalcPlan,
@@ -80,11 +127,25 @@ export async function applyRestPolicyRecalc(
   const updatedProjects: Project[] = [];
   const updatedTasks: Task[] = [];
   let failed = 0;
+  let skipped = 0;
+
+  /** 与当前库值比：目标已达成就别写（幂等闸门，见上方注释） */
+  const alreadyApplied = (current: string | null | undefined, target: string): boolean =>
+    current != null && (toIsoDate(current) ?? current) === target;
 
   for (const pp of plan.projects) {
     for (const sp of pp.stages) {
       if (!sp.changed) continue;
       try {
+        const current = await deps.repos.stages.get(sp.stageId);
+        if (
+          current &&
+          alreadyApplied(current.startAt, sp.newStartAt) &&
+          alreadyApplied(current.endAt, sp.newEndAt)
+        ) {
+          skipped += 1;
+          continue;
+        }
         updatedStages.push(
           await service.reschedule(sp.stageId, {
             newStartAt: `${sp.newStartAt}T00:00:00Z`,
@@ -100,9 +161,14 @@ export async function applyRestPolicyRecalc(
     if (pp.plannedEndAtChanged) {
       try {
         // 竣工日与建档口径一致：纯日期 'YYYY-MM-DD'
-        updatedProjects.push(
-          await deps.repos.projects.update(pp.projectId, { plannedEndAt: pp.newPlannedEndAt }),
-        );
+        const current = await deps.repos.projects.get(pp.projectId);
+        if (current && alreadyApplied(current.plannedEndAt, pp.newPlannedEndAt)) {
+          skipped += 1;
+        } else {
+          updatedProjects.push(
+            await deps.repos.projects.update(pp.projectId, { plannedEndAt: pp.newPlannedEndAt }),
+          );
+        }
       } catch {
         failed += 1;
       }
@@ -110,7 +176,12 @@ export async function applyRestPolicyRecalc(
     if (deps.alignTaskDueDates) {
       for (const ts of pp.taskShifts) {
         try {
-          updatedTasks.push(await deps.repos.tasks.update(ts.taskId, { dueDate: ts.newDueDate }));
+          const current = await deps.repos.tasks.get(ts.taskId);
+          if (current && alreadyApplied(current.dueDate, ts.newDueDate)) {
+            skipped += 1;
+          } else {
+            updatedTasks.push(await deps.repos.tasks.update(ts.taskId, { dueDate: ts.newDueDate }));
+          }
         } catch {
           failed += 1;
         }
@@ -118,7 +189,7 @@ export async function applyRestPolicyRecalc(
     }
   }
 
-  return { updatedStages, updatedProjects, updatedTasks, failed };
+  return { updatedStages, updatedProjects, updatedTasks, failed, skipped };
 }
 
 /* ------------------------------ 弹窗 ------------------------------ */
@@ -218,7 +289,7 @@ export function RestPolicyRecalcDialog({
   }, [durations]);
 
   /** 预览即演算：模式/天数/对齐选项任一变化都重跑同一纯函数 */
-  const plan = useMemo(
+  const livePlan = useMemo(
     () =>
       planRestPolicyRecalc({
         projects: inputs,
@@ -228,6 +299,29 @@ export function RestPolicyRecalcDialog({
       }),
     [inputs, oldPolicyAtOpen, newPolicy, mode, overrides],
   );
+
+  /**
+   * ★ 已批准 plan 快照（F1-④-c-①）：**确认的那一刻把预览的那份 plan 冻结下来**，
+   *   此后本弹窗渲染与重试应用都用它，不再从 store 现算。
+   *
+   * 为什么必须有它：`livePlan` 的输入是 store 里的**当前库值**（`inputs` ← 各 store），
+   * 而确认的第一步就把阶段改了 ⇒ 重渲染出来的 `livePlan` 已经是「基于半迁移状态」的
+   * 另一份演算结果 —— 用户批准 A、重试却应用 B，且 B 还会漂移（机理见
+   * `applyRestPolicyRecalc` 上方注释）。快照化后「预览即演算、确认后应用同一份 plan」
+   * 这句话才真的成立到**重试**这一步。
+   *
+   * 什么时候解冻：用户**主动改**影响演算的选项（工期模式 / 每阶段天数）时 —— 那是他
+   * 在重新出方案，理应在下次确认时重新取快照（见下方 `reviseInputs`）。
+   * 注意 `alignDue` 不参与 `livePlan` 演算，故不需要解冻。
+   */
+  const [approvedPlan, setApprovedPlan] = useState<RecalcPlan | null>(null);
+  /** 弹窗当前展示、也是下次确认要应用的那份（已冻结则恒为冻结的那份） */
+  const plan = approvedPlan ?? livePlan;
+  /** 用户改演算输入 ⇒ 解冻（下次确认重新取快照） */
+  const reviseInputs = (fn: () => void): void => {
+    setApprovedPlan(null);
+    fn();
+  };
 
   const confirmDisabled = applying || !plan.hasChanges;
 
@@ -244,52 +338,53 @@ export function RestPolicyRecalcDialog({
   };
 
   /*
-    ════════════════ ★ 残局留痕：本次重算**不是原子的**（已知未修，v1.1 头号项） ════════════════
+    ════════════════ ★ 残局留痕：本次重算**不是原子的** ════════════════
 
-    审计批 F1-④ 结论（只评估、未实现；裁决：A/B 两条修法均排出 v1.0，此处仅留痕）：
-
-    1) 制度先落库（:251-252），逐条重算各自独立事务；且单条 `reschedule` 自身也是两次写
+    1) 制度先落库（:380-381），逐条重算各自独立事务；且单条 `reschedule` 自身也是两次写
        （stage → log，见 `core/services/stage.service.ts:64-83`）。
     2) ⇒ 三种残局：
        (a) 改了期、没流水 —— 下面那句「重算会写进阶段流水…打印延期台账时可见」的承诺会落空
            （stage 已落、log 未落时 reschedule 抛错，被计成「一条写入失败」，实际日期已改）；
+           ★ 幂等闸门（F1-④-c，见 `applyRestPolicyRecalc` 上方注释）让这一条**成为永久**：
+             这类阶段重试时当前值已等于目标 ⇒ 被跳过 ⇒ 缺失的流水再也不会被补上。
+             这是知情取舍（team-lead 裁决：日期正确 > 台账完整），**未修，留 v1.1**；
        (b) 部分阶段停在旧口径（本弹窗有失败时故意不关，让用户重试，但用户在关掉弹窗 / 重启
-           应用后就没有第二次机会了）；
-       (c) **重试本身会改坏已经写对的阶段** —— `plan` 每次渲染从**当前库值**重算
-           （:221-230 + `restPolicyRecalc.ts:285` 的链游标取 `stage.endAt`），而半迁移状态下
-           库值已经是新旧混杂；更根本的是工期恒按 `countWorkdays(当前起止, 旧制度)` 现算
-           （`restPolicyRecalc.ts:236`）⇒ 已迁到新制度日期的阶段会被按旧制度重新计量，
-           每重试一次工期就少一截。实测：S2 写失败、S3 成功后重试，S3 被二次改期、
-           留痕 2 条，且落库值从用户批准的 09-24~09-26 漂成 09-24~09-25。
-           可执行复现见 `tests/rest-policy-recalc-dialog.spec.tsx` 的 F1-④-b 用例。
+           应用后就没有第二次机会了）—— **未修，留 v1.1**；
+       (c) ~~重试本身会改坏已经写对的阶段~~ —— **已修（F1-④-c，随 v1.0 进）**：
+           实测原缺陷：S2 写失败、S3 成功后重试，S3 被二次改期、留痕 2 条，且落库值从
+           用户批准的 09-24~09-26 漂成 09-24~09-25。修法 = 上方 `approvedPlan` 快照
+           （①）+ `applyRestPolicyRecalc` 的幂等闸门（②），验收性质是**重试幂等**
+           （路径 A「部分失败→重试」与路径 B「一次全成功」逐字段全等），
+           判定用例见 `tests/rest-policy-recalc-dialog.spec.tsx` 的 F1-④-c。
+           机理留痕（「看着像能拦、其实拦不住」，下一个人别再踩）：详见
+           `applyRestPolicyRecalc` 上方「为什么靠 `!sp.changed` 拦住重试不成立」一段。
     3) 残局在**弹窗关闭 / 应用重启后不可发现、不可续做**：`RestPolicyDialog.tsx:99` 的 `draft`
        初值取自 `saved`（此时已是新制度）、`:233` 的 `sameWorkdayPolicy(saved, draft)` 为真
        ⇒ 下次点「保存」直接落库、**永不触发重算**，剩余阶段永久停在旧口径，界面上无任何提示。
 
-    ★ v1.1 设计已定（优先级：(c) > (b) > (a)）：
-        · (c) 两件事都要做，缺一不可：
-          ① 重试必须**复用用户批准的那份 plan 快照**，不得从半迁移的当前状态重算
-             （现行为 `:221-230` 的 `useMemo` 每次渲染重算）；
-          ② `applyRestPolicyRecalc` 落库前要与**当前库值**比一次，相等就跳过（幂等）——
-             否则只做①的话，回放同一份 plan 会把已经写对的阶段再写一遍、**再 append 一条
-             Rescheduled 流水**（日期对了，但重复留痕仍在）。
-          这是本轮 F1-④ 把「确认」按钮点活之后才变成可达的问题，最小且必须先修。
-          纯函数层最小复现（与 UI/仓储无关）：同一份阶段数据，把 S3 从 09-28~09-30
-          换成 ① 算出的目标 09-24~09-26，`planRestPolicyRecalc` 会给出
-          09-24~09-26 → 09-24~09-25，`workdays` 3→2、`changed` 仍为 true。
-        · (a)+(b) 加一条 `recalcJob` 记录（fromPolicy/toPolicy + 待重算 id 列表）先落库、
-          逐条划掉、全部完成即删；bootstrap 检测到残留 job 就在设置页挂常驻「继续重算」入口。
-          复用现有逐条写口，不动 `StageService`，且能扛住崩溃（不只是配额错误）。
+    ★ v1.1 设计已定（(a)+(b) 两项；C 方案「整批一个事务」已裁决不做）：
+        加一条 `recalcJob` 记录（fromPolicy/toPolicy + 待重算 id 列表）**在写之前**落库、
+        逐条成功即划掉、全部完成即删；bootstrap 检测到残留 job 就在设置页挂常驻
+        「继续重算」入口，同时可据它补回 (a) 缺失的流水（job 里预先记下了 operatorName，
+        这是「事后补写」做不到的那部分——见 `applyRestPolicyRecalc` 上方对取舍的说明）。
+        复用现有逐条写口，不动 `StageService`，且能扛住崩溃（不只是配额错误）。
   */
   const onConfirm = async (): Promise<void> => {
     if (confirmDisabled) return;
+    /**
+     * ★ 冻结本次要应用的那份 plan（F1-④-c-①）：首次确认 = 用户眼前预览的那份；
+     *   之后的重试 = 同一份（`plan` 已指向 `approvedPlan`）。
+     * 必须在这里冻结，否则重试会拿「基于半迁移状态重算」的另一份结果去应用 ⇒ 漂移。
+     */
+    const applying = plan;
+    setApprovedPlan(applying);
     setApplying(true);
     try {
       // 先落库制度再应用重算：写库失败时界面保持原制度，不出现「重算了但制度没存」
       await repos.settings.set('restPolicy', draft);
       useSettingsStore.getState().setRestPolicy(draft);
 
-      const result = await applyRestPolicyRecalc(plan, {
+      const result = await applyRestPolicyRecalc(applying, {
         repos,
         operatorName,
         reason: restPolicyRecalcReason(oldPolicyAtOpen, newPolicy),
@@ -301,9 +396,10 @@ export function RestPolicyRecalcDialog({
       for (const p of result.updatedProjects) store.putProject(p);
       for (const t of result.updatedTasks) store.putTask(t);
 
-      const projectNames = plan.projects
+      const projectNames = applying.projects
         .filter((p) => p.changedStageCount > 0 || p.plannedEndAtChanged)
         .map((p) => p.projectName);
+      // `skipped` 不计进「已重算」条数：那是上一轮就写好的，重复计数等于虚报
       const summary =
         `已按新制度重算 ${result.updatedStages.length} 个阶段` +
         (result.updatedProjects.length > 0
@@ -374,7 +470,7 @@ export function RestPolicyRecalcDialog({
                 type="radio"
                 name="recalc-duration-mode"
                 checked={mode === 'keep'}
-                onChange={() => setMode('keep')}
+                onChange={() => reviseInputs(() => setMode('keep'))}
                 className="accent-pine"
                 data-testid="recalc-mode-keep"
               />
@@ -386,7 +482,7 @@ export function RestPolicyRecalcDialog({
                 type="radio"
                 name="recalc-duration-mode"
                 checked={mode === 'custom'}
-                onChange={() => setMode('custom')}
+                onChange={() => reviseInputs(() => setMode('custom'))}
                 className="accent-pine"
                 data-testid="recalc-mode-custom"
               />
@@ -472,10 +568,12 @@ export function RestPolicyRecalcDialog({
                                     placeholder={`${sp.workdays} 天`}
                                     disabled={sp.freeze === 'full'}
                                     onChange={(e) =>
-                                      setDurations((prev) => ({
-                                        ...prev,
-                                        [sp.stageId]: e.target.value,
-                                      }))
+                                      reviseInputs(() =>
+                                        setDurations((prev) => ({
+                                          ...prev,
+                                          [sp.stageId]: e.target.value,
+                                        })),
+                                      )
                                     }
                                     data-testid={`recalc-duration-${sp.stageId}`}
                                     className="w-16 rounded-md border border-line bg-cream px-2 py-1 text-xs text-ink outline-none focus:border-pine disabled:opacity-40"
