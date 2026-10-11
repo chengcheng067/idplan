@@ -10,6 +10,7 @@ import { ArchiveListRow } from '../components/project/ArchiveListRow';
 import { MembersPageSection } from '../components/member/MembersPageSection';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
+import { DataGate, useDataReadiness } from '../components/layout/DataGate';
 import { useMembersStore } from '../store/useMembersStore';
 import { useUiStore, type HomeViewMode } from '../store/useUiStore';
 import { memberBoardHref, searchMemberHits, useRoleGuard } from '../hooks/useRoleGuard';
@@ -81,6 +82,12 @@ export function HomePage(): JSX.Element {
   const setSelectedProjectId = useUiStore((s) => s.setSelectedProjectId);
   // 手动建档显隐统走 store（AppShell 全局挂载表单），此处仅需打开意图
   const openManual = useUiStore((s) => s.openManualForm);
+  /*
+    ★ 数据就绪态（审计 F1-①）：副标题里的三个计数与整块正文都是**数据派生**，
+    装载中/失败时它们会算成 0。0 个进行中 ＋ 「还没有进行中的项目」叠在一起
+    就是在说假话，故两者都要按就绪态收口（正文由 <DataGate> 包住，副标题在此判）。
+  */
+  const readiness = useDataReadiness();
 
   const today = new Date();
   const todayIso = localIso(today);
@@ -173,12 +180,22 @@ export function HomePage(): JSX.Element {
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-[24px] font-bold text-ink">我的项目</h1>
-          <p data-home-subtitle="" className="text-[13px] text-mist">
-            {active.length} 个进行中 · {dueThisWeek} 个本周到期 · {overdueCount} 个逾期
-          </p>
+          {/* 计数只在「已装载」档出（否则 0 个进行中是假数字，见 readiness 注释） */}
+          {readiness === 'ready' && (
+            <p data-home-subtitle="" className="text-[13px] text-mist">
+              {active.length} 个进行中 · {dueThisWeek} 个本周到期 · {overdueCount} 个逾期
+            </p>
+          )}
         </div>
       </div>
 
+      {/*
+        ★ 数据就绪态闸门（审计 F1-①）：统计卡 / 视图切换 / 项目网格 / 归档区 /
+          成员管理区全部由 store 里的数据派生，一律放进 <DataGate> ——
+          装载中出占位、失败出常驻可重试错误面，**只有已装载才允许**渲染下面的
+          「还没有进行中的项目」空态（那三句话在装载失败时全是假话）。
+      */}
+      <DataGate>
       {/* 2. 统计卡行（响应式：桌面 4 列 / 平板 2×2 / 手机单列） */}
       <section className="flex flex-wrap gap-5">
         <StatCard tone="pine" value={active.length} label="进行中项目" trend={null} />
@@ -275,6 +292,7 @@ export function HomePage(): JSX.Element {
 
       {/* 成员管理（权限矩阵 #5：仅 admin；路由守卫已把成员重定向出首页，这里双保险） */}
       {isAdmin && <MembersPageSection />}
+      </DataGate>
     </div>
   );
 }

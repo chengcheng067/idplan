@@ -17,6 +17,7 @@ import { taskAssigneeIds } from '../hooks/useRoleGuard';
 import { cn } from '../lib/cn';
 import { remainingDays } from '../lib/date';
 import { StatCard } from '../components/project/StatCard';
+import { DataGate } from '../components/layout/DataGate';
 import { stageSolidColor } from '../components/timeline/stageColors';
 import { customStageColor } from '../components/timeline/stageColorKey';
 import type { Project, Stage, Task } from '../core/types/entities';
@@ -124,6 +125,15 @@ export function MyTasksPage(): JSX.Element {
         <span className="text-xs text-mist">只显示与我相关的内容</span>
       </div>
 
+      {/*
+        ★ 数据就绪态闸门（审计 F1-①，与首页/成员看板同口径）：统计卡、分组列表、
+          以及下面那句「××，目前没有分配给你的待办 🎉」全部由 store 派生。
+          注意**失败时这句空态是会真的出现的**：`currentMemberId` 初值来自
+          localStorage（上次进入过身份就有值），于是「任务数组为空」这条判据成立——
+          「没读进来」被说成「没有活派给你」，成员会直接去问管理员。
+          标题行留在闸门外，保证装载中/失败时用户仍知道自己在哪一页。
+      */}
+      <DataGate>
       {/* 分组方式 tab + 显示已完成（独立一行：tab 左、过滤右，手机不再挤在标题旁换行错乱） */}
       <div className="-mt-2 flex flex-wrap items-center justify-between gap-3">
         <div
@@ -283,6 +293,7 @@ export function MyTasksPage(): JSX.Element {
             </ul>
           </section>
         ))}
+      </DataGate>
     </div>
   );
 }

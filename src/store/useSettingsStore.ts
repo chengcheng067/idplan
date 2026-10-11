@@ -34,7 +34,30 @@ export type IdentityFlowState = 'closed' | 'admin_prompt' | 'name_input' | 'mism
 
 export interface SettingsState {
   currentMemberId: string | null;
+  /**
+   * 首屏数据是否已装载（bootstrap 完成信号）。
+   *
+   * ★ 三态判据（唯一事实源，消费方一律经 `useDataReadiness()` / `<DataGate>` 读，
+   *   不要自己拼 `hydrated` 与 `hydrateError`）：
+   *     `hydrateError !== null` → 失败（hydrated 恒为 false）
+   *     `!hydrated`             → 装载中
+   *     `hydrated`              → 已装载 —— **只有这一档才允许渲染「空态」**
+   *   缺陷背景（审计 F1-①）：装载失败时各页只看项目/任务数为 0 就断言
+   *   「还没有进行中的项目」「目前没有分配给你的待办」——把「没读进来」说成
+   *   「本来就没有」，用户据此可能去拿旧备份覆盖真实数据。
+   */
   hydrated: boolean;
+  /**
+   * 首屏装载失败原因（null = 未失败；非 null 即失败态，且 hydrated 保持 false）。
+   * 为什么与 hydrated 同居一处：拆成两个 store 就会出现「hydrated=false 且
+   * error 在别处」的中间态被误读成「装载中」，那正是这次要消灭的含糊。
+   */
+  hydrateError: string | null;
+  /**
+   * 重试装载的请求计数：+1 触发 `useProjectsBootstrap` 重跑 bootstrap
+   * （**不是**刷新页面——本应用是 Electron 壳，用户没有地址栏）。
+   */
+  bootstrapAttempt: number;
   identityFlow: IdentityFlowState;
   /** name_input 是否处于「管理员确立」意图（首次引导路径） */
   adminIntent: boolean;
@@ -54,6 +77,10 @@ export interface SettingsState {
   pendingMemberId: string | null;
 
   hydrate(currentMemberId: string | null): void;
+  /** 装载失败：记下原因，hydrated 保持 false（失败态由此参与判据） */
+  failHydrate(detail: string): void;
+  /** 重试装载：请求计数 +1 并清失败态（回到「装载中」），由 bootstrap hook 重跑 */
+  requestBootstrapRetry(): void;
   setRestPolicy(next: RestPolicyConfig): void;
   setCurrentMember(memberId: string | null): void;
   setPendingMember(memberId: string | null): void;
@@ -74,6 +101,8 @@ function readLocalStorageId(): string | null {
 export const useSettingsStore = create<SettingsState>((set) => ({
   currentMemberId: readLocalStorageId(),
   hydrated: false,
+  hydrateError: null,
+  bootstrapAttempt: 0,
   identityFlow: 'closed',
   adminIntent: false,
   firstRunDismissed: false,
@@ -93,7 +122,18 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       // 设置表值优先；无则回落 localStorage；再次无则空（未选身份）
       currentMemberId: currentMemberId ?? readLocalStorageId(),
       hydrated: true,
+      // 装载成功即清失败态（重试成功后错误面必须消失）
+      hydrateError: null,
     }),
+
+  failHydrate: (detail) => set({ hydrateError: detail, hydrated: false }),
+
+  requestBootstrapRetry: () =>
+    set((st) => ({
+      bootstrapAttempt: st.bootstrapAttempt + 1,
+      // 回到「装载中」：错误面让位给占位，重跑失败会再写回失败态
+      hydrateError: null,
+    })),
 
   setCurrentMember: (memberId) => {
     try {

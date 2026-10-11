@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button';
 import { ProjectCard } from '../components/project/ProjectCard';
 import { StatCard } from '../components/project/StatCard';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
+import { DataGate } from '../components/layout/DataGate';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -281,6 +282,13 @@ export function MemberBoardPage(): JSX.Element {
         </div>
       </div>
 
+      {/*
+        ★ 数据就绪态闸门（审计 F1-①，同首页口径）：统计卡 / 任务三块 / 看板列 /
+          月历全部由 store 派生，一律放进 <DataGate> —— 装载失败时下面那句
+          「还没有与你相关的项目」会把「没读进来」说成「本来就没有」，
+          而成员看到它只会以为管理员没给自己派活。
+      */}
+      <DataGate>
       {/* 统计概览行（两档共用；口径已是「观看对象的 active 项目」）
           v0.8.6.0002 · 反馈 #10.4：改回与 HomePage 逐字同款的 flex-wrap 行。
           此前这里是 grid-cols-2/lg:grid-cols-4，与 StatCard 自身断点（md 半宽 /
@@ -400,6 +408,7 @@ export function MemberBoardPage(): JSX.Element {
           })}
         </section>
       )}
+      </DataGate>
     </div>
   );
 }
