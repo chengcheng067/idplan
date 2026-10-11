@@ -19,6 +19,18 @@ import { listenOnSafePort } from './helpers/safe-listen';
  * 只能真 Chromium 量 getBoundingClientRect。
  *
  * 前置：`npm run build` 先跑过；产物/Chromium 缺失或产物过期 → 整组 skip。
+ *
+ * ═══ v1.0.x 重定（产品拍板「默认窗口每行 4 列」）═══
+ * 看板列几何由「基准 340 / 上限 360」改为**定宽 262**（默认窗口 1400 ⇒ section 1096 ⇒ 4 列），
+ * 卡片随之 330 → **232**，卡内两行重排（头像组从底部元信息行移到委托方行）。
+ * 于是本 spec 的两条旧数字必须换对象：
+ *   · M-01 旧契约「1440 档卡片 ≥330、标题不截断」→ 新契约「4 列 / 232×185、标题**单行省略**、
+ *     标题可用宽 ≥120、卡内无纵向溢出」。**「标题不截断」在新设计下不成立**（232 宽的卡片装不下
+ *     长标题；标题与委托方是本卡仅有的两个允许单行省略的字段），护城河改由「单行 + 可用宽下限」
+ *     承接 —— 下限 120 正是为了守住 #10.4 的「105px 窄卡全面报废」那条线。
+ *   · M-02 旧契约「1152 档 ≥280」→ 新契约「3 列 / 232、委托方行不被压成 0 高」。
+ * 卡内**逐元素**约束（到期日不截断 / 胶囊不折行 / 头像不越界 / 进度条贴合 / 无纵向溢出）
+ * 见 `tests/member-board-narrow-card.spec.ts`（新增，1400 档）。
  */
 
 /** 探测已安装的 chromium（与 v07-board-acceptance.spec.ts 同一实现） */
@@ -206,42 +218,75 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await server?.close();
     });
 
-    /** 成员看板首卡度量（宽/高/标题截断/头像行形态） */
+    /** 成员看板首卡度量（宽/高/标题行/头像行/列数/纵向溢出） */
     async function firstCardMetrics(page: Page) {
       return page.evaluate(() => {
         const card = document.querySelector('[role="button"].group') as HTMLElement | null;
         if (!card) return null;
         const title = card.querySelector('span.truncate') as HTMLElement | null;
+        // 头像组：新窄版把它放在**委托方行**（`layout==='column'` 的重排），
+        // 该行的最后一个 div 子节点即 AvatarStack 根节点（其内层 div 才是叠放盒）。
         const av = card.querySelector('.flex.items-center.justify-between > div:last-child') as HTMLElement | null;
         const avInner = av?.firstElementChild as HTMLElement | null;
         const avatars = avInner ? Array.from(avInner.children) : [];
+        // 委托方行 = 卡片第 2 个子节点（窄版是 div，行版是单个 span）
+        const delegator = card.children[1] as HTMLElement | null;
+        const board = Array.from(document.querySelectorAll('section.grid')).find((s) =>
+          s.querySelector('[role="button"].group'),
+        );
+        const tracks = board
+          ? getComputedStyle(board)
+              .gridTemplateColumns.split(' ')
+              .filter(Boolean)
+              .map((t) => Math.round(parseFloat(t) * 10) / 10)
+          : [];
         return {
           w: card.clientWidth,
           h: card.clientHeight,
-          titleTruncated: title ? title.scrollWidth > title.clientWidth + 1 : null,
+          colCount: tracks.length,
+          tracks,
+          titleNeed: title ? title.scrollWidth : null,
+          titleAvail: title ? title.clientWidth : null,
+          titleH: title ? Math.round(title.getBoundingClientRect().height * 10) / 10 : null,
+          titleLineH: title ? parseFloat(getComputedStyle(title).lineHeight) : null,
+          delegatorNode: delegator ? delegator.tagName.toLowerCase() : null,
+          delegatorH: delegator ? Math.round(delegator.getBoundingClientRect().height * 10) / 10 : null,
           avatarDir: avInner ? getComputedStyle(avInner).flexDirection : null,
           avatarsSameRow:
             avatars.length >= 2
               ? avatars[0].getBoundingClientRect().top === avatars[1].getBoundingClientRect().top
               : null,
+          verticalOverflow: card.scrollHeight - card.clientHeight,
         };
       });
     }
 
 
-    it('M-01 · 1440 档：卡片回到设计尺寸（≈340×185）、标题不截断、头像横排', async () => {
+    it('M-01 · 1440 档：看板 4 列、卡片 232×185、标题单行省略不纵向裁切、头像横排', async () => {
       const ctx: BrowserContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const page: Page = await ctx.newPage();
       try {
         await enterMemberBoard(page, server.url);
         const m = await firstCardMetrics(page);
         expect(m).not.toBeNull();
-        // 修复前：232×340（flex-basis 作用到纵轴）且标题在窄列下截断
-        expect(m!.h, '卡片高度应回到 xl 设计档 185（修复前被抅到 340）').toBe(185);
-        expect(m!.w, '卡片宽度应≈340（列基准 340 减列内边距）').toBeGreaterThanOrEqual(330);
-        expect(m!.titleTruncated, '标题不应被截断（修复前 105px 窄卡必截断）').toBe(false);
+        // 旧数字：卡片 330×185、看板 3 列（列基准 340 + 定值上限 360）。
+        // 新数字：卡片 232×185、看板 **4 列**、轨道恒 262 —— 产品拍板「默认窗口 4 列」，
+        // 262 是 section 1136 下出 4 轨的临界值（floor((1136+16)/(t+16)) ≥ 4 ⇒ t ≤ 278−16）。
+        expect(m!.colCount, '1440 档看板应为 4 列（旧 3 列）').toBe(4);
+        expect(m!.tracks.every((t) => t === 262), `1440 档轨道应恒 262，实测 ${JSON.stringify(m!.tracks)}`).toBe(true);
+        expect(m!.h, '卡片高度应仍是 xl 设计档 185（修复前曾被抅到 340）').toBe(185);
+        expect(m!.w, '卡片宽度应为 轨道 − 列盒内边距 30 = 232（旧设计 330）').toBe(232);
+        // 「标题不截断」这条旧断言在新设计下**不再成立**（232 宽的卡片放不下长标题，
+        // 标题与委托方是本卡**仅有的两个允许单行省略的字段**）。护城河改为：
+        //   ① 标题必须是**单行**（不换行 ⇒ 行高 == line-height，不允许折成两行把卡撑变形）；
+        //   ② 标题可用宽不得低于 120px（≥ 8 个汉字）——守住 #10.4「105px 窄卡全面报废」那条线。
+        expect(m!.titleH, '标题必须单行（行高 == line-height）').toBeCloseTo(m!.titleLineH!, 1);
+        expect(m!.titleAvail, '标题可用宽不得低于 120px（防回到 #10.4 的 105px 报废档）').toBeGreaterThanOrEqual(120);
         expect(m!.avatarDir).toBe('row');
         expect(m!.avatarsSameRow, '头像必须横排（修复前被挤成竖排/报废）').toBe(true);
+        expect(m!.delegatorNode, '窄版（layout=column）的委托方行必须是 div（要挂头像组）').toBe('div');
+        expect(m!.delegatorH, '委托方行不得被压成 0 高（旧 1152 档实测过这种塌陷）').toBeGreaterThanOrEqual(19);
+        expect(m!.verticalOverflow, 'xl 档卡内不得纵向溢出').toBeLessThanOrEqual(0);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow, '页面不应出现横向滚动').toBeLessThanOrEqual(0);
         await page.screenshot({ path: resolve(SHOT_DIR, 'M-01-member-board-1440.png') });
@@ -250,15 +295,25 @@ describe.skipIf(!CAN_RUN_FRESH)(
       }
     }, 60000);
 
-    it('M-02 · 1152 档（xl 以下）：半宽类不得把卡片压窄（修复前 105px 全面报废）', async () => {
+    it('M-02 · 1152 档（xl 以下）：卡片撑满列宽、头像横排、委托方行不被压成 0', async () => {
       const ctx: BrowserContext = await browser.newContext({ viewport: { width: 1152, height: 864 } });
       const page: Page = await ctx.newPage();
       try {
         await enterMemberBoard(page, server.url);
         const m = await firstCardMetrics(page);
         expect(m).not.toBeNull();
-        expect(m!.w, 'xl 以下卡片也应撑满列宽（修复前被 md:w-[50%-10px] 压到 105px）').toBeGreaterThanOrEqual(280);
-        expect(m!.titleTruncated, '标题不应被截断').toBe(false);
+        // 旧数字：≥280（当时是 360 轨道 ⇒ 卡片 330）。新数字：定宽 262 ⇒ 卡片恒 **232**。
+        // ⚠️ 这一档（视口 ≤1279）卡片走**紧凑档**（`h-[124px]`，xl 断点未到），
+        //    旧版实测该卡内纵向溢出 4px 且委托方行被 flex 压成 **0 高**（客户名完全不可见）；
+        //    新窄版把头像组移进委托方行后，该行有了 24px 的不可压缩下限 ⇒ 溢出增到 **26px**
+        //    （委托方恢复可见）。这一档不在本批产品决策范围（默认窗口 1400 已 ≥ xl），
+        //    溢出量已登记在报告里待 team-lead 定档；此处**刻意不钉溢出数值**
+        //    （钉住一个已知破损的数字＝把破损写进契约）。
+        expect(m!.colCount, '1152 档（section 1088）看板应为 3 列').toBe(3);
+        expect(m!.tracks.every((t) => t === 262), '1152 档轨道同样恒 262').toBe(true);
+        expect(m!.h, 'xl 以下仍是紧凑档 124').toBe(124);
+        expect(m!.w, 'xl 以下卡片同样应撑满列宽（修复前被 md:w-[50%-10px] 压到 105px）').toBe(232);
+        expect(m!.delegatorH, '委托方行不得被压成 0 高（旧版实测塌陷）').toBeGreaterThanOrEqual(19);
         expect(m!.avatarsSameRow, '头像必须横排').toBe(true);
         await page.screenshot({ path: resolve(SHOT_DIR, 'M-02-member-board-1152.png') });
       } finally {
