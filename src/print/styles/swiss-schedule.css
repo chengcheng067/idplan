@@ -32,11 +32,16 @@
   --tpl-line: var(--swiss-black);
 }
 
-/* ── 纸面：整幅交通黄，顶/底黑栏由内部元素自持（不用 padding 让位）── */
+/* ── 纸面：整幅交通黄，顶/底黑栏由内部元素自持（不用 padding 让位）──
+   顶栏距页顶 24px / 底栏距页底 36px（P0-5；参考稿 A P1 实测顶栏 y24..123.5、
+   底栏 y1040..1087.5，现状是 0 / 1123 两处都贴死）。用 .a4-page 的
+   padding 而不是给两条栏加 margin：flex 列里 padding 让「间距」与「栏自身高度」
+   解耦，底栏不必再靠 margin 抵消 flex 分配（.a4-page 是 border-box，
+   min-height 1123 不含 padding，故页高仍恒 1123）。 */
 .print-root.print-template-swiss-schedule .a4-page {
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: 24px 0 36px;
   background: var(--tpl-accent);
   color: var(--tpl-ink);
   font-family: inherit;
@@ -77,7 +82,14 @@
   margin-right: 2px;
 }
 
-.print-root.print-template-swiss-schedule .print-logo[data-tone='on-dark'] {
+/* 暗底反白——**只命中图片标**（P0-2，回归级）：
+   组件文件头原话是「invert 只针对黑透明底 PNG」，但原规则
+   `.print-logo[data-tone='on-dark'] { filter: invert(1) }` 没做载体约束，
+   把未上传 logo 时的**文字标**也一起反相了：文字标本已在下方 :85 声明为
+   黄 `--tpl-accent`（#F2D957），反相后逐通道 255−值 ⇒ 宝蓝 #0D26A8，
+   与参考稿「顶栏只有黄字 + 黑底」冲突（审计 §1.1③ 实测）。
+   收窄到 [data-print-logo='img']：文字标回归 :85 的黄色，图片标照旧反白。 */
+.print-root.print-template-swiss-schedule .print-logo[data-tone='on-dark'][data-print-logo='img'] {
   filter: invert(1);
 }
 
@@ -117,14 +129,16 @@
   letter-spacing: 0.06em;
 }
 
-/* ── 主体：密集横线、数字优先 ── */
+/* ── 主体：密集横线、数字优先 ──
+   段间距一律交给各块自己的 margin（不再用容器 gap）：P0-3/P0-4 的板头、口径行、
+   休息制度块、数据来源行要按参考稿的实测 y 逐块定位，容器 gap 会让「块间距」
+   与「块自身高度」耦合，调一处动一片。 */
 .print-root.print-template-swiss-schedule .swiss-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 20px var(--swiss-inset) 16px;
+  padding: 0 var(--swiss-inset);
 }
 
 .print-root.print-template-swiss-schedule .swiss-num {
@@ -132,29 +146,22 @@
 }
 
 .print-root.print-template-swiss-schedule .swiss-board {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.print-root.print-template-swiss-schedule .swiss-board__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 2px solid var(--tpl-ink);
-  padding-bottom: 6px;
 }
 
 .print-root.print-template-swiss-schedule .swiss-board__title {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.08em;
-}
-
-.print-root.print-template-swiss-schedule .swiss-board__count {
-  font-size: 11px;
-  font-weight: 500;
+  /* 墨色显式取自模板 token（P0-1，回归级）：本类挂在 <h2> 上，原先没声明
+     color，于是吃到 global.css base 层的 `h1..h4 { @apply text-ink }`
+     ⇒ 渲染成应用 UI 蓝灰 #1F2937，而 A 的墨是 #191816（审计 §1.1③ 实测）。
+     根因侧的「print 树标题隔离」见 global.css 的 .print-root h1..h4；
+     这里是模板自己的兜底（哪怕隔离规则被人删掉，A 的板头也不会再被染色）。 */
+  color: var(--tpl-ink);
 }
 
 .print-root.print-template-swiss-schedule .swiss-board__subtitle {
@@ -162,6 +169,92 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   margin-top: 2px;
+}
+
+/* ── 栏外板头（P0-3）：站名 → 副标题 → 2px 通栏线 → 元信息行 ──
+   全部纵向值按参考稿 A P1 实测 CSS px 反算（见文档层 SwissMasthead 注释）：
+     站名 ink y162..199（字号 40、line-height 1 ⇒ 盒 y161..201、墨 162.2..199.8）
+     副标 ink y215.5..232（16px，盒 y215..231）
+     2px 通栏线 y268..270（参考 268..269.5）
+     左元信息 3 行 ink y293.5 / 310.5 / 327.5（12px，行高 17px）
+     右巨字完成度 ink y268..328（82px cap ≈60） */
+.print-root.print-template-swiss-schedule .swiss-masthead {
+  display: flex;
+  flex-direction: column;
+  /* 板头 → 下方主体（栏头/表头）的界面间距：参考稿巨字说明行 ink 349.5 → 栏头 ink 393.5 */
+  margin-bottom: 38px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-masthead__name {
+  /* 顶栏底（y124）→ 站名盒顶（y161）= 37px */
+  margin-top: 37px;
+  /* 字号 40：参考稿 4 字墨宽 157.5px ⇒ 每字 39.4px（中文方块字advance=1em）；
+     审计报告的「≈52px」是拿拉丁 cap 比（0.72）反推的，对中文不成立 */
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-align: center;
+  /* 项目名最多两行，超出截断（02 §8）；完整文本经 title 属性可访问 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+/* 副标题 = 板头标题（类名沿用 .swiss-board__title，故 P0-1 的 h2 在 DOM 上仍可直接断言）。
+   两个类叠加让特异性 0,4,0 压过 .swiss-board__title 的 0,3,0，不依赖文件顺序。 */
+.print-root.print-template-swiss-schedule .swiss-board__title.swiss-masthead__subtitle {
+  /* 站名盒底（y201）→ 副标盒顶（y215）= 14px */
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-align: center;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-swiss-schedule .swiss-masthead__rule {
+  /* 副标盒底（y231）→ 通栏线（y268）= 37px */
+  margin-top: 37px;
+  height: 2px;
+  background: var(--tpl-ink);
+}
+
+.print-root.print-template-swiss-schedule .swiss-masthead__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-masthead__meta {
+  /* 通栏线底（y270）→ 首行盒顶（y290）= 20px */
+  margin-top: 20px;
+  font-size: 12px;
+  line-height: 17px;
+  font-weight: 500;
+}
+
+.print-root.print-template-swiss-schedule .swiss-masthead__anchor {
+  /* 巨字右对齐至内容框右缘（参考 x753.5），字面与通栏线齐平起 */
+  margin-top: -14px;
+  text-align: right;
+}
+
+.print-root.print-template-swiss-schedule .swiss-masthead__pct {
+  font-size: 82px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+}
+
+.print-root.print-template-swiss-schedule .swiss-masthead__pct-caption {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* ── P1 三列错落 ── */
@@ -213,17 +306,19 @@
   opacity: 0.72;
 }
 
+/* ── P1 阶段卡（P0-6）：四段结构 = 号码行 → 胶囊行（胶囊 + 右对齐日期）→ 占比/负责人行
+   → 1px 发丝线；行节距目标 ≈96px（参考稿卡顶实测 490.5 / 586.5 / 682.5 ⇒ 96）。
+   纵向值按 66.5px 内容 + 15/14px 上下 padding + 1px 发丝线 = 96.5px 反算。 */
 .print-root.print-template-swiss-schedule .swiss-stage-row {
   border-bottom: 1px solid var(--tpl-ink);
-  /* 行内呼吸 15→9px（密度研究 §3-A：L2 数据行按「文字行高 + 4-8px」算，
-     省下的预算给列间界面；62px 的单条高度是「该紧没紧」的典型） */
-  padding: 5px 0 4px;
+  padding: 15px 0 14px;
 }
 
 .print-root.print-template-swiss-schedule .swiss-stage-row__top {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  line-height: 1.2;
 }
 
 .print-root.print-template-swiss-schedule .swiss-stage-row__no {
@@ -243,28 +338,123 @@
   text-overflow: ellipsis;
 }
 
-.print-root.print-template-swiss-schedule .swiss-stage-row__state {
+/* 胶囊行：状态胶囊（左）+ 日期（右对齐）同排（参考稿实测同排；原先状态被降级成
+   名称行末尾的小字，是 P0-6 的症状） */
+.print-root.print-template-swiss-schedule .swiss-stage-row__capsule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 状态胶囊：四态靠**文字 + 明度 + 形状**三重编码（宪法 4 灰度硬约束），颜色只作
+   第四道冗余。参考稿 P1 实测：已完成 = 实心墨底黄字（#1C1A17 / #F2D957）、
+   进行中 = 半实心（≈#A89641，即墨色约 1/3 罩印在黄纸上）、未开始 = 空心描边。 */
+.print-root.print-template-swiss-schedule .swiss-stage-row__capsule {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  padding: 2px 12px;
+  border: 1px solid var(--tpl-ink);
+  border-radius: 999px;
   font-size: 11px;
+  line-height: 1.25;
+  font-weight: 600;
   white-space: nowrap;
+  color: var(--tpl-ink);
+  background: transparent;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
-.print-root.print-template-swiss-schedule .swiss-stage-row[data-state='delayed'] .swiss-stage-row__state {
+/* 已完成：实心墨底黄字（明度最重） */
+.print-root.print-template-swiss-schedule .swiss-stage-row__capsule[data-state='completed'] {
+  background: var(--tpl-ink);
+  color: var(--tpl-accent);
+}
+
+/* 进行中：半实心（斜纹罩印 ≈1/3 墨，打印下读作参考稿的暖灰底）。不引入 color-mix
+   之类新特性——斜纹本身也是可复现的「明度 + 纹理」第二重编码。 */
+.print-root.print-template-swiss-schedule .swiss-stage-row__capsule[data-state='in_progress'] {
+  background-image: repeating-linear-gradient(135deg, var(--tpl-ink) 0 1px, transparent 1px 3px);
+}
+
+/* 未开始：空心描边 + 纸底（明度最轻） */
+.print-root.print-template-swiss-schedule .swiss-stage-row__capsule[data-state='not_started'] {
+  background: transparent;
+}
+
+/* 延期：实心墨底 + 黄字 + **内圈黄环**。参考稿 P1 无延期态可依（参考数据里没有
+   延期阶段），取「已完成 + 一圈」——第四种处理必须在灰度下与已完成可辨：内环是
+   额外的形状/明度编码，字形 ▲ 与文字「延期」同时变。 */
+.print-root.print-template-swiss-schedule .swiss-stage-row__capsule[data-state='delayed'] {
+  background: var(--tpl-ink);
+  color: var(--tpl-accent);
+  box-shadow: inset 0 0 0 1px var(--tpl-accent);
   font-weight: 700;
+}
+
+.print-root.print-template-swiss-schedule .swiss-stage-row__date {
+  white-space: nowrap;
+  font-size: 9.5px;
+  opacity: 0.72;
 }
 
 .print-root.print-template-swiss-schedule .swiss-stage-row__bottom {
   display: flex;
   flex-wrap: wrap;
   gap: 3px 12px;
-  margin-top: 3px;
-  /* 行内 meta 降档（密度研究规则 4）：10.5→9.5px + 灰度一档（opacity 0.72，
-     与 E 版 ei-head__meta 同一降档手法）。与主信息 13px 差 3.5px 字号 +
-     一档灰度，附属信息不再与数据行同字号同色。9.5px 是 accent 文字下限
-     （密度研究 §4 约束 3），禁止再小 */
+  margin-top: 6px;
+  /* 行内 meta 降档（密度研究规则 4）：与主信息 13px 差 3.5px 字号 + 一档灰度。
+     9.5px 是 accent 文字下限（密度研究 §4 约束 3），禁止再小 */
   font-size: 9.5px;
+  opacity: 0.72;
+}
+
+/* ── P1 页尾：口径行 + 休息制度黑块 + 数据来源行（P0-4）── */
+.print-root.print-template-swiss-schedule .swiss-board__note {
+  /* 末条卡发丝线（参考 y762）→ 口径行 ink（y799.5）= 约 24px */
+  margin: 24px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  opacity: 0.72;
+}
+
+/* 休息制度黑块：参考稿 y832..915.5（h 84）、x40..754、内缩 20px；
+   行1 ink y851（块顶 +19）、行2 ink y875.5。黑底黄字与顶/底栏同一语法。 */
+.print-root.print-template-swiss-schedule .swiss-rest {
+  margin-top: 22px;
+  min-height: 84px;
+  box-sizing: border-box;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  background: var(--tpl-line);
+  color: var(--tpl-accent);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-swiss-schedule .swiss-rest__title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+}
+
+.print-root.print-template-swiss-schedule .swiss-rest__note {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* 数据来源行：贴底栏（L4 页脚层，宪法 1）——margin-top:auto 在 .swiss-board
+   的 flex 列里把它压到内容区底部；参考稿 ink y1025.5..1033、底栏顶 y1040。 */
+.print-root.print-template-swiss-schedule .swiss-source {
+  margin: auto 0 5px;
+  font-size: 11px;
+  line-height: 1.4;
   opacity: 0.72;
 }
 
@@ -377,10 +567,18 @@
 /* ── 密度档：20+ 阶段 / 22+ 任务 / 12+ 流水时压紧 ──
    档位语义（密度研究 §3-A/D 同款纪律）：compact = 超限项目的应急档，normal
    收紧后两档差距变小是预期的——compact 必须仍**整体紧于** normal 一档，
-   故 normal 行内 meta 降到 9.5 后，compact 的 10px 反会比 normal 大（档差
-   倒挂），同步收到 9px。 */
+   故 normal 行内 meta 降到 9.5 后，compact 反会比 normal 大（档差倒挂），
+   同步收到 9px。
+   P0-6 后卡片长出「胶囊行」，compact 的压缩预算改从三处取：卡内 padding / 卡间
+   margin、胶囊行/占比行的界面间距、胶囊自身的内边距——**不压字号**（9px 已是下限）。
+   P0-6 后卡片长出「胶囊行」，compact 的压缩预算改从三处取：行 padding、
+   胶囊行/占比行的界面间距、胶囊自身的内边距——**不压字号**（9px 已是下限）。 */
 .print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row {
-  padding: 5px 0 4px;
+  padding: 6px 0 5px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__capsule-row {
+  margin-top: 5px;
 }
 
 .print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__no {
@@ -388,7 +586,13 @@
   min-width: 28px;
 }
 
+.print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__capsule {
+  padding: 1px 10px;
+  font-size: 10px;
+}
+
 .print-root.print-template-swiss-schedule .swiss-board[data-density='compact'] .swiss-stage-row__bottom {
+  margin-top: 4px;
   font-size: 9px;
 }
 
@@ -440,9 +644,17 @@
   }
 
   .print-root.print-template-swiss-schedule .swiss-topbar,
-  .print-root.print-template-swiss-schedule .swiss-bottombar {
+  .print-root.print-template-swiss-schedule .swiss-bottombar,
+  /* 休息制度黑块（P0-4）与顶/底栏同语法 ⇒ 同一条 !important 反白链 */
+  .print-root.print-template-swiss-schedule .swiss-rest {
     background: var(--tpl-line) !important;
     color: var(--tpl-accent) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* 状态胶囊的实心/描边在 print 态同样要保住（省墨默认会吃掉与纸面同色的描边） */
+  .print-root.print-template-swiss-schedule .swiss-stage-row__capsule {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

@@ -65,6 +65,23 @@ const SWISS_NAV: ReadonlyArray<{ kind: PrintPageKind; en: string }> = [
   { kind: 'member-roster', en: 'TEAM DEPARTURES' },
 ];
 
+/**
+ * 页题（黑顶栏中文页题 + 板头副标题）。
+ *
+ * 参考稿 A P1 的站位（`A-swiss-schedule-p1.png` 实测）：
+ *   · 黑顶栏左端 = **中文页题**（`阶段总览`），右端 = 品牌 + 页序（`ID PLAN · 01/04`）；
+ *   · 栏外居中「站名」= **项目名**（52px 级巨字），其下才是页副标题
+ *     （`阶段排期表 · PROJECT DEPARTURES`）。
+ * 故项目名从栏内移到栏外板头（P0-3），栏内改登页题——与参考稿逐位对位，
+ * 且消除「同一页项目名出现两次」。
+ */
+const SWISS_PAGE_TITLES: Record<string, { cn: string; subtitle: string }> = {
+  'stage-overview': { cn: '阶段总览', subtitle: '阶段排期表 · PROJECT DEPARTURES' },
+  'task-register': { cn: '任务读号表', subtitle: '任务读号表 · TASK' },
+  'delay-ledger': { cn: '延期记录表', subtitle: '延期记录表 · DELAY' },
+  'member-roster': { cn: '成员责任表', subtitle: '成员责任表 · TEAM DEPARTURES' },
+};
+
 /** 阶段四态的字形双编码（灰度可读：文字 + 实心/空心/形状，01 §2） */
 const STAGE_GLYPH: Record<StageStatus, string> = {
   [StageStatus.NotStarted]: '□',
@@ -202,7 +219,14 @@ function SwissPage({
   // 原生页 = 栏内当前项（nav 点亮）；通用页 = 模块英文栏名（nav 不点亮）
   const nav = page.type === 'native' ? SWISS_NAV.find((n) => n.kind === page.kind) : undefined;
   const navEn = page.type === 'native' ? (nav ?? SWISS_NAV[0]!).en : GENERIC_TITLES[page.module].en;
+  // 页题：原生页走页题表；通用页走模块名（黑顶栏中文页题位）
+  const pageCn =
+    page.type === 'native'
+      ? SWISS_PAGE_TITLES[page.kind]?.cn ?? navEn
+      : GENERIC_TITLES[page.module].cn;
   const pageAttr = page.type === 'native' ? page.kind : `generic-${page.module}`;
+  const nn = String(pageIndex + 1).padStart(2, '0');
+  const NN = String(pageTotal).padStart(2, '0');
   return (
     <div
       ref={pageRef}
@@ -211,7 +235,7 @@ function SwissPage({
       className="a4-page swiss-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
     >
-      {/* 黑顶栏（左右内缩 40px，黄字反白；项目名居中=站名） */}
+      {/* 黑顶栏（左右内缩 40px，黄字反白）：logo + 四枚英文栏目 + 中文页题 + 品牌·页序 */}
       <header className="swiss-topbar">
         <div className="swiss-topbar__nav" aria-label="栏目">
           {/* logo：黑顶栏左端（≤24px，黄字旁）。暗栏反白、亮栏原样（按栏底
@@ -227,14 +251,15 @@ function SwissPage({
             </span>
           ))}
         </div>
-        {/* 项目名居中被做「站名」；超出两行截断，完整名经 title 可访问（02 §8） */}
-        <div className="swiss-topbar__title" title={vm.project.name}>
-          {vm.project.name}
-        </div>
+        {/* 中文页题（参考稿黑顶栏左端站位；项目名已移到栏外板头的「站名」位） */}
+        <div className="swiss-topbar__title">{pageCn}</div>
+        {/* 品牌 + 页序（参考稿右端 `ID PLAN · 01/04`）+ 项目周期 */}
         <div className="swiss-topbar__meta">
-          <span>{navEn}</span>
           <span className="swiss-num">
-            {vm.project.scheduleBasisLabel} · {vm.project.plannedStartAt} – {vm.project.plannedEndAt}
+            ID PLAN · {nn} / {NN}
+          </span>
+          <span className="swiss-num">
+            {vm.project.plannedStartAt} — {vm.project.plannedEndAt}
           </span>
         </div>
       </header>
@@ -243,7 +268,15 @@ function SwissPage({
         {page.type === 'native' ? (
           <SwissPageBody kind={page.kind} vm={vm} />
         ) : (
-          <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />
+          <>
+            {/* 通用模块页同样有「站名 + 副标题 + 通栏线」（每页可独立解释，01 §2） */}
+            <SwissMasthead
+              projectName={vm.project.name}
+              subtitle={`${GENERIC_TITLES[page.module].cn} · ${GENERIC_TITLES[page.module].en}`}
+              meta={[]}
+            />
+            <GenericModuleBody plan={page.plan} chunkIndex={page.chunkIndex} />
+          </>
         )}
       </div>
 
@@ -254,6 +287,62 @@ function SwissPage({
           第 {pageIndex + 1} / {pageTotal} 页 · 数据时间 {stampOf(vm.generatedAt)}
         </span>
       </footer>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ 栏外板头（站名） */
+
+/**
+ * 栏外板头（P0-3）：居中的「站名」项目名 → 副标题 → 2px 通栏线 → 元信息行。
+ *
+ * 参考稿实测（A P1，794×1123 CSS px）：
+ *   站名 y162..199（cap 37.5 ⇒ 字号 ≈40px，**不是**审计报告的 52px——那个值
+ *     是按拉丁 cap 比推的，中文方块字的字面/字宽比不同，实测 4 字墨宽 157.5px
+ *     ⇒ 每字 39.4px ⇒ 字号 ≈40px）；副标 y216..232；2px 通栏线 y268；
+ *   左元信息 3 行 y293.5 / 310.5 / 327.5；右巨字完成度 y268..328（cap 60 ⇒ 82px）；
+ *   巨字说明行 y341.5..349.5。
+ *
+ * 为什么做共享件而不是只在 P1 里写：项目名是「每页可独立解释」的项目标识
+ * （01 §2 + 宪法 7），它从黑顶栏移出后必须每页都有落点；且 01 §4 A 视觉系统
+ * 原文就是「标题：项目名居中，像站名」（版本级规则，不是 P1 专属）。
+ */
+function SwissMasthead({
+  projectName,
+  subtitle,
+  meta,
+  anchor,
+}: {
+  projectName: string;
+  subtitle: string;
+  meta: readonly string[];
+  /** 右侧版面锚点（P1 = 巨字完成度；其余页无——巨字不借，审美标准 §2-H 同律） */
+  anchor?: { value: string; caption: string };
+}): JSX.Element {
+  return (
+    <div className="swiss-masthead">
+      <div className="swiss-masthead__name" title={projectName}>
+        {projectName}
+      </div>
+      {/* 板头标题 = 页副标题（参考稿 `阶段排期表 · PROJECT DEPARTURES`）；
+          仍是 h2 + 原类名，故 P0-1 的「纸面 h2 墨色」在 DOM 上可直接断言 */}
+      <h2 className="swiss-board__title swiss-masthead__subtitle">{subtitle}</h2>
+      <div className="swiss-masthead__rule" />
+      <div className="swiss-masthead__row">
+        <div className="swiss-masthead__meta">
+          {meta.map((line) => (
+            <div key={line} className="swiss-masthead__meta-line swiss-num">
+              {line}
+            </div>
+          ))}
+        </div>
+        {anchor && (
+          <div className="swiss-masthead__anchor">
+            <div className="swiss-masthead__pct swiss-num">{anchor.value}</div>
+            <div className="swiss-masthead__pct-caption">{anchor.caption}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -285,15 +374,29 @@ function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
     .map((gi) => stages.slice(gi * per, (gi + 1) * per))
     .filter((col) => col.length > 0);
   const dense = stages.length > 15;
+  // 「阶段套餐」：套餐键 + 模板版本（纯增量 VM 字段）；未套用套餐时只登版本位
+  const presetKey = vm.project.stagePresetKey ?? null;
+  const presetText = presetKey
+    ? `${presetKey} v${vm.project.stageTemplateVersion ?? 0}`
+    : '—';
 
   return (
     <section className="swiss-board" data-density={dense ? 'compact' : undefined}>
-      <div className="swiss-board__head">
-        <h2 className="swiss-board__title">阶段总览 · 时刻表</h2>
-        <span className="swiss-board__count swiss-num">
-          {stages.length} 阶段 · 完成度 {Math.round(vm.project.percent)}%
-        </span>
-      </div>
+      {/* 栏外板头（P0-3）：站名 + 副标题 + 2px 通栏线 + 左元信息 3 行 + 右巨字完成度 */}
+      <SwissMasthead
+        projectName={vm.project.name}
+        subtitle={SWISS_PAGE_TITLES['stage-overview']!.subtitle}
+        meta={[
+          `排期基准 ${vm.project.scheduleBasisLabel}`,
+          `阶段套餐 ${presetText}（${stages.length} 项）`,
+          `可见阶段 ${stages.length} / ${vm.project.visibleStageCount}`,
+        ]}
+        anchor={{
+          value: `${Math.round(vm.project.percent)}%`,
+          // 口径：完成度按可见阶段数统计（01 §3.1），不按 ratioPercent 加权
+          caption: '项目完成度（阶段粒度）',
+        }}
+      />
       {stages.length === 0 ? (
         <EmptyPrintState kind="stages" />
       ) : (
@@ -310,24 +413,30 @@ function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
               </div>
               {col.map((s) => (
                 <div key={s.id} className="swiss-stage-row" data-state={s.status}>
+                  {/* ① 号码行（号码 + 名称） */}
                   <div className="swiss-stage-row__top">
                     <span className="swiss-stage-row__no swiss-num">
                       {String(s.orderIndex).padStart(2, '0')}
                     </span>
                     <span className="swiss-stage-row__name">{s.name}</span>
-                    <span className="swiss-stage-row__state">
+                  </div>
+                  {/* ② 胶囊行：状态胶囊（实心/描边 + 字形双编码）+ 右对齐日期。
+                      参考稿实测胶囊与日期同一行（审计把「2px 粗线」记在号码行与
+                      胶囊行之间，实拍里没有这条线——见施工报告 P0-6） */}
+                  <div className="swiss-stage-row__capsule-row">
+                    <span className="swiss-stage-row__capsule" data-state={s.status}>
                       <span className="swiss-state-glyph" aria-hidden>
                         {STAGE_GLYPH[s.status]}
                       </span>
                       {stageStatusLabel(s.status)}
                     </span>
-                  </div>
-                  <div className="swiss-stage-row__bottom">
-                    <span className="swiss-num">
-                      {s.startAt} — {s.endAt}
+                    <span className="swiss-stage-row__date swiss-num">
+                      {s.startAt} → {s.endAt}
                     </span>
+                  </div>
+                  {/* ③ 占比 + 负责人行（01 §4 P1 字段表逐项） */}
+                  <div className="swiss-stage-row__bottom">
                     <span>占比 {s.ratioPercent}%</span>
-                    <span>任务 {s.taskProgress.done}/{s.taskProgress.total}</span>
                     <span>负责人 {s.ownerName ?? '—'}</span>
                   </div>
                 </div>
@@ -336,6 +445,22 @@ function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
           ))}
         </div>
       )}
+
+      {/* 口径行（01 §2 + 宪法 7：口径注每页独立解释，空态同样登；参考 y799.5..809.5 单行） */}
+      <p className="swiss-board__note">
+        阶段四态：已完成 进行中 未开始 延期　|　占比 = Stage.ratioPercent（项目级覆写）
+      </p>
+
+      {/* 休息制度黑块（P0-4；参考稿 y832..915.5 h84） */}
+      <div className="swiss-rest">
+        <div className="swiss-rest__title">休息制度　{vm.project.restPolicyLabel ?? '—'}</div>
+        <div className="swiss-rest__note">{vm.project.restPolicyNote ?? ''}</div>
+      </div>
+
+      {/* 数据来源行（P0-4；参考稿 y1025.5..1033，贴底栏） */}
+      <p className="swiss-source swiss-num">
+        数据来源 ID Plan 排程库 {stampOf(vm.generatedAt)} 同步
+      </p>
     </section>
   );
 }
@@ -367,10 +492,12 @@ function TaskDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
   const dense = tasks.length > 22;
   return (
     <section className="swiss-board" data-density={dense ? 'compact' : undefined}>
-      <div className="swiss-board__head">
-        <h2 className="swiss-board__title">任务读号表</h2>
-        <span className="swiss-board__count swiss-num">{tasks.length} 条</span>
-      </div>
+      {/* 板头（页题进黑顶栏；此处只登站名与页副标题 + 本页计数） */}
+      <SwissMasthead
+        projectName={vm.project.name}
+        subtitle={SWISS_PAGE_TITLES['task-register']!.subtitle}
+        meta={[`${tasks.length} 条任务`]}
+      />
       {tasks.length === 0 ? (
         <EmptyPrintState kind="tasks" />
       ) : (
@@ -416,10 +543,11 @@ function DelayDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
 
   return (
     <section className="swiss-board" data-density={dense ? 'compact' : undefined}>
-      <div className="swiss-board__head">
-        <h2 className="swiss-board__title">延期记录表</h2>
-        <span className="swiss-board__count swiss-num">{logs.length} 条流水</span>
-      </div>
+      <SwissMasthead
+        projectName={vm.project.name}
+        subtitle={SWISS_PAGE_TITLES['delay-ledger']!.subtitle}
+        meta={[`${logs.length} 条流水`]}
+      />
 
       {/* 三类延期口径（01 §3.3）：判据分列、互不推导 */}
       <div className="swiss-delay-types">
@@ -486,10 +614,11 @@ function TeamDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
   const members = vm.members;
   return (
     <section className="swiss-board">
-      <div className="swiss-board__head">
-        <h2 className="swiss-board__title">成员责任表</h2>
-        <span className="swiss-board__count swiss-num">{members.length} 人</span>
-      </div>
+      <SwissMasthead
+        projectName={vm.project.name}
+        subtitle={SWISS_PAGE_TITLES['member-roster']!.subtitle}
+        meta={[`${members.length} 人`]}
+      />
       {members.length === 0 ? (
         <EmptyPrintState kind="members" />
       ) : (

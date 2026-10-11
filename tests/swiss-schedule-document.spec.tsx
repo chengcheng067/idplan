@@ -276,29 +276,75 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
     // 页码随启用页重排：第 1 / 2 页、第 2 / 2 页
     expect(qa('.swiss-bottombar')[0]!.textContent).toContain('第 1 / 2 页');
     expect(qa('.swiss-bottombar')[1]!.textContent).toContain('第 2 / 2 页');
-    // 每页都有项目标识 + 数据时间（01 §2：每页可独立解释）
-    for (const bar of qa('.swiss-topbar__title')) {
-      expect(bar.textContent).toBe(PROJECT.name);
+    // 每页可独立解释（01 §2）：项目标识 = 栏外板头的「站名」
+    // （P0-3 起项目名从黑顶栏移到栏外板头，与参考稿 A P1 站位一致；栏内改登中文页题）
+    for (const name of qa('.swiss-masthead__name')) {
+      expect(name.textContent).toBe(PROJECT.name);
     }
+    expect(qa('.swiss-masthead__name')).toHaveLength(2);
+    // 黑顶栏登的是本页中文页题（参考稿栏内站位）
+    expect(qa('.swiss-topbar__title').map((el) => el.textContent)).toEqual([
+      '任务读号表',
+      '成员责任表',
+    ]);
+    // 栏内置品牌 + 页序（参考稿 `ID PLAN · 01/04`）
+    expect(qa('.swiss-topbar__meta')[0]!.textContent).toContain('ID PLAN · 01 / 02');
     expect(qa('.swiss-bottombar')[0]!.textContent).toContain('数据时间 2026-10-09 07:30');
   });
 
-  it('④a P1 阶段总览：序号/名称/四态双编码/日期/占比/负责人/任务进度', () => {
+  it('④a P1 阶段总览：序号/名称/四态胶囊/日期/占比/负责人', () => {
     render(['stage-overview']);
     const root = text('.print-root');
     expect(root).toContain('提案与测量');
     expect(root).toContain('平面方案');
     expect(root).toContain('已完成');
     expect(root).toContain('延期');
-    expect(root).toContain('2026-01-05 — 2026-01-20');
+    // 日期区间走参考稿的箭头写法（`01-01 → 01-24`）
+    expect(root).toContain('2026-01-05 → 2026-01-20');
     expect(root).toContain('占比 40%');
     expect(root).toContain('负责人 负责人甲');
     // 四态字形双编码（灰度可读，不靠色相）
     expect(q('.swiss-stage-row[data-state="delayed"] .swiss-state-glyph')?.textContent).toBe('▲');
     expect(q('.swiss-stage-row[data-state="completed"] .swiss-state-glyph')?.textContent).toBe('●');
+    // P0-6：状态升格为**胶囊**（独立行），不再是名称行末尾的小字
+    const capsules = qa('.swiss-stage-row__capsule');
+    expect(capsules).toHaveLength(2);
+    expect(capsules[0]!.getAttribute('data-state')).toBe('completed');
+    expect(capsules[1]!.getAttribute('data-state')).toBe('delayed');
+    // 胶囊与日期同排，且日期右对齐（参考稿同排）
+    expect(q('.swiss-stage-row__capsule-row .swiss-stage-row__date')?.textContent).toContain(
+      '2026-01-05 → 2026-01-20',
+    );
+    // 名称行里不再挂状态（降级回归护栏）
+    expect(q('.swiss-stage-row__top .swiss-state-glyph')).toBeNull();
     // 项目元信息体现排期基准（01 P1 硬要求）
     expect(root).toContain('按自然日');
-    expect(root).toContain('完成度 50%');
+    // P0-3：完成度升格为板头巨字 + 口径副行（旧板头计数行已移除）
+    expect(q('.swiss-masthead__pct')?.textContent).toBe('50%');
+    expect(q('.swiss-masthead__pct-caption')?.textContent).toBe('项目完成度（阶段粒度）');
+    // 板头左元信息 3 行（参考稿站位）
+    const metaLines = qa('.swiss-masthead__meta-line').map((el) => el.textContent);
+    expect(metaLines).toHaveLength(3);
+    expect(metaLines[0]).toBe('排期基准 按自然日');
+    expect(metaLines[1]).toBe('阶段套餐 —（2 项）');
+    expect(metaLines[2]).toBe('可见阶段 2 / 2');
+  });
+
+  it('④e P1 页尾：口径行 + 休息制度黑块 + 数据来源行（P0-4）', () => {
+    render(['stage-overview']);
+    // 口径注（01 §2 + 宪法 7：每页独立解释）
+    expect(text('.swiss-board__note')).toContain('阶段四态：已完成 进行中 未开始 延期');
+    expect(text('.swiss-board__note')).toContain('占比 = Stage.ratioPercent');
+    // 休息制度黑块：制度名（真实 settings 口径投影）+ 判定链说明
+    expect(text('.swiss-rest__title')).toBe('休息制度　双休 DoubleOff');
+    const note = text('.swiss-rest__note');
+    expect(note).toContain('排期基准为自然日');
+    expect(note).toContain('周六/周日为休息日');
+    // 不伪造班次/工时（宪法 7）
+    expect(note).not.toContain('小时');
+    expect(note).not.toContain('班次');
+    // 数据来源行（含装配时刻）
+    expect(text('.swiss-source')).toBe('数据来源 ID Plan 排程库 2026-10-09 07:30 同步');
   });
 
   it('④b P2 任务读号表：taskNo 读号 / 七态 / 负责人 / 产出物数 / 逾期标记', () => {

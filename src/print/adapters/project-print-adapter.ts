@@ -18,8 +18,9 @@
  */
 
 import type { Member, Project, Stage, StageLog, Task } from '../../core/types/entities';
-import { taskIsDone } from '../../core/types/entities';
-import { MemberRoleKind, SCHEDULE_BASIS_LABELS, ScheduleBasis } from '../../core/types/enums';
+import { DEFAULT_REST_POLICY, taskIsDone } from '../../core/types/entities';
+import type { RestPolicyConfig } from '../../core/types/entities';
+import { MemberRoleKind, REST_POLICY_LABELS, RestPolicyKind, SCHEDULE_BASIS_LABELS, ScheduleBasis } from '../../core/types/enums';
 import type { Execution, WritebackProposal } from '../../core/types/agent-execution';
 import { computeProjectPercent, computeStageTaskProgress } from '../../lib/progress';
 import { computeRelatedStageIds, taskAssigneeIds } from '../../hooks/useRoleGuard';
@@ -57,6 +58,45 @@ export interface PrintViewModelInput {
   todayIso?: string;
   /** 装配时刻（generatedAt；缺省取现在） */
   now?: Date;
+  /**
+   * 公司休息制度（settings key='restPolicy'；缺省回落出厂默认双休）。
+   * 只用于**纸面口径说明**的投影（A 版 P1「休息制度」黑块），不参与任何过滤；
+   * 缺省回落与 useRepos.readRestPolicyFromSettings 同口径（读不出来不该拦打印）。
+   */
+  restPolicy?: RestPolicyConfig;
+}
+
+/** 休息制度英文 token（与参考稿 A P1 `双休 DoubleOff` 的写法一致；取枚举成员名） */
+const REST_POLICY_TOKENS: Record<RestPolicyKind, string> = {
+  [RestPolicyKind.DoubleOff]: 'DoubleOff',
+  [RestPolicyKind.SingleOff]: 'SingleOff',
+  [RestPolicyKind.BigSmallWeek]: 'BigSmallWeek',
+};
+
+/**
+ * 休息制度口径说明（**只描述真实判定链**，不伪造班次/工时/时长换算）。
+ *
+ * 两段拼装：
+ *   ① 排期基准（Project.scheduleBasis，与休息制度正交）——决定「工期 N 天」怎么切；
+ *   ② 休息制度怎么判断（lib/workdays.ts 的 isRestDay 判定链）+ 是否接法定节假日表。
+ */
+function restPolicyNoteOf(policy: RestPolicyConfig, basis: ScheduleBasis): string {
+  const restFromWorkday: Record<RestPolicyKind, string> = {
+    [RestPolicyKind.DoubleOff]: '周六/周日自动跳过',
+    [RestPolicyKind.SingleOff]: '周日自动跳过',
+    [RestPolicyKind.BigSmallWeek]: '周日固定休息、周六按 ISO 周交替（大休周休息）',
+  };
+  const restFromCalendar: Record<RestPolicyKind, string> = {
+    [RestPolicyKind.DoubleOff]: '周六/周日为休息日',
+    [RestPolicyKind.SingleOff]: '周日为休息日',
+    [RestPolicyKind.BigSmallWeek]: '周日固定为休息日、周六按大休/小休周交替',
+  };
+  const holidayPart =
+    policy.skipHolidays === true ? '；法定节假日按内置表计入休息日' : '';
+  if (basis === ScheduleBasis.Workday) {
+    return `排期基准为工作日，${restFromWorkday[policy.kind]}；工期按 workdays.ts 口径换算${holidayPart}。`;
+  }
+  return `排期基准为自然日，日历天连续计算、休息日不参与工期换算；${restFromCalendar[policy.kind]}${holidayPart}。`;
 }
 
 /** 今天兜底：与 useSchedulePaperData 同口径（UTC ISO 前 10 位） */
@@ -117,6 +157,10 @@ export function buildPrintViewModel(input: PrintViewModelInput): PrintViewModel 
   // 口径一「项目逾期」：结束日早于今天且未完成。**不**生成原因（01 §3.3）。
   const projectOverdue = plannedEndDate < todayIso && percent < 100;
 
+  // 休息制度（纸面口径说明用；与过滤无关，缺省回落出厂默认双休）
+  const restPolicy = input.restPolicy ?? DEFAULT_REST_POLICY;
+  const basis = input.project.scheduleBasis ?? ScheduleBasis.Calendar;
+
   const projectVM: PrintProjectVM = {
     id: input.project.id,
     name: input.project.name,
@@ -132,6 +176,11 @@ export function buildPrintViewModel(input: PrintViewModelInput): PrintViewModel 
     visibleStageCount: visibleStages.length,
     projectOverdue,
     todayIso,
+    // ── 纯增量投影（无权限语义）：A 版 P1 板头的套餐/版本行 + 休息制度黑块 ──
+    stagePresetKey: input.project.stagePresetKey ?? null,
+    stageTemplateVersion: input.project.stageTemplateVersion ?? 0,
+    restPolicyLabel: `${REST_POLICY_LABELS[restPolicy.kind]} ${REST_POLICY_TOKENS[restPolicy.kind]}`,
+    restPolicyNote: restPolicyNoteOf(restPolicy, basis),
   };
 
   const stagesVM: PrintStageVM[] = visibleStages.map((s) => ({

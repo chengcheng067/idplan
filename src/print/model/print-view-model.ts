@@ -87,6 +87,25 @@ export interface PrintProjectVM {
   projectOverdue: boolean;
   /** 今天（YYYY-MM-DD，VM 装配时注入，保证纯函数可测） */
   todayIso: string;
+  /**
+   * 阶段套餐键（`Project.stagePresetKey`；null = 项目未套用套餐）。
+   * 纯增量投影（照 artifacts 先例），无权限语义——A 版 P1 板头左元信息第 2 行用。
+   * 可选：手搓 VM 的既有 spec 无需补字段（装配器恒填）。
+   */
+  stagePresetKey?: string | null;
+  /** 阶段模板版本（`Project.stageTemplateVersion`）。同上，A 版 P1 板头用。 */
+  stageTemplateVersion?: number;
+  /**
+   * 公司休息制度展示串（形如 `双休 DoubleOff`）。
+   * 值来自 settings 的休息制度（装配器从 RestPolicyConfig 投影），
+   * A 版 P1「休息制度」黑块第一行用（参考稿同名块）。
+   */
+  restPolicyLabel?: string;
+  /**
+   * 休息制度口径说明（**真实口径**：排期基准 × lib/workdays.ts 判定链 ×
+   * 是否跳过法定节假日）。A 版 P1「休息制度」黑块第二行用。
+   */
+  restPolicyNote?: string;
 }
 
 /** 阶段投影（已过 visible !== false 与可见范围过滤） */

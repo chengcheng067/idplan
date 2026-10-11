@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
 import { useProjectById, useProjectStages, useProjectTasks } from '../../core/project/visibility';
 import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
@@ -77,6 +78,13 @@ export function usePrintViewModel(projectId: string): PrintViewModelData {
   const stageLogCache = useProjectsStore((s) => s.stageLogs);
   const { role, currentMember, hydrated } = useRoleGuard();
   const repos = useReposOrNull();
+  /**
+   * 公司休息制度（settings key='restPolicy' 的 store 镜像）。
+   * 与月历/合同向导同一取值口径（effectiveRestPolicy = 已按需合并法定节假日表），
+   * 只喂给纸面「休息制度」黑块的口径说明，不参与任何可见性过滤。
+   * store 未 hydrate 时是出厂默认双休（useSettingsStore 初值）。
+   */
+  const restPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
 
   const [projectLogs, setProjectLogs] = useState<StageLog[] | null>(null);
   /**
@@ -142,8 +150,9 @@ export function usePrintViewModel(projectId: string): PrintViewModelData {
       proposals: agentData?.proposals,
       role,
       currentMemberId: currentMember?.id ?? null,
+      restPolicy,
     });
-  }, [project, stages, tasks, members, stageLogCache, projectLogs, agentData, role, currentMember, hydrated]);
+  }, [project, stages, tasks, members, stageLogCache, projectLogs, agentData, role, currentMember, hydrated, restPolicy]);
 
   return { vm, project, hydrated };
 }
