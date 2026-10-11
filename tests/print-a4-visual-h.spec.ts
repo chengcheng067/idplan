@@ -1,24 +1,26 @@
 /**
- * H 版 A4 视觉验收（批 4：真构建产物 + 真 Chromium 实测，不真打黑白打印机）。
+ * H 版 A4 视觉验收（人类化后：阶段 / 任务 / 成员海报）。
  *
- * ── 为什么这样做验收 ──
- * 产品决策文档批 4 要求「H 彩色 3 + 灰度 3（重点看空态、confidence 标注、
- * 中轴不穿说明文字）」。灰度走「纸面套 filter:grayscale(1)」——与预览面板
- * 「灰度」toggle 同一机制（决策文档 §3.2-②）。
+ * ── 这个 spec 是什么 ──
+ * **H 唯一的真浏览器回归网**（真实构建 CSS + 真 Chromium + 794×1123 逐页几何）。
+ * 人类化批次（规格 §1.2.2~§1.2.4）把载荷从 Agent 治理公示换成人类项目内容，
+ * 版式构件一个没删 ⇒ 验收判据整体**重挂到人类三页**（规格 §1.3.3：改断言，
+ * 不删测试）。本文件锁四件事：
+ *   ① 逐页 794×1123 **无裁切**（页高 / 主体 scrollHeight 双口径）
+ *   ② 版式台账（构件一个不少）：中轴 2px accent / 栏头 3px 规则线 /
+ *      实底标签 ≥9.5px 且带文字与字形 / 标签错落 / 居中摘要大号 mono（不借巨字）
+ *   ③ 人类口径（分组名、meta 行、口径行、图例态数、脚注）+ **Agent 载荷已下纸**
+ *   ④ 分页压测（24 阶段 / 30 任务）逐页无裁切 + 续页不出巨字出「（续）」
+ * 加上 A1/A2 的纸色与巨字几何自证（P0-17 / P0-18 / P0-23 的继任判据）。
  *
- * ── 方法（与 print-a4-visual{-d,-e}.spec.ts 同范式）──
- * ① 真实组件（AgentPosterDocument）+ 真实 VM 装配（buildPrintViewModel，
- *    executions / proposals 经适配器入 VM）；② 外挂真实构建产物 CSS；
- * ③ 真 Chromium 逐页截图 + 794×1123 无裁切断言。
- *
- * 夹具覆盖批 4 点名的面：七态执行（running 主焦点）、四态提案（含
- * confidence 值）、**非 Agent 项目整版空态**、中轴几何（只贯穿栏区）、
- * 口径文案（仅供参考 / 白名单四项 / 其余字段只读）。
- *
- * 前置：`npm run build --outDir build-dist` 与本机 chromium；缺任一整组 skip。
- *
- * 产物落点：`outputs/print-a4-shots/`（工作区交付目录，不进 git）。
+ * ── 为什么逐页要断两遍「无裁切」──
+ * `.a4-page` 是 1123 的 flex 列，`.ap-body` 是 `flex: 1; min-height: 0` 的弹性项：
+ * 内容比可用高度高时**不会把纸撑高**（撑高会被页高断言抓到），而是溢出到
+ * 弹性项之外被 `overflow: hidden` 剪掉 —— 页高断言因此对「主体内部溢出」是瞎的。
+ * 第二道用 `.ap-body` 的 `scrollHeight ≤ clientHeight`（主体里的内容全在里面），
+ * 这才是「无裁切」的真判据。
  */
+
 import { describe, it, expect, beforeAll } from 'vitest';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -28,9 +30,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { AgentPosterDocument } from '../src/print/documents/AgentPosterDocument';
 import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
+import { formatTaskNo } from '../src/core/lib/task-no';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
-import { WRITEBACK_WRITABLE_FIELDS } from '../src/core/types/agent-execution';
-import type { WritebackProposalStatus } from '../src/core/types/agent-execution';
 import type { Execution, WritebackProposal } from '../src/core/types/agent-execution';
 import {
   MemberActorKind,
@@ -88,8 +89,7 @@ function builtCss(): string {
 /**
  * `#RRGGBB` → `rgb(r, g, b)`（与 getComputedStyle 的返回格式一致）。
  * 用途：断言「元素取的是 palette 里那枚色」而不把色值抄第二遍——
- * palette 是单一真值源，抄一遍色值 = 造第二真值源（P0-17 判据里的
- * 「accent = #E2522B」由 print-palette 侧的 spec 负责钉死）。
+ * palette 是单一真值源，抄一遍色值 = 造第二真值源。
  */
 function hexRgb(hex: string): string {
   const n = parseInt(hex.replace('#', ''), 16);
@@ -153,200 +153,89 @@ const AGENT: Member = {
   updatedAt: '2026-01-01T00:00:00Z',
 };
 
+function makeStage(
+  n: number,
+  status: StageStatus,
+  name: string,
+  ownerId: string | null = null,
+): Stage {
+  return {
+    id: `stg_h4_${n}`,
+    projectId: PROJECT_ID,
+    orderIndex: n,
+    templateKey: null,
+    colorIndex: (n % 6) + 1,
+    customColor: null,
+    name,
+    ratioPercent: 20,
+    startAt: `2026-01-${String(n).padStart(2, '0')}T00:00:00Z`,
+    endAt: `2026-02-${String(n).padStart(2, '0')}T23:59:59Z`,
+    status,
+    ownerId,
+    visible: true,
+    resourcePath: null,
+    revision: 1,
+    updatedAt: '2026-01-01T00:00:00Z',
+  };
+}
+
+/**
+ * 常态夹具：3 阶段、**两栏都有块**——待推进栏 2 块（延期 + 未开始，错落可验）、
+ * 在推进栏 1 块。一页装得下（原生容量 7 块/栏）。
+ */
 const STAGES: Stage[] = [
-  {
-    id: 'stg_h4_1',
-    projectId: PROJECT_ID,
-    orderIndex: 1,
-    templateKey: null,
-    colorIndex: 1,
-    customColor: null,
-    name: '现场勘查',
-    ratioPercent: 40,
-    startAt: '2026-01-05T00:00:00Z',
-    endAt: '2026-01-20T23:59:59Z',
-    status: StageStatus.InProgress,
-    ownerId: AGENT.id,
-    visible: true,
-    resourcePath: null,
-    revision: 1,
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'stg_h4_2',
-    projectId: PROJECT_ID,
-    orderIndex: 2,
-    templateKey: null,
-    colorIndex: 2,
-    customColor: null,
-    name: '方案深化',
-    ratioPercent: 60,
-    startAt: '2026-01-21T00:00:00Z',
-    endAt: '2026-02-20T23:59:59Z',
-    status: StageStatus.NotStarted,
-    ownerId: HUMAN.id,
-    visible: true,
-    resourcePath: null,
-    revision: 1,
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
+  makeStage(1, StageStatus.InProgress, '现场勘查', AGENT.id),
+  makeStage(2, StageStatus.Delayed, '方案深化', null),
+  makeStage(3, StageStatus.NotStarted, '施工图交付', null),
 ];
 
-const TASKS: Task[] = [
-  {
-    id: 'tsk_h4_1',
-    taskNo: 1042,
+function makeTask(
+  n: number,
+  taskNo: number,
+  title: string,
+  status: TaskStatus,
+  dueDate: string | null,
+  artifactCount = 0,
+): Task {
+  return {
+    id: `tsk_h4_${n}`,
     projectId: PROJECT_ID,
     stageId: 'stg_h4_1',
-    title: '整理测绘图与材料清单并同步给施工方确认',
-    done: false,
-    assigneeId: AGENT.id,
-    assigneeIds: [AGENT.id],
-    dueDate: null,
-    source: 'agent',
-    externalId: null,
-    agentId: AGENT.id,
-    status: TaskStatus.InProgress,
-    description: null,
+    taskNo,
+    title,
+    status,
+    assigneeIds: [HUMAN.id],
+    dueDate,
     dependsOn: [],
-    artifacts: [],
-    startAt: null,
-    claimedAt: null,
-    runId: 'run_h4_001',
-    orderIndex: 1,
+    // 产出物走真实字段（`Task.artifacts[]`），投影层的 `artifactCount` 由它派生——
+    // 夹具里直接写 `artifactCount` 会绕过适配器（第一版就是这么写错的）。
+    artifacts: Array.from({ length: artifactCount }, (_, i) => ({
+      id: `art_h4_${n}_${i}`,
+      kind: 'doc' as const,
+      title: `产出物 ${i + 1}`,
+      path: null,
+      url: null,
+      note: null,
+    })),
+    source: 'manual',
+    runId: null,
     revision: 1,
     updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'tsk_h4_2',
-    taskNo: 1043,
-    projectId: PROJECT_ID,
-    stageId: 'stg_h4_2',
-    title: '输出深化方案文档',
-    done: false,
-    assigneeId: AGENT.id,
-    assigneeIds: [AGENT.id],
-    dueDate: null,
-    source: 'agent',
-    externalId: null,
-    agentId: AGENT.id,
-    status: TaskStatus.Ready,
-    description: null,
-    dependsOn: [],
-    artifacts: [],
-    startAt: null,
-    claimedAt: null,
-    runId: 'run_h4_002',
-    orderIndex: 1,
-    revision: 1,
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
+  };
+}
+
+const TASKS: Task[] = [
+  makeTask(1, 1042, '首轮测绘图归档', TaskStatus.InProgress, '2026-01-18', 1),
+  makeTask(2, 1043, '结构复核（外部）', TaskStatus.Blocked, '2026-01-10'),
 ];
 
-/** 七态执行（覆盖四组中的七态；running = 主焦点） */
-const EXECUTIONS: Execution[] = [
+/**
+ * 项目里**确实存在 Agent 数据**（执行单 + 写回提案）——人类化后纸面一个字都不许
+ * 再出现它们（这正是「有 Agent 数据也不再上纸」的回归判据）。
+ */
+const EXECUTIONS = [
   {
     id: 'exec_h4_running',
-    projectId: PROJECT_ID,
-    taskId: 'tsk_h4_1',
-    source: 'project-task',
-    objective: '整理测绘图与材料清单并同步给施工方确认',
-    agentMemberId: AGENT.id,
-    channelKind: 'loopback',
-    inputSnapshotHash: null,
-    status: 'running',
-    confirmation: null,
-    idempotencyKey: 'exec:project-task:proj_h4:1',
-    currentAttemptNo: 2,
-    createdAt: '2026-10-08T01:00:00Z',
-    updatedAt: '2026-10-08T02:00:00Z',
-    startedAt: '2026-10-08T01:30:00Z',
-    finishedAt: null,
-    terminalReason: null,
-    blockedReason: null,
-  },
-  {
-    id: 'exec_h4_attention',
-    projectId: PROJECT_ID,
-    taskId: 'tsk_h4_1',
-    source: 'natural-language',
-    objective: '补充主材样品清单',
-    agentMemberId: AGENT.id,
-    channelKind: null,
-    inputSnapshotHash: null,
-    status: 'needs_attention',
-    confirmation: null,
-    idempotencyKey: 'exec:natural-language:proj_h4:2',
-    currentAttemptNo: 1,
-    createdAt: '2026-10-07T01:00:00Z',
-    updatedAt: '2026-10-07T03:00:00Z',
-    startedAt: '2026-10-07T01:10:00Z',
-    finishedAt: null,
-    terminalReason: null,
-    blockedReason: '缺输入：客户主材样品未确认',
-  },
-  {
-    id: 'exec_h4_review',
-    projectId: PROJECT_ID,
-    taskId: 'tsk_h4_2',
-    source: 'project-task',
-    objective: '输出深化方案文档',
-    agentMemberId: AGENT.id,
-    channelKind: null,
-    inputSnapshotHash: null,
-    status: 'awaiting_review',
-    confirmation: null,
-    idempotencyKey: 'exec:project-task:proj_h4:3',
-    currentAttemptNo: 1,
-    createdAt: '2026-10-06T01:00:00Z',
-    updatedAt: '2026-10-06T05:00:00Z',
-    startedAt: '2026-10-06T01:10:00Z',
-    finishedAt: '2026-10-06T04:00:00Z',
-    terminalReason: null,
-    blockedReason: null,
-  },
-  {
-    id: 'exec_h4_draft',
-    projectId: PROJECT_ID,
-    taskId: null,
-    source: 'external',
-    objective: '外部接入的批量整理',
-    agentMemberId: null,
-    channelKind: 'http',
-    inputSnapshotHash: null,
-    status: 'draft',
-    confirmation: null,
-    idempotencyKey: 'exec:external:proj_h4:4',
-    currentAttemptNo: 0,
-    createdAt: '2026-10-05T01:00:00Z',
-    updatedAt: '2026-10-05T01:00:00Z',
-    startedAt: null,
-    finishedAt: null,
-    terminalReason: null,
-    blockedReason: null,
-  },
-  {
-    id: 'exec_h4_queued',
-    projectId: PROJECT_ID,
-    taskId: 'tsk_h4_2',
-    source: 'template',
-    objective: '模板触发的图档整理',
-    agentMemberId: AGENT.id,
-    channelKind: null,
-    inputSnapshotHash: null,
-    status: 'queued',
-    confirmation: null,
-    idempotencyKey: 'exec:template:proj_h4:5',
-    currentAttemptNo: 0,
-    createdAt: '2026-10-05T02:00:00Z',
-    updatedAt: '2026-10-05T02:00:00Z',
-    startedAt: null,
-    finishedAt: null,
-    terminalReason: null,
-    blockedReason: null,
-  },
-  {
-    id: 'exec_h4_done',
     projectId: PROJECT_ID,
     taskId: 'tsk_h4_1',
     source: 'project-task',
@@ -354,85 +243,71 @@ const EXECUTIONS: Execution[] = [
     agentMemberId: AGENT.id,
     channelKind: null,
     inputSnapshotHash: null,
-    status: 'completed',
+    status: 'running',
     confirmation: null,
-    idempotencyKey: 'exec:project-task:proj_h4:6',
-    currentAttemptNo: 1,
-    createdAt: '2026-10-04T01:00:00Z',
-    updatedAt: '2026-10-04T06:00:00Z',
-    startedAt: '2026-10-04T01:10:00Z',
-    finishedAt: '2026-10-04T05:00:00Z',
+    idempotencyKey: 'exec:project-task:proj_h4:1',
+    currentAttemptNo: 2,
+    createdAt: '2026-10-06T01:00:00Z',
+    updatedAt: '2026-10-06T05:00:00Z',
+    startedAt: '2026-10-06T01:10:00Z',
+    finishedAt: null,
     terminalReason: null,
     blockedReason: null,
   },
-  {
-    id: 'exec_h4_failed',
-    projectId: PROJECT_ID,
-    taskId: null,
-    source: 'external',
-    objective: '外部通道同步（失败）',
-    agentMemberId: AGENT.id,
-    channelKind: 'http',
-    inputSnapshotHash: null,
-    status: 'failed',
-    confirmation: null,
-    idempotencyKey: 'exec:external:proj_h4:7',
-    currentAttemptNo: 3,
-    createdAt: '2026-10-03T01:00:00Z',
-    updatedAt: '2026-10-03T04:00:00Z',
-    startedAt: '2026-10-03T01:10:00Z',
-    finishedAt: '2026-10-03T03:30:00Z',
-    terminalReason: '通道超时',
-    blockedReason: null,
-  },
-];
+] as unknown as Execution[];
 
-/** 四态提案（含 confidence 值；Proposed / Conflict = 治理焦点） */
-function makeProposal(
-  n: number,
-  status: WritebackProposalStatus,
-  field: string,
-  confidence: number | null,
-  decided: { by: string; at: string } | null,
-): WritebackProposal {
-  return {
-    id: `wb_h4_${n}`,
-    executionId: n <= 2 ? 'exec_h4_running' : 'exec_h4_review',
+const PROPOSALS = [
+  {
+    id: 'wb_h4_1',
+    executionId: 'exec_h4_running',
     attemptId: null,
     projectId: PROJECT_ID,
-    taskId: n <= 2 ? 'tsk_h4_1' : 'tsk_h4_2',
-    operations: [{ field, before: 'ready', after: 'in_progress' }],
-    status,
-    idempotencyKey: `wb:exec_h4:tsk_h4:${field}`,
-    reason: n === 1 ? '测绘图已归档，状态可推进' : null,
-    confidence,
-    decidedBy: decided?.by ?? null,
-    decidedAt: decided?.at ?? null,
-    createdAt: `2026-10-0${n}T02:00:00Z`,
-    updatedAt: `2026-10-0${n}T02:00:00Z`,
-  };
-}
+    taskId: 'tsk_h4_1',
+    operations: [{ field: 'task.status', before: 'ready', after: 'in_progress' }],
+    status: 'proposed',
+    idempotencyKey: 'wb:exec_h4:tsk_h4:status',
+    reason: '测绘图已归档，状态可推进',
+    confidence: 0.82,
+    decidedBy: null,
+    decidedAt: null,
+    createdAt: '2026-10-06T02:00:00Z',
+    updatedAt: '2026-10-06T02:00:00Z',
+  },
+] as unknown as WritebackProposal[];
 
-const PROPOSALS: WritebackProposal[] = [
-  makeProposal(1, 'proposed', 'task.status', 0.82, null),
-  makeProposal(2, 'applied', 'task.notes.append', 0.91, { by: '负责人甲', at: '2026-10-01T06:00:00Z' }),
-  makeProposal(3, 'rejected', 'task.comment', 0.4, { by: '负责人甲', at: '2026-10-02T06:00:00Z' }),
-  makeProposal(4, 'conflict', 'task.attachment.ref', 0.66, null),
+/**
+ * 压测夹具：24 阶段（**两栏都压满**：待推进 8 = 4 延期 + 4 未开始；在推进 16 =
+ * 8 进行中 + 8 已完成）⇒ 首屏 7 + 7 = 14 块正好满页，其余进续页；
+ * 30 任务（> 原生容量 12 ⇒ 任务海报回落通用渲染，规格 §1.2.3）。
+ */
+const MANY_STAGES: Stage[] = [
+  ...Array.from({ length: 4 }, (_, i) => makeStage(i + 1, StageStatus.Delayed, `延期阶段 ${i + 1}`)),
+  ...Array.from({ length: 4 }, (_, i) => makeStage(i + 5, StageStatus.NotStarted, `未开始阶段 ${i + 1}`)),
+  ...Array.from({ length: 8 }, (_, i) => makeStage(i + 9, StageStatus.InProgress, `在推阶段 ${i + 1}`)),
+  ...Array.from({ length: 8 }, (_, i) => makeStage(i + 17, StageStatus.Completed, `已完成阶段 ${i + 1}`)),
 ];
 
-function buildVm(withAgentData = true): ReturnType<typeof buildPrintViewModel> {
+const MANY_TASKS: Task[] = [
+  ...Array.from({ length: 10 }, (_, i) => makeTask(100 + i, 2000 + i, `在轨任务 ${i + 1}`, TaskStatus.InProgress, null)),
+  ...Array.from({ length: 8 }, (_, i) => makeTask(200 + i, 3000 + i, `已完成任务 ${i + 1}`, TaskStatus.Done, null)),
+  ...Array.from({ length: 7 }, (_, i) => makeTask(300 + i, 4000 + i, `受阻任务 ${i + 1}`, TaskStatus.Blocked, '2026-01-05')),
+  ...Array.from({ length: 5 }, (_, i) => makeTask(400 + i, 5000 + i, `就绪任务 ${i + 1}`, TaskStatus.Ready, null)),
+];
+
+function buildVm(over: Partial<Parameters<typeof buildPrintViewModel>[0]> = {}): ReturnType<typeof buildPrintViewModel> {
   return buildPrintViewModel({
     project: PROJECT,
     stages: STAGES,
     tasks: TASKS,
     members: [HUMAN, AGENT],
     stageLogs: [],
-    executions: withAgentData ? EXECUTIONS : [],
-    proposals: withAgentData ? PROPOSALS : [],
+    executions: EXECUTIONS,
+    proposals: PROPOSALS,
     role: MemberRoleKind.Admin,
     currentMemberId: HUMAN.id,
     todayIso: TODAY,
     now: new Date('2026-10-09T07:30:00Z'),
+    ...over,
   });
 }
 
@@ -450,41 +325,66 @@ function writeHtml(name: string, html: string): string {
   return p;
 }
 
+const BASELINE = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
+
+function markupOf(vm: ReturnType<typeof buildPrintViewModel>, brandWord?: string): string {
+  return renderToStaticMarkup(
+    createElement(AgentPosterDocument, { vm, palette: BASELINE, ...(brandWord ? { brandWord } : {}) }),
+  );
+}
+
+/** 逐页几何：页高 + 主体内部溢出（「无裁切」的两道判据） */
+async function pageGeometry(page: import('playwright-core').Page) {
+  return page.$$eval('.a4-page', (els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      const body = el.querySelector('.ap-body') as HTMLElement | null;
+      return {
+        page: el.getAttribute('data-print-page'),
+        w: +r.width.toFixed(1),
+        h: +r.height.toFixed(1),
+        bodyOverflow: body ? +(body.scrollHeight - body.clientHeight).toFixed(1) : null,
+      };
+    }),
+  );
+}
+
 /* ------------------------------------------------------------------ 验收 */
 
-describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真实构建 CSS）', () => {
+describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium + 真实构建 CSS）', () => {
   let browser: Browser;
 
   beforeAll(async () => {
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('H 版默认态：3 原生签名纸面，彩色 3 张 + 灰度 3 张；794×1123 无裁切（她 10-09 23:38 反馈：默认收敛到签名页，通用 M1/M2/M4 不进默认态）', async () => {
+  it('① 默认态：三页人类海报（阶段 / 任务 / 成员），彩色 3 张 + 灰度 3 张；逐页 794×1123 无裁切', async () => {
     const css = builtCss();
     const vm = buildVm();
-    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
-    const markup = renderToStaticMarkup(
-      createElement(AgentPosterDocument, { vm, palette: baseline }),
-    );
+    const markup = markupOf(vm);
 
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
       for (const gray of [false, true]) {
-        const htmlPath = writeHtml(
-          gray ? 'h-default-gray.html' : 'h-default-color.html',
-          shell(markup, css, gray),
-        );
+        const htmlPath = writeHtml(gray ? 'h-hum-gray.html' : 'h-hum-color.html', shell(markup, css, gray));
         await page.goto('file://' + htmlPath);
-        const pages = await page.$$('.a4-page');
-        expect(pages, 'H 版应渲染 3 页（默认 = 原生签名页；M10 落两页 + 写回一页）').toHaveLength(3);
-        for (let i = 0; i < pages.length; i++) {
-          const el = pages[i]!;
-          const box = await el.boundingBox();
-          expect(box, `第 ${i + 1} 页应有布局盒`).not.toBeNull();
-          expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
-          expect(box!.height, `第 ${i + 1} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
-          expect(box!.height, `第 ${i + 1} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
-          await el.screenshot({ path: join(OUT_DIR, `density2-h-p${i + 1}-${gray ? 'gray' : 'color'}.png`) });
+        const geo = await pageGeometry(page);
+        expect(geo.map((g) => g.page), 'H 默认纸面 = 人类三页（M1 → M2 → M4）').toEqual([
+          'stage-overview',
+          'task-register',
+          'member-roster',
+        ]);
+        for (const g of geo) {
+          expect(Math.abs(g.w - 794), `${g.page} 页宽应 794`).toBeLessThanOrEqual(1);
+          expect(g.h, `${g.page} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
+          expect(g.h, `${g.page} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
+          expect(g.bodyOverflow, `${g.page} 主体内容不得超出可用高度（内部溢出 = 被 overflow 剪掉）`).toBeLessThanOrEqual(1);
+        }
+        const els = await page.$$('.a4-page');
+        for (let i = 0; i < els.length; i++) {
+          await els[i]!.screenshot({
+            path: join(OUT_DIR, `h-hum-p${i + 1}-${gray ? 'gray' : 'color'}.png`),
+          });
         }
       }
     } finally {
@@ -492,314 +392,335 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
     }
   });
 
-  it('H 版自身密度修订锁定：状态卡 36px / card-key 9.5px / 块题下距 12px / 摘要下距 20px', async () => {
+  it('② 版式台账：中轴 2px accent 只贯穿栏区 / 栏头 3px 规则线 / 实底标签 ≥9.5px 带字带字形 / 标签错落 / 居中摘要大号 mono', async () => {
     const css = builtCss();
     const vm = buildVm();
-    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
-    const markup = renderToStaticMarkup(
-      createElement(AgentPosterDocument, { vm, palette: baseline }),
-    );
-
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
-      const htmlPath = writeHtml('h-default-color.html', shell(markup, css, false));
-      await page.goto('file://' + htmlPath);
+      await page.goto('file://' + writeHtml('h-hum-color.html', shell(markupOf(vm), css, false)));
 
-      // ① L2 状态卡 42→36px（padding 8→5；进密度规则 26-36px/行区间）
-      const cardH = await page.$eval('.ap-status__card', (el) => el.getBoundingClientRect().height);
-      expect(cardH, '状态卡高应为 36px（L2 区间上界）').toBeCloseTo(36, 0);
-      const cardPad = await page.$eval('.ap-status__card', (el) => getComputedStyle(el).padding);
-      expect(cardPad, '状态卡上下 padding 应为 5px').toBe('5px 11px');
-
-      // ② card-key 9→9.5px（gate 态随卡变 accent ⇒ 密度 §4 约束 3 下限）
-      const keyFs = await page.$eval('.ap-status__card-key', (el) => getComputedStyle(el).fontSize);
-      expect(keyFs, '状态卡 key 字号应 ≥9.5px（accent 文字下限）').toBe('9.5px');
-
-      // ③ P1 块题 → 字段行界面 8→12px（L1↔L2）
-      const blockTitleMb = await page.$eval('.ap-declare__block-title', (el) => getComputedStyle(el).marginBottom);
-      expect(blockTitleMb, '宣告块题下距应为 12px').toBe('12px');
-
-      // ④ P2 巨号摘要 → 状态卡界面 14→20px（L0↔L2）
-      const summaryPb = await page.$eval('.ap-status__summary', (el) => getComputedStyle(el).paddingBottom);
-      expect(summaryPb, '摘要带下距应为 20px').toBe('20px');
-
-      // 焦点纪律不断：running 仍是全页唯一实心黑卡
-      const runningBg = await page.$eval('[data-testid="ap-status-card-running"]', (el) =>
-        getComputedStyle(el).backgroundColor,
-      );
-      expect(runningBg, 'running 卡仍为近黑实心 #0A0A0A（焦点身份不断）').toBe('rgb(10, 10, 10)');
-    } finally {
-      await page.close();
-    }
-  });
-
-  it('H 版空态：非 Agent 项目 ⇒ 整版只读空态（无巨字 / 无状态卡 / 不填模拟记录）', async () => {
-    const css = builtCss();
-    const vm = buildVm(false);
-    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
-    const markup = renderToStaticMarkup(
-      createElement(AgentPosterDocument, { vm, palette: baseline }),
-    );
-
-    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
-    try {
-      const htmlPath = writeHtml('h-empty.html', shell(markup, css, false));
-      await page.goto('file://' + htmlPath);
-      // 三页照常出纸（页头页脚齐全）：原生三页主体是只读空态
-      // （默认 = 原生签名页；通用 M1/M2/M4 可手动勾选，不进默认态）
-      const pages = await page.$$('.a4-page');
-      expect(pages).toHaveLength(3);
-      const empties = await page.$$('[data-print-empty="agent"]');
-      expect(empties.length, '三个原生页整版只读空态').toBe(3);
-      const text = (await page.textContent('body')) ?? '';
-      expect(text).toContain('当前项目暂无 Agent 执行数据');
-      // 不许拿模拟记录填版：空态下没有任何状态卡 / 巨字 / 流程盒
-      // （期七深化起 H×M2 双栏卡用 .gm-task-* 自有类名，与原生卡零碰撞）
-      expect(await page.$('.ap-giant')).toBeNull();
-      expect(await page.$('.ap-status__card')).toBeNull();
-      expect(await page.$('.ap-flow-box')).toBeNull();
-      // 页头页脚仍在（每页可独立解释，01 §2）
-      expect(text).toContain('Agent 执行宣告');
-      expect(text).toContain('执行状态全览');
-      expect(text).toContain('写回提案公示');
-      // 空态页也不溢出
-      for (let i = 0; i < pages.length; i++) {
-        const box = await pages[i]!.boundingBox();
-        expect(box!.height).toBeLessThanOrEqual(1124);
-        await pages[i]!.screenshot({ path: join(OUT_DIR, `h-empty-p${i + 1}-color.png`) });
-      }
-    } finally {
-      await page.close();
-    }
-  });
-
-  it('H 版中轴几何：轴只贯穿双栏栏区，不穿下方说明文字；门控标题不压状态卡', async () => {
-    const css = builtCss();
-    const vm = buildVm();
-    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
-    const markup = renderToStaticMarkup(
-      createElement(AgentPosterDocument, { vm, palette: baseline }),
-    );
-
-    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
-    try {
-      const htmlPath = writeHtml('h-default-color.html', shell(markup, css, false));
-      await page.goto('file://' + htmlPath);
-      const p2 = await page.$('[data-print-page="execution-status"]');
-      expect(p2, 'P2 执行状态全览页应在').not.toBeNull();
-
-      // ① 轴是双栏容器的 ::before（02 §6：禁绝对定位贯穿整页）
-      const axis = await p2!.$eval('.ap-status__cols', (el) => {
-        const s = getComputedStyle(el, '::before');
-        const r = el.getBoundingClientRect();
+      // ── ① 中轴：容器伪元素、2px、accent、只贯穿栏区（不穿下方说明文字）──
+      const axis = await page.$eval('[data-print-page="stage-overview"]', (el) => {
+        const cols = el.querySelector('.ap-cols') as HTMLElement;
+        const notes = el.querySelector('.ap-notes') as HTMLElement;
+        const s = getComputedStyle(cols, '::before');
+        const c = cols.getBoundingClientRect();
         return {
           position: s.position,
           width: s.width,
-          top: s.top,
-          bottom: s.bottom,
-          // Chromium 把 left:50% 解析成 used value（px，相对容器内宽）⇒ 轴左缘 = 容器半宽
+          bg: s.backgroundColor,
           leftPx: parseFloat(s.left),
-          halfWidth: r.width / 2,
+          halfWidth: c.width / 2,
+          colsBottom: c.bottom,
+          notesTop: notes.getBoundingClientRect().top,
         };
       });
-      expect(axis.position, '轴必须是容器伪元素（absolute 相对栏区容器）').toBe('absolute');
-      expect(axis.width).toBe('1px');
-      expect(axis.top, '轴顶端 = 栏区顶端').toBe('0px');
-      expect(axis.bottom, '轴底端 = 栏区底端（贯穿栏区）').toBe('0px');
-      expect(axis.leftPx, '轴左缘居中于双栏容器（left:50%）').toBeCloseTo(axis.halfWidth, 0);
+      expect(axis.position, '轴必须是双栏容器的伪元素（禁绝对定位贯穿整页，02 §6）').toBe('absolute');
+      expect(axis.width, '参考稿实测轴宽 2px').toBe('2px');
+      expect(axis.bg, '轴取身份色 accent').toBe(hexRgb(BASELINE.accent));
+      expect(axis.leftPx, '轴居中于双栏容器').toBeCloseTo(axis.halfWidth - 1, 0);
+      expect(axis.colsBottom, '栏区底边须在说明文字之上（轴穿不到说明文字，01 §7）').toBeLessThanOrEqual(
+        axis.notesTop + 1,
+      );
 
-      // ② 几何断言：栏区容器整体在说明文字**上方**⇒ 轴（inset-block:0）穿不到说明
-      const geom = await p2!.evaluate((el) => {
-        const cols = el.querySelector('.ap-status__cols') as HTMLElement;
-        const note = el.querySelector('.ap-status__note') as HTMLElement;
-        const c = cols.getBoundingClientRect();
-        const n = note.getBoundingClientRect();
-        return { colsBottom: c.bottom, noteTop: n.top, colsTop: c.top };
-      });
-      expect(
-        geom.colsBottom,
-        '栏区底边必须在说明文字顶边之上（中轴不穿说明文字，01 §7）',
-      ).toBeLessThanOrEqual(geom.noteTop + 1);
+      // ── ② 栏头：3px 分组规则线走 accent（gate 组）/ ink（其余），**不许中灰** ──
+      const rules = await page.$$eval('.ap-col__rule', (els) =>
+        els.map((e) => {
+          const s = getComputedStyle(e);
+          return { h: s.height, bg: s.backgroundColor, tone: (e.closest('.ap-col') as HTMLElement).dataset.tone };
+        }),
+      );
+      expect(rules.length, '三页都应有栏头规则线').toBeGreaterThan(0);
+      for (const r of rules) {
+        expect(r.h, '分组线 3px（参考稿实测 y404.5..407）').toBe('3px');
+        expect(r.bg, `分组线不许中灰（tone=${r.tone}）`).not.toBe('rgb(191, 191, 191)');
+      }
+      expect(rules.some((r) => r.bg === hexRgb(BASELINE.accent) && r.tone === 'gate'), 'gate 组线走 accent').toBe(true);
+      expect(rules.some((r) => r.bg === 'rgb(10, 10, 10)' && r.tone === 'ink'), 'ink 组线走墨').toBe(true);
 
-      // ③ 人工门控标题不压状态卡：组头底边 ≤ 首卡顶边
-      const gateGeom = await p2!.evaluate((el) => {
-        const head = el.querySelector('[data-group="gate"] .ap-status__group-head') as HTMLElement;
-        const card = el.querySelector('[data-group="gate"] .ap-status__card') as HTMLElement;
+      // ── ③ 实底状态标签：实底 + 文字 + 字形；字号 ≥9.5px（accent 文字下限）──
+      const tags = await page.$$eval('.ap-block__tag', (els) =>
+        els.map((e) => {
+          const s = getComputedStyle(e);
+          return {
+            bg: s.backgroundColor,
+            color: s.color,
+            fs: parseFloat(s.fontSize),
+            text: (e.textContent ?? '').trim(),
+            glyph: (e.querySelector('.ap-block__glyph')?.textContent ?? '').trim(),
+          };
+        }),
+      );
+      expect(tags.length, '标签数 = 上纸的块数').toBeGreaterThan(0);
+      for (const t of tags) {
+        expect(t.bg, '标签必须是**实底**（不是描边卡；P0-20）').not.toBe('rgba(0, 0, 0, 0)');
+        expect(t.text.length, '标签内必须有文字（宪法 4：灰度下不靠色相）').toBeGreaterThan(0);
+        expect(t.glyph.length, '标签带形状互异的字形（第二重编码）').toBeGreaterThan(0);
+        expect(t.fs, '标签字号 ≥9.5px（PRINT_DENSITY_FLOORS.accentFontSizeMin）').toBeGreaterThanOrEqual(9.5);
+      }
+      const gateTag = tags.find((t) => t.bg === hexRgb(BASELINE.accent));
+      expect(gateTag, '存在 accent 实底（需人工介入）的标签').toBeTruthy();
+      // 实底标签的文字色按对比度取高者：墨配橙 5.20:1（白配橙只有 3.81:1，不过 4.5）
+      expect(gateTag!.color, 'accent 实底上取墨字（对比度 5.20:1 > 白字 3.81:1）').toBe('rgb(10, 10, 10)');
+
+      // ── ④ 标签错落（参考稿 1001 左 / 1002 右 / 1003 左）：同栏相邻块标签左缘不全相等 ──
+      const stagger = await page.$eval('[data-print-page="stage-overview"] .ap-col__rows', (rows) =>
+        Array.from(rows.querySelectorAll('.ap-block__tag')).map(
+          (e) => +(e as HTMLElement).getBoundingClientRect().left.toFixed(1),
+        ),
+      );
+      expect(new Set(stagger).size, '相邻块标签须错落（否则退化成一列整齐的表格）').toBeGreaterThan(1);
+
+      // ── ⑤ 居中摘要：大号 mono（**不借巨字**——借了每页都是海报）──
+      const sum = await page.$eval('[data-print-page="stage-overview"] .ap-sum', (el) => {
+        const big = el.querySelector('.ap-sum__big') as HTMLElement;
+        const s = getComputedStyle(big);
         return {
-          headBottom: head.getBoundingClientRect().bottom,
-          cardTop: card.getBoundingClientRect().top,
+          textAlign: getComputedStyle(el).textAlign,
+          fs: parseFloat(s.fontSize),
+          family: s.fontFamily,
+          inGiant: big.closest('.ap-giant') !== null,
         };
       });
-      expect(
-        gateGeom.headBottom,
-        '人工门控组头不得压住状态卡（01 §7 P2）',
-      ).toBeLessThanOrEqual(gateGeom.cardTop + 1);
+      expect(sum.textAlign, '居中摘要块须居中').toBe('center');
+      expect(sum.fs, '主数值大号（≈40px 档）').toBeGreaterThanOrEqual(30);
+      expect(sum.family.toLowerCase(), '主数值走等宽').toContain('mono');
+      expect(sum.inGiant, '摘要**不许借巨字装置**（syntax.ts:80-81）').toBe(false);
     } finally {
       await page.close();
     }
   });
 
-  it('H 版口径断言：10 态四组 / running 主焦点 / confidence 仅供参考 / 白名单四项', async () => {
+  it('③ 人类口径：分组名 / meta 行 / 口径行字段 / 图例态数按真实数据 / 两行脚注；**Agent 载荷已下纸**', async () => {
     const css = builtCss();
     const vm = buildVm();
-    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
-    const markup = renderToStaticMarkup(
-      createElement(AgentPosterDocument, { vm, palette: baseline }),
-    );
-
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
-      const htmlPath = writeHtml('h-default-color.html', shell(markup, css, false));
-      await page.goto('file://' + htmlPath);
+      await page.goto('file://' + writeHtml('h-hum-color.html', shell(markupOf(vm), css, false)));
+      const text = (await page.textContent('body')) ?? '';
 
-      // ① P2：十态四组流程 + running 主焦点（实心黑卡）
-      const p2 = await page.$('[data-print-page="execution-status"]');
-      const p2Text = (await p2!.textContent()) ?? '';
-      for (const status of [
-        'draft',
-        'awaiting_confirmation',
-        'queued',
-        'running',
-        'paused',
-        'needs_attention',
-        'awaiting_review',
-        'completed',
-        'failed',
-        'cancelled',
-      ]) {
-        expect(p2Text, `P2 应含十态之 ${status}`).toContain(status);
-      }
-      for (const group of ['准备', '执行', '人工门控', '终局']) {
-        expect(p2Text, `P2 应含四组之「${group}」`).toContain(group);
-      }
-      // running 卡 = 实心黑（当前主焦点）；计数 1（夹具一条 running）
-      const runningCard = await p2!.$eval('[data-testid="ap-status-card-running"]', (el) => {
-        const s = getComputedStyle(el);
-        return { bg: s.backgroundColor, focus: el.hasAttribute('data-focus'), count: el.textContent ?? '' };
-      });
-      expect(runningCard.focus, 'running 为主焦点卡').toBe(true);
-      expect(runningCard.bg, 'running 卡应为近黑实心 #0A0A0A').toBe('rgb(10, 10, 10)');
-      expect(runningCard.count).toContain('1');
-      // needs_attention 卡 = 橙边橙字（等待人工介入）
-      const gateCard = await p2!.$eval('[data-testid="ap-status-card-needs_attention"]', (el) => {
-        const s = getComputedStyle(el);
-        return { border: s.borderTopColor, color: s.color };
-      });
-      // 色值从 palette 读（不复制字面量 —— 避开第二真值源；P0-17 后基线是 #E2522B）
-      expect(gateCard.border, '人工门控卡应为身份色 accent').toBe(hexRgb(baseline.accent));
+      // ── ① 三页页题与页签：`ID PLAN · {英文页题}` / `SHEET nn / NN · A4` ──
+      expect(text).toContain('ID PLAN · STAGE POSTER');
+      expect(text).toContain('ID PLAN · TASK POSTER');
+      expect(text).toContain('ID PLAN · MEMBER POSTER');
+      expect(text).toContain('SHEET 01 / 03 · A4');
+      expect(text).toContain('SHEET 03 / 03 · A4');
 
-      // ② P1：confidence 仅展示 + 旁标「仅供参考」；白名单四项 + 其余字段只读
-      const p1 = await page.$('[data-print-page="agent-declaration"]');
-      const p1Text = (await p1!.textContent()) ?? '';
-      expect(p1Text, 'confidence 旁标「仅供参考」').toContain('仅供参考');
-      // 页顶巨字载荷 = 品牌词（规格 §1.4：与状态解绑）——不再是状态词 RUNNING
-      const topWord = await p1!.$eval('.ap-giant__word', (el) => el.textContent);
-      expect(topWord, '页顶巨字 = 品牌词 PLAN（规格 §1.4，不再是焦点状态词）').toBe('PLAN');
-      // 状态表达归页内焦点行（§1.4 表格末行）——状态没丢，只是换了装置
-      const focusRow = await p1!.$eval('.ap-declare__focus', (el) => el.textContent ?? '');
-      expect(focusRow, '当前主状态归页内焦点行陈述').toContain('当前主状态');
-      expect(p1Text, '状态仍在页内（执行状态字段行）').toContain('running');
-      expect(p1Text).toContain('run_h4_001');
-      expect(p1Text).toContain('第 2 次');
-      for (const field of WRITEBACK_WRITABLE_FIELDS) {
-        expect(p1Text, `P1 白名单应含 ${field}`).toContain(field);
-      }
-      expect(p1Text).toContain('其余字段只读');
-      // 白名单恰好四项（ol 四行，不多不少）
-      const wlCount = await p1!.$$eval('.ap-whitelist__item', (els) => els.length);
-      expect(wlCount, '写回白名单仅四项').toBe(4);
-      // 巨字颜色 = 身份色 accent（参考稿页顶 AGENT 为橙；品牌装置不随状态变，
-      // 故不再有「running ⇒ 近黑」的分支）。期望值取自 palette，单一真值源。
-      const giantColor = await p1!.$eval('.ap-giant__word', (el) => getComputedStyle(el).color);
-      expect(giantColor, '页顶巨字 = accent（品牌装置，不随状态变）').toBe(hexRgb(baseline.accent));
-      expect(giantColor, '巨字不应再是墨色近黑').not.toBe('rgb(10, 10, 10)');
+      // ── ② meta 行（项目名从页眉移到巨字下方；参考稿 y≈242 那位）──
+      const p1 = (await page.$('[data-print-page="stage-overview"]'))!;
+      const p1Text = (await p1.textContent()) ?? '';
+      expect(p1Text, 'meta 行 = 项目名 + 阶段计数').toContain('云栖·湖畔茶室综合改造项目');
+      expect(p1Text).toContain('阶段 3  已完成 0  延期 1');
 
-      // ③ P3：五态 + confidence 列 + 白名单 + 只读注 + 提案四行
-      const p3 = await page.$('[data-print-page="writeback-proposals"]');
-      const p3Text = (await p3!.textContent()) ?? '';
-      for (const status of ['draft', 'proposed', 'applied', 'rejected', 'conflict']) {
-        expect(p3Text, `P3 应含五态之 ${status}`).toContain(status);
+      // ── ③ 分组名（状态表达归双栏栏头，规格 §1.4 表格末行）──
+      expect(p1Text).toContain('待推进');
+      expect(p1Text).toContain('PENDING');
+      expect(p1Text).toContain('在推进');
+      expect(p1Text).toContain('RUNNING');
+      // 块载荷 = 阶段号 + 状态标签 + 一行 meta（日期 / 占比 / 负责人）
+      expect(p1Text).toContain('阶段 01');
+      expect(p1Text).toContain('进行中');
+      expect(p1Text).toContain('2026-01-01 → 2026-02-01 · 占比 20% · 小 Agent');
+      expect(p1Text, '未指派的阶段如实写「未指派」').toContain('未指派');
+
+      // ── ④ 口径行（一行 mono 平铺；标签末二字橙）──
+      for (const f of ['Stage.status', 'Stage.ratioPercent', 'Stage.ownerId', 'StageLog.reason']) {
+        expect(p1Text, `口径行应含 ${f}`).toContain(f);
       }
-      expect(p3Text).toContain('人工门控流程');
-      expect(p3Text).toContain('其余字段只读');
-      for (const field of WRITEBACK_WRITABLE_FIELDS) {
-        expect(p3Text, `P3 白名单应含 ${field}`).toContain(field);
+      const tail = await p1.$eval('.ap-scope__tail', (el) => ({
+        text: (el.textContent ?? '').trim(),
+        color: getComputedStyle(el).color,
+      }));
+      expect(tail.text).toBe('口径');
+      expect(tail.color, '标签末二字着色 accent（参考稿「白名单」二字橙的同位替换）').toBe(hexRgb(BASELINE.accent));
+
+      // ── ⑤ 图例：态数按**真实数据**算（不许写死）──
+      const legend = await p1.$eval('.ap-legend', (el) => (el.textContent ?? '').trim());
+      expect(legend, '图例前半是编码图例').toContain('橙标签=需人工介入');
+      expect(legend, '后半写明状态域总态数与本页列示数').toContain('阶段 4 态，本页列示 3 态');
+      expect(legend).toContain('进行中');
+      expect(legend).toContain('未开始');
+
+      // ── ⑥ 两行脚注：口径 + 数据来源 ──
+      const notes = await p1.$$eval('.ap-notes__line', (els) => els.map((e) => (e.textContent ?? '').trim()));
+      expect(notes, '脚注两行').toHaveLength(2);
+      expect(notes[0]).toContain('完成度按可见阶段数统计');
+      expect(notes[1]).toContain('数据来源 ID Plan 排程库');
+
+      // ── ⑦ 任务页 / 成员页的载荷 ──
+      const p2Text = (await (await page.$('[data-print-page="task-register"]'))!.textContent()) ?? '';
+      // 空组不落版（诚实：本页没有该态的块就不摆空壳栏）——
+      // 夹具只有「进行中 + 受阻」⇒ 命中 `在轨` / `需要人动作`，另两组不出空壳
+      expect(p2Text, '有块的分组出栏头').toContain('在轨');
+      expect(p2Text, '有块的分组出栏头').toContain('需要人动作');
+      expect(p2Text, '空组不摆空壳栏（诚实口径）').not.toContain('起草与待命');
+      expect(p2Text, '空组不摆空壳栏（诚实口径）').not.toContain('终局');
+      // 读号走 `formatTaskNo`（补零规则只有一处，纸面不散拼 'T-' + n）
+      expect(p2Text, '任务块 = 读号 + 状态标签').toContain(`任务 ${formatTaskNo(1042)}`);
+      expect(p2Text).toContain('受阻');
+      expect(p2Text).toContain('产出物 1');
+      expect(p2Text, '任务口径行').toContain('Task.dueDate');
+      expect(p2Text, '任务图例').toContain('任务 7 态，本页列示 2 态');
+
+      const p3Text = (await (await page.$('[data-print-page="member-roster"]'))!.textContent()) ?? '';
+      expect(p3Text, '成员分栏 = 人类 / Agent').toContain('人类成员');
+      expect(p3Text, '成员分栏 = 人类 / Agent').toContain('Agent 执行体');
+      expect(p3Text).toContain('负责人甲');
+      expect(p3Text).toContain('小 Agent');
+      expect(p3Text, '成员口径行').toContain('Member.roleKind');
+      expect(p3Text, '成员图例如实写明不登 agentKind 的理由（每页可独立解释）').toContain('不登 agentKind');
+      expect(p3Text, 'agentKind 值本身不上纸').not.toContain('brand-new-harness-9000');
+
+      // ── ⑧ Agent 载荷整块下纸（项目里**确实有**执行单与写回提案）──
+      expect(vm.executions.length, '夹具里确实存在 Agent 执行数据').toBeGreaterThan(0);
+      for (const dead of ['run_h4_001', 'task.status', '写回', '仅供参考', 'confidence', 'runId']) {
+        expect(text, `Agent 载荷「${dead}」不得再上纸（规格 §1.3）`).not.toContain(dead);
       }
-      const proposalRows = await p3!.$$eval('.ap-wb-table tbody tr', (els) => els.length);
-      expect(proposalRows, '四条提案全部上纸').toBe(4);
-      // confidence 值 + 「仅供参考」旁标在清单里
-      expect(p3Text).toContain('82%');
-      expect(p3Text).toContain('（仅供参考）');
-      // 提案表字段列出现白名单字段名（task.status 等）
-      expect(p3Text).toContain('task.status');
-      expect(p3Text).toContain('task.attachment.ref');
+      expect(text).not.toContain('当前项目暂无 Agent 执行数据');
     } finally {
       await page.close();
     }
   });
 
-  it('H 版预设变体（朱红）彩色 3 张；状态槽位确实挂上（非默认态重截，期三）', async () => {
+  it('④ 空态：三页各自的只读空态（阶段 / 任务 / 成员），不出巨字、不填模拟记录', async () => {
+    const css = builtCss();
+    const vm = buildVm({ stages: [], tasks: [], members: [] });
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('h-hum-empty.html', shell(markupOf(vm), css, false)));
+      const geo = await pageGeometry(page);
+      expect(geo).toHaveLength(3);
+      const kinds = await page.$$eval('[data-print-empty]', (els) =>
+        els.map((e) => e.getAttribute('data-print-empty')),
+      );
+      expect(kinds, '三页各出自己的空态口径').toEqual(['stages', 'tasks', 'members']);
+      const text = (await page.textContent('body')) ?? '';
+      expect(text).toContain('当前可见范围内无阶段');
+      expect(text).toContain('当前可见范围内无任务');
+      expect(text).toContain('当前可见范围内无相关成员');
+      // 空态不出巨字（不用装饰填版）。断言要**限定在主体内**：页眉的品牌标识
+      // `ID PLAN · …` 是纸面身份装置，任何页面都在，不能拿整页文本当真值源。
+      const bodyText = (await page.$eval('.ap-body', (el) => el.textContent ?? '')) ?? '';
+      expect(bodyText, '空态主体不出品牌巨字').not.toContain('PLAN');
+      expect(await page.$('.ap-giant')).toBeNull();
+      expect(await page.$('.ap-block')).toBeNull();
+      // 页底品牌装置与页题仍在（纸面照常出、每页可独立解释）
+      expect(await page.$('.ap-footword__word')).not.toBeNull();
+      for (const g of geo) {
+        expect(g.h, `${g.page} 空态页不得溢出`).toBeLessThanOrEqual(1124);
+        expect(g.bodyOverflow).toBeLessThanOrEqual(1);
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('⑤ 分页压测：24 阶段 + 30 任务（单栏必跨页）；续页不出巨字出「（续）」；逐页 794×1123 无裁切', async () => {
+    const css = builtCss();
+    const vm = buildVm({ stages: MANY_STAGES, tasks: MANY_TASKS });
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('h-hum-many.html', shell(markupOf(vm), css, false)));
+      const geo = await pageGeometry(page);
+      expect(geo.length, '压测数据必须分页（> 三页）').toBeGreaterThan(3);
+      for (const g of geo) {
+        expect(Math.abs(g.w - 794), `${g.page} 页宽应 794`).toBeLessThanOrEqual(1);
+        expect(g.h, `${g.page} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
+        expect(g.h).toBeGreaterThanOrEqual(1122);
+        expect(g.bodyOverflow, `${g.page} 主体不得内部溢出`).toBeLessThanOrEqual(1);
+      }
+      // 总页数进页签：NN = 物理页总数，nn 递增
+      const tabs = await page.$$eval('.ap-head__tab', (els) => els.map((e) => (e.textContent ?? '').trim()));
+      const total = String(geo.length).padStart(2, '0');
+      expect(tabs[0]).toBe(`SHEET 01 / ${total} · A4`);
+      expect(tabs[tabs.length - 1]).toBe(`SHEET ${total} / ${total} · A4`);
+
+      // ── 满页密度（「没白留一整条」的正向判据）──
+      // 24 阶段 ⇒ 首屏 7 块/栏 × 2 栏 = 14 块，栏区真的铺满
+      const fullNotes = await page.$eval('.a4-page .ap-notes', (el) => {
+        const r = el.getBoundingClientRect();
+        const pg = el.closest('.a4-page')!.getBoundingClientRect();
+        return +(r.bottom - pg.top).toFixed(1);
+      });
+      expect(fullNotes, '满页正文须铺到下半页（≥900）').toBeGreaterThanOrEqual(900);
+      expect(fullNotes, '满页正文也不得进页底巨字墨迹带（≤994）').toBeLessThanOrEqual(994);
+      const blockCount = await page.$eval('.a4-page', (el) => el.querySelectorAll('.ap-block').length);
+      expect(blockCount, '阶段海报单页原生容量 = 7 块/栏 × 2 栏（真机实测回填）').toBe(14);
+
+      // ── 任务海报的双轨（规格 §1.2.3）──
+      // 30 条任务 > `AP_POSTER_TASK_MAX`(12) ⇒ 该页**回落通用渲染**（清单行 + 右栏面板），
+      // 而不是把海报语法硬撑成一条长清单（审美标准 §2-H 的既有纪律）。
+      const pageKinds = await page.$$eval('[data-print-page]', (els) =>
+        els.map((e) => e.getAttribute('data-print-page')),
+      );
+      expect(pageKinds, '任务超容量 ⇒ 该页落通用渲染').toContain('generic-task-list');
+      expect(pageKinds, '回落时不再出原生任务海报页').not.toContain('task-register');
+
+      // 续页：不出巨字、页眉出「（续）」常规小页题
+      const cont = await page.$$eval('[data-print-page="stage-overview"]', (els) =>
+        els.map((el) => ({
+          hasGiant: el.querySelector('.ap-giant') !== null,
+          cont: (el.querySelector('.ap-head__cont')?.textContent ?? '').trim(),
+        })),
+      );
+      expect(cont.length, '24 个同栏阶段 ⇒ 阶段海报必跨页').toBeGreaterThan(1);
+      expect(cont[0]!.hasGiant, '模块首页出巨字').toBe(true);
+      for (const [i, c] of cont.entries()) {
+        if (i === 0) continue;
+        expect(c.hasGiant, '续页不出巨字（规格 §1.2.2 分页口径）').toBe(false);
+        expect(c.cont, '续页页眉出常规小页题「阶段海报（续）」').toBe('阶段海报（续）');
+      }
+      await page.$eval('.a4-page', () => undefined);
+      const els = await page.$$('.a4-page');
+      await els[0]!.screenshot({ path: join(OUT_DIR, 'h-hum-many-p1.png') });
+      await els[1]!.screenshot({ path: join(OUT_DIR, 'h-hum-many-p2.png') });
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('⑥ 预设变体（朱红）：三页彩色全新取色；accent 槽位确实挂上；纸底仍是暖灰米', async () => {
     const css = builtCss();
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['agent-poster'].presets.find((p) => p.id === 'vermilion')!;
     const markup = renderToStaticMarkup(
       createElement(AgentPosterDocument, { vm, palette: preset.palette }),
     );
-
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
-      const htmlPath = writeHtml('h-preset-vermilion.html', shell(markup, css, false));
-      await page.goto('file://' + htmlPath);
-      const pages = await page.$$('.a4-page');
-      expect(pages).toHaveLength(3);
-      for (let i = 0; i < pages.length; i++) {
-        const box = await pages[i]!.boundingBox();
-        expect(Math.abs(box!.width - 794)).toBeLessThanOrEqual(1);
-        expect(box!.height).toBeLessThanOrEqual(1124);
-        await pages[i]!.screenshot({ path: join(OUT_DIR, `h-preset-p${i + 1}-color.png`) });
-      }
-      // 预设真的挂上了：人工门控卡描边取朱红 #C8102E（不是默认橙）
-      const border = await page.$eval('[data-testid="ap-status-card-needs_attention"]', (el) =>
-        getComputedStyle(el).borderTopColor,
+      await page.goto('file://' + writeHtml('h-hum-preset-vermilion.html', shell(markup, css, false)));
+      const geo = await pageGeometry(page);
+      expect(geo).toHaveLength(3);
+      for (const g of geo) expect(g.h, `${g.page} 不得溢出`).toBeLessThanOrEqual(1124);
+      // 预设真的挂上：gate 实底标签 + 栏头线 + 中轴都取朱红（不是默认橙）
+      const accents = await page.$$eval('.ap-block__tag, .ap-col__rule, .ap-cols', (els) =>
+        els.map((e) => getComputedStyle(e).backgroundColor),
       );
-      expect(border, '朱红预设的状态色应为 #C8102E').toBe('rgb(200, 16, 46)');
+      expect(accents, '朱红预设应出现在实底标签/栏头线里').toContain(hexRgb(preset.palette.accent));
+      const axisBg = await page.$eval('.ap-cols', (el) => getComputedStyle(el, '::before').backgroundColor);
+      expect(axisBg, '中轴随预设变').toBe(hexRgb(preset.palette.accent));
       // 纸面仍是暖灰米（paper 不开槽位 = H 的身份，规格 §1.1 A1 / P0-17）
       const paper = await page.$eval('.a4-page', (el) => getComputedStyle(el).backgroundColor);
       expect(paper, '纸底应为参考稿实测暖灰米 #DEDDD4').toBe('rgb(222, 221, 212)');
+      // 井字极简：确认没把 gate 标签的文字色做成白的（对比度 3.81 < 4.5）
+      const gateColor = await page.$eval('.ap-block__tag[data-tone="gate"]', (el) => getComputedStyle(el).color);
+      expect(gateColor, 'accent 实底取墨字').toBe('rgb(10, 10, 10)');
+      const els = await page.$$('.a4-page');
+      for (let i = 0; i < els.length; i++) {
+        await els[i]!.screenshot({ path: join(OUT_DIR, `h-hum-preset-p${i + 1}.png`) });
+      }
     } finally {
       await page.close();
     }
   });
 
-  /**
-   * B1/B3 · 页级出血巨字（规格 §1.1 B1/B3 + §1.4 载荷拍板 + P0-18）。
-   *
-   * ── 数值权威：参考原稿 PNG 的像素复核（本次实测，非转述）──
-   * 原稿 1588×2246 ⇒ ×0.5 折算回 794×1123 CSS px：
-   *   页顶巨字  墨迹左缘 x=18、顶缘 y=11、底缘 y=137
-   *   页底巨字  墨迹左缘 x=24、顶缘 y=1023.5、底缘 y=1113
-   *   纸底 #DEDDD4（85.7% 面积）、橙 #E2522B（10.7% 面积）
-   *
-   * ── 两个口径一起断（这是本 spec 的关键设计）──
-   * 原稿两块巨字的**墨迹都没有真的被切**（第 0 行与末行均无墨）——所谓
-   * 「被页顶/页底裁切」的本体是**行盒**越出纸缘：.ap-giant__word 的 top < 0、
-   * .ap-footword__word 的 bottom > 1123；墨迹停在离纸缘约 11px 处，视觉即出血。
-   * 故分两层断言：装置（.ap-giant / .ap-footword）贴纸缘；行盒越出纸缘。
-   * 规格 §1.1 B1 / P0-18 写的「从 x=0 起 / left ≤ 0」指**装置**（x=0 成立）；
-   * 墨迹左缘 18px 是原稿实测值（附录速查表）——两者不矛盾，别把装置当文字盒。
-   *
-   * ── 载荷纪律（§1.4 规则 1-6）──
-   * 页顶 = 品牌词（默认 PLAN，可自定义、恒大写、超长截断）；页底 = 固定 IDPLAN，
-   * **不随自定义变**（规则 5）。
-   */
-  it('B1/B3 · 页级出血巨字：页顶 = 品牌词 / 页底 = 固定 IDPLAN（真 Chromium 几何自证 + 截图）', async () => {
+  it('⑦ B1/B3 · 页级出血巨字：页顶 = 品牌词（模块首页）/ 页底 = 固定 IDPLAN；正文底线让出墨迹带且留 8–12px 呼吸', async () => {
     const css = builtCss();
     const vm = buildVm();
-    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
-    const dir = join(OUT_DIR, 'h-giant-2026-10-11');
+    const dir = join(OUT_DIR, 'h-hum-giant-2026-10-11');
     mkdirSync(dir, { recursive: true });
 
-    /** 量一张纸上两块巨字（坐标relative 纸面左上角，CSS px） */
+    /** 量一张纸上两块巨字（坐标 relative 纸面左上角，CSS px） */
     const measure = (el: Element) => {
       const pg = el.getBoundingClientRect();
       const box = (sel: string) => {
@@ -820,15 +741,13 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
         };
       };
       /**
-       * 元素内文字的**真实墨迹**矩形（在页内用字体度量算，不抄实现里的系数）。
+       * 元素内文字的**真实墨迹**矩形（用页内 canvas 字体度量算，不抄实现系数）。
        *
-       * 为什么不能只断元素矩形：巨字的**行盒**比墨迹高一圈（上有多余行距、
-       * 下有过冲），行盒相交 ≠ 墨迹相交。P0-23 要守的是「页脚压到看得见的字」，
+       * 为什么不能只断元素矩形：巨字的**行盒**比墨迹高一圈（上有多余行距、下有
+       * 过冲），行盒不相交 ≠ 墨迹不相交。要守的是「正文压到看得见的字」，
        * 判据必须落在墨迹上。算法：半行距 + 字体上下度量 ⇒ 基线，基线 ∓ 实际
-       * 墨迹上下缘 ⇒ 墨迹矩形。
-       *
-       * 自证：调用方会拿它去复核「页底 IDPLAN 墨迹 ≈ y1004..1113」（规格 §1.1 B3
-       * 的原稿实测值）——若 canvas 与 DOM 解出了不同字体，这条会先红，不会静默。
+       * 墨迹上下缘 ⇒ 墨迹矩形。自证：下面会拿它去复核参考稿实测的 y1004..1113，
+       * canvas 与 DOM 解出不同字体时先红，不静默。
        */
       const inkOf = (sel: string) => {
         const t = el.querySelector(sel) as HTMLElement | null;
@@ -855,17 +774,16 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
       return {
         page: { w: +pg.width.toFixed(2), h: +pg.height.toFixed(2) },
         head: box('.ap-head'),
-        giant: box('.ap-giant'),
         word: box('.ap-giant__word'),
         wordInk: inkOf('.ap-giant__word'),
+        sub: box('.ap-giant__subword'),
         foot: box('.ap-footword'),
         footWord: box('.ap-footword__word'),
         footWordInk: inkOf('.ap-footword__word'),
-        footRow: box('.ap-foot'),
+        notes: box('.ap-notes'),
       };
     };
 
-    /** 载入一版纸面（同一 page 复用，只换 HTML） */
     const open = async (file: string, markup: string): Promise<void> => {
       await page.goto('file://' + writeHtml(file, shell(markup, css, false)));
     };
@@ -873,94 +791,75 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 批 4（真 Chromium + 真�
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
       // ── ① 默认品牌词（不传 brandWord ⇒ 回落 PLAN）──
-      await open(
-        'h-giant-default.html',
-        renderToStaticMarkup(createElement(AgentPosterDocument, { vm, palette: baseline })),
-      );
-      const p1 = (await page.$('[data-print-page="agent-declaration"]'))!;
+      await open('h-hum-giant-default.html', markupOf(vm));
+      const p1 = (await page.$('[data-print-page="stage-overview"]'))!;
       const m = await p1.evaluate(measure);
 
       // 装置贴纸缘：出血的「画布」就是整张纸
-      expect(m.giant!.top, '巨字装置贴纸顶').toBeLessThanOrEqual(1);
-      expect(m.giant!.left, '巨字装置从纸面 x=0 起（越出 44px 内容框）').toBeLessThanOrEqual(0);
-      expect(m.giant!.right, '巨字装置满宽（右缘贴纸缘）').toBeGreaterThanOrEqual(790);
-      // 行盒越出纸顶 ⇒ 被纸缘裁切（P0-18 的 DOM 判据）
       expect(m.word!.top, '巨字行盒须越出纸顶（出血）').toBeLessThan(0);
-      // 墨迹级贴边：行盒左缘 = 墨迹左缘 18px − 该字号左侧边距 ⇒ 必落在 [0, 20)
-      expect(m.word!.left, '巨字应贴纸左缘（墨迹左缘 ≈18px，原稿实测）').toBeGreaterThanOrEqual(0);
+      expect(m.word!.left, '巨字应贴纸左缘（墨迹左缘 ≈18px，参考稿实测）').toBeGreaterThanOrEqual(0);
       expect(m.word!.left, '巨字不得被推进内容框（44px）').toBeLessThan(20);
       expect(m.word!.text, '页顶巨字载荷 = 默认品牌词 PLAN（§1.4 规则 1）').toBe('PLAN');
       expect(m.word!.tt, '巨字恒大写（§1.4 规则 4）').toBe('uppercase');
-      expect(m.word!.color, '页顶巨字取身份色 accent').toBe(hexRgb(baseline.accent));
+      expect(m.word!.color, '页顶巨字取身份色 accent').toBe(hexRgb(BASELINE.accent));
 
-      // 页底：装置贴纸底、行盒越出纸底（被裁），词固定
+      // 页底：行盒越出纸底（被裁），词固定
       expect(m.foot!.bottom, '页底巨字装置贴纸底').toBeGreaterThanOrEqual(1120);
       expect(m.footWord!.bottom, '页底巨字行盒须越出纸底（出血）').toBeGreaterThan(1123);
       expect(m.footWord!.text, '页底巨字 = 固定品牌装置 IDPLAN').toBe('IDPLAN');
-      expect(m.footWord!.tt).toBe('uppercase');
-      expect(m.footWord!.color, '页底巨字同为身份色').toBe(hexRgb(baseline.accent));
+      expect(m.footWord!.color, '页底巨字同为身份色').toBe(hexRgb(BASELINE.accent));
 
-      // ── P0-23：页脚不得压在页底巨字上（本批新引入装置造成的缺陷）──
-      // 自证 ①：墨迹量法与规格 §1.1 B3 的原稿实测值对齐（页底 IDPLAN y1004..1113）
-      // 若 canvas 与 DOM 解出了不同字体，这两条会先红 —— 不会静默放行
-      expect(m.footWordInk!.top, 'IDPLAN 墨迹顶须复现原稿实测 y≈1004').toBeGreaterThan(1000);
-      expect(m.footWordInk!.top, 'IDPLAN 墨迹顶须复现原稿实测 y≈1004').toBeLessThan(1008);
-      expect(m.footWordInk!.bottom, 'IDPLAN 墨迹底须复现原稿实测 y≈1113').toBeGreaterThan(1109);
-      expect(m.footWordInk!.bottom, 'IDPLAN 墨迹底须复现原稿实测 y≈1113').toBeLessThan(1117);
-      // 自证 ②：页脚与巨字墨迹**不相交**，且留 8–12px 呼吸（规格 P0-23 验收判据）
-      expect(m.footRow!.bottom, '页脚底线须在巨字墨迹之上（改前实测重叠 29px）').toBeLessThan(
-        m.footWordInk!.top,
-      );
-      const breath = +(m.footWordInk!.top - m.footRow!.bottom).toFixed(2);
-      expect(breath, '页脚↔巨字墨迹呼吸须 8–12px').toBeGreaterThanOrEqual(8);
-      expect(breath, '页脚↔巨字墨迹呼吸须 8–12px').toBeLessThanOrEqual(12);
+      // 叠字（参考稿 Execution 的同位替换）：英文页主题词、墨色、压到巨字右下
+      expect(m.sub!.text, '叠字 = 英文页主题词').toBe('Stages');
+      expect(m.sub!.color, '叠字为墨色（与参考稿 Execution 同）').toBe('rgb(10, 10, 10)');
+      expect(parseFloat(m.sub!.fs), '叠字 ≈41px（参考稿 cap31 反解，推断值实拍复核）').toBeCloseTo(41, 0);
+      expect(m.sub!.top, '叠字压到巨字下方（与巨字基线齐平）').toBeLessThan(150);
+      expect(m.sub!.left, '叠字压在巨字右侧（约 x397 起，参考稿实测）').toBeGreaterThan(300);
 
-      await p1.screenshot({ path: join(dir, 'h-p1-after.png') });
+      // ── 自证：页底巨字墨迹复现参考稿实测 y1004..1113 ──
+      expect(m.footWordInk!.top, 'IDPLAN 墨迹顶须复现参考稿实测 y≈1004').toBeGreaterThan(1000);
+      expect(m.footWordInk!.top, 'IDPLAN 墨迹顶须复现参考稿实测 y≈1004').toBeLessThan(1008);
+      expect(m.footWordInk!.bottom, 'IDPLAN 墨迹底须复现参考稿实测 y≈1113').toBeGreaterThan(1109);
+      expect(m.footWordInk!.bottom, 'IDPLAN 墨迹底须复现参考稿实测 y≈1113').toBeLessThan(1117);
 
-      // 页顶巨字只在 P1（页锚点装置原址）；页底是纸级品牌装置，三页同构
-      const p2 = (await page.$('[data-print-page="execution-status"]'))!;
-      expect(await p2.$('.ap-giant__word'), '页顶巨字只出在 P1').toBeNull();
+      // ── P0-23 的继任判据：正文（两行脚注）须让出页底巨字墨迹带 ──
+      expect(m.notes!.bottom, '正文底线须 ≤ 994（1123 − 129 让位量）').toBeLessThanOrEqual(994);
+      const breath = +(m.footWordInk!.top - m.notes!.bottom).toFixed(2);
+      expect(breath, '正文↔巨字墨迹呼吸须 ≥8px（P0-23 的继任判据）').toBeGreaterThanOrEqual(8);
+      // 上界不在这里断：让位量是**下限**（正文不许进墨迹带），短内容当然离得远。
+      // 「没白留一整条」的正向判据放在 ⑤ 的**满页**上（notes 底须 ≥900）。
+
+      await p1.screenshot({ path: join(dir, 'h-hum-p1-giant.png') });
+
+      // 页顶巨字只在**模块首页**；页底是纸级品牌装置，三页同构
+      const p2 = (await page.$('[data-print-page="task-register"]'))!;
+      expect(await p2.$('.ap-giant__word'), '任务页是模块首页 ⇒ 也出巨字（三页各是模块首页）').not.toBeNull();
       expect(await p2.$('.ap-footword__word'), '页底品牌装置三页同构').not.toBeNull();
 
       // ── ② 自定义品牌词：页顶跟着变，页底**不跟着变**（§1.4 规则 5）──
-      await open(
-        'h-giant-custom.html',
-        renderToStaticMarkup(
-          createElement(AgentPosterDocument, { vm, palette: baseline, brandWord: '云栖茶室' }),
-        ),
-      );
-      const p1b = (await page.$('[data-print-page="agent-declaration"]'))!;
+      await open('h-hum-giant-custom.html', markupOf(vm, '云栖茶室'));
+      const p1b = (await page.$('[data-print-page="stage-overview"]'))!;
       const m2 = await p1b.evaluate(measure);
       expect(m2.word!.text, '页顶巨字 = 自定义品牌词').toBe('云栖茶室');
       expect(m2.word!.top, '换词后仍出血').toBeLessThan(0);
       expect(m2.word!.right, '4 个汉字仍须在纸宽内').toBeLessThanOrEqual(794);
       expect(m2.footWord!.text, '页底 IDPLAN 不随自定义变（§1.4 规则 5）').toBe('IDPLAN');
-      await p1b.screenshot({ path: join(dir, 'h-p1-custom.png') });
+      await p1b.screenshot({ path: join(dir, 'h-hum-p1-custom.png') });
 
       // ── ③ 超上限长词：渲染口再截断一次 + 降档后仍不撑破纸面（规则 3/6）──
-      await open(
-        'h-giant-long.html',
-        renderToStaticMarkup(
-          createElement(AgentPosterDocument, {
-            vm,
-            palette: baseline,
-            brandWord: '云栖·湖畔茶室综合改造项目A', // 14 字符 > 上限 12
-          }),
-        ),
-      );
-      const p1c = (await page.$('[data-print-page="agent-declaration"]'))!;
+      await open('h-hum-giant-long.html', markupOf(vm, '云栖·湖畔茶室综合改造项目A'));
+      const p1c = (await page.$('[data-print-page="stage-overview"]'))!;
       const m3 = await p1c.evaluate(measure);
       expect(m3.word!.text, '超上限词在渲染口被截断到 12 字符').toBe('云栖·湖畔茶室综合改造项');
       expect(m3.word!.tier, '长词降到地板档 sm').toBe('sm');
       expect(m3.word!.right, '地板档仍须在纸宽内').toBeLessThanOrEqual(794);
-      await p1c.screenshot({ path: join(dir, 'h-p1-long.png') });
+      await p1c.screenshot({ path: join(dir, 'h-hum-p1-long.png') });
 
       console.log(
-        `[H 巨字实测] 默认 left=${m.word!.left} right=${m.word!.right} fs=${m.word!.fs}` +
-          `(${m.word!.tier}) 越顶=${m.word!.top} 顶墨迹=${m.wordInk!.top}..${m.wordInk!.bottom}｜` +
-          `页底 left=${m.footWord!.left} right=${m.footWord!.right} 越底=${m.footWord!.bottom}` +
-          ` 底墨迹=${m.footWordInk!.top}..${m.footWordInk!.bottom}｜` +
-          `P0-23 页脚底线=${m.footRow!.bottom} 呼吸=${breath}px｜` +
+        `[H 人类化实测] 页顶 left=${m.word!.left} right=${m.word!.right} fs=${m.word!.fs}(${m.word!.tier}) ` +
+          `越顶=${m.word!.top} 顶墨迹=${m.wordInk!.top}..${m.wordInk!.bottom}｜叠字 ${m.sub!.left}..${m.sub!.right} ` +
+          `y=${m.sub!.top}..${m.sub!.bottom}｜页底 越底=${m.footWord!.bottom} ` +
+          `底墨迹=${m.footWordInk!.top}..${m.footWordInk!.bottom}｜正文底线=${m.notes!.bottom} 呼吸=${breath}px｜` +
           `页头框 ${m.head!.top}..${m.head!.bottom}（顶巨字墨迹 ${m.wordInk!.top}..${m.wordInk!.bottom}）｜` +
           `自定义 right=${m2.word!.right}(${m2.word!.tier})｜长词 right=${m3.word!.right}(${m3.word!.tier})`,
       );

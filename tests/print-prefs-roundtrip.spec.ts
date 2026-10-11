@@ -71,19 +71,30 @@ describe('打印偏好 · roundtrip 回归闸（落库 → rehydrate → 读回�
     ]);
   });
 
-  it('H 版勾通用模块 stage-list：roundtrip 保真（旧版同理丢）', async () => {
+  it('H 版勾可用模块（默认三个人类原生）：roundtrip 保真；下架的 M10 被可用性收编', async () => {
     usePrintPrefsStore.setState({
       template: 'agent-poster',
-      modules: { 'agent-poster': ['agent-execution', 'stage-list'] },
+      // M10 混进来（旧数据形状）：H 人类化后 M10 已从能力表移除
+      modules: { 'agent-poster': ['agent-execution', 'member-roster', 'stage-list'] },
     });
     await flushPersist();
 
     await rehydrate();
 
-    // normalizeModules 按 PRINT_MODULE_IDS 注册序收编（M1→M11）⇒ stage-list 在前
+    // normalizeModules 按 PRINT_MODULE_IDS 注册序收编（M1→M11），**并按可用性过滤**：
+    // M10 不在 H 的可用集 ⇒ 收编后只剩 M1/M4（顺序 = 注册序）
     expect(usePrintPrefsStore.getState().modules['agent-poster']).toEqual([
       'stage-list',
-      'agent-execution',
+      'member-roster',
+    ]);
+    // 全量可用集 roundtrip 逐字保真
+    usePrintPrefsStore.setState({ modules: { 'agent-poster': ['stage-list', 'task-list', 'member-roster'] } });
+    await flushPersist();
+    await rehydrate();
+    expect(usePrintPrefsStore.getState().modules['agent-poster']).toEqual([
+      'stage-list',
+      'task-list',
+      'member-roster',
     ]);
   });
 

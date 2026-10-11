@@ -66,6 +66,14 @@
  *   **未动**：A/classic 的全部断言（A 无通用模块，默认形状不变）、五块
  *   开关、⑥ 的 A 路径（原生 = 可用，默认全选形状不变）。
  *
+ * ── v5（H 人类化）适配记录（2026-10-11，规格 §1.2.5 / §1.3） ──
+ *   H 的 Agent 治理两模块（M10/M11）下架、M1/M2/M4 升为**人类原生海报页** ⇒
+ *   改动 1：⑤ 的 H 段整块重写——不再断言「无 Agent 数据 ⇒ 整版只读空态」
+ *          （该空态随 Agent 载荷一起退役），改断人类三页 kind 集合 + 逐页
+ *          数据驱动分页（本夹具 8 阶段 / 8 任务 ⇒ 5 页）+ Agent 载荷零上纸；
+ *   改动 2：H 段不再有「手动勾通用模块 ⇒ 6 页」的路径（H 已无通用专属模块）。
+ *   **未动**：A/D/E/classic 的全部断言。
+ *
  * 挂载形态同 `print-preview-zoom.spec.tsx`：先 open=false 再翻 true（= 首次
  * 打开），纸面走**真实** SchedulePaper + 真实 useSchedulePaperData，stores
  * 用 replaceAll/setAll 直接 seed（jsdom + fake-indexeddb 已在 setup.ts 就位）。
@@ -601,27 +609,39 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(paperRoot()!.textContent, 'E 版纸面应含通用页题「任务清单」').toContain('任务清单');
     setModuleChecked('task-list', false);
 
-    // 切 H：默认 = 3 原生签名页（M10 两页 + 写回一页）；
-    // 本夹具无 Agent 数据 ⇒ 三个原生页整版只读空态（不许假装有执行）；
-    // 通用 M1/M2/M4 默认不勾（去专属化后默认态仍是原生签名页）
+    // 切 H：默认 = 3 **人类原生海报页**（阶段 / 任务 / 成员；2026-10-11 人类化批次）。
+    // 上一代的「无 Agent 数据 ⇒ 整版只读空态」已作废：H 三页现在打人类内容，
+    // 有没有 Agent 执行数据都与纸面无关（Agent 治理载荷整体下纸，规格 §1.3）。
     pickTemplate('agent-poster');
     expect(paperRoot()!.className).toContain('print-template-agent-poster');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
-    expect(bodyContains('预计 3 页')).toBe(true);
     expect(printButton()!.disabled, 'H 版可打印').toBe(false);
-    const hEmpty = document.querySelectorAll('[data-print-empty="agent"]');
-    expect(hEmpty.length, '无 Agent 数据 ⇒ 三个原生页整版只读空态').toBe(3);
-    expect(paperRoot()!.textContent).toContain('当前项目暂无 Agent 执行数据');
-    // 空态下不许出现任何执行状态卡（不拿模拟记录填版）
-    expect(document.querySelector('[data-testid="ap-status-columns"]')).toBeNull();
-    expect(document.querySelector('.ap-giant')).toBeNull();
-    // 手动勾通用模块 ⇒ 三个通用页有内容（本夹具 2 阶段 / 2 任务 / 1 成员）
-    for (const m of ['stage-list', 'task-list', 'member-roster']) setModuleChecked(m, true);
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(6);
+    // 本夹具 8 阶段 / 8 任务都超单页原生容量 ⇒ 分页（页面数由数据驱动，
+    // 不再写死 3 页）：阶段海报 2 页 + 任务海报 2 页 + 成员海报 1 页 = 5 页。
+    const hKinds = Array.from(document.querySelectorAll('.a4-page')).map((el) =>
+      el.getAttribute('data-print-page'),
+    );
+    expect(hKinds[0], 'H 默认首页 = 阶段海报').toBe('stage-overview');
+    expect(new Set(hKinds), 'H 默认纸面只落人类三页 kind（Agent 治理页已下架）').toEqual(
+      new Set(['stage-overview', 'task-register', 'member-roster']),
+    );
+    expect(hKinds).toContain('task-register');
+    expect(hKinds).toContain('member-roster');
+    expect(hKinds, '续页仍是同 kind（页眉出「（续）」），不上别的页').toHaveLength(5);
+    expect(bodyContains('预计 5 页'), '预计页数 = 物理页数（分页后一致）').toBe(true);
     const hText = paperRoot()!.textContent ?? '';
-    for (const title of ['阶段清单', '任务清单', '成员名册']) {
-      expect(hText, `H 版纸面应含通用页题「${title}」`).toContain(title);
+    // 页眉左 = `ID PLAN · {英文页题}`（中文页题按规格移出页眉，只在续页出「（续）」页题）
+    for (const kicker of ['ID PLAN · STAGE POSTER', 'ID PLAN · TASK POSTER', 'ID PLAN · MEMBER POSTER']) {
+      expect(hText, `H 版页眉应含「${kicker}」`).toContain(kicker);
     }
+    expect(hText, '续页页眉出「（续）」小页题').toContain('（续）');
+    // Agent 载荷整体下纸（本夹具项目里确实有执行数据，纸面一个字都不许出现）
+    for (const dead of ['执行宣告', '写回提案', 'runId', 'confidence', '白名单']) {
+      expect(hText, `Agent 载荷「${dead}」不得再上纸`).not.toContain(dead);
+    }
+    // 人类内容照常上纸：不出「暂无 Agent 执行数据」整版空态，巨字装置在位
+    expect(document.querySelectorAll('[data-print-empty="agent"]')).toHaveLength(0);
+    expect(document.querySelector('.ap-giant'), '页顶出血巨字（人类化后载荷 = 品牌词）').not.toBeNull();
+    expect(document.querySelector('.ap-block'), '阶段块上纸').not.toBeNull();
   });
 
   it('⑥【新】模块勾选：四版默认全选原生、可摘模块、页码/预计页数联动', () => {

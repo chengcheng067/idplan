@@ -87,7 +87,8 @@ const CASES: ReadonlyArray<{
   { tag: 'a', template: 'swiss-schedule', nativeCount: 4, genericCount: 0 },
   { tag: 'd', template: 'data-editorial', nativeCount: 4, genericCount: 3 },
   { tag: 'e', template: 'editorial-index', nativeCount: 3, genericCount: 1 },
-  { tag: 'h', template: 'agent-poster', nativeCount: 2, genericCount: 3 },
+  // H 人类化（2026-10-11）：M1/M2/M4 升为原生 ⇒ 原生 3 / 通用 0（M10/M11 下架转禁用）
+  { tag: 'h', template: 'agent-poster', nativeCount: 3, genericCount: 0 },
 ];
 
 function shell(bodyMarkup: string, css: string): string {
@@ -165,9 +166,9 @@ describe.skipIf(!CAN_RUN)('选择器模块化 · 四套外表模块勾选态截�
           expect(text, '禁用行带原因').toContain('该外表下暂不可用');
         }
 
-        // 脚注：已支持口径 + 后续支持口径如实告知
+        // 脚注：通用渲染口径 + 后续支持口径如实告知
         const note = await page.$eval('[data-print-module-section]', (el) => el.textContent ?? '');
-        expect(note).toContain('已支持通用渲染');
+        expect(note).toContain('在无原生页的外表下走通用渲染');
         expect(note).toContain('将随通用渲染陆续支持');
 
         await (await page.$('[data-selector-shot]'))!.screenshot({

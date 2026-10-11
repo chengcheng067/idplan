@@ -12,8 +12,8 @@
  * ① 四套模板 CSS 各自 @media print 块加页头豁免（两类选择器 + !important ⇒
  *   特异性高者胜，与同块内「纸面背景压过 global」同一手法）：
  *   A .swiss-topbar / D .de-head / E .ei-head / H .ap-head ⇒ display:flex
- *   H .ap-status__group-head ⇒ display:block（h3 组题 + p 组注**纵排**，
- *     不能跟 blanket-flex 否则并排压坏 P2 双栏——按元素显式还原的理由）
+ *   （H 人类化后栏头 `.ap-col__head` **刻意是 div 不是 <header>** ⇒ 不再需要
+ *     单独豁免：每多一个语义 <header> 就多一处要豁免的坑，见 agent-poster.css）
  * ② global.css 的 @media print 块加两条纸面豁免（经典/月历无自有样式表，
  *   落点选 global.css：一条 `.print-root .a4-page header ⇒ flex` 覆盖经典
  *   SchedulePaper + 月历打印页（均 flex 布局）；行程打印页的抬头是
@@ -25,7 +25,7 @@
  * ── 本文件锁什么 ──
  *   P1 四版页头 print 态可见（display 非 none + 有布局盒）；
  *   P2 A 黑顶栏 print 态背景色 computed 仍在（print-color-adjust 链路未破）；
- *   P3 H 分组头 print 态 block 且组题/组注仍纵排（没被 flex 化）；
+ *   P3 H 栏头（`.ap-col__head`，div）print 态可见且组名/规则线/组注仍纵排；
  *   P4 screen 态四版页头不变（豁免只作用于 print 媒体）；
  *   P5 应用级 header print 态仍 none（裸规则本职：TopBar 不进打印件）；
  *   P6 经典（默认模板，断言最全）：真实 SchedulePaper 渲染，screen 不变 +
@@ -332,7 +332,7 @@ describe.skipIf(!CAN_RUN)('纸面页头 print 媒体豁免（真 Chromium + 真�
         expect(box.w, `${t} print 态页头应通栏`).toBeGreaterThan(600);
         // 页题/项目名文本仍在纸面上（每页可独立解释）
         const text = (await page.textContent('body')) ?? '';
-        expect(text, `${t} print 态应含页题`).toContain(t === 'agent-poster' ? 'Agent 执行宣告' : t === 'data-editorial' ? '阶段进度矩阵' : t === 'editorial-index' ? '阶段目录' : 'PROJECT');
+        expect(text, `${t} print 态应含页题`).toContain(t === 'agent-poster' ? 'ID PLAN · STAGE POSTER' : t === 'data-editorial' ? '阶段进度矩阵' : t === 'editorial-index' ? '阶段目录' : 'PROJECT');
       }
     } finally {
       await page.close();
@@ -363,26 +363,37 @@ describe.skipIf(!CAN_RUN)('纸面页头 print 媒体豁免（真 Chromium + 真�
     }
   });
 
-  it('P3 H 版分组头：print 态 block 且组题/组注仍纵排（没被 blanket-flex 并排）', async () => {
+  it('P3 H 版分组头：print 态可见且组名/组注纵排（div 栏头，不靠 header 豁免）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
       await page.setContent(shell(renderDoc('agent-poster', vm), css));
       await page.emulateMedia({ media: 'print' });
-      const heads = await page.$$('.ap-status__group-head');
-      expect(heads.length, 'P2 执行状态全览应有分组头（四组流程）').toBeGreaterThan(0);
-      const display = await page.$eval('.ap-status__group-head', (el) => getComputedStyle(el).display);
-      expect(display, '分组头 print 态应为 block（纵排布局，不是 flex）').toBe('block');
-      // 组题（h3）与组注（p）纵排：p 的顶边不低于 h3 的底边
-      const stack = await page.$eval('.ap-status__group-head', (el) => {
-        const h3 = el.querySelector('h3')!.getBoundingClientRect();
-        const p = el.querySelector('p')!.getBoundingClientRect();
-        return { h3Bottom: h3.bottom, pTop: p.top, h3H: h3.height, pH: p.height };
+      const heads = await page.$$('.ap-col__head');
+      expect(heads.length, 'H 三页的栏头（组名 + en + 计数）').toBeGreaterThan(0);
+      const display = await page.$eval('.ap-col__head', (el) => getComputedStyle(el).display);
+      expect(display, '栏头 print 态须可见（不得被 blanket header 规则吃掉）').not.toBe('none');
+      const box = await page.$eval('.ap-col__head', (el) => el.getBoundingClientRect().height);
+      expect(box, '栏头应有布局盒').toBeGreaterThan(0);
+      // 纵排：组名行 → 3px 规则线 → 组注（三段自上而下不重叠）
+      const stack = await page.$eval('.ap-col', (el) => {
+        const head = el.querySelector('.ap-col__head')!.getBoundingClientRect();
+        const rule = el.querySelector('.ap-col__rule')!.getBoundingClientRect();
+        const note = el.querySelector('.ap-col__note')!.getBoundingClientRect();
+        return {
+          headBottom: head.bottom,
+          ruleTop: rule.top,
+          ruleBottom: rule.bottom,
+          noteTop: note.top,
+          noteH: note.height,
+        };
       });
-      expect(stack.h3H, '组题应有高度').toBeGreaterThan(0);
-      expect(stack.pH, '组注应有高度').toBeGreaterThan(0);
-      expect(stack.pTop, '组注应在组题下方（纵排未被并排化）').toBeGreaterThanOrEqual(stack.h3Bottom - 1);
+      expect(stack.noteH, '组注应有高度').toBeGreaterThan(0);
+      expect(stack.ruleTop, '3px 规则线在栏头盒下方（纵排未被并排化）').toBeGreaterThanOrEqual(
+        stack.headBottom - 1,
+      );
+      expect(stack.noteTop, '组注在规则线下方（纵排）').toBeGreaterThanOrEqual(stack.ruleBottom - 1);
     } finally {
       await page.close();
     }

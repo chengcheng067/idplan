@@ -475,28 +475,25 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     expect(logoHeights(doc)).toEqual([22, 22, 22]);
   });
 
-  it('H 版：P1 logo 在巨字下方左侧 ≤24px；P2/P3 左上角 ≤22px；中轴区无 logo', () => {
+  it('H 版：人类三页各一枚 logo（巨字墨迹之下的 logo 行，22px）；中轴/栏区无 logo', () => {
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
     const doc = parse(
       renderToStaticMarkup(createElement(AgentPosterDocument, { vm, palette: baseline, logo: TINY_LOGO })),
     );
-    const p1 = doc.querySelector('[data-print-page="agent-declaration"]')!;
-    const p1Logo = p1.querySelector('.ap-declare__logo img.print-logo');
-    expect(p1Logo, 'P1 logo 应在巨字下方左侧').not.toBeNull();
-    expect((p1Logo as HTMLElement).style.height).toBe('24px');
-    // P1 没有页级 logo 行（巨字下方那枚就是全部，不重复）
-    expect(p1.querySelector('.ap-logo-row')).toBeNull();
-
-    for (const kind of ['execution-status', 'writeback-proposals']) {
+    // 人类化后三页同构（阶段/任务/成员海报）：页眉下方各一枚 logo 行。
+    // 旧的 P1 `.ap-declare__logo`（24px、巨字下方左侧）随页重写退场——全局 logo
+    // 是产品必登项，形态服从现行版式（规格 §3.3）。
+    for (const kind of ['stage-overview', 'task-register', 'member-roster']) {
       const p = doc.querySelector(`[data-print-page="${kind}"]`)!;
       const logo = p.querySelector('.ap-logo-row img.print-logo');
       expect(logo, `${kind} 左上角应有 logo`).not.toBeNull();
       expect((logo as HTMLElement).style.height).toBe('22px');
     }
+    expect(logoHeights(doc)).toEqual([22, 22, 22]);
     // 中轴区域严禁放 logo：双栏容器内无任何 print-logo
-    const cols = doc.querySelector('.ap-status__cols')!;
-    expect(cols.querySelector('.print-logo'), '中轴区域不得放 logo').toBeNull();
+    const cols = doc.querySelector('.ap-cols')!;
+    expect(cols.querySelector('.print-logo'), '中轴/栏区不得放 logo').toBeNull();
   });
 
   it('classic：logo 在页脚署名旁 ≤20px；署名字样逐字保留', () => {

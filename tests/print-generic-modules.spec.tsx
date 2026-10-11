@@ -186,8 +186,8 @@ describe('期三 · G1 十二组合映射（M1/M2/M4 × A/D/E/H）', () => {
       // 模板类（外表）就位
       const root = d.querySelector('.print-root');
       expect(root!.className).toContain(`print-template-${c.template}`);
-      // 页题（通用页 = 模块名；原生页 = 各版原生页题）
-      const title = pages[0]!.querySelector('h1, .swiss-topbar__title');
+      // 页题（通用页 = 模块名；原生页 = 各版原生页题；H 的页题在页眉 kicker 上）
+      const title = pages[0]!.querySelector('h1, .swiss-topbar__title, .ap-head__kicker');
       expect(title, `${c.module} × ${c.template} 应有页题元素`).not.toBeNull();
     }
   });

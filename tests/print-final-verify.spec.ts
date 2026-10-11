@@ -110,6 +110,15 @@ function builtCss(): string {
     .join('\n');
 }
 
+/**
+ * `#RRGGBB` → `rgb(r, g, b)`（与 getComputedStyle 同格式）。
+ * 断言「元素取的是 palette 里那枚色」而不把色值抄第二遍——palette 是单一真值源。
+ */
+function hexRgb(hex: string): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
+
 /* ------------------------------------------------------------------ 夹具（四版通吃） */
 
 const TODAY = '2026-10-09';
@@ -529,18 +538,19 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实�
       const eFoot = await page.$eval('.ei-foot', (el) => getComputedStyle(el).backgroundColor);
       expect(eFoot, 'E 版无底部黑栏').toBe('rgba(0, 0, 0, 0)');
 
-      // H：无底部黑栏 + 双栏容器有中轴伪元素
+      // H：**没有页脚元素**（人类化后净删 `.ap-foot`：页序在页眉、数据时间在脚注）
+      // + 双栏容器有 2px 橙色中轴伪元素（P0-19）
       await page.goto('file://' + writeHtml('final-h.html', shell(renderToStaticMarkup(
         createElement(AgentPosterDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['agent-poster'].baseline }),
       ), css)));
-      const hFoot = await page.$eval('.ap-foot', (el) => getComputedStyle(el).backgroundColor);
-      expect(hFoot, 'H 版无底部黑栏').toBe('rgba(0, 0, 0, 0)');
-      const hAxis = await page.$eval('.ap-status__cols', (el) => {
+      expect(await page.$('.ap-foot'), 'H 版无页脚带（品牌串整块退役）').toBeNull();
+      const hAxis = await page.$eval('.ap-cols', (el) => {
         const s = getComputedStyle(el, '::before');
-        return { position: s.position, width: s.width };
+        return { position: s.position, width: s.width, bg: s.backgroundColor };
       });
       expect(hAxis.position, 'H 版中轴是双栏容器伪元素').toBe('absolute');
-      expect(hAxis.width).toBe('1px');
+      expect(hAxis.width, '中轴 2px（参考稿实测 x396.5 宽 2）').toBe('2px');
+      expect(hAxis.bg, '中轴取身份色 accent').toBe(hexRgb(PRINT_TEMPLATE_PALETTES['agent-poster'].baseline.accent));
     } finally {
       await page.close();
     }
