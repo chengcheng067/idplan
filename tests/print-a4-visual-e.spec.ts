@@ -517,7 +517,11 @@ describe.skipIf(!CAN_RUN)('E 版 A4 视觉验收 · 批 3（真 Chromium + 真�
       expect(titleLines.map((l) => l.text), '页题拆两行：阶段 / 目录').toEqual(['阶段', '目录']);
       expect(titleLines[0]!.color, '行1 近黑').toBe('rgb(20, 20, 20)');
       expect(titleLines[1]!.color, '行2 = accent 槽位 #B04A2F').toBe('rgb(176, 74, 47)');
-      expect(titleLines[0]!.fs, '两行巨字字号 ≥80px（规格：两行总高 192px 反推）').toBeGreaterThanOrEqual(80);
+      // 字号**定值**（2026-10-11 P1-3）：原判据 `≥80` 让「92 → 80~89」这类缩小仍绿，
+      // 下界够不着真实值 ⇒ 变异静默（独立验证 worker 的 79px 变异正是靠它蒙混过）。
+      // 两行同属一条规则（.ei-head__title），故两行各断一次。
+      expect(titleLines[0]!.fs, '巨题字号 = 92px（实现唯一真值源：.ei-head__title）').toBe(92);
+      expect(titleLines[1]!.fs, '行2 与行1 同字号（同一条规则）').toBe(92);
       // 行节距 = 单行槽高 = 字号 × line-height（规格判据「两行 offsetTop 差 ≈106px」）
       expect(Math.abs(titleLines[1]!.top - titleLines[0]!.top), '两行 offsetTop 差 ≈106px').toBeGreaterThanOrEqual(100);
       expect(Math.abs(titleLines[1]!.top - titleLines[0]!.top)).toBeLessThanOrEqual(112);
