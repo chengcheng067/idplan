@@ -29,6 +29,8 @@ import { ANCHOR_GAP, resolveAnchoredPosition } from '../../lib/anchoredPosition'
  *   bg-paper + shadow-raised；桌面 圆角24 / 高185，平板 圆角12 / 高124（flex-wrap，不写死列数）；
  *   信息架构 = 项目名(15/600) → 委托方(13 次级) → 阶段进度轨道(高8，多段按比例拼接，槽 sunken) →
  *   底部元信息行(周期 11 + 阶段标签 + 成员头像组)。
+ *   ★ 窄版（看板列内，`layout === 'column'`，v1.0.x）同一套信息换一种摆法：头像组从元信息行
+ *     上移到委托方行右侧、元信息行只留「到期日 + 阶段胶囊」——见 `layout` 形参注释。
  * 阶段色走 STAGE_BAR_COLORS（实心块 main 色），阶段标签走 Tag（stageIndex 取 lightBar + lightText）。
  * 状态语义色全部走 token，禁止裸 hex。选中态 = 主色环。
  *
@@ -89,6 +91,12 @@ export function ProjectCard({
    *              列容器——`xl:flex-[1_1_340px]` 的基准在 flex-col 列里会作用
    *              到**纵轴**（卡片被抅到 340px 高），`md:w-[calc(50%-10px)]`
    *              会把卡片压成列宽的一半（标题截断、头像行/Tag 挤烂）。
+   *
+   * ★ v1.0.x：「column」这一档**不再只是"去掉 row 专用类"**，它同时触发**窄版内部重排**
+   *   （看板列定宽 262 ⇒ 卡片 232 / 内容宽 184，见 `MemberBoardPage.tsx` 的
+   *   `BOARD_COLUMN_TEMPLATE` 注释）：底部元信息行只留「到期日 + 阶段胶囊」，
+   *   **头像组搬到委托方行右侧**。两处形态都由本形参门控，`'row'` 档 DOM 逐字节不变。
+   *   验收见 `tests/member-board-narrow-card.spec.ts`。
    */
   layout?: 'row' | 'column';
 }): JSX.Element {
@@ -168,6 +176,42 @@ export function ProjectCard({
   const dueMd = dueIso.slice(5).replace('-', '-');
   const overdueDays = daysBetween(dueIso, todayIso);
   const dueText = overdueDays > 0 ? `逾期 ${overdueDays} 天` : `${dueMd} 到期`;
+
+  /*
+    ── v1.0.x · 窄版卡片（`layout === 'column'`）的两个搬家件 ──
+    两处行内形态都要用到「阶段胶囊」与「头像组」，而窄版要把头像组从底部元信息行
+    **搬到委托方行**。为避免同一元素在两处各写一遍（改一处漏一处的经典形态漂移），
+    在这里各取一次、下行按 `isColumn` 条件摆放。
+    ⚠️ 门控用 `layout === 'column'`（形参语义见上方 `layout` 注释）：本仓**唯一**
+    传 `'column'` 的消费点是看板列内的卡片（`MemberBoardPage.tsx`），首页走默认 `'row'`
+    ⇒ 首页卡片 DOM 逐字节不变。刻意**不用**容器查询：本仓没有容器查询基建，
+    而这里要区分的只是「谁在用这张卡片」这一个已知事实。
+
+    为什么必须搬（真机实测，不是审美偏好）：旧版把头像留在元信息行，该行需要
+    「到期日 53 + gap 8 + 阶段胶囊 73.5」+ gap 8 + 头像组（6 + 18n），而窄版卡片内容宽
+    只有 184 ⇒ **n=2 就要 184.5 > 184**，于是阶段胶囊折行、到期日被截断
+    （失效阈值「所需轨道宽 = 226.5 + 18n」，见 `BOARD_COLUMN_TEMPLATE` 注释）。
+    搬走之后元信息行只需 134.5 ≤ 184 ✓。
+  */
+  const isColumn = layout === 'column';
+
+  /** 阶段胶囊（0-based ⇒ 1-based 的口径说明随件移动，勿丢）：
+     ⚠️ `stageSlotOf` 的入参口径是 **1-based**（`orderIndex` / `colorIndex` /
+     `resolveStageColorIndex()` 三者同源），故这里直接传 `orderIndex`。
+     历史上这里传过 `orderIndex - 1`（0-based）：那是在 `stageSlotOf` 还多做一次
+     `+1` 的时候，两者**互相抵消**才碰巧正确；`stageSlotOf` 去掉多余的 +1 之后
+     （见 stageColors.ts 的说明），这里必须同步去掉 `- 1`，否则本卡片的阶段色签
+     会整体错位一格。净视觉：1..9 全部逐字节不变（旧 `slot(orderIndex-1)` = 新 `slot(orderIndex)`）。 */
+  const stageTag = cur ? <Tag stageIndex={cur.orderIndex}>{stageLabel}</Tag> : null;
+
+  /** 头像组（两行之间搬家）。取值口径与 `maskMemberNames` 传参**沿既有语义，不许动**：
+      成员受限视图下仍走 `memberView`（不暴露其他成员姓名）。 */
+  const avatarStack = (
+    <AvatarStack
+      members={cardMembers.length > 0 ? cardMembers : stageMembers}
+      maskMemberNames={memberView}
+    />
+  );
 
   // 阶段进度轨道：可见阶段按工期占比拼接多段（实心块 main 色）
   const visibleStages = stages.filter((s) => s.visible !== false);
@@ -483,8 +527,26 @@ export function ProjectCard({
         )}
       </div>
 
-      {/* 委托方（成员受限视图隐藏客户名，沿用既有语义） */}
-      <span className="w-full truncate text-[13px] text-mist">{clientText}</span>
+      {/* 委托方（成员受限视图隐藏客户名，沿用既有语义）。
+          两档形态：
+            · row   = 单行 `span`（首页，逐字节不变）；
+            · 窄版  = 本行右侧挂**头像组**（v1.0.x 的搬家落点）。选这一行是因为它右侧
+              本来就是**死空间**（单行 `span` 的右半永远空着）——
+              实测代价只有行高：本行由「文本行高」抬到「头像 24」。
+              可用宽度实测（真机，头像组宽 = 6 + 18n）：n=4 ⇒ 78，扣 gap 8 后留给委托方
+              **98px ≥ 90px**（team-lead 给的判据线）⇒ `AvatarStack` 的 `max` 保持默认 4。
+              ⚠️ 已知边界（**只登记、未改**）：头像到达 `max` 后还会追加一个 `+N` 胶囊
+              （5 个 span ⇒ 96px），此时委托方只剩 **80px**。委托方是本卡**允许截断的两个
+              字段之一**（另一个是项目标题），故只降级、不破形；若产品判定必须 ≥90px，
+              把 `avatarStack` 的 `max` 改成 3 即可（3 个 + `+N` = 78 ⇒ 恒 ≥ 98px）。 */}
+      {isColumn ? (
+        <div className="flex w-full items-center justify-between gap-2">
+          <span className="min-w-0 flex-1 truncate text-[13px] text-mist">{clientText}</span>
+          {avatarStack}
+        </div>
+      ) : (
+        <span className="w-full truncate text-[13px] text-mist">{clientText}</span>
+      )}
 
       {/* 阶段进度轨道：高 8，槽 sunken，多段按工期占比拼接（实心块 main 色）
           v0.8.6.0002 · 反馈 #10.1 / #10.2：分段上色规则重定——
@@ -533,25 +595,25 @@ export function ProjectCard({
         </div>
       </div>
 
-      {/* 底部元信息行：周期 + 阶段标签 + 成员头像组 */}
-      <div className="flex w-full items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+      {/* 底部元信息行。两档形态（v1.0.x）：
+            · row（首页，逐字节不变）：左「周期 + 阶段胶囊」、右「成员头像组」；
+            · 窄版：**只留「到期日 + 阶段胶囊」，一左一右铺满整行**（`justify-between`
+              把胶囊推到右缘），头像组已上移到委托方行（见该行注释）。
+              需宽实测：53 + 8 + 73.5 = 134.5 ≤ 184 ✓ —— 这正是搬走头像组换来的余量。 */}
+      {isColumn ? (
+        <div className="flex w-full items-center justify-between gap-2">
           <span className="truncate text-[11px] text-mist">{dueText}</span>
-          {cur && (
-            /* ⚠️ `stageSlotOf` 的入参口径是 **1-based**（`orderIndex` / `colorIndex` /
-               `resolveStageColorIndex()` 三者同源），故这里直接传 `orderIndex`。
-               历史上这里传过 `orderIndex - 1`（0-based）：那是在 `stageSlotOf` 还多做一次
-               `+1` 的时候，两者**互相抵消**才碰巧正确；`stageSlotOf` 去掉多余的 +1 之后
-               （见 stageColors.ts 的说明），这里必须同步去掉 `- 1`，否则本卡片的阶段色签
-               会整体错位一格。净视觉：1..9 全部逐字节不变（旧 `slot(orderIndex-1)` = 新 `slot(orderIndex)`）。 */
-            <Tag stageIndex={cur.orderIndex}>{stageLabel}</Tag>
-          )}
+          {stageTag}
         </div>
-        <AvatarStack
-          members={cardMembers.length > 0 ? cardMembers : stageMembers}
-          maskMemberNames={memberView}
-        />
-      </div>
+      ) : (
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[11px] text-mist">{dueText}</span>
+            {stageTag}
+          </div>
+          {avatarStack}
+        </div>
+      )}
 
       {/* 重命名弹窗 */}
       <Modal open={renameOpen} onClose={() => setRenameOpen(false)} ariaLabel="项目重命名">
