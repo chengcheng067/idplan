@@ -35,6 +35,10 @@ import {
   type OverlayEntry,
 } from '../src/core/overlay/overlayStack';
 import { Modal } from '../src/components/common/Modal';
+import { MemberIdentityPicker } from '../src/components/layout/MemberIdentityPicker';
+import { useMembersStore } from '../src/store/useMembersStore';
+import { useSettingsStore } from '../src/store/useSettingsStore';
+import { MemberActorKind, MemberRoleKind } from '../src/core/types/enums';
 
 const ROOT = resolve(__dirname, '..');
 const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf-8');
@@ -260,6 +264,168 @@ describe('浮层栈 · Modal 接线（F3：Esc 只关栈顶）', () => {
       document.querySelector<HTMLButtonElement>('[data-probe="close"]')!.click();
     });
     expect(overlayStackSize(), '关闭必须出栈，否则下一层永远不是栈顶').toBe(0);
+  });
+});
+
+/* ====================================================================================
+ * F2 · 顶栏 chrome 浮层：进栈（Esc 不连坐）+ 档位高于一切内容浮层
+ *
+ * 为什么 jsdom 只能测到这一半：F2 的另一半（「点击被遮罩吞掉」）需要**命中测试**，
+ * 而 jsdom 没有 `elementFromPoint` —— 那一半只能真 Chromium 验，见
+ * `tests/overlay-stack-browser.spec.ts` 的 F2 用例。这里守的是**栈参与**与
+ * **档位声明**这两件 jsdom 能真判的事。
+ * ==================================================================================== */
+describe('浮层栈 · chrome 浮层接线（F2）', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  function mount(node: React.ReactElement): void {
+    act(() => {
+      root.render(node);
+    });
+  }
+
+  function identityTrigger(): HTMLButtonElement | null {
+    return document.querySelector<HTMLButtonElement>(
+      'button[title="当前身份（点击切换/退出）"]',
+    );
+  }
+
+  beforeEach(() => {
+    useMembersStore.getState().setAll([
+      {
+        id: 'mem_chrome',
+        name: '顶栏探针',
+        role: '负责人',
+        contact: null,
+        avatarColor: '#88A293',
+        active: true,
+        roleKind: MemberRoleKind.Admin,
+        passwordHash: null,
+        actorKind: MemberActorKind.Human,
+        agentKind: null,
+        revision: 1,
+        updatedAt: '2026-10-01T00:00:00Z',
+      },
+    ]);
+    useSettingsStore.setState({ currentMemberId: 'mem_chrome', hydrated: true });
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    useSettingsStore.setState({ currentMemberId: null, hydrated: false });
+  });
+
+  it('身份菜单与内容浮层同时在栈上时，一次 Esc 只关菜单（不连坐底下的内容浮层）', () => {
+    function Harness(): JSX.Element {
+      const [contentOpen, setContentOpen] = useState(true);
+      return (
+        <>
+          <Modal
+            open={contentOpen}
+            onClose={() => setContentOpen(false)}
+            placement="fullscreen"
+            ariaLabel="内容浮层"
+          >
+            <div />
+          </Modal>
+          <MemberIdentityPicker />
+        </>
+      );
+    }
+    mount(<Harness />);
+    expect(document.querySelector('[role="dialog"][aria-label="内容浮层"]')).not.toBeNull();
+
+    // 打开身份菜单（chrome 档，79 > 内容层 75）
+    act(() => {
+      identityTrigger()!.click();
+    });
+    expect(document.querySelector('[role="menu"][aria-label="身份操作"]'), '菜单应在场').not.toBeNull();
+
+    pressEscape();
+    expect(document.querySelector('[role="menu"][aria-label="身份操作"]'), 'Esc 关掉 chrome 菜单').toBeNull();
+    expect(
+      document.querySelector('[role="dialog"][aria-label="内容浮层"]'),
+      '★ chrome 菜单开着时按 Esc 不该连坐底下的内容浮层',
+    ).not.toBeNull();
+
+    // 菜单已退场 ⇒ 内容浮层成为栈顶，这次才轮到它
+    pressEscape();
+    expect(document.querySelector('[role="dialog"][aria-label="内容浮层"]')).toBeNull();
+  });
+
+  it('同档两个 chrome 菜单同时在栈上时，Esc 只关**栈顶那一个**', () => {
+    /*
+     * 这是 chrome 菜单也必须判栈顶的**唯一真实场景**，也是本用例存在的理由：
+     * 手机档顶栏同时有「⋮ 更多」和身份头像两个 chrome 菜单（`TopBar.tsx`），
+     * 两个都开着时按一次 Esc —— 不判栈顶的话**两个一起关**，正是 F3 那类症状
+     * 在 chrome 层的翻版。
+     *
+     * 这里用两枚 `MemberIdentityPicker` 来构造「同档两个 chrome 条目」：
+     * `MobileMoreMenu` 要拖进 useRepos / 备份 IO 一整串依赖，而本用例要测的是
+     * **栈的规则**（同档取后进者、Esc 只给栈顶），与菜单里装的是什么无关。
+     */
+    mount(
+      <>
+        <MemberIdentityPicker />
+        <MemberIdentityPicker />
+      </>,
+    );
+    const triggers = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('button[title="当前身份（点击切换/退出）"]'),
+    );
+    expect(triggers, '应有两枚身份入口').toHaveLength(2);
+
+    act(() => triggers[0].click());
+    act(() => triggers[1].click());
+    expect(document.querySelectorAll('[role="menu"][aria-label="身份操作"]')).toHaveLength(2);
+
+    pressEscape();
+    expect(
+      document.querySelectorAll('[role="menu"][aria-label="身份操作"]').length,
+      '★ 一次 Esc 只该关掉后开的（栈顶）那一个，另一个必须还在',
+    ).toBe(1);
+
+    pressEscape();
+    expect(document.querySelectorAll('[role="menu"][aria-label="身份操作"]').length).toBe(0);
+  });
+
+  it('两个顶栏 chrome 菜单都 portal 到 body、都取 chrome 档（不再自持 z-50）', () => {
+    for (const f of [
+      'src/components/layout/MemberIdentityPicker.tsx',
+      'src/components/layout/MobileMoreMenu.tsx',
+    ]) {
+      const src = read(f);
+      expect(src, `${f} 应 portal 到 body`).toContain('createPortal(');
+      expect(src, `${f} 应用 chrome 档类名`).toContain('${CHROME_OVERLAY_Z_CLASS}');
+      expect(src, `${f} 应上栈（这样子 Esc 才只关它）`).toContain('pushOverlay({');
+      expect(src, `${f} 出栈与入栈必须配对`).toContain('popOverlay(overlayId);');
+      expect(src, `${f} 外点判定必须同时看面板本体（否则点菜单项会自杀式关闭）`).toContain(
+        'panelRef.current?.contains(t)',
+      );
+      // 反面：自持 z-50 就是 F2 的病灶（长在 header 的 z-40 层叠上下文里出不来）
+      expect(src, `${f} 不该再有 absolute z-50 的面板`).not.toContain('top-full z-50');
+    }
+  });
+
+  it('chrome 档必须高于**所有**内容浮层档位（79 与 toast 的 80 之间）', () => {
+    const modalSrc = read('src/components/common/Modal.tsx');
+    // 内容侧的档位面：60 / 70 / 75 / 78。取最大值与 chrome 档比较（不写死具体数，
+    // 将来内容档整体上移时这里会红 —— 正是「静默漂移」要的摩擦）
+    const contentTiers = [60, 70, 75, 78];
+    const maxContent = Math.max(...contentTiers);
+    expect(
+      CHROME_OVERLAY_TIER,
+      `chrome 档 ${CHROME_OVERLAY_TIER} 必须高于最高的内容浮层档 ${maxContent}`,
+    ).toBeGreaterThan(maxContent);
+    expect(CHROME_OVERLAY_TIER, 'chrome 档必须留在 toast 的 80 之下').toBeLessThan(80);
+    // 类名确实来自那张静态映射表（没有第二个真相）
+    expect(modalSrc).toContain("79: 'z-[79]'");
+    expect(modalSrc).toContain('OVERLAY_Z_CLASS[CHROME_OVERLAY_TIER]');
   });
 });
 

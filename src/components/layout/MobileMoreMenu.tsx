@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import {
@@ -18,6 +19,22 @@ import { SettingsDialog } from './SettingsDialog';
 import { useBackupIo } from './useBackupIo';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { cn } from '../../lib/cn';
+import { resolveAnchoredPosition } from '../../lib/anchoredPosition';
+import { titleBarHeight } from '../../lib/topbarMetrics';
+import { CHROME_OVERLAY_Z_CLASS } from '../common/Modal';
+import {
+  CHROME_OVERLAY_TIER,
+  isTopOverlay,
+  popOverlay,
+  pushOverlay,
+} from '../../core/overlay/overlayStack';
+
+/** 菜单声明宽度（`w-56` = 224）—— 尺寸量到之前的第一帧兜底 */
+const MENU_WIDTH = 224;
+/** 菜单高度兜底（多分组 + 内边距 + 上下描边）；量到实测值后以实测为准 */
+const MENU_FALLBACK_HEIGHT = 320;
+/** 与触发按钮的下间距（原 `mt-2`） */
+const MENU_GAP = 8;
 
 /** 菜单项基础样式（玻璃面板内，hover 走 sand 半透明白，不引入新颜色；py-2 收紧提升密度） */
 const ITEM =
@@ -65,6 +82,19 @@ function Divider(): JSX.Element {
  *   - 备份导入导出 → useBackupIo（与桌面/侧栏按钮同一份逻辑）
  *   - 设置/导出日志 → SettingsDialog
  *   - 更新红点 → useUpdateCheck（**窄屏这一份保留**；桌面/平板那份在 `Sidebar` 设置项上）
+ *
+ * ── ★ F2（team-lead 2026-10-12 裁决 A / B）：面板 portal 到 body + chrome 档 ──
+ * 与 `MemberIdentityPicker` 逐字同病同修（那边有完整的来龙去脉，此处不重复）：
+ * 修前是 header 内的 `absolute ... z-50`，长在 `TopBar` 的 `relative z-40` 层叠
+ * 上下文里 —— 层叠上下文是墙，里面写多大的 z 都出不去。任何 ≥60 的内容遮罩
+ * （设置抽屉 / 打印预览 / 阶段抽屉）一开，⋮ 面板就被压住，点菜单项命中的是遮罩的
+ * 点击捕获层 ⇒ **抽屉被关掉、菜单项却没执行**。
+ * 两条几何 hack（加兄弟遮罩层 / 给顶栏加 pointer-events-none）被裁决否决，走机制：
+ * `createPortal` 到 `document.body` + `CHROME_OVERLAY_Z_CLASS`（79 档，高于一切
+ * 内容浮层、低于 toast），并进浮层栈（Esc 只关栈顶，不连坐底下的内容浮层）。
+ * ⚠️ 外点判定必须同时看触发包裹与面板本体（面板已不在 rootRef 里，只判它会
+ *    「点菜单项即自杀式关闭」）；`print:hidden` 现在是必需（portal 之后脱离了
+ *   header 的 print:hidden 子树）。
  */
 export function MobileMoreMenu(): JSX.Element {
   const location = useLocation();
@@ -82,25 +112,85 @@ export function MobileMoreMenu(): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  /** portal 出去的面板本体（外点判定要它，见文件头） */
+  const panelRef = useRef<HTMLDivElement>(null);
+  /** 打开那一刻量的视口锚点 */
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  /** 面板实测尺寸（锚定定位要它才能翻转 / 夹取） */
+  const [menuSize, setMenuSize] = useState<{ width: number; height: number } | null>(null);
 
   const onProjectPage = location.pathname === '/' || location.pathname.startsWith('/project');
 
-  // 外点关闭 + Escape 关闭
+  // 外点关闭 + Escape 关闭 + 上栈（Esc 只关栈顶，同 MemberIdentityPicker）
   useEffect(() => {
     if (!menuOpen) return;
+    const overlayId = pushOverlay({
+      tier: CHROME_OVERLAY_TIER,
+      kind: 'chrome',
+      railExempt: false,
+    });
     const onDocClick = (e: MouseEvent): void => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setMenuOpen(false);
+      const t = e.target as Node;
+      const insideTrigger = !!rootRef.current?.contains(t);
+      const insidePanel = !!panelRef.current?.contains(t);
+      if (!insideTrigger && !insidePanel) setMenuOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Escape' && isTopOverlay(overlayId)) setMenuOpen(false);
     };
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKeyDown);
+      popOverlay(overlayId);
     };
   }, [menuOpen]);
+
+  /** 量一次面板实测尺寸（内容随角色变化：管理员多出四个动作） */
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const el = panelRef.current;
+    if (!el) return;
+    const next = { width: el.offsetWidth, height: el.offsetHeight };
+    setMenuSize((prev) =>
+      prev && prev.width === next.width && prev.height === next.height ? prev : next,
+    );
+  }, [menuOpen]);
+
+  /** 宽度变化收起（顶栏响应式类变化会让触发按钮错位）；不监听 scroll：顶栏不在滚动容器里 */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onResize = (): void => setMenuOpen(false);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [menuOpen]);
+
+  /** 菜单最终位置（原观感：从按钮下方展开、右缘对齐） */
+  const menuPos = useMemo(() => {
+    if (!anchor) return null;
+    const vv = window.visualViewport;
+    return resolveAnchoredPosition({
+      anchor,
+      panel: menuSize ?? { width: MENU_WIDTH, height: MENU_FALLBACK_HEIGHT },
+      viewport: {
+        width: vv?.width ?? window.innerWidth,
+        height: vv?.height ?? window.innerHeight,
+      },
+      insetTop: window.idplan?.platform === 'win32' ? titleBarHeight() : 0,
+    });
+  }, [anchor, menuSize]);
+
+  const toggleMenu = (): void => {
+    if (menuOpen) {
+      setMenuOpen(false);
+      return;
+    }
+    const rect = buttonRef.current?.getBoundingClientRect();
+    setAnchor(rect ? { x: rect.right - MENU_WIDTH, y: rect.bottom + MENU_GAP } : null);
+    setMenuOpen(true);
+  };
 
   // 换页时收起，避免在「我的任务」页看到只属于首页的视图切换项
   useEffect(() => {
@@ -110,8 +200,9 @@ export function MobileMoreMenu(): JSX.Element {
   return (
     <div ref={rootRef} className="relative md:hidden">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setMenuOpen((v) => !v)}
+        onClick={toggleMenu}
         aria-label="更多操作"
         aria-expanded={menuOpen}
         aria-haspopup="menu"
@@ -123,12 +214,17 @@ export function MobileMoreMenu(): JSX.Element {
         <MoreVertical size={18} />
       </button>
 
-      {menuOpen && (
-        <div
-          role="menu"
-          aria-label="更多操作"
-          className="glass-medium menuFadeIn absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-6rem)] w-56 overflow-y-auto rounded-xl border border-line py-1 shadow-soft"
-        >
+      {menuOpen &&
+        menuPos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="menu"
+            aria-label="更多操作"
+            /* ★ F2：portal 到 body + fixed + chrome 档（类名来自 Modal 的静态映射表） */
+            className={`glass-medium menuFadeIn print:hidden fixed max-h-[calc(100vh-6rem)] w-56 overflow-y-auto rounded-xl border border-line py-1 shadow-soft ${CHROME_OVERLAY_Z_CLASS}`}
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
           {/* 导航（手机档 <768 的就近入口；与侧栏全屏抽屉互为冗余但都保留——R15 入口不丢） */}
           {isAdmin ? (
             <Link to="/" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
@@ -253,8 +349,9 @@ export function MobileMoreMenu(): JSX.Element {
               )}
             </span>
           </button>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {fileInput}
       {confirmDialog}
