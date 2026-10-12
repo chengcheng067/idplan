@@ -964,7 +964,11 @@ export function PrintPreviewDialog({
               {template === 'agent-poster' && printVm.vm && (
                 <AgentPosterDocument
                   vm={printVm.vm}
-                  sheets={enabledSheets}
+                  /* 2026-10-13 批 D：H 也走五块形态（决策 1）⇒ 不传 sheets（那是
+                     legacy 三页通路），改传 `resolveUnits` 的结果；四条分支与 A/D/E
+                     逐字同款。 */
+                  sheets={meta.usesBlocks ? undefined : enabledSheets}
+                  units={units}
                   palette={
                     palette['agent-poster'] ?? PRINT_TEMPLATE_PALETTES['agent-poster'].baseline
                   }

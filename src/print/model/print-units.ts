@@ -179,8 +179,14 @@ export const PRINT_TEMPLATE_UNITS: Record<PrintTemplateId, readonly PrintUnitSpe
     deviceSpec('ei-sheet-tag', 'SHEET 页签', 'SHEET nn / NN · A4（刊头身份；与页脚页码并存）'),
   ],
   'agent-poster': [
-    // H：B1 不可取消（项目名只在 meta 行） + B5 不可取消（页码与品牌装置，§2.6）
-    ...blockSpecs(['header', 'footer']),
+    // H：B1 不可取消（项目名只在 meta 行，§2.6 H·B1 = 丙）。
+    // B5 **可勾**（2026-10-13 批 D）：H 零页脚元素，署名与页码都由**装置**承担
+    // （页底出血巨字 IDPLAN / 页眉 `SHEET nn / NN`），B5 的唯一可摘载荷是脚注里的
+    // 「数据来源 … 同步」行 —— 摘掉后纸面下缘仍是 IDPLAN、页眉右端仍在（原则 1）。
+    // ⚠️ §2.6 的三条纪律里写过「H 的 B5 恒为禁用行」，与它自己的规则表
+    // 「丙 + **局部甲**」自相矛盾；批 D 任务书第 2 条按规则表裁定 B5 可勾、
+    // 只摘脚注行 ⇒ 以本条为准。
+    ...blockSpecs(['header']),
     deviceSpec('ap-flood-top', '页顶出血巨字', '品牌词 + 叠字主题词（页锚点）'),
     deviceSpec('ap-flood-bottom', '页底出血巨字', 'IDPLAN（B5 的署名由它承担，不许摘）'),
     deviceSpec('ap-spine', '中轴与栏头线', '双栏语法本体'),

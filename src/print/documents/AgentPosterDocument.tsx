@@ -69,10 +69,13 @@
 import type { CSSProperties, Ref } from 'react';
 
 import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
-import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-templates';
+import { printTemplateClass } from '../../components/print/print-templates';
 import type { PrintSheet } from '../../components/print/print-templates';
 
+import type { SchedulePaperBlocks } from '../../lib/schedule-print';
 import type { PrintPageKind, PrintViewModel } from '../model/print-view-model';
+import { blockRecordOf, resolveUnits, unitEnabled } from '../model/print-units';
+import type { PrintUnitId, ResolvedPrintUnit } from '../model/print-units';
 import type { PrintPalette } from '../model/print-palette';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
@@ -84,11 +87,25 @@ import {
   type GenericPlan,
 } from '../pages/generic/shared';
 import { PosterSheetBody } from '../pages/agent-poster/PosterSheetBody';
+import { PosterTail } from '../pages/agent-poster/PosterTail';
+import { Reschedule } from '../pages/agent-poster/Reschedule';
+import { SpanGantt } from '../pages/agent-poster/SpanGantt';
 import {
   AP_POSTER_TASK_MAX,
+  STAGE_FIELD_SCOPE,
+  agentPosterBlockPages,
+  apRescheduleRows,
+  apReschedRowsOf,
   giantTier,
   isPosterKind,
   planPosterSheets,
+  stageBlockMeta,
+  stagePosterLegend,
+  stagePosterNotes,
+  stagePosterStats,
+  stagePosterSummary,
+  type ApBlockPage,
+  type ApSpanPage,
   type PosterSheet,
 } from '../pages/agent-poster/shared';
 import { DEFAULT_PRINT_BRAND_WORD, normalizeBrandWord } from '../adapters/use-print-brand-word';
@@ -97,6 +114,14 @@ import '../styles/agent-poster.css';
 
 /** 页底品牌装置词：固定 `IDPLAN`，不随自定义品牌词变（规格 §1.4 规则 5） */
 export const AP_FOOTWORD_TEXT = 'IDPLAN';
+
+/**
+ * 5 块形态的物理页装配（**预计页数 = 实际出纸**的唯一出处）。
+ * 派生在 `pages/agent-poster/shared.ts`，这里只做出口——与 A/D/E 同款
+ * （`swissBlockPages` / `deBlockPages` / `eiBlockPages` 都在各自 document 出口）。
+ */
+export { agentPosterBlockPages } from '../pages/agent-poster/shared';
+export type { ApBlockPage, ApSpanPage } from '../pages/agent-poster/shared';
 
 /**
  * H 版三页（人类化批次：M1 阶段 / M2 任务 / M4 成员；顺序即纸面顺序）。
@@ -148,10 +173,17 @@ const AP_PAGE_SUBWORD: Partial<Record<PrintPageKind, string>> = {
 export interface AgentPosterDocumentProps {
   vm: PrintViewModel;
   /**
-   * 纸面页（原生页 kind + 通用模块 id；缺省 = 默认原生模块 = 人类三页）。
-   * 通用模块仍可手动勾选（`generic` 标记保留，P2 的回落路径也靠它）。
+   * 纸面页（原生页 kind + 通用模块 id；**传了就走 legacy 路径**）。
+   * 期三通用模块的显式勾选路径也靠它（`generic` 标记保留）。
    */
   sheets?: readonly PrintSheet[];
+  /**
+   * **解析好的单元**（`resolveUnits('agent-poster', prefs)` 的结果：5 块 + 4 件
+   * 版性装置 `ap-flood-top` / `ap-flood-bottom` / `ap-spine` / `ap-sum`）。
+   * **未传 `sheets` 时走「5 块形态」**（决策 1：选择器只暴露那 5 块）。
+   * 与 A/D/E 逐字同一条路（决策 5 第 2 条）：将来开放装置勾选只改 registry。
+   */
+  units?: readonly ResolvedPrintUnit[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，显示「ID Plan」文字标） */
@@ -224,13 +256,26 @@ export function agentPosterPhysical(vm: PrintViewModel, sheets: readonly PrintSh
 export function AgentPosterDocument({
   vm,
   sheets,
+  units,
   palette,
   logo = null,
   brandWord = null,
   pageRef,
 }: AgentPosterDocumentProps): JSX.Element {
-  const physical = agentPosterPhysical(vm, sheets ?? enabledSheetsOf('agent-poster', undefined));
-  const total = physical.length;
+  // 同一条解析路径（决策 5 第 2 条；与 A/D/E 逐字同款）
+  const resolvedUnits = units ?? resolveUnits('agent-poster', undefined);
+  const blocks = blockRecordOf(resolvedUnits);
+  const show = (id: PrintUnitId): boolean => unitEnabled(resolvedUnits, id);
+  /**
+   * 两种形态的分流（**唯一分叉点**，与 A/D/E 同款）：
+   *   · 传了 `sheets` ⇒ legacy 原生海报页路径（阶段 / 任务 / 成员三页 + 通用模块；
+   *     从界面消失但代码与 spec 全留，决策 2）；
+   *   · 否则 ⇒ **5 块形态**（B1 打印头部 / B2 双栏分段轴甘特 / B3 项目信息 /
+   *     B4 双栏状态分组块 / B5 页脚映射；缺省 = 五块全开）。
+   */
+  const legacy = sheets ? agentPosterPhysical(vm, sheets) : null;
+  const blockPages = legacy === null ? agentPosterBlockPages(vm, blocks) : null;
+  const total = legacy ? legacy.length : (blockPages?.length ?? 0);
   // 页顶巨字载荷：同一真值源做归一（去空白 + ≤12 字符截断），空值回落缺省词。
   // 截断在**渲染口**再做一遍，保证「传进来的超长词也不会撑破纸面」——单次归一，逐页复用。
   const topWord = normalizeBrandWord(brandWord ?? '') || DEFAULT_PRINT_BRAND_WORD;
@@ -246,18 +291,34 @@ export function AgentPosterDocument({
         } as CSSProperties
       }
     >
-      {physical.map((p, idx) => (
-        <ApPage
-          key={p.type === 'native' ? `${p.sheet.kind}-${p.chunkIndex}` : `generic-${p.module}-${p.chunkIndex}`}
-          page={p}
-          vm={vm}
-          logo={logo}
-          brandWord={topWord}
-          pageIndex={idx}
-          pageTotal={total}
-          pageRef={pageRef?.(idx)}
-        />
-      ))}
+      {legacy &&
+        legacy.map((p, idx) => (
+          <ApPage
+            key={p.type === 'native' ? `${p.sheet.kind}-${p.chunkIndex}` : `generic-${p.module}-${p.chunkIndex}`}
+            page={p}
+            vm={vm}
+            logo={logo}
+            brandWord={topWord}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+          />
+        ))}
+      {blockPages &&
+        blockPages.map((plan, idx) => (
+          <ApBlockPageView
+            key={`blocks-${idx}`}
+            plan={plan}
+            blocks={blocks}
+            show={show}
+            vm={vm}
+            logo={logo}
+            brandWord={topWord}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+          />
+        ))}
     </div>
   );
 }
@@ -365,4 +426,134 @@ function GenericPosterEmpty({
   if (module === 'task-list') return <EmptyPrintState kind="tasks" />;
   if (module === 'member-roster') return <EmptyPrintState kind="members" />;
   return <EmptyPrintState kind="stages" />;
+}
+
+/* ------------------------------------------------------------------ 5 块形态的纸面 */
+
+/**
+ * 5 块形态的一个物理页（2026-10-13 批 D）。
+ *
+ * ── 页壳与 legacy 逐字同构（§2.6 原则 2：装置的壳永远留着）──
+ *   页顶出血巨字（品牌词）/ 页眉（kicker + `SHEET nn / NN · A4` + meta + 发丝线）/
+ *   logo 行 / 页底出血巨字 `IDPLAN` —— **一样不减**，只有载荷换。
+ *   差异只有三处，都是 5 块形态必须的：
+ *     ① `data-print-page="blocks"`（与 A/D/E 同一标识）+ `data-page-form`；
+ *     ② meta 行换成 `stageBlockMeta`（项目名 · 排期基准 · 周期 · 打印日期）；
+ *     ③ 主体按页形分成 B2 页 / B4 页 / 页壳。
+ */
+function ApBlockPageView({
+  plan,
+  blocks,
+  show,
+  vm,
+  logo,
+  brandWord,
+  pageIndex,
+  pageTotal,
+  pageRef,
+}: {
+  plan: ApBlockPage;
+  blocks: SchedulePaperBlocks;
+  show: (id: PrintUnitId) => boolean;
+  vm: PrintViewModel;
+  logo: string | null;
+  brandWord: string;
+  pageIndex: number;
+  pageTotal: number;
+  pageRef?: Ref<HTMLDivElement>;
+}): JSX.Element {
+  const sub = plan.sub;
+  const title = AP_PAGE_TITLES['stage-overview']!;
+  const subWord = AP_PAGE_SUBWORD['stage-overview'];
+  // 页形内第几页（B2 读 `ApSpanPage.index`、B4 读 `PosterSheet.chunkIndex`、
+  // 页壳恒 0）——「（续）」只标**真跨页**，两张不同的页形之间不互相标续。
+  const formIndex =
+    sub.kind === 'span' ? sub.span.index : sub.kind === 'list' ? sub.sheet.chunkIndex : 0;
+  const continued = formIndex > 0;
+  const empty = sub.kind === 'list' && sub.sheet.empty;
+  // 页顶出血巨字只出在**文档第一张纸**上（规格 §1.2.2 的分页口径：续页不出巨字）
+  const showTopWord = pageIndex === 0 && !empty && show('ap-flood-top');
+  const resched = blocks.stageTable ? apReschedRowsOf(vm) : [];
+  const reschedTotal = apRescheduleRows(vm).length;
+
+  return (
+    <div
+      ref={pageRef}
+      data-print-page="blocks"
+      data-page-form={sub.kind}
+      data-page-index={pageIndex}
+      className="a4-page ap-page"
+      style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
+    >
+      {/* 页顶出血巨字：品牌词（默认 PLAN），从纸面 x=0 起、行盒越出纸顶被裁 */}
+      {showTopWord && (
+        <div className="ap-giant" data-tier={giantTier(brandWord)} aria-hidden>
+          <span className="ap-giant__word">{brandWord}</span>
+          {subWord !== undefined && <span className="ap-giant__subword">{subWord}</span>}
+        </div>
+      )}
+
+      <header className="ap-head" data-first={showTopWord || undefined}>
+        <div className="ap-head__top">
+          <p className="ap-head__kicker">{`ID PLAN · ${title.en}`}</p>
+          <p className="ap-head__tab">{`SHEET ${String(pageIndex + 1).padStart(2, '0')} / ${String(pageTotal).padStart(2, '0')} · A4`}</p>
+        </div>
+        {continued && <p className="ap-head__cont">{`${title.cn}（续）`}</p>}
+        {/* B1 的 meta 行：项目名（原则 1）· 排期基准 · 周期 · 打印日期 —— 四段恒在 */}
+        <p className="ap-head__meta">{stageBlockMeta(vm)}</p>
+        <div className="ap-head__rule" aria-hidden />
+      </header>
+
+      <div className="ap-logo-row">
+        <PrintLogoMark logo={logo} height={22} />
+      </div>
+
+      <div className="ap-body">
+        {sub.kind === 'span' && blocks.timeline && (
+          <SpanGantt page={sub.span as ApSpanPage} />
+        )}
+        {sub.kind === 'list' && blocks.stageTable && (
+          <PosterSheetBody
+            sheet={sub.sheet}
+            blocks={blocks}
+            first={pageIndex === 0}
+            annex={
+              plan.lastList && resched.length > 0 ? (
+                <Reschedule rows={resched} total={reschedTotal} />
+              ) : null
+            }
+          />
+        )}
+        {/* 页壳（B2 与 B4 都被摘掉）：装置的壳留着，尾部照出（原则 1/2） */}
+        {sub.kind === 'shell' && (
+          <PosterTail
+            summary={stagePosterSummary(stagePosterStats(vm))}
+            scope={STAGE_FIELD_SCOPE}
+            legend={stagePosterLegend(vm)}
+            notes={stagePosterNotes(vm)}
+            blocks={blocks}
+            first={pageIndex === 0}
+            variant="shell"
+          />
+        )}
+        {/* B2 页的尾部（摘要载荷 = 「跨度总天数」；B4 页的尾部在它自己的体内） */}
+        {sub.kind === 'span' && blocks.timeline && (
+          <PosterTail
+            summary={(sub.span as ApSpanPage).summary}
+            scope={STAGE_FIELD_SCOPE}
+            legend={stagePosterLegend(vm)}
+            notes={stagePosterNotes(vm)}
+            blocks={blocks}
+            first={pageIndex === 0}
+            variant="span"
+          />
+        )}
+      </div>
+
+      {/* 页底出血巨字：品牌装置 IDPLAN（固定词，不随自定义品牌词变；三页同构） */}
+      <div className="ap-footword" aria-hidden>
+        <span className="ap-footword__word">{AP_FOOTWORD_TEXT}</span>
+      </div>
+    </div>
+  );
 }

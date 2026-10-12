@@ -35,8 +35,10 @@
  * `AP_POSTER_ROWS_H` / `AP_POSTER_BLOCK_H` 的注释。
  */
 
-import { MemberActorKind, StageStatus, TaskStatus } from '../../../core/types/enums';
-import type { PrintPageKind, PrintViewModel } from '../../model/print-view-model';
+import { MemberActorKind, StageLogType, StageStatus, TaskStatus } from '../../../core/types/enums';
+import { totalDaysInclusive } from '../../../lib/date';
+import { buildPrintGantt, GANTT_MIN_LABEL_GAP_PCT } from '../../model/print-gantt';
+import type { PrintPageKind, PrintStageLogVM, PrintViewModel } from '../../model/print-view-model';
 import {
   buildMemberRosterRows,
   buildStageListRows,
@@ -292,6 +294,28 @@ export function taskPosterMeta(vm: PrintViewModel, s: TaskPosterStats): string {
 /** P3 meta 行（人类 / 执行体 构成是成员事实，不是治理面板，故照登） */
 export function memberPosterMeta(vm: PrintViewModel, s: MemberPosterStats): string {
   return `${vm.project.name} · 成员 ${s.total}  人类 ${s.humans}  执行体 ${s.agents}`;
+}
+
+/**
+ * 5 块形态的 meta 行（B1 的载荷，**每页都出**；批 D）。
+ *
+ * 与 legacy 的 `stagePosterMeta` 不同源，且有意不同：legacy 的 meta 登的是
+ * 「阶段 N / 已完成 n / 延期 n」这套**计数**，而 5 块形态里计数已经由 B4 的
+ * 栏头 `ap-col__count` 与 `ap-sum` 承担（同页两处印同一个值正是用户在 P0-3
+ * 点名过的排版病）。5 块形态的 meta 登**只有它才有的四样**：
+ * 项目名（原则 1）· 排期基准 · 周期 · 打印日期。
+ *
+ * ⚠️ 这是**高风险的多字段归并**（批 D 移交项点名）：四个字段分别来自
+ * `vm.project.name` / `scheduleBasisLabel` / `plannedStartAt`+`EndAt` /
+ * `generatedAt`，**没有任何条件分支**——四段恒在，不因权限 / 数据空而少一段。
+ * `print-a4-visual-h` 有一条逐字段自查断言守着。
+ */
+export function stageBlockMeta(vm: PrintViewModel): string {
+  return (
+    `${vm.project.name} · 排期基准 ${vm.project.scheduleBasisLabel}` +
+    ` · ${vm.project.plannedStartAt} – ${vm.project.plannedEndAt}` +
+    ` · 打印日期 ${vm.generatedAt.slice(0, 10)}`
+  );
 }
 
 /** 居中摘要块（规格 §1.1 D1：主数值大号 mono，**不借巨字**——借了每页都是海报） */
@@ -690,4 +714,489 @@ export function giantTier(word: string): 'xl' | 'lg' | 'md' | 'sm' {
 /** ISO 时间串 → 纸面用的「yyyy-MM-dd HH:mm」 */
 export function stampOf(iso: string): string {
   return iso.slice(0, 10) + ' ' + iso.slice(11, 16);
+}
+
+/* ====================================================================================
+ * B2 · 三段式甘特（2026-10-13「5 块 × 4 模板」重构 · 批 D）
+ * ====================================================================================
+ * 依据 §1.4 的 H·B2 行（定稿形态）+ team-lead 批 D 任务书的四条几何硬约束。
+ *
+ * ── 三段式 ──
+ *   ① 通栏覆盖带 `ap-span-band`：全部阶段区间的**合并覆盖**（gate 橙 / ink 墨分色段）
+ *      + 1px 墨色基线 + 月份 mono 刻度压线 —— 一眼看全项目时间轮廓的**页级基准**。
+ *   ② 双栏分段轴甘特：H 的签名双栏 + 中轴，每栏一条**栏内时间标尺**（与①同一
+ *      0→100% 映射）+ 每阶段一行（`NN 名称` + 跨度条 + 条左端内嵌实底状态标签
+ *      + 右端两端日期）。
+ *   ③ `ap-sum` 的**第四个载荷**「跨度总天数」（B4 页的载荷是「阶段健康度」⇒ 两张
+ *      同族双栏页靠 ap-sum 载荷分工 + 条/字段 meta 区分）。
+ *
+ * ── 四条几何硬约束（team-lead 批 D）──
+ *   ① `.ap-cols` 在 B2 页强制 `1fr 1fr`（今天 `340px 336px` 两栏不等宽 ⇒ 同一 %
+ *      的条在两栏不等长）；CSS 侧见 `.ap-cols[data-gantt]`。
+ *   ② B2 页**关 `data-stagger`**（交错会让条错位）。
+ *   ③ 栏间位置**不可直接互比**（双栏 = 两条独立轴）⇒ 这条必须写进 B2 的口径注，
+ *      靠栏内标尺 + 通栏覆盖带缓解。**保双栏**是 team-lead 的裁定：要一条共享轴
+ *      就得砍双栏 ⇒ H 不再是 H。
+ *   ④ B2 与 B4 是**两张同族双栏页**（各自占物理页），两块**共用同一批切片**。
+ *
+ * ── 窗口来源 ──
+ * 与 A/D/E **同一套派生**（批 B 裁决：尺子必须同口径）：直接用
+ * `buildPrintGantt`（`print-gantt.ts`）的 `rows[].left/width` 与 `ticks`。
+ * 本文件不自己算几何——它是 H 对同一份模型的**另一种画法**（条 → 双栏块）。
+ */
+
+/**
+ * B2 一行的高度（px）：块头行（NN + 名称 + 日期）+ 轨道行（条）+ 块下 1px 发丝线。
+ * **实测 41.5**（padding-top 6 + 块头行 12.5px/700 的行盒 19.5 + 轨道 12 + 上距 3
+ * + 1px 发丝线），取 42 向上取整 —— 估高只许偏大（估小 = 内容溢出纸面）。
+ * 第一版取 40 时实测 n≥14 的第一页长出 **1127.8px**（超 4.8px），本值据此回填。
+ */
+export const AP_SPAN_ROW_H = 42;
+/** ① 通栏覆盖带占高（px）：带高 10 + 基线 + 月份刻度行为一体 */
+export const AP_SPAN_BAND_H = 40;
+/** ② 栏内时间标尺占高（px）：1px 基线 + 月份 mono 小字 */
+export const AP_SPAN_RULER_H = 22;
+/** B2 口径注（与「条 = 时长跨度」同处；几何约束③必须写在这） */
+export const AP_SPAN_NOTE =
+  '条 = 时间跨度，非完成度；两栏是两个独立轴（刻度相同），栏间位置不可直接互比。';
+
+/**
+ * 刻度抽稀阈值（%）。**两处刻度各用各的**（同一份映射、不同密度）：
+ *   · 通栏覆盖带 714px 宽 ⇒ 12% ≈ 86px，沿用 `print-gantt.ts` 的同值；
+ *   · 栏内标尺只有 338px 宽（`1fr 1fr` 的一半）⇒ 12% 只有 40px，比月份标签
+ *     本身还窄（实测「2026年1月」9.5px mono ≈ 52px）⇒ 必须放到 18%（≈61px）。
+ * 这是**可读性下限**，不是审美值：放到 12% 会让相邻两个月标签叠字。
+ */
+export const AP_SPAN_BAND_MIN_TICK_GAP_PCT = GANTT_MIN_LABEL_GAP_PCT;
+export const AP_SPAN_COL_MIN_TICK_GAP_PCT = 18;
+
+/**
+ * 月份标签的**实测宽度**（px）：`2026年1月` 在 9.5px mono + 0.04em 字距下 ≈52px，
+ * 取 56 留余量。用来判「这枚刻度贴右缘了吗」——贴了就要**右对齐**（否则标签
+ * 越出盒外：实测 9 阶段夹具里覆盖带最后一枚越出 714 通栏，被真机断言抓到）。
+ */
+export const AP_SPAN_TICK_PX = 56;
+/** 覆盖带轨宽 = 内容框 714（实测 `.ap-body` 的 40px 右边距下的内容宽） */
+export const AP_SPAN_BAND_TRACK_PX = 714;
+/** 栏内轨宽 = (714 − 38 栏间) / 2 = **338**（`1fr 1fr` 实测；几何约束①） */
+export const AP_SPAN_COL_TRACK_PX = (AP_SPAN_BAND_TRACK_PX - 38) / 2;
+
+/** 刻度对齐：`lead` = 左对齐于刻度位置（默认）；`tail` = 右对齐（贴右缘时防越盒） */
+export interface ApTick {
+  label: string;
+  leftPercent: number;
+  align: 'lead' | 'tail';
+}
+
+/** 按最小间距抽稀刻度（保留第一枚；`ticks` 已按位置升序） */
+export function pruneTicks(
+  ticks: readonly { label: string; leftPercent: number }[],
+  minGapPct: number,
+): readonly { label: string; leftPercent: number }[] {
+  const kept: { label: string; leftPercent: number }[] = [];
+  for (const t of ticks) {
+    const prev = kept[kept.length - 1];
+    if (prev && t.leftPercent - prev.leftPercent < minGapPct) continue;
+    kept.push(t);
+  }
+  return kept;
+}
+
+/**
+ * 抽稀 + 标贴右缘的对齐档（**必须两步一起**：只抽稀不标对齐，最后一枚会越盒）。
+ * 贴右缘的那一段刻度会被连续标成 `tail`（它们之间都有 ≥minGap 的间距、
+ * 且都右对齐 ⇒ 彼此不叠，这也是「同段同档」的原因）。
+ */
+export function layoutTicks(
+  ticks: readonly { label: string; leftPercent: number }[],
+  minGapPct: number,
+  trackPx: number,
+): readonly ApTick[] {
+  return pruneTicks(ticks, minGapPct).map((t) => ({
+    label: t.label,
+    leftPercent: t.leftPercent,
+    align: (t.leftPercent / 100) * trackPx + AP_SPAN_TICK_PX > trackPx ? 'tail' : 'lead',
+  }));
+}
+
+/** 双栏分段轴甘特的一行 */
+export interface ApSpanRow {
+  key: string;
+  /** 两位阶段号（mono） */
+  no: string;
+  name: string;
+  /** 阶段四态（分组 / 标签 / 字形都由它派生，一处定义） */
+  status: StageStatus;
+  tone: PosterColumnTone;
+  /** 实底标签文字（状态名） */
+  tag: string;
+  glyph: string;
+  /** 条左缘 / 宽度（%；与 ① 覆盖带、栏内标尺同一坐标系） */
+  left: number;
+  width: number;
+  startAt: string;
+  endAt: string;
+  /** 单阶段跨度天数（含首尾；1 天阶段 = 1） */
+  days: number;
+}
+
+/** 一栏（栏头 + 本页落在该栏的行）——沿用 B4 的双栏分组语义（两页同族） */
+export interface ApSpanColumn {
+  key: string;
+  label: string;
+  en: string;
+  tone: PosterColumnTone;
+  note: string;
+  rows: readonly ApSpanRow[];
+}
+
+/** ① 通栏覆盖带的一段（合并后的区间；tone 分色） */
+export interface ApCoverSegment {
+  left: number;
+  width: number;
+  tone: PosterColumnTone;
+}
+
+/** 一个 B2 物理页的载荷 */
+export interface ApSpanPage {
+  /** 本模块第几页（0 起） */
+  index: number;
+  total: number;
+  columns: readonly ApSpanColumn[];
+  /** 覆盖带**全量**（跨页不变：它是页级基准，不是本页切片） */
+  cover: readonly ApCoverSegment[];
+  ticks: readonly { label: string; leftPercent: number }[];
+  /** ③ ap-sum 第四载荷 */
+  summary: PosterSummary;
+  /** B2 口径注（含几何约束③） */
+  note: string;
+}
+
+/** 一栏能装几行（`bands` = 本页栏行数：B2 恒 1 行 2 栏） */
+export function apSpanColumnCap(bands: number, availH: number): number {
+  const perRow = availH / bands - AP_POSTER_COL_HEAD_H - AP_SPAN_RULER_H;
+  return Math.max(1, Math.floor(perRow / AP_SPAN_ROW_H));
+}
+
+/**
+ * 把同一色调的区间合并成互不重叠的段（升序）。输入 / 输出都以**天偏移**为单位，
+ * 便于先按真实天数合并、再一次性换算成 %（先换算后合并会把相邻段算断）。
+ */
+function mergeIntervals(input: readonly [number, number][]): [number, number][] {
+  const sorted = [...input].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const out: [number, number][] = [];
+  for (const [lo, hi] of sorted) {
+    const last = out[out.length - 1];
+    if (last && lo <= last[1] + 1) {
+      // 相邻（lo === last.hi + 1）也算连成一段——中间空一天不该断成两截
+      last[1] = Math.max(last[1], hi);
+      continue;
+    }
+    out.push([lo, hi]);
+  }
+  return out;
+}
+
+/** 单阶段跨度天数（含首尾）；脏行（空日期）记 0 */
+export function spanDays(startAt: string, endAt: string): number {
+  const s = startAt.slice(0, 10);
+  const e = endAt.slice(0, 10);
+  if (s === '' || e === '') return 0;
+  return Math.max(totalDaysInclusive(s, e), 1);
+}
+
+/**
+ * B2 页的载荷派生（纯函数；确定性）。
+ *
+ * `availH` = B2 页**栏区可用总高**（扣除页眉 / 巨字让位 / 覆盖带 / 口径注 /
+ * ap-sum / 通栏线 / 口径行 / 图例 / 脚注）。
+ */
+export function planApSpanPages(vm: PrintViewModel, availH: number): ApSpanPage[] {
+  const gantt = buildPrintGantt(vm.project, vm.stages);
+  const geo = new Map(gantt.rows.map((r) => [r.key, r]));
+  const rows: ApSpanRow[] = vm.stages.map((s) => {
+    const g = geo.get(s.id) ?? geo.get(`${s.orderIndex}-${s.name}`);
+    return {
+      key: s.id,
+      no: String(s.orderIndex).padStart(2, '0'),
+      name: s.name,
+      status: s.status,
+      tone: stageTagTone(s.status),
+      tag: stageStatusLabel(s.status),
+      glyph: STAGE_GLYPH[s.status],
+      left: g?.left ?? 0,
+      width: g?.width ?? 0,
+      startAt: s.startAt.slice(0, 10),
+      endAt: s.endAt.slice(0, 10),
+      days: spanDays(s.startAt, s.endAt),
+    };
+  });
+
+  // ① 覆盖带：按色调合并**全部**阶段的真实区间（用真实天数，不用 2.5% 最小可见宽
+  //    ——覆盖带表达的是「项目有没有空窗」，把 1 天阶段撑成 2.5% 会把空窗抹掉）
+  const offsetOf = (iso: string): number =>
+    totalDaysInclusive(gantt.viewStart, iso.slice(0, 10)) - 1;
+  const byTone = new Map<PosterColumnTone, [number, number][]>();
+  for (const s of vm.stages) {
+    const lo = offsetOf(s.startAt);
+    const hi = offsetOf(s.endAt);
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+    const tone = stageTagTone(s.status);
+    const list = byTone.get(tone) ?? [];
+    list.push([Math.max(lo, 0), Math.max(hi, 0)]);
+    byTone.set(tone, list);
+  }
+  const cover: ApCoverSegment[] = [];
+  for (const tone of ['gate', 'ink'] as const) {
+    for (const [lo, hi] of mergeIntervals(byTone.get(tone) ?? [])) {
+      cover.push({
+        left: (lo / gantt.viewDays) * 100,
+        width: ((hi - lo + 1) / gantt.viewDays) * 100,
+        tone,
+      });
+    }
+  }
+  cover.sort((a, b) => a.left - b.left || a.width - b.width);
+
+  const columns: ApSpanColumn[] = STAGE_POSTER_COLUMNS.map((c) => ({
+    key: c.key,
+    label: c.label,
+    en: c.en,
+    tone: c.tone,
+    note: c.note,
+    rows: rows.filter((r) => c.statuses.includes(r.status)),
+  }));
+
+  const cap = apSpanColumnCap(1, availH);
+  const slices = planPosterPages(
+    columns.map((c) => c.rows),
+    cap,
+  );
+  const totalDays = rows.reduce((n, r) => n + r.days, 0);
+  const summary: PosterSummary = {
+    label: '跨度总天数',
+    big: String(totalDays),
+    sub: `${gantt.viewStart || '—'} → ${(gantt.viewEnd || '—').slice(5)} · ${rows.length} 个阶段跨度合计 · 条 = 时间跨度，非完成度`,
+  };
+  return slices.map((pageRows, i) => ({
+    index: i,
+    total: slices.length,
+    // 本页空栏不落版（与 B4 的 assembleSheets 同纪律：不出只有栏头没有行的空壳栏）
+    columns: columns
+      .map((c, ci) => ({ ...c, rows: pageRows[ci] ?? [] }))
+      .filter((c) => c.rows.length > 0),
+    cover,
+    ticks: gantt.ticks.map((t) => ({ label: t.label, leftPercent: t.leftPercent })),
+    summary,
+    note: AP_SPAN_NOTE,
+  }));
+}
+
+/** B2 的**栏区可用总高**（px）：由 `AP_POSTER_ROWS_H` 扣掉 B2 页独有件（实测回填见 CSS 头） */
+export const AP_SPAN_ROWS_H = AP_POSTER_ROWS_H - AP_SPAN_BAND_H;
+
+/* ── 5 块形态的实测表（2026-10-13 批 D · 真 Chromium 794×1123 · 预计 = 实际逐档核过）──
+ *
+ * 夹具：`print-a4-visual-h.spec.ts` 的 `stagesN(n)`（3 天阶梯、跨度 4–19 天、
+ * 状态四态轮换、**无**改期记录）。表由该 spec 的页数表用例控制台打印留档。
+ *
+ *   | 阶段 n | 物理页 | 页形序列             |
+ *   |-------:|-------:|----------------------|
+ *   |  1–13  |      2 | span ×1 → list ×1    |
+ *   | 14–20  |      4 | span ×2 → list ×2    |
+ *   | 30     |      6 | span ×3 → list ×3    |
+ *   | 40     |      6 | span ×3 → list ×3    |
+ *
+ * 两条读表须知：
+ *   ① **两张页形各自连续**（先「何时」页、后「什么状态」页），各自页数由自己的
+ *      容量决定 ⇒ 总页数 = B2 页数 + B4 页数（两张同族页各占自己的纸）；
+ *   ② 有改期记录时 B4 的收口页要多装 L3（`apReschedHeight`），容量下调
+ *      ⇒ 同规模可能多出一页（`apListPages` 的两段式分页只在这种时候多开一张）。
+ *
+ * 分块高度实测（B2 页，9 阶段夹具）：覆盖带 25（刻度行 14 + 段 10 + 基线 1）、
+ * 栏内标尺 18（刻度行 14 + 3 呼吸 + 1 基线）、阶段行 **41.5**（取常量 42）、
+ * 条高 **12**、栏宽 **338**（`1fr 1fr` 于 714 内容框、栏间 38）。
+ */
+
+/* ====================================================================================
+ * L3 · 改期记录（§0.5 的公共附加件；B4 的附属层，随 B4 一起不出）
+ * ==================================================================================== */
+
+/** 一页最多列几条改期记录（§0.5 建议 5-8；H 的块高 52 取 6） */
+export const AP_RESCHED_MAX_ROWS = 6;
+
+/**
+ * 最近 N 条 `StageLog(rescheduled)`（新在前）。
+ * ⚠️ 与 D/E 同一口径（`deRescheduleRows` / `eiRescheduleRows` 三处逐字同款）——
+ * 「第二真值源」在本仓出过三次事故，L3 的取数规则只许有一套。
+ */
+export function apRescheduleRows(vm: PrintViewModel): readonly PrintStageLogVM[] {
+  return vm.stageLogs
+    .filter((l) => l.type === StageLogType.Rescheduled)
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .slice(0, AP_RESCHED_MAX_ROWS);
+}
+
+/** L3 一行（走 H 的 `ap-block` 清单行语法：块头 2px 粗上线 + mono meta 行，§0.5） */
+export interface ApReschedRow {
+  key: string;
+  stageName: string;
+  /** `旧结束日 → 新结束日`（两端 mono；缺一端就只写有的那端） */
+  span: string;
+  reason: string;
+  /** `2026-01-19 02:00 · 负责人甲` */
+  at: string;
+}
+
+/** L3 的块高常量（px）：标题行 + 每条 + 收口行（实测回填见 CSS 头） */
+export const AP_RESCHED_HEAD_H = 96;
+export const AP_RESCHED_ROW_H = 38;
+export const AP_RESCHED_FOOT_H = 18;
+
+/** L3 明细行（缺日期的一端写 `—`；reason 为 null 时写「未记原因」，**不编原因**） */
+export function apReschedRowsOf(vm: PrintViewModel): readonly ApReschedRow[] {
+  return apRescheduleRows(vm).map((l) => ({
+    key: l.id,
+    stageName: l.stageName,
+    span: `${(l.oldEndAt ?? '').slice(0, 10) || '—'} → ${(l.newEndAt ?? '').slice(0, 10) || '—'}`,
+    reason: l.reason ?? '未记原因',
+    at: `${stampOf(l.createdAt)} · ${l.operatorName}`,
+  }));
+}
+
+/** L3 整块占高（px；0 = 整段不出，§0.5 的空态纪律） */
+export function apReschedHeight(rows: readonly ApReschedRow[]): number {
+  return rows.length === 0
+    ? 0
+    : AP_RESCHED_HEAD_H + rows.length * AP_RESCHED_ROW_H + AP_RESCHED_FOOT_H;
+}
+
+/* ====================================================================================
+ * 5 块形态的页装配（「5 块 × 4 模板」重构 · 批 D）
+ * ====================================================================================
+ * ── 两张同族双栏页各自占物理页（§1.4 明写「B4 的清单页另有它自己的双栏」）──
+ *   · B2 页（`span`）= ① 通栏覆盖带 + ② 双栏分段轴甘特 + ③ `ap-sum`「跨度总天数」
+ *   · B4 页（`list`）= 双栏状态分组块（今天 H P1 原样）+ `ap-sum`「项目完成度」
+ *     + L3 改期记录（只挂 B4 的**收口页**）
+ * 两块**共用同一批切片**（同一批阶段先出「何时」页、再出「什么状态」页）。
+ * 读者靠三样区分这对同族页：`ap-sum` 载荷措辞 / B2 有跨度条 / B4 有字段 meta。
+ *
+ * ── 为什么不做成「同页上下两半」──
+ * 704px 正文装不下两套双栏 + 两个 ap-sum（实测：覆盖带 38 + 甘特 8 行 + 状态块 7 行
+ * + 两个摘要块 ≈ 1200px）。team-lead 的任务书也把「若这条分工在连续翻页里撑不住，
+ * 停下报我，别自己合并两块」写成了硬约束 —— 故本实现**不合并**。
+ */
+
+/** B2 页的栏区可用总高（px）= 通用栏区 − 覆盖带 − 口径注行 */
+export const AP_SPAN_NOTE_H = 22;
+export const AP_SPAN_AVAIL = AP_POSTER_ROWS_H - AP_SPAN_BAND_H - AP_SPAN_NOTE_H;
+
+/** 一个 5 块物理页的子形态 */
+export type ApBlockSub =
+  /** B2 页：三段式甘特 */
+  | { kind: 'span'; span: ApSpanPage }
+  /** B4 页：双栏状态分组块（复用 `PosterSheetBody`，今天 H 的阶段海报原样） */
+  | { kind: 'list'; sheet: PosterSheet }
+  /** 页壳：两块都被摘掉（或本就没有阶段）时，仍出一张「B1 + B3 + B5」的纸 */
+  | { kind: 'shell' };
+
+export interface ApBlockPage {
+  sub: ApBlockSub;
+  /** 本页是 B4 的**收口页**（L3 改期记录挂这；§0.5） */
+  lastList: boolean;
+}
+
+/**
+ * B4 页的分页（带 L3 预留）。
+ *
+ * ⚠️ **与 legacy 的 `planPosterSheets` 不同源，且这是有意的**：5 块形态里 B4 的
+ * 收口页要额外装下 L3（`apReschedHeight`），legacy 路径不装 L3 ⇒ 容量分界线不同。
+ * 硬合并会算错（批 B 裁决第 4 条同款理由：`DE_BLOCK_COMPACT_AT` 与 legacy 的 9
+ * 不同源）。
+ *
+ * 做法（两段式，**只在真装不下时才多出一页**）：
+ *   ① 先按**不留 L3** 的容量 `cap` 正常分页；
+ *   ② 若最后一页的栏高 > `capTail`（留了 L3 的容量），把最后一页每栏超出
+ *      `capTail` 的**尾部行**挪进新的一页 —— 新页带着这些行 + L3，是真正的
+ *      「续页尾段」（§0.5 明文：不单独成页，不与 L3 单独成一张纸）。
+ * 全程确定性，且渲染侧与装配侧读同一个切片 ⇒ 预计 = 实际。
+ */
+function apListPages(vm: PrintViewModel, reschedH: number): PosterSheet[] {
+  const rows = buildStageListRows(vm);
+  const stats = stagePosterStats(vm);
+  const columns: PosterColumn[] = STAGE_POSTER_COLUMNS.map((c) => ({
+    key: c.key,
+    label: c.label,
+    en: c.en,
+    tone: c.tone,
+    note: c.note,
+    blocks: rows.filter((r) => c.statuses.includes(r.status)).map(stageBlock),
+  }));
+  const capOf = (avail: number): number =>
+    Math.max(1, Math.floor((avail - AP_POSTER_COL_HEAD_H) / AP_POSTER_BLOCK_H));
+  const cap = capOf(AP_POSTER_ROWS_H);
+  const capTail = capOf(AP_POSTER_ROWS_H - reschedH);
+  const pageBlocks = planPosterPages(
+    columns.map((c) => c.blocks),
+    cap,
+  );
+  // ② 收口页塞不下 L3 ⇒ 把最后一页的尾部行挪到新的一页（那一页才挂 L3）
+  if (reschedH > 0 && pageBlocks.length > 0) {
+    const last = pageBlocks[pageBlocks.length - 1]!;
+    if (Math.max(...last.map((b) => b.length)) > capTail) {
+      pageBlocks[pageBlocks.length - 1] = last.map((b) => b.slice(0, capTail));
+      pageBlocks.push(last.map((b) => b.slice(capTail)));
+    }
+  }
+  return pageBlocks.map((blocksOfPage, i) => ({
+    kind: 'stage-overview' as PosterKind,
+    total: rows.length,
+    chunkIndex: i,
+    chunkTotal: pageBlocks.length,
+    empty: rows.length === 0,
+    meta: stagePosterMeta(vm, stats),
+    columns: columns
+      .map((c, ci) => ({ ...c, blocks: blocksOfPage[ci] ?? [] }))
+      .filter((c) => c.blocks.length > 0),
+    summary: stagePosterSummary(stats),
+    scope: STAGE_FIELD_SCOPE,
+    legend: stagePosterLegend(vm),
+    notes: stagePosterNotes(vm),
+  }));
+}
+
+/**
+ * 5 块形态的 H 物理页序列（**预计页数 = 实际出纸**的唯一出处）。
+ *
+ * `blocks` = 用户在五块清单里的勾选态（B1 / B5 在 H 是装置级，见 §2.6）。
+ */
+export function agentPosterBlockPages(
+  vm: PrintViewModel,
+  blocks: { timeline: boolean; stageTable: boolean },
+): ApBlockPage[] {
+  const out: ApBlockPage[] = [];
+  const reschedH = blocks.stageTable ? apReschedHeight(apReschedRowsOf(vm)) : 0;
+
+  // ── 无可见阶段：两块都无非画不可的东西（B2 的覆盖带更是「装饰填版」）⇒ 只出一张
+  //    空态纸（B4 的空态载体，02 §8 的明确空态），不造数据填版。
+  if (vm.stages.length === 0) {
+    const sheets = apListPages(vm, 0);
+    return [{ sub: { kind: 'list', sheet: sheets[0]! }, lastList: true }];
+  }
+
+  if (blocks.timeline) {
+    for (const span of planApSpanPages(vm, AP_SPAN_AVAIL)) {
+      out.push({ sub: { kind: 'span', span }, lastList: false });
+    }
+  }
+  if (blocks.stageTable) {
+    const sheets = apListPages(vm, reschedH);
+    sheets.forEach((sheet, i) => {
+      out.push({ sub: { kind: 'list', sheet }, lastList: i === sheets.length - 1 });
+    });
+  }
+  // 两块都被摘掉 ⇒ 仍出一张页壳（B1 + B3 + B5；原则 1 的三件不许消失）
+  if (out.length === 0) out.push({ sub: { kind: 'shell' }, lastList: false });
+  return out;
 }

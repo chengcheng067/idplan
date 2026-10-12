@@ -17,7 +17,7 @@ import type { PrintSheet } from '../../components/print/print-templates';
 import type { PrintTemplateId } from '../../components/print/print-templates';
 import type { SchedulePaperBlocks } from '../../lib/schedule-print';
 import type { PrintViewModel } from '../model/print-view-model';
-import { agentPosterPhysical } from './AgentPosterDocument';
+import { agentPosterBlockPages, agentPosterPhysical } from './AgentPosterDocument';
 import { dataEditorialPhysical, deBlockPages } from './DataEditorialDocument';
 import { editorialIndexPhysical, eiBlockPages } from './EditorialIndexDocument';
 import { swissBlockPages, swissSchedulePhysical } from './SwissScheduleDocument';
@@ -45,7 +45,9 @@ export function printPhysicalPageCount(
     case 'editorial-index':
       return blocks ? eiBlockPages(vm, blocks).length : editorialIndexPhysical(vm, sheets).length;
     case 'agent-poster':
-      return agentPosterPhysical(vm, sheets).length;
+      // 2026-10-13 批 D：H 起走**五块形态**（决策 1）；legacy 三页 + 通用模块
+      // 仍可由显式 `sheets` 复现（代码与 spec 全留，决策 2）——不传 blocks 即那条路。
+      return blocks ? agentPosterBlockPages(vm, blocks).length : agentPosterPhysical(vm, sheets).length;
     default:
       // classic 不走模块表（五块 blocks 另一套粒度；调用方走 d.pages.length）
       return 0;

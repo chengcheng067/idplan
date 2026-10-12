@@ -672,3 +672,307 @@
     print-color-adjust: exact;
   }
 }
+
+/* ====================================================================================
+ * 5 块形态（2026-10-13「5 块 × 4 模板」重构 · 批 D · H 版）
+ * ====================================================================================
+ * 依据 `deliverables/gstack/print-5blocks-mapping-2026-10-13.md` §1.4（H 逐格）。
+ * 本区**只加不改**：上方既有规则（人类化批次 + 参考稿还原批次逐像素校准过）
+ * 一行不动，legacy 原生海报页路径因此逐字不变。
+ * 新增只有 B2 的三件硬件（跨度条 / 栏内标尺 / 通栏覆盖带）与 L3 的块语法复用。
+ * ==================================================================================== */
+
+/* ── 几何硬约束①②（team-lead 批 D）：B2 页双栏**强制等宽** + **关交错** ──
+ * `.ap-cols` 既有值是 `340px 336px`（参考稿实测的两栏不等宽，为的是让三轨恰好
+ * 落满 714px 内容框）。B2 页画的是**同一个百分比尺子**：两栏不等宽 ⇒ 同一个 30%
+ * 的左栏条与右栏条像素长度不同，跨栏等长的前提直接不成立。故只在这一页覆盖成
+ * `1fr 1fr`（总宽仍是 714 = 338 + 38 + 338，中轴仍在 50%）。 */
+.print-root.print-template-agent-poster .ap-cols[data-gantt] {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* B2 的行**不许交错**：`data-stagger` 会把标签交替推到右缘，而甘特的条必须在
+ * 同一条轨道上对齐（交错 = 条错位）。B2 的行根本不出 `data-stagger` 属性
+ * （见 `SpanGantt.tsx`），这条是兜底：万一将来有人给 B2 行加了交错，它的
+ * `justify-content` 也保持 flex-start，标签不会被推到右缘。 */
+.print-root.print-template-agent-poster .ap-span-row[data-stagger] {
+  justify-content: flex-start;
+}
+
+/* ── ① 通栏覆盖带（`ap-span-band`）：1px 墨色基线 + 月份 mono 刻度 + 合并覆盖 ──
+ * 它是**页级基准**：一眼看全项目的时间轮廓（哪有空窗、要人动的那段集中在哪）。
+ * 带内画的是全部阶段区间**按色调合并后**的段 —— 合并用真实天数（把 1 天阶段
+ * 撑成 2.5% 最小可见宽会把空窗抹掉，见 shared.ts 的注释）。 */
+.print-root.print-template-agent-poster .ap-span-band {
+  margin: 0 0 14px;
+}
+
+.print-root.print-template-agent-poster .ap-span-band__axis {
+  position: relative;
+  height: 14px;
+}
+
+.print-root.print-template-agent-poster .ap-span-band__track {
+  position: relative;
+  height: 10px;
+  /* 1px 墨色基线：覆盖段压在它上面 */
+  border-bottom: 1px solid var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-span-band__seg {
+  position: absolute;
+  bottom: 0;
+  height: 10px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-agent-poster .ap-span-band__seg[data-tone='gate'] {
+  background: var(--tpl-accent);
+}
+
+.print-root.print-template-agent-poster .ap-span-band__seg[data-tone='ink'] {
+  background: var(--tpl-ink);
+}
+
+/* 月份刻度「压线」：文字骑在基线上（不居中、不旋转 —— 9.5px mono 是本节最小的字，
+ * 再压就不可读）。左对齐于刻度位置，避免居中时右端刻度越出内容框。 */
+.print-root.print-template-agent-poster .ap-span-band__tick {
+  position: absolute;
+  top: 0;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--tpl-ink);
+  white-space: nowrap;
+}
+
+/* ── ② 双栏分段轴甘特 ──
+ * 每栏顶部一条**栏内时间标尺**（1px + 月份 mono，栏内全宽），与 ① 同一 0→100% 映射。
+ * 它是「栏间位置不可直接互比」这条几何硬事实的**缓解件之一**：读者在每栏内部都能
+ * 自明地读位置，不必跨栏比。 */
+.print-root.print-template-agent-poster .ap-col__ruler {
+  /* 刻度行 + 3px 呼吸 + 1px 基线；两层各自成行（同 ap-span-band 的理由） */
+  padding-bottom: 3px;
+  margin-top: 6px;
+  border-bottom: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-agent-poster .ap-col__ruler-axis {
+  position: relative;
+  height: 14px;
+}
+
+.print-root.print-template-agent-poster .ap-col__ruler-tick {
+  position: absolute;
+  top: 0;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--tpl-ink);
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+/* 贴右缘的刻度**右对齐**（防越盒）：实测 9 阶段夹具里覆盖带最后一枚越出 714 通栏，
+   被真机断言抓到。判据在 `layoutTicks`（`left% × 轨宽 + 标签宽 > 轨宽` ⇒ tail）。
+   同段的连续 tail 刻度彼此都有 ≥minGap 的间距且都右对齐 ⇒ 不会互叠。 */
+.print-root.print-template-agent-poster .ap-span-band__tick[data-tick-align='tail'],
+.print-root.print-template-agent-poster .ap-col__ruler-tick[data-tick-align='tail'] {
+  transform: translateX(-100%);
+}
+
+/* ── 一行：块头（NN 名称 + 两端日期）+ 轨道（条 + 条左端内嵌状态标签）── */
+.print-root.print-template-agent-poster .ap-span-row {
+  padding: 6px 0 0;
+  border-bottom: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-agent-poster .ap-span-row__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__no {
+  flex: none;
+  font-family: var(--ap-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-span-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-span-row__dates {
+  flex: none;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tpl-ink);
+  opacity: 0.66;
+  white-space: nowrap;
+}
+
+/* 轨道：条是**绝对定位**的，长度 = 跨度%（`data-span-width`）—— 标签再长也不会
+ * 把条撑长（那是「条长 = 跨度%」这条机器判据的前提）。 */
+.print-root.print-template-agent-poster .ap-span-row__track {
+  position: relative;
+  height: 12px;
+  margin-top: 3px;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar {
+  position: absolute;
+  top: 0;
+  height: 12px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='gate'] {
+  background: var(--tpl-accent);
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='ink'] {
+  background: var(--tpl-ink);
+}
+
+/* 条左端内嵌的**实底状态标签**（与 B4 同一套语义：橙底墨字 / 墨底白字 + 字形）。
+ * ⚠️ 这里是本块最大的误读风险点：条的背景与标签的背景同色，标签一旦溢出短条
+ * （实测：条 12px / 标签 52.3px），读者会把「标签的长度」读成「条的长度」。三重处理：
+ *   ① 条是**绝对定位**的（标签不改父盒宽度 ⇒ 条长严格等于跨度%）；
+ *   ② **条的右缘压一条纸色 1px 缝**（`::after`）—— 缝在哪，「条到哪」就到哪。
+ *      缝画在**条**上而不是标签上：画在标签上时（第一版）缝落在标签的右缘，
+ *      短条那条缝就跑到标签外面去了，等于没标；
+ *   ③ 标签背景继承条的实底（不另上色），文字色按对比度取其高者（沿用 B4 的档位）。
+ *      残余风险（已登记）：条短于标签时，标签溢出条的那一截与条同色 ⇒ 单看色块
+ *      长度仍可能被误读，靠 ② 的缝 + 行右端的**两端日期**（文字真值）双重兜底。 */
+.print-root.print-template-agent-poster .ap-span-row__bar .ap-block__tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  padding: 0 6px;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  background: var(--ap-paper);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='gate'] .ap-block__tag {
+  background: transparent;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='ink'] .ap-block__tag {
+  background: transparent;
+  color: #ffffff;
+}
+
+/* ── B2 的口径注（几何硬事实「栏间位置不可直接互比」必须写在这）── */
+.print-root.print-template-agent-poster .ap-span-note {
+  margin: 10px 0 0;
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--tpl-ink);
+  opacity: 0.72;
+}
+
+/* ── L3「改期记录」（§0.5：走 H 的 `ap-block` 清单行语法，不自创表格）── */
+.print-root.print-template-agent-poster .ap-l3 {
+  margin: 14px 0 0;
+}
+
+.print-root.print-template-agent-poster .ap-l3__title {
+  margin: 0;
+  padding-top: 6px;
+  /* 块头 2px 粗上线（H 的块语法本体） */
+  border-top: 2px solid var(--tpl-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-l3__rows {
+  margin-top: 6px;
+}
+
+.print-root.print-template-agent-poster .ap-l3__row {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-agent-poster .ap-l3__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.print-root.print-template-agent-poster .ap-l3__stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-l3__at {
+  flex: none;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tpl-ink);
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.print-root.print-template-agent-poster .ap-l3__meta {
+  margin: 2px 0 0;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tpl-ink);
+  opacity: 0.78;
+}
+
+.print-root.print-template-agent-poster .ap-l3__foot {
+  margin: 6px 0 0;
+  font-family: var(--ap-font-mono);
+  font-size: 9.5px;
+  text-align: right;
+  color: var(--tpl-ink);
+  opacity: 0.6;
+}
+
+@media print {
+  .print-root.print-template-agent-poster .ap-span-band__seg,
+  .print-root.print-template-agent-poster .ap-span-row__bar {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

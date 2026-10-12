@@ -23,10 +23,12 @@
  * （状态名），并带**形状互异的字形**——灰度打印下不靠色相也读得出。
  */
 
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 
+import type { SchedulePaperBlocks } from '../../../lib/schedule-print';
 import type { PrintEmptyKind } from '../../parts/EmptyPrintState';
 import { EmptyPrintState } from '../../parts/EmptyPrintState';
+import { PosterTail } from './PosterTail';
 import type { PosterColumn, PosterSheet } from './shared';
 
 /** 三页各自的空态口径（真值驱动；文案在 EmptyPrintState 的唯一出处里） */
@@ -36,10 +38,45 @@ const EMPTY_KIND: Record<PosterSheet['kind'], PrintEmptyKind> = {
   'member-roster': 'members',
 };
 
-export function PosterSheetBody({ sheet }: { sheet: PosterSheet }): JSX.Element {
+export function PosterSheetBody({
+  sheet,
+  blocks,
+  first = true,
+  annex = null,
+}: {
+  sheet: PosterSheet;
+  /**
+   * 五块勾选态。**undefined = legacy 路径**（尾部全部恒出，逐字保持旧行为）。
+   * 传了则按 §2.6 的门控：B3 关 ⇒ 口径行 + 图例整块不出（口径句锚回脚注）；
+   * B5 关 ⇒ 只摘脚注的「数据来源 … 同步」行。
+   */
+  blocks?: SchedulePaperBlocks;
+  /** 本页是该文档的第一张纸（B3 承载区只在它上面） */
+  first?: boolean;
+  /** B4 的附属层（L3 改期记录；§0.5 说它挂在清单**末尾**） */
+  annex?: ReactNode;
+}): JSX.Element {
   // 无数据：纸面照常出（页头/巨字/页脚齐全），主体走明确空态，
   // **不许用模拟记录填版**（01 §8 / 02 §8）
-  if (sheet.empty) return <EmptyPrintState kind={EMPTY_KIND[sheet.kind]} />;
+  // legacy（blocks === undefined）保持旧行为：空态页**只有空态**，不出尾部；
+  // 5 块形态则仍要出尾部——口径句属原则 1（恒在），B3/B5 的门也在那里。
+  if (sheet.empty) {
+    if (blocks === undefined) return <EmptyPrintState kind={EMPTY_KIND[sheet.kind]} />;
+    return (
+      <>
+        <EmptyPrintState kind={EMPTY_KIND[sheet.kind]} />
+        <PosterTail
+          summary={sheet.summary}
+          scope={sheet.scope}
+          legend={sheet.legend}
+          notes={sheet.notes}
+          blocks={blocks}
+          first={first}
+          variant="list"
+        />
+      </>
+    );
+  }
 
   return (
     <div className="ap-poster">
@@ -52,40 +89,20 @@ export function PosterSheetBody({ sheet }: { sheet: PosterSheet }): JSX.Element 
         ))}
       </div>
 
-      {/* 居中摘要块（在双栏容器与中轴**之外**，与参考稿同） */}
-      <div className="ap-sum">
-        <p className="ap-sum__label">{sheet.summary.label}</p>
-        <p className="ap-sum__big">{sheet.summary.big}</p>
-        <p className="ap-sum__sub">{sheet.summary.sub}</p>
-      </div>
+      {/* B4 的附属层 L3（§0.5：B4 的**末尾**，与主体同一页）——
+          放在栏区之后、尾部之前：栏区是「阶段清单」本体，L3 是它的脚注小表，
+          尾部（摘要/线/口径/图例/脚注）是**页级装置**、跨页位置稳定。 */}
+      {annex}
 
-      {/* 通栏 3px 橙线（分区线；纯装置，内容无关） */}
-      <div className="ap-rule" aria-hidden />
-
-      {/* 一行 mono 平铺口径行（标签末二字橙 —— 参考稿「白名单」二字着橙的同位替换） */}
-      <p className="ap-scope">
-        <span className="ap-scope__label">
-          {sheet.scope.head}
-          <span className="ap-scope__tail">{sheet.scope.tail}</span>
-        </span>
-        {sheet.scope.items.map((f) => (
-          <span key={f} className="ap-scope__item">
-            {f}
-          </span>
-        ))}
-      </p>
-
-      {/* 图例行（单行；态数按真实数据算，见 shared.ts 的 legend 构造） */}
-      <p className="ap-legend">{sheet.legend}</p>
-
-      {/* 脚注：口径 + 数据来源（每页可独立解释，宪法 7） */}
-      <div className="ap-notes">
-        {sheet.notes.map((n) => (
-          <p key={n} className="ap-notes__line">
-            {n}
-          </p>
-        ))}
-      </div>
+      <PosterTail
+        summary={sheet.summary}
+        scope={sheet.scope}
+        legend={sheet.legend}
+        notes={sheet.notes}
+        blocks={blocks}
+        first={first}
+        variant="list"
+      />
     </div>
   );
 }

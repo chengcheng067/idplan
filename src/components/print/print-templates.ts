@@ -351,7 +351,11 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '海报式跳读：阶段 / 任务 / 成员的公告板',
     thumb: '/print-thumbs/H-agent-poster-p1.png',
     implemented: true,
-    usesBlocks: false,
+    // 2026-10-13 批 D：H 起走**五块模型**（决策 1）；它的 3 个原生模块条目
+    // （阶段 / 任务 / 成员海报）**保留在能力表里**（代码与 spec 全留，只是不再有
+    // 暴露面——决策 2 的同一本账）。至此**四套模板全部走五块清单**，
+    // 11 模块通路只剩能力表、没有任何模板暴露它。
+    usesBlocks: true,
     // 人类化批次：M1/M2/M4 由「通用渲染」**升格为 H 的原生海报页**
     // （顺序即纸面页序 = PRINT_MODULES 的 M1→M2→M4 ⇒ 默认 3 页）。
     // `generic: true` 保留：pages 非空时原生优先、该标记不参与分发（见 :176），
