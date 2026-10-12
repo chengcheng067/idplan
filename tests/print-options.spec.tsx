@@ -650,39 +650,57 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(eLogos.length, 'E 单页一枚文字标').toBe(1);
     expect((eLogos[0]!.textContent ?? '').trim()).toBe('ID Plan');
 
-    // 切 H：默认 = 3 **人类原生海报页**（阶段 / 任务 / 成员；2026-10-11 人类化批次）。
-    // 上一代的「无 Agent 数据 ⇒ 整版只读空态」已作废：H 三页现在打人类内容，
-    // 有没有 Agent 执行数据都与纸面无关（Agent 治理载荷整体下纸，规格 §1.3）。
+    // 切 H：**五块形态**（2026-10-13 批 D · 决策 1）。本夹具 8 阶段、**无 StageLog**
+    // ⇒ L3 不出 ⇒ 页形序列 = B2 甘特页在前、B4 状态页在后（页数由装配层驱动，
+    // 不写死：一条阶段 4 条完成的分布会让某一栏跨页）
     pickTemplate('agent-poster');
     expect(paperRoot()!.className).toContain('print-template-agent-poster');
     expect(printButton()!.disabled, 'H 版可打印').toBe(false);
-    // 本夹具 8 阶段 / 8 任务都超单页原生容量 ⇒ 分页（页面数由数据驱动，
-    // 不再写死 3 页）：阶段海报 2 页 + 任务海报 2 页 + 成员海报 1 页 = 5 页。
-    const hKinds = Array.from(document.querySelectorAll('.a4-page')).map((el) =>
-      el.getAttribute('data-print-page'),
-    );
-    expect(hKinds[0], 'H 默认首页 = 阶段海报').toBe('stage-overview');
-    expect(new Set(hKinds), 'H 默认纸面只落人类三页 kind（Agent 治理页已下架）').toEqual(
-      new Set(['stage-overview', 'task-register', 'member-roster']),
-    );
-    expect(hKinds).toContain('task-register');
-    expect(hKinds).toContain('member-roster');
-    expect(hKinds, '续页仍是同 kind（页眉出「（续）」），不上别的页').toHaveLength(5);
-    expect(bodyContains('预计 5 页'), '预计页数 = 物理页数（分页后一致）').toBe(true);
-    const hText = paperRoot()!.textContent ?? '';
-    // 页眉左 = `ID PLAN · {英文页题}`（中文页题按规格移出页眉，只在续页出「（续）」页题）
-    for (const kicker of ['ID PLAN · STAGE POSTER', 'ID PLAN · TASK POSTER', 'ID PLAN · MEMBER POSTER']) {
-      expect(hText, `H 版页眉应含「${kicker}」`).toContain(kicker);
+    // 中截 = 五块清单：4 行可勾（B1「打印头部」由刊头承担 ⇒ 不可摘、不进清单）
+    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    expect(document.querySelector('input[data-print-block="header"]'), 'H 的 B1 不进清单').toBeNull();
+    expect(
+      document.querySelector('[data-print-module-row]'),
+      '批 D 后 H 的中截不再是 11 个内容模块（决策 1：五套全上）',
+    ).toBeNull();
+    for (const k of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
+      expect(checkbox(k).checked, `H 的 ${k} 默认勾选`).toBe(true);
     }
-    expect(hText, '续页页眉出「（续）」小页题').toContain('（续）');
+    const hForms = Array.from(document.querySelectorAll('.a4-page')).map((el) =>
+      el.getAttribute('data-page-form'),
+    );
+    expect(hForms.length, 'H 至少两张纸（B2 页 + B4 页）').toBeGreaterThanOrEqual(2);
+    expect(hForms[0], 'H 首页 = B2 双栏分段轴甘特页').toBe('span');
+    expect(hForms[hForms.length - 1], 'H 末页 = B4 双栏状态分组页').toBe('list');
+    // 两张页形各自连续（先「何时」后「什么状态」），不交错
+    expect(
+      hForms.map((f) => (f === 'span' ? 0 : 1)),
+      '两张页形各自连续（span 段在前、list 段在后）',
+    ).toEqual([...hForms].map((f) => (f === 'span' ? 0 : 1)).sort((a, b) => a - b));
+    expect(bodyContains(`预计 ${hForms.length} 页`), '预计页数 = 物理页数').toBe(true);
+
+    const hText = paperRoot()!.textContent ?? '';
+    // B2 的三段式都在纸上 + 口径注写明几何硬事实
+    expect(hText, 'B2 的 ①覆盖带 / ②双栏甘特 / ③ap-sum 载荷').toContain('跨度总天数');
+    expect(hText, 'B2 口径注：条 = 时间跨度').toContain('条 = 时间跨度，非完成度');
+    expect(hText, 'B2 口径注：几何硬事实写进纸面').toContain('栏间位置不可直接互比');
+    // B4 的状态分组 + 它的 ap-sum 载荷（两张同族页的分工）
+    expect(hText, 'B4 的 ap-sum 载荷 = 项目完成度').toContain('项目完成度');
+    // B1 的 meta 四段（项目名 / 排期基准 / 周期 / 打印日期）
+    expect(hText, 'meta：排期基准').toContain('排期基准');
+    expect(hText, 'meta：打印日期').toContain('打印日期');
+    // 页眉装置仍在（巨字压在它上面是设计如此）
+    expect(hText, '页眉 kicker').toContain('ID PLAN · STAGE POSTER');
+    expect(hText, '页眉页序').toContain('SHEET 01');
     // Agent 载荷整体下纸（本夹具项目里确实有执行数据，纸面一个字都不许出现）
     for (const dead of ['执行宣告', '写回提案', 'runId', 'confidence', '白名单']) {
       expect(hText, `Agent 载荷「${dead}」不得再上纸`).not.toContain(dead);
     }
-    // 人类内容照常上纸：不出「暂无执行数据」整版空态，巨字装置在位
+    // 人类内容照常上纸：不出「暂无执行数据」整版空态，巨字/块装置在位
     expect(document.querySelectorAll('[data-print-empty="agent"]')).toHaveLength(0);
-    expect(document.querySelector('.ap-giant'), '页顶出血巨字（人类化后载荷 = 品牌词）').not.toBeNull();
-    expect(document.querySelector('.ap-block'), '阶段块上纸').not.toBeNull();
+    expect(document.querySelector('.ap-giant'), '页顶出血巨字（载荷 = 品牌词）').not.toBeNull();
+    expect(document.querySelector('.ap-block'), 'B4 状态块上纸').not.toBeNull();
+    expect(document.querySelector('.ap-span-row__bar'), 'B2 跨度条上纸').not.toBeNull();
   });
 
   it('⑥【新】五块勾选（A）：逐块可摘 = 纸面精确减掉一个可见区 + 页码/预计页数联动', async () => {

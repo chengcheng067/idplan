@@ -211,12 +211,26 @@ describe.skipIf(!CAN_RUN)('期六 · 选择器弹窗截图（真 Chromium + 真�
       expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
       expect(box!.y + box!.height, '弹窗底边不得出视口').toBeLessThanOrEqual(720);
 
-      // 右侧内容区内部滚（内容高于可见区 ⇒ 滚而不是裁）
+      /*
+       * 右侧内容区的**不裁切**判据。
+       *
+       * ⚠️ 2026-10-13 批 D 重定：原来这条写的是「内容必须高于可见区（才有滚的意义）」
+       * —— 那句是**代理判据**，成立的前提是「中截有 11 行模块清单 ⇒ 一定比 720 高的
+       * 弹窗内容区还高」。批 D 把四套全切成五块清单（4 行）后，内容变矮、在这个
+       * 尺寸下**正好装得下** ⇒ 代理判据失效（它会把「装得下」误判成缺陷）。
+       * 真实判据是**不许裁**，两种活法都合格：
+       *   · 装得下 ⇒ `scrollHeight <= clientHeight`（没有东西被切掉）；
+       *   · 装不下 ⇒ 内容区必须是可滚容器（`overflow-y: auto`），滚而不是裁。
+       */
       const scroll = await page.$eval('[data-print-selector-content]', (el) => ({
         h: el.scrollHeight,
         c: el.clientHeight,
+        overflowY: getComputedStyle(el).overflowY,
       }));
-      expect(scroll.h, '内容应高于可见区（才有滚的意义）').toBeGreaterThan(scroll.c);
+      expect(
+        scroll.h <= scroll.c + 1 || scroll.overflowY === 'auto',
+        `内容区不许裁（实测 scrollH=${scroll.h} clientH=${scroll.c} overflowY=${scroll.overflowY}）`,
+      ).toBe(true);
 
       await (await page.$('[data-print-selector-panel]'))!.screenshot({
         path: join(OUT_DIR, 'selector-modal-small.png'),

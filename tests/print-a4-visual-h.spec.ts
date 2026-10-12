@@ -42,6 +42,12 @@ import {
   TaskStatus,
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
+import type { StageLog } from '../src/core/types/entities';
+import { StageLogType } from '../src/core/types/enums';
+import { agentPosterBlockPages } from '../src/print/documents/AgentPosterDocument';
+import { DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../src/lib/schedule-print';
+import { blockRecordOf, printTemplateUnitIds, resolveUnits } from '../src/print/model/print-units';
+import type { PrintSheet } from '../src/components/print/print-templates';
 import { createElement } from 'react';
 import { builtCss as readBuiltCss } from './helpers/built-css';
 
@@ -326,9 +332,43 @@ function writeHtml(name: string, html: string): string {
 
 const BASELINE = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
 
+/**
+ * legacy 原生页清单（期三的 sheets 形状：人类三页海报）。
+ * 2026-10-13 批 D 起 H 走**五块形态**（`usesBlocks`）；原来的三页与通用模块渲染
+ * **代码与 spec 全留**（决策 2），只是不再有暴露面 —— 本 spec 里凡要验「原生海报
+ * 页那套版式 / 分页」的用例，都显式传它走 legacy 路径。
+ */
+const NATIVE_SHEETS: readonly PrintSheet[] = [
+  { type: 'native', page: 'stage-overview' },
+  { type: 'native', page: 'task-register' },
+  { type: 'native', page: 'member-roster' },
+];
+
+/** legacy 原生页的纸面（本 spec 既有用例全走这条；断言逐字未改） */
 function markupOf(vm: ReturnType<typeof buildPrintViewModel>, brandWord?: string): string {
   return renderToStaticMarkup(
-    createElement(AgentPosterDocument, { vm, palette: BASELINE, ...(brandWord ? { brandWord } : {}) }),
+    createElement(AgentPosterDocument, {
+      vm,
+      sheets: NATIVE_SHEETS,
+      palette: BASELINE,
+      ...(brandWord ? { brandWord } : {}),
+    }),
+  );
+}
+
+/** 5 块形态的纸面（`units` = `resolveUnits` 的结果；缺省 = 五块全开） */
+function blocksMarkupOf(
+  vm: ReturnType<typeof buildPrintViewModel>,
+  ids?: readonly string[],
+  brandWord?: string,
+): string {
+  return renderToStaticMarkup(
+    createElement(AgentPosterDocument, {
+      vm,
+      units: resolveUnits('agent-poster', ids ? { units: { 'agent-poster': ids as never } } : undefined),
+      palette: BASELINE,
+      ...(brandWord ? { brandWord } : {}),
+    }),
   );
 }
 
@@ -765,7 +805,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['agent-poster'].presets.find((p) => p.id === 'vermilion')!;
     const markup = renderToStaticMarkup(
-      createElement(AgentPosterDocument, { vm, palette: preset.palette }),
+      createElement(AgentPosterDocument, { vm, sheets: NATIVE_SHEETS, palette: preset.palette }),
     );
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
@@ -943,6 +983,547 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
           `底墨迹=${m.footWordInk!.top}..${m.footWordInk!.bottom}｜正文底线=${m.notes!.bottom} 呼吸=${breath}px｜` +
           `页头框 ${m.head!.top}..${m.head!.bottom}（顶巨字墨迹 ${m.wordInk!.top}..${m.wordInk!.bottom}）｜` +
           `自定义 right=${m2.word!.right}(${m2.word!.tier})｜长词 right=${m3.word!.right}(${m3.word!.tier})`,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+});
+
+/* ====================================================================================
+ * 5 块形态（2026-10-13「5 块 × 4 模板」重构 · 批 D）
+ * ==================================================================================== */
+
+describe.skipIf(!CAN_RUN)('H 版 · 五块形态（批 D：双栏分段轴甘特 / 两栏等宽 / 条长对账）', () => {
+  let browser: Browser;
+
+  beforeAll(async () => {
+    browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
+  });
+
+  const ALL = (): readonly string[] => printTemplateUnitIds('agent-poster');
+  const blocksOf = (ids: readonly string[]) =>
+    blockRecordOf(resolveUnits('agent-poster', { units: { 'agent-poster': ids as never } }));
+
+  /**
+   * n 阶段夹具（批 D 页数表用）。⚠️ 不能复用既有 `makeStage`：它的日期是
+   * `2026-01-{n}`（n ≤ 28 才合法），40 阶段直接造出 `2026-01-40` 这种脏日期。
+   * 这里按 3 天阶梯铺开、跨度 4–19 天不一，状态四态轮换。
+   */
+  function stagesN(n: number): Stage[] {
+    return Array.from({ length: n }, (_, i) => {
+      const k = i + 1;
+      const start = new Date(Date.UTC(2026, 0, 1 + i * 3));
+      const end = new Date(Date.UTC(2026, 0, 1 + i * 3 + 4 + (i % 4) * 5));
+      return {
+        ...makeStage(
+          k,
+          k % 3 === 0
+            ? StageStatus.NotStarted
+            : k % 4 === 0
+              ? StageStatus.Delayed
+              : k % 5 === 0
+                ? StageStatus.Completed
+                : StageStatus.InProgress,
+          `阶段${k}·现场勘查与方案深化`,
+        ),
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+      };
+    });
+  }
+
+  /** 一条改期记录（L3 的正面锁要它才可能上纸；既有夹具的 stageLogs 是空数组） */
+  const RESCHED_LOGS: readonly StageLog[] = [
+    {
+      id: 'log_h4_1',
+      stageId: 'stg_h4_2',
+      projectId: PROJECT_ID,
+      type: StageLogType.Rescheduled,
+      fromStatus: null,
+      toStatus: null,
+      oldStartAt: null,
+      newStartAt: null,
+      oldEndAt: '2026-02-02T23:59:59Z',
+      newEndAt: '2026-02-09T23:59:59Z',
+      reason: '等客户确认主材样品，延期 7 天',
+      operatorName: '负责人甲',
+      createdAt: '2026-01-19T02:00:00Z',
+    },
+  ];
+
+  /** 逐页几何 + 页形（「无裁切」两道判据，同既有组） */
+  async function pageGeometry(page: import('playwright-core').Page) {
+    return page.$$eval('.a4-page', (els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        const body = el.querySelector('.ap-body') as HTMLElement | null;
+        return {
+          page: el.getAttribute('data-print-page'),
+          form: el.getAttribute('data-page-form'),
+          w: +r.width.toFixed(1),
+          h: +r.height.toFixed(1),
+          bodyOverflow: body ? +(body.scrollHeight - body.clientHeight).toFixed(1) : null,
+        };
+      }),
+    );
+  }
+
+  it('★ 默认态 = 五块形态：预计 = 实际、逐页 794×1123（彩 + 灰）、页形序列 span → list', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const markup = blocksMarkupOf(vm);
+    const planned = agentPosterBlockPages(vm, DEFAULT_SCHEDULE_PAPER_BLOCKS).length;
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      for (const gray of [false, true]) {
+        const path = writeHtml(gray ? 'h-blocks-gray.html' : 'h-blocks-color.html', shell(markup, css, gray));
+        await page.goto('file://' + path);
+        const geo = await pageGeometry(page);
+        expect(geo, `五块形态应渲染 ${planned} 页（装配层同源）`).toHaveLength(planned);
+        expect(geo.every((g) => g.page === 'blocks'), '五块形态的纸面标识').toBe(true);
+        // B2 页在前、B4 页在后（同一批阶段：先「何时」后「什么状态」）
+        expect(geo.map((g) => g.form)[0], '首页是 B2 甘特页').toBe('span');
+        expect(geo.map((g) => g.form)).toContain('list');
+        for (const g of geo) {
+          expect(Math.abs(g.w - 794), `${g.form} 页宽应 794`).toBeLessThanOrEqual(1);
+          expect(g.h, `${g.form} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
+          expect(g.h, `${g.form} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
+          expect(g.bodyOverflow, `${g.form} 主体不得内部溢出`).toBeLessThanOrEqual(1);
+        }
+        const els = await page.$$('.a4-page');
+        for (let i = 0; i < els.length; i++) {
+          await els[i]!.screenshot({
+            path: join(OUT_DIR, `density-h-blocks-p${i + 1}-${gray ? 'gray' : 'color'}.png`),
+          });
+        }
+      }
+      // 巨字只在**文档第一张纸**上（分页口径；续页/后续页形都不出）
+      await page.goto('file://' + writeHtml('h-blocks-color.html', shell(markup, css, false)));
+      const giants = await page.$$eval('.a4-page', (els) =>
+        els.map((el) => el.querySelectorAll('.ap-giant').length),
+      );
+      expect(giants[0], '第一张纸出页顶巨字').toBe(1);
+      expect(giants.slice(1).every((n) => n === 0), '其余页不出巨字').toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★ B2 三段式逐段落点：① 通栏覆盖带 ② 双栏 + 栏内标尺 + 条 + 内嵌标签 ③ ap-sum「跨度总天数」', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('h-blocks-color.html', shell(blocksMarkupOf(vm), css, false)));
+      const m = await page.evaluate(() => {
+        const spanPage = document.querySelector('.a4-page[data-page-form="span"]') as HTMLElement;
+        const rects = (sel: string) =>
+          Array.from(spanPage.querySelectorAll(sel)).map((e) => {
+            const r = (e as HTMLElement).getBoundingClientRect();
+            return { w: +r.width.toFixed(1), h: +r.height.toFixed(1) };
+          });
+        return {
+          // ① 通栏覆盖带：刻度 + 合并覆盖段
+          bandSegs: spanPage.querySelectorAll('.ap-span-band__seg').length,
+          bandTicks: spanPage.querySelectorAll('.ap-span-band__tick').length,
+          bandW: +(spanPage.querySelector('.ap-span-band') as HTMLElement).getBoundingClientRect().width.toFixed(1),
+          // ② 双栏 + 栏内标尺 + 条 + 内嵌标签
+          cols: spanPage.querySelectorAll('.ap-cols[data-gantt] .ap-col').length,
+          rulers: spanPage.querySelectorAll('.ap-col__ruler').length,
+          colTicks: spanPage.querySelectorAll('.ap-col__ruler-tick').length,
+          rows: spanPage.querySelectorAll('.ap-span-row').length,
+          bars: spanPage.querySelectorAll('.ap-span-row__bar').length,
+          tags: spanPage.querySelectorAll('.ap-span-row__bar .ap-block__tag').length,
+          rowRects: rects('.ap-span-row'),
+          // ③ ap-sum 第四载荷
+          sumLabel: spanPage.querySelector('.ap-sum__label')?.textContent ?? '',
+          sumBig: spanPage.querySelector('.ap-sum__big')?.textContent ?? '',
+          sumSub: spanPage.querySelector('.ap-sum__sub')?.textContent ?? '',
+          note: spanPage.querySelector('.ap-span-note')?.textContent ?? '',
+          // 刻度不许越出自己的盒（覆盖带的刻度不许出 714 通栏、栏内刻度不许出栏）
+          bandTickOverflow: (() => {
+            const track = spanPage.querySelector('.ap-span-band__track') as HTMLElement;
+            const right = track.getBoundingClientRect().right;
+            return Array.from(spanPage.querySelectorAll('.ap-span-band__tick')).filter(
+              (e) => (e as HTMLElement).getBoundingClientRect().right > right + 1,
+            ).length;
+          })(),
+          colTickOverflow: (() => {
+            const cols = Array.from(spanPage.querySelectorAll('.ap-cols[data-gantt] .ap-col')) as HTMLElement[];
+            let bad = 0;
+            for (const col of cols) {
+              const right = col.getBoundingClientRect().right;
+              for (const t of Array.from(col.querySelectorAll('.ap-col__ruler-tick'))) {
+                if ((t as HTMLElement).getBoundingClientRect().right > right + 1) bad++;
+              }
+            }
+            return bad;
+          })(),
+        };
+      });
+      expect(m.bandSegs, '① 覆盖带有合并覆盖段').toBeGreaterThan(0);
+      expect(m.bandTicks, '① 覆盖带有月份刻度').toBeGreaterThan(0);
+      expect(m.bandW, '① 覆盖带是**通栏**（714px 内容框）').toBe(714);
+      expect(m.cols, '② 双栏').toBe(2);
+      expect(m.rulers, '② 每栏一条栏内标尺').toBe(2);
+      expect(m.colTicks, '② 栏内标尺有月份刻度').toBeGreaterThan(0);
+      expect(m.rows, '② 每阶段一行').toBe(m.bars);
+      expect(m.bars, '② 每行一条跨度条').toBeGreaterThan(0);
+      expect(m.tags, '② 条左端内嵌实底状态标签').toBe(m.bars);
+      for (const r of m.rowRects) expect(r.h, '② 行高 = 42 的实测（41.5）').toBeLessThanOrEqual(42);
+      expect(m.sumLabel, '③ ap-sum 载荷 = 跨度总天数（与 B4 的「项目完成度」分工）').toBe('跨度总天数');
+      expect(Number(m.sumBig), '③ 大数 = 各阶段跨度天数之和').toBeGreaterThan(0);
+      expect(m.sumSub, '③ 副行写明口径').toContain('条 = 时间跨度，非完成度');
+      // 刻度不许越盒（第一版把刻度放在盒外用 padding 让位，实测骑到栏注上）
+      expect(m.bandTickOverflow, '覆盖带刻度不得越出通栏').toBe(0);
+      expect(m.colTickOverflow, '栏内刻度不得越出本栏').toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★★ 四条几何硬约束实测：两栏 1fr 等宽逐值相等 / B2 关 stagger / 口径注写明栏间不可比 / 两张同族页', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('h-blocks-color.html', shell(blocksMarkupOf(vm), css, false)));
+      const m = await page.evaluate(() => {
+        const spanPage = document.querySelector('.a4-page[data-page-form="span"]') as HTMLElement;
+        const listPage = document.querySelector('.a4-page[data-page-form="list"]') as HTMLElement;
+        const cols = Array.from(spanPage.querySelectorAll('.ap-cols[data-gantt] .ap-col')) as HTMLElement[];
+        const tracks = Array.from(spanPage.querySelectorAll('.ap-span-row__track')) as HTMLElement[];
+        const colRule = getComputedStyle(spanPage.querySelector('.ap-cols[data-gantt]') as Element)
+          .gridTemplateColumns;
+        return {
+          colW: cols.map((c) => +c.getBoundingClientRect().width.toFixed(2)),
+          trackW: tracks.map((t) => +t.getBoundingClientRect().width.toFixed(2)),
+          colRule,
+          // ② B2 页的行不许有交错；B4 页必须仍有（交错是 H 的签名）
+          spanStagger: spanPage.querySelectorAll('.ap-span-row[data-stagger]').length,
+          listStagger: listPage.querySelectorAll('.ap-block[data-stagger]').length,
+          note: spanPage.querySelector('.ap-span-note')?.textContent ?? '',
+          // ④ 两张同族页：B2 有跨度条无字段 meta；B4 有字段 meta 无跨度条
+          spanBars: spanPage.querySelectorAll('.ap-span-row__bar').length,
+          spanMeta: spanPage.querySelectorAll('.ap-block__meta').length,
+          listBars: listPage.querySelectorAll('.ap-span-row__bar').length,
+          listMeta: listPage.querySelectorAll('.ap-block__meta').length,
+          listSum: listPage.querySelector('.ap-sum__label')?.textContent ?? '',
+          sumVariants: Array.from(document.querySelectorAll('.ap-sum')).map((e) =>
+            e.getAttribute('data-print-sum'),
+          ),
+        };
+      });
+      // ① 两栏 1fr 等宽（约束①）：逐值相等，且轨宽也相等（同一 % 的条在两栏等长）
+      expect(m.colRule, '约束①：B2 页强制 1fr 1fr').toContain('338px');
+      expect(m.colW[0], '约束①：两栏实测宽逐值相等').toBe(m.colW[1]);
+      expect(m.colW[0], '约束①：栏宽 = (714 − 38) / 2').toBe(338);
+      expect(new Set(m.trackW).size, '约束①：两栏轨道同宽').toBe(1);
+      // ② 关交错（约束②）
+      expect(m.spanStagger, '约束②：B2 页的行没有 data-stagger').toBe(0);
+      expect(m.listStagger, '约束②：B4 页的交错**保留**（H 的签名）').toBeGreaterThan(0);
+      // ③ 口径注必须写明「栏间位置不可直接互比」
+      expect(m.note, '约束③：口径注写明两条独立轴、栏间不可比').toContain('两栏是两个独立轴');
+      expect(m.note).toContain('栏间位置不可直接互比');
+      // ④ 两张同族页靠「条 / 字段 meta / ap-sum 载荷」三样区分
+      expect([m.spanBars > 0, m.spanMeta], 'B2 有跨度条、没有字段 meta').toEqual([true, 0]);
+      expect([m.listBars, m.listMeta > 0], 'B4 有字段 meta、没有跨度条').toEqual([0, true]);
+      expect(m.sumVariants, '两张页各有一个 ap-sum，载荷由页形决定').toEqual(['span', 'list']);
+      expect(m.listSum, 'B4 的 ap-sum 载荷 = 项目完成度（与 B2 的跨度总天数分工）').toBe('项目完成度');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★ 条长 = 跨度% × 栏宽（两栏各测，像素级逐条对账；标签不许把条撑长）', async () => {
+    const css = builtCss();
+    // 夹具必须**含一条短跨度阶段**（2 天）/ 一条长跨度（整窗），否则「标签比条宽」
+    // 这个最容易出错的分支根本没被触发（第一版用默认夹具时 9 条条全宽于标签 ⇒
+    // 对账是空转，判据自证为「没测到」）。
+    const shortStage: Stage = {
+      ...makeStage(21, StageStatus.Delayed, '短跨度·现场复测'),
+      startAt: '2026-01-20T00:00:00Z',
+      endAt: '2026-01-21T23:59:59Z',
+    };
+    const vm = buildVm({ stages: [...STAGES, shortStage] });
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('h-blocks-color.html', shell(blocksMarkupOf(vm), css, false)));
+      const m = await page.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('.ap-span-row')) as HTMLElement[];
+        return rows.map((row) => {
+          const bar = row.querySelector('.ap-span-row__bar') as HTMLElement;
+          const tag = row.querySelector('.ap-block__tag') as HTMLElement;
+          const track = row.querySelector('.ap-span-row__track') as HTMLElement;
+          const col = row.closest('.ap-col') as HTMLElement;
+          return {
+            colIdx: Array.from(document.querySelectorAll('.ap-cols[data-gantt] .ap-col')).indexOf(col),
+            barPx: +bar.getBoundingClientRect().width.toFixed(2),
+            barH: +bar.getBoundingClientRect().height.toFixed(2),
+            tagPx: +tag.getBoundingClientRect().width.toFixed(2),
+            tagSameTop: Math.abs(tag.getBoundingClientRect().top - bar.getBoundingClientRect().top) < 0.5,
+            trackW: +track.getBoundingClientRect().width.toFixed(2),
+            width: Number.parseFloat(bar.getAttribute('data-span-width') ?? 'NaN'),
+            days: Number.parseInt(bar.getAttribute('data-span-days') ?? '0', 10),
+          };
+        });
+      });
+      expect(m.length, '两栏加起来 = 全部阶段').toBeGreaterThan(0);
+      expect(new Set(m.map((r) => r.colIdx)).size, '两栏都有条（左右各测）').toBe(2);
+      for (const r of m) {
+        expect(
+          Math.abs(r.barPx - (r.width / 100) * r.trackW),
+          `条长 = 跨度% × 栏宽（第 ${r.colIdx + 1} 栏，width=${r.width}%）`,
+        ).toBeLessThanOrEqual(1.5);
+        expect(r.barH, '条高 12px（实测值）').toBe(12);
+        expect(r.tagSameTop, '标签与条同顶（内嵌不是另起一行）').toBe(true);
+      }
+      // 标签**溢出不改父盒宽度**：至少有一条标签比它的条宽（否则这条判据没被触发）
+      expect(
+        m.some((r) => r.tagPx > r.barPx + 1),
+        '夹具里确实存在「标签比条宽」的行（否则对账是空转）',
+      ).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★ 块独立（严格一一对应）：关 B2 只少 span 页、关 B4 只少 list 页（L3 随它走）、两块都关只剩页壳', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const all = ALL();
+    const noB2 = all.filter((id) => id !== 'timeline');
+    const noB4 = all.filter((id) => id !== 'stageTable');
+    const noBoth = all.filter((id) => id !== 'timeline' && id !== 'stageTable');
+    expect(agentPosterBlockPages(vm, blocksOf(all)).map((p) => p.sub.kind), '默认 = span → list').toEqual([
+      'span',
+      'list',
+    ]);
+    expect(agentPosterBlockPages(vm, blocksOf(noB2)).map((p) => p.sub.kind), '关 B2 ⇒ 只剩 list').toEqual([
+      'list',
+    ]);
+    expect(agentPosterBlockPages(vm, blocksOf(noB4)).map((p) => p.sub.kind), '关 B4 ⇒ 只剩 span').toEqual([
+      'span',
+    ]);
+    expect(agentPosterBlockPages(vm, blocksOf(noBoth)).map((p) => p.sub.kind), '两块都关 ⇒ 一张页壳').toEqual([
+      'shell',
+    ]);
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      for (const [tag, ids] of [
+        ['no-b2', noB2],
+        ['no-b4', noB4],
+        ['no-both', noBoth],
+      ] as const) {
+        await page.goto(
+          'file://' + writeHtml(`h-blocks-${tag}.html`, shell(blocksMarkupOf(vm, ids), css, false)),
+        );
+        const m = await page.evaluate(() => ({
+          pages: document.querySelectorAll('.a4-page').length,
+          forms: Array.from(document.querySelectorAll('.a4-page')).map((e) =>
+            e.getAttribute('data-page-form'),
+          ),
+          bars: document.querySelectorAll('.ap-span-row__bar').length,
+          band: document.querySelectorAll('.ap-span-band').length,
+          blocks: document.querySelectorAll('.ap-block').length,
+          resched: document.querySelectorAll('[data-print-resched]').length,
+          // 原则 1/2：页壳件不许消失
+          giant: document.querySelectorAll('.ap-footword').length,
+          tab: document.querySelectorAll('.ap-head__tab').length,
+          notes: document.querySelectorAll('.ap-notes__line').length,
+        }));
+        expect(m.pages, `${tag}：页数 = 装配层同源`).toBe(
+          agentPosterBlockPages(vm, blocksOf(ids)).length,
+        );
+        if (tag === 'no-b2') {
+          expect(m.bars, '关 B2 ⇒ 跨度条全没了').toBe(0);
+          expect(m.band, '关 B2 ⇒ 覆盖带也没了（整块不出）').toBe(0);
+          expect(m.blocks, '关 B2 不得动 B4').toBeGreaterThan(0);
+        }
+        if (tag === 'no-b4') {
+          expect(m.blocks, '关 B4 ⇒ 状态块全没了').toBe(0);
+          expect(m.resched, '关 B4 ⇒ L3 随它一起不出（§0.5）').toBe(0);
+          expect(m.bars, '关 B4 不得动 B2').toBeGreaterThan(0);
+        }
+        if (tag === 'no-both') {
+          expect([m.blocks, m.bars], '两块都关 ⇒ 主体没有内容块').toEqual([0, 0]);
+        }
+        // 页壳装置恒在（原则 1/2）
+        expect(m.giant, '页底 IDPLAN 巨字恒在').toBe(m.pages);
+        expect(m.tab, '页眉 SHEET 页序恒在').toBe(m.pages);
+        // 口径句恒在：**每页至少一行**（B5 开着时还有第二行「数据来源」）
+        expect(m.notes, '脚注口径句恒在（每页至少一行）').toBeGreaterThanOrEqual(m.pages);
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★ B1 meta 逐字段自查：项目名 / 排期基准 / 周期 / 打印日期 四段任何组合都不丢', async () => {
+    const css = builtCss();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      // 管理员 + 有委托人 / 普通成员（VM 里 clientName 是 undefined）两种身份
+      for (const [tag, role] of [
+        ['admin', MemberRoleKind.Admin],
+        ['member', MemberRoleKind.Member],
+      ] as const) {
+        const vm = buildVm({ role, currentMemberId: HUMAN.id });
+        await page.goto(
+          'file://' + writeHtml(`h-blocks-meta-${tag}.html`, shell(blocksMarkupOf(vm), css, false)),
+        );
+        const metas = await page.$$eval('.ap-head__meta', (els) => els.map((e) => e.textContent ?? ''));
+        expect(metas.length, `${tag}：每页都有 meta 行`).toBeGreaterThan(0);
+        for (const text of metas) {
+          expect(text, `${tag}：项目名（原则 1）`).toContain(vm.project.name);
+          expect(text, `${tag}：排期基准`).toContain('排期基准');
+          expect(text, `${tag}：周期起点`).toContain(vm.project.plannedStartAt);
+          expect(text, `${tag}：周期终点`).toContain(vm.project.plannedEndAt);
+          expect(text, `${tag}：打印日期`).toContain(vm.generatedAt.slice(0, 10));
+        }
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★ L3 与 ap-sum 载荷的正面锁：带 StageLog ⇒ 改期记录一定上纸；L3 在 B4 收口页', async () => {
+    const css = builtCss();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      // ── ① 无改期记录 ⇒ L3 整段不出（§0.5 空态纪律：不出孤单表头）──
+      const vmNoLog = buildVm();
+      await page.goto(
+        'file://' + writeHtml('h-blocks-nolog.html', shell(blocksMarkupOf(vmNoLog), css, false)),
+      );
+      const noLog = await page.evaluate(() => ({
+        resched: document.querySelectorAll('[data-print-resched]').length,
+        sum: document.querySelectorAll('.ap-sum').length,
+        pages: document.querySelectorAll('.a4-page').length,
+        labels: Array.from(document.querySelectorAll('.ap-sum__label')).map((e) => e.textContent ?? ''),
+      }));
+      expect(noLog.resched, '无改期记录 ⇒ L3 整段不出').toBe(0);
+      expect(noLog.sum, 'ap-sum 装置每页都在（装置本体永不消失，§2.6 原则 2）').toBe(noLog.pages);
+      expect(
+        noLog.labels.sort(),
+        'ap-sum 的两个载荷分工都在（B2 跨度总天数 / B4 项目完成度）',
+      ).toEqual(['项目完成度', '跨度总天数'].sort());
+
+      // ── ② 带一条改期记录 ⇒ L3 **必须**上纸（正面锁）──
+      const vmLog = buildVm({ stageLogs: RESCHED_LOGS as never });
+      await page.goto(
+        'file://' + writeHtml('h-blocks-log.html', shell(blocksMarkupOf(vmLog), css, false)),
+      );
+      const withLog = await page.evaluate(() => {
+        const l3 = document.querySelector('[data-print-resched]') as HTMLElement | null;
+        const rowsHost = l3?.closest('.a4-page') as HTMLElement | null;
+        return {
+          count: document.querySelectorAll('[data-print-resched]').length,
+          rows: document.querySelectorAll('.ap-l3__row').length,
+          title: document.querySelector('.ap-l3__title')?.textContent ?? '',
+          foot: document.querySelector('.ap-l3__foot')?.textContent ?? '',
+          meta: document.querySelector('.ap-l3__meta')?.textContent ?? '',
+          form: rowsHost?.getAttribute('data-page-form'),
+          // L3 只挂 B4 的**收口页**（§0.5：B4 的末尾）
+          isLastList: (() => {
+            const lists = Array.from(document.querySelectorAll('.a4-page[data-page-form="list"]'));
+            return lists.length > 0 && rowsHost === lists[lists.length - 1];
+          })(),
+        };
+      });
+      expect(withLog.count, '带改期记录 ⇒ L3 上纸（正面锁）').toBe(1);
+      expect(withLog.rows, 'L3 有 1 条明细').toBe(1);
+      expect(withLog.title).toBe('改期记录');
+      expect(withLog.foot).toBe('共 1 条');
+      expect(withLog.meta, 'L3 行含「旧结束日 → 新结束日 · 原因」').toContain('2026-02-02');
+      expect(withLog.meta).toContain('2026-02-09');
+      expect(withLog.meta).toContain('等客户确认主材样品');
+      expect(withLog.form, 'L3 挂在 B4 页上').toBe('list');
+      expect(withLog.isLastList, 'L3 挂 B4 的**收口页**（§0.5）').toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★ B5 只摘脚注数据来源行；页码与 IDPLAN 巨字恒在（原则 1）；B3 关掉时口径句锚回', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const all = ALL();
+    const noB5 = all.filter((id) => id !== 'footer');
+    const noB3 = all.filter((id) => id !== 'projectInfo');
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('h-blocks-color.html', shell(blocksMarkupOf(vm, all), css, false)));
+      const on = await page.evaluate(() => ({
+        hasSource: (document.body.textContent ?? '').includes('数据来源'),
+        scope: document.querySelectorAll('.ap-scope').length,
+        legend: document.querySelectorAll('.ap-legend').length,
+        notes: document.querySelectorAll('.ap-notes__line').length,
+      }));
+      expect(on.hasSource, 'B5 开着 ⇒ 脚注有数据来源行').toBe(true);
+      expect(on.scope, 'B3 开着 ⇒ 首页有 mono 平铺口径行').toBe(1);
+
+      await page.goto('file://' + writeHtml('h-blocks-no-b5.html', shell(blocksMarkupOf(vm, noB5), css, false)));
+      const off5 = await page.evaluate(() => ({
+        hasSource: (document.body.textContent ?? '').includes('数据来源'),
+        notes: document.querySelectorAll('.ap-notes__line').length,
+        giants: document.querySelectorAll('.ap-footword').length,
+        tabs: Array.from(document.querySelectorAll('.ap-head__tab')).map((e) => e.textContent ?? ''),
+      }));
+      expect(off5.hasSource, '关 B5 ⇒ 数据来源行消失').toBe(false);
+      expect(off5.notes, '关 B5 ⇒ 口径句还在（原则 1）').toBeGreaterThan(0);
+      expect(off5.giants, '关 B5 ⇒ 页底 IDPLAN 巨字还在（装置，丙）').toBeGreaterThan(0);
+      expect(off5.tabs.every((t) => t.includes('SHEET')), '关 B5 ⇒ 页眉页序还在（原则 1）').toBe(true);
+
+      await page.goto('file://' + writeHtml('h-blocks-no-b3.html', shell(blocksMarkupOf(vm, noB3), css, false)));
+      const off3 = await page.evaluate(() => ({
+        scope: document.querySelectorAll('.ap-scope').length,
+        legend: document.querySelectorAll('.ap-legend').length,
+        notes: document.querySelectorAll('.ap-notes__line').length,
+      }));
+      expect([off3.scope, off3.legend], '关 B3 ⇒ 承载区（口径行 + 图例）整块不出').toEqual([0, 0]);
+      expect(off3.notes, '关 B3 ⇒ 口径句锚回脚注（每页）').toBeGreaterThan(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('★ 页数表（1/2/4/5/8/9/10/14/16/20/30/40 阶段）：预计 = 实际、逐页 ≤1123、页数单调不减', async () => {
+    const css = builtCss();
+    const ns = [1, 2, 4, 5, 8, 9, 10, 11, 12, 13, 14, 16, 20, 30, 40];
+    const vmOf = (n: number) => buildVm({ stages: stagesN(n) });
+    const planned = ns.map(
+      (n) => agentPosterBlockPages(vmOf(n), DEFAULT_SCHEDULE_PAPER_BLOCKS).length,
+    );
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      for (let i = 0; i < ns.length; i++) {
+        const n = ns[i]!;
+        await page.goto(
+          'file://' + writeHtml(`h-blocks-${n}.html`, shell(blocksMarkupOf(vmOf(n)), css, false)),
+        );
+        const geo = await pageGeometry(page);
+        expect(geo.length, `${n} 阶段：预计页数 = 实际出纸`).toBe(planned[i]!);
+        for (const g of geo) expect(g.h, `${n} 阶段：逐页溢出即红`).toBeLessThanOrEqual(1124);
+        if (n === 20) {
+          const els = await page.$$('.a4-page');
+          for (let k = 0; k < els.length; k++) {
+            await els[k]!.screenshot({ path: join(OUT_DIR, `density-h-many-p${k + 1}.png`) });
+          }
+        }
+      }
+      for (let i = 1; i < planned.length; i++) {
+        expect(planned[i]!, `页数单调不减（${ns[i - 1]} → ${ns[i]}）`).toBeGreaterThanOrEqual(
+          planned[i - 1]!,
+        );
+      }
+      // 实测页数表（回填到 `agent-poster/shared.ts` 的常量注释；控制台留档供复核）
+      console.log(
+        '\n[H 五块实测页数表] ' +
+          ns.map((n, i) => `${n}→${planned[i]}`).join(' | '),
       );
     } finally {
       await page.close();

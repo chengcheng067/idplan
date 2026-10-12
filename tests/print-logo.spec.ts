@@ -56,6 +56,7 @@ import { SwissScheduleDocument } from '../src/print/documents/SwissScheduleDocum
 import { DataEditorialDocument } from '../src/print/documents/DataEditorialDocument';
 import { EditorialIndexDocument } from '../src/print/documents/EditorialIndexDocument';
 import { AgentPosterDocument } from '../src/print/documents/AgentPosterDocument';
+import type { PrintSheet } from '../src/components/print/print-templates';
 import { SchedulePaper } from '../src/components/print/SchedulePaper';
 import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
@@ -490,11 +491,26 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     expect(logoHeights(doc)).toEqual([22]);
   });
 
-  it('H 版：人类三页各一枚 logo（巨字墨迹之下的 logo 行，22px）；中轴/栏区无 logo', () => {
+  it('H 版（legacy 原生海报页）：人类三页各一枚 logo（巨字墨迹之下的 logo 行，22px）；中轴/栏区无 logo', () => {
+    /** legacy 三页清单（批 D 后 H 默认走五块 ⇒ 验原生页要显式传） */
+    const NATIVE_SHEETS: readonly PrintSheet[] = [
+      { type: 'native', page: 'stage-overview' },
+      { type: 'native', page: 'task-register' },
+      { type: 'native', page: 'member-roster' },
+    ];
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
+    // 2026-10-13 批 D：H 默认走五块形态 ⇒ 验「原生海报页那套版式」要显式传 sheets
+    // （决策 2：代码与 spec 全留，只是不再有暴露面）。断言一字未改。
     const doc = parse(
-      renderToStaticMarkup(createElement(AgentPosterDocument, { vm, palette: baseline, logo: TINY_LOGO })),
+      renderToStaticMarkup(
+        createElement(AgentPosterDocument, {
+          vm,
+          sheets: NATIVE_SHEETS,
+          palette: baseline,
+          logo: TINY_LOGO,
+        }),
+      ),
     );
     // 人类化后三页同构（阶段/任务/成员海报）：页眉下方各一枚 logo 行。
     // 旧的 P1 `.ap-declare__logo`（24px、巨字下方左侧）随页重写退场——全局 logo
@@ -509,6 +525,21 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     // 中轴区域严禁放 logo：双栏容器内无任何 print-logo
     const cols = doc.querySelector('.ap-cols')!;
     expect(cols.querySelector('.print-logo'), '中轴/栏区不得放 logo').toBeNull();
+  });
+
+  it('H 版（五块形态）：logo 数 === 页数，每枚 22px；B2 甘特页与 B4 状态页各一枚', () => {
+    const vm = buildVm();
+    const baseline = PRINT_TEMPLATE_PALETTES['agent-poster'].baseline;
+    const doc = parse(
+      renderToStaticMarkup(createElement(AgentPosterDocument, { vm, palette: baseline, logo: TINY_LOGO })),
+    );
+    const pages = doc.querySelectorAll('.a4-page');
+    expect(pages.length, '五块形态 = B2 页 + B4 页').toBeGreaterThanOrEqual(2);
+    expect(logoHeights(doc), '每页一枚 22px').toEqual(Array.from({ length: pages.length }, () => 22));
+    for (const p of Array.from(pages)) {
+      expect(p.querySelector('.ap-logo-row img.print-logo'), '每页左上角一枚').not.toBeNull();
+      expect(p.querySelector('.ap-body .print-logo'), '主体区不得再有 logo').toBeNull();
+    }
   });
 
   it('classic：logo 在页脚署名旁 ≤20px；署名字样逐字保留', () => {

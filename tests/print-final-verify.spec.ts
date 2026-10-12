@@ -488,8 +488,11 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 四版默认态（四版同 VM 真实渲
         markup: renderToStaticMarkup(
           createElement(AgentPosterDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['agent-poster'].baseline }),
         ),
-        // 默认 = 3 原生纸面（M10 两页 + 写回一页；通用 M1/M2/M4 默认不勾）
-        expected: 3,
+        // 2026-10-13「5 块 × 4 模板」重构 · 批 D：H 从「3 张人类原生海报页」改为
+        // **五块形态**（决策 1）。本夹具 6 可见阶段 ⇒ 2 页：第 1 张 B2 双栏分段轴
+        // 甘特页、第 2 张 B4 双栏状态分组块页（两块共用同一批切片，先「何时」后
+        // 「什么状态」）。页数表见 print-a4-visual-h。
+        expected: 2,
       },
     ];
 
@@ -511,9 +514,9 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 四版默认态（四版同 VM 真实渲
         }
       }
       // 2026-10-13：批 1 把 A 从 4 页变 2 页；批 B 把 D 从 4 页变 1 页；
-      // 批 C 把 E 从 4 页变 1 页 ⇒ 合计 15 → 13 → 10 → **7**
-      // （A 五块 2 + D 五块 1 + E 五块 1 + H 原生 3）
-      expect(totalPages, '四版合计 7 页（A2 + D1 + E1 + H3）').toBe(7);
+      // 批 C 把 E 从 4 页变 1 页；批 D 把 H 从 3 页变 2 页
+      // ⇒ 合计 15 → 13 → 10 → 7 → **6**（A 五块 2 + D 五块 1 + E 五块 1 + H 五块 2）
+      expect(totalPages, '四版合计 6 页（A2 + D1 + E1 + H2）').toBe(6);
     } finally {
       await page.close();
     }

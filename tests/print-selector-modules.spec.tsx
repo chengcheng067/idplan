@@ -47,7 +47,7 @@ class ResizeObserverStub {
 }
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub;
 
-import { PrintPreviewDialog } from '../src/components/print/PrintPreviewDialog';
+import { PrintModuleSection, PrintPreviewDialog } from '../src/components/print/PrintPreviewDialog';
 import {
   PRINT_MODULES,
   PRINT_MODULE_IDS,
@@ -66,7 +66,8 @@ import {
   printTemplateNativeModuleIds,
 } from '../src/components/print/print-templates';
 import type { PrintModuleId, PrintTemplateId } from '../src/components/print/print-templates';
-import { AGENT_POSTER_PAGES } from '../src/print/documents/AgentPosterDocument';
+import { AGENT_POSTER_PAGES, agentPosterPhysical } from '../src/print/documents/AgentPosterDocument';
+import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
 import { DATA_EDITORIAL_PAGES } from '../src/print/documents/DataEditorialDocument';
 import { EDITORIAL_INDEX_PAGES } from '../src/print/documents/EditorialIndexDocument';
 import { SWISS_SCHEDULE_PAGES } from '../src/print/documents/SwissScheduleDocument';
@@ -317,6 +318,52 @@ function setBlockChecked(key: string, on: boolean): void {
 }
 
 const paperPages = (): number => document.querySelectorAll('.a4-page').length;
+
+/**
+ * ★★ 2026-10-13 批 D（team-lead 任务书第 8 条）：**11 模块清单从此没有任何模板载体**。
+ *
+ * 批 D 把 H 也切成五块清单后，`PrintTemplates` 里 `usesBlocks` 全为 true
+ * ⇒ 「11 行模块表单」在选择器里**一个载体都不剩**（A/D/E/H/classic 五套都没有）。
+ * 通报口径是**不删断言、也不放宽判据**：把它改成对 `PrintModuleSection` **组件
+ * 本体**的直接渲染断言 —— 组件留着、能力表与 `enabledSheetsOf` 的派页账本留着
+ * （决策 2：代码与 spec 全留，只是不再有暴露面）。
+ *
+ * 本助手把该组件挂进**独立容器**（不碰 `container`：那一份留给真实对话框），
+ * 用例结束由 `afterEach` 一并卸载。
+ */
+let moduleSectionHost: HTMLDivElement | null = null;
+let moduleSectionRoot: Root | null = null;
+
+function renderModuleSection(template: PrintTemplateId): void {
+  moduleSectionHost = document.createElement('div');
+  document.body.appendChild(moduleSectionHost);
+  moduleSectionRoot = createRoot(moduleSectionHost);
+  act(() => {
+    moduleSectionRoot!.render(
+      <PrintModuleSection
+        template={template}
+        enabledModules={printTemplateDefaultModuleIds(template)}
+      />,
+    );
+  });
+}
+
+/** 从 seed 好的 stores 装一份 VM（批 D：模块勾选联动用例改走通路级断言时用） */
+function buildVmFromStores(): ReturnType<typeof buildPrintViewModel> {
+  const { stages, tasks } = useProjectsStore.getState();
+  const { members } = useMembersStore.getState();
+  return buildPrintViewModel({
+    project: PROJECT,
+    stages,
+    tasks,
+    members,
+    stageLogs: [],
+    role: MemberRoleKind.Admin,
+    currentMemberId: ADMIN_ID,
+    todayIso: '2026-10-09',
+    now: new Date('2026-10-09T07:30:00Z'),
+  });
+}
 const bodyContains = (t: string): boolean => (document.body.textContent ?? '').includes(t);
 
 beforeEach(async () => {
@@ -333,6 +380,15 @@ afterEach(() => {
     root.unmount();
   });
   document.body.removeChild(container);
+  // 组件级渲染的独立宿主（批 D 重挂用）一并在每例后清掉
+  if (moduleSectionRoot) {
+    act(() => {
+      moduleSectionRoot!.unmount();
+    });
+    if (moduleSectionHost?.parentNode) document.body.removeChild(moduleSectionHost);
+    moduleSectionRoot = null;
+    moduleSectionHost = null;
+  }
 });
 
 /* ====================================================================================
@@ -604,12 +660,14 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
    * 用法：每批落地一套就把它加进下面的数组（数组是这条锁的唯一参数）。
    * 批 1 加了 A、批 B 加了 D、**批 C 加了 E**；H 落地时继续加。
    */
-  it('★ A / D / E / classic 的选择器里不存在 11 模块行（模块清单已无暴露面）', () => {
+  it('★ 五套模板的选择器里都不存在 11 模块行（模块清单已无任何暴露面）', () => {
     const BLOCK_TEMPLATES: readonly PrintTemplateId[] = [
       'classic',
       'swiss-schedule',
       'data-editorial',
       'editorial-index',
+      // 2026-10-13 批 D：H 也切成五块清单 ⇒ 至此**五套全上**
+      'agent-poster',
     ];
     for (const id of BLOCK_TEMPLATES) {
       renderDialog(true);
@@ -644,79 +702,49 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
    * 少了 ①，将来有人顺手把通用通路整条删掉没人拦；少了 ②，将来有人把通用行
    * 挂回五块模板也没人拦。
    */
-  it('★ 三态收敛：11 模块通路只剩 H（原生 3 / 禁用 8），通用态仅存能力表（决策 2）', () => {
-    // ① 能力表侧：通用态仍在账本里，派生行为照旧
-    expect(
-      printTemplateGenericModuleIds('editorial-index'),
-      'E 的通用条目保留在能力表（决策 2：代码与 spec 全留）',
-    ).toEqual(['task-list']);
-    expect(moduleAvailability('editorial-index', 'task-list')).toBe('generic');
-    expect(enabledSheetsOf('editorial-index', ['task-list']), '通用通路仍能派页').toEqual([
-      { type: 'generic', module: 'task-list' },
-    ]);
-    // 四套外表里只剩 H 走模块表（其余三套 + classic 都是五块清单）
+  it('★ 三态收敛：11 模块通路已无模板载体（四套 + classic 全是五块清单）', () => {
+    /*
+     * ★★ 2026-10-13 批 D 重定（team-lead 任务书第 8 条）：
+     * 批 C 时这条还断言「11 模块通路只剩 H」；批 D 把 H 也切成五块清单后，
+     * **一套都不剩**了。判据**一条没删，只是把「载体」换成「组件」**：
+     *   · 载体侧（新事实）：五套模板的 `usesBlocks` 全为 true ⇒ 选择器里
+     *      `[data-print-module-row]` 一个都不会出现（反向锁，见上一条用例）；
+     *   · 能力表侧（决策 2 的账本，一字未动）：模块条目仍在、可用性仍算得出、
+     *     `enabledSheetsOf` 仍能按模块派页 —— 这正是「组件留着、能力表留着」
+     *     的含义：**暴露面没了，通路还在**。
+     */
     expect(
       PRINT_TEMPLATES.filter((t) => !t.usesBlocks).map((t) => t.id),
-      '11 模块通路只剩 H（批 C 后 E 也改走五块清单）',
-    ).toEqual(['agent-poster']);
-
-    // ② 暴露面侧：H 的选择器 11 行，且一行 generic 都没有
-    renderDialog(true);
-    openSelector();
-    pickTemplate('agent-poster');
-    expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
+      '五套模板全部走五块清单（11 模块通路已无载体）',
+    ).toEqual([]);
+    // 能力表侧：逐套的（原生 / 通用 / 暂不可用）三态仍算得出，且与批 D 之前逐值同
+    expect(moduleAvailability('agent-poster', 'stage-list')).toBe('native');
+    expect(moduleAvailability('agent-poster', 'agent-execution')).toBe('off');
+    expect(moduleAvailability('editorial-index', 'task-list')).toBe('generic');
     expect(
-      document.querySelectorAll('[data-print-module-row][data-avail="generic"]'),
-      '通用态已无暴露面（决策 1 的必然后果）',
-    ).toHaveLength(0);
+      PRINT_TEMPLATES.filter((t) => printTemplateModuleIds(t.id).length > 0).map((t) => t.id),
+      '能力表条目四处都在（A/D/E/H）',
+    ).toEqual(['swiss-schedule', 'data-editorial', 'editorial-index', 'agent-poster']);
+    // 派页账本仍能跑：H 的默认模块 ⇒ 三张原生海报页
     expect(
-      Array.from(document.querySelectorAll('[data-print-module-row]')).map((el) =>
-        el.getAttribute('data-avail'),
-      ),
-      'H 的 11 行只有 native / off 两态',
+      enabledSheetsOf('agent-poster', undefined),
+      'enabledSheetsOf 的派页账本留着（决策 2）',
     ).toEqual([
-      'native',
-      'native',
-      'off',
-      'native',
-      'off',
-      'off',
-      'off',
-      'off',
-      'off',
-      'off',
-      'off',
+      { type: 'native', page: 'stage-overview' },
+      { type: 'native', page: 'task-register' },
+      { type: 'native', page: 'member-roster' },
     ]);
-    // 原生：可勾选且默认全选（01 §8）
-    for (const m of ['stage-list', 'task-list', 'member-roster']) {
-      const input = moduleCheckbox(m);
-      expect(input.disabled, `${m} 原生应可勾`).toBe(false);
-      expect(input.checked, `${m} 默认应勾选`).toBe(true);
-    }
-    // 暂不可用：禁用 + 不勾 + 原因文案（不装能打）
-    for (const m of [
-      'delay-ledger',
-      'progress-matrix',
-      'dependency-network',
-      'workload-composition',
-      'milestone-acceptance',
-      'artifact-list',
-      'agent-execution',
-      'writeback-proposals',
-    ]) {
-      const input = moduleCheckbox(m);
-      expect(input.disabled, `${m} 在 H 外表下应禁用`).toBe(true);
-      expect(input.checked, `${m} 禁用态不勾选`).toBe(false);
-      expect(moduleRow(m).textContent, '禁用行带原因').toContain('该外表下暂不可用');
-    }
-    // 禁用行点不动：store 不收暂不可用模块的勾选
-    expect(usePrintPrefsStore.getState().modules['agent-poster']).toBeUndefined();
   });
 
-  it('人类化后的 H 外表：3 人类原生默认勾选 + 8 暂不可用（M10/M11 已下架）', () => {
-    renderDialog(true);
-    openSelector();
-    pickTemplate('agent-poster');
+  it('★（组件级）人类化后的 H 三态：3 原生默认勾选 + 8 暂不可用（M10/M11 已下架）', () => {
+    /*
+     * ★ 2026-10-13 批 D：**判据一条没改，载体从「H 的选择器」换成
+     * `PrintModuleSection` 组件本体**（H 的 `usesBlocks` 已为 true ⇒ 选择器里
+     * 不再有 11 行）。这正是「不删断言、只换重挂方式」的意思。
+     * 组件级渲染不涉及纸面 ⇒ 原来那半条「默认纸面 = 人类三页」的断言挪到
+     * `print-a4-visual-h` 的 legacy 复现用例里（显式传 `NATIVE_SHEETS`）。
+     */
+    renderModuleSection('agent-poster');
 
     expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
     // 原生 3 个（默认勾选 = 原生签名页；行带归属页名 = 人类三页）
@@ -729,14 +757,6 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     expect(moduleRow('stage-list').textContent, '原生行标注归属页名').toContain('阶段海报');
     expect(moduleRow('task-list').textContent, '原生行标注归属页名').toContain('任务海报');
     expect(moduleRow('member-roster').textContent, '原生行标注归属页名').toContain('成员海报');
-
-    // 默认纸面 = 人类三页（与参考稿 `SHEET 01 / 03 · A4` 对齐）
-    expect(paperPages()).toBe(3);
-    expect(
-      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
-        el.getAttribute('data-print-page'),
-      ),
-    ).toEqual(['stage-overview', 'task-register', 'member-roster']);
 
     // 暂不可用 8 个：后代模块（M3/M5-M9）+ **下架的 Agent 治理两模块**（M10/M11）
     const off = Array.from(document.querySelectorAll('[data-print-module-row]')).filter(
@@ -761,47 +781,38 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     expect(section!.textContent).toContain('将随通用渲染陆续支持');
   });
 
-  it('模块勾选联动：摘模块 ⇒ 纸面少页 + 预计 N 页重算', () => {
-    renderDialog(true);
-    openSelector();
-    pickTemplate('agent-poster');
-    // 默认 = 人类原生三页（阶段 / 任务 / 成员海报）
-    expect(paperPages()).toBe(3);
-    expect(bodyContains('预计 3 页')).toBe(true);
+  it('★（通路级）模块勾选联动：摘模块 ⇒ 纸面少页 + 预计 N 页重算（store → sheets → Document）', () => {
+    /*
+     * ★ 2026-10-13 批 D：载体从「选择器里的 H」换成**整条通路**
+     * （能力表 → `enabledSheetsOf` → `agentPosterPhysical` → `.a4-page` 计数）。
+     * 没有模板再暴露 11 行模块清单了，但这条链子是**决策 2 的账本**，
+     * 断言原理一字未改：勾选只做筛选、页数随之重算、页序不因勾选变。
+     */
+    const vm = buildVmFromStores();
+    const pagesOf = (mods: readonly PrintModuleId[]): number =>
+      agentPosterPhysical(vm, enabledSheetsOf('agent-poster', mods)).length;
+    const kindsOf = (mods: readonly PrintModuleId[]): (string | null)[] =>
+      agentPosterPhysical(vm, enabledSheetsOf('agent-poster', mods)).map((p) =>
+        p.type === 'native' ? p.sheet.kind : `generic-${p.module}`,
+      );
+
+    const all = printTemplateDefaultModuleIds('agent-poster');
+    expect(all, '默认 = 人类原生三模块').toEqual(['stage-list', 'task-list', 'member-roster']);
+    expect(pagesOf(all), '默认 = 人类原生三页').toBe(3);
+    expect(kindsOf(all)).toEqual(['stage-overview', 'task-register', 'member-roster']);
 
     // 摘任务海报 ⇒ 2 页
-    setModuleChecked('task-list', false);
-    expect(paperPages()).toBe(2);
-    expect(bodyContains('预计 2 页')).toBe(true);
-    expect(
-      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
-        el.getAttribute('data-print-page'),
-      ),
-    ).toEqual(['stage-overview', 'member-roster']);
-
+    expect(pagesOf(['stage-list', 'member-roster'])).toBe(2);
+    expect(kindsOf(['stage-list', 'member-roster'])).toEqual(['stage-overview', 'member-roster']);
     // 再摘成员海报 ⇒ 1 页（页序按 M1→M2→M4 不变）
-    setModuleChecked('member-roster', false);
-    expect(paperPages()).toBe(1);
-    expect(bodyContains('预计 1 页')).toBe(true);
-    expect(
-      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
-        el.getAttribute('data-print-page'),
-      ),
-    ).toEqual(['stage-overview']);
-
-    // 勾回成员海报 ⇒ 页回
-    setModuleChecked('member-roster', true);
-    expect(paperPages()).toBe(2);
-
-    // 反选 / 全选（按模块）：全选范围 = 可用集（人类三页）
-    act(() => {
-      document.querySelector<HTMLButtonElement>('[data-print-modules-none]')!.click();
-    });
-    expect(paperPages()).toBe(0);
-    act(() => {
-      document.querySelector<HTMLButtonElement>('[data-print-modules-all]')!.click();
-    });
-    expect(paperPages()).toBe(3);
+    expect(pagesOf(['stage-list'])).toBe(1);
+    expect(kindsOf(['stage-list'])).toEqual(['stage-overview']);
+    // 反选（一个模块都不勾）⇒ 一页不出
+    expect(pagesOf([])).toBe(0);
+    // 勾回 ⇒ 页回
+    expect(pagesOf(['stage-list', 'member-roster'])).toBe(2);
+    // 暂不可用 id 混入不进纸面、不计页数（M3 在 H 是 off）
+    expect(pagesOf(['stage-list', 'delay-ledger'])).toBe(1);
   });
 
   it('勾选态按外表各存一套：E 摘「阶段清单」→ 切 D / H → 回 E 仍摘着；两套键互不干扰', async () => {
@@ -839,15 +850,20 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     expect(blockCheckbox('stageTable').checked, 'D 的 stageTable 不受 E 影响').toBe(true);
     expect(blockCheckbox('timeline').checked, 'D 的 timeline 默认勾选').toBe(true);
 
-    // 切 H：仍在 11 模块通路，H 的模块勾选与 E 的五块勾选互不干扰
+    // 切 H：**也走五块清单了**（批 D）⇒ 中截仍是 4 行可勾，**不是** 11 模块行。
+    // H 的 B5「页脚」可勾（批 D 裁定：H 零页脚元素，可摘载荷 = 脚注「数据来源」行；
+    // 页底巨字 IDPLAN 与页眉 SHEET 是装置，原则 1 不许摘）。
     pickTemplate('agent-poster');
+    expect(document.querySelectorAll('input[data-print-block]'), 'H 出五块清单').toHaveLength(4);
+    expect(document.querySelectorAll('[data-print-module-row]'), 'H 不再出 11 模块行').toHaveLength(0);
+    expect(blockCheckbox('footer')!.checked, 'H 的 B5 可勾且默认勾选').toBe(true);
     const hBase = paperPages();
-    expect(hBase, 'H 默认 = 人类原生海报页').toBeGreaterThan(0);
-    expect(moduleCheckbox('stage-list').checked, 'H 的 stage-list 默认勾选').toBe(true);
-    expect(moduleCheckbox('member-roster').checked, 'H 的 member-roster 默认勾选').toBe(true);
-    expect(paperPages(), 'H 的页数不受 E 勾选影响').toBe(hBase);
-    // 五块清单与 11 模块清单**不会同时出现**（分流是互斥的）
-    expect(document.querySelectorAll('input[data-print-block]'), 'H 不出五块清单').toHaveLength(0);
+    expect(
+      Array.from(document.querySelectorAll('.a4-page')).map((el) => el.getAttribute('data-page-form')),
+      'H 默认五块 = 1 张 B2 甘特页 + 1 张 B4 状态页',
+    ).toEqual(['span', 'list']);
+    expect(hBase, 'H 默认五块 = 2 页').toBe(2);
+    expect(blockCheckbox('stageTable').checked, 'H 的 stageTable 不受 E 影响').toBe(true);
 
     // 回 E：stageTable 仍被摘着（按模板分键，换模板不丢）
     pickTemplate('editorial-index');
@@ -1150,11 +1166,13 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
       previewCloseCalls += 1;
     });
     openSelector();
-    // ⚠️ 载体换过两次：A（批 1 前）→ D（批 1 后）→ **H**（批 B 后 D 也走五块清单）
+    // ⚠️ 载体换过三次：A（批 1 前）→ D（批 1 后）→ H（批 B 后）→ **H 的五块清单**
+    // （批 D 后 H 也走五块 ⇒ 11 模块清单至此没有任何模板载体）
     pickTemplate('agent-poster');
-    // 摘一个**可用**模块（即时生效；H 的 artifact-list 是禁用态 ⇒ 用原生 member-roster）
-    setModuleChecked('member-roster', false);
-    expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
+    // 摘一个**可摘**的五块（即时生效；H 的 B1 是禁用态不进清单 ⇒ 用 B4 阶段清单）
+    setBlockChecked('stageTable', false);
+    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(0);
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -1189,10 +1207,16 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     expect(previewCloseCalls, '第二次 Esc 才轮到下层（栈顶随出栈转移到预览）').toBe(1);
 
     // 关闭后纸面仍是改过的勾选态（即时重渲染，无待确认）
-    // 起手 = H 的默认集（原生三模块）⇒ 摘掉 member-roster 后剩两条，按 M1→M11 序
-    expect(usePrintPrefsStore.getState().modules['agent-poster']).toEqual([
-      'stage-list',
-      'task-list',
+    // 起手 = H 的五块全开 ⇒ 摘掉 B4 后剩四条（含今天不可摘的装置），按声明序
+    expect(usePrintPrefsStore.getState().units['agent-poster']).toEqual([
+      'header',
+      'timeline',
+      'projectInfo',
+      'footer',
+      'ap-flood-top',
+      'ap-flood-bottom',
+      'ap-spine',
+      'ap-sum',
     ]);
   });
 
