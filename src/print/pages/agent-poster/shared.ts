@@ -852,7 +852,14 @@ export interface ApSpanRow {
 /** 状态标签的落位（见 `ApSpanRow.tagPlace`） */
 export type ApSpanTagPlacement = 'in' | 'out-right' | 'out-left';
 
-/** 标签外移时与条之间的**纸缝**（px；2px 是批 D 裁决给的下限） */
+/**
+ * 标签外移时与条之间的**纸缝**（px；2px 是批 D 裁决给的下限）。
+ *
+ * ⚠️ 这个值与 CSS 里三条分支的 `margin-left/right: 2px` 是**有意双写**（不升级成变量注入：
+ * 那要给每行挂 inline 变量，收益不抵成本）。**这张双写由 `print-a4-visual-h` 的
+ * 「条/标签混合规则」用例兜住** —— 那条断言要求外移档「纸缝 ≥2px（实测值）」，
+ * CSS 若被人改成 0 会立刻红，不会静默。
+ */
 export const AP_SPAN_TAG_GAP_PX = 2;
 
 /**
@@ -871,6 +878,10 @@ export function apSpanTagPx(label: string): number {
  * 混合规则（纯函数、确定性）：条与标签谁宽决定标签内嵌还是外移。
  * 右侧放不下（`barRight + 2 + tagPx > 轨宽`）就改放左侧 —— 与「刻度不许越盒」
  * 同一条纪律：**纸面上的件不许越出它所在的栏**。
+ *
+ * 口径：**标签优先内嵌；放不下时外移，先右后左，任何情况下与条之间必须有缝。**
+ * （为什么必须有缝：条与标签**同色**，相连时合并图形会被读成更长的跨度 —— 2 天阶段的
+ * 12px 条曾与 42px 标签连成 52px 的假跨度。缝是这件事的机器判据，不是装饰。）
  */
 export function apSpanTagPlacement(
   leftPct: number,
