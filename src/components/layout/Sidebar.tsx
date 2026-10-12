@@ -355,7 +355,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           {!hasIdentity && (
             <div className="mx-3 mt-3 rounded-md border border-line bg-cream/60 px-2.5 py-2">
               <p className="text-[11px] leading-relaxed text-mist">
-                还未进入身份。点左下角的身份行选择成员后，这里会显示你能看到与改动的项目。
+                还未进入身份。点侧栏最下方的身份行选择成员后，这里会显示你能看到与改动的项目。
               </p>
             </div>
           )}
