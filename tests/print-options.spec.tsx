@@ -561,8 +561,12 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
       expect(checkbox(k).checked, `A 的 ${k} 默认勾选`).toBe(true);
     }
     expect(selectorPanel()!.textContent, '选择器写明不可摘的原因（§2.6 纪律 1）').toContain(
-      '由模板刊头承担，不可摘',
+      '由该模板的刊头承载项目名与页序，属版式构件',
     );
+    expect(
+      selectorPanel()!.textContent,
+      '状态用「当前不可摘」而不是「永不」（决策 5：将来会开放勾选）',
+    ).toContain('该模板当前不可摘');
     // 五块的纸面标识（每页都是五块形态的页壳）
     expect(
       Array.from(document.querySelectorAll('.a4-page')).map((el) => el.getAttribute('data-print-page')),

@@ -104,7 +104,10 @@ function panelMarkup(template: PrintTemplateId = 'swiss-schedule'): string {
         checked: true,
       })),
       onToggleUnit: () => {},
-      forcedNote: meta.usesBlocks && template !== 'classic' ? '「打印头部」由模板刊头承担，不可摘。' : '',
+      forcedNote:
+        meta.usesBlocks && template !== 'classic'
+          ? '「打印头部」由该模板的刊头承载项目名与页序，属版式构件 —— 该模板当前不可摘。'
+          : '',
       onClose: () => {},
     }),
   );
@@ -174,7 +177,8 @@ describe.skipIf(!CAN_RUN)('期六 · 选择器弹窗截图（真 Chromium + 真�
       const status = await page.$eval('[data-print-selector-panel]', (el) => el.textContent ?? '');
       expect(status).toContain('当前 4 块 · 预计 2 页');
       // 五块清单的纪律文案（§2.6 纪律 1/2：不可摘的原因 + 装置不在此列）
-      expect(status).toContain('由模板刊头承担，不可摘');
+      expect(status).toContain('由该模板的刊头承载项目名与页序，属版式构件');
+      expect(status).toContain('该模板当前不可摘');
       expect(status).toContain('可摘项随版式而定');
 
       await (await page.$('[data-print-selector-panel]'))!.screenshot({

@@ -773,9 +773,14 @@ export function PrintPreviewDialog({
     hint: spec.hint,
     checked: unitEnabled(units, spec.id),
   }));
-  /** 不可摘块的原因（§2.6 纪律 1：不许只是灰掉/消失，得说清为什么） */
+  /**
+   * 不可摘块的原因（§2.6 纪律 1：不许只是灰掉/消失，得说清**为什么**）。
+   * 文案口径（批 A 裁决）：先给原因（「由该模板的刊头承载项目名与页序，属版式
+   * 构件」），再说状态（「该模板**当前**不可摘」）——**不写「永不」**，
+   * 因为决策 5 的原话是「预留接口未来肯定是会开放勾选的」。
+   */
   const forcedNote = forcedBlockUnits(template)
-    .map((u) => `「${u.label}」由模板刊头承担，不可摘。`)
+    .map((u) => `「${u.label}」由该模板的刊头承载项目名与页序，属版式构件 —— 该模板当前不可摘。`)
     .join('');
 
   return (
