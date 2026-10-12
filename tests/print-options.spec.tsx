@@ -656,14 +656,21 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     pickTemplate('agent-poster');
     expect(paperRoot()!.className).toContain('print-template-agent-poster');
     expect(printButton()!.disabled, 'H 版可打印').toBe(false);
-    // 中截 = 五块清单：4 行可勾（B1「打印头部」由刊头承担 ⇒ 不可摘、不进清单）
-    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    // 中截 = 五块清单：**3 行可勾** —— H 有两行不可摘（批 D 裁决第 1 条）：
+    // B1「打印头部」（项目名载体）与 B5「页脚」（署名 = 页底巨字 / 页码 = 页眉页序 /
+    // 脚注是治理披露）；勾选框若做出 B5，会承诺一个它兑不了的效果。
+    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(3);
     expect(document.querySelector('input[data-print-block="header"]'), 'H 的 B1 不进清单').toBeNull();
+    expect(document.querySelector('input[data-print-block="footer"]'), 'H 的 B5 不进清单').toBeNull();
+    expect(
+      document.querySelector('[data-print-selector-panel]')!.textContent,
+      '两行不可摘的原因逐行给',
+    ).toContain('脚注是治理披露');
     expect(
       document.querySelector('[data-print-module-row]'),
       '批 D 后 H 的中截不再是 11 个内容模块（决策 1：五套全上）',
     ).toBeNull();
-    for (const k of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
+    for (const k of ['timeline', 'projectInfo', 'stageTable']) {
       expect(checkbox(k).checked, `H 的 ${k} 默认勾选`).toBe(true);
     }
     const hForms = Array.from(document.querySelectorAll('.a4-page')).map((el) =>

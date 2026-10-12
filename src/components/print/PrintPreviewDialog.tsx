@@ -127,7 +127,7 @@ import {
   resolveUnits,
   unitEnabled,
 } from '../../print/model/print-units';
-import type { PrintBlockId } from '../../print/model/print-units';
+import type { PrintBlockId, PrintUnitId } from '../../print/model/print-units';
 import type { PrintTemplateId } from '../../print/model/print-view-model';
 
 /** 纸面总自然高度（缩放 wrapper 的负边距修正用；规范 §2：总高 = 1123×N + 24×(N−1)） */
@@ -775,12 +775,23 @@ export function PrintPreviewDialog({
   }));
   /**
    * 不可摘块的原因（§2.6 纪律 1：不许只是灰掉/消失，得说清**为什么**）。
-   * 文案口径（批 A 裁决）：先给原因（「由该模板的刊头承载项目名与页序，属版式
-   * 构件」），再说状态（「该模板**当前**不可摘」）——**不写「永不」**，
-   * 因为决策 5 的原话是「预留接口未来肯定是会开放勾选的」。
+   * 文案口径（批 A 裁决）：先给原因，再说状态（「该模板**当前**不可摘」）——
+   * **不写「永不」**，因为决策 5 的原话是「预留接口未来肯定是会开放勾选的」。
+   *
+   * ⚠️ 2026-10-13 批 D 裁决第 1 条：H 的 B5 也变成禁用行 ⇒ 同一次可能有两行
+   * 不可摘、**原因各不相同**（B1 是项目名载体、B5 是署名与页码载体 + 披露件），
+   * 故按单元 id 逐条给原因，不再用一句通用文案套所有行。
    */
+  const FORCED_REASON: Partial<Record<PrintUnitId, string>> = {
+    header: '由该模板的刊头承载项目名与页序，属版式构件',
+    footer:
+      '在本模板由版式构件承担（署名 = 页底巨字、页码 = 页眉页序），脚注是治理披露，都不随勾选变化',
+  };
   const forcedNote = forcedBlockUnits(template)
-    .map((u) => `「${u.label}」由该模板的刊头承载项目名与页序，属版式构件 —— 该模板当前不可摘。`)
+    .map(
+      (u) =>
+        `「${u.label}」${FORCED_REASON[u.id as PrintUnitId] ?? '属该模板的版式构件'} —— 该模板当前不可摘。`,
+    )
     .join('');
 
   return (

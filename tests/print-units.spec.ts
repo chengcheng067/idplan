@@ -117,23 +117,23 @@ describe('批 1 地基 · L1-a 统一注册表（5 块 + 逐套装置声明）',
     }
   });
 
-  it('不可摘块（§2.6 的丙）逐套登记：A/D/E/H 的 B1（H 的 B5 批 D 起可摘）', () => {
+  it('不可摘块（§2.6 的丙）逐套登记：A/D/E/H 的 B1；**H 另有 B5**', () => {
     expect(forcedBlockUnits('classic').map((u) => u.id), '经典五块全可摘').toEqual([]);
-    for (const id of ['swiss-schedule', 'data-editorial', 'editorial-index', 'agent-poster'] as const) {
+    for (const id of ['swiss-schedule', 'data-editorial', 'editorial-index'] as const) {
       expect(forcedBlockUnits(id).map((u) => u.id), `${id} 的 B1 不可摘`).toEqual(['header']);
     }
     /*
-     * ⚠️ 2026-10-13 批 D：H 的 B5 从「丙·不可摘」改成**可摘**（只摘脚注的数据来源行）。
-     * 依据是 §2.6 规则表的 H·B5 行自己写的「**丙 ＋ 局部甲**」+ 批 D 任务书第 2 条
-     * 「勾选只控『脚注行 + 页眉页序』」—— 而 §2.6 的三条纪律里另有一句
-     * 「H 的 B5 恒为禁用行」，与规则表自相矛盾。以规则表 + 任务书为准（已在报告里
-     * 登记该冲突）。判据一条没松：**页码（页眉 SHEET）与署名（页底巨字 IDPLAN）
-     * 仍不可摘**（原则 1），可摘的只有脚注那一行。
+     * ⚠️ 2026-10-13 批 D 裁决第 1 条：H 的 B5 **不可摘**（我上一版判成可摘，被推翻）。
+     * 依据三条（team-lead 裁）：① 该行名叫「页脚」但可摘的只有一行脚注 —— 页底巨字
+     * 与页眉页码按原则 1 永在 ⇒ **勾选框会承诺一个它兑不了的效果**（用户最反感的
+     * 「我明明取消了还在印」）；② 脚注在 H 的语汇里是**治理披露件**，披露不该可选；
+     * ③ 与四套的「打印头部」同款处理，一致性更好。
+     * ⇒ H 是四套里唯一有**两个**丙格的模板（B1 + B5）。
      */
     expect(
       forcedBlockUnits('agent-poster').map((u) => u.id),
-      'H 只剩 B1 不可摘（B5 批 D 起可摘：只摘脚注数据来源行）',
-    ).toEqual(['header']);
+      'H 的 B1 与 B5 都不可摘（四套里唯一两个丙格）',
+    ).toEqual(['header', 'footer']);
   });
 });
 

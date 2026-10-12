@@ -1493,7 +1493,7 @@ describe.skipIf(!CAN_RUN)('H 版 · 五块形态（批 D：双栏分段轴甘特
     }
   });
 
-  it('★ B5 只摘脚注数据来源行；页码与 IDPLAN 巨字恒在（原则 1）；B3 关掉时口径句锚回', async () => {
+  it('★ B5 不可摘（裁决第 1 条）：显式关掉也**恒开**（脚注 + 页码 + 巨字都在）；B3 关掉时口径句锚回', async () => {
     const css = builtCss();
     const vm = buildVm();
     const all = ALL();
@@ -1506,31 +1506,41 @@ describe.skipIf(!CAN_RUN)('H 版 · 五块形态（批 D：双栏分段轴甘特
         hasSource: (document.body.textContent ?? '').includes('数据来源'),
         scope: document.querySelectorAll('.ap-scope').length,
         legend: document.querySelectorAll('.ap-legend').length,
-        notes: document.querySelectorAll('.ap-notes__line').length,
       }));
       expect(on.hasSource, 'B5 开着 ⇒ 脚注有数据来源行').toBe(true);
       expect(on.scope, 'B3 开着 ⇒ 首页有 mono 平铺口径行').toBe(1);
+      expect(on.legend, 'B3 开着 ⇒ 首页有图例').toBe(1);
 
+      // ── 裁决第 1 条：B5 = 丙（不可摘）⇒ 显式从勾选集里拿掉，纸面也**一行不少** ──
+      // 判据手法同 A 的「B1 恒开」：`resolveUnits` 对 forced 单元恒开、source='forced'
+      // （H 的 B5 若做成可勾，会承诺一个它兑不了的效果 —— 页底巨字与页眉页码按
+      // 原则 1 永在，勾选框却说自己能关掉这一块）。
       await page.goto('file://' + writeHtml('h-blocks-no-b5.html', shell(blocksMarkupOf(vm, noB5), css, false)));
       const off5 = await page.evaluate(() => ({
         hasSource: (document.body.textContent ?? '').includes('数据来源'),
         notes: document.querySelectorAll('.ap-notes__line').length,
         giants: document.querySelectorAll('.ap-footword').length,
         tabs: Array.from(document.querySelectorAll('.ap-head__tab')).map((e) => e.textContent ?? ''),
+        pages: document.querySelectorAll('.a4-page').length,
+        forms: Array.from(document.querySelectorAll('.a4-page')).map((e) => e.getAttribute('data-page-form')),
       }));
-      expect(off5.hasSource, '关 B5 ⇒ 数据来源行消失').toBe(false);
-      expect(off5.notes, '关 B5 ⇒ 口径句还在（原则 1）').toBeGreaterThan(0);
-      expect(off5.giants, '关 B5 ⇒ 页底 IDPLAN 巨字还在（装置，丙）').toBeGreaterThan(0);
-      expect(off5.tabs.every((t) => t.includes('SHEET')), '关 B5 ⇒ 页眉页序还在（原则 1）').toBe(true);
+      expect(off5.hasSource, 'B5 不可摘：显式关掉 → 数据来源行照旧在（恒开）').toBe(true);
+      expect(off5.notes, '脚注两行都在').toBe(off5.pages * 2);
+      expect(off5.giants, '页底 IDPLAN 巨字在（装置）').toBe(off5.pages);
+      expect(off5.tabs.every((t) => t.includes('SHEET')), '页眉页序在（原则 1）').toBe(true);
+      // 与「全开」逐页形同构（拿掉 footer 不该改变任何一页的形态）
+      expect(off5.forms, 'B5 恒开 ⇒ 页形序列与全开一致').toEqual(['span', 'list']);
 
+      // ── B3 = 乙：承载区整块不出，**口径句锚回**（原则 1） ──
       await page.goto('file://' + writeHtml('h-blocks-no-b3.html', shell(blocksMarkupOf(vm, noB3), css, false)));
       const off3 = await page.evaluate(() => ({
         scope: document.querySelectorAll('.ap-scope').length,
         legend: document.querySelectorAll('.ap-legend').length,
         notes: document.querySelectorAll('.ap-notes__line').length,
+        pages: document.querySelectorAll('.a4-page').length,
       }));
       expect([off3.scope, off3.legend], '关 B3 ⇒ 承载区（口径行 + 图例）整块不出').toEqual([0, 0]);
-      expect(off3.notes, '关 B3 ⇒ 口径句锚回脚注（每页）').toBeGreaterThan(0);
+      expect(off3.notes, '关 B3 ⇒ 口径句锚回脚注（每页两行，含数据来源）').toBe(off3.pages * 2);
     } finally {
       await page.close();
     }

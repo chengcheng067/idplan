@@ -850,13 +850,22 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     expect(blockCheckbox('stageTable').checked, 'D 的 stageTable 不受 E 影响').toBe(true);
     expect(blockCheckbox('timeline').checked, 'D 的 timeline 默认勾选').toBe(true);
 
-    // 切 H：**也走五块清单了**（批 D）⇒ 中截仍是 4 行可勾，**不是** 11 模块行。
-    // H 的 B5「页脚」可勾（批 D 裁定：H 零页脚元素，可摘载荷 = 脚注「数据来源」行；
-    // 页底巨字 IDPLAN 与页眉 SHEET 是装置，原则 1 不许摘）。
+    // 切 H：**也走五块清单了**（批 D）⇒ 中截是 **3 行**可勾，**不是** 11 模块行。
+    // H 有两行不可摘（批 D 裁决第 1 条）：B1「打印头部」（项目名载体）与
+    // B5「页脚」（署名 = 页底巨字 / 页码 = 页眉页序 / 脚注是治理披露）——
+    // 四套里唯一一条有**两个**丙格的模板。
     pickTemplate('agent-poster');
-    expect(document.querySelectorAll('input[data-print-block]'), 'H 出五块清单').toHaveLength(4);
+    expect(document.querySelectorAll('input[data-print-block]'), 'H 出五块清单（3 行可勾）').toHaveLength(3);
     expect(document.querySelectorAll('[data-print-module-row]'), 'H 不再出 11 模块行').toHaveLength(0);
-    expect(blockCheckbox('footer')!.checked, 'H 的 B5 可勾且默认勾选').toBe(true);
+    expect(blockCheckbox('header'), 'H 的 B1 不进清单').toBeNull();
+    expect(blockCheckbox('footer'), 'H 的 B5 不进清单（裁决第 1 条：禁用行）').toBeNull();
+    // 两行不可摘的原因**逐行给**（不再是一句通用文案套所有行）
+    const hNote = document.querySelector('[data-print-selector-panel]')!.textContent ?? '';
+    expect(hNote, 'B1 的原因').toContain('由该模板的刊头承载项目名与页序，属版式构件');
+    expect(hNote, 'B5 的原因（署名为版式构件 + 脚注是治理披露）').toContain(
+      '在本模板由版式构件承担（署名 = 页底巨字、页码 = 页眉页序），脚注是治理披露，都不随勾选变化',
+    );
+    expect(hNote, '两行都带状态句').toContain('该模板当前不可摘');
     const hBase = paperPages();
     expect(
       Array.from(document.querySelectorAll('.a4-page')).map((el) => el.getAttribute('data-page-form')),
@@ -1169,9 +1178,10 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     // ⚠️ 载体换过三次：A（批 1 前）→ D（批 1 后）→ H（批 B 后）→ **H 的五块清单**
     // （批 D 后 H 也走五块 ⇒ 11 模块清单至此没有任何模板载体）
     pickTemplate('agent-poster');
-    // 摘一个**可摘**的五块（即时生效；H 的 B1 是禁用态不进清单 ⇒ 用 B4 阶段清单）
+    // 摘一个**可摘**的五块（即时生效；H 的 B1 与 B5 都是禁用态、不进清单
+    // ⇒ 用 B4 阶段清单）
     setBlockChecked('stageTable', false);
-    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    expect(document.querySelectorAll('input[data-print-block]'), 'H 的三行可勾').toHaveLength(3);
     expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(0);
 
     act(() => {
