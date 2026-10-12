@@ -1119,6 +1119,27 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   animation: float-pop-out var(--dur-base) var(--ease-exit) both;
 }
 
+/* --- 遮罩（Modal 的 portal 根，同时也是点击捕获层）的出口：**只淡出、不位移** ---
+   为什么要它（2026-10-12，用户报「关闭设置频闪」的第二半）：遮罩原先不参与出口
+   ⇒ 面板淡完、portal 卸载的那一帧整块遮罩瞬间消失，内容区亮度一帧跳变
+   （真机实测 L 202 → 255，ΔL = +53）。
+   为什么**不复用**六个兄弟 `*-out`：它们都带 transform —— `drawer-out-left` 的
+   `translateX(0→-24px)` 会把全宽遮罩整体左移、右缘露出 24px 未压暗的内容（亮带）；
+   `float-pop-out` 的 scale 更不对。遮罩要的只是"把压暗撤掉"，故只有 opacity。
+   时长/缓动与兄弟类逐字同源；reduced-motion 关停清单里已同步加。 */
+@keyframes scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.scrim-out {
+  animation: scrim-out var(--dur-base) var(--ease-exit) both;
+}
+
 /* ----------------------------------------------------------------------------
  * 持续态动效：本批之前全项目一个都没有（只有 animate-spin 在转圈）。
  * 只做两个，覆盖「正在工作」与「正在加载」两种真实语义，不堆。
@@ -1168,6 +1189,9 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   .drawer-out-right,
   .drawer-out-left,
   .float-pop-out,
+  /* 遮罩出口（scrim-out）必须同在这一段：漏了就是"面板不动、遮罩还在淡"，
+     属于无障碍回归 —— 仓库既有纪律是六组入口/出口类两段清单都要齐 */
+  .scrim-out,
   .status-pulse,
   .skeleton-pulse {
     animation: none;

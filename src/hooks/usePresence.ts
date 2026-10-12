@@ -44,6 +44,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   动画在面板上，但**拦住点击的是遮罩**，两者都必须是 `pointer-events: none`，
  *   否则用户点到的还是那个正在淡出的遮罩。两者同一个元素时（Toast 就是）
  *   只挂 `exitRef` 即可。
+ * - `blockExitClass`（可选）是给**遮罩那类需要随出口一起动、且不随 `exitRef` 走**
+ *   的元素准备的（Modal 的 `scrim-out`）。它与 `exitClass` 在同一批同步语句里挂上，
+ *   保证两层**同帧起跑**；同样不在收尾时摘掉（理由见 `finish()` 的注释）。
  * - 调用方必须用 `mounted` 做渲染门，否则「卸载」无从发生。`mounted` 的翻转是
  *   **渲染期同步**的（打开当帧就在场、关闭当帧就被扣住），不晚一帧 —— 晚一帧会
  *   同时坏两件事：① 元素晚一帧才交给 React，依赖 `[open]` 的 effect（Modal 的
@@ -52,7 +55,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 export function usePresence(
   active: boolean,
-  { exitClass, enterClass, exitMs = DEFAULT_EXIT_MS }: PresenceOptions,
+  { exitClass, blockExitClass, enterClass, exitMs = DEFAULT_EXIT_MS }: PresenceOptions,
 ): Presence {
   /**
    * 出口期「保留」标记：本次关闭要不要把元素扣在 DOM 里等动画。
@@ -93,6 +96,8 @@ export function usePresence(
 
   useEffect(() => {
     const el = exitElRef.current;
+    /** 挂出口类的第二个元素（遮罩那类）。与 `el` 同一批同步语句 ⇒ 同帧起跑。 */
+    const blockEl = blockElRef.current;
 
     if (active) {
       // 打开（含「出口期又打开」）：撤销出口态，元素回到入场态继续用。
@@ -101,6 +106,7 @@ export function usePresence(
       if (el && strippedRef.current && enterClass) el.classList.add(enterClass);
       strippedRef.current = false;
       if (el && exitClass) el.classList.remove(exitClass);
+      if (blockEl && blockExitClass) blockEl.classList.remove(blockExitClass);
       setExiting(false);
       return;
     }
@@ -128,6 +134,10 @@ export function usePresence(
       strippedRef.current = true;
     }
     el.classList.add(exitClass);
+    // ★ 与上面这一行**同一批同步语句**：两层的出口动画必须同帧起跑（见 PresenceOptions）。
+    //   刻意不放进 finish() 的收尾里摘 —— 与 exitClass 同理：元素即将卸载，
+    //   此时摘掉会让它弹回动画前的不透明态，正是「频闪」那一帧。
+    if (blockEl && blockExitClass) blockEl.classList.add(blockExitClass);
     setExiting(true);
     block();
 
@@ -181,7 +191,7 @@ export function usePresence(
       el.removeEventListener('animationend', onEnd);
       window.clearTimeout(timer);
     };
-  }, [active, retain, exitClass, enterClass, exitMs, block, unblock]);
+  }, [active, retain, exitClass, blockExitClass, enterClass, exitMs, block, unblock]);
 
   /*
    * ── 两个方向都在**渲染期**定，不能等到 effect ───────────────────────────
@@ -246,6 +256,24 @@ export interface PresenceOptions {
    * 而不是随便挑一个类名凑数或白等 200ms。
    */
   exitClass?: string;
+  /**
+   * 挂在 `blockRef` 元素上的出口类（遮罩那类「额外需要随出口一起动」的元素）。
+   *
+   * ★ 2026-10-12 新增（用户报「关闭设置频闪」的第二半，team-lead 裁定走"甲"）：
+   *   遮罩（Modal 的 portal 根）原先**不参与出口** ⇒ 面板淡完、portal 卸载那一帧
+   *   整块遮罩瞬间消失，内容区亮度一帧跳变（真机实测 L 202 → 255，ΔL = +53）。
+   *
+   *   为什么必须由 hook 挂、而不是消费方用 `exiting` state 驱动：两者要**同帧起跑**。
+   *   `classList.add(exitClass)` 是命令式的、发生在 effect 里；消费方若改用 state，
+   *   类名要等下一次 render 提交才落 DOM ⇒ 两层动画相位差约一帧，卸载时遮罩还停在
+   *   几个百分点的不透明度上，仍留一记小台阶。放在这里与 `exitClass` 是同一批
+   *   同步语句，同一帧完成样式重算 —— 相位差结构性为 0。
+   *
+   * 命名口径与兄弟类一致（`*-out`）；时长/缓动同源（`--dur-base` / `--ease-exit`）。
+   * ⚠️ 与 `blockRef` 原本的职责（出口期 `pointer-events: none`）**互不干涉**：本项
+   *   只做类名的加/摘，绝不碰 `block()` / `unblock()`。
+   */
+  blockExitClass?: string;
   /**
    * 入场动画类名（如 `toast-enter`）。首帧仍由调用方的 JSX 负责；hook 只在出口启动时
    * 摘掉、重开时补回。不传 = 调用方自己用 `exiting` 切换类名。

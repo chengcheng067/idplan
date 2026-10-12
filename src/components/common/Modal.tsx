@@ -364,8 +364,34 @@ export function Modal({
    * 面板的淡出只是**剩余的视觉余韵**。
    */
   const exitClass = EXIT_CLASS[placement];
+  /*
+   * ★ 2026-10-12 遮罩出口（「关闭设置频闪」的第二半，team-lead 裁定走"甲"）。
+   *
+   * 修回弹帧（`usePresence.finish` 提前摘类）之后，还剩**第二记台阶**：遮罩
+   * （本组件的 portal 根、`bg-ink/25`）原先完全不参与出口 ⇒ 面板淡完、portal 卸载
+   * 那一帧整块遮罩瞬间消失，内容区亮度一帧跳变（真机实测 **L 202 → 255，ΔL = +53**）。
+   * 用户报的「频闪」是这两下叠出来的，只修前一半他大概率回来说"还是闪"。
+   *
+   * 所以遮罩与面板**同帧起跑**一起淡出。三条口径约束：
+   *   ① **只做 opacity**：六个兄弟 `*-out` 都带 transform（位移/缩放），挂到全宽遮罩上
+   *      会在边缘露亮带（`drawer-out-left` 的 `translateX(-24px)` 会把遮罩左移、
+   *      右缘露出 24px 未压暗的内容），故独立一个 `scrim-out`，不做位移；
+   *   ② 时长/缓动与兄弟类**逐字同源**（`--dur-base` / `--ease-exit`），reduced-motion
+   *      关停清单里同步加了一条；
+   *   ③ 只有**本档有出口动画**（`exitClass` 存在）时才挂：`dropdown`（遮罩全透明）
+   *      与 `fullscreen`（定义层没有配套 keyframes）关闭即卸载，给它们加遮罩淡出等于
+   *      新造一档动效，不在本批范围。
+   *
+   * ⚠️ 挂动画的元素同时也是 `blockRef`（出口期 `pointer-events: none` 的容器）——
+   *    两者互不干涉：`blockExitClass` 只做类名加/摘，绝不碰 pointer-events 那套逻辑。
+   * ⚠️ 为什么不在这里用 `presence.exiting` 驱动类名、而要让 hook 挂：`classList.add`
+   *    是命令式的、与面板出口类在同一批同步语句里；改用 state 要等下一次 render 提交
+   *    才落 DOM ⇒ 两层相位差约一帧，卸载时遮罩还停在几个百分点的不透明度上，仍留小台阶。
+   */
+  const scrimExitClass = exitClass ? 'scrim-out' : undefined;
   const presence = usePresence(open, {
     exitClass,
+    blockExitClass: scrimExitClass,
     /*
      * 只有 float 档的入场类是 Modal 自己挂的（下方 `float-pop-in`），能交回给 hook
      * 在出口启动时摘掉；center / right / left 的 `dialog-pop` / `drawer-*` 挂在
