@@ -932,21 +932,23 @@ export function swissBlockPages(vm: PrintViewModel, blocks: SchedulePaperBlocks)
 
 /**
  * B1 的 meta 三行（§1.1 A·B1：栏外板头线下左三行）。
- * 字段全集不丢（§3 铁律①：B1 ∪ B3 = 同一组字段全集）：
- *   ① 委托方（**仅 admin 且非空**；普通成员 VM 里 clientName 恒 undefined）
- *      非 admin 时该行改登可见阶段计数；
+ *
+ * 字段全集不丢（§3 铁律①：B1 ∪ B3 = 同一组字段全集）——四件都在，且**行数恒 3**
+ * （参考稿的板头是「线下左三行」，行数不能随角色变）：
+ *   ① 可见阶段 N / M ＋（仅 admin 且非空时）委托方；
  *   ② 阶段套餐；
  *   ③ 打印日期（§1.1 的「乙 · 从底栏上移」）。
+ *
+ * ⚠️ 「可见阶段」不放进条件分支：普通成员 VM 里 `clientName` 恒 undefined，
+ * 若把可见阶段也写进那个分支，**admin 的项目就看不到阶段计数**（第一版即如此，
+ * 2026-10-13 自审时按铁律①改回）。
  */
 function swissBlockMastheadMeta(vm: PrintViewModel): string[] {
   const presetKey = vm.project.stagePresetKey ?? null;
   const presetText = presetKey ? `${presetKey} v${vm.project.stageTemplateVersion ?? 0}` : '—';
-  const clientLine =
-    vm.viewerRole === 'admin' && vm.project.clientName
-      ? `委托方 ${vm.project.clientName}`
-      : `可见阶段 ${vm.stages.length} / ${vm.project.visibleStageCount}`;
+  const client = vm.viewerRole === 'admin' && vm.project.clientName ? `　·　委托方 ${vm.project.clientName}` : '';
   return [
-    clientLine,
+    `可见阶段 ${vm.stages.length} / ${vm.project.visibleStageCount}${client}`,
     `阶段套餐 ${presetText}（${vm.stages.length} 项）`,
     `打印日期 ${stampOf(vm.generatedAt).slice(0, 10)}`,
   ];

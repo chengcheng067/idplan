@@ -553,6 +553,10 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     // 中截 = 五块清单：4 行可勾（B1「打印头部」由刊头承担 ⇒ 不可摘、不进清单）
     expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
     expect(document.querySelector('input[data-print-block="header"]'), 'B1 不进清单').toBeNull();
+    expect(
+      document.querySelector('[data-print-module-row]'),
+      '批 1 后 A 的选择器中截不再是 11 个内容模块（决策 1：只暴露 5 块）',
+    ).toBeNull();
     for (const k of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
       expect(checkbox(k).checked, `A 的 ${k} 默认勾选`).toBe(true);
     }

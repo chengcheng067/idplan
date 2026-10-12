@@ -512,6 +512,28 @@ describe('批 1 地基 · L5 A 版五块形态的页装配与自适应行高', (
     }
   });
 
+  it('B1 的 meta 恒三行且字段全集不丢（委托方只在 admin 且非空时附加）', () => {
+    // 铁律①「B1 ∪ B3 = 同一组字段全集」：可见阶段 / 阶段套餐 / 打印日期三件恒在，
+    // 委托方按角色附加（普通成员 VM 里 clientName 恒 undefined）
+    const admin = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, {
+        vm: vmOf(2),
+        palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+      }),
+    );
+    const all = (admin.match(/swiss-masthead__meta-line swiss-num">[^<]*</g) ?? []).map((m) =>
+      m.slice(m.indexOf('">') + 2, -1),
+    );
+    // 本夹具 2 页（每页一枚板头 ⇒ 6 行）；判据只看首页那三行
+    const lines = all.slice(0, 3);
+    expect(all.length, '每页一枚板头、每枚三行').toBe(6);
+    expect(lines).toHaveLength(3);
+    expect(lines[0], '可见阶段恒在第一行').toContain('可见阶段 2 / 2');
+    expect(lines[0], 'admin 且有委托方 ⇒ 同行附加').toContain('委托方 客户甲');
+    expect(lines[1]).toContain('阶段套餐');
+    expect(lines[2]).toContain('打印日期');
+  });
+
   it('无改期记录的小项目：单页（§3 速查表「A 纸面 1 页」的常见形态）', () => {
     expect(swissBlockPages(vmOf(2, false), DEFAULT_SCHEDULE_PAPER_BLOCKS)).toHaveLength(1);
     expect(renderedPages(2, false)).toBe(1);
