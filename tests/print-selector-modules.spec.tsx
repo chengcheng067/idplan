@@ -573,6 +573,34 @@ describe('期二+期三 · L1-b 打印零变化红线（缺键 = 原生签名页
  * ==================================================================================== */
 
 describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
+  /**
+   * ★ 反向锁（2026-10-13 批 A 裁决新增）：走五块清单的外表，选择器里**不存在**
+   * `[data-print-module-row]`——即「11 模块不再有暴露面」这件事被**锁死**。
+   *
+   * 为什么必须独立成条：批 1 的三条换载体用例只证明「模块清单在 D/E 下还在」，
+   * 没有证明「它在 A/classic 下**不再**出现」。少了这条，将来有人把模块清单
+   * 挂回五块模板就没人拦。
+   *
+   * 后三批的用法：D/E/H 落地五块后，把它们的 id 加进下面的数组即可自动收紧
+   * （数组是这条锁的唯一参数）。
+   */
+  it('★ A / classic 的选择器里不存在 11 模块行（模块清单已无暴露面）', () => {
+    const BLOCK_TEMPLATES: readonly PrintTemplateId[] = ['classic', 'swiss-schedule'];
+    for (const id of BLOCK_TEMPLATES) {
+      renderDialog(true);
+      openSelector();
+      pickTemplate(id);
+      expect(
+        document.querySelectorAll('[data-print-module-row]'),
+        `${id} 不该再有模块清单行（决策 1：只暴露五块）`,
+      ).toHaveLength(0);
+      expect(
+        document.querySelectorAll('input[data-print-block]').length,
+        `${id} 应出五块清单`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it('D 外表：4 原生默认全选 + 3 通用可勾不默认 + 4 暂不可用禁用（禁用态带原因）', () => {
     renderDialog(true);
     openSelector();
