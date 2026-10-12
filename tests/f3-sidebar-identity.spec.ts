@@ -239,7 +239,7 @@ describe.skipIf(!CAN_RUN || buildIsStale())('F3-BROWSER · 退出身份后侧栏
       const collapsedWithId = await sidebarProjectCounts(page);
       expect(collapsedWithId.collapsed, '有身份时收起态应有项目方块（f4acee0 之前的对照面）').toBeGreaterThan(0);
 
-      // 展开回来 → 退出身份（顶栏身份菜单 → 退出身份）
+      // 展开回来 → 退出身份（侧栏左下角身份行 → 退出身份；2026-10-12 前入口在顶栏）
       await page.locator('button[aria-label="展开侧边栏"]').first().click();
       await page.waitForTimeout(300);
       await page.locator('button[title="当前身份（点击切换/退出）"]').first().click();

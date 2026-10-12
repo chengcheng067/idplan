@@ -669,7 +669,13 @@ describe('v0.7-D · 打印入口门控（ProjectDetailPage / ProjectCard）', ()
     const h = renderAt(`/project/${PROJECT_ID}`);
 
     // 未进入身份命中受限空态（无任何相关阶段）
-    expect(h.textContent).toContain('请先点击右上角「进入身份」');
+    /*
+     * ★ 2026-10-12 身份去重：原断言文本为「请先点击右上角「进入身份」」——
+     *   顶栏身份控件已删、入口搬到侧栏左下角，引导文案随之下线重写。
+     *   本断言判的**不是文案**，而是"未进入身份落进了受限空态"这件事；
+     *   文案变了所以换文案，用例与判据一字未动（打印准入那条断言就在下一行）。
+     */
+    expect(h.textContent).toContain('请先点击左侧栏左下角的身份入口');
     expect(findScheduleEntry(h), '未进入身份不得看到打印入口').toBeNull();
   });
 

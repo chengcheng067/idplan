@@ -290,10 +290,10 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
     /*
      * ④ 重新进入身份。
      * 示例包是**覆盖式**导入 —— 它把 members 也整表换掉了，刚才那个「严过关」管理员
-     * 随之不存在；不重新进入的话详情页只会显示「请先点击右上角『进入身份』」，
+     * 随之不存在；不重新进入的话详情页只会显示「请先点击左侧栏左下角的身份入口」，
      * 后面所有步骤都会在一片空页面上"通过"，那是标准的假绿。
      */
-    expect(await clickText(page, '点击进入'), '顶栏应回到「点击进入」（前置：身份已被示例包换掉）').toBe(true);
+    expect(await clickText(page, '点击进入'), '未进入身份时应能在页面上点到「点击进入」（前置：身份已被示例包换掉）').toBe(true);
     await page.waitForTimeout(400);
     await page.locator('input[placeholder="你的姓名"]').fill('演示负责人');
     expect(await clickText(page, '下一步'), '姓名流程应有「下一步」').toBe(true);
