@@ -397,6 +397,78 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
     }
   });
 
+  it('A 版超阈值（28 阶段）：B2 按页续排（首页 13 行 + 续页 15 行 + 轴尾「（续）」），逐页无裁切', async () => {
+    /*
+     * 批 A 裁决第 1 条的**降级路径甲**在真机上的样子：28 阶段（> 阈值 23）⇒
+     * 行高回设计基线 28、整轴分两页；续段自带轴与刻度（同一时间坐标系）、
+     * 轴尾有「（续）」、图例只在首段，行号连续（01..13 → 14..28）。
+     */
+    const css = builtCss();
+    const base = buildVm();
+    const n = 28;
+    const vm = {
+      ...base,
+      stages: Array.from({ length: n }, (_, i) => {
+        const b = base.stages[i % base.stages.length]!;
+        return { ...b, id: `stg_cont_${i + 1}`, orderIndex: i + 1, name: `${i + 1}·${b.name}` };
+      }),
+    } as typeof base;
+    const markup = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, {
+        vm,
+        palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+      }),
+    );
+    const expectedPages = swissBlockPages(vm, DEFAULT_SCHEDULE_PAPER_BLOCKS).length;
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      await page.goto('file://' + writeHtml('a-gantt-cont.html', shell(markup, css, false)));
+      const pages = await page.$$('.a4-page');
+      expect(pages, '28 阶段：预计页数 = 实际出纸').toHaveLength(expectedPages);
+      const info = await page.evaluate(() => {
+        const gantts = Array.from(document.querySelectorAll('.print-gantt')) as HTMLElement[];
+        return gantts.map((g) => ({
+          cont: g.getAttribute('data-gantt-cont') === 'true',
+          rows: g.querySelectorAll('.print-gantt__row').length,
+          firstNo: g.querySelector('.print-gantt__no')?.textContent ?? '',
+          lastNo:
+            Array.from(g.querySelectorAll('.print-gantt__no')).pop()?.textContent ?? '',
+          ticks: g.querySelectorAll('[data-print-month-tick]').length,
+          legend: g.querySelectorAll('.print-gantt__legend').length,
+          tail: g.querySelector('.print-gantt__tail')?.textContent ?? '',
+          height: Math.round(g.getBoundingClientRect().height),
+        }));
+      });
+      expect(info, 'B2 分两段（首页 + 续页）').toHaveLength(2);
+      expect(info[0], '首段：13 行、有图例、无「（续）」').toMatchObject({
+        cont: false,
+        rows: 13,
+        firstNo: '01',
+        lastNo: '13',
+        legend: 1,
+        tail: '',
+      });
+      expect(info[1], '续段：15 行、无图例、轴尾「（续）」、行号接得上').toMatchObject({
+        cont: true,
+        rows: 15,
+        firstNo: '14',
+        lastNo: '28',
+        legend: 0,
+        tail: '（续）',
+      });
+      expect(info[0]!.ticks, '两段都带自己的月份刻度（同一坐标系）').toBeGreaterThan(0);
+      expect(info[1]!.ticks).toBe(info[0]!.ticks);
+      for (let i = 0; i < pages.length; i++) {
+        const box = await pages[i]!.boundingBox();
+        expect(Math.abs(box!.width - 794)).toBeLessThanOrEqual(1);
+        expect(box!.height, `第 ${i + 1} 页溢出即红`).toBeLessThanOrEqual(1124);
+        await pages[i]!.screenshot({ path: join(OUT_DIR, `density-a-cont-p${i + 1}.png`) });
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
   it('A 版 B2 行高可读性：**文字行盒不超出被压矮的轨道行**（净空 ≥ 0，20 / 23 阶段两档）', async () => {
     /*
      * 这条锁的是 2026-10-13 批 A 裁决里的「实测可读下限」：行高被压缩时，
