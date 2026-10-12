@@ -96,10 +96,11 @@ export function ProjectCard({
    *              会把卡片压成列宽的一半（标题截断、头像行/Tag 挤烂）。
    *
    * ★ v1.0.x：「column」这一档**不再只是"去掉 row 专用类"**，它同时触发**窄版内部重排**
-   *   （看板列定宽 262 ⇒ 卡片 232 / 内容宽 184，见 `MemberBoardPage.tsx` 的
-   *   `BOARD_COLUMN_TEMPLATE` 注释）：底部元信息行只留「到期日 + 阶段胶囊」，
-   *   **头像组搬到委托方行右侧**。两处形态都由本形参门控，`'row'` 档 DOM 逐字节不变。
-   *   验收见 `tests/member-board-narrow-card.spec.ts`。
+   *   （看板列 `repeat(auto-fit, minmax(min(100%, 245px), 1fr))`：真机同宽 section **1088**
+   *   ⇒ 轨 **260** ⇒ 卡片 **230** / 内容宽 **182**；**最窄轨 245** ⇒ 卡片 **215** / 内容宽 **167**
+   *   —— 见 `MemberBoardPage.tsx` 的 `BOARD_COLUMN_TEMPLATE` 注释）：底部元信息行只留
+   *   「到期日 + 阶段胶囊」，**头像组搬到委托方行右侧**。两处形态都由本形参门控，
+   *   `'row'` 档 DOM 逐字节不变。验收见 `tests/member-board-narrow-card.spec.ts`。
    */
   layout?: 'row' | 'column';
 }): JSX.Element {
@@ -192,9 +193,10 @@ export function ProjectCard({
 
     为什么必须搬（真机实测，不是审美偏好）：旧版把头像留在元信息行，该行需要
     「到期日 53 + gap 8 + 阶段胶囊 73.5」+ gap 8 + 头像组（6 + 18n），而窄版卡片内容宽
-    只有 184 ⇒ **n=2 就要 184.5 > 184**，于是阶段胶囊折行、到期日被截断
+    只有 **182**（gen5 真机同宽）⇒ **n=2 就要 184.5 > 182**（**最窄轨 245** ⇒ 内容宽 **167**
+    那一档只会更放不下：184.5 > 167），于是阶段胶囊折行、到期日被截断
     （失效阈值「所需轨道宽 = 226.5 + 18n」，见 `BOARD_COLUMN_TEMPLATE` 注释）。
-    搬走之后元信息行只需 134.5 ≤ 184 ✓。
+    搬走之后元信息行只需 134.5 ≤ **182** ✓（167 那一档同样成立）。
   */
   const isColumn = layout === 'column';
 
@@ -671,7 +673,9 @@ export function ProjectCard({
             · row（首页，逐字节不变）：左「周期 + 阶段胶囊」、右「成员头像组」；
             · 窄版：**只留「到期日 + 阶段胶囊」，一左一右铺满整行**（`justify-between`
               把胶囊推到右缘），头像组已上移到委托方行（见该行注释）。
-              需宽实测：53 + 8 + 73.5 = 134.5 ≤ 184 ✓ —— 这正是搬走头像组换来的余量。 */}
+              需宽实测：53 + 8 + 73.5 = 134.5 ≤ **182** ✓（真机同宽，轨 260 / 卡片 230）；
+              **最窄轨 245** ⇒ 内容宽 **167** 那一档同样成立（134.5 ≤ 167 ✓）
+              —— 这正是搬走头像组换来的余量。 */}
       {isColumn ? (
         <div className="flex w-full items-center justify-between gap-2">
           <span className="truncate text-[11px] text-mist">{dueText}</span>
