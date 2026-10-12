@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Maximize2, Menu, Minus, Minimize2, Search, X } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import { MemberIdentityPicker } from './MemberIdentityPicker';
 import { MobileMoreMenu } from './MobileMoreMenu';
 import { ImeInput } from '../common/ImeInput';
 import { useUiStore } from '../../store/useUiStore';
@@ -36,7 +35,7 @@ import { cn } from '../../lib/cn';
  *   `/project/:id/calendar-print`→ 项目 / {项目名} / 月历
  *   项目名取自 `useProjectsStore`，取不到回落「项目详情」。
  *
- * ── 右组：搜索 + 身份头像（+ 手机档 <md 的 ⋮更多）──
+ * ── 右组：搜索（+ 手机档 <md 的 ⋮更多）──
  *   桌面：搜索常驻 280×36（`bg-sunken` 圆角 16，复用 `ImeInput`，绑 `useUiStore.searchQuery`）；
  *   平板：40×40 图标按钮，点击展开为内联 280 搜索；
  *   手机：第⼆⾏整宽搜索框（36 / 圆角 12 / pad 0 12 / gap 8）。
@@ -44,6 +43,11 @@ import { cn } from '../../lib/cn';
  *   ⚠️ 顶栏齿轮「设置」按钮已移除（v0.7 批次 A · 画板背书）：画板 02/03/06/07/12/14
  *      的顶栏均只有「面包屑 + 搜索 + 头像」三块，设置入口在**侧栏底部**
  *      （Sidebar.tsx，展开态与收起态各一处），顶栏不再重复挂载。
+ *   ⚠️ 顶栏身份胶囊**同样已移除**（2026-10-12 身份去重，用户 21:43 原话见下）：
+ *      与侧栏左下角身份行功能重复，唯一实现留在 `MemberIdentityPicker`、
+ *      挂载点在 `Sidebar.tsx` 底部。⇒ **上一条注释里的「+ 头像」也已经不成立**，
+ *      本文件右组只剩「搜索」+（手机档的）「⋮更多」+ 自绘三键。
+ *      手机档（<768）身份入口是 `MobileMoreMenu`（侧栏那时不可见），别连它一起删。
  *   ⚠️ 「⋮更多」已收窄到**仅手机档**（v0.7 T04 · P0-17）：根节点 `md:hidden`，
  *      平板（768–1279）与桌面（≥1280）都不渲染 —— 依据画板 10（平板顶栏只有
  *      「汉堡 + 品牌 + 搜索入口 40×40 + 头像 32×32」，没有 ⋮）。
@@ -323,9 +327,10 @@ export function TopBar(): JSX.Element {
           </div>
         </div>
 
-        {/* 右组：搜索 + ⋮更多（仅手机档 <md）+ 身份头像。
+        {/* 右组：搜索 + ⋮更多（仅手机档 <md）。身份控件 2026-10-12 已搬到侧栏左下角。
             app-no-drag：本容器自身不是 button/input，若不豁免则其内边距区域会
-            拖拽窗口而不是留给子按钮命中（画板 02 顶栏右组是搜索 + 头像两块）。 */}
+            拖拽窗口而不是留给子按钮命中（画板 02 顶栏右组是搜索 + 头像两块，
+            头像那块的职责已移走，见文件头「身份胶囊同样已移除」）。 */}
         <div className="app-no-drag ml-auto flex shrink-0 items-center gap-3 xl:gap-4">
           {/* 桌面（≥xl）：搜索常驻 280×36（bg-sunken 圆角 16） */}
           <SearchField inputRef={desktopSearchRef} className="hidden w-[280px] xl:flex" />
@@ -362,9 +367,16 @@ export function TopBar(): JSX.Element {
               上界由 1280 下移到 768，被删掉的是**平板档**——画板 10 的平板顶栏
               只有「汉堡 + 品牌 + 搜索入口 + 头像」，没有 ⋮。
               顶栏齿轮「设置」按钮已移除——画板 02/03/06/07/12/14 顶栏均无该按钮，
-              设置入口在侧栏底部（Sidebar.tsx），此处不再重复。 */}
+              设置入口在侧栏底部（Sidebar.tsx），此处不再重复。
+
+              ★ 2026-10-12 身份去重：顶栏身份胶囊**同理删掉**（用户 21:43 原话：
+              「1. 只保留左下角的『登录人是谁』显示在这里，切换身份也在左下角。
+              2. 右上角的取消掉。」）。它与侧栏左下角的身份行功能完全重复。
+              唯一实现留在 `MemberIdentityPicker`，挂载点是 `Sidebar.tsx` 底部身份行
+              （`variant="rail"` / 收起态 `variant="rail-collapsed"`）——**本处不再渲染**。
+              ⚠️ 手机档（<768）身份入口仍是 `MobileMoreMenu`（侧栏那时不可见），
+                所以本行下面只留它一个，别一并删掉。 */}
           <MobileMoreMenu />
-          <MemberIdentityPicker />
         </div>
 
         {/* 自绘窗口三键（仅 Windows 桌面端渲染）。

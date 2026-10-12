@@ -4,6 +4,7 @@ import { Bot, ChevronDown, FolderKanban, PenLine, Save, Settings, Sparkles, Uplo
 
 import { Modal } from '../common/Modal';
 import { SettingsDialog } from './SettingsDialog';
+import { MemberIdentityPicker } from './MemberIdentityPicker';
 import { useBackupIo } from './useBackupIo';
 import { SidebarCollapseToggle } from './SidebarCollapseToggle';
 import { navItemClass, SidebarNav } from './SidebarNav';
@@ -23,7 +24,6 @@ import {
   resolveProjectAccentColor,
   resolveProjectShortLabel,
 } from '../../lib/projectAccent';
-import { MEMBER_ROLE_LABELS } from '../../core/types/enums';
 import { computeProjectStatus } from '../../lib/progress';
 import type { Project, Stage } from '../../core/types/entities';
 import { cn } from '../../lib/cn';
@@ -355,7 +355,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           {!hasIdentity && (
             <div className="mx-3 mt-3 rounded-md border border-line bg-cream/60 px-2.5 py-2">
               <p className="text-[11px] leading-relaxed text-mist">
-                还未进入身份。点顶栏的身份标识选择成员后，这里会显示你能看到与改动的项目。
+                还未进入身份。点左下角的身份行选择成员后，这里会显示你能看到与改动的项目。
               </p>
             </div>
           )}
@@ -575,31 +575,16 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             </button>
           )}
 
-          {/* 身份行（§2.2：高 52、sunken 底、圆角 12、头像 28 + 姓名/角色 13） */}
-          {currentMember && (
-            <div
-              className="flex h-[52px] items-center gap-2 rounded-md bg-sunken px-2"
-              title={`${currentMember.name} · ${MEMBER_ROLE_LABELS[currentMember.roleKind]}`}
-            >
-              {/*
-                头像底色来自数据字段（Member.avatarColor），非设计 token——故此处允许裸 hex
-                仅作 fallback（与 MemberIdentityPicker 一致），避免使用未上传头像时的占位灰。
-              */}
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] text-white"
-                style={{ backgroundColor: currentMember.avatarColor ?? '#8A959E' }}
-                aria-hidden
-              >
-                {(currentMember.name ?? '?')[0]}
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-[13px] text-ink">{currentMember.name}</span>
-                <span className="truncate text-[11px] text-mist">
-                  {MEMBER_ROLE_LABELS[currentMember.roleKind]}
-                </span>
-              </span>
-            </div>
-          )}
+          {/*
+            身份行（§2.2：高 52、sunken 底、圆角 12、头像 28 + 姓名/角色 13）。
+
+            ★ 2026-10-12 身份去重：这里现在是全站**唯一**的身份控件（显示 + 切换/退出），
+              顶栏那枚重复的胶囊已删。几何逐字未动 —— 尺寸与配色都在
+              `MemberIdentityPicker` 的 `variant="rail"` 分支里，与本处注释同一口径。
+            ★ 未进入身份时**同一位置**渲染「点击进入」：此前这里被 `currentMember &&` 门控，
+              顶栏一删就会出现"没身份时全站无入口"的断链（侧栏那句提示本身也在侧栏里）。
+          */}
+          <MemberIdentityPicker variant="rail" />
         </div>
       </>
     );
@@ -761,17 +746,14 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               <PenLine size={18} aria-hidden />
             </button>
           )}
-          {currentMember && (
-            <Link
-              to="/"
-              title={`${currentMember.name} · ${MEMBER_ROLE_LABELS[currentMember.roleKind]}`}
-              aria-label={currentMember.name}
-              className="mt-1 flex h-8 w-8 items-center justify-center rounded-full text-[13px] text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
-              style={{ backgroundColor: currentMember.avatarColor ?? '#8A959E' }}
-            >
-              {(currentMember.name ?? '?')[0]}
-            </Link>
-          )}
+          {/*
+            ★ 2026-10-12 身份去重：收起态这枚也从「`<Link to="/">` 纯头像」换成身份控件
+              （`variant="rail-collapsed"`）—— 收起态同样要能看清"我是谁"并切换身份，
+              否则折叠侧栏后身份入口又没了。
+              ⚠️ 这改掉了原「点头像回首页」的行为（有意，已在报告备案）：头像本就是身份控件，
+                回首页由上方 logo 那一枚承担。未进入身份时此处给一枚进入图标 + tooltip。
+          */}
+          <MemberIdentityPicker variant="rail-collapsed" />
         </div>
       </>
     );
