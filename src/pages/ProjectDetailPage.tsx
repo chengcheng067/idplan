@@ -169,7 +169,11 @@ export function ProjectDetailPage(): JSX.Element {
     return (
       <div className="px-8 py-16 text-center text-mist">
         <p className="mb-3">
-          {currentMember ? '该项目的阶段与你无关。' : '请先点击右上角「进入身份」，再查看项目。'}
+          {/*
+            ★ 2026-10-12 身份去重：后半句原为「请先点击右上角「进入身份」，再查看项目。」
+              —— 顶栏身份控件已删，入口在侧栏左下角的身份行（见 MemberIdentityPicker）。
+          */}
+          {currentMember ? '该项目的阶段与你无关。' : '请先点击左侧栏左下角的身份入口，再查看项目。'}
         </p>
         <Link
           to={currentMember ? '/my-tasks' : '/'}

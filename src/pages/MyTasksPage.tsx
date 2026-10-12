@@ -191,7 +191,12 @@ export function MyTasksPage(): JSX.Element {
       {!currentMemberId && (
         <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
           <p className="text-sm leading-6 text-mist">
-            请点击右上角「进入身份」输入你的姓名；
+            {/*
+              ★ 2026-10-12 身份去重：原话是「请点击右上角「进入身份」输入你的姓名」——
+                顶栏身份控件已删，入口搬到侧栏左下角的身份行，本句必须跟着改，
+                否则这条**没身份时唯一的引导**会把用户指向一个不存在的地方。
+            */}
+            请点击左侧栏左下角的身份入口输入你的姓名；
             <br />
             若系统还没有管理员，请先让管理员完成首次设置后再进入。
           </p>
