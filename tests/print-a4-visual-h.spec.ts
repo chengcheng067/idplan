@@ -1546,6 +1546,104 @@ describe.skipIf(!CAN_RUN)('H 版 · 五块形态（批 D：双栏分段轴甘特
     }
   });
 
+  it('★★ 条/标签混合规则：条够长才内嵌；条太短 ⇒ 标签外移 + 纸缝 ≥2px（不许同色无间断相连）', async () => {
+    /*
+     * 批 D 裁决第 4 条。为什么这不是观感问题：条与标签**同色** ⇒ 12px 的条 +
+     * 52.3px 的内嵌标签，合并图形读出来是**52px 的跨度** —— **会印错事实**。
+     * 规则：`barPx ≥ tagPx` 内嵌（标签完全落在条内 ⇒ 并集 == 条）；否则外移
+     * （右外侧优先、右侧放不下则左外侧）+ **2px 纸缝**。
+     */
+    const css = builtCss();
+    /** 2 天阶段：barPx ≈ 10px ≪ tagPx ≈ 54px ⇒ 必走外移档 */
+    const twoDayStage: Stage = {
+      ...makeStage(21, StageStatus.Delayed, '短跨度·两日复测'),
+      startAt: '2026-01-20T00:00:00Z',
+      endAt: '2026-01-21T23:59:59Z',
+    };
+    const vm = buildVm({ stages: [...STAGES, twoDayStage] });
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('h-blocks-tagplace.html', shell(blocksMarkupOf(vm), css, false)));
+      const m = await page.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('.ap-span-row')) as HTMLElement[];
+        return rows.map((row) => {
+          const bar = row.querySelector('.ap-span-row__bar') as HTMLElement;
+          const tag = row.querySelector('.ap-block__tag') as HTMLElement;
+          const track = row.querySelector('.ap-span-row__track') as HTMLElement;
+          const b = bar.getBoundingClientRect();
+          const t = tag.getBoundingClientRect();
+          return {
+            no: row.getAttribute('data-testid'),
+            place: tag.getAttribute('data-tag-place'),
+            barPx: +b.width.toFixed(2),
+            tagPx: +t.width.toFixed(2),
+            /** 两者的水平重叠长度（>0 = 同色图形相连） */
+            overlap: +Math.max(0, Math.min(b.right, t.right) - Math.max(b.left, t.left)).toFixed(2),
+            gapRight: +(t.left - b.right).toFixed(2),
+            gapLeft: +(b.left - t.right).toFixed(2),
+            tagRight: +t.right.toFixed(2),
+            trackRight: +track.getBoundingClientRect().right.toFixed(2),
+            /** 标签越出条之外的墨迹长度（内嵌档必须为 0 —— 那才是「印错事实」的根因） */
+            inkBeyondBar:
+              tag.getAttribute('data-tag-place') === 'in'
+                ? +Math.max(0, t.right - b.right).toFixed(2)
+                : 0,
+          };
+        });
+      });
+      expect(m.length, '每阶段一行').toBeGreaterThan(1);
+
+      /*
+       * 逐行判据**放在「两档都出现」的前置检查之前** —— 顺序有意：
+       * 前置检查是防「判据空转」的哨兵（夹具全落一档就没测到），而逐行判据是
+       * **核心不变量**。若先跑哨兵，「永远内嵌」这种突变会先撞哨兵、核心判据
+       * 根本不执行 —— 那自证就只能证明哨兵有效，证明不了不变量有效（踩过一次）。
+       */
+      for (const r of m) {
+        // ★ 合取判据：**任何阶段下标签与条不得同色无间断相连**
+        expect(
+          r.inkBeyondBar,
+          `${r.no}（${r.place}）：标签墨迹不得越出条之外（越出 = 合并图形比条长）`,
+        ).toBe(0);
+        if (r.place === 'in') {
+          expect(r.barPx, `${r.no}：内嵌档的充要条件是 barPx ≥ tagPx`).toBeGreaterThanOrEqual(
+            r.tagPx - 0.5,
+          );
+          expect(r.overlap, `${r.no}：内嵌档允许重叠（标签在条内）`).toBeGreaterThan(0);
+        } else {
+          expect(r.overlap, `${r.no}（${r.place}）：外移档不许与条水平重叠`).toBe(0);
+          const gap = r.place === 'out-right' ? r.gapRight : r.gapLeft;
+          expect(gap, `${r.no}（${r.place}）：纸缝 ≥2px（实测 ${gap}）`).toBeGreaterThanOrEqual(1.9);
+          if (r.place === 'out-right') {
+            expect(r.tagRight, `${r.no}：外移的标签不许越出本栏`).toBeLessThanOrEqual(
+              r.trackRight + 1,
+            );
+          }
+        }
+      }
+
+      // 哨兵（防判据空转 —— 上一版夹具全落内嵌档，自证「没测到」）
+      expect(
+        new Set(m.map((r) => r.place)).size,
+        `夹具须同时覆盖内嵌与外移两档（实测档位：${[...new Set(m.map((r) => r.place))].join(' / ')}）`,
+      ).toBeGreaterThanOrEqual(2);
+      // 2 天阶段那行：必然外移（10px 的条放不下 54px 的标签）
+      const tiny = m.find((r) => r.no === 'ap-span-row-21');
+      expect(tiny, '2 天阶段那行应在').toBeDefined();
+      expect(tiny!.place, '2 天阶段（≈10px 的条）必走外移档').not.toBe('in');
+      expect(tiny!.barPx, '外移档的条本身**不许被标签撑长**').toBeLessThan(tiny!.tagPx);
+      // 截图留档：2 天阶段那一行 + B2 整页
+      await (await page.$('[data-testid="ap-span-row-21"]'))!.screenshot({
+        path: join(OUT_DIR, 'd-h-bar-tag-outer-row.png'),
+      });
+      await (await page.$('.a4-page[data-page-form="span"]'))!.screenshot({
+        path: join(OUT_DIR, 'd-h-bar-tag-outer-page.png'),
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
   it('★ 页数表（1/2/4/5/8/9/10/14/16/20/30/40 阶段）：预计 = 实际、逐页 ≤1123、页数单调不减', async () => {
     const css = builtCss();
     const ns = [1, 2, 4, 5, 8, 9, 10, 11, 12, 13, 14, 16, 20, 30, 40];

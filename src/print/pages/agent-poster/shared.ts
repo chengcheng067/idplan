@@ -838,6 +838,50 @@ export interface ApSpanRow {
   endAt: string;
   /** 单阶段跨度天数（含首尾；1 天阶段 = 1） */
   days: number;
+  /**
+   * 状态标签的落位（**混合规则**，批 D 裁决第 4 条）：
+   *   · `in`        —— 条够长（`barPx ≥ tagPx`）⇒ 标签**内嵌**在条左端（签名形态）；
+   *   · `out-right` —— 条太短 ⇒ 标签移到条的**右外侧** + 2px 纸缝；
+   *   · `out-left`  —— 条太短且右边没地方 ⇒ 移到**左外侧** + 2px 纸缝（防越盒）。
+   * 为何必须有这条：条与标签**同色**，短条 + 内嵌标签合并读出来是「**52px 的跨度**」
+   * —— 那不是观感问题，是**会印错事实**（12px 的条被读成 52px）。
+   */
+  tagPlace: ApSpanTagPlacement;
+}
+
+/** 状态标签的落位（见 `ApSpanRow.tagPlace`） */
+export type ApSpanTagPlacement = 'in' | 'out-right' | 'out-left';
+
+/** 标签外移时与条之间的**纸缝**（px；2px 是批 D 裁决给的下限） */
+export const AP_SPAN_TAG_GAP_PX = 2;
+
+/**
+ * 状态标签的**估宽**（px）。**只许偏大**：估大 ⇒ 多一些标签判成「放外面」（安全，
+ * 不会误读）；估小 ⇒ 有些内嵌标签仍然溢出条（误读风险照旧）。
+ *
+ * 公式来自实测：「未开始」（3 字）在 9.5px mono + 0.04em 字距下**实测 52.3px**；
+ * 结构 = 左右 padding 12 + 字形 9.5 + 与文字间隔 4 + 每字 9.5。
+ * 3 字 ⇒ 54（比实测大 1.7，方向正确）；2 字（延期）⇒ 44.5。
+ */
+export function apSpanTagPx(label: string): number {
+  return 12 + 9.5 + 4 + [...label].length * 9.5;
+}
+
+/**
+ * 混合规则（纯函数、确定性）：条与标签谁宽决定标签内嵌还是外移。
+ * 右侧放不下（`barRight + 2 + tagPx > 轨宽`）就改放左侧 —— 与「刻度不许越盒」
+ * 同一条纪律：**纸面上的件不许越出它所在的栏**。
+ */
+export function apSpanTagPlacement(
+  leftPct: number,
+  widthPct: number,
+  tagPx: number,
+): ApSpanTagPlacement {
+  const track = AP_SPAN_COL_TRACK_PX;
+  const barPx = (widthPct / 100) * track;
+  if (barPx >= tagPx) return 'in';
+  const barRightPx = ((leftPct + widthPct) / 100) * track;
+  return barRightPx + AP_SPAN_TAG_GAP_PX + tagPx <= track ? 'out-right' : 'out-left';
 }
 
 /** 一栏（栏头 + 本页落在该栏的行）——沿用 B4 的双栏分组语义（两页同族） */
@@ -916,19 +960,24 @@ export function planApSpanPages(vm: PrintViewModel, availH: number): ApSpanPage[
   const geo = new Map(gantt.rows.map((r) => [r.key, r]));
   const rows: ApSpanRow[] = vm.stages.map((s) => {
     const g = geo.get(s.id) ?? geo.get(`${s.orderIndex}-${s.name}`);
+    const left = g?.left ?? 0;
+    const width = g?.width ?? 0;
+    const tag = stageStatusLabel(s.status);
     return {
       key: s.id,
       no: String(s.orderIndex).padStart(2, '0'),
       name: s.name,
       status: s.status,
       tone: stageTagTone(s.status),
-      tag: stageStatusLabel(s.status),
+      tag,
       glyph: STAGE_GLYPH[s.status],
-      left: g?.left ?? 0,
-      width: g?.width ?? 0,
+      left,
+      width,
       startAt: s.startAt.slice(0, 10),
       endAt: s.endAt.slice(0, 10),
       days: spanDays(s.startAt, s.endAt),
+      // 混合规则（裁决第 4 条）：条与标签谁宽，决定标签内嵌还是外移
+      tagPlace: apSpanTagPlacement(left, width, apSpanTagPx(tag)),
     };
   });
 

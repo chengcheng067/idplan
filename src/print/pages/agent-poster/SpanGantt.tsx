@@ -152,8 +152,15 @@ function SpanRow({ row }: { row: ApSpanRow }): JSX.Element {
           style={{ left: `${row.left}%`, width: `${row.width}%` }}
           title={`${row.no}. ${row.name}（${row.startAt} → ${row.endAt} · ${row.days} 天）`}
         >
-          {/* 条左端内嵌实底状态标签（与 B4 同一套标签语义；纸色 1px 缝见 CSS） */}
-          <span className="ap-block__tag" data-tone={row.tone} data-span-tag="">
+          {/* 条左端内嵌实底状态标签（够长时）/ 移到条外 + 2px 纸缝（太短时）
+              —— 混合规则见 `apSpanTagPlacement`：条与标签同色，短条 + 内嵌会把
+              12px 的条读成 52px 的跨度（那是**印错事实**，不是观感问题）。 */}
+          <span
+            className="ap-block__tag"
+            data-tone={row.tone}
+            data-span-tag=""
+            data-tag-place={row.tagPlace}
+          >
             <span className="ap-block__glyph" aria-hidden>
               {row.glyph}
             </span>

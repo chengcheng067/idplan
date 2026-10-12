@@ -849,24 +849,63 @@
   background: var(--tpl-ink);
 }
 
-/* 条左端内嵌的**实底状态标签**（与 B4 同一套语义：橙底墨字 / 墨底白字 + 字形）。
- * ⚠️ 这里是本块最大的误读风险点：条的背景与标签的背景同色，标签一旦溢出短条
- * （实测：条 12px / 标签 52.3px），读者会把「标签的长度」读成「条的长度」。三重处理：
- *   ① 条是**绝对定位**的（标签不改父盒宽度 ⇒ 条长严格等于跨度%）；
- *   ② **条的右缘压一条纸色 1px 缝**（`::after`）—— 缝在哪，「条到哪」就到哪。
- *      缝画在**条**上而不是标签上：画在标签上时（第一版）缝落在标签的右缘，
- *      短条那条缝就跑到标签外面去了，等于没标；
- *   ③ 标签背景继承条的实底（不另上色），文字色按对比度取其高者（沿用 B4 的档位）。
- *      残余风险（已登记）：条短于标签时，标签溢出条的那一截与条同色 ⇒ 单看色块
- *      长度仍可能被误读，靠 ② 的缝 + 行右端的**两端日期**（文字真值）双重兜底。 */
+/* 状态标签的**混合落位**（2026-10-13 批 D 裁决第 4 条）：
+ * 条与标签**同色** ⇒ 条短于标签时，「条 + 内嵌标签」合并读出来是**标签那么长的跨度**
+ * （实测 12px 的条 + 52.3px 的标签 ⇒ 读成 52px 的跨度）—— 那不是观感问题，是
+ * **会印错事实**。故：
+ *   · 条够长（`barPx ≥ tagPx`）⇒ 标签**内嵌**在条左端（保留签名形态；此时标签
+ *     完全落在条内 ⇒ 并集 == 条，长度不会被读错）；
+ *   · 条太短 ⇒ 标签移到条的**外侧** + 2px 纸缝（缝是纸色，断开同色相连）；
+ *   · 右侧放不下 ⇒ 改放**左外侧**（纸面上的件不许越出所在的栏，同刻度纪律）。
+ * 落位由数据侧算（`apSpanTagPlacement`，纯函数 + 命名常量），CSS 只负责画。 */
 .print-root.print-template-agent-poster .ap-span-row__bar .ap-block__tag {
   position: absolute;
-  left: 0;
   top: 0;
   height: 100%;
   padding: 0 6px;
 }
 
+/* 内嵌：条自己就是实底，标签不上底色（文字色按对比度取其高者，沿用 B4 的档位） */
+.print-root.print-template-agent-poster .ap-span-row__bar .ap-block__tag[data-tag-place='in'] {
+  left: 0;
+  background: transparent;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='gate'] .ap-block__tag[data-tag-place='in'] {
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='ink'] .ap-block__tag[data-tag-place='in'] {
+  color: #ffffff;
+}
+
+/* 外移：标签自带实底（同 B4 的档位），与条之间留 2px 纸缝 */
+.print-root.print-template-agent-poster .ap-span-row__bar .ap-block__tag[data-tag-place='out-right'] {
+  left: 100%;
+  margin-left: 2px;
+  background: var(--tpl-ink);
+  color: #ffffff;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='gate'] .ap-block__tag[data-tag-place='out-right'] {
+  background: var(--tpl-accent);
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar .ap-block__tag[data-tag-place='out-left'] {
+  right: 100%;
+  margin-right: 2px;
+  background: var(--tpl-ink);
+  color: #ffffff;
+}
+
+.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='gate'] .ap-block__tag[data-tag-place='out-left'] {
+  background: var(--tpl-accent);
+  color: var(--tpl-ink);
+}
+
+/* 条的右缘压一条纸色 1px 缝（**画在条上**：「缝在哪，条到哪」）。
+ * 第一版把缝画在标签右缘 —— 短条时那条缝跑到标签外面去了，等于没标。 */
 .print-root.print-template-agent-poster .ap-span-row__bar::after {
   content: '';
   position: absolute;
@@ -877,16 +916,6 @@
   background: var(--ap-paper);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
-}
-
-.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='gate'] .ap-block__tag {
-  background: transparent;
-  color: var(--tpl-ink);
-}
-
-.print-root.print-template-agent-poster .ap-span-row__bar[data-tone='ink'] .ap-block__tag {
-  background: transparent;
-  color: #ffffff;
 }
 
 /* ── B2 的口径注（几何硬事实「栏间位置不可直接互比」必须写在这）── */
