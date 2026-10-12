@@ -42,12 +42,22 @@ import {
  *   承接（到期日不截断 / 胶囊不折行 / 头像不越界 / 进度条贴合 / 无纵向溢出）。
  *   任务三块则仍按 340 设计宽呈现（它没有"要 4 列"的约束）。
  *
- * 本 spec 的职责（拆成两条契约，各自给数）：
+ * 本 spec 的职责（拆成三条契约，各自给数）：
  *   B-01a 看板列：轨道恒 **262**、默认窗口 **4 列**、且**轨道宽不随容器宽增长**
  *         （新增的反拉伸断言：1600 与 1920 的 section 不同、轨道必须同值）
- *   B-01b 任务三块：轨道恒 **340**、默认窗口 **3 轨**
- *   两条都保留旧契约里仍然有效的两件事：**列盒贴合内容**（内部空洞 ≤2px）与
- *   **页面无横向溢出**。
+ *   B-01b 任务三块：轨道恒 **340**、默认窗口 **3 轨**、**三块等高**（2026-10-12 拍板）
+ *   B-01c 守闸：**两条纪律方向相反且同时成立** —— 看板列不许被拉齐、任务三块必须等高
+ *   「**列盒贴合内容**（内部空洞 ≤2px）」这条只留给 **B-01a**：看板列每列贴合自己的内容，
+ *   它正是"看板列没被拉伸"的**零数据依赖**表达式（任务三块那一边刻意不贴合，见 B-01b）。
+ *   两条都仍然要求**页面无横向溢出**。
+ *
+ * ── 2026-10-12 用户拍板「任务三块等高」（本批新增，方案 B）──
+ * 他附截图 + 三个红箭头圈出「任务三块」下方的两片空洞：「成员的窗口看板，在这个界面下把这个
+ * 部分做成四列非常难吗？**为什么一直在拒绝我**」。根因不是列数（默认窗口早就是 3 轨并排），
+ * 而是**纵向**：三块内容量 4 / 9 / 1 条 ⇒ 第 1、3 块的盒子比最高的「进行中」矮，下面各空一片。
+ * 做法：任务三块那个 `section` 去掉 `items-start` ⇒ grid 默认 `align-items: stretch` ⇒
+ * 三块拉齐到行高（= 最高块），空洞从"块外"挪进"块内"，三块底边对齐。
+ * ⚠️ 看板列那个 `section` 的 `items-start` **一个字母都不许动**（两条纪律刻意相反，见 B-01c）。
  *
  * ── 变异自证（产物还原后重建 md5 与变异前逐字节一致）──
  *   M1 · 只把 `BOARD_COLUMN_TEMPLATE` 退回 gen3 `340/360`：
@@ -56,26 +66,57 @@ import {
  *     旧模板在宽档会被抻宽，新模板恒 262）。
  *   纯函数单测（`member-board-columns.spec.ts`）在此变异下 **5 条全绿**——它看不见几何常量，
  *   这就是为什么几何必须有真机闸。
+ *   M2 · 把 `items-start` 加回**任务三块**那个 `section` ⇒ **两条红**（实测原文）：
+ *       `B-01b 任务三块第 1 块盒高应等于三块最大值 864（实测各块 96.5 / 864 / 264；不等高即
+ *        用户 2026-10-12 圈出的空洞）: expected 767.5 to be less than or equal to 1`
+ *       `B-01c 任务三块必须**不带** items-start…: expected 'flex-start' not to be 'flex-start'`
+ *       （96.5 / 864 / 264 这三个数就是用户截图里那三块的高度。）
+ *   M3 · 把**看板列** `section` 的 `items-start` 删掉 ⇒ **两条红**（实测原文）：
+ *       `B-01a default-1400 看板第 2 列盒应贴合内容（内部空洞 ≤2px；被拉伸即红）:
+ *        expected 152.5 to be less than or equal to 2`
+ *       `B-01c 看板列必须保留 items-start…: expected 'normal' to be 'flex-start'`
+ *   ⚠️ 诚实登记（**实测证明的假绿**）：**「看板列各列盒高不全相等」这个写法在 M3 下仍然成立**
+ *     —— M3 变异态实测各列高 = `[249 ×16, 96.5 ×5]` ⇒ 仍有 **2 个取值**（全空行照旧矮、
+ *     有卡行照旧高）⇒ 那条断言永远红不了。能判红的只有
+ *     `align-items` 计算值（`flex-start` → `normal`）与**行内**是否被拉齐、
+ *     以及 B-01a ③ 的 `voidPx`（0 → 152.5）。证据：`qa-scratch/mbcols/probe18-m2.log`。
+ *   ⚠️ 编号对照（避免误读）：team-lead 本批派单里点名的「M1 = 把 `items-start` 加回任务三块」
+ *     与「M2 = 删掉看板列的 `items-start`」，在本文件里分别记作 **M2 / M3** —— 因为
+ *     **M1 这个编号在本文件已属"退回 gen3 几何"那条历史变异**（见上），不改它的编号免得
+ *     与既有提交信息、其他 spec 的引用对不上。
  */
 
-/** 一列一度量：宽 / 盒高 / 内容底缘差 / 卡片是否撑满列宽 */
+/** 一列一度量：宽 / 盒高 / 顶边 / 内容底缘差 / 卡片是否撑满列宽 */
 async function columnMetrics(
   page: Page,
   sectionIndex: number,
-): Promise<{ cols: Array<{ w: number; voidPx: number; cardW: number | null }>; found: boolean; tracks: number[]; sectionW: number }> {
+): Promise<{
+  cols: Array<{ w: number; h: number; top: number; voidPx: number; cardW: number | null }>;
+  found: boolean;
+  tracks: number[];
+  sectionW: number;
+  align: string;
+}> {
   return page.evaluate((idx: number) => {
+    const R = (n: number): number => Math.round(n * 10) / 10;
     const sections = Array.from(document.querySelectorAll('section.grid'));
     const sec = sections[idx];
-    if (!sec) return { found: false, cols: [], tracks: [], sectionW: 0 };
+    if (!sec) return { found: false, cols: [], tracks: [], sectionW: 0, align: '' };
     const cols = Array.from(sec.children) as HTMLElement[];
     const tracks = getComputedStyle(sec)
       .gridTemplateColumns.split(' ')
       .filter(Boolean)
-      .map((t) => Math.round(parseFloat(t) * 10) / 10);
+      .map((t) => R(parseFloat(t)));
     return {
       found: true,
       tracks,
-      sectionW: Math.round(sec.getBoundingClientRect().width),
+      sectionW: R(sec.getBoundingClientRect().width),
+      /*
+       * `align-items` 的**计算值**：写 `items-start` 时是 `flex-start`；不写（= grid 默认
+       * `stretch`）时现代浏览器算成 `normal`。本 spec 用它做「两条纪律方向相反」的结构判据
+       * —— 它**零数据依赖**，比"量出来高不一样"更硬（见 B-01c 注释）。
+       */
+      align: getComputedStyle(sec).alignItems,
       cols: cols.map((c) => {
         const cr = c.getBoundingClientRect();
         const last = c.lastElementChild as HTMLElement | null;
@@ -88,13 +129,27 @@ async function columnMetrics(
         const bordB = parseFloat(cs.borderBottomWidth) || 0;
         const card = c.querySelector('[role="button"].group') as HTMLElement | null;
         return {
-          w: Math.round(cr.width),
-          voidPx: Math.round((cr.bottom - padB - bordB - contentBottom) * 10) / 10,
-          cardW: card ? Math.round(card.getBoundingClientRect().width) : null,
+          w: R(cr.width),
+          h: R(cr.height),
+          top: R(cr.top),
+          voidPx: R(cr.bottom - padB - bordB - contentBottom),
+          cardW: card ? R(card.getBoundingClientRect().width) : null,
         };
       }),
     };
   }, sectionIndex);
+}
+
+/** 把逐列度量按**行**分组（同一行的列共享同一个 top 值）——用于判断行内是否被拉齐 */
+function rowsOf(cols: Array<{ h: number; top: number }>): Array<Array<{ h: number; top: number }>> {
+  const byTop = new Map<number, Array<{ h: number; top: number }>>();
+  for (const c of cols) {
+    const key = Math.round(c.top);
+    const bucket = byTop.get(key);
+    if (bucket) bucket.push(c);
+    else byTop.set(key, [c]);
+  }
+  return [...byTop.values()];
 }
 
 /** DOM 次序：section.grid[0] = 成员任务三块，[1] = 看板列 */
@@ -163,9 +218,15 @@ describe.skipIf(!CAN_RUN_FRESH)(
           }
           measured.push({ vp: vp.w, sectionW: m.sectionW, tracks: m.tracks });
 
-          // ③ 旧契约里仍然有效的两件：列盒贴合内容（内部空洞 ≤2px）
+          // ③ 旧契约里仍然有效的一件：列盒贴合内容（内部空洞 ≤2px）。
+          //    ⚠️ 这条**只对看板列成立**（任务三块那一边被刻意拉伸，见 B-01b）。
+          //    它同时是"看板列没被拉伸"的**零数据依赖**表达式：删掉 `items-start` 后，
+          //    矮列的盒底会被拉到行底 ⇒ voidPx 立刻变成上百 px（见 B-01c 与 M3）。
           for (const [i, col] of m.cols.entries()) {
-            expect(col.voidPx, `${vp.name} 看板第 ${i + 1} 列盒应贴合内容（内部空洞 ≤2px）`).toBeLessThanOrEqual(2);
+            expect(
+              col.voidPx,
+              `${vp.name} 看板第 ${i + 1} 列盒应贴合内容（内部空洞 ≤2px；被拉伸即红）`,
+            ).toBeLessThanOrEqual(2);
           }
 
           // ④ 卡片跟着列走（撑满列宽 − 列盒内边距 30）
@@ -202,7 +263,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       expect(wider.tracks.length, '更宽只应多出一列').toBeGreaterThan(wide.tracks.length);
     }, 180000);
 
-    it('B-01b · 任务三块：轨道恒 340、默认窗口 3 轨并排、列盒贴合内容', async () => {
+    it('B-01b · 任务三块：轨道恒 340、默认窗口 3 轨并排、三块等高（2026-10-12 拍板）', async () => {
       const ctx: BrowserContext = await newContext(browser, { width: 1400, height: 900 });
       const page: Page = await ctx.newPage();
       try {
@@ -220,13 +281,106 @@ describe.skipIf(!CAN_RUN_FRESH)(
         for (const [i, t] of m.tracks.entries()) {
           expect(t, `任务三块第 ${i + 1} 轨应恒为 ${TRIAGE_TRACK}（定宽 min=max，永不被拉伸）`).toBe(TRIAGE_TRACK);
         }
-        for (const [i, col] of m.cols.entries()) {
-          expect(col.voidPx, `任务三块第 ${i + 1} 块盒应贴合内容（内部空洞 ≤2px）`).toBeLessThanOrEqual(2);
+
+        /*
+         * ★ 纵向：三块**等高**（2026-10-12 用户拍板；旧断言是「列盒贴合内容 voidPx ≤ 2」，本批换掉）。
+         *
+         * 旧断言 → 新断言 → 为什么：
+         *   · 旧：`col.voidPx ≤ 2`「列盒应贴合内容」——量的是「盒底缘 − 最后子元素底缘」。
+         *     它**对任务三块不再成立**：三块被刻意拉伸到行高后，矮的两块底部必然留白
+         *     （实测 1400 档：已逾期空洞 767.5、近期完成 600、最高的进行中 0）——
+         *     那不是"盒子没贴合"，那**正是设计意图**。
+         *   · 新：三块盒高**逐项相等**（容差 1px）**且都等于三块里的最大值**。
+         *     "等于最大值"这一半是必要的：只要求"彼此相等"的话，三块一起塌成 0 高也算过；
+         *     而"都等于最大值"同时钉住了「没有被压扁」与「确实被拉齐到最高块」。
+         *   · 为什么这么定：用户 2026-10-12 附截图圈出三块下方的两片空洞，拍板「三块等高」；
+         *     判据是**这一格代表排版**（分类面板并排 ⇒ 底边对齐是意图），而看板列那一边
+         *     每格代表**数据**（项目卡 ⇒ 高度随信息量，禁止拉伸）——两条方向相反、同时成立，
+         *     守闸见 B-01c。详见 `MemberBoardPage.tsx` 两个 section 的注释。
+         */
+        const heights = m.cols.map((c) => c.h);
+        const maxH = Math.max(...heights);
+        expect(heights.length, '应有 3 块的高度可量').toBe(3);
+        for (const [i, h] of heights.entries()) {
+          expect(
+            Math.abs(h - maxH),
+            `任务三块第 ${i + 1} 块盒高应等于三块最大值 ${maxH}（实测各块 ${heights.join(' / ')}；不等高即用户 2026-10-12 圈出的空洞）`,
+          ).toBeLessThanOrEqual(1);
+        }
+        // 逐对比较也写出来：失败时能直接看到是哪两块不一致
+        for (let i = 0; i < heights.length; i += 1) {
+          for (let j = i + 1; j < heights.length; j += 1) {
+            expect(
+              Math.abs(heights[i] - heights[j]),
+              `任务三块第 ${i + 1} 块与第 ${j + 1} 块盒高差应 ≤1px（实测 ${heights[i]} vs ${heights[j]}）`,
+            ).toBeLessThanOrEqual(1);
+          }
         }
 
         await expectNoHorizontalOverflow(page, 'default-1400 任务三块');
         await page.screenshot({
           path: resolve(__dirname, '..', 'qa-scratch', 'member-board-column-cap', 'B-01b-default-1400.png'),
+          fullPage: true,
+        });
+      } finally {
+        await ctx.close();
+      }
+    }, 120000);
+
+    it('B-01c · 守闸：两条纪律方向相反且同时成立（看板列不许被拉齐 / 任务三块必须等高）', async () => {
+      /*
+       * ★ 这一条是防「顺手统一」的守闸。两个 section 的 `align-items` 刻意相反：
+       *     · 看板列（`BOARD_COLUMN_TEMPLATE`）**必须** `items-start`（计算值 `flex-start`）——
+       *       每格是一张**项目卡**，「卡片高度是数据该有的样子」，**禁止**拉伸填满列高
+       *       （历史教训：反馈 #10.4 那批窄卡报废之外，宽窗"卡片被抻高 + 下半空白"也是这么来的）；
+       *     · 任务三块（`TRIAGE_COLUMN_TEMPLATE`）**刻意不带** `items-start`（计算值 `normal`,
+       *       即 grid 默认 `stretch`）—— 每格是一块**分类面板**，等高是**排版意图**。
+       *   判据只有一条：「**这一格代表数据，还是代表排版？**」数据 ⇒ 不拉伸；排版 ⇒ 等高。
+       *
+       * ⚠️ 为什么把结构（计算样式）也钉住，而不只量高度：**"看板列各列高不全相等"这个写法
+       *   本身是假绿的**。见 B-01c 的行为佐证那段注释 —— 变异 M2 下（看板列被拉齐）仍然成立。
+       */
+      const ctx: BrowserContext = await newContext(browser, { width: 1400, height: 900 });
+      const page: Page = await ctx.newPage();
+      try {
+        await bootstrapAdminWithDemo(page, server.url);
+        await enterMemberBoard(page);
+        await page.waitForTimeout(400);
+
+        const kanban = await columnMetrics(page, KANBAN_SECTION);
+        const triage = await columnMetrics(page, TRIAGE_SECTION);
+        expect(kanban.found && triage.found, '两个 section 都应找到').toBe(true);
+
+        // ① 结构不变式（零数据依赖）：看板列顶对齐、任务三块拉齐
+        expect(
+          kanban.align,
+          '看板列必须保留 `items-start`（每格是项目卡：卡片高度是数据该有的样子，不许被拉伸填满列高）',
+        ).toBe('flex-start');
+        expect(
+          triage.align,
+          '任务三块必须**不带** `items-start`（每格是分类面板：等高是排版意图）',
+        ).not.toBe('flex-start');
+
+        // ② 行为佐证 A：看板列**行内不被拉齐**
+        //    （结构对了但被别的 CSS 覆盖时，这一条会先红）
+        const kanbanRows = rowsOf(kanban.cols);
+        expect(kanbanRows.length, '看板列应至少排成 2 行（否则本断言无判别力）').toBeGreaterThanOrEqual(2);
+        const unevenRows = kanbanRows.filter((r) => new Set(r.map((c) => c.h)).size > 1);
+        expect(
+          unevenRows.length,
+          '看板列应存在「行内各列盒高不等」的行（每列贴合自己的内容）；若所有行都被拉齐 = items-start 被删',
+        ).toBeGreaterThanOrEqual(1);
+
+        // ③ 行为佐证 B：任务三块**行内被拉齐**（同一行内三块等高）
+        const triageRows = rowsOf(triage.cols);
+        expect(triageRows.length, '任务三块应排在同一行').toBe(1);
+        expect(
+          new Set(triageRows[0].map((c) => c.h)).size,
+          `任务三块同一行内盒高应只有一个取值（实测 ${triageRows[0].map((c) => c.h).join(' / ')}）`,
+        ).toBe(1);
+
+        await page.screenshot({
+          path: resolve(__dirname, '..', 'qa-scratch', 'member-board-column-cap', 'B-01c-guard-1400.png'),
           fullPage: true,
         });
       } finally {
