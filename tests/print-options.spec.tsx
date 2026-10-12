@@ -572,38 +572,36 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
       Array.from(document.querySelectorAll('.a4-page')).map((el) => el.getAttribute('data-print-page')),
     ).toEqual(['blocks', 'blocks']);
 
-    // 切 D：默认 = 4 原生签名页（她 10-09 23:38 反馈修复：第一页是进度
-    // 矩阵，不再是通用「阶段清单」表格——参考稿那个味道）
+    // 切 D：**五块形态**（2026-10-13 批 B · 决策 1）。本夹具 8 阶段 **无 StageLog**
+    // ⇒ L3 改期记录不出 ⇒ 紧凑档 8 行正好一页（带一条改期记录时同规模是 2 页，
+    // 见 print-a4-visual-d 的「决策 6」与页数表用例）
     pickTemplate('data-editorial');
     expect(paperRoot()!.className).toContain('print-template-data-editorial');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
-    expect(bodyContains('预计 4 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(1);
+    expect(bodyContains('预计 1 页')).toBe(true);
     expect(printButton()!.disabled, 'D 版可打印').toBe(false);
-    // 默认通用模块不勾（M1/M2/M4 在 D 是通用渲染，不进默认态）
-    for (const m of ['stage-list', 'task-list', 'member-roster']) {
-      expect(moduleCheckbox(m).checked, `D 的 ${m} 默认不勾（默认 = 原生签名页）`).toBe(false);
-    }
-    // 四页原生页题（完整单行中文）与关键内容在纸面上
-    const dText = paperRoot()!.textContent ?? '';
-    for (const title of ['阶段进度矩阵', '任务依赖网络', '阶段工作量构成', '里程碑与验收']) {
-      expect(dText, `D 版纸面应含页题「${title}」`).toContain(title);
-    }
-    expect(dText).toContain('占比不等于完成度');
-    // 本夹具 8 任务 dependsOn 全空 ⇒ 依赖网络走「无依赖」空态 + 节点摘要
-    expect(document.querySelector('[data-print-empty="dependencies"]'), '无依赖空态').not.toBeNull();
-    // 第一页 = 进度矩阵（反馈修复的核心断言：默认态落在签名原生页）
+    // 中截 = 五块清单：4 行可勾（B1「打印头部」由刊头承担 ⇒ 不可摘、不进清单）
+    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    expect(document.querySelector('input[data-print-block="header"]'), 'D 的 B1 不进清单').toBeNull();
     expect(
-      document.querySelector('.a4-page')!.getAttribute('data-print-page'),
-      'D 默认第一页应是进度矩阵（不是通用阶段清单表）',
-    ).toBe('progress-matrix');
-    // 手动勾通用模块 ⇒ 三通用页（M1/M2/M4）页题与口径注上纸（可勾选性保留）
-    for (const m of ['stage-list', 'task-list', 'member-roster']) setModuleChecked(m, true);
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(7);
-    expect(bodyContains('预计 7 页')).toBe(true);
-    for (const title of ['阶段清单', '任务清单', '成员名册']) {
-      expect(paperRoot()!.textContent, `D 版纸面应含通用页题「${title}」`).toContain(title);
+      document.querySelector('[data-print-module-row]'),
+      '批 B 后 D 的选择器中截不再是 11 个内容模块（决策 1）',
+    ).toBeNull();
+    for (const k of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
+      expect(checkbox(k).checked, `D 的 ${k} 默认勾选`).toBe(true);
     }
-    for (const m of ['stage-list', 'task-list', 'member-roster']) setModuleChecked(m, false);
+    expect(selectorPanel()!.textContent, 'D 也写明不可摘的原因与版式差异').toContain(
+      '由该模板的刊头承载项目名与页序，属版式构件',
+    );
+    // 纸面：五块形态的标识 + 巨字标题（固定类型词）+ B2 日期格矩阵 + B4 两段式清单
+    const dText = paperRoot()!.textContent ?? '';
+    expect(document.querySelector('.a4-page')!.getAttribute('data-print-page')).toBe('blocks');
+    expect(dText, 'D 的巨字标题 = 固定类型词（§1.2 B1 乙项）').toContain('排期报告');
+    expect(document.querySelector('.de-mx'), 'B2 日期格矩阵在纸面上').not.toBeNull();
+    expect(document.querySelector('.de-mx__cell'), '矩阵有格').not.toBeNull();
+    expect(document.querySelector('.de-row'), 'B4 两段式清单在纸面上').not.toBeNull();
+    expect(dText, '口径注恒在（§2.6 原则 1）').toContain('占比=ratioPercent≠完成度');
+    expect(dText, '每页的完成度横带装置（丙）').toContain('项目完成度');
 
     // 切 E：默认 = 3 原生签名页（M2 任务清单是通用渲染，默认不勾）
     pickTemplate('editorial-index');

@@ -328,8 +328,19 @@ describe.skipIf(!CAN_RUN)('纸面页头 print 媒体豁免（真 Chromium + 真�
         expect(box.h, `${t} print 态页头应有布局盒（高 > 0）`).toBeGreaterThan(0);
         expect(box.w, `${t} print 态页头应通栏`).toBeGreaterThan(600);
         // 页题/项目名文本仍在纸面上（每页可独立解释）
+        // ⚠️ 2026-10-13 批 B：D 起走五块形态，巨字标题从「页题」改为**固定类型词**
+        // （§1.2 B1 的乙项）⇒ 这里断「排期报告」而不是旧的「阶段进度矩阵」；
+        // 每页身份由页头 `REPORT nn / nn` 装置 + 橙副标承担。
         const text = (await page.textContent('body')) ?? '';
-        expect(text, `${t} print 态应含页题`).toContain(t === 'agent-poster' ? 'ID PLAN · STAGE POSTER' : t === 'data-editorial' ? '阶段进度矩阵' : t === 'editorial-index' ? '阶段目录' : 'PROJECT');
+        expect(text, `${t} print 态应含页题`).toContain(
+          t === 'agent-poster'
+            ? 'ID PLAN · STAGE POSTER'
+            : t === 'data-editorial'
+              ? '排期报告'
+              : t === 'editorial-index'
+                ? '阶段目录'
+                : 'PROJECT',
+        );
       }
     } finally {
       await page.close();

@@ -45,7 +45,8 @@ import { chromium, type Browser } from 'playwright-core';
 
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { DataEditorialDocument } from '../src/print/documents/DataEditorialDocument';
+import { DataEditorialDocument, deBlockPages, DE_BLOCK_COMPACT_AT } from '../src/print/documents/DataEditorialDocument';
+import { deMatrixColumns, deMatrixColumnUnit } from '../src/print/pages/data-editorial/matrix';
 import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
 import { planMatrixPages } from '../src/print/pages/data-editorial/shared';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
@@ -60,6 +61,13 @@ import {
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, StageLog, Task } from '../src/core/types/entities';
 import type { PrintStageVM } from '../src/print/model/print-view-model';
+import type { PrintSheet } from '../src/components/print/print-templates';
+import { DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../src/lib/schedule-print';
+import {
+  blockRecordOf,
+  printTemplateUnitIds,
+  resolveUnits,
+} from '../src/print/model/print-units';
 import { createElement } from 'react';
 import { builtCss as readBuiltCss } from './helpers/built-css';
 
@@ -96,6 +104,19 @@ function resolveChromium(): string | null {
 
 const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
+
+/**
+ * legacy 原生页清单（期三的 sheets 形状）。
+ * 2026-10-13 批 B 起 D 走**五块形态**（`usesBlocks`）；原来的四页与通用模块渲染
+ * **代码与 spec 全留**（决策 2），只是不再有暴露面 —— 本 spec 里凡是要验「原生页
+ * 那套版式」的用例，都显式传它，走 legacy 路径（与 UI 真实路径区分开）。
+ */
+const NATIVE_SHEETS: readonly PrintSheet[] = [
+  { type: 'native', page: 'progress-matrix' },
+  { type: 'native', page: 'dependency-network' },
+  { type: 'native', page: 'workload-composition' },
+  { type: 'native', page: 'milestone-acceptance' },
+];
 
 /** 拼接全部构建产物 CSS（D 版样式 + 亮色锁 + 主题令牌都在里面） */
 function builtCss(): string {
@@ -364,13 +385,22 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('D 版默认态：4 原生签名页，彩色 4 张 + 灰度 4 张；794×1123 无裁切（她 10-09 23:38 反馈：默认收敛到签名页，第一页 = 进度矩阵）', async () => {
+  it('D 版默认态 = 五块形态：预计页数 = 实际出纸，逐页 794×1123 无裁切；legacy 四页仍可复现', async () => {
+    /*
+     * 2026-10-13 批 B（决策 1/6）：D 的默认输出从「4 个原生签名页」改为**五块形态**
+     * （B1 打印头部 / B2 日期格矩阵 / B3 项目信息 / B4 两段式清单 / B5 页脚）。
+     * 原「4 页 + 第一页 = 进度矩阵」的断言不是被删掉，而是**分成两半**：
+     *   · 本用例前半 = 五块形态（页数由 `deBlockPages` 给出，逐页无裁切）；
+     *   · 本用例后半 = 显式 `NATIVE_SHEETS` 复现 legacy 四页（第一页仍是进度矩阵）
+     *     ——「代码与 spec 全留」的直接证据。
+     */
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['data-editorial'].baseline;
     const markup = renderToStaticMarkup(
       createElement(DataEditorialDocument, { vm, palette: baseline }),
     );
+    const expectedPages = deBlockPages(vm, DEFAULT_SCHEDULE_PAPER_BLOCKS).length;
 
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
@@ -381,12 +411,11 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
         );
         await page.goto('file://' + htmlPath);
         const pages = await page.$$('.a4-page');
-        expect(pages, 'D 版应渲染 4 页（默认 = 原生签名页；通用 M1/M2/M4 不进默认态）').toHaveLength(4);
-        // 第一页 = 阶段进度矩阵（反馈修复的核心：不再是通用「阶段清单」表格）
+        expect(pages, `五块形态应渲染 ${expectedPages} 页（装配层同源）`).toHaveLength(expectedPages);
         expect(
           await pages[0]!.getAttribute('data-print-page'),
-          'D 默认第一页应是进度矩阵',
-        ).toBe('progress-matrix');
+          '五块形态的纸面标识',
+        ).toBe('blocks');
         for (let i = 0; i < pages.length; i++) {
           const el = pages[i]!;
           const box = await el.boundingBox();
@@ -399,17 +428,30 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
           await el.screenshot({ path: join(OUT_DIR, `density3-d-p${i + 1}-${tag}.png`) });
         }
       }
+
+      // ── 后半：legacy 四页仍可复现（决策 2「代码与 spec 全留」的证据）──
+      const legacyMarkup = renderToStaticMarkup(
+        createElement(DataEditorialDocument, { vm, palette: baseline, sheets: NATIVE_SHEETS }),
+      );
+      await page.goto('file://' + writeHtml('d-legacy-four.html', shell(legacyMarkup, css, false)));
+      const legacyPages = await page.$$('.a4-page');
+      expect(legacyPages, 'legacy 四原生页仍可渲染（显式 sheets）').toHaveLength(4);
+      expect(
+        await legacyPages[0]!.getAttribute('data-print-page'),
+        'legacy 第一页仍是进度矩阵',
+      ).toBe('progress-matrix');
     } finally {
       await page.close();
     }
   });
 
-  it('D 版矩阵骨架（P0-7）：行首 [号码+阶段名]/[日期·占比] 不溢出、通栏条 682×32、节距 90、<table> 不存在', async () => {
+  it('D 版矩阵骨架（P0-7，legacy 原生页）：行首 [号码+阶段名]/[日期·占比] 不溢出、通栏条 682×32、节距 90、<table> 不存在', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['data-editorial'].baseline;
+    // 批 B：本用例验的是**原生页那套版式**（P0-7 骨架）⇒ 显式走 legacy sheets
     const markup = renderToStaticMarkup(
-      createElement(DataEditorialDocument, { vm, palette: baseline }),
+      createElement(DataEditorialDocument, { vm, palette: baseline, sheets: NATIVE_SHEETS }),
     );
 
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
@@ -513,7 +555,7 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     }
   });
 
-  it('D 矩阵分页（30 阶段）：2 页 16+14、续表头只第 2 页、页尾横带每页都有、页码联动、无溢出', async () => {
+  it('D 矩阵分页（30 阶段 · legacy 原生页）：2 页 16+14、续表头只第 2 页、页尾横带每页都有、页码联动、无溢出', async () => {
     const css = builtCss();
     // 长 VM：9 个可见夹具阶段轮值扩到 30 个（隐藏夹具阶段不进来）
     const stages: Stage[] = Array.from({ length: 30 }, (_, i) => {
@@ -725,12 +767,13 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     }
   });
 
-  it('D 版 P2 依赖网络：环、缺失引用、20+ 任务全部上纸（DOM 断言）', async () => {
+  it('D 版 P2 依赖网络（legacy 原生页）：环、缺失引用、20+ 任务全部上纸（DOM 断言）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['data-editorial'].baseline;
+    // 依赖网络页在五块模型里**无承载位**（决策 2：从界面消失、代码与 spec 全留）
     const markup = renderToStaticMarkup(
-      createElement(DataEditorialDocument, { vm, palette: baseline }),
+      createElement(DataEditorialDocument, { vm, palette: baseline, sheets: NATIVE_SHEETS }),
     );
 
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
@@ -770,12 +813,12 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     }
   });
 
-  it('D 版默认态：套预设变体（靛蓝）彩色 4 张；信号槽位确实挂上（非默认态重截）', async () => {
+  it('D 版 legacy 原生页：套预设变体（靛蓝）彩色 4 张；信号槽位确实挂上（非默认态重截）', async () => {
     const css = builtCss();
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['data-editorial'].presets.find((p) => p.id === 'indigo')!;
     const markup = renderToStaticMarkup(
-      createElement(DataEditorialDocument, { vm, palette: preset.palette }),
+      createElement(DataEditorialDocument, { vm, palette: preset.palette, sheets: NATIVE_SHEETS }),
     );
 
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
@@ -801,12 +844,12 @@ describe.skipIf(!CAN_RUN)('D 版 A4 视觉验收 · 批 2（真 Chromium + 真�
     }
   });
 
-  it('D 版口径断言：占比不等于完成度 + 合计 ≠100% 不归一化（P3 DOM）', async () => {
+  it('D 版口径断言（legacy 原生页 P3）：占比不等于完成度 + 合计 ≠100% 不归一化', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['data-editorial'].baseline;
     const markup = renderToStaticMarkup(
-      createElement(DataEditorialDocument, { vm, palette: baseline }),
+      createElement(DataEditorialDocument, { vm, palette: baseline, sheets: NATIVE_SHEETS }),
     );
 
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
@@ -874,6 +917,232 @@ function matrixStages(n: number): PrintStageVM[] {
   }));
 }
 
+describe.skipIf(!CAN_RUN)('D 版 · 五块形态（批 B：决策 6 / 列粒度 / 格阵 / 署名 / 口径注）', () => {
+  let browser: Browser;
+
+  beforeAll(async () => {
+    browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
+  });
+
+  /** 用显式单元集合渲一版（模拟选择器的勾选 ⇒ `resolveUnits` 的结果） */
+  function markupWith(ids: readonly string[], vm = buildVm()): string {
+    const units = resolveUnits('data-editorial', {
+      units: { 'data-editorial': ids as never },
+    });
+    return renderToStaticMarkup(
+      createElement(DataEditorialDocument, {
+        vm,
+        units,
+        palette: PRINT_TEMPLATE_PALETTES['data-editorial'].baseline,
+      }),
+    );
+  }
+
+  const ALL_UNITS = () => printTemplateUnitIds('data-editorial');
+  const blocksOf = (ids: readonly string[]) =>
+    blockRecordOf(resolveUnits('data-editorial', { units: { 'data-editorial': ids as never } }));
+
+  it('★ 决策 6 三条（严格一一对应）：关 B2 只矩阵消失、关 B4 只清单消失，页数各自联动', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const all = ALL_UNITS();
+    const withoutB2 = all.filter((id) => id !== 'timeline');
+    const withoutB4 = all.filter((id) => id !== 'stageTable');
+    const expected = {
+      all: deBlockPages(vm, blocksOf(all)).length,
+      noB2: deBlockPages(vm, blocksOf(withoutB2)).length,
+      noB4: deBlockPages(vm, blocksOf(withoutB4)).length,
+    };
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      // 全开：每页各有矩阵与清单（本夹具 2 页 ⇒ 2 个矩阵）
+      await page.goto('file://' + writeHtml('d-blocks-all.html', shell(markupWith(all), css, false)));
+      expect(await page.$$('.a4-page')).toHaveLength(expected.all);
+      expect(await page.$$('.de-mx'), 'B2 每页一份（与切片同步）').toHaveLength(expected.all);
+      expect((await page.$$('.de-row')).length, 'B4 在').toBeGreaterThan(0);
+      // 全开态的两个基线（后面两轮各自的「没摘的那块」要与它们逐值相等）
+      const rowsBefore = (await page.$$('.de-row')).length;
+      const cellsBefore = (await page.$$('.de-mx__cell')).length;
+
+      // 关 B2：**只有**矩阵消失，清单原样
+      await page.goto('file://' + writeHtml('d-blocks-no-b2.html', shell(markupWith(withoutB2), css, false)));
+      expect(await page.$$('.de-mx'), '关 B2 ⇒ 矩阵整块消失').toHaveLength(0);
+      expect((await page.$$('.de-row')).length, '关 B2 不得动清单').toBe(rowsBefore);
+      expect(await page.$$('.a4-page'), '关 B2 的页数联动').toHaveLength(expected.noB2);
+
+      // 关 B4：**只有**清单消失，矩阵原样
+      await page.goto('file://' + writeHtml('d-blocks-no-b4.html', shell(markupWith(withoutB4), css, false)));
+      expect(await page.$$('.de-row'), '关 B4 ⇒ 清单整块消失').toHaveLength(0);
+      expect(await page.$$('.de-bar'), '关 B4 ⇒ 条也消失').toHaveLength(0);
+      expect((await page.$$('.de-mx__cell')).length, '关 B4 不得动矩阵').toBe(cellsBefore);
+      expect(await page.$$('.a4-page'), '关 B4 的页数联动').toHaveLength(expected.noB4);
+      // 两条页数各自成立（本夹具 9 阶段：全开 2 页，各自关掉都回 1 页）
+      expect(expected).toEqual({ all: 2, noB2: 1, noB4: 1 });
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('B2 日期格矩阵：列数恒在 [4,14]；填充**不越格**（像素级）+ 三档分色', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      await page.goto('file://' + writeHtml('d-blocks-matrix.html', shell(markupWith(ALL_UNITS()), css, false)));
+      const geom = await page.evaluate(() => {
+        const mx = document.querySelector('.de-mx') as HTMLElement;
+        const cols = Array.from(mx.querySelectorAll('.de-mx__col')) as HTMLElement[];
+        const headCells = Array.from(mx.querySelectorAll('.de-mx__head .de-mx__cols > *')) as HTMLElement[];
+        const firstRow = mx.querySelector('.de-mx__row') as HTMLElement;
+        const cells = Array.from(firstRow.querySelectorAll('.de-mx__cell')) as HTMLElement[];
+        const r = (el: HTMLElement): DOMRect => el.getBoundingClientRect();
+        const wrap = firstRow.querySelector('.de-mx__cols') as HTMLElement;
+        const wr = r(wrap);
+        // 每个填充分格是否落在自己的列里：用列头的 x 区间做参照（同一 grid 模板）
+        const colRects = headCells.map((el) => r(el));
+        const bad: number[] = [];
+        cells.forEach((c, i) => {
+          const cr = r(c);
+          const owner = colRects[i];
+          if (!owner) return;
+          if (cr.x < owner.x - 1 || cr.x + cr.width > owner.x + owner.width + 1) bad.push(i);
+        });
+        const fills = cells.map((c) => c.getAttribute('data-cell'));
+        return {
+          cols: cols.length,
+          gridColumns: getComputedStyle(wrap).gridTemplateColumns,
+          cellsPerRow: cells.length,
+          cellW: Math.round(r(cells[0]!).width * 10) / 10,
+          wrapW: Math.round(wr.width * 10) / 10,
+          badCells: bad,
+          tones: Array.from(new Set(fills)),
+          rowHeight: Math.round(r(firstRow).height),
+          radius: getComputedStyle(cells[0]!).borderRadius,
+          // 无竖线纪律：单元格之间是间隙而不是线 ⇒ 相邻两格 x 之差 = 格宽 + 1
+          gap: cells.length > 1 ? Math.round((r(cells[1]!).x - (r(cells[0]!).x + r(cells[0]!).width)) * 10) / 10 : -1,
+        };
+      });
+      expect(geom.cols, '列数 ≥ 下限 4').toBeGreaterThanOrEqual(4);
+      expect(geom.cols, '列数 ≤ 上限 14').toBeLessThanOrEqual(14);
+      expect(geom.cellsPerRow, '每行格数 = 列数').toBe(geom.cols);
+      expect(geom.cellW, '格宽应撑得住填充（>20px）').toBeGreaterThan(20);
+      expect(geom.badCells, '填充不得越出自己的列').toEqual([]);
+      expect(geom.radius, '零圆角（D 的身份）').toBe('0px');
+      expect(geom.gap, '格与格之间是 1px 间隙（无竖线纪律）').toBeCloseTo(1, 1);
+      // 三档分色至少出现 ink（本夹具含进行中/已完成）
+      expect(geom.tones).toContain('ink');
+      void vm;
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('B2 列粒度阶梯：4 ≤ 列数 ≤ 14，粒度随窗口长度自动升降（含 3 年窗口 = 12 季列）', () => {
+    const cases: Array<{ from: string; to: string; unit: string; cols: number }> = [
+      { from: '2026-01-05', to: '2026-01-16', unit: 'day', cols: 12 },
+      { from: '2026-01-01', to: '2026-03-01', unit: 'week', cols: 9 },
+      { from: '2026-01-01', to: '2026-06-30', unit: 'month', cols: 6 },
+      { from: '2026-01-01', to: '2028-12-31', unit: 'quarter', cols: 12 },
+      { from: '2026-01-01', to: '2035-12-31', unit: 'year', cols: 10 },
+    ];
+    for (const c of cases) {
+      const cols = deMatrixColumns(c.from, c.to);
+      expect(deMatrixColumnUnit(c.from, c.to), `${c.from}→${c.to} 的粒度`).toBe(c.unit);
+      expect(cols.length, `${c.from}→${c.to} 列数应 4..14`).toBeGreaterThanOrEqual(4);
+      expect(cols.length, `${c.from}→${c.to} 列数应 4..14`).toBeLessThanOrEqual(14);
+      expect(cols.length, `${c.from}→${c.to} 列数`).toBe(c.cols);
+    }
+    // 窗口不足 4 天 ⇒ 外扩到 4 列（约束①的下限不破）
+    expect(deMatrixColumns('2026-01-05', '2026-01-06')).toHaveLength(4);
+    // ⚠️ 已知边界：> 14 年窗口会越出上限（如实登记，不静默改语义）
+    expect(deMatrixColumns('2026-01-01', '2045-12-31').length).toBeGreaterThan(14);
+  });
+
+  it('B5 页脚：1px 发丝线 + 署名（新）+ 数据时间可摘；**页码只在页头 REPORT**', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const all = ALL_UNITS();
+    const noB5 = all.filter((id) => id !== 'footer');
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      await page.goto('file://' + writeHtml('d-blocks-foot.html', shell(markupWith(all), css, false)));
+      const info = await page.evaluate(() => {
+        const pages = Array.from(document.querySelectorAll('.a4-page')) as HTMLElement[];
+        return {
+          signs: pages.map((p) => (p.querySelector('.de-foot__sign')?.textContent ?? '').trim()),
+          dataTimes: pages.map((p) => p.querySelector('.de-foot__page')?.textContent ?? ''),
+          reports: pages.map((p) => (p.querySelector('.de-head__report')?.textContent ?? '').trim()),
+          borderTop: getComputedStyle(pages[0]!.querySelector('.de-foot')!).borderTopWidth,
+          // 「第 n / N 页」这套口径不该出现在 D 的任何一页（页码唯一落点是页头）
+          hasPageWord: pages.some((p) => (p.textContent ?? '').includes(' 页')),
+        };
+      });
+      expect(info.signs.every((x) => x === 'ID Plan · 项目排期与交付管理'), '每页都有署名').toBe(true);
+      expect(info.dataTimes.every((x) => x.startsWith('数据时间 ')), 'B5 开着 ⇒ 每页都有数据时间').toBe(true);
+      expect(info.reports[0], '页码唯一落点 = 页头 REPORT').toContain('REPORT 01 / 02');
+      expect(info.borderTop, 'B5 的 1px 发丝线').toBe('1px');
+      expect(info.hasPageWord, 'D 的纸面不该再出现「第 n / N 页」').toBe(false);
+
+      // 关 B5 ⇒ **只**摘数据时间，发丝线与署名留着（§2.6 D·B5 = 甲）
+      await page.goto('file://' + writeHtml('d-blocks-no-b5.html', shell(markupWith(noB5), css, false)));
+      const off = await page.evaluate(() => {
+        const p1 = document.querySelector('.a4-page') as HTMLElement;
+        return {
+          dataTime: p1.querySelector('.de-foot__page') ? 1 : 0,
+          sign: (p1.querySelector('.de-foot__sign')?.textContent ?? '').trim(),
+          report: (p1.querySelector('.de-head__report')?.textContent ?? '').trim(),
+        };
+      });
+      expect(off.dataTime, '关 B5 ⇒ 数据时间消失').toBe(0);
+      expect(off.sign, '关 B5 ⇒ 署名还在').toBe('ID Plan · 项目排期与交付管理');
+      expect(off.report, '关 B5 不动页码（住页头）').toContain('REPORT 01 / 02');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('口径注恒在（§2.6 原则 1）：B3 开 ⇒ 主体底部成簇；B3 关 ⇒ 锚回页脚（含续页）', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const all = ALL_UNITS();
+    const noB3 = all.filter((id) => id !== 'projectInfo');
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      await page.goto('file://' + writeHtml('d-blocks-info-on.html', shell(markupWith(all), css, false)));
+      const on = await page.evaluate(() => {
+        const pages = Array.from(document.querySelectorAll('.a4-page')) as HTMLElement[];
+        return {
+          cluster: pages.map((p) => p.querySelectorAll('.de-info').length),
+          noteInCluster: pages.map((p) => p.querySelectorAll('.de-info__note').length),
+          noteInFoot: pages.map((p) => p.querySelectorAll('.de-foot__note').length),
+          line: (pages[0]!.querySelector('.de-info__line')?.textContent ?? '').trim(),
+        };
+      });
+      expect(on.cluster, 'B3 簇只首页').toEqual([1, 0]);
+      expect(on.noteInCluster, '口径注在 B3 簇里').toEqual([1, 0]);
+      expect(on.noteInFoot, 'B3 开着时续页的口径注锚回页脚（原则 1）').toEqual([0, 1]);
+      expect(on.line, 'B3 的 mono 行 = 排期基准 + 打印时间').toContain('排期基准');
+      expect(on.line).toContain('打印时间');
+
+      // 关 B3 ⇒ 承载区整块不出，但口径注**每页**都在页脚（§2.6 的锚回）
+      await page.goto('file://' + writeHtml('d-blocks-info-off.html', shell(markupWith(noB3), css, false)));
+      const off = await page.evaluate(() => {
+        const pages = Array.from(document.querySelectorAll('.a4-page')) as HTMLElement[];
+        return {
+          cluster: pages.reduce((n, p) => n + p.querySelectorAll('.de-info').length, 0),
+          noteInFoot: pages.map((p) => p.querySelectorAll('.de-foot__note').length),
+          basis: pages.some((p) => (p.textContent ?? '').includes('排期基准')),
+        };
+      });
+      expect(off.cluster, '关 B3 ⇒ 承载区整块不出').toBe(0);
+      expect(off.noteInFoot, '关 B3 ⇒ 口径注每页都在（底线不是块）').toEqual([1, 1]);
+      expect(off.basis, '关 B3 ⇒ 排期基准随之消失（口径注除外）').toBe(false);
+    } finally {
+      await page.close();
+    }
+  });
+});
+
 describe('D 矩阵分页计划（纯函数：行不裂 / 容量 / compact 边界）', () => {
   it('9 阶段（= 参考稿 P1 的行数与 normal 容量上限）⇒ 1 块不拆页；行数守恒', () => {
     const plan = planMatrixPages(matrixStages(9));
@@ -906,6 +1175,46 @@ describe('D 矩阵分页计划（纯函数：行不裂 / 容量 / compact 边界
     expect(p30.chunks.map((c) => c.rows.length)).toEqual([16, 14]);
     // 行不裂：总行数守恒（两规模）
     expect(p30.chunks.reduce((n, c) => n + c.rows.length, 0)).toBe(30);
+  });
+
+  it('5 块形态的页数表（1/2/6/7/8/9/20/30/40/60 阶段；预计 = 实测，真机逐档跑过）', () => {
+    /*
+     * 夹具 = 本 spec 的 buildVm() 9 阶段轮值扩到 n（与真机探针同一构造）。
+     * 实测（真 Chromium，批 B 探针）：
+     *   n=1/2/3/4/6 → 1 页；n=8/9/10 → 2 页；20 → 3；30 → 5；40 → 6；60 → 9。
+     * 行成本 = B2 一行(26) + B4 一行(compact 49) = 75 ⇒ 紧凑档每页 7 行左右。
+     */
+    const mk = (n: number) => {
+      const stages: Stage[] = Array.from({ length: n }, (_, i) => {
+        const tpl = STAGES[i % 9]!;
+        return { ...tpl, id: `stg_b_${i + 1}`, orderIndex: i + 1, name: `阶段${i + 1}` };
+      });
+      return buildPrintViewModel({
+        project: PROJECT,
+        stages,
+        tasks: [],
+        members: [HUMAN, AGENT],
+        stageLogs: LOGS,
+        role: MemberRoleKind.Admin,
+        currentMemberId: HUMAN.id,
+        todayIso: TODAY,
+        now: new Date('2026-10-09T07:30:00Z'),
+      });
+    };
+    const pages = (n: number) => deBlockPages(mk(n), DEFAULT_SCHEDULE_PAPER_BLOCKS).length;
+    expect([1, 2, 3, 4, 6].map(pages), '小项目恒 1 页').toEqual([1, 1, 1, 1, 1]);
+    expect(pages(DE_BLOCK_COMPACT_AT), '切点处仍 1 页（normal 容量 = 切点）').toBe(1);
+    // ⚠️ 本 spec 的夹具在 `mk()` 里重写了阶段 id ⇒ 那条 StageLog(rescheduled)
+    // 因引用不到可见阶段而**不进 VM**（L3 不出）⇒ 8 行正好一页（探针夹具 ID 对齐，
+    // 带一条改期记录时是 8 → 2 页；L3 的影响由「决策 6」用例单独覆盖）。
+    expect([8, 9, 10].map(pages), '8/9/10 阶段').toEqual([1, 2, 2]);
+    const long = [20, 30, 40, 60].map(pages);
+    expect(long, '长项目逐档（每页 8–9 行）').toEqual([3, 4, 5, 7]);
+    for (let i = 1; i < long.length; i++) {
+      expect(long[i]!, '页数随阶段数单调不减').toBeGreaterThanOrEqual(long[i - 1]!);
+    }
+    // 紧凑档切点 = normal 容量（不留断崖：7 阶段 1 页、8 阶段 2 页都是单调的）
+    expect(DE_BLOCK_COMPACT_AT, '5 块形态的紧凑切点（≠ legacy 的 9）').toBe(5);
   });
 
   it('空阶段 ⇒ 单空块（调用方走空态，不出零页纸面）', () => {

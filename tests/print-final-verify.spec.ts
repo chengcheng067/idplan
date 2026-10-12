@@ -444,7 +444,7 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('四版默认态：2 + 4 + 4 + 3 = 13 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
+  it('四版默认态：2 + 1 + 4 + 3 = 10 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
     const css = builtCss();
     const vm = adminVm();
     const cases: Array<{ tag: string; markup: string; expected: number }> = [
@@ -464,9 +464,10 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实�
         markup: renderToStaticMarkup(
           createElement(DataEditorialDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['data-editorial'].baseline }),
         ),
-        // 她 10-09 23:38 反馈修复：D 默认 = 4 原生签名页（第一页进度矩阵，
-        // 不再是通用阶段清单表格；通用 M1/M2/M4 可手动勾选，不进默认态）
-        expected: 4,
+        // 2026-10-13「5 块 × 4 模板」重构 · 批 B：D 从「4 个原生签名页」改为
+        // **五块形态**（决策 1/6）。本夹具 6 可见阶段 ⇒ 1 页（B2 日期格矩阵与
+        // B4 两段式清单共用同一批切片，紧凑档每页 8 行左右）
+        expected: 1,
       },
       {
         tag: 'e',
@@ -505,9 +506,9 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实�
           await pages[i]!.screenshot({ path: join(OUT_DIR, `final-${c.tag}-p${i + 1}-color.png`) });
         }
       }
-      // 2026-10-13 批 1：A 从 4 页（四个原生模块页）变 2 页（五块形态）
-      // ⇒ 合计 15 → 13；D/E/H 三版本批未动，仍是 4 + 4 + 3
-      expect(totalPages, '四版合计 13 页（A 五块形态 2 页 + D4 + E4 + H3）').toBe(13);
+      // 2026-10-13：批 1 把 A 从 4 页变 2 页；批 B 把 D 从 4 页变 1 页
+      // ⇒ 合计 15 → 13 → **10**；E/H 两版本批未动，仍是 4 + 3
+      expect(totalPages, '四版合计 10 页（A 五块 2 页 + D 五块 1 页 + E4 + H3）').toBe(10);
     } finally {
       await page.close();
     }

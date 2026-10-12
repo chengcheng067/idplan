@@ -456,9 +456,13 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     // 左上格：在 kicker 之前（de-head__left 的第一个子元素）
     const firstInLeft = doc.querySelector('.de-head__left')!.firstElementChild;
     expect(firstInLeft!.classList.contains('de-head__logo'), 'logo 应是头部左格第一个元素').toBe(true);
-    // 她 10-09 23:38 反馈修复：D 默认 = 4 原生签名页，每页头部左上格各一枚
-    // （通用 M1/M2/M4 不进默认态，可手动勾选）
-    expect(logoHeights(doc)).toEqual([28, 28, 28, 28]);
+    // 2026-10-13 批 B 重定：D 默认 = 五块形态（决策 1），页数由数据驱动 ⇒
+    // 判据收紧为「logo 数 === 页数，且每枚 28px」（写死 4 反而测不出「漏了某页」）
+    const dPages = doc.querySelectorAll('.a4-page').length;
+    expect(dPages, 'D 五块形态：本夹具 1 页').toBe(1);
+    expect(logoHeights(doc), `D 每页一枚页头 logo（${dPages} 页）`).toEqual(
+      Array.from({ length: dPages }, () => 28),
+    );
   });
 
   it('E 版：logo 在每页页头左上格 ≤22px（全页只此一枚）', () => {

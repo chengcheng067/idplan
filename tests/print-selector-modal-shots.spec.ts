@@ -193,10 +193,11 @@ describe.skipIf(!CAN_RUN)('期六 · 选择器弹窗截图（真 Chromium + 真�
     const css = builtCss();
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     try {
-      // ⚠️ 批 1：A 改五块清单后内容恰好装下，本用例的「内部滚」判据需要内容更高的
-      // 样本 ⇒ 改用仍在 11 模块通路的 **D**（她的原场景不变量「不裁切」因此被完整保留）
+      // ⚠️ 批 1 把 A 改成五块清单、批 B 把 D 也改了 ⇒ 现在只剩 E/H 还在 11 模块通路。
+      // 本用例的「内部滚」判据需要内容更高的样本 ⇒ 用 **H**（3 原生 + 3 通用 + 剩余
+      // 禁用，行数最多）；她的原场景不变量「不裁切」因此被完整保留。
       await page.goto(
-        'file://' + writeHtml('selector-modal-small.html', shell(panelMarkup('data-editorial'), css)),
+        'file://' + writeHtml('selector-modal-small.html', shell(panelMarkup('agent-poster'), css)),
       );
 
       // xl 仍生效 ⇒ 主从式（她的桌面场景：窗口没最大化，但不是窄屏）
