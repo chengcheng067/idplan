@@ -15,21 +15,31 @@
 
 import type { PrintSheet } from '../../components/print/print-templates';
 import type { PrintTemplateId } from '../../components/print/print-templates';
+import type { SchedulePaperBlocks } from '../../lib/schedule-print';
 import type { PrintViewModel } from '../model/print-view-model';
 import { agentPosterPhysical } from './AgentPosterDocument';
 import { dataEditorialPhysical } from './DataEditorialDocument';
 import { editorialIndexPhysical } from './EditorialIndexDocument';
-import { swissSchedulePhysical } from './SwissScheduleDocument';
+import { swissBlockPages, swissSchedulePhysical } from './SwissScheduleDocument';
 
-/** 该模板在给定 VM 与勾选态下的物理纸面数（0 = 一页不出） */
+/**
+ * 该模板在给定 VM 与勾选态下的物理纸面数（0 = 一页不出）。
+ *
+ * `blocks`（第 4 参，2026-10-13 批 1 新增）：**5 块形态**的模板读它
+ * （今天 = A；classic 不走本表、D/E/H 仍在模块通路）。传了就按 5 块装配算页数，
+ * 不传则按 `sheets` 的页/模块装配算——两条路的页数都与各自文档层的实际出纸同源。
+ */
 export function printPhysicalPageCount(
   template: PrintTemplateId,
   vm: PrintViewModel,
   sheets: readonly PrintSheet[],
+  blocks?: SchedulePaperBlocks,
 ): number {
   switch (template) {
     case 'swiss-schedule':
-      return swissSchedulePhysical(vm, sheets).length;
+      return blocks
+        ? swissBlockPages(vm, blocks).length
+        : swissSchedulePhysical(vm, sheets).length;
     case 'data-editorial':
       return dataEditorialPhysical(vm, sheets).length;
     case 'editorial-index':

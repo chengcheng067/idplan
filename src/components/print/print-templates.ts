@@ -199,7 +199,11 @@ export interface PrintTemplateMeta {
   thumb: string | undefined;
   /** 页面是否已实现（false ⇒ 建设中空态 + 禁打印，见文件头） */
   implemented: boolean;
-  /** 经典专用：用五块开关而不是模块复选框（决策文档 §2.2） */
+  /**
+   * 走**五块开关**而不是模块清单（决策文档 §2.2 原创，2026-10-13 决策 1 扩到 A）。
+   * 今天 = `classic` + `swiss-schedule`（批 1）；D/E/H 仍在模块通路（批 2/3/4）。
+   * 选择器的**唯一机构分支**读它（`PrintPreviewDialog`）。
+   */
   usesBlocks: boolean;
   /**
    * 模块能力表（期二：原 `pages` 语义升级；期三：原生 + 通用两类）——该模板
@@ -227,7 +231,10 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '时刻表式竖读扫描：阶段 / 任务 / 延期 / 成员',
     thumb: '/print-thumbs/A-swiss-schedule-p1.png',
     implemented: true,
-    usesBlocks: false,
+    // 2026-10-13「5 块 × 4 模板」重构 · 批 1：A 起走**五块模型**（决策 1：选择器
+    // 只暴露那 5 块）；它的 4 个原生模块条目**保留在能力表里**（代码与 spec 全留，
+    // 只是不再有暴露面——决策 2 的同一本账）。D/E/H 仍走模块清单（批 2/3/4 再切）。
+    usesBlocks: true,
     // A 的 M1/M2/M4 已有原生页（时刻表/读号表/责任表）⇒ 通用标记不参与分发
     modules: [
       {

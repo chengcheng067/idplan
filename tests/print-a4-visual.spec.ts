@@ -1,6 +1,14 @@
 /**
  * A 版 A4 视觉验收（批 1：真构建产物 + 真 Chromium 实测，不真打黑白打印机）。
  *
+ * ── 2026-10-13「5 块 × 4 模板」重构 · 批 1 的重定（逐条）──
+ *   · 「A 版四页」⇒ **五块形态的物理页**（页数由数据驱动：本夹具 9 阶段 = 2 页），
+ *     判据从「恰好 4 页」改为「**逐页 794×1123 无裁切** + 页数 === 文档层装配数」；
+ *   · 新增 **B2 甘特的实测几何**（本批唯一的横读块）：月份刻度不被抽稀吞掉、
+ *     条带不越轨道（`left ≥ 0` 且 `left + width ≤ 100`）、条带最小可见宽 ≥2.5%；
+ *   · 「板头巨字 82px」断言原样保留（它锁的是 A 的版面锚点，与块数无关）。
+ *   旧四页的视觉证据仍可由显式 `sheets` 复现（代码与 spec 全留，决策 2）。
+ *
  * ── 为什么这样做验收 ──
  * 产品决策文档批 1 要求「A 彩色 4 + 灰度 4；同时首次验证配色槽位（默认态 vs
  * 一个预设变体 vs 一个踩线禁存用例）」，02 §9 要求「794×1123 预览截图…无裁切」。
@@ -26,7 +34,8 @@ import { chromium, type Browser } from 'playwright-core';
 
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { SwissScheduleDocument } from '../src/print/documents/SwissScheduleDocument';
+import { SwissScheduleDocument, swissBlockPages } from '../src/print/documents/SwissScheduleDocument';
+import { DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../src/lib/schedule-print';
 import { PaletteSection } from '../src/print/parts/PaletteSection';
 import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
@@ -295,13 +304,15 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('A 版四页：默认态彩色 4 张 + 灰度 4 张；794×1123 无裁切', async () => {
+  it('A 版五块形态：默认态彩色 + 灰度各一轮；逐页 794×1123 无裁切', async () => {
     const css = builtCss();
     const vm = buildVm();
     const baseline = PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline;
     const markup = renderToStaticMarkup(
       createElement(SwissScheduleDocument, { vm, palette: baseline }),
     );
+    // 页数 = 文档层装配的页数（「预计页数 = 实际出纸」的对价：两边同源）
+    const expectedPages = swissBlockPages(vm, DEFAULT_SCHEDULE_PAPER_BLOCKS).length;
 
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     try {
@@ -312,7 +323,9 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
         );
         await page.goto('file://' + htmlPath);
         const pages = await page.$$('.a4-page');
-        expect(pages, 'A 版应渲染 4 页').toHaveLength(4);
+        expect(pages, `A 版五块形态应渲染 ${expectedPages} 页（装配层同源）`).toHaveLength(
+          expectedPages,
+        );
         for (let i = 0; i < pages.length; i++) {
           const el = pages[i]!;
           const box = await el.boundingBox();
@@ -322,6 +335,13 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
           expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
           expect(box!.height, `第 ${i + 1} 页高应恰 1123（溢出即红）`).toBeLessThanOrEqual(1124);
           expect(box!.height, `第 ${i + 1} 页高不得低于 1123`).toBeGreaterThanOrEqual(1122);
+          // 内容不得越过纸面下缘（页脚压底：底栏底边 ≤ 页底）
+          const bottomBar = await el.$('.swiss-bottombar');
+          expect(bottomBar, `第 ${i + 1} 页应有黑底栏（每页装置）`).not.toBeNull();
+          const barBox = await bottomBar!.boundingBox();
+          expect(barBox!.y + barBox!.height, `第 ${i + 1} 页底栏不越出纸底`).toBeLessThanOrEqual(
+            box!.y + box!.height + 0.5,
+          );
           await el.screenshot({ path: join(OUT_DIR, `density-a-p${i + 1}-${tag}.png`) });
         }
       }
@@ -330,7 +350,130 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
     }
   });
 
-  it('A 版四页：套预设变体（站台蓝）彩色 4 张；深色纸仍 794×1123 无裁切', async () => {
+  it('A 版大项目（20 阶段）：甘特行高自适应、逐页无裁切、预计页数 = 实际出纸', async () => {
+    const css = builtCss();
+    // 复用同一夹具，扩到 20 阶段（触发 B2 的行高自适应：28 → 19）
+    const vm = buildVm();
+    const many = {
+      ...vm,
+      stages: Array.from({ length: 20 }, (_, i) => {
+        const base = vm.stages[i % vm.stages.length]!;
+        const n = i + 1;
+        return { ...base, id: `stg_many_${n}`, orderIndex: n, name: `${n}·${base.name}` };
+      }),
+    } as typeof vm;
+    const markup = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, {
+        vm: many,
+        palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+      }),
+    );
+    const expectedPages = swissBlockPages(many, DEFAULT_SCHEDULE_PAPER_BLOCKS).length;
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      const htmlPath = writeHtml('a-many-stages.html', shell(markup, css, false));
+      await page.goto('file://' + htmlPath);
+      const pages = await page.$$('.a4-page');
+      expect(pages, '20 阶段：预计页数 = 实际出纸').toHaveLength(expectedPages);
+      // 首页的甘特行高被压下来（没有把纸撑爆的唯一原因）
+      const rowH = await page.$eval('.print-gantt__row', (el) =>
+        Math.round((el as HTMLElement).getBoundingClientRect().height),
+      );
+      expect(rowH, '20 阶段 ⇒ 行高自适应到设定值以下').toBeLessThan(28);
+      expect(rowH, '行高不低于可读下限').toBeGreaterThanOrEqual(14);
+      expect(
+        await page.$eval('.print-gantt__row', (el) => (el as HTMLElement).style.height),
+        '行高经内联几何落到 DOM（各版预算不同，不在组件里写死）',
+      ).toBe(rowH + 'px');
+      for (let i = 0; i < pages.length; i++) {
+        const box = await pages[i]!.boundingBox();
+        expect(Math.abs(box!.width - 794), `第 ${i + 1} 页宽应 794`).toBeLessThanOrEqual(1);
+        expect(box!.height, `第 ${i + 1} 页溢出即红（实测 ${box!.height}）`).toBeLessThanOrEqual(1124);
+        await pages[i]!.screenshot({ path: join(OUT_DIR, `density-a-many-p${i + 1}.png`) });
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('A 版 B2 甘特实测几何：刻度不被抽稀吞掉、条带不越轨道、最小可见宽 ≥2.5%', async () => {
+    const css = builtCss();
+    const vm = buildVm();
+    const baseline = PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline;
+    const markup = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, { vm, palette: baseline }),
+    );
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      const htmlPath = writeHtml('a-gantt-geom.html', shell(markup, css, false));
+      await page.goto('file://' + htmlPath);
+
+      const geom = await page.evaluate(() => {
+        const first = document.querySelector('.a4-page')!;
+        const gantt = first.querySelector('.print-gantt') as HTMLElement;
+        if (!gantt) throw new Error('B2 甘特不在首页上');
+        const tickEls = Array.from(gantt.querySelectorAll('[data-print-month-tick]')) as HTMLElement[];
+        const trackEls = Array.from(gantt.querySelectorAll('.print-gantt__track')) as HTMLElement[];
+        const barEls = Array.from(gantt.querySelectorAll('[data-print-gantt-bar]')) as HTMLElement[];
+        const rectOf = (el: HTMLElement): DOMRect => el.getBoundingClientRect();
+        return {
+          viewDays: Number(gantt.getAttribute('data-view-days')),
+          trackWidth: rectOf(trackEls[0]!).width,
+          ticks: tickEls.map((el) => ({
+            text: (el.textContent ?? '').trim(),
+            left: Number.parseFloat(el.getAttribute('data-tick-left') ?? 'NaN'),
+            // 刻度**可见性**：真实盒宽 > 0 且左缘落在轨道内（抽稀吞掉时这条会红）
+            boxW: rectOf(el).width,
+            xInTrack: rectOf(el).x - rectOf(trackEls[0]!).x,
+          })),
+          bars: barEls.map((el) => {
+            const style = el.style;
+            const r = rectOf(el);
+            const t = rectOf(el.parentElement as HTMLElement);
+            return {
+              title: el.getAttribute('title') ?? '',
+              left: Number.parseFloat(style.left),
+              width: Number.parseFloat(style.width),
+              // 实测像素级：条不越出轨道（含 1px 边框的容差）
+              overflowLeftPx: t.x - r.x,
+              overflowRightPx: r.x + r.width - (t.x + t.width),
+              widthPx: r.width,
+            };
+          }),
+        };
+      });
+
+      expect(geom.viewDays, 'B2 的窗口天数应由派生层给出').toBeGreaterThan(0);
+      expect(geom.trackWidth, '轨道应有可测宽度').toBeGreaterThan(100);
+      expect(geom.ticks.length, '9 阶段的项目应有月份刻度').toBeGreaterThan(0);
+      for (const t of geom.ticks) {
+        expect(t.text, '刻度应有文案（不被抽稀吞成空）').toMatch(/^\d{4}年\d{1,2}月$/);
+        expect(t.boxW, `刻度「${t.text}」的盒宽应 > 0`).toBeGreaterThan(0);
+        expect(t.xInTrack, `刻度「${t.text}」不得不合理地左越轨道`).toBeGreaterThanOrEqual(-1);
+        expect(Number.isFinite(t.left), `刻度「${t.text}」的 left 应是数值`).toBe(true);
+      }
+      expect(geom.bars.length, '每月阶段一条轨道条').toBe(9);
+      for (const b of geom.bars) {
+        const name = b.title.split('（')[0] ?? '';
+        // 内联几何（%）：不越轨道
+        expect(b.left, `${name}：left ≥ 0`).toBeGreaterThanOrEqual(0);
+        expect(b.left + b.width, `${name}：left + width ≤ 100（不越轨道）`).toBeLessThanOrEqual(
+          100.0001,
+        );
+        expect(b.width, `${name}：最小可见宽 ≥ 2.5%`).toBeGreaterThanOrEqual(2.5);
+        expect(Number.isFinite(b.left) && Number.isFinite(b.width), `${name}：几何非 NaN`).toBe(true);
+        // 实测像素：条不越出它的轨道（容差 1.5px = 边框 + 亚像素）
+        expect(b.overflowLeftPx, `${name}：左端不越出轨道`).toBeLessThanOrEqual(1.5);
+        expect(b.overflowRightPx, `${name}：右端不越出轨道`).toBeLessThanOrEqual(1.5);
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('A 版五块形态：套预设变体（站台蓝）逐页彩色；深色纸仍 794×1123 无裁切', async () => {
     const css = builtCss();
     const vm = buildVm();
     const preset = PRINT_TEMPLATE_PALETTES['swiss-schedule'].presets.find((p) => p.id === 'platform-blue')!;
@@ -343,7 +486,9 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
       const htmlPath = writeHtml('a-preset-platform-blue.html', shell(markup, css, false));
       await page.goto('file://' + htmlPath);
       const pages = await page.$$('.a4-page');
-      expect(pages).toHaveLength(4);
+      expect(pages, '预设变体不改变页数（装配层同源）').toHaveLength(
+        swissBlockPages(vm, DEFAULT_SCHEDULE_PAPER_BLOCKS).length,
+      );
       for (let i = 0; i < pages.length; i++) {
         const box = await pages[i]!.boundingBox();
         expect(Math.abs(box!.width - 794)).toBeLessThanOrEqual(1);

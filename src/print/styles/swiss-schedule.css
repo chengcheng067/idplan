@@ -694,3 +694,290 @@
     print-color-adjust: exact;
   }
 }
+
+/* ====================================================================================
+ * 5 块形态（2026-10-13 · 「5 块内容 × 4 模板」重构 · 批 1 · 只服务 B2/B3/B4 的新构件）
+ * ====================================================================================
+ * 依据 `deliverables/gstack/print-5blocks-mapping-2026-10-13.md` §1.1（A 版逐格映射）。
+ * 前缀纪律不变：每条规则同时命中 `.print-root` 与模板类。
+ * 本区**只加不改**——上方既有规则（参考稿还原批次校准过的每一处像素）一行不动，
+ * 5 块形态靠新类名叠加得到。
+ * ==================================================================================== */
+
+/* ── B2 打印时间轴：通栏运行图（横读；A 全页唯一的横读块）────────────────────
+   结构（§1.1）：2px 黑线当轴 + 月份刻度压线；每阶段一条 28px 轨道行
+   （左 200px 站号列 → 轨道 → 右对齐两端日期）；图例两行。
+   轨道行与刻度行**左右两端对齐**（站号列 / 日期列同宽 + 同 gap），
+   否则刻度与条带不在同一坐标系上（经典甘特的同一纪律）。 */
+.print-root.print-template-swiss-schedule .print-gantt {
+  display: flex;
+  flex-direction: column;
+  /* 板头已给 margin-bottom 33（栏头 → 主体的界面间距），此处不再叠加 */
+  margin-top: 0;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__axis {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__lead {
+  width: 200px;
+  flex: 0 0 auto;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__tick {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__ticks {
+  position: relative;
+  flex: 1 1 auto;
+  height: 15px;
+  /* 轴本体：2px 黑线（刻度压在线上） */
+  border-bottom: 2px solid var(--tpl-ink);
+  box-sizing: content-box;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__tail {
+  width: 110px;
+  flex: 0 0 auto;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 28px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__stop {
+  width: 200px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__no {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 28px;
+  box-sizing: border-box;
+  /* 黄底上 1px 黑框（§1.1） */
+  border: 1px solid var(--tpl-ink);
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  /* 墨实心条 = 跨度（A 的纸面是交通黄 ⇒ 条走墨，阶段色只做左端 4px 端标） */
+  background: var(--tpl-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__cap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__state {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  line-height: 1;
+  /* 墨条上的字形取纸面色（黄字压墨条）；灰度下形状双编码仍可辨 */
+  color: var(--tpl-accent);
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__dates {
+  width: 110px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 9.5px;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--tpl-ink);
+  font-size: 10px;
+  opacity: 0.82;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__legend-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__swatch {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__legend-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 6px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt__legend-glyph {
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* 四套甘特统一口径注（§5-3：条 = 时间跨度，不是完成度；防与 D 的完成度条读错） */
+.print-root.print-template-swiss-schedule .print-gantt__legend-note {
+  margin-left: auto;
+  font-style: italic;
+}
+
+/* ── B3 项目信息：排期基准行 + 休息制度黑块 + 口径注 ───────────────────────── */
+.print-root.print-template-swiss-schedule .swiss-info {
+  margin-top: 16px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-info__line {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+}
+
+/* 口径注区（**恒在**：§2.6 的 B3 格——口径注不许随块消失） */
+.print-root.print-template-swiss-schedule .swiss-notes {
+  margin-top: 0;
+}
+
+.print-root.print-template-swiss-schedule .swiss-board__note--sub {
+  /* 三类延期判据：比主口径行再降一档（9.5px = accent 文字下限，密度研究 §4） */
+  margin-top: 2px;
+  font-size: 9.5px;
+  opacity: 0.62;
+}
+
+/* ── B4 阶段清单块（三列错落 + L3 改期记录）───────────────────────────────── */
+.print-root.print-template-swiss-schedule .swiss-block {
+  margin-top: 20px;
+}
+
+/* L3 附属件「改期记录」：窄表（register 表缩窄版）+ 「共 M 条」尾行。
+   §0.5：随 B4 勾选、空态整段不出（组件层判 rows.length === 0 即不渲染）。 */
+.print-root.print-template-swiss-schedule .swiss-resched {
+  margin-top: 22px;
+  border-top: 2px solid var(--tpl-ink);
+  padding-top: 8px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-resched__title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--tpl-ink);
+  margin: 0 0 6px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-resched__table {
+  font-size: 10.5px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-resched__table th {
+  font-size: 9.5px;
+  padding: 4px 6px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-resched__table td {
+  padding: 4px 6px;
+}
+
+.print-root.print-template-swiss-schedule .swiss-resched__more {
+  margin-top: 4px;
+  font-size: 9.5px;
+  opacity: 0.72;
+  text-align: right;
+}
+
+/* ── B2 甘特 · 紧凑档（阶段数 ≥ GANTT_COMPACT_AT=17；阈值与分页估高同一出处）──
+   语义与经典的 `TIMELINE_COMPACT_AT` 同性质：超限项目的应急档，保证「阶段多时
+   整轴不把第一页撑爆」。**不压字号到下限以下**（9px 是 accent 文字下限）。 */
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__row {
+  height: 22px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__track {
+  height: 22px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__no {
+  font-size: 14px;
+  min-width: 24px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__name {
+  font-size: 12px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__dates {
+  font-size: 9px;
+}
+
+/* 打印媒体：甘特的墨条 / 端标 / 字形必须保色（浏览器省墨会吃掉黄底黑条） */
+@media print {
+  .print-root.print-template-swiss-schedule .print-gantt__bar,
+  .print-root.print-template-swiss-schedule .print-gantt__cap,
+  .print-root.print-template-swiss-schedule .print-gantt__track {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -3,13 +3,24 @@
  * A 版 · SwissScheduleDocument 组件测试（02 文档 §9 组件测试清单）。
  *
  * 锁六件：
- *   ① 渲染 4 页 `.a4-page`，`.print-root.print-template-swiss-schedule` 在位；
+ *   ① 缺省（五块形态）渲染 `.a4-page`，`.print-root.print-template-swiss-schedule` 在位
+ *      （原「渲染 4 页」随 2026-10-13 批 1 重定：缺省 = 五块形态；旧四页仍可由
+ *      显式 `sheets` 复现，见用例内两条断言）；
  *   ② 三槽位配色经 `.print-root` inline CSS 变量挂载（iframe 打印无损的前提）；
- *   ③ 页面选择器可关单页且**页码重排**（第 N / M 页随启用页变）；
+ *   ③ 页面选择器可关单页且**页码重排**（第 N / M 页随启用页变）——旧页路径；
  *   ④ P1-P4 各页数据口径：四态双编码 / taskNo 读号 / 三类延期分列 / Agent 行焦点；
  *   ⑤ 空数据显示标准空态文案，**不出现示例数据**；
  *   ⑥ `.a4-page` 等受保护选择器不被改名（02 §5 契约）。
+ *
+ * ── 2026-10-13「5 块 × 4 模板」重构 · 批 1 的重定（逐条）──
+ *   · ① 「渲染 4 页」⇒ 缺省 1 页（2 阶段 × 五块形态装得下）+ 显式四页仍 4 页；
+ *   · ⑤ 空态：旧四页的空态走显式 `sheets` 复跑（原断言逐字保留），另加五块
+ *     形态的空态（B4 标准空态 + 改期记录整段不出，§0.5）；
+ *   · ⑥ pageRef：五块形态 1 页；旧四页路径另测 4 页；
+ *   · ⑦ 「缺省 = 四页全选」⇒ 缺省 = 五块形态；四页由显式页清单复现。
+ *   **未动**：②③④a-④e 的全部断言（③④b/④c/④d 走显式 sheets ⇒ 旧页路径原样）。
  */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -248,14 +259,25 @@ afterEach(() => {
  * ==================================================================================== */
 
 describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
-  it('① 渲染 4 页 .a4-page，.print-root.print-template-swiss-schedule 在位', () => {
+  it('① 缺省 = 五块形态（本夹具 2 页）；显式 sheets 仍出旧四页（代码与 spec 全留）', () => {
     render();
     const rootEl = q('.print-root');
     expect(rootEl).not.toBeNull();
     expect(rootEl!.className).toContain('print-template-swiss-schedule');
-    expect(qa('.a4-page')).toHaveLength(4);
+    /*
+     * 五块形态的页数：本夹具 2 阶段 **且带 1 条 rescheduled 流水** ⇒ 2 页。
+     * 真机实测（2026-10-13 批 1，见 print-a4-visual 的 20 阶段用例与交付报告）：
+     * A 的首页被 B1（板头 265.5）+ B2（2 行甘特 131）+ B3（168）+ 贴底行（20）
+     * 吃掉 ~585px，剩 ~330px 给 B4；而 B4（组头 93 + 一列卡 95 + 错落 34）
+     * + L3 改期记录（124.5）需 ~366px ⇒ **整段后移一页**（不留空壳尾页）。
+     */
+    expect(qa('.a4-page')).toHaveLength(2);
+    expect(q('.a4-page')!.getAttribute('data-print-page'), '五块形态的纸面标识').toBe('blocks');
     // 受保护选择器不被改名（02 §5 契约：.print-root / .a4-page）
-    expect(qa('.print-root .a4-page').length).toBe(4);
+    expect(qa('.print-root .a4-page').length).toBe(2);
+    // 旧四页路径（额外内容页 / 通用模块；选择器不再暴露，代码与 spec 全留 —— 决策 2）
+    render(SWISS_SCHEDULE_PAGES);
+    expect(qa('.a4-page')).toHaveLength(4);
   });
 
   it('② 三槽位配色经 .print-root inline CSS 变量挂载', () => {
@@ -414,8 +436,15 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
       todayIso: TODAY,
       now: new Date('2026-10-09T07:30:00Z'),
     });
+    // 旧四页路径的空态（显式 sheets；额外内容页的代码与 spec 全留 —— 决策 2）
     act(() => {
-      root.render(<SwissScheduleDocument vm={emptyVm} palette={BASELINE} />);
+      root.render(
+        <SwissScheduleDocument
+          vm={emptyVm}
+          sheets={SWISS_SCHEDULE_PAGES.map((page) => ({ type: 'native', page }) as const)}
+          palette={BASELINE}
+        />,
+      );
     });
     // P3 台账空态 = 02 §8 标准文案（按页定位，别误中 P1 的阶段空态）
     expect(
@@ -430,9 +459,21 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
     const rootText = text('.print-root');
     expect(rootText).not.toContain('T-1000');
     expect(rootText).not.toContain('示例');
+
+    // 五块形态的空态：B4 出标准空态；L3「改期记录」整段不出（§0.5 的空态纪律：
+    // 无 rescheduled ⇒ 不出孤单表头）
+    act(() => {
+      root.render(<SwissScheduleDocument vm={emptyVm} palette={BASELINE} />);
+    });
+    expect(qa('.a4-page')).toHaveLength(1);
+    expect(q('[data-print-empty="stages"]')?.textContent).toBe('当前可见范围内无阶段');
+    expect(qa('.swiss-resched'), '无改期记录 ⇒ 整段不出').toHaveLength(0);
+    expect(qa('.swiss-register tbody tr')).toHaveLength(0);
+    expect(text('.print-root'), '空数据下也不出现示例数据').not.toContain('示例');
   });
 
-  it('⑥ pageRef 收集 4 个页面元素（PNG 逐页导出的前提）', () => {
+  it('⑥ pageRef 收集页面元素（PNG 逐页导出的前提）', () => {
+    // 五块形态：本夹具 2 页（见 ① 的实测说明）
     const collected: Array<HTMLDivElement | null> = [];
     act(() => {
       root.render(
@@ -445,15 +486,39 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
         />,
       );
     });
-    expect(collected).toHaveLength(4);
+    expect(collected).toHaveLength(2);
     for (const el of collected) {
+      expect(el).not.toBeNull();
+      expect(el!.className).toContain('a4-page');
+    }
+    // 旧四页路径：同一 ref 协议仍按页收集（额外内容页的 PNG 导出链全留）
+    const collectedLegacy: Array<HTMLDivElement | null> = [];
+    act(() => {
+      root.render(
+        <SwissScheduleDocument
+          vm={buildVm()}
+          sheets={SWISS_SCHEDULE_PAGES.map((page) => ({ type: 'native', page }) as const)}
+          palette={BASELINE}
+          pageRef={(idx) => (el: HTMLDivElement | null) => {
+            collectedLegacy[idx] = el;
+          }}
+        />,
+      );
+    });
+    expect(collectedLegacy).toHaveLength(4);
+    for (const el of collectedLegacy) {
       expect(el).not.toBeNull();
       expect(el!.className).toContain('a4-page');
     }
   });
 
-  it('⑦ 默认 pages 缺省 = 四页全选（01 §8）', () => {
+  it('⑦ 缺省 = 五块形态（决策 1）；显式四页时页序与旧默认逐页一致', () => {
     render();
+    expect(qa('.a4-page').map((el) => el.getAttribute('data-print-page'))).toEqual([
+      'blocks',
+      'blocks',
+    ]);
+    render(SWISS_SCHEDULE_PAGES);
     expect(SWISS_SCHEDULE_PAGES).toHaveLength(4);
     expect(qa('.a4-page').map((el) => el.getAttribute('data-print-page'))).toEqual([
       'stage-overview',

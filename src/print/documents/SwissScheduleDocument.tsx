@@ -23,10 +23,15 @@
 
 import type { CSSProperties, Ref } from 'react';
 
-import { MemberActorKind, StageStatus, TASK_STATUS_LABELS } from '../../core/types/enums';
+import { MemberActorKind, StageLogType, StageStatus, TASK_STATUS_LABELS } from '../../core/types/enums';
 import { formatTaskNo } from '../../core/lib/task-no';
 import { relativeLuminance } from '../../core/color/contrast';
-import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
+import {
+  A4_WIDTH_PX,
+  A4_HEIGHT_PX,
+  DEFAULT_SCHEDULE_PAPER_BLOCKS,
+  type SchedulePaperBlocks,
+} from '../../lib/schedule-print';
 import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-templates';
 import type { PrintSheet } from '../../components/print/print-templates';
 
@@ -37,7 +42,9 @@ import type {
   PrintViewModel,
 } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
+import { buildPrintGantt, type PrintGanttModel } from '../model/print-gantt';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
+import { PrintGantt } from '../parts/PrintGantt';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
 import { GenericModuleBody } from '../pages/generic/GenericModuleBody';
 import {
@@ -105,11 +112,23 @@ function stampOf(iso: string): string {
 export interface SwissScheduleDocumentProps {
   vm: PrintViewModel;
   /**
-   * 纸面页（期三：原生页 kind + 通用模块 id 的混合序列；缺省 = 默认原生模块）。
-   * 选择器勾选即时重渲染；A 的 M1/M2/M4 是原生页，通用页在本版不会出现
-   * （期三第一批里 A 无 generic 标记模块），装配链仍统一走 sheets。
+   * **legacy** 纸面页（期三：原生页 kind + 通用模块 id 的混合序列）。
+   * 传了就一定走旧页路径——额外内容页（任务读号表 / 延期记录表 / 成员责任表）
+   * 与通用模块页选中器不再暴露、但代码与 spec 全留（决策 2）。
    */
   sheets?: readonly PrintSheet[];
+  /**
+   * 五块打印内容（决策 1：选择器只暴露这 5 块）。**缺省 = 五块全开**。
+   * 未传 `sheets` 时（= 应用内预览面板与所有新形态宿主）走「5 块形态」：
+   * B1 打印头部 / B2 打印时间轴 / B3 项目信息 / B4 阶段清单（含 L3 改期记录）
+   * / B5 页脚——版性装置（黑顶栏 / 板头巨字 / 黑底栏）按 §2.6 恒在。
+   *
+   * ⚠️ 本组件是**哑渲染层**：`blocks` 说什么就画什么。**「A 的 B1 不可摘」这条
+   * 纪律住在单元层**（`resolveUnits('swiss-schedule')` 把 header 标成 `forced` ⇒
+   * `blockRecordOf` 恒给 true），所有宿主都从那里取布尔值 ⇒ 单一裁决点，
+   * 文档层不重复判一次（否则两处判断必然漂移）。
+   */
+  blocks?: SchedulePaperBlocks;
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，黑顶栏左端显示「ID Plan」文字标） */
@@ -156,12 +175,19 @@ export function swissSchedulePhysical(vm: PrintViewModel, sheets: readonly Print
 export function SwissScheduleDocument({
   vm,
   sheets,
+  blocks,
   palette,
   logo = null,
   pageRef,
 }: SwissScheduleDocumentProps): JSX.Element {
-  const physical = swissSchedulePhysical(vm, sheets ?? enabledSheetsOf('swiss-schedule', undefined));
-  const total = physical.length;
+  /**
+   * 两种形态的分流（**唯一分叉点**，其余全部共用/沿革）：
+   *   · 传了 `sheets` ⇒ legacy 页路径（额外内容页 + 通用模块；出选择器但代码全留）；
+   *   · 否则 ⇒ 5 块形态（决策 1：选择器只暴露这 5 块；缺省 = 五块全开）。
+   */
+  const physical = sheets ? swissSchedulePhysical(vm, sheets) : null;
+  const blockPages = physical === null ? swissBlockPages(vm, blocks ?? DEFAULT_SCHEDULE_PAPER_BLOCKS) : null;
+  const total = physical ? physical.length : (blockPages?.length ?? 0);
   /**
    * 顶栏明暗（决定 logo 反不反白）：栏底 = --tpl-line 槽位。基线黑栏 ⇒
    * 二值化黑 logo 必须反白才看得见；自定义预设若把栏底改亮（站台蓝/赭石/
@@ -169,6 +195,10 @@ export function SwissScheduleDocument({
    * 否则三个浅栏预设下白 logo 直接消失。
    */
   const barIsDark = relativeLuminance(palette.line) < 0.2;
+  const effectiveBlocks = blocks ?? DEFAULT_SCHEDULE_PAPER_BLOCKS;
+  /** 甘特模型（5 块形态专用；legacy 页路径不消费——经典甘特是它自己的私有实现） */
+  const gantt = physical === null ? swissGanttModel(vm) : null;
+  const reschedLogs = physical === null ? swissRescheduleLogs(vm) : [];
 
   return (
     <div
@@ -181,18 +211,36 @@ export function SwissScheduleDocument({
         } as CSSProperties
       }
     >
-      {physical.map((p, idx) => (
-        <SwissPage
-          key={p.type === 'native' ? p.kind : `generic-${p.module}-${p.chunkIndex}`}
-          page={p}
-          vm={vm}
-          pageIndex={idx}
-          pageTotal={total}
-          pageRef={pageRef?.(idx)}
-          logo={logo}
-          barIsDark={barIsDark}
-        />
-      ))}
+      {physical &&
+        physical.map((p, idx) => (
+          <SwissPage
+            key={p.type === 'native' ? p.kind : `generic-${p.module}-${p.chunkIndex}`}
+            page={p}
+            vm={vm}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+            logo={logo}
+            barIsDark={barIsDark}
+          />
+        ))}
+      {blockPages &&
+        gantt &&
+        blockPages.map((p, idx) => (
+          <SwissBlockPage
+            key={`blocks-${idx}`}
+            vm={vm}
+            blocks={effectiveBlocks}
+            gantt={gantt}
+            reschedLogs={reschedLogs}
+            page={p}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+            logo={logo}
+            barIsDark={barIsDark}
+          />
+        ))}
     </div>
   );
 }
@@ -411,40 +459,13 @@ function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
                 </span>
                 <span className="swiss-column__count swiss-num">{col.length}</span>
               </div>
-              {col.map((s) => (
-                <div key={s.id} className="swiss-stage-row" data-state={s.status}>
-                  {/* ① 号码行（号码 + 名称） */}
-                  <div className="swiss-stage-row__top">
-                    <span className="swiss-stage-row__no swiss-num">
-                      {String(s.orderIndex).padStart(2, '0')}
-                    </span>
-                    <span className="swiss-stage-row__name">{s.name}</span>
-                  </div>
-                  {/* ② 胶囊行：状态胶囊（实心/描边 + 字形双编码）+ 右对齐日期。
-                      参考稿实测胶囊与日期同一行（审计把「2px 粗线」记在号码行与
-                      胶囊行之间，实拍里没有这条线——见施工报告 P0-6） */}
-                  <div className="swiss-stage-row__capsule-row">
-                    <span className="swiss-stage-row__capsule" data-state={s.status}>
-                      <span className="swiss-state-glyph" aria-hidden>
-                        {STAGE_GLYPH[s.status]}
-                      </span>
-                      {stageStatusLabel(s.status)}
-                    </span>
-                    <span className="swiss-stage-row__date swiss-num">
-                      {s.startAt} → {s.endAt}
-                    </span>
-                  </div>
-                  {/* ③ 占比 + 负责人行（01 §4 P1 字段表逐项） */}
-                  <div className="swiss-stage-row__bottom">
-                    <span>占比 {s.ratioPercent}%</span>
-                    <span>负责人 {s.ownerName ?? '—'}</span>
-                  </div>
+                  {col.map((s) => (
+                    <SwissStageCard key={s.id} stage={s} />
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
       {/* 口径行（01 §2 + 宪法 7：口径注每页独立解释，空态同样登；参考 y799.5..809.5 单行） */}
       <p className="swiss-board__note">
@@ -462,6 +483,46 @@ function StageDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
         数据来源 ID Plan 排程库 {stampOf(vm.generatedAt)} 同步
       </p>
     </section>
+  );
+}
+
+/**
+ * 阶段卡（三段结构：号码行 → 胶囊行 → 占比/负责人行）。
+ *
+ * 从 `StageDeparturePage` 的内联 JSX **逐字搬运**（DOM 与类名一字未改，
+ * `swiss-schedule-document.spec` 的 ④a 断言照旧）——搬出来只为让「5 块形态」
+ * 的 B4 与 legacy P1 用**同一张卡**，避免两处各长一版（第二真值源纪律）。
+ */
+function SwissStageCard({ stage }: { stage: PrintStageVM }): JSX.Element {
+  return (
+    <div className="swiss-stage-row" data-state={stage.status}>
+      {/* ① 号码行（号码 + 名称） */}
+      <div className="swiss-stage-row__top">
+        <span className="swiss-stage-row__no swiss-num">
+          {String(stage.orderIndex).padStart(2, '0')}
+        </span>
+        <span className="swiss-stage-row__name">{stage.name}</span>
+      </div>
+      {/* ② 胶囊行：状态胶囊（实心/描边 + 字形双编码）+ 右对齐日期。
+          参考稿实测胶囊与日期同一行（审计把「2px 粗线」记在号码行与
+          胶囊行之间，实拍里没有这条线——见施工报告 P0-6） */}
+      <div className="swiss-stage-row__capsule-row">
+        <span className="swiss-stage-row__capsule" data-state={stage.status}>
+          <span className="swiss-state-glyph" aria-hidden>
+            {STAGE_GLYPH[stage.status]}
+          </span>
+          {stageStatusLabel(stage.status)}
+        </span>
+        <span className="swiss-stage-row__date swiss-num">
+          {stage.startAt} → {stage.endAt}
+        </span>
+      </div>
+      {/* ③ 占比 + 负责人行（01 §4 P1 字段表逐项） */}
+      <div className="swiss-stage-row__bottom">
+        <span>占比 {stage.ratioPercent}%</span>
+        <span>负责人 {stage.ownerName ?? '—'}</span>
+      </div>
+    </div>
   );
 }
 
@@ -652,5 +713,458 @@ function TeamDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
         </table>
       )}
     </section>
+  );
+}
+
+/* ====================================================================================
+ * 5 块形态（2026-10-13 · 「5 块内容 × 4 模板」重构 · 批 1）
+ * ====================================================================================
+ * 依据：`deliverables/gstack/print-5blocks-mapping-2026-10-13.md`
+ *   · §1.1 = A 版的 5 块映射（逐格照做）；§0.5 = B4 的 L3 附属件「改期记录」；
+ *   · §2.6 = 装置 vs 内容的分界（本文件里体现为：黑顶栏 / 黑底栏 / 板头巨字
+ *     **恒渲染**，五块按勾选渲染；B1 因承载项目名而不可摘，由 units 层声明）。
+ *
+ * 分页口径（照 §0.2 经典的 5 块口径）：
+ *   B1 打印头部 **每页**；B2 打印时间轴 **只第 1 页**；B3 项目信息 **只第 1 页**；
+ *   B4 阶段清单 **每页**（本页无承载则不出清单，与经典「空页不出表」同源）；
+ *   B5 页脚 **每页**（此处可摘的载荷 = 贴底的数据来源行，见 §2.6 的 A·B5 格）。
+ *
+ * 严格一一对应（决策 6）：勾选只决定「打什么内容」，永不决定「这套模板长什么样」；
+ * 取消一块 = 纸面上精确减掉一个可见区。
+ * ==================================================================================== */
+
+/**
+ * 纸面几何常量（px）——纪律与 `lib/schedule-print.ts` 的 EST 同款：
+ * **估高只许偏大不许偏小**（偏大 = 早分页白留一截，偏小 = 内容溢出纸面）。
+ *
+ * ★ 全部值来自**真 Chromium 实测**（2026-10-13 批 1，9/6/2 阶段三档夹具，
+ *   逐块量 `getBoundingClientRect` + margin；探针脚本见交付报告）。
+ *   实测值 → 本表取值的对照写在每条注释里；表格值 ≥ 实测值。
+ */
+const SWISS_BLOCK_EST = {
+  /** .a4-page padding：24（顶）+ 36（底）——swiss-schedule.css */
+  pagePadding: 60,
+  /** 黑顶栏 --swiss-bar-height-top */
+  topbar: 100,
+  /** 黑底栏 --swiss-bar-height-bottom */
+  bottombar: 48,
+  /** 首页板头（含 margin-bottom 33）：实测 265.5 */
+  masthead: 266,
+  /** 续页板头（无巨字锚点，含 margin-bottom 33）：实测 250 */
+  mastheadCont: 250,
+  /** B2 甘特 chrome（轴 + 刻度 + 图例两行 + 行上间距）：实测 75 */
+  ganttChrome: 76,
+  /** B3 项目信息整块（排期基准行 + 休息制度黑块 + 口径注两行）：实测 168.25 */
+  infoTotal: 170,
+  /** B5 的贴底数据来源行（在 body 流里占位）：实测 20.39 */
+  sourceH: 21,
+  /** B4 组头（标签 + 2px 粗线 + 其下呼吸）：实测 92.75 */
+  stageHead: 94,
+  /** 三列错落的中列下移：实测 34（`[data-col='2']` 的 margin-top） */
+  stageStagger: 34,
+  /** B4 一条阶段卡（含卡间间距）：实测 95.19 */
+  stagePitch: 96,
+  /** B4 三列错落 */
+  columns: 3,
+  /** L3「改期记录」固定头（小标题 + 表头 + 「共 M 条」尾行 + 间距）：1 条记录时实测 124.5 */
+  reschedHead: 106,
+  /** L3 每条改期记录 */
+  reschedRow: 24,
+  /**
+   * B2 轨道行高的**下限/上限**（px）：28 = 设计基线，14 = 可读下限。
+   * 轨道行高按阶段数**自适应**（见 `swissGanttPitch`）——因为 B2 是「只第 1 页」
+   * 的块（§0.2 的经典口径），行高不自适应的话阶段一多就会把纸撑爆。
+   */
+  ganttMinPitch: 14,
+  ganttMaxPitch: 28,
+};
+
+/** 纸面可用高度（= 1123 − padding − 顶栏 − 底栏） */
+const SWISS_BLOCK_BODY_H =
+  A4_HEIGHT_PX - SWISS_BLOCK_EST.pagePadding - SWISS_BLOCK_EST.topbar - SWISS_BLOCK_EST.bottombar;
+
+/** L3 改期记录最多登几条（§0.5：「取最近 N 条 + 行末「共 M 条」」） */
+export const SWISS_RESCHED_MAX_ROWS = 6;
+
+/** 一页的装配计划（5 块形态；`first` = 首页，B2/B3 只认它） */
+export interface SwissBlockPagePlan {
+  first: boolean;
+  /** 本页承载的阶段（B4 的行切片；空 = 本页不出清单） */
+  stages: readonly PrintStageVM[];
+  /** 本页是 B4 的最后一页（L3 改期记录挂这里；§0.5：不单独成页） */
+  last: boolean;
+}
+
+/** 甘特模型（VM 的可见阶段已过权限过滤 ⇒ 这里只做几何派生） */
+function swissGanttModel(vm: PrintViewModel): PrintGanttModel {
+  return buildPrintGantt(vm.project, vm.stages);
+}
+
+/** L3 改期记录的行（StageLog type=rescheduled，**最近的在前**，取 N 条） */
+export function swissRescheduleLogs(vm: PrintViewModel): readonly PrintStageLogVM[] {
+  return vm.stageLogs
+    .filter((l) => l.type === StageLogType.Rescheduled)
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .slice(0, SWISS_RESCHED_MAX_ROWS);
+}
+
+/** B4 三列错落的切分（与 legacy P1 同一算法：按 orderIndex 顺序切三段） */
+function splitColumns(stages: readonly PrintStageVM[]): PrintStageVM[][] {
+  const per = Math.ceil(stages.length / SWISS_BLOCK_EST.columns);
+  return [0, 1, 2]
+    .map((gi) => stages.slice(gi * per, (gi + 1) * per))
+    .filter((col) => col.length > 0);
+}
+
+/**
+ * B2 轨道行高（px）——按阶段数**自适应**，夹在 [14, 28]。
+ *
+ * 为什么必须自适应：B2 是「只第 1 页」的块（§0.2 照抄经典的 5 块分页口径），
+ * 而行数 = 阶段数（无上限）⇒ 固定行高时阶段一多就把纸撑爆（经典的时间轴
+ * 也有这条暴露面，只是它的行高便宜得多：26/28px + 没有 A 的板头开销）。
+ * 自适应 = 在「纸面装得下」的硬约束下把行高让给行数。
+ *
+ * 上限 28 是设计基线（§1.1 的「28px 轨道行」）；下限 14 是**可读下限**
+ * （12.5px 名称 + tabular 日期仍可辨）。**超过 27 个阶段时下限也兜不住**
+ * ——那条边界已在交付报告里如实登记为已知限制（不是静默裁切）。
+ */
+export function swissGanttPitch(stageCount: number): number {
+  if (stageCount <= 0) return SWISS_BLOCK_EST.ganttMaxPitch;
+  const room =
+    SWISS_BLOCK_BODY_H -
+    SWISS_BLOCK_EST.masthead -
+    SWISS_BLOCK_EST.infoTotal -
+    SWISS_BLOCK_EST.sourceH -
+    SWISS_BLOCK_EST.ganttChrome;
+  const pitch = Math.floor(room / stageCount);
+  return Math.min(Math.max(pitch, SWISS_BLOCK_EST.ganttMinPitch), SWISS_BLOCK_EST.ganttMaxPitch);
+}
+
+/**
+ * 5 块形态的物理页装配（**预计页数 = 实际出纸**的唯一出处；
+ * `printPhysicalPageCount` 与文档本体都读它）。
+ *
+ * 规则（顺序即优先级）：
+ *   ① 首页预算 = 纸面可用高 − B1 − B2 − B3 − B5 的贴底行；剩余给 B4；
+ *   ② 首页连一「组」阶段卡都放不下 ⇒ 首页只出纸壳（B1+B2+B3），B4 从第二页起
+ *      ——与经典 `paginateSections` 的「第一页放不下任何一行 ⇒ 先出纸壳」同源；
+ *   ③ 续页预算 = 纸面可用高 − 续页板头 − B5 贴底行；
+ *   ④ L3 改期记录挂在 B4 的最后一页（§0.5：不单独成页）。**关键取舍**：
+ *      若本页装得下剩余阶段、却装不下那条改期记录，则**整段（含清单）后移一页**
+ *      ——不留「上一页有清单、下一页只有一张小表」的空壳尾页。
+ */
+export function swissBlockPages(vm: PrintViewModel, blocks: SchedulePaperBlocks): SwissBlockPagePlan[] {
+  const stages = vm.stages;
+  // B4 关掉 ⇒ 没有任何清单承载（改期记录是它的附属件，不独立成块，§0.5）
+  // ⇒ 只有单页（B1 / B2 / B3 都只认首页）
+  if (!blocks.stageTable) return [{ first: true, stages: [], last: false }];
+  if (stages.length === 0) return [{ first: true, stages: [], last: true }];
+
+  const pitch = swissGanttPitch(stages.length);
+  const timelineH = blocks.timeline ? SWISS_BLOCK_EST.ganttChrome + stages.length * pitch : 0;
+  const infoH = blocks.projectInfo ? SWISS_BLOCK_EST.infoTotal : 0;
+  // B5 的贴底行在两个页型里都占流内高度（它总是渲染，除非用户摘掉页脚块）；
+  // 关掉页脚 = 少一行 ⇒ 预算反而更宽松（保守方向允许）
+  const footerH = blocks.footer ? SWISS_BLOCK_EST.sourceH : 0;
+  const availFirst = SWISS_BLOCK_BODY_H - SWISS_BLOCK_EST.masthead - timelineH - infoH - footerH;
+  const availCont = SWISS_BLOCK_BODY_H - SWISS_BLOCK_EST.mastheadCont - footerH;
+  const resched = blocks.stageTable ? swissRescheduleLogs(vm) : [];
+  const reschedH =
+    resched.length > 0 ? SWISS_BLOCK_EST.reschedHead + resched.length * SWISS_BLOCK_EST.reschedRow : 0;
+
+  /**
+   * 给定可用高度能装几条阶段卡（三列错落 ⇒ ×3）。
+   * 2026-10-13 真机实测反馈：**必须扣掉错落的 34px**——只扣组头会让
+   * 「2 阶段 + 改期记录」这种临界情形误判为「装得下」，实测溢出 28px。
+   */
+  const fit = (avail: number): number => {
+    const budget = avail - SWISS_BLOCK_EST.stageHead - SWISS_BLOCK_EST.stageStagger;
+    if (budget < SWISS_BLOCK_EST.stagePitch) return 0;
+    return Math.floor(budget / SWISS_BLOCK_EST.stagePitch) * SWISS_BLOCK_EST.columns;
+  };
+
+  const pages: SwissBlockPagePlan[] = [];
+  let first = true;
+  let cursor = 0;
+  let guard = 0;
+  while (cursor < stages.length && guard++ < 64) {
+    const avail = first ? availFirst : availCont;
+    const remaining = stages.length - cursor;
+    const capFull = fit(avail);
+    const capTail = fit(avail - reschedH);
+    // 这一页就能把清单连同改期记录一起收口 ⇒ 收口（§0.5：附属件不单独成页）
+    if (capTail >= remaining) {
+      pages.push({ first, stages: stages.slice(cursor), last: true });
+      break;
+    }
+    // 首页装得下清单、装不下改期记录 ⇒ **整段后移**（不留「清单在上一页、
+    // 小表在下一页」的空壳尾页）。只允许首页让位一次（否则会无限出纸壳页）
+    if (first && capFull >= remaining) {
+      pages.push({ first: true, stages: [], last: false });
+      first = false;
+      continue;
+    }
+    // 其余情形：本页只装「给改期记录留了位」的那一档（`capTail`）——不足时退回
+    // `capFull`（只在极窄的首页会发生），都没有则出纸壳页（决不死循环）。
+    const take = capTail > 0 ? capTail : capFull;
+    if (take === 0) {
+      pages.push({ first, stages: [], last: false });
+      first = false;
+      continue;
+    }
+    pages.push({ first, stages: stages.slice(cursor, cursor + take), last: false });
+    cursor += take;
+    first = false;
+  }
+  return pages;
+}
+
+/**
+ * B1 的 meta 三行（§1.1 A·B1：栏外板头线下左三行）。
+ * 字段全集不丢（§3 铁律①：B1 ∪ B3 = 同一组字段全集）：
+ *   ① 委托方（**仅 admin 且非空**；普通成员 VM 里 clientName 恒 undefined）
+ *      非 admin 时该行改登可见阶段计数；
+ *   ② 阶段套餐；
+ *   ③ 打印日期（§1.1 的「乙 · 从底栏上移」）。
+ */
+function swissBlockMastheadMeta(vm: PrintViewModel): string[] {
+  const presetKey = vm.project.stagePresetKey ?? null;
+  const presetText = presetKey ? `${presetKey} v${vm.project.stageTemplateVersion ?? 0}` : '—';
+  const clientLine =
+    vm.viewerRole === 'admin' && vm.project.clientName
+      ? `委托方 ${vm.project.clientName}`
+      : `可见阶段 ${vm.stages.length} / ${vm.project.visibleStageCount}`;
+  return [
+    clientLine,
+    `阶段套餐 ${presetText}（${vm.stages.length} 项）`,
+    `打印日期 ${stampOf(vm.generatedAt).slice(0, 10)}`,
+  ];
+}
+
+/**
+ * B3 的口径注（**永远渲染**：§2.6 的 B3 格明文——「主体里的承载区整块不出；
+ * 但口径注不许随它消失（原则 1）」，A 的锚回位置 = 板头 meta 区的口径行位）。
+ *
+ * 两行：① 阶段四态 + 占比口径（A P1 原有）；② 三类延期判据（§2 A-⑥ 的边界：
+ * 三类延期口径块**不随台账一起搬**，它归 B3 的口径注区）。
+ */
+function SwissBlockNotes(): JSX.Element {
+  return (
+    <div className="swiss-notes">
+      <p className="swiss-board__note">
+        阶段四态：已完成 进行中 未开始 延期　|　占比 = Stage.ratioPercent（项目级覆写）
+      </p>
+      <p className="swiss-board__note swiss-board__note--sub">
+        延期口径：项目逾期 = 结束日早于今天且未完成；阶段延期 = status=delayed 且有 StageLog（reason
+        必填）；任务逾期 = dueDate 早于今天且未完成（三判据互不推导）
+      </p>
+    </div>
+  );
+}
+
+/** B4 的 L3 附属件「改期记录」（§0.5：随 B4 勾选、空态整段不出、不单独成页） */
+function SwissReschedule({
+  rows,
+  total,
+}: {
+  rows: readonly PrintStageLogVM[];
+  total: number;
+}): JSX.Element {
+  return (
+    <div className="swiss-resched">
+      <h3 className="swiss-resched__title">改期记录</h3>
+      <table className="swiss-register swiss-resched__table">
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th className="swiss-register__date">旧结束日</th>
+            <th className="swiss-register__date">新结束日</th>
+            <th>原因</th>
+            <th className="swiss-register__date">时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((l) => (
+            <tr key={l.id}>
+              <td>{l.stageName}</td>
+              <td className="swiss-num">{l.oldEndAt ?? '—'}</td>
+              <td className="swiss-num">{l.newEndAt ?? '—'}</td>
+              <td className="swiss-register__reason">{l.reason ?? '—'}</td>
+              <td className="swiss-num">{stampOf(l.createdAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="swiss-resched__more swiss-num">
+        共 {total} 条{rows.length < total ? `（示最近 ${rows.length} 条）` : ''}
+      </p>
+    </div>
+  );
+}
+
+/** 黑顶栏的 5 块栏目（§2 A-⑧：四枚旧栏目里后三枚指向不存在的内容 ⇒ 缩为两枚） */
+const SWISS_BLOCK_NAV: ReadonlyArray<{ id: 'timeline' | 'stageTable'; en: string }> = [
+  { id: 'timeline', en: 'TIME TABLE' },
+  { id: 'stageTable', en: 'STAGE DEPARTURES' },
+];
+
+/** 一根阶段卡列（组头 + 卡片；与 legacy P1 的列结构逐字同款） */
+function SwissStageColumn({ col, index }: { col: readonly PrintStageVM[]; index: number }): JSX.Element {
+  const phase = SWISS_PHASES[index] ?? SWISS_PHASES[SWISS_PHASES.length - 1]!;
+  return (
+    <div className="swiss-column" data-col={index + 1}>
+      <div className="swiss-column__head">
+        <span className="swiss-column__label">
+          {phase.cn}
+          <span className="swiss-column__en">/ {phase.en}</span>
+        </span>
+        <span className="swiss-column__count swiss-num">{col.length}</span>
+      </div>
+      {col.map((s) => (
+        <SwissStageCard key={s.id} stage={s} />
+      ))}
+    </div>
+  );
+}
+
+/** 5 块形态的一个物理页 */
+function SwissBlockPage({
+  vm,
+  blocks,
+  gantt,
+  reschedLogs,
+  page,
+  pageIndex,
+  pageTotal,
+  pageRef,
+  logo,
+  barIsDark,
+}: {
+  vm: PrintViewModel;
+  blocks: SchedulePaperBlocks;
+  gantt: PrintGanttModel;
+  reschedLogs: readonly PrintStageLogVM[];
+  page: SwissBlockPagePlan;
+  pageIndex: number;
+  pageTotal: number;
+  pageRef?: Ref<HTMLDivElement>;
+  logo: string | null;
+  barIsDark: boolean;
+}): JSX.Element {
+  const nn = String(pageIndex + 1).padStart(2, '0');
+  const NN = String(pageTotal).padStart(2, '0');
+  const columns = splitColumns(page.stages);
+  const reschedTotal = vm.stageLogs.filter((l) => l.type === StageLogType.Rescheduled).length;
+  const stamp = stampOf(vm.generatedAt);
+  // 栏内当前项点亮：单张纸面上两份内容块都在 ⇒ 有清单就点亮清单那一枚
+  const current = blocks.stageTable ? 'stageTable' : 'timeline';
+  return (
+    <div
+      ref={pageRef}
+      data-print-page="blocks"
+      data-page-index={pageIndex}
+      className="a4-page swiss-page"
+      style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
+    >
+      {/* 装置 · 黑顶栏（§2.6 原则 2：装置本体从不因勾选消失） */}
+      <header className="swiss-topbar">
+        <div className="swiss-topbar__nav" aria-label="栏目">
+          <PrintLogoMark logo={logo} height={24} tone={barIsDark ? 'on-dark' : 'ink'} />
+          {SWISS_BLOCK_NAV.map((n) => (
+            <span
+              key={n.id}
+              className="swiss-topbar__navitem"
+              data-current={n.id === current ? true : undefined}
+            >
+              {n.en}
+            </span>
+          ))}
+        </div>
+        <div className="swiss-topbar__title">{page.first ? '阶段总览' : '阶段总览（续）'}</div>
+        <div className="swiss-topbar__meta">
+          <span className="swiss-num">
+            ID PLAN · {nn} / {NN}
+          </span>
+          <span className="swiss-num">
+            {vm.project.plannedStartAt.slice(0, 10)} — {vm.project.plannedEndAt.slice(0, 10)}
+          </span>
+        </div>
+      </header>
+
+      <div className="swiss-body">
+        {/* B1 打印头部（每页；§2.6 A·B1 = 不可取消：项目名住在板头站名） */}
+        <SwissMasthead
+          projectName={vm.project.name}
+          subtitle={
+            page.first ? '阶段排期表 · PROJECT DEPARTURES' : '阶段排期表（续） · PROJECT DEPARTURES'
+          }
+          meta={swissBlockMastheadMeta(vm)}
+          anchor={
+            page.first
+              ? {
+                  value: `${Math.round(vm.project.percent)}%`,
+                  // 口径：完成度按可见阶段数统计（01 §3.1），不按 ratioPercent 加权
+                  caption: '项目完成度（阶段粒度）',
+                }
+              : undefined
+          }
+        />
+
+        {/* B2 打印时间轴（只第 1 页；§1.1：通栏运行图，A 全页唯一横读块） */}
+        {page.first && blocks.timeline && (
+          <PrintGantt model={gantt} variant="swiss" rowHeight={swissGanttPitch(vm.stages.length)} />
+        )}
+
+        {/* B3 项目信息（只第 1 页）：排期基准行 + 休息制度黑块 */}
+        {page.first && blocks.projectInfo && (
+          <div className="swiss-info">
+            <p className="swiss-info__line swiss-num">
+              排期基准 {vm.project.scheduleBasisLabel}　·　打印时间 {stamp}
+            </p>
+            <div className="swiss-rest">
+              <div className="swiss-rest__title">休息制度　{vm.project.restPolicyLabel ?? '—'}</div>
+              <div className="swiss-rest__note">{vm.project.restPolicyNote ?? ''}</div>
+            </div>
+          </div>
+        )}
+        {/* 口径注恒在：B3 关掉时锚回板头 meta 区的口径行位（§2.6 B3 格） */}
+        {page.first && <SwissBlockNotes />}
+
+        {/* B4 阶段清单（每页；含 L3 附属件「改期记录」）
+            ⚠️ 空态只在**整个项目没有可见阶段**时出（与经典 `pageSections.length > 0`
+            的空页纪律同源）——「本页没有承载」（纸壳页）不出空态，否则纸壳页会
+            多出一句「当前可见范围内无阶段」（真机实测 +72px，会把首页撑爆）。 */}
+        {blocks.stageTable && (vm.stages.length === 0 || page.stages.length > 0) && (
+          <section className="swiss-board swiss-block" data-print-block="stageTable">
+            {columns.length === 0 ? (
+              <EmptyPrintState kind="stages" />
+            ) : (
+              <div className="swiss-columns">
+                {columns.map((col, ci) => (
+                  <SwissStageColumn key={ci} col={col} index={ci} />
+                ))}
+              </div>
+            )}
+            {page.last && reschedLogs.length > 0 && (
+              <SwissReschedule rows={reschedLogs} total={reschedTotal} />
+            )}
+          </section>
+        )}
+
+        {/* B5 页脚的可摘载荷 = 贴底数据来源行（§2.6 A·B5 格：黑底栏装置留着） */}
+        {blocks.footer && (
+          <p className="swiss-source swiss-num">数据来源 ID Plan 排程库 {stamp} 同步</p>
+        )}
+      </div>
+
+      {/* 装置 · 黑底栏（署名 + 页码 + 数据时间；页码在此 ⇒ 原则 1 的落点） */}
+      <footer className="swiss-bottombar">
+        <span>ID Plan · 项目排期与交付管理</span>
+        <span className="swiss-num">
+          第 {pageIndex + 1} / {pageTotal} 页 · 数据时间 {stamp}
+        </span>
+      </footer>
+    </div>
   );
 }

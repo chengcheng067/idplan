@@ -38,6 +38,19 @@
  *  工具条另加「灰度」toggle（纸面 wrapper 套 filter:grayscale(1)）——选色时
  *  实时自查灰度可读，同时服务 02 §9 的灰度快照验收（不必真打黑白）。
  *
+ * ── 2026-10-13「5 块内容 × 4 模板」重构 · 批 1（决策 1/5/6）──
+ * 用户原话：「所有的模板都只需要这 5 个打印内容，请把后面的模板根据各自的风格
+ * 以及不同的排版，去映射这 5 块内容」——选择器**只暴露那 5 块**：
+ *   · 中截的机构分支（`meta.usesBlocks`）语义扩到 A：classic 与 A 走**五块清单**
+ *     （行来自单元注册表 `print/model/print-units.ts` 的 `printToggleableUnits`），
+ *     D/E/H 仍走模块清单（批 2/3/4 再切，本批不动它们的文档）；
+ *   · 清单**只列可勾的块**：版性装置与「不可摘块」（A 的 B1 —— 项目名住在板头
+ *     站名里，取掉就印出一张没项目名的纸）今天**不进清单、也不渲染成灰行禁用**
+ *     （决策 5 第 3 条：灰行会让清单多 4–8 行噪音）；注册表里它们仍是一等单元，
+ *     故将来开放装置勾选**不用改这个文件的结构**，只换 `resolveUnits` 的数据源；
+ *   · 渲染侧统一读 `resolveUnits(template, prefs)`（决策 5 第 2 条：装配与渲染
+ *     一条路，装置恒 `forced`），经典与 A 的纸面因此拿到**同一份**布尔值。
+ *
  * ── v1.5-d 期六：选择器弹窗化（dropdown 长条 → 主从式居中弹窗）──
  * 她的两条抱怨（「没有打开全屏时显示不完整」「长条形选择方式排版不美观」，
  * UX 研究 print-preview-ux-study-2026-10-09.md §1）：300px fixed 长条对
@@ -73,7 +86,7 @@ import { Modal } from '../common/Modal';
 import { SchedulePaper } from './SchedulePaper';
 import { useSchedulePaperData } from './useSchedulePaperData';
 import { printPaper } from '../../lib/print-frame';
-import { exportSchedulePngPages, schedulePngFileName, type SchedulePaperBlocks } from '../../lib/schedule-print';
+import { exportSchedulePngPages, schedulePngFileName } from '../../lib/schedule-print';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { usePrintPrefsStore } from '../../store/usePrintPrefsStore';
 import {
@@ -106,6 +119,15 @@ import { AgentPosterDocument } from '../../print/documents/AgentPosterDocument';
 import { printPhysicalPageCount } from '../../print/documents/physical-pages';
 import { PaletteSection } from '../../print/parts/PaletteSection';
 import { PRINT_TEMPLATE_PALETTES } from '../../print/model/print-palette';
+import {
+  blockRecordOf,
+  enabledBlockCount,
+  forcedBlockUnits,
+  printToggleableUnits,
+  resolveUnits,
+  unitEnabled,
+} from '../../print/model/print-units';
+import type { PrintBlockId } from '../../print/model/print-units';
 import type { PrintTemplateId } from '../../print/model/print-view-model';
 
 /** 纸面总自然高度（缩放 wrapper 的负边距修正用；规范 §2：总高 = 1123×N + 24×(N−1)） */
@@ -129,15 +151,6 @@ export const ZOOM_STEP = 0.05;
 function clampZoom(value: number): number {
   return Math.min(Math.max(value, ZOOM_MIN), ZOOM_MAX);
 }
-
-/** 打印内容勾选面板的行（键 ↔ SchedulePaperBlocks；hint 是该块的通俗解释）——经典模板专用 */
-const BLOCK_ROWS: ReadonlyArray<{ key: keyof SchedulePaperBlocks; label: string; hint: string }> = [
-  { key: 'header', label: '打印头部', hint: '项目名 / 周期' },
-  { key: 'timeline', label: '打印时间轴', hint: '甘特图' },
-  { key: 'projectInfo', label: '项目信息', hint: '排期基准' },
-  { key: 'stageTable', label: '阶段清单', hint: '表格' },
-  { key: 'footer', label: '页脚', hint: '署名 / 页码' },
-];
 
 /**
  * 选择器弹窗体（期六：dropdown 长条 → 主从式居中弹窗；UX 研究 §1.3）。
@@ -170,22 +183,31 @@ export function PrintSelectorPanel({
   onToggleModule,
   onSelectAllModules,
   onSelectNoneModules,
-  blocks,
-  onToggleBlock,
+  unitRows,
+  onToggleUnit,
+  forcedNote,
   onClose,
 }: {
   template: PrintTemplateId;
   /** 预计页数（工具条同源） */
   pagesCount: number;
-  /** 当前启用的模块数（四版）/ 块数（经典）——状态条读数 */
+  /** 当前启用的模块数（四版）/ 块数（经典 · A）——状态条读数 */
   enabledModuleCount: number;
   enabledModules: readonly PrintModuleId[];
   onTemplatePick(id: PrintTemplateId): void;
   onToggleModule(module: PrintModuleId, on: boolean): void;
   onSelectAllModules(): void;
   onSelectNoneModules(): void;
-  blocks: SchedulePaperBlocks;
-  onToggleBlock(key: keyof SchedulePaperBlocks, on: boolean): void;
+  /**
+   * 五块模型的行（**今天 = `printToggleableUnits(template)`**：只有可勾的块；
+   * 版性装置与不可摘块**今天不进清单**，也不渲染成灰行禁用——决策 5 第 3 条的
+   * 原话是「现在不要渲染成灰行禁用（会让清单多出 4–8 行噪音）」。将来开放
+   * 装置勾选时，这个 prop 的来源会多出装置行，**弹窗体本身不用改**）。
+   */
+  unitRows: ReadonlyArray<{ id: PrintBlockId; label: string; hint: string; checked: boolean }>;
+  onToggleUnit(id: PrintBlockId, on: boolean): void;
+  /** 不可摘块的原因文案（空串 = 本套五块全可摘，如 classic）；见 §2.6 的文案纪律 1 */
+  forcedNote: string;
   onClose(): void;
 }): JSX.Element {
   const meta = printTemplateMeta(template);
@@ -277,22 +299,28 @@ export function PrintSelectorPanel({
               <div className="flex items-center justify-between px-3 pb-1 pt-3">
                 <span className="text-[11px] font-medium text-mist">打印内容（五块）</span>
               </div>
-              {BLOCK_ROWS.map((row) => (
+              {unitRows.map((row) => (
                 <label
-                  key={row.key}
+                  key={row.id}
                   className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-3 py-1.5 text-[13px] text-ink hover:bg-sand"
                 >
                   <input
                     type="checkbox"
-                    checked={blocks[row.key]}
-                    onChange={(e) => onToggleBlock(row.key, e.target.checked)}
-                    data-print-block={row.key}
+                    checked={row.checked}
+                    onChange={(e) => onToggleUnit(row.id, e.target.checked)}
+                    data-print-block={row.id}
                     className="h-3.5 w-3.5 shrink-0 accent-pine"
                   />
                   <span className="flex-1 whitespace-nowrap">{row.label}</span>
                   <span className="shrink-0 text-[11px] text-mist">{row.hint}</span>
                 </label>
               ))}
+              {/* 纪律文案（§2.6 的实现/文案纪律 1 + 2）：装置不在此列、不可摘的块说明
+                  原因、可摘项随版式而定——三件事一句话说清，不加灰行 */}
+              <p className="px-3 pb-1.5 pt-1 text-[11px] leading-relaxed text-mist">
+                {forcedNote}
+                模板自身的版式构件（刊头 / 页脚线 / 页序 / 摘要块）不在此列；可摘项随版式而定。
+              </p>
             </>
           ) : (
             <PrintModuleSection
@@ -507,15 +535,30 @@ export function PrintPreviewDialog({
   onClose: () => void;
 }): JSX.Element | null {
   /** 打印偏好（个人偏好，localStorage 持久化；无角色门控——成员也打印） */
-  const blocks = usePrintPrefsStore((s) => s.blocks);
+  const storedBlocks = usePrintPrefsStore((s) => s.blocks);
   const template = usePrintPrefsStore((s) => s.template);
-  /** 每模板一套「启用模块」勾选态（store 字段已随语义改名 modules，债②） */
+  /** 每模板一套「启用模块」勾选态（D/E/H 的正主；批 2/3/4 才切单元模型） */
   const modules = usePrintPrefsStore((s) => s.modules);
+  /** 每模板一套「启用单元」集合（5 块模型的正主；缺失 = 默认全开） */
+  const unitsPrefs = usePrintPrefsStore((s) => s.units);
   const palette = usePrintPrefsStore((s) => s.palette);
   const setBlock = usePrintPrefsStore((s) => s.setBlock);
   const setTemplate = usePrintPrefsStore((s) => s.setTemplate);
   const setModuleEnabled = usePrintPrefsStore((s) => s.setModuleEnabled);
   const setTemplateModules = usePrintPrefsStore((s) => s.setTemplateModules);
+  const setUnit = usePrintPrefsStore((s) => s.setUnit);
+
+  /**
+   * **同一条解析路径**（决策 5 第 2 条）：装配与渲染都读 `resolveUnits` 的结果，
+   * 装置在该函数里恒为 `forced`（恒开），将来开放勾选只换它的数据源。
+   * `blocks` 这个变量名保留：它既是经典 `SchedulePaper` 的 prop 形状，
+   * 也是 A 的 5 块形态的 prop（两者同一组布尔值、同一份解析结果）。
+   */
+  const units = useMemo(
+    () => resolveUnits(template, { units: unitsPrefs, blocks: storedBlocks }),
+    [template, unitsPrefs, storedBlocks],
+  );
+  const blocks = useMemo(() => blockRecordOf(units), [units]);
 
   const d = useSchedulePaperData(projectId, blocks);
   const printVm = usePrintViewModel(projectId);
@@ -659,12 +702,18 @@ export function PrintPreviewDialog({
     [template, modules],
   );
 
-  /** 预计页数：经典 = 分页产物；四版 = 物理纸面数（原生 1:1 + 通用模块分页产物） */
+  /** 预计页数：经典 = 分页产物；四版 = 物理纸面数（原生 1:1 + 通用模块分页产物）；
+   *  走五块形态的模板（classic / A）用**5 块装配**算页数（与文档层同源） */
   const pagesCount =
     template === 'classic'
       ? d.pages.length
       : printVm.vm
-        ? printPhysicalPageCount(template, printVm.vm, enabledSheets)
+        ? printPhysicalPageCount(
+            template,
+            printVm.vm,
+            enabledSheets,
+            meta.usesBlocks ? blocks : undefined,
+          )
         : enabledSheets.length;
   /** 未实现模板不许假装能打（决策 ⑥ 实现顺序：D/E/H 后续批次落地） */
   const canOutput = meta.implemented;
@@ -713,10 +762,21 @@ export function PrintPreviewDialog({
 
   const paperNaturalHeight =
     Math.max(pagesCount, 1) * A4_HEIGHT_PX + Math.max(Math.max(pagesCount, 1) - 1, 0) * GAP_BETWEEN_PAGES;
-  /** 状态条读数：当前启用的模块数（四版）/ 块数（经典）；四版缺键 = 默认原生模块 */
+  /** 状态条读数：当前启用的块数（五块模型的模板）/ 模块数（四版）；四版缺键 = 默认原生模块 */
   const enabledModuleCount = meta.usesBlocks
-    ? BLOCK_ROWS.filter((row) => blocks[row.key]).length
+    ? enabledBlockCount(units)
     : (modules[template] ?? printTemplateDefaultModuleIds(template)).length;
+  /** 五块模型的选择器行（今天 = 可勾的块；装置与不可摘块不进清单，见 PrintSelectorPanel 注） */
+  const unitRows = printToggleableUnits(template).map((spec) => ({
+    id: spec.id as PrintBlockId,
+    label: spec.label,
+    hint: spec.hint,
+    checked: unitEnabled(units, spec.id),
+  }));
+  /** 不可摘块的原因（§2.6 纪律 1：不许只是灰掉/消失，得说清为什么） */
+  const forcedNote = forcedBlockUnits(template)
+    .map((u) => `「${u.label}」由模板刊头承担，不可摘。`)
+    .join('');
 
   return (
     <Modal
@@ -850,7 +910,10 @@ export function PrintPreviewDialog({
               {template === 'swiss-schedule' && printVm.vm && (
                 <SwissScheduleDocument
                   vm={printVm.vm}
-                  sheets={enabledSheets}
+                  /* 走五块形态时**不传** sheets（那是 legacy 页路径的开关）；
+                     D/E/H 批 2/3/4 之前仍按模块清单传 sheets（它们不在本批范围） */
+                  sheets={meta.usesBlocks ? undefined : enabledSheets}
+                  blocks={blocks}
                   palette={
                     palette['swiss-schedule'] ?? PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline
                   }
@@ -941,8 +1004,9 @@ export function PrintPreviewDialog({
             onToggleModule={(module, on) => setModuleEnabled(template, module, on)}
             onSelectAllModules={() => setTemplateModules(template, printTemplateModuleIds(template))}
             onSelectNoneModules={() => setTemplateModules(template, [])}
-            blocks={blocks}
-            onToggleBlock={(key, on) => setBlock(key, on)}
+            unitRows={unitRows}
+            onToggleUnit={(id, on) => (template === 'classic' ? setBlock(id, on) : setUnit(template, id, on))}
+            forcedNote={forcedNote}
             onClose={() => setSelectorOpen(false)}
           />
         </Modal>
