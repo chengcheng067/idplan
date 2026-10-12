@@ -750,8 +750,15 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             ★ 2026-10-12 身份去重：收起态这枚也从「`<Link to="/">` 纯头像」换成身份控件
               （`variant="rail-collapsed"`）—— 收起态同样要能看清"我是谁"并切换身份，
               否则折叠侧栏后身份入口又没了。
-              ⚠️ 这改掉了原「点头像回首页」的行为（有意，已在报告备案）：头像本就是身份控件，
-                回首页由上方 logo 那一枚承担。未进入身份时此处给一枚进入图标 + tooltip。
+              ⚠️ 这改掉了原「点头像回首页」的行为（有意，已在报告备案）：头像本就是身份控件。
+                「回首页」在收起态**没有失联**，另有**两处**承载（都不是那枚头像）：
+                  ① 本栏顶部 Logo（`<Link to="/" aria-label="ID Plan 首页">`，就在上面几行）；
+                  ② 导航首项（`SidebarNav.tsx`）：管理员 `to:'/'` / 成员 `to:'/member-board'`。
+                ⚠️ 别把 ① 认错：**展开/收起侧栏是紧邻 Logo 的另一枚 `SidebarCollapseToggle`**，
+                  不是这个 Logo（这个误判真发生过一次）。
+                两处都有真机断言：`tests/identity-rail-browser.spec.ts` ⑤。
+              ★ 未进入身份时此处给一枚进入图标 + tooltip（收起态放不下「点击进入」四个字，
+                那四个字用 `sr-only` 留在 DOM 里 —— 1024–1280 侧栏默认收起，靠它不丢入口）。
           */}
           <MemberIdentityPicker variant="rail-collapsed" />
         </div>

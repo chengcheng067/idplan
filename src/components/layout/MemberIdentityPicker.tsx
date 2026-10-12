@@ -51,8 +51,15 @@ const MENU_GAP = 4;
  *    翻转由 `resolveAnchoredPosition` 承担，判据是「下方余量不足且上方更宽裕」——
  *    侧栏行贴着视口下沿，该条件恒成立。已真机验证底部夹紧不越界（见 spec）。
  * ⚠️ 收起态那枚**原本是 `<Link to="/">`（点头像回首页）**，改成本控件后该行为消失。
- *    这是**有意的行为变更**（头像本就该是身份控件；回首页有 Logo 那一枚承担），
- *    已在交付报告里备案给 team-lead。
+ *    这是**有意的行为变更**（头像本就该是身份控件），已在交付报告里备案给 team-lead。
+ *    「回首页」在收起态**没有失联**，它另有**两处**承载（都不是这枚头像）：
+ *      ① 收起态顶部 **Logo**：`Sidebar.tsx` 里 `<Link to="/" aria-label="ID Plan 首页">`；
+ *      ② **导航首项**（`SidebarNav.tsx`）：管理员 `to:'/'`（「项目」）/ 成员 `to:'/member-board'`（「看板」）。
+ *    ⚠️ 别把 ① 认错：**收起/展开侧栏是紧邻它的另一枚 `SidebarCollapseToggle`**
+ *      （原生 button，`aria-label` 是「展开侧边栏 / 收起侧边栏」），**不是这个 Logo**。
+ *      这个误判真发生过一次，所以写在这里。
+ *    两处承载都有**真机断言**：`tests/identity-rail-browser.spec.ts` ⑤ 用真鼠标分别点
+ *    Logo 与首枚导航，各断言 `location.pathname === '/'`。
  *
  * ── ★ F2（team-lead 2026-10-12 裁决 A / B）：菜单 portal 到 body + chrome 档 ──
  * 修前菜单是 header 内的 `absolute ... z-50`，长在 `TopBar` 的 `relative z-40`
@@ -336,7 +343,8 @@ export function MemberIdentityPicker({
         /*
          * 收起态（宽 64）那枚。几何逐字保持原 `<Link to="/">`（h-8 w-8 圆头像 + mt-1），
          * 只把 Link 换成 button —— **这改掉了「点头像回首页」**，是有意的行为变更
-         * （头像本就该是身份控件，回首页由 logo 那一枚承担），已在报告里备案。
+         * （头像本就该是身份控件），已在报告里备案。
+         * 「回首页」仍可达：顶部 Logo + 导航首项**两处**都指 `/`（详见文件头那条 ⚠️）。
          * tooltip 保留「姓名 · 角色」（收起态唯一能读出"我是谁"的地方），
          * 并补「（点击切换/退出）」提示它现在可点。
          */
