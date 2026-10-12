@@ -266,7 +266,9 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '横读矩阵与数据图形：进度 / 依赖 / 工作量 / 验收',
     thumb: '/print-thumbs/D-data-editorial-p1.png',
     implemented: true,
-    usesBlocks: false,
+    // 2026-10-13 批 B：D 起走**五块模型**（决策 1）；4 个原生模块条目保留在
+    // 能力表里（代码与 spec 全留，只是不再有暴露面）。E/H 仍走模块清单（批 C/D）。
+    usesBlocks: true,
     // 期三第一批：M1/M2/M4 在 D 无原生页 ⇒ 通用渲染（该外表基础排版承接）
     modules: [
       {

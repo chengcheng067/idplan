@@ -27,44 +27,23 @@
  * ratioPercent 是工作量占比、不是完成度（01 §3.1）；脚注把这两条口径
  * 并排写出（**单行**，参考稿的脚注是单行）。
  *
+ * ── 批 B（2026-10-13）后的定位 ──
+ * 5 块重构把本页拆成「B2 日期格矩阵 + B4 两段式清单」两格；本组件因此退为
+ * **legacy 纸面页路径**（sheets 传入时才渲染，出选择器但代码与 spec 全留）。
+ * 它的行渲染 `MatrixRow` 与页尾横带 `DeBand` 已抽到共享件，**DOM 逐字不变**
+ * ——本页与新形态的 B4 因此永远同形，不会各长一版。
+ *
  * ── 跨页分页（2026-10-09「原生矩阵无分页」修复）──
  * 阶段行按页预算 chunk（planMatrixPages，实测估高）：续表页带「续表」
  * 模块头；页尾完成度横带**每页都有**（每页可独立解释，01 §2）。
  * 行是原子单位（行不裂）；本页无行时不渲染行区（不出孤单续表头）。
  */
 
-import { StageStatus } from '../../../core/types/enums';
 import type { PrintStageVM, PrintViewModel } from '../../model/print-view-model';
 import { EmptyPrintState } from '../../parts/EmptyPrintState';
-import { MATRIX_COMPACT_AT, pct } from './shared';
-
-/**
- * 条填充最小宽度（px；P0-11）。
- * 参考稿实测：12% / 4% / 3% / 0% 四档的填充全是 **96px**（14.1–14.7% 轨宽），
- * 即「比例再小也留一根看得见的底桩」。96 是**绝对 px**，而轨道是通栏固定
- * 682px ⇒ 安全；若将来轨道宽度可变，须改成比例式 `max(占比, 14%)`。
- * 用 CSS `max()` 表达 `max(trackWidth × pct/100, 96px)`——页组件层实现
- * （审计点名：不要写进 CSS 的固定 width）。
- */
-export const DE_BAR_MIN_FILL_PX = 96;
-
-/** 填充宽度（CSS `max()`）：小比例钳到 96px，大比例按百分比 */
-export function deBarFillWidth(percent: number): string {
-  return `max(${percent}%, ${DE_BAR_MIN_FILL_PX}px)`;
-}
-
-/** 条的填充档（P0-10：按阶段四态分色；进行中与延期同走重点状态橙红） */
-export function deBarFillTone(status: StageStatus): 'ink' | 'signal' | 'idle' {
-  switch (status) {
-    case StageStatus.Completed:
-      return 'ink';
-    case StageStatus.InProgress:
-    case StageStatus.Delayed:
-      return 'signal';
-    default:
-      return 'idle';
-  }
-}
+import { DeBand } from './chrome';
+import { MatrixRow } from './StageBarList';
+import { MATRIX_COMPACT_AT } from './shared';
 
 export interface ProgressMatrixPageProps {
   vm: PrintViewModel;
@@ -81,7 +60,6 @@ export function ProgressMatrixPage({ vm, rows, chunkIndex, chunkTotal }: Progres
   // 档位判定与分页同源（同一个常量，不是两处各写一个数字）：
   // normal 容量 9 行 ⇒ 10 阶段起转紧凑档（见 shared.ts 的 MATRIX_EST 注释）
   const dense = stages.length > MATRIX_COMPACT_AT;
-  const doneStages = stages.filter((s) => s.status === StageStatus.Completed).length;
 
   return (
     <section className="de-board" data-density={dense ? 'compact' : undefined}>
@@ -109,53 +87,9 @@ export function ProgressMatrixPage({ vm, rows, chunkIndex, chunkTotal }: Progres
         </div>
       )}
 
-      {/* 页尾横带（P0-9）：项目完成度 + 已完成 N/M 个阶段 + 右对齐巨字百分比。
-          每页都有（每页可独立解释，01 §2；参考稿 P1 的巨字 67% 与
-          「已完成 2 / 9 个阶段」是同一根口径）。 */}
-      <div className="de-band">
-        <span className="de-band__left">
-          <span className="de-band__label">项目完成度</span>
-          <span className="de-band__caption">
-            已完成 {doneStages} / {stages.length} 个阶段
-          </span>
-        </span>
-        <span className="de-band__pct de-num">{Math.round(vm.project.percent)}%</span>
-      </div>
+      {/* 页尾横带（P0-9 / 装置 · 丙）：**每页都有**（每页可独立解释，01 §2）。
+          2026-10-13 批 B：改用共享件 `DeBand`（与 5 块形态同源），DOM 逐字不变。 */}
+      <DeBand vm={vm} />
     </section>
-  );
-}
-
-/** 目录行：段1 [号码 + 阶段名] / [日期 · 占比]；段2 通栏条（填充分色 = 四态） */
-function MatrixRow({ stage }: { stage: PrintStageVM }): JSX.Element {
-  const { done, total } = stage.taskProgress;
-  const percent = pct(done, total);
-  const tone = deBarFillTone(stage.status);
-  return (
-    <div className="de-row" data-state={stage.status} data-testid={`de-matrix-row-${stage.orderIndex}`}>
-      <div className="de-row__head">
-        <span className="de-row__id">
-          <span className="de-row__no de-num">{String(stage.orderIndex).padStart(2, '0')}</span>
-          <span className="de-row__name" title={stage.name}>
-            {stage.name}
-          </span>
-        </span>
-        <span className="de-row__meta de-num">
-          {stage.startAt} → {stage.endAt} · {stage.ratioPercent}%
-        </span>
-      </div>
-      <span className="de-bar" role="img" aria-label={`阶段内任务完成度 ${percent}%（${done}/${total}）`}>
-        <span className="de-bar__track">
-          <span
-            className="de-bar__fill"
-            data-fill={tone}
-            style={{ width: deBarFillWidth(percent) }}
-          >
-            <span className="de-bar__num de-num">
-              {done}/{total} · {percent}%
-            </span>
-          </span>
-        </span>
-      </span>
-    </div>
   );
 }

@@ -31,10 +31,20 @@ import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
 import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-templates';
 import type { PrintSheet } from '../../components/print/print-templates';
 
-import type { PrintPageKind, PrintViewModel } from '../model/print-view-model';
+import type { PrintPageKind, PrintStageVM, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
+import {
+  blockRecordOf,
+  resolveUnits,
+  unitEnabled,
+  type PrintUnitId,
+  type ResolvedPrintUnit,
+} from '../model/print-units';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
-import { PrintLogoMark } from '../parts/PrintLogoMark';
+import { DeBand, DeHead, DE_TYPE_KICKER, DE_TYPE_TITLE } from '../pages/data-editorial/chrome';
+import { DateMatrix } from '../pages/data-editorial/DateMatrix';
+import { StageBarList } from '../pages/data-editorial/StageBarList';
+import { deRescheduleRows } from '../pages/data-editorial/shared';
 import { GenericModuleBody } from '../pages/generic/GenericModuleBody';
 import {
   GENERIC_TITLES,
@@ -49,10 +59,8 @@ import { DependencyNetworkPage } from '../pages/data-editorial/DependencyNetwork
 import { WorkloadCompositionPage } from '../pages/data-editorial/WorkloadCompositionPage';
 import { MilestoneAcceptancePage } from '../pages/data-editorial/MilestoneAcceptancePage';
 import { planMatrixPages, type MatrixPlan } from '../pages/data-editorial/shared';
-import { reportStampOf, stampOf } from '../pages/data-editorial/shared';
-
-/** 两位补零（页头报告号 `REPORT 01 / 04` 的定宽形状，P1-7 右半） */
-const pad2 = (n: number): string => String(n).padStart(2, '0');
+import { stampOf } from '../pages/data-editorial/shared';
+import type { SchedulePaperBlocks } from '../../lib/schedule-print';
 
 /** D 版四页（02 §6 组件映射；顺序即纸面顺序） */
 export const DATA_EDITORIAL_PAGES: readonly PrintPageKind[] = [
@@ -104,6 +112,15 @@ export interface DataEditorialDocumentProps {
    * D 的 M1/M2/M4 无原生页 ⇒ 走通用渲染（该外表基础排版承接）。
    */
   sheets?: readonly PrintSheet[];
+  /**
+   * **解析好的单元**（`resolveUnits('data-editorial', prefs)` 的结果：5 块 + 2 件
+   * 版性装置 `de-head` / `de-band`）。未传 `sheets` 时走「5 块形态」。
+   *
+   * 与 A 版同一条路（决策 5 第 2 条）：内容块与装置都从同一个 `ResolvedPrintUnit[]`
+   * 取「今天渲不渲染」⇒ 将来把装置开放成可勾时只改注册表，本文件零改动。
+   * 缺省 = `resolveUnits('data-editorial', undefined)`（全开）。
+   */
+  units?: readonly ResolvedPrintUnit[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，每页头部左上格显示「ID Plan」文字标） */
@@ -163,12 +180,23 @@ export function dataEditorialPhysical(vm: PrintViewModel, sheets: readonly Print
 export function DataEditorialDocument({
   vm,
   sheets,
+  units,
   palette,
   logo = null,
   pageRef,
 }: DataEditorialDocumentProps): JSX.Element {
-  const physical = dataEditorialPhysical(vm, sheets ?? enabledSheetsOf('data-editorial', undefined));
-  const total = physical.length;
+  // 同一条解析路径（决策 5 第 2 条；与 A 版逐字同款）
+  const resolvedUnits = units ?? resolveUnits('data-editorial', undefined);
+  const blocks = blockRecordOf(resolvedUnits);
+  const show = (id: PrintUnitId): boolean => unitEnabled(resolvedUnits, id);
+  /**
+   * 两种形态的分流（**唯一分叉点**，与 A 版同款）：
+   *   · 传了 `sheets` ⇒ legacy 原生页路径（四页 + 通用模块；出选择器但代码全留）；
+   *   · 否则 ⇒ 5 块形态（决策 1：选择器只暴露 5 块；缺省 = 五块全开）。
+   */
+  const legacy = sheets ? dataEditorialPhysical(vm, sheets) : null;
+  const blockPages = legacy === null ? deBlockPages(vm, blocks) : null;
+  const total = legacy ? legacy.length : (blockPages?.length ?? 0);
 
   return (
     <div
@@ -181,17 +209,32 @@ export function DataEditorialDocument({
         } as CSSProperties
       }
     >
-      {physical.map((p, idx) => (
-        <DePage
-          key={p.type === 'native' ? p.kind : `generic-${p.module}-${p.chunkIndex}`}
-          page={p}
-          vm={vm}
-          pageIndex={idx}
-          pageTotal={total}
-          pageRef={pageRef?.(idx)}
-          logo={logo}
-        />
-      ))}
+      {legacy &&
+        legacy.map((p, idx) => (
+          <DePage
+            key={p.type === 'native' ? p.kind : `generic-${p.module}-${p.chunkIndex}`}
+            page={p}
+            vm={vm}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+            logo={logo}
+          />
+        ))}
+      {blockPages &&
+        blockPages.map((plan, idx) => (
+          <DeBlockPage
+            key={`blocks-${idx}`}
+            vm={vm}
+            blocks={blocks}
+            show={show}
+            plan={plan}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+            logo={logo}
+          />
+        ))}
     </div>
   );
 }
@@ -227,47 +270,19 @@ function DePage({
       className="a4-page de-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
     >
-      {/* 页头（2026-10-11 P0-8 结构重排）：logo 行 → **单行黑体大标题** →
-          **标题之下的橙英文副标**；右侧项目标识与副标同底对齐。
-          参考稿实测：标题字面 y104..165、副标 y174..185、右栏 y172..182、
-          3px 分隔线 y210..212.5（内缩 40px）。 */}
-      <header className="de-head">
-        <div className="de-head__left">
-          {/* logo：每页头部左上格（≤28px；D 的 radius=0 身份 ⇒ 不加圆角不加底）。
-              未上传 = 「ID Plan」文字标 */}
-          <div className="de-head__logo">
-            <PrintLogoMark logo={logo} height={28} />
-          </div>
-          {/* 完整单行中文标题（Noto Sans SC Black；不拆字体拼接，01 §5） */}
-          <h1 className="de-head__title">{title.cn}</h1>
-          {/* 英文副标：在标题下发，橙（P0-8：原在标题上方且是 #404040 kicker） */}
-          <p className="de-head__kicker">
-            <span className="de-head__signal" aria-hidden />
-            {title.en}
-          </p>
-        </div>
-        <div className="de-head__right">
-          {/* 报告装置右半（2026-10-11 P1-7 裁决）：`REPORT nn / nn` + 点分日期，
-              mono 小字、右对齐，置于项目标识之上。
-              为什么要它：P1-7 的「页眉改 mono 小字一行」与 P0-8 的「副标移到
-              标题下 + 转橙」冲突，team-lead 裁决按 P0-8、但**右半是纯加法**必须补
-              ——E 有页码、H 有 `SHEET nn / nn`，D 缺这一块会让四套的「报告身份」
-              不齐。日期取 `generatedAt`（与页脚的数据时间同源，不另造时刻）。 */}
-          <p className="de-head__report de-num">
-            REPORT {pad2(pageIndex + 1)} / {pad2(pageTotal)}　{reportStampOf(vm.generatedAt)}
-          </p>
-          {/* 项目名最多两行，超出截断；完整文本经 title 可访问（02 §8） */}
-          <p className="de-head__project" title={vm.project.name}>
-            {vm.project.name}
-          </p>
-          <p className="de-head__meta de-num">
-            {vm.project.scheduleBasisLabel} · {vm.project.plannedStartAt} – {vm.project.plannedEndAt}
-            {vm.project.clientName ? ` · 委托人 ${vm.project.clientName}` : ''}
-          </p>
-        </div>
-        {/* 3px 近黑硬边分隔线（**内缩 40px**，P0-9 ①；原为通版出血） */}
-        <div className="de-head__rule" aria-hidden />
-      </header>
+      {/* B1 的载荷在 `de-head` 装置里（批 B：抽成共享件 `DeHead`，DOM 逐字不变）。
+          legacy 路径的巨字标题 = **该页的页题**（与 5 块形态的固定类型词相对）。 */}
+      <DeHead
+        vm={vm}
+        logo={logo}
+        pageIndex={pageIndex}
+        pageTotal={pageTotal}
+        title={title}
+        /* legacy 的排期口径行**逐字不变**（含排期基准） */
+        meta={`${vm.project.scheduleBasisLabel} · ${vm.project.plannedStartAt} – ${vm.project.plannedEndAt}${
+          vm.project.clientName ? ` · 委托人 ${vm.project.clientName}` : ''
+        }`}
+      />
 
       <div className="de-body">
         <DePageBody page={page} vm={vm} />
@@ -311,4 +326,280 @@ function DePageBody({ page, vm }: { page: DePhysical; vm: PrintViewModel }): JSX
       // 其余十页归 A/E/H；本组件只实现 D 四页（类型上不可达，运行时兜底）
       return <EmptyPrintState kind="stages" text="该页属于其他版本模板" />;
   }
+}
+
+/* ====================================================================================
+ * 5 块形态（2026-10-13 「5 块 × 4 模板」重构 · 批 B）
+ * ====================================================================================
+ * 依据 `deliverables/gstack/print-5blocks-mapping-2026-10-13.md`：
+ *   · §1.2 = D 的 5 块映射（逐格照做）；§0.5 = B4 的 L3「改期记录」；
+ *   · §2.6 = 装置 vs 内容（`de-head` / `de-band` / `REPORT nn/nn` 恒在、不可摘）；
+ *   · §3 铁律①= B1 ∪ B3 是同一组字段全集（分界线可按各版刊头承载能力走）。
+ *
+ * 分页口径：
+ *   B1 打印头部 **每页**；B2 日期格矩阵 与 B4 阶段清单 **共用同一批阶段切片**
+ *   （每页同一批 ⇒ 两个视图能互相对照，且不会出现「矩阵翻了页、清单还在上一页」
+ *   的错位）；B3 项目信息 只首页（承载区）；B5 页脚 **每页**。
+ *   切片按页预算滚动 —— 与 A 版同一套贪心切法（附「收口页」与「首页让位一次」
+ *   两条规则，防死循环与空壳尾页）。
+ * ==================================================================================== */
+
+/**
+ * D 5 块形态的纸面几何常量（px）——纪律与 A 版 / `MATRIX_EST` 同款：
+ * **实测校准、只许偏大不许偏小**。2026-10-13 批 B 真 Chromium 逐块实测后回填
+ * （见各条注释里的实测值）。
+ */
+const DE_BLOCK_EST = {
+  /** 页壳：`de-head` 213（CSS 里钉死的常数，含 3px 线）+ 主体上内距 39
+      + `de-band` 42 + 页脚 52（8 上距 + 44 行高） */
+  pageShell: 213 + 39 + 42 + 52,
+  /** B2 矩阵 chrome：caption 行 + **2px 硬边线** + 列头行（实测 39.75 → 取 42）
+      + 矩阵与清单之间的下距 24（`.de-mx` 的 margin-bottom） */
+  b2Chrome: 42 + 24,
+  /** B2 轨道行高（固定）：切片由 B4 的行高主导，矩阵不需要再自适应 */
+  b2Row: 26,
+  /** B3 项目信息簇（mono 行 + 口径注 + 上距 20）：实测 53.25 → 取 55 */
+  b3: 55,
+  /** B4 续表头（仅续页）：2px 线 + kicker + 下距，与 `MATRIX_EST.contHead` 同源 */
+  contHead: 28,
+  /** B4 两段式行：normal 90 / compact 49（与 `MATRIX_EST` 同值同源） */
+  listRowNormal: 90,
+  listRowCompact: 49,
+  /** 每页**尾行免掉的**下距（与 CSS `.de-row:last-child` 同源） */
+  lastFreeNormal: 36,
+  lastFreeCompact: 13,
+  /** L3 改期记录固定头 + 每条 */
+  reschedHead: 106,
+  reschedRow: 24,
+} as const;
+
+/** 5 块形态每页可用高 */
+const DE_BLOCK_AVAIL = A4_HEIGHT_PX - DE_BLOCK_EST.pageShell;
+
+/**
+ * 5 块形态的**紧凑档切点**（> 此值即 compact）。
+ *
+ * ⚠️ 与 legacy 的 `MATRIX_COMPACT_AT = 9` **不同源、也不同值**：5 块形态的首页
+ * 还要装 B2 的 chrome（46）与 B3 簇（42），normal 档容量因此从 9 降到 8。
+ * 纪律照旧：**切档点 = normal 容量**（normal 装不下的第一个规模就切档），
+ * 不留「normal 装不下却仍在 normal」的断崖（否则 9 阶段会被切成 8+1 两页，
+ * 而 10 阶段反倒一页 —— 那正是 legacy 注释里点名的病）。
+ * 推导：`floor((可用 − B3 − B2 chrome + 尾行免下距) ÷ (B2 行高 + 清单 normal 行高))`
+ * ⇒ `floor((777 − 55 − 66 + 36) ÷ (26 + 90))` = **5**（一行阶段在 5 块形态里要占
+ * 两份纵向空间：矩阵一行 + 清单一行）。
+ * 这也是它与 legacy 的 `MATRIX_COMPACT_AT = 9` 差得远的原因——legacy 的页面
+ * 只有清单一份。
+ */
+export const DE_BLOCK_COMPACT_AT = Math.floor(
+  (DE_BLOCK_AVAIL - DE_BLOCK_EST.b3 - DE_BLOCK_EST.b2Chrome + DE_BLOCK_EST.lastFreeNormal) /
+    (DE_BLOCK_EST.b2Row + DE_BLOCK_EST.listRowNormal),
+);
+
+/** 一页的 5 块装配计划（B2 与 B4 共用 `stages` 切片） */
+export interface DeBlockPagePlan {
+  first: boolean;
+  /** 本页承载的阶段（B2 矩阵行 = B4 清单行 = 这一批） */
+  stages: readonly PrintStageVM[];
+  /** 本页是 B4 的最后一页（L3 改期记录挂这里；§0.5） */
+  last: boolean;
+}
+
+/**
+ * 5 块形态的物理页装配（**预计页数 = 实际出纸**的唯一出处）。
+ *
+ * 规则（顺序即优先级）：
+ *   ① 每页预算 = 可用高 −（首页的 B3 簇 / 续页的续表头）− B2 的 chrome；
+ *   ② 切片大小 = `min(B2 容量, B4 容量, 剩余)` —— 两个视图**共用同一批阶段**；
+ *   ③ 本页连一行都装不下 ⇒ 出一张**纸壳页**（只允许一次，防死循环）；
+ *   ④ L3 改期记录挂在 B4 的最后一页；本页装得下清单却装不下 L3 ⇒ 只装「给 L3
+ *      留位」的那一档，余下顺延（**不让位**：D 的续页要另付 28px 续表头、
+ *      比首页更紧，让位只会多出一页——与 A 版相反，A 的续页板头比首页矮）。
+ *
+ * ⚠️ 与 §3「B2 + B4；阶段多时各自 chunk 分页」的**用词差异**（有意）：
+ * 我让两者**共用同一批切片**而不是各自独立 chunk —— 同一页上矩阵与清单指的是
+ * 同一批阶段（可互相对照），不会出现「矩阵已翻到第 3 批、清单还在第 2 批」的错位。
+ */
+export function deBlockPages(vm: PrintViewModel, blocks: SchedulePaperBlocks): DeBlockPagePlan[] {
+  const stages = vm.stages;
+  const total = stages.length;
+  if (total === 0) return [{ first: true, stages: [], last: true }];
+
+  const dense = total > DE_BLOCK_COMPACT_AT;
+  const listRow = dense ? DE_BLOCK_EST.listRowCompact : DE_BLOCK_EST.listRowNormal;
+  const lastFree = dense ? DE_BLOCK_EST.lastFreeCompact : DE_BLOCK_EST.lastFreeNormal;
+  const resched = blocks.stageTable ? deRescheduleRows(vm) : [];
+  const reschedH =
+    resched.length > 0 ? DE_BLOCK_EST.reschedHead + resched.length * DE_BLOCK_EST.reschedRow : 0;
+
+  /**
+   * 某页能装几**行阶段**。
+   *
+   * ⚠️ 关键对价（2026-10-13 批 B 探针实测纠正过一次）：**一行阶段在 5 块形态里
+   * 要占两份纵向空间**——B2 矩阵一行 + B4 清单一行（两者共用同一切片）⇒ 每行成本
+   * 是 `b2Row + listRow`，不是二者取 min。第一版按「两张表各自算容量再取 min」
+   * 写，等于免费多印一整个矩阵（9 阶段实测溢出 122px）。
+   */
+  const capOf = (avail: number): number => {
+    // ⚠️ 两个块**各自**在才算自己的行成本：清单关掉时不该再收清单的行高
+    //   （第一版漏了这一条 ⇒ 关 B4 后仍按「矩阵 + 清单」估行，页数白多一页）
+    const perRow = (blocks.timeline ? DE_BLOCK_EST.b2Row : 0) + (blocks.stageTable ? listRow : 0);
+    if (perRow <= 0) return 0;
+    return Math.max(Math.floor((avail + (blocks.stageTable ? lastFree : 0)) / perRow), 0);
+  };
+  /** 某页（首页 / 续页）扣掉 chrome 后留给「阶段行」的预算 */
+  const availOf = (first: boolean): number =>
+    DE_BLOCK_AVAIL -
+    (first ? DE_BLOCK_EST.b3 : DE_BLOCK_EST.contHead) -
+    (blocks.timeline ? DE_BLOCK_EST.b2Chrome : 0);
+
+  const pages: DeBlockPagePlan[] = [];
+  let cursor = 0;
+  let shelled = false;
+  let guard = 0;
+  while (cursor < total && guard++ < 512) {
+    const first = pages.length === 0;
+    const avail = availOf(first);
+    const remaining = total - cursor;
+    const cap = capOf(avail);
+    const capTail = capOf(avail - reschedH);
+    // 收口：全部装得下，且给 L3 留得出位置
+    if (cap >= remaining && capTail >= remaining) {
+      pages.push({ first, stages: stages.slice(cursor), last: true });
+      break;
+    }
+    // 本页装得下清单、装不下 L3 ⇒ 只装「给 L3 留位」的那一档，余下下页
+    // （**不让位**：D 的续页要另付 28px 续表头、比首页更紧，让位只会多出一页
+    //   —— 这与 A 版相反：A 的续页板头比首页矮，让位是划算的）
+    const take = Math.max(Math.min(capTail > 0 ? capTail : cap, remaining), 0);
+    if (take > 0) {
+      pages.push({ first, stages: stages.slice(cursor, cursor + take), last: false });
+      cursor += take;
+      continue;
+    }
+    // 本页连一行都装不下：出一张纸壳页（只允许一次，防死循环），否则兜底收下
+    if (!shelled) {
+      shelled = true;
+      pages.push({ first, stages: [], last: false });
+      continue;
+    }
+    pages.push({ first, stages: stages.slice(cursor), last: true });
+    break;
+  }
+  // 兜底：B4 有承载时**必须**有一页收口（否则 L3 会静默不上纸）
+  if (blocks.stageTable && total > 0 && !pages.some((pg) => pg.last)) {
+    const i = pages.length - 1;
+    pages[i] = {
+      ...pages[i]!,
+      stages: pages[i]!.stages.length > 0 ? pages[i]!.stages : stages.slice(),
+      last: true,
+    };
+  }
+  return pages;
+}
+
+/** 5 块形态的一个物理页（B1 + B2/B3/B4 + B5；装置 `de-head` / `de-band` 恒在） */
+function DeBlockPage({
+  vm,
+  blocks,
+  show,
+  plan,
+  pageIndex,
+  pageTotal,
+  pageRef,
+  logo,
+}: {
+  vm: PrintViewModel;
+  blocks: SchedulePaperBlocks;
+  show: (id: PrintUnitId) => boolean;
+  plan: DeBlockPagePlan;
+  pageIndex: number;
+  pageTotal: number;
+  pageRef?: Ref<HTMLDivElement>;
+  logo: string | null;
+}): JSX.Element {
+  const dense = vm.stages.length > DE_BLOCK_COMPACT_AT;
+  const resched = blocks.stageTable ? deRescheduleRows(vm) : [];
+  const reschedTotal = vm.stageLogs.filter((l) => l.type === 'rescheduled').length;
+  // 口径注**恒在**（§2.6 原则 1）：B3 开着且本页有承载时住在 B3 簇里，否则锚回页脚
+  const noteInCluster = blocks.projectInfo && plan.first;
+  return (
+    <div
+      ref={pageRef}
+      data-print-page="blocks"
+      data-page-index={pageIndex}
+      className="a4-page de-page"
+      style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
+    >
+      {/* 装置 · `de-head`（含 `REPORT nn/nn`：D 的页码唯一落点）；B1 的载荷在里面 */}
+      {show('de-head') && (
+        <DeHead
+          vm={vm}
+          logo={logo}
+          pageIndex={pageIndex}
+          pageTotal={pageTotal}
+          /* 巨字 = **固定类型词**（§1.2 B1 的乙项：从「页题」改成类型词）；
+             每页身份交给橙副标与 REPORT 装置 */
+          title={{ cn: DE_TYPE_TITLE, en: DE_TYPE_KICKER }}
+          /* 排期基准搬去 B3 的 mono 行 ⇒ 本行只剩周期 · 委托人（不重复印） */
+          meta={`${vm.project.plannedStartAt} – ${vm.project.plannedEndAt}${
+            vm.project.clientName ? ` · 委托人 ${vm.project.clientName}` : ''
+          }`}
+        />
+      )}
+
+      <div className="de-body">
+        {/* B2 打印时间轴（日期格矩阵）：与 B4 共用本页切片 */}
+        {blocks.timeline && plan.stages.length > 0 && (
+          <DateMatrix vm={vm} rows={plan.stages} rowHeight={DE_BLOCK_EST.b2Row} />
+        )}
+
+        {/* B4 阶段清单（两段式通栏条 + L3 改期记录）。
+            chunkIndex 用「本页是不是首页」而不是页码：续表头只在「清单被切开」
+            的续页出（首页与后续页都由同一个判定给出，与 legacy 的表意一致） */}
+        {blocks.stageTable && plan.stages.length > 0 && (
+          <StageBarList
+            vm={vm}
+            rows={plan.stages}
+            chunkIndex={plan.first && pageIndex === 0 ? 0 : 1}
+            chunkTotal={pageTotal}
+            resched={resched}
+            reschedTotal={reschedTotal}
+            withResched={plan.last}
+            dense={dense}
+          />
+        )}
+        {/* 空态只在「整个项目没有可见阶段」时出（纸壳页不出空态） */}
+        {blocks.stageTable && vm.stages.length === 0 && plan.stages.length === 0 && (
+          <section className="de-board" data-print-block="stageTable">
+            <EmptyPrintState kind="stages" />
+          </section>
+        )}
+
+        {/* B3 项目信息簇（只首页）：mono 行 + 口径注。
+            **口径注恒在**（§2.6 原则 1 的硬底线：口径注不是块）——B3 关掉时
+            它锚回页脚 `de-foot__note`（见下方 footer）。 */}
+        {noteInCluster && (
+          <div className="de-info" data-print-block="projectInfo">
+            <p className="de-info__line de-num">
+              排期基准 {vm.project.scheduleBasisLabel}　·　打印时间 {stampOf(vm.generatedAt)}
+            </p>
+            <p className="de-info__note">{DE_FOOT_NOTE}</p>
+          </div>
+        )}
+
+        {/* 装置 · 页尾完成度横带（每页都有；**不是** KPI 带） */}
+        {show('de-band') && <DeBand vm={vm} />}
+      </div>
+
+      {/* B5 页脚：1px 发丝线 + **署名**（批 B 新增）+ 数据时间（可摘）；
+          **页码不在这**（住页头 `REPORT nn/nn`，一页两个页码是排版病） */}
+      <footer className="de-foot">
+        <span className="de-foot__sign">ID Plan · 项目排期与交付管理</span>
+        {!noteInCluster && <span className="de-foot__note">{DE_FOOT_NOTE}</span>}
+        {blocks.footer && (
+          <span className="de-foot__page de-num">数据时间 {stampOf(vm.generatedAt)}</span>
+        )}
+      </footer>
+    </div>
+  );
 }

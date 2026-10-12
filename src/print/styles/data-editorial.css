@@ -1354,3 +1354,206 @@
     print-color-adjust: exact;
   }
 }
+
+/* ====================================================================================
+ * 5 块形态（2026-10-13 「5 块 × 4 模板」重构 · 批 B · D 版）
+ * ====================================================================================
+ * 依据 `deliverables/gstack/print-5blocks-mapping-2026-10-13.md` §1.2（D 逐格）。
+ * 本区**只加不改**：上方既有规则（参考稿还原批次逐像素校准过）一行不动，
+ * legacy 原生页路径因此逐字不变。
+ * ==================================================================================== */
+
+/* ── B2 打印时间轴：日期格矩阵（§1.2 B2）────────────────────────────────────
+   纪律：零圆角 / **无竖线**（列与列靠 1px 间隙，不是画出来的线）/
+   列头英文小字帽 + letter-spacing .08em / 行 = 阶段（左 NN mono + 名，右 占比）。 */
+.print-root.print-template-data-editorial .de-mx {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+}
+
+.print-root.print-template-data-editorial .de-mx__caption {
+  margin: 0 0 6px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--de-gray-500);
+  white-space: nowrap;
+}
+
+/* 列头行：2px 近黑硬边线是 D 的表格骨架（只有横线） */
+.print-root.print-template-data-editorial .de-mx__head {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  border-bottom: 2px solid var(--tpl-ink);
+  padding-bottom: 4px;
+}
+
+.print-root.print-template-data-editorial .de-mx__lead {
+  width: 200px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.print-root.print-template-data-editorial .de-mx__cols {
+  flex: 1 1 auto;
+  display: grid;
+  /* 列与列的 1px 间隙 = 唯一的「竖线」（§1.2 B2 的零竖线纪律） */
+  gap: 1px;
+  min-width: 0;
+}
+
+.print-root.print-template-data-editorial .de-mx__col {
+  font-family: var(--de-font-en);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--de-gray-700);
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-mx__tail {
+  width: 56px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-size: 9.5px;
+  color: var(--de-gray-500);
+  white-space: nowrap;
+}
+
+.print-root.print-template-data-editorial .de-mx__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.print-root.print-template-data-editorial .de-mx__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.print-root.print-template-data-editorial .de-mx__no {
+  font-size: 10px;
+  color: var(--de-gray-700);
+  min-width: 20px;
+}
+
+.print-root.print-template-data-editorial .de-mx__name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tpl-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 填充带：行内居中一条 12px 高的实心带（格子之间 1px 间隙把它切成段） */
+.print-root.print-template-data-editorial .de-mx__row .de-mx__cols {
+  height: 12px;
+}
+
+.print-root.print-template-data-editorial .de-mx__cell {
+  border-radius: 0;
+  background: transparent;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* 三档分色（§1.2 B2 原文：在轨 = 近黑 / 延期 = 信号橙 / 未开始 = 填充灰） */
+.print-root.print-template-data-editorial .de-mx__cell[data-cell='ink'] {
+  background: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-mx__cell[data-cell='signal'] {
+  background: var(--tpl-accent);
+}
+
+.print-root.print-template-data-editorial .de-mx__cell[data-cell='idle'] {
+  background: #d4d4d4;
+}
+
+/* ── B3 项目信息簇（主体底部成簇；§1.2 B3）────────────────────────────────── */
+.print-root.print-template-data-editorial .de-info {
+  margin-top: 20px;
+}
+
+.print-root.print-template-data-editorial .de-info__line {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--de-gray-700);
+}
+
+/* 口径注：9.5px 单行（与页脚那条同字号同灰度；§1.2 B3 / P0-9 ②） */
+.print-root.print-template-data-editorial .de-info__note {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  color: var(--de-gray-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── L3「改期记录」（§0.5：D 走 de-table 语法 = mono 日期 + 1px 灰行线）──── */
+.print-root.print-template-data-editorial .de-resched {
+  margin-top: 22px;
+  padding-top: 8px;
+  border-top: 2px solid var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-resched__title {
+  margin: 0 0 6px;
+  font-family: var(--de-font-cn);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-data-editorial .de-resched__table {
+  font-size: 10.5px;
+}
+
+.print-root.print-template-data-editorial .de-resched__table th {
+  font-size: 9px;
+  padding: 4px 6px;
+}
+
+.print-root.print-template-data-editorial .de-resched__table td {
+  padding: 4px 6px;
+}
+
+.print-root.print-template-data-editorial .de-resched__more {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  color: var(--de-gray-500);
+  text-align: right;
+}
+
+/* ── B5 页脚（5 块形态）：发丝线 + 署名（新）+ 数据时间（可摘）──
+   页码**不在这**（住页头 `REPORT nn/nn`，属装置）⇒ 本行没有「第 n/N 页」。 */
+.print-root.print-template-data-editorial .de-page .de-foot {
+  justify-content: flex-start;
+  gap: 24px;
+}
+
+.print-root.print-template-data-editorial .de-foot__sign {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 5 块形态里「口径注」的两处家：B3 簇内（正常）或页脚（B3 关掉时锚回）——
+   页脚那条要能占满中段并尾截，否则长串口径注会把署名/数据时间挤走。 */
+.print-root.print-template-data-editorial .de-page .de-foot__note {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 完成度横带贴底：5 块形态里它是 `.de-body` 的直接子元素（legacy 在 `.de-board` 内），
+   用 margin-top:auto 压到主体底部——与 A 版的贴底数据来源行同一手法 */
+.print-root.print-template-data-editorial .de-body > .de-band {
+  margin-top: auto;
+}

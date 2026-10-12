@@ -138,7 +138,8 @@ export function truncateToWidth(text: string, maxWidth: number, fontSize: number
 
 /* ------------------------------------------------------------------ 矩阵分页 */
 
-import type { PrintStageVM } from '../../model/print-view-model';
+import type { PrintStageLogVM, PrintStageVM, PrintViewModel } from '../../model/print-view-model';
+import { StageLogType } from '../../../core/types/enums';
 
 /**
  * D 矩阵分页估高（2026-10-09「原生矩阵无分页」修复；0.8.6.0007 反馈：
@@ -236,4 +237,56 @@ export function planMatrixPages(stages: readonly PrintStageVM[]): MatrixPlan {
   }
   if (current.length > 0 || chunks.length === 0) chunks.push({ rows: current });
   return { chunks, compact };
+}
+
+/* ------------------------------------------------------------------ B4 通栏条（P0-10/P0-11 口径） */
+
+/**
+ * 条填充最小宽度（px；P0-11）。
+ * 参考稿实测：12% / 4% / 3% / 0% 四档的填充全是 **96px**（14.1–14.7% 轨宽），
+ * 即「比例再小也留一根看得见的底桩」。96 是**绝对 px**，而轨道是通栏固定
+ * 682px ⇒ 安全；若将来轨道宽度可变，须改成比例式 `max(占比, 14%)`。
+ * 用 CSS `max()` 表达 `max(trackWidth × pct/100, 96px)`——页组件层实现
+ * （审计点名：不要写进 CSS 的固定 width）。
+ *
+ * 2026-10-13 批 B：本组三个出口从 `ProgressMatrixPage.tsx` 搬到本文件——B4 的
+ * 行渲染被抽成 `StageBarList.tsx` 后，两个组件都要用它；留在原处会形成
+ * 「StageBarList ⇄ ProgressMatrixPage」的双向 import。搬到这里（纯函数层）
+ * 两边单向依赖，且口径注释随函数一起搬（未改一字）。
+ */
+export const DE_BAR_MIN_FILL_PX = 96;
+
+/** 填充宽度（CSS `max()`）：小比例钳到 96px，大比例按百分比 */
+export function deBarFillWidth(percent: number): string {
+  return `max(${percent}%, ${DE_BAR_MIN_FILL_PX}px)`;
+}
+
+/** 条的填充档（P0-10：按阶段四态分色；进行中与延期同走重点状态橙红） */
+export function deBarFillTone(status: StageStatus): 'ink' | 'signal' | 'idle' {
+  switch (status) {
+    case StageStatus.Completed:
+      return 'ink';
+    case StageStatus.InProgress:
+    case StageStatus.Delayed:
+      return 'signal';
+    default:
+      return 'idle';
+  }
+}
+
+/* ------------------------------------------------------------------ L3 改期记录 */
+
+/** L3 改期记录最多登几条（§0.5：「取最近 N 条 + 行末「共 M 条」」；D 按一页余量取 6） */
+export const DE_RESCHED_MAX_ROWS = 6;
+
+/**
+ * B4 的 L3 附属件「改期记录」的行（StageLog type=rescheduled，**最近的在前**）。
+ * 数据源与 A 版一字不差（`vm.stageLogs`）——§0.5 明文「四套零数据代价」。
+ */
+export function deRescheduleRows(vm: PrintViewModel): readonly PrintStageLogVM[] {
+  return vm.stageLogs
+    .filter((l) => l.type === StageLogType.Rescheduled)
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .slice(0, DE_RESCHED_MAX_ROWS);
 }
