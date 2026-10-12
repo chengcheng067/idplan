@@ -397,7 +397,7 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
     }
   });
 
-  it('A 版超阈值（28 阶段）：B2 按页续排（首页 13 行 + 续页 15 行 + 轴尾「（续）」），逐页无裁切', async () => {
+  it('A 版超阈值（28 阶段）：B2 按页续排（首页 13 行 + 续页 15 行 + 轴首「（续）」），逐页无裁切', async () => {
     /*
      * 批 A 裁决第 1 条的**降级路径甲**在真机上的样子：28 阶段（> 阈值 23）⇒
      * 行高回设计基线 28、整轴分两页；续段自带轴与刻度（同一时间坐标系）、
@@ -435,6 +435,9 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
             Array.from(g.querySelectorAll('.print-gantt__no')).pop()?.textContent ?? '',
           ticks: g.querySelectorAll('[data-print-month-tick]').length,
           legend: g.querySelectorAll('.print-gantt__legend').length,
+          // 「（续）」标记住**轴首列**（轴尾列会被靠右缘的月份刻度文字越界占用，
+          // 实测叠字 ⇒ 挪到永远空的站号位）
+          contMark: g.querySelector('.print-gantt__cont')?.textContent ?? '',
           tail: g.querySelector('.print-gantt__tail')?.textContent ?? '',
           height: Math.round(g.getBoundingClientRect().height),
         }));
@@ -446,15 +449,17 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
         firstNo: '01',
         lastNo: '13',
         legend: 1,
+        contMark: '',
         tail: '',
       });
-      expect(info[1], '续段：15 行、无图例、轴尾「（续）」、行号接得上').toMatchObject({
+      expect(info[1], '续段：15 行、无图例、轴首「（续）」、行号接得上').toMatchObject({
         cont: true,
         rows: 15,
         firstNo: '14',
         lastNo: '28',
         legend: 0,
-        tail: '（续）',
+        contMark: '（续）',
+        tail: '',
       });
       expect(info[0]!.ticks, '两段都带自己的月份刻度（同一坐标系）').toBeGreaterThan(0);
       expect(info[1]!.ticks).toBe(info[0]!.ticks);

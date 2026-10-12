@@ -96,7 +96,9 @@ export function PrintGantt({
     >
       {/* 轴：2px 基线；月份刻度**压线**（与条带同一坐标系，故与轨道行左右两端同宽） */}
       <div className="print-gantt__axis">
-        <div className="print-gantt__lead" aria-hidden />
+        <div className="print-gantt__lead">
+          {continuation && <span className="print-gantt__cont">（续）</span>}
+        </div>
         <div className="print-gantt__ticks">
           {model.ticks.map((t) => (
             <span
@@ -110,7 +112,7 @@ export function PrintGantt({
             </span>
           ))}
         </div>
-        <div className="print-gantt__tail">{continuation ? '（续）' : ''}</div>
+        <div className="print-gantt__tail" aria-hidden />
       </div>
 
       <div className="print-gantt__rows">
