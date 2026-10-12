@@ -516,6 +516,181 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
     }
   }, 90000);
 
+  /** 当前路径 */
+  async function pathname(page: Page): Promise<string> {
+    return page.evaluate(() => window.location.pathname);
+  }
+
+  /**
+   * 在侧栏（常驻或抽屉）内真鼠标点一枚链接。
+   *
+   * ⚠️ 两个踩过的坑，缺一不可：
+   *   ① **只能认可见的那个侧栏**。<1280 时 DOM 里有**两个** `[data-app-sidebar]`
+   *      —— 常驻侧栏（`hidden`，仍在 DOM）排在抽屉前面；`document.querySelector`
+   *      只会拿到那个隐藏的，量出来 0×0 ⇒ 永远点不到（实测 @1024 就死在这）。
+   *   ② **匹配口径要同时认两种形态**：收起态导航项只有图标 ⇒ 靠 `aria-label`
+   *      （`SidebarNav` 里 `collapsed ? label : undefined`）；展开态渲染文字、
+   *      `aria-label` 反而是 undefined ⇒ 只能按文本认。
+   *   并且**优先在 `<nav aria-label="主导航">` 里找**：侧栏项目列表里可能真有个
+   *   叫「项目」的项目，全侧栏按文本找会认错。
+   */
+  async function clickSidebarLink(page: Page, label: string): Promise<boolean> {
+    const point = await page.evaluate((l) => {
+      const matchIn = (root: Element): HTMLAnchorElement | undefined =>
+        Array.from(root.querySelectorAll('a')).find((x) => {
+          const al = x.getAttribute('aria-label');
+          const txt = (x.textContent ?? '').trim();
+          return al === l || txt === l || txt.startsWith(l);
+        });
+      const visible = (el: Element): boolean => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      for (const host of Array.from(document.querySelectorAll('[data-app-sidebar]'))) {
+        if (!visible(host)) continue; // ① 跳过隐藏的常驻侧栏
+        const nav = host.querySelector('nav[aria-label="主导航"]');
+        const a = (nav ? matchIn(nav) : undefined) ?? matchIn(host); // ②
+        if (!a || !visible(a)) continue;
+        const r = a.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+      return null;
+    }, label);
+    if (!point) return false;
+    await page.mouse.click(point.x, point.y);
+    await page.waitForTimeout(700);
+    return true;
+  }
+
+  /**
+   * 「身份入口就在导航**最下方**」的量化判据：入口顶边落在导航高度的下方 30% 之内。
+   * 取**可见**的那个 `[data-app-sidebar]`（1024 那一档常驻侧栏是 hidden、抽屉才是可见的）。
+   *
+   * ⚠️ 两种身份态都要认（踩过）：已进入 ⇒ title 含「点击切换/退出」；
+   *   未进入 ⇒ 那枚是「点击进入」（title 是"点击进入身份…"、文本是"点击进入"）。
+   *   本用例走的正是**未进入**那条路 —— 引导语只会出现在那个状态下。
+   */
+  async function identityBottomRatio(page: Page): Promise<number | null> {
+    return page.evaluate(() => {
+      const navs = Array.from(document.querySelectorAll('[data-app-sidebar]')).filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      const nav = navs[0];
+      if (!nav) return null;
+      const btn = Array.from(nav.querySelectorAll('button')).find((x) => {
+        const t = x.getAttribute('title') ?? '';
+        const txt = (x.textContent ?? '').trim();
+        return t.includes('点击切换/退出') || txt === '点击进入';
+      });
+      if (!btn) return null;
+      const nr = nav.getBoundingClientRect();
+      const br = btn.getBoundingClientRect();
+      return (br.top - nr.top) / nr.height;
+    });
+  }
+
+  /**
+   * 侧栏没在屏幕上就开抽屉。
+   * ⚠️ 判据必须用 `.some()` 而不是 `querySelector`：1024 那一档**常驻侧栏仍在 DOM 里**
+   *   但 `hidden`（`hidden xl:flex`）且排在前面 —— 只取第一个会永远判"不可见"，
+   *   于是每次都去点汉堡，反而把已经开着的抽屉点关了（踩过）。
+   */
+  async function openNavIfHidden(page: Page): Promise<void> {
+    const visible = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-app-sidebar]')).some((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }),
+    );
+    if (visible) return;
+    const burger = page.locator('button[aria-label="打开导航菜单"]');
+    expect(await burger.count(), '侧栏收在抽屉里时应能靠汉堡打开').toBeGreaterThan(0);
+    await burger.first().click();
+    await page.waitForTimeout(700);
+  }
+
+  it('⑤ 收起态「回首页」仍可达（头像改成身份控件后不曾失联）—— team-lead 裁决 ② 的前置', async () => {
+    const { ctx, page } = await open(1440, 900);
+    try {
+      await becomeAdmin(page);
+      const collapse = page.locator('button[aria-label="收起侧边栏"]');
+      expect(await collapse.count(), '侧栏应有收起键').toBeGreaterThan(0);
+      await collapse.first().click();
+      await page.waitForTimeout(600);
+
+      // 先离开首页，否则"回首页"没有判别力
+      expect(await clickSidebarLink(page, '我的任务'), '收起态应有「我的任务」导航').toBe(true);
+      expect(await pathname(page), '前置：应已离开首页').toBe('/my-tasks');
+
+      // 承载①：收起态顶部 Logo（`aria-label="ID Plan 首页"`）——它**不是**展开侧栏的开关
+      expect(
+        await clickSidebarLink(page, 'ID Plan 首页'),
+        '★ 收起态 Logo 应仍是指向 / 的入口（回首页承载①）',
+      ).toBe(true);
+      expect(await pathname(page), '★ 点收起态 Logo 应回到首页').toBe('/');
+
+      // 承载②：导航首枚（管理员支 = 「项目」→ `/`）
+      expect(await clickSidebarLink(page, '我的任务')).toBe(true);
+      expect(await pathname(page)).toBe('/my-tasks');
+      expect(
+        await clickSidebarLink(page, '项目'),
+        '★ 收起态导航首枚（项目 → /）应仍在（回首页承载②）',
+      ).toBe(true);
+      expect(await pathname(page), '★ 点收起态首枚导航应回到首页').toBe('/');
+    } finally {
+      await ctx.close();
+    }
+  }, 90000);
+
+  it('⑥ 引导语在两档都成立：1280 常驻侧栏 / 1024 抽屉，入口都真的在导航最下方', async () => {
+    for (const width of [1280, 1024]) {
+      const { ctx, page } = await open(width, 900);
+      try {
+        await becomeAdmin(page);
+        /*
+         * ⚠️ 1024 那一档侧栏在抽屉里、且默认关着 ⇒ 想"从侧栏退出身份"必须先开导航。
+         *   这正是裁决 ① 承认的那一步（「左下角没变，只是多了一步开抽屉」），
+         *   所以这几处都显式地走它，而不是绕过去（绕过去就等于测了个不存在的入口）。
+         */
+        await openNavIfHidden(page);
+        // 退出身份 → 回到"未进入身份"（这时引导语才出现）
+        await clickIdentity(page);
+        expect(await clickText(page, '退出身份')).toBe(true);
+        await page.waitForTimeout(800);
+        const cancel = page.locator('button', { hasText: '取消' });
+        if (await cancel.count()) {
+          await cancel.first().click();
+          await page.waitForTimeout(600);
+        }
+
+        // 去「我的任务」——它带着那句「请到左侧导航最下方进入身份」
+        await openNavIfHidden(page); // 点导航项可能把抽屉关掉，这里再开一次
+        expect(await clickSidebarLink(page, '我的任务'), `@${width} 应有「我的任务」导航`).toBe(true);
+        expect(await pathname(page)).toBe('/my-tasks');
+        const hasCopy = await page.evaluate(() =>
+          (document.body.textContent ?? '').includes('请到左侧导航最下方进入身份'),
+        );
+        expect(hasCopy, `@${width} 我的任务页应显示新引导语`).toBe(true);
+
+        /*
+         * ★ 措辞验真：句子说「左侧导航最下方」，那就必须在**这一档真的成立**。
+         *   ≥1280 侧栏常驻 ⇒ 直接可量；1024–1279 侧栏收在抽屉里 ⇒ 先开汉堡再量。
+         *   两档都用同一个量化判据（入口顶边落在导航高度的下方 30% 内）。
+         */
+        await openNavIfHidden(page);
+        const ratio = await identityBottomRatio(page);
+        expect(ratio, `@${width} 打开导航后应能找到身份入口`).not.toBeNull();
+        expect(
+          ratio!,
+          `@${width} 身份入口应落在导航下方 30% 之内（「左侧导航最下方」这句话得是真的，实际比值 ${ratio?.toFixed(2)}）`,
+        ).toBeGreaterThan(0.7);
+      } finally {
+        await ctx.close();
+      }
+    }
+  }, 120000);
+
   it('④ 顶栏右侧已无身份控件（那里只剩原有内容）', async () => {
     const { ctx, page } = await open(1440, 900);
     try {

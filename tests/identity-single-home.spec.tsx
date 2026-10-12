@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 /**
- * 身份显示去重（2026-10-12 用户 21:43）：身份控件**全站只剩一处** —— 侧栏左下角。
+ * 身份显示去重（2026-10-12 用户 21:43）：身份控件**全站只剩一处** —— 侧栏最下方那行。
+ *
+ * ⚠️ 措辞注意：代码/文案里一律说「侧栏最下方 / 左侧导航最下方」，**不说「左下角」** ——
+ *   侧栏 ≥1280 才常驻，1024–1279 收在左上角汉堡的抽屉里（`useLayoutStore` 的 D3 纪律：
+ *   `defaultExpanded()` = matchMedia('(min-width:1280px)')），「左下角」在那一档不成立。
  *
  * ══════════════════ 用户原话（一字不改） ══════════════════
  *   「这两处功能是重复的：
@@ -14,7 +18,7 @@
  *    "上轮把 div 换成 button"上想。
  * ② **两态都有入口**：展开态与收起态、已进入与未进入，四个组合都要有可点的身份控件。
  *    尤其是「未进入」——原实现被 `currentMember &&` 门控，顶栏一删就断链
- *    （见 Sidebar.tsx 里那句"点左下角的身份行"提示，它本身也在侧栏里）。
+ *    （见 Sidebar.tsx 里那句"点侧栏最下方的身份行"提示，它本身也在侧栏里）。
  * ③ **「点击进入」四个字是载荷**：6 个 spec 与真机助手都按这四个字全页搜按钮
  *    （calendar-anchor / f3-sidebar-identity / helpers/board-env / member-board-layout /
  *    overlay-stack-browser / settings-zones）。改文案等于同时改六个文件。
@@ -250,10 +254,16 @@ describe('身份去重 · 侧栏身份行是唯一身份控件（variant="rail"�
 
 describe('身份去重 · 收起态（variant="rail-collapsed"）', () => {
   it('已进入身份：是身份控件而**不再是回首页的 Link**（有意的行为变更）+ 菜单能开', () => {
-    mount('rail-collapsed');
+    const host = mount('rail-collapsed');
     const btn = collapsedTrigger();
-    // 原实现是 `<Link to="/">`（点头像回首页）；现在回首页由 logo 那一枚承担
-    expect(document.querySelector('a[href="/"]'), '收起态不该再有「点头像回首页」的链接').toBeNull();
+    /*
+     * 原实现是 `<Link to="/">`（点头像回首页）；现在头像改成身份控件。
+     * ⚠️ 断言**只在这个隔离宿主内**取（`host`），不查整个 document ——
+     *   真实壳层里侧栏 Logo 自己就是一个 `a[href="/"]`，用 document 级查询会
+     *   在将来有人把本 spec 改成挂整壳时变成一条假红/假绿。
+     *   「收起态回首页仍可达」这件事由真机断言在 `identity-rail-browser.spec.ts` 里证。
+     */
+    expect(host.querySelector('a'), '这枚头像不该再是链接').toBeNull();
     expect(btn.tagName, '应是 button').toBe('BUTTON');
     // 收起态唯一能读出"我是谁"的地方就是 tooltip
     expect(btn.getAttribute('title'), 'tooltip 保留姓名 · 角色').toContain('左栏负责人');
@@ -333,6 +343,27 @@ describe('身份去重 · 唯一实现（不许把菜单逻辑复制到侧栏）
     expect(sidebar, '展开态那段纯展示 div 应已删除').not.toContain('flex h-[52px] items-center gap-2 rounded-md bg-sunken px-2"');
   });
 
+  it('★ 收起态「回首页」仍有承载：头像改成身份控件之后不曾失联', () => {
+    /*
+     * team-lead 裁决 ② 的前置：先证「收起态回首页」不是只由那枚头像承载。
+     * 查证结果 —— 收起态**有两处**回首页，都不经那头像：
+     *   ① 收起态顶部 Logo `<Link to="/">`（aria-label="ID Plan 首页"）；
+     *      展开侧栏是**另一枚** `SidebarCollapseToggle`，不是这个 Logo。
+     *   ② 导航首项：管理员 → `/`（「项目」）；成员 → `/member-board`（「看板」）。
+     * ⇒ 把这枚头像改成身份控件**没有删掉任何唯一的回首页路径**，可以照改。
+     * 真机实证见 `identity-rail-browser.spec.ts`：点收起态 Logo 与首枚导航 ⇒ 都落到 `/`。
+     */
+    const sidebar = code('src/components/layout/Sidebar.tsx');
+    expect(sidebar, '收起态 Logo 应仍是指向 / 的 Link（回首页承载①）').toContain('aria-label="ID Plan 首页"');
+    expect(sidebar, 'Logo 不得被改成「展开侧栏”的开关（那是另一枚 SidebarCollapseToggle）').toContain(
+      'SidebarCollapseToggle',
+    );
+    // 导航首项（回首页承载②）：管理员支是 `/`
+    const nav = code('src/components/layout/SidebarNav.tsx');
+    expect(nav, '管理员支导航首项应指向 /').toMatch(/to:\s*'\/'/);
+    expect(nav, '成员支导航首项应指向 /member-board').toContain("'/member-board'");
+  });
+
   it('TopBar 不再 import / 不再渲染身份控件；手机档入口 MobileMoreMenu 仍在', () => {
     const topbar = code('src/components/layout/TopBar.tsx');
     expect(topbar, 'TopBar 不许再 import 身份控件').not.toContain('MemberIdentityPicker');
@@ -347,17 +378,23 @@ describe('身份去重 · 唯一实现（不许把菜单逻辑复制到侧栏）
 });
 
 describe('身份去重 · 指向旧入口的文案已下线', () => {
-  it('侧栏提示指向左下角身份行，不再说「顶栏的身份标识」', () => {
-    const sidebar = code('src/components/layout/Sidebar.tsx');
-    expect(sidebar, '旧文案「点顶栏的身份标识」必须下线').not.toContain('点顶栏的身份标识');
-    expect(sidebar, '新文案应指向左下角身份行').toContain('点左下角的身份行');
-  });
-
-  it('我的任务页 / 项目详情页不再说「右上角「进入身份」」', () => {
+  it('我的任务页 / 项目详情页不再说「右上角「进入身份」」，且措辞两档都成立', () => {
     for (const f of ['src/pages/MyTasksPage.tsx', 'src/pages/ProjectDetailPage.tsx']) {
       const src = code(f);
       expect(src, `${f} 仍指向已删除的右上角入口`).not.toContain('右上角「进入身份」');
-      expect(src, `${f} 应改指左下角身份入口`).toContain('左下角的身份入口');
+      /*
+       * ★ 措辞纪律（team-lead 裁决 ①）：侧栏 ≥1280 才常驻，1024–1279 收在左上角汉堡的
+       *   抽屉里 ⇒「左下角」在窄窗上**不成立**，不许出现在这两句引导语里。
+       *   必须用「左侧导航最下方」这种两档都真的说法。
+       */
+      expect(src, `${f} 用了只在常驻侧栏成立的「左下角」说法`).not.toContain('左下角');
+      expect(src, `${f} 应改指左侧导航最下方`).toContain('左侧导航最下方');
     }
+  });
+
+  it('侧栏内那句提示也不写「左下角」（它同时出现在常驻侧栏与抽屉两种形态里）', () => {
+    const sidebar = code('src/components/layout/Sidebar.tsx');
+    expect(sidebar).not.toContain('点顶栏的身份标识');
+    expect(sidebar, '应指向侧栏最下方的身份行').toContain('点侧栏最下方的身份行');
   });
 });
