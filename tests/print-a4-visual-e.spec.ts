@@ -556,6 +556,25 @@ describe.skipIf(!CAN_RUN)('E 版 · 五块形态（批 C：跨度条 vs 占比 /
       expect(on.notes, '口径行每页都在（原则 1）').toEqual([1, 1]);
       expect(on.p1, 'B3 元信息行含可见阶段/完成度/套餐').toContain('阶段套餐');
       expect(on.p1, 'B3 含排期基准').toContain('排期基准');
+      // 刊头 meta 行的**断行纪律**：右栏被巨题挤到 160px，字段片绝不许跨行断开
+      // （批 C 实测过的丑：`打印日期 2026-` / `10-09` 被劈成两半）
+      const metaFacts = await page.evaluate(() => {
+        const meta = document.querySelector('.ei-head__meta') as HTMLElement;
+        const toks = Array.from(meta.querySelectorAll('.ei-head__mtok')) as HTMLElement[];
+        return {
+          text: meta.textContent ?? '',
+          // 每个字段片占几行：getClientRects() 一行一枚矩形
+          rectsPerTok: toks.map((t) => t.getClientRects().length),
+          tokTexts: toks.map((t) => t.textContent ?? ''),
+        };
+      });
+      expect(metaFacts.rectsPerTok, '每个字段片都只占一行（不许片内断行）').toEqual(
+        metaFacts.rectsPerTok.map(() => 1),
+      );
+      expect(metaFacts.text, 'meta 文本逐字不变（拆片只是排版，不改内容）').toBe(
+        '2026-01-01 – 2026-03-01 · 委托人 客户甲 · 打印日期 2026-10-09',
+      );
+      expect(metaFacts.tokTexts.join(''), '三片拼起来 === 原串').toBe(metaFacts.text);
 
       // 关 B3 ⇒ 承载区（元信息行 + 基准行）整块不出，**口径行两页都还在**
       await page.goto('file://' + writeHtml('e-blocks-no-b3.html', shell(markupWith(noB3), css, false)));

@@ -538,10 +538,29 @@ function EiHead({
         <p className="ei-head__project" title={vm.project.name}>
           {vm.project.name}
         </p>
+        {/*
+         * meta 行拆成**不可断的字段片**（批 C 撞见并修掉的一个「丑」）：
+         * 右栏被巨题挤到 160px，整行文本会**在词内断开** —— 实测断成
+         * `打印日期 2026-` / `10-09`（浏览器在连字符后就有断点，`keep-all` 也
+         * 拦不住 ASCII 里的 `-`）。印在纸上的日期被劈成两半是硬伤，故把三个
+         * 字段各包一层 `ei-head__mtok`（`white-space: nowrap`）。
+         * ⚠️ **文本逐字不变**：分隔符「 · 」仍留在片内，`textContent` 与原串相等
+         * （legacy 原生页的可访问文本因此一字未动）。
+         */}
         <p className="ei-head__meta">
-          {vm.project.plannedStartAt} – {vm.project.plannedEndAt}
-          {vm.project.clientName ? ` · 委托人 ${vm.project.clientName}` : ''}
-          {` · 打印日期 ${vm.generatedAt.slice(0, 10)}`}
+          <span className="ei-head__mtok">
+            <span className="de-num">
+              {vm.project.plannedStartAt} – {vm.project.plannedEndAt}
+            </span>
+            {' ·'}
+          </span>
+          {vm.project.clientName ? (
+            <span className="ei-head__mtok">{' 委托人 '}{vm.project.clientName}{' ·'}</span>
+          ) : null}
+          <span className="ei-head__mtok">
+            {' 打印日期 '}
+            <span className="de-num">{vm.generatedAt.slice(0, 10)}</span>
+          </span>
         </p>
       </div>
       <div className="ei-head__rule" aria-hidden />
