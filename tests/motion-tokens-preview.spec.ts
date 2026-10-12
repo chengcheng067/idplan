@@ -248,7 +248,13 @@ describe('动效地基 · 源码定义', () => {
       'float-pop-in',
     ];
     for (const name of ORIGINAL) expect(kf.has(name), `缺 ${name}`).toBe(true);
-    expect(kf.size).toBe(ORIGINAL.length + 8); // + 6 出口 + 2 持续态
+    /*
+     * + 6 出口 + 2 持续态 —— 2026-10-12 起是 **+ 7 出口**：新增了遮罩出口
+     * `scrim-out`（用户报「关闭设置频闪」的第二半，team-lead 裁定走"甲"）。
+     * 它**故意没有配对入口**（遮罩入场从不做动画）⇒ 不进 PAIRS 表，
+     * 但出口那一侧的口径（`--dur-base` / `--ease-exit` / `both`）照样受下面那条锁。
+     */
+    expect(kf.size).toBe(ORIGINAL.length + 9); // + 7 出口 + 2 持续态
   });
 
   it('6 组 入口/出口 的 from/to 互为镜像（入口的 to == 出口的 from，反之亦然）', () => {
@@ -325,12 +331,19 @@ describe('动效地基 · 源码定义', () => {
     ).toEqual([]);
   });
 
-  it('6 个出口类用 --dur-base + --ease-exit + fill-mode both', () => {
+  it('出口类一律用 --dur-base + --ease-exit + fill-mode both（六组 + 遮罩 scrim-out）', () => {
     for (const p of PAIRS) {
       const body = ruleBody(css, `.${p.outClass}`);
       expect(body, `缺 .${p.outClass}`).toBeTruthy();
       expect(body).toMatch(/^animation:\s*[\w-]+\s+var\(--dur-base\)\s+var\(--ease-exit\)\s+both;$/);
     }
+    /*
+     * 遮罩出口 `scrim-out` **不在 PAIRS 里**（它没有配对入口），但"与六组逐字同源"
+     * 这条口径对它同样成立 —— 单独再锁一次，免得它因为不在表里而完全无人看守。
+     */
+    const scrim = ruleBody(css, '.scrim-out');
+    expect(scrim, '缺 .scrim-out').toBeTruthy();
+    expect(scrim).toMatch(/^animation:\s*scrim-out\s+var\(--dur-base\)\s+var\(--ease-exit\)\s+both;$/);
   });
 
   it('2 个持续态 keyframes + 便捷类：平滑往复，且**不含** steps()/step-end 硬切', () => {

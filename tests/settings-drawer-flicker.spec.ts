@@ -1,23 +1,23 @@
 // @vitest-environment node
 /**
- * 设置抽屉「关闭频闪」回归闸 · **真 Chromium**（用户 2026-10-12：呼出设置后再关闭会有频闪）。
+ * 浮层关闭「频闪」回归闸 · **真 Chromium**（用户 2026-10-12：呼出设置后关闭设置会有频闪）。
  *
- * ══════════════════ 被锁住的那一帧 ══════════════════
- * 出口动画跑在**锚点容器**上（`drawer-out-left`：opacity 1→0、translateX 0→-24px，
- * `fill-mode: both`）。`usePresence.finish()` 原来在动画结束时**立刻摘掉出口类**，
- * 而摘掉类 = 元素回到**动画前**的样式 = `opacity: 1`。于是「动画结束」与「React 真正
- * 卸载」之间那一帧，屏幕上就是**整块面板从几乎透明弹回全不透明** —— 用户说的频闪。
+ * ══════════════════ 被锁住的两记亮度跳变 ══════════════════
+ * 出口动画跑在**锚点容器**上（`drawer-out-left` / `dialog-pop-out`：opacity 1→0，
+ * `fill-mode: both`）；遮罩（portal 根）是它的父级。修复前有两处缺陷、两记跳变：
+ *   ① `usePresence.finish()` 在动画结束时**立刻摘掉出口类** ⇒ 元素回到动画前的
+ *      `opacity: 1` ⇒ 卸载前那一帧面板整块弹回全亮（真机实测：冻在出口终态
+ *      op 0.0082 / L 202，摘类后 op 1.0 / L 255，**ΔL = +53**，且元素仍 connected）。
+ *   ② 遮罩**完全不参与出口** ⇒ portal 卸载那一帧整块遮罩消失，内容区亮度一帧跳变
+ *      （实测 **L 202 → 255，ΔL = +53**）。
+ * 修法：① 不再提前摘类；② 遮罩与面板**同帧起跑**一起淡出（`scrim-out`，只有 opacity）。
  *
- * 真机实测（修复前，逐帧）：出口 200ms 里 opacity 1→0.987→…→0.130 单调下降，
- * 动画结束那一帧直接跳回 **1.0**，再下一帧才随卸载消失；冻结动画后只做"摘类"这一步，
- * 同一像素 rgb(200,202,206)L=202/op0.0082 → rgb(255,255,255)L=255/op1.0，**ΔL=+53**。
- *
- * ══════════════════ 为什么必须真浏览器 / 为什么判据是离散的 ══════════════════
- * 这一帧只存在于**真实的动画时序**里：jsdom 不跑 CSS 动画、`animationend` 不会自己来、
- * 也没有合成帧，`opacity` 是不是被绘制过根本无从判定。所以这里用真产物 + 真 Chromium，
- * 且逐帧采样放在**页面内**用 rAF 做（跨进程往返会让 200ms 的窗口变成竞态）。
- * 判据一律**不带容差**：opacity 阈值取 0.5（修复前那一帧恰好是 1.0，20 倍余量）、
- * `animationstart` 取**次数**、几何取**完全相等**。
+ * ══════════════════ 为什么必须真浏览器 / 判据为什么是离散的 ══════════════════
+ * 这一帧只存在于**真实动画时序**里：jsdom 不跑 CSS 动画、`animationend` 不会自己来、
+ * 也没有合成帧，opacity 是否被绘制过无从判定。所以用真产物 + 真 Chromium，逐帧采样放在
+ * **页面内**用 rAF 做（跨进程往返会让 200ms 的窗口变成竞态）。
+ * 判据一律**不带容差**：单调性是"后一帧 ≤ 前一帧"、离场是"类必须还在"、
+ * 同帧起跑是"两层动画首次出现的**帧序号相等**"。
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -27,43 +27,60 @@ import { startServer, CAN_RUN_FRESH, CHROMIUM_PATH } from './helpers/board-env';
 
 const HEAVY = 60000;
 
-/** 页面内逐帧记录器：动画事件 + 元素在场/类名/透明度 + 几何 */
+/** 页面内逐帧记录器：面板 + 遮罩两份读数、动画事件、几何 */
 const INSTALL = `
 window.__rec = { frames: [], events: [] };
 window.__now = function () { return performance.timeOrigin + performance.now(); };
+window.__pick = function (label) {
+  var dlg = document.querySelector('[role="dialog"][aria-label="' + label + '"]');
+  if (!dlg) return { dlg: null, anchor: null };
+  return { dlg: dlg, anchor: dlg.firstElementChild };
+};
 window.__install = function () {
   if (window.__inst) return; window.__inst = 1;
   var onEv = function (type) { return function (e) {
     if (!window.__recording) return;
     var el = e.target;
+    var cls = (el && el.classList) ? el.className : '';
     window.__rec.events.push({
       t: +window.__now().toFixed(1), type: type, name: e.animationName,
-      isAnchor: !!(el && el.classList && el.classList.contains('outline-none')),
+      onAnchor: String(cls).indexOf('outline-none') >= 0,
+      onMask: !!(el && el.getAttribute && el.getAttribute('role') === 'dialog'),
     });
   }; };
   document.addEventListener('animationstart', onEv('start'), true);
   document.addEventListener('animationend', onEv('end'), true);
   document.addEventListener('animationcancel', onEv('cancel'), true);
 };
-window.__start = function () {
+window.__start = function (label, outClass) {
   window.__install();
+  window.__label = label;
+  window.__outClass = outClass;
   window.__rec = { frames: [], events: [] };
   window.__recording = true;
   var loop = function () {
     if (!window.__recording) return;
-    var mask = document.querySelector('[role="dialog"][aria-label="设置"]');
-    var anchor = mask ? mask.firstElementChild : null;
+    var p = window.__pick(window.__label);
     var main = document.querySelector('main');
-    var s = anchor ? getComputedStyle(anchor) : null;
-    var mr = mask ? mask.getBoundingClientRect() : null;
+    var rd = function (el, cls) {
+      if (!el) return null;
+      var s = getComputedStyle(el);
+      var an = [];
+      try { an = el.getAnimations().map(function (a) { return a.animationName; }); } catch (e) {}
+      return {
+        opacity: +Number(s.opacity).toFixed(4),
+        anims: an,
+        hasOut: cls ? el.classList.contains(cls) : false,
+      };
+    };
+    var dr = p.dlg ? p.dlg.getBoundingClientRect() : null;
     window.__rec.frames.push({
       t: +window.__now().toFixed(1),
-      connected: anchor !== null,
-      hasExit: anchor ? anchor.classList.contains('drawer-out-left') : false,
-      opacity: s ? +Number(s.opacity).toFixed(4) : null,
-      maskPresent: mask !== null,
-      maskLeft: mr ? +mr.left.toFixed(2) : null,
-      maskWidth: mr ? +mr.width.toFixed(2) : null,
+      // ⚠️ 面板那一侧也要把**本档的出口类名**传进去 —— 传 null 会让 hasOut 恒为 false，
+      //    使「出口类不得提前摘」这条判据永远空过（自己踩过：重写 recorder 时漏了这个参数）
+      anchor: rd(p.anchor, window.__outClass),
+      mask: rd(p.dlg, 'scrim-out'),
+      maskRect: dr ? { left: +dr.left.toFixed(2), width: +dr.width.toFixed(2) } : null,
       contentLeft: main ? +main.getBoundingClientRect().left.toFixed(2) : null,
     });
     requestAnimationFrame(loop);
@@ -71,16 +88,10 @@ window.__start = function () {
   requestAnimationFrame(loop);
 };
 window.__stop = function () { window.__recording = false; return window.__rec; };
-window.__closeXY = function () {
-  var b = document.querySelector('button[aria-label="关闭设置"]');
-  if (!b) return null;
-  var r = b.getBoundingClientRect();
-  return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-};
-window.__maskCorner = function () {
-  var m = document.querySelector('[role="dialog"][aria-label="设置"]');
-  if (!m) return null;
-  var r = m.getBoundingClientRect();
+window.__maskCorner = function (label) {
+  var p = window.__pick(label);
+  if (!p.dlg) return null;
+  var r = p.dlg.getBoundingClientRect();
   return { x: Math.round(r.right - 40), y: Math.round(r.top + 40) };
 };
 `;
@@ -109,32 +120,115 @@ async function openSettings(page: Page): Promise<void> {
   await page.waitForTimeout(600); // 入场动画（200ms）播完并停在 both 终态
 }
 
+/** 打开设置 → 数据区 → 清空日志（center 档确认框） */
+async function openClearLogConfirm(page: Page): Promise<void> {
+  await openSettings(page);
+  await page.click('[data-settings-zone="data"]');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '清空日志')?.click();
+  });
+  await page.waitForSelector('[role="dialog"][aria-label="清空日志"]', { timeout: 5000 });
+  await page.waitForTimeout(600);
+}
+
+interface Side {
+  opacity: number;
+  anims: string[];
+  hasOut: boolean;
+}
 interface Frame {
   t: number;
-  connected: boolean;
-  hasExit: boolean;
-  opacity: number | null;
-  maskPresent: boolean;
-  maskLeft: number | null;
-  maskWidth: number | null;
+  anchor: Side | null;
+  mask: Side | null;
+  maskRect: { left: number; width: number } | null;
   contentLeft: number | null;
 }
 interface Rec {
   frames: Frame[];
-  events: { t: number; type: string; name: string; isAnchor: boolean }[];
+  events: { t: number; type: string; name: string; onAnchor: boolean; onMask: boolean }[];
 }
 
-/** 关一次、逐帧录完，返回记录（关闭方式：x / esc / mask） */
-async function closeAndRecord(page: Page, how: 'x' | 'esc' | 'mask'): Promise<Rec> {
-  await openSettings(page);
-  const coords = await page.evaluate(() => ({
-    close: (window as any).__closeXY(),
-    mask: (window as any).__maskCorner(),
-  }));
-  expect(coords.close, '抽屉头部应有「关闭设置」按钮').not.toBeNull();
-  expect(coords.mask, '取不到遮罩取样点').not.toBeNull();
+/**
+ * ★ 主判据（离散、无容差）：**出口期透明度单调不增**。
+ *
+ * 为什么不是"低于某阈值"：出口动画的 `from` 就是 `opacity: 1`，按阈值判会把开口那几帧
+ * 正常的高透明度全判成违规（踩过）。真正要抓的是**回落**：修复前 `…0.130 → 1.0`。
+ */
+function assertMonotone(seq: Frame[], pick: (f: Frame) => Side | null, label: string): void {
+  const rows = seq.map((f) => ({ t: f.t, s: pick(f) })).filter((r): r is { t: number; s: Side } => r.s !== null);
+  expect(rows.length, `${label}：在场帧太少（判据空过）`).toBeGreaterThan(3);
+  for (let i = 1; i < rows.length; i += 1) {
+    expect(
+      rows[i].s.opacity,
+      `★ ${label} 透明度**回升**了（元素仍挂在 DOM 上就弹回动画前样式 = 用户报的「频闪」）：` +
+        `t=${rows[i].t.toFixed(1)} ${rows[i - 1].s.opacity} → ${rows[i].s.opacity}`,
+    ).toBeLessThanOrEqual(rows[i - 1].s.opacity);
+  }
+}
 
-  await page.evaluate(() => (window as any).__start());
+/** ★ 出口类不得在元素仍挂载时被摘掉（提前摘掉 ⇒ 弹回动画前样式） */
+function assertClassHeld(seq: Frame[], pick: (f: Frame) => Side | null, label: string): void {
+  let seen = false;
+  const stripped: string[] = [];
+  for (const f of seq) {
+    const s = pick(f);
+    if (s === null) break; // 卸载之后不再管
+    if (s.hasOut) { seen = true; continue; }
+    if (seen) stripped.push(`t=${f.t.toFixed(1)} opacity=${s.opacity}`);
+  }
+  expect(seen, `${label}：出口类从未出现 ⇒ 本用例空过`).toBe(true);
+  expect(
+    stripped.length,
+    `★ ${label} 出口类在元素仍挂载时被摘掉了 ⇒ 会弹回动画前的样式（那一帧就是频闪）。违规帧：` +
+      stripped.join(' | '),
+  ).toBe(0);
+}
+
+/** ★ 两层必须**同帧起跑**：两个出口动画首次出现的帧序号必须相等 */
+function assertSameFrameStart(seq: Frame[], aName: string, bName: string): void {
+  const aIdx = seq.findIndex((f) => f.anchor !== null && f.anchor.anims.includes(aName));
+  const bIdx = seq.findIndex((f) => f.mask !== null && f.mask.anims.includes(bName));
+  expect(aIdx, `面板出口动画 ${aName} 从未出现`).toBeGreaterThanOrEqual(0);
+  expect(bIdx, `遮罩出口动画 ${bName} 从未出现`).toBeGreaterThanOrEqual(0);
+  expect(
+    bIdx,
+    `★ 遮罩与面板的出口动画没有同帧起跑（${aName} 首帧 #${aIdx} vs ${bName} 首帧 #${bIdx}）` +
+      ` ⇒ 卸载时其中一层还停在半透明上，仍留台阶`,
+  ).toBe(aIdx);
+}
+
+/** ★ 遮罩必须在被卸载前淡到几乎全透明（否则卸载那一帧就是那记 ΔL=+53 的台阶） */
+function assertMaskFadedBeforeGone(seq: Frame[]): void {
+  const last = [...seq].reverse().find((f) => f.mask !== null);
+  expect(last, '遮罩从未出现在场帧').toBeTruthy();
+  expect(
+    last!.mask!.opacity,
+    `★ 遮罩在被卸载前只淡到 ${last!.mask!.opacity}（应 ≈0）⇒ 卸载那一帧内容区会突然变亮`,
+  ).toBeLessThanOrEqual(0.05);
+}
+
+async function closeAndRecord(
+  page: Page,
+  label: string,
+  how: 'x' | 'esc' | 'mask',
+  closeLabel: string,
+  outClass: string,
+): Promise<Rec> {
+  const coords = await page.evaluate(
+    ([l, cl]) => ({
+      close: ((): { x: number; y: number } | null => {
+        const dlg = document.querySelector(`[role="dialog"][aria-label="${l}"]`);
+        const b = dlg?.querySelector(`button[aria-label="${cl}"]`);
+        if (!b) return null;
+        const r = b.getBoundingClientRect();
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+      })(),
+      mask: (window as any).__maskCorner(l) as { x: number; y: number } | null,
+    }),
+    [label, closeLabel] as const,
+  );
+  await page.evaluate(([l, o]) => (window as any).__start(l, o), [label, outClass] as const);
   if (how === 'x') await page.mouse.click(coords.close!.x, coords.close!.y);
   else if (how === 'esc') await page.keyboard.press('Escape');
   else await page.mouse.click(coords.mask!.x, coords.mask!.y);
@@ -142,7 +236,7 @@ async function closeAndRecord(page: Page, how: 'x' | 'esc' | 'mask'): Promise<Re
   return (await page.evaluate(() => (window as any).__stop())) as Rec;
 }
 
-describe.skipIf(!CAN_RUN_FRESH)('关闭频闪 · 真 Chromium 逐帧', () => {
+describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () => {
   let browser: Browser;
   let server: { url: string; close(): Promise<void> };
 
@@ -166,128 +260,35 @@ describe.skipIf(!CAN_RUN_FRESH)('关闭频闪 · 真 Chromium 逐帧', () => {
     return { ctx, page };
   }
 
-  /**
-   * ★ 本批主判据：**出口期透明度必须单调不增**（逐帧、rAF 精度、不带容差）。
-   *
-   * 为什么是"单调"而不是"小于某个阈值"：出口动画的 `from` 就是 `opacity: 1`
-   * （踩过——按阈值判会把开口那几帧正常的高透明度全判成违规），所以要抓的是
-   * **回落**：修复前 `…0.130 → 1.0`（动画结束那一帧 `finish()` 提前摘掉出口类，
-   * 元素弹回动画前样式），修复后 `1 → 0.987 → … → 0.008` 一路不回头。
-   *
-   * ⚠️ 为什么不用"像素时序单调"当闸：那一帧只存在 ~17ms（60Hz 一帧），而
-   * `page.screenshot` 单点采样的间隔约 35ms ⇒ 抓到与否全靠运气，断言会变成
-   * "看着在测、其实测不到"的假闸。像素证据改为**打印**（见 ⑤），判红交给这条
-   * 帧同步的 opaque 判据。
-   */
-  function assertMonotoneExit(rec: Rec): { frames: Frame[]; lowest: number } {
-    let exitStarted = false;
-    const seq: Frame[] = [];
-    for (const f of rec.frames) {
-      if (f.hasExit) exitStarted = true;
-      if (!exitStarted) continue;
-      if (!f.connected) continue;
-      if (f.opacity === null) continue;
-      seq.push(f);
-    }
-    expect(seq.length, '出口期在场帧数太少（判据空过）').toBeGreaterThan(3);
-    for (let i = 1; i < seq.length; i += 1) {
-      expect(
-        seq[i].opacity,
-        `★ 出口期透明度**回升**了（元素仍挂在 DOM 上就弹回动画前样式 = 用户报的「频闪」）：` +
-          `t=${seq[i].t.toFixed(1)} ${seq[i - 1].opacity} → ${seq[i].opacity}`,
-      ).toBeLessThanOrEqual(seq[i - 1].opacity!);
-    }
-    const lowest = Math.min(...seq.map((f) => f.opacity!));
-    return { frames: seq, lowest };
-  }
-
-  it('① 三种关闭方式：出口期透明度**单调不增**（无回弹帧）', async () => {
+  it('① 设置抽屉（left-rail）：三种关闭方式，面板与遮罩透明度**均单调不增**', async () => {
     const { ctx, page } = await openApp();
     try {
       for (const how of ['x', 'esc', 'mask'] as const) {
-        const rec = await closeAndRecord(page, how);
-        const withExit = rec.frames.filter((f) => f.hasExit).length;
-        const exitEnd = rec.events.find((e) => e.type === 'end' && e.name === 'drawer-out-left');
-        console.log(
-          `[${how}] 帧=${rec.frames.length} 含出口类的帧=${withExit} 出口事件=${rec.events
-            .map((e) => `${e.type}:${e.name}`)
-            .join(',')}`,
-        );
-        expect(withExit, `[${how}] 出口类从未挂上 ⇒ 出口路径没走`).toBeGreaterThan(0);
-        expect(exitEnd, `[${how}] drawer-out-left 没有 animationend，出口没播完`).toBeTruthy();
-        const { lowest } = assertMonotoneExit(rec);
-        console.log(`[${how}] 出口期最低透明度=${lowest}`);
+        await openSettings(page);
+        const rec = await closeAndRecord(page, '设置', how, '关闭设置', 'drawer-out-left');
+        const starts = rec.events.filter((e) => e.type === 'start').map((e) => e.name);
+        console.log(`[${how}] 帧=${rec.frames.length} 出口起点=${JSON.stringify(starts)}`);
+        expect(starts, `[${how}] 出口类从未挂上 ⇒ 出口路径没走`).toContain('drawer-out-left');
+        assertMonotone(rec.frames, (f) => f.anchor, `[${how}] 面板`);
+        assertMonotone(rec.frames, (f) => f.mask, `[${how}] 遮罩`);
+        assertMaskFadedBeforeGone(rec.frames);
       }
     } finally {
       await ctx.close();
     }
   }, 180000);
 
-  it('⑤ 出口动画结束后元素仍持有出口类，直到被卸载（不许提前摘掉 ⇒ 不许弹回）', async () => {
+  it('② 两层同帧起跑（面板 + 遮罩），且各自只 start 一次', async () => {
     const { ctx, page } = await openApp();
     try {
       await openSettings(page);
-      const px = async (): Promise<number> => {
-        const buf = await page.screenshot({ clip: { x: 560, y: 500, width: 1, height: 1 } });
-        let pos = 8;
-        let colorType = 0;
-        const idat: Buffer[] = [];
-        while (pos < buf.length) {
-          const len = buf.readUInt32BE(pos);
-          const type = buf.toString('ascii', pos + 4, pos + 8);
-          const data = buf.subarray(pos + 8, pos + 8 + len);
-          if (type === 'IHDR') colorType = data[9];
-          else if (type === 'IDAT') idat.push(data);
-          else if (type === 'IEND') break;
-          pos += 12 + len;
-        }
-        const raw = require('node:zlib').inflateSync(Buffer.concat(idat)) as Buffer;
-        const bpp = colorType === 6 ? 4 : colorType === 2 ? 3 : 1;
-        const p = raw.subarray(1, 1 + bpp);
-        return Math.round(0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]);
-      };
-      const before = await px();
-      await page.evaluate(() => (window as any).__start());
-      await page.evaluate(() => {
-        (document.querySelector('button[aria-label="关闭设置"]') as HTMLButtonElement | null)?.click();
-      });
-      await page.waitForTimeout(700);
-      const rec = (await page.evaluate(() => (window as any).__stop())) as Rec;
-      const afterGone = await px();
-
-      // ★ 判据（离散）：出口动画**开始之后**，只要元素还 connected，出口类就必须还在。
-      //   修复前那一帧正是「类已摘掉、元素还在」⇒ 必红（元素随即弹回动画前的 opacity:1）。
-      expect(rec.frames.some((f) => f.hasExit), '出口类从未出现 ⇒ 本用例空过').toBe(true);
-      let seenExit = false;
-      const stripped: Frame[] = [];
-      for (const f of rec.frames) {
-        if (f.hasExit) { seenExit = true; continue; }
-        if (seenExit && f.connected) stripped.push(f);
-      }
-      expect(
-        stripped.length,
-        `★ 出口类在元素仍挂载时被摘掉了 ⇒ 元素会弹回动画前的样式（那一帧就是频闪）。违规帧：` +
-          stripped.map((f) => `t=${f.t.toFixed(1)} opacity=${f.opacity}`).join(' | '),
-      ).toBe(0);
-
-      // 像素证据（打印，不判红）：修复前这里是 255（弹回全白）；修复后应一路 ≤ 关闭前
-      console.log(
-        `[⑤ 像素证据] 关闭前=${before} 卸载后=${afterGone} 出口期透明度序列=${JSON.stringify(
-          rec.frames.filter((f) => f.hasExit).map((f) => f.opacity),
-        )}`,
-      );
-    } finally {
-      await ctx.close();
-    }
-  }, 120000);
-
-  it('② 同一个出口动画在同一个元素上只 start 一次（不是重放造成的闪）', async () => {
-    const { ctx, page } = await openApp();
-    try {
-      const rec = await closeAndRecord(page, 'x');
-      const starts = rec.events.filter((e) => e.type === 'start' && e.name === 'drawer-out-left' && e.isAnchor);
-      console.log(`drawer-out-left 在锚点上的 animationstart 次数 = ${starts.length}`);
-      expect(starts.length, '出口动画重放了（同一动画名同一元素多次 start）').toBe(1);
+      const rec = await closeAndRecord(page, '设置', 'x', '关闭设置', 'drawer-out-left');
+      assertSameFrameStart(rec.frames, 'drawer-out-left', 'scrim-out');
+      const a = rec.events.filter((e) => e.type === 'start' && e.name === 'drawer-out-left' && e.onAnchor);
+      const s = rec.events.filter((e) => e.type === 'start' && e.name === 'scrim-out' && e.onMask);
+      console.log(`animationstart：面板 drawer-out-left=${a.length}，遮罩 scrim-out=${s.length}`);
+      expect(a.length, '面板出口动画重放').toBe(1);
+      expect(s.length, '遮罩出口动画重放').toBe(1);
     } finally {
       await ctx.close();
     }
@@ -296,20 +297,23 @@ describe.skipIf(!CAN_RUN_FRESH)('关闭频闪 · 真 Chromium 逐帧', () => {
   it('③ 关闭全过程：内容区左边缘与遮罩几何**零位移**', async () => {
     const { ctx, page } = await openApp();
     try {
-      const rec = await closeAndRecord(page, 'x');
+      await openSettings(page);
+      const rec = await closeAndRecord(page, '设置', 'x', '关闭设置', 'drawer-out-left');
       const contentLefts = Array.from(new Set(rec.frames.map((f) => f.contentLeft)));
-      const maskLefts = Array.from(new Set(rec.frames.filter((f) => f.maskPresent).map((f) => f.maskLeft)));
-      const maskWidths = Array.from(new Set(rec.frames.filter((f) => f.maskPresent).map((f) => f.maskWidth)));
-      console.log(`内容区 left 取值=${JSON.stringify(contentLefts)}；遮罩 left=${JSON.stringify(maskLefts)}；遮罩宽=${JSON.stringify(maskWidths)}`);
-      expect(contentLefts.length, `内容区左边缘在关闭过程中动了：${JSON.stringify(contentLefts)}`).toBe(1);
-      expect(maskLefts.length, `遮罩左缘在关闭过程中被重算：${JSON.stringify(maskLefts)}`).toBe(1);
-      expect(maskWidths.length, `遮罩宽度在关闭过程中被重算：${JSON.stringify(maskWidths)}`).toBe(1);
+      const maskLefts = Array.from(new Set(rec.frames.filter((f) => f.maskRect).map((f) => f.maskRect!.left)));
+      const maskWidths = Array.from(new Set(rec.frames.filter((f) => f.maskRect).map((f) => f.maskRect!.width)));
+      console.log(
+        `内容区 left=${JSON.stringify(contentLefts)}；遮罩 left=${JSON.stringify(maskLefts)}；遮罩宽=${JSON.stringify(maskWidths)}`,
+      );
+      expect(contentLefts.length, `内容区左边缘动了：${JSON.stringify(contentLefts)}`).toBe(1);
+      expect(maskLefts.length, `遮罩左缘被重算：${JSON.stringify(maskLefts)}`).toBe(1);
+      expect(maskWidths.length, `遮罩宽度被重算：${JSON.stringify(maskWidths)}`).toBe(1);
     } finally {
       await ctx.close();
     }
   }, 90000);
 
-  it('④ 关闭后元素确实卸载（不许用"留在 DOM"来消症状）', async () => {
+  it('④ 关闭后元素确实卸载（不许用"留在 DOM"消症状）', async () => {
     const { ctx, page } = await openApp();
     try {
       await openSettings(page);
@@ -319,13 +323,40 @@ describe.skipIf(!CAN_RUN_FRESH)('关闭频闪 · 真 Chromium 逐帧', () => {
       await page.waitForFunction(() => document.querySelector('[role="dialog"][aria-label="设置"]') === null, undefined, {
         timeout: 2000,
       });
-      expect(
-        await page.evaluate(() => document.querySelector('[role="dialog"][aria-label="设置"]')),
-        '关闭后 2s 内抽屉仍留在 DOM',
-      ).toBeNull();
+      expect(await page.evaluate(() => document.querySelector('[role="dialog"][aria-label="设置"]'))).toBeNull();
     } finally {
       await ctx.close();
     }
   }, 90000);
 
+  it('⑤ 面板与遮罩的出口类都不得在仍挂载时被摘掉', async () => {
+    const { ctx, page } = await openApp();
+    try {
+      await openSettings(page);
+      const rec = await closeAndRecord(page, '设置', 'esc', '关闭设置', 'drawer-out-left');
+      assertClassHeld(rec.frames, (f) => f.anchor, '面板 drawer-out-left');
+      assertClassHeld(rec.frames, (f) => f.mask, '遮罩 scrim-out');
+    } finally {
+      await ctx.close();
+    }
+  }, 90000);
+
+  it('⑥ center 档（dialog-pop-out）：形态不同、同一路径，判据同样成立', async () => {
+    const { ctx, page } = await openApp();
+    try {
+      await openClearLogConfirm(page);
+      const rec = await closeAndRecord(page, '清空日志', 'esc', '关闭', 'dialog-pop-out');
+      const starts = rec.events.filter((e) => e.type === 'start').map((e) => e.name);
+      console.log(`[center] 帧=${rec.frames.length} 出口起点=${JSON.stringify(starts)}`);
+      expect(starts, '[center] 出口类没挂上 ⇒ 出口路径没走').toContain('dialog-pop-out');
+      assertMonotone(rec.frames, (f) => f.anchor, '[center] 面板');
+      assertMonotone(rec.frames, (f) => f.mask, '[center] 遮罩');
+      assertClassHeld(rec.frames, (f) => f.anchor, '[center] 面板 dialog-pop-out');
+      assertClassHeld(rec.frames, (f) => f.mask, '[center] 遮罩 scrim-out');
+      assertSameFrameStart(rec.frames, 'dialog-pop-out', 'scrim-out');
+      assertMaskFadedBeforeGone(rec.frames);
+    } finally {
+      await ctx.close();
+    }
+  }, 120000);
 });
