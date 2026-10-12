@@ -42,8 +42,18 @@ export const GANTT_MIN_LABEL_GAP_PCT = 12;
  * 「基线 28 / 低于 24 转紧凑字体档」这两个与版式无关的口径，不复制各版预算。
  */
 export const GANTT_ROW_HEIGHT = 28;
-/** 低于此值时切紧凑字体档（名称/日期各降一档，仍在 9px 下限之上） */
+/**
+ * 低于此值时切**紧凑**字体档（名称 10px / 号码 10px / 状态 9px）。
+ * 阈值 = 基线档文字的行盒高（16px 号码 → 行盒 24px）：行高小于它，基线字号就会
+ * 与相邻行叠字 ⇒ 必须换档。**实测值，不是审美值**（见交付报告的可读性表）。
+ */
 export const GANTT_COMPACT_UNDER = 24;
+/**
+ * 低于此值时切**最紧**字体档（名称 9px / 号码 10px；9px 是本仓的 accent 文字下限）。
+ * 两档字体都是为了让**文字行盒不超出被压矮的轨道行**——实测判据见交付报告
+ * 「行高可读性实测」（14px 行 + 12px 名称时，两行文字盒重叠 4px ⇒ 不可读）。
+ */
+export const GANTT_DENSE_UNDER = 20;
 
 /** 派生所需的最小阶段形状（`PrintStageVM` / `ScheduleSection` 都能直接喂） */
 export interface PrintGanttStageInput {

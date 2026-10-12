@@ -397,6 +397,75 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
     }
   });
 
+  it('A 版 B2 行高可读性：**文字行盒不超出被压矮的轨道行**（净空 ≥ 0，20 / 23 阶段两档）', async () => {
+    /*
+     * 这条锁的是 2026-10-13 批 A 裁决里的「实测可读下限」：行高被压缩时，
+     * 若字号不跟着降，相邻两行的文字行盒会**叠在一起**（真机实测 12px 行 +
+     * 12px 名称 ⇒ 净空 −6px；14px ⇒ −4px）。故判据写死为机器可测的形式：
+     *   `.print-gantt__no` / `.print-gantt__name` 的行盒 ≤ 该行行高（+0.5px 亚像素容差）
+     * 覆盖两档：20 阶段（pitch 19，compact 档）与 23 阶段（pitch 16，单页档下界）。
+     */
+    const css = builtCss();
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      for (const n of [20, 23]) {
+        const base = buildVm();
+        const vm = {
+          ...base,
+          stages: Array.from({ length: n }, (_, i) => {
+            const b = base.stages[i % base.stages.length]!;
+            return { ...b, id: `stg_read_${i + 1}`, orderIndex: i + 1, name: `${i + 1}·${b.name}` };
+          }),
+        } as typeof base;
+        const markup = renderToStaticMarkup(
+          createElement(SwissScheduleDocument, {
+            vm,
+            palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+          }),
+        );
+        await page.goto('file://' + writeHtml(`a-readability-${n}.html`, shell(markup, css, false)));
+        const r = await page.evaluate(() => {
+          const rows = Array.from(document.querySelectorAll('.print-gantt__row')) as HTMLElement[];
+          const first = rows[0];
+          if (!first) return null;
+          const h = (sel: string): number => {
+            const el = first.querySelector(sel) as HTMLElement | null;
+            return el ? Math.round(el.getBoundingClientRect().height * 100) / 100 : -1;
+          };
+          // 相邻两行的名称文字盒之间的净空（负值 = 叠字）
+          const nameOf = (i: number): DOMRect | null => {
+            const el = rows[i]?.querySelector('.print-gantt__name') as HTMLElement | null;
+            return el ? el.getBoundingClientRect() : null;
+          };
+          const a = nameOf(0);
+          const b = nameOf(1);
+          return {
+            rowH: Math.round(first.getBoundingClientRect().height * 100) / 100,
+            nameBox: h('.print-gantt__name'),
+            noBox: h('.print-gantt__no'),
+            density: (first.closest('.print-gantt') as HTMLElement).getAttribute('data-density') ?? '',
+            pitch: first.style.height,
+            gap: a && b ? Math.round((b.y - (a.y + a.height)) * 100) / 100 : -999,
+            rows: rows.length,
+          };
+        });
+        expect(r, `${n} 阶段应有甘特行`).not.toBeNull();
+        expect(r!.rows, `${n} 阶段：全部轨道行都在首页`).toBe(n);
+        // 判据：文字行盒 ≤ 行高（+0.5 亚像素），且相邻两行名称盒净空 ≥ 0
+        expect(r!.noBox, `${n} 阶段：号码行盒 ${r!.noBox} ≤ 行高 ${r!.rowH}`).toBeLessThanOrEqual(
+          r!.rowH + 0.5,
+        );
+        expect(r!.nameBox, `${n} 阶段：名称行盒 ${r!.nameBox} ≤ 行高 ${r!.rowH}`).toBeLessThanOrEqual(
+          r!.rowH + 0.5,
+        );
+        expect(r!.gap, `${n} 阶段：相邻两行名称盒净空不得为负（叠字）`).toBeGreaterThanOrEqual(0);
+        expect(r!.pitch, '行高经内联几何落到 DOM').toBe(r!.rowH + 'px');
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
   it('A 版 B2 甘特实测几何：刻度不被抽稀吞掉、条带不越轨道、最小可见宽 ≥2.5%', async () => {
     const css = builtCss();
     const vm = buildVm();

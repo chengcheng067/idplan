@@ -33,6 +33,7 @@ import {
 import { STAGE_GLYPH, stageStatusLabel } from '../pages/generic/shared';
 import {
   GANTT_COMPACT_UNDER,
+  GANTT_DENSE_UNDER,
   GANTT_ROW_HEIGHT,
   type PrintGanttModel,
 } from '../model/print-gantt';
@@ -64,21 +65,34 @@ export interface PrintGanttProps {
    * 缺省 = 设计基线 28（§1.1 的「28px 轨道行」）。
    */
   rowHeight?: number;
+  /** 是否出图例（图例两行只该在第一段出，续段不重复占版面） */
+  withLegend?: boolean;
+  /**
+   * 本段是否是**续段**（整轴按页续排时的第 2 段起）。
+   * 续段自带自己的轴与刻度（同一时间坐标系 ⇒ 与首段对得上），
+   * 只在轴尾加一枚「（续）」标记；行号连续，读者自己接得上。
+   */
+  continuation?: boolean;
 }
 
 export function PrintGantt({
   model,
   variant,
   rowHeight = GANTT_ROW_HEIGHT,
+  withLegend = true,
+  continuation = false,
 }: PrintGanttProps): JSX.Element {
-  // 行高被压到基线以下 ⇒ 切紧凑字体档（各版 CSS 按 data-density 覆写字号）
+  // 行高被压到基线以下 ⇒ 切紧凑/最紧字体档（各版 CSS 按 data-density 覆写字号）。
+  // 两档的**唯一目的**是让文字行盒不超出被压矮的轨道行（实测判据）。
   const compact = rowHeight < GANTT_COMPACT_UNDER;
+  const dense = rowHeight < GANTT_DENSE_UNDER;
   return (
     <section
       className={`print-gantt ${VARIANT_CLASS[variant]}`}
       data-print-gantt={variant}
       data-view-days={model.viewDays}
-      data-density={compact ? 'compact' : undefined}
+      data-density={dense ? 'dense' : compact ? 'compact' : undefined}
+      data-gantt-cont={continuation ? true : undefined}
     >
       {/* 轴：2px 基线；月份刻度**压线**（与条带同一坐标系，故与轨道行左右两端同宽） */}
       <div className="print-gantt__axis">
@@ -96,7 +110,7 @@ export function PrintGantt({
             </span>
           ))}
         </div>
-        <div className="print-gantt__tail" aria-hidden />
+        <div className="print-gantt__tail">{continuation ? '（续）' : ''}</div>
       </div>
 
       <div className="print-gantt__rows">
@@ -149,7 +163,7 @@ export function PrintGantt({
         })}
       </div>
 
-      {model.rows.length > 0 && (
+      {withLegend && model.rows.length > 0 && (
         <div className="print-gantt__legend">
           {/* 图例两行：① 阶段色 9（名称进 title，不占版面）② 状态四态（字形 + 词） */}
           <div className="print-gantt__legend-row">

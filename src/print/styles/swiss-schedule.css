@@ -981,3 +981,50 @@
     print-color-adjust: exact;
   }
 }
+
+/* ── B2 甘特 · 最紧档（行高 < GANTT_DENSE_UNDER=20；阈值在 model/print-gantt.ts）──
+   字号与行高的关系是**实测判据**，不是审美：12px 字号的行盒 18px ⇒ 行高被压到
+   14px 时相邻两行的文字盒重叠 4px（真 Chromium 实测，见交付报告）。故压到 20px
+   以下时字号跟着降到 10px/9px（9px = 本仓 accent 文字下限），让「行盒 ≤ 行高」。 */
+.print-root.print-template-swiss-schedule .print-gantt[data-density='dense'] .print-gantt__no {
+  font-size: 10px;
+  min-width: 22px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='dense'] .print-gantt__name {
+  font-size: 9px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='dense'] .print-gantt__dates {
+  font-size: 9px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='dense'] .print-gantt__state {
+  font-size: 9px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='dense'] .print-gantt__bar {
+  top: 2px;
+  bottom: 2px;
+}
+
+/* 紧凑档（行高 20–23）：字号也要跟着降，否则**号码**先叠字——
+   实测：14px 号码的行盒 21px，行高 20 时已超出 1px（见交付报告的可读性表）。
+   故紧凑档与最紧档共用 10px 号码 / 10px 名称，只有基线档（≥24）用 16px/13px。 */
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__no {
+  font-size: 10px;
+  min-width: 22px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__name {
+  font-size: 10px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__state {
+  font-size: 9px;
+}
+
+.print-root.print-template-swiss-schedule .print-gantt[data-density='compact'] .print-gantt__bar {
+  top: 2px;
+  bottom: 2px;
+}

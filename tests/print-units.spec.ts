@@ -38,6 +38,7 @@ import {
 import { PRINT_TEMPLATE_IDS } from '../src/components/print/print-templates';
 import { DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../src/lib/schedule-print';
 import {
+  SWISS_GANTT_SINGLE_PAGE_MAX_STAGES,
   SwissScheduleDocument,
   swissBlockPages,
   swissGanttPitch,
@@ -471,13 +472,30 @@ describe('批 1 地基 · L5 A 版五块形态的页装配与自适应行高', (
     return (markup.match(/class="a4-page swiss-page"/g) ?? []).length;
   }
 
-  it('★ 预计页数 ≡ 实际出纸（2 / 9 / 14 / 20 / 27 阶段逐一对照）', () => {
-    for (const n of [2, 9, 14, 20, 27]) {
+  it('★ 预计页数 ≡ 实际出纸（含超阈值续页档：1 / 2 / 9 / 20 / 23 / 24 / 27 / 40 / 60）', () => {
+    for (const n of [1, 2, 9, 14, 20, 23, 24, 27, 40, 60]) {
       const vm = vmOf(n);
       const planned = swissBlockPages(vm, DEFAULT_SCHEDULE_PAPER_BLOCKS).length;
       expect(renderedPages(n), `${n} 阶段：装配层 ${planned} 页、文档层应逐页一致`).toBe(planned);
       expect(planned, `${n} 阶段：至少 1 页`).toBeGreaterThan(0);
     }
+  });
+
+  it('B2 超阈值 ⇒ 整轴按页续排（行不丢、坐标系不换、预计页数 = 实际出纸）', () => {
+    const vm = vmOf(40);
+    const plans = swissBlockPages(vm, DEFAULT_SCHEDULE_PAPER_BLOCKS);
+    const chunks = plans.filter((p) => p.ganttTo > p.ganttFrom);
+    expect(chunks.length, '40 阶段：甘特分多段').toBeGreaterThan(1);
+    // 行不丢不重：区间并集 = 全量、按序相接
+    let cursor = 0;
+    for (const c of chunks) {
+      expect(c.ganttFrom, '各段首尾相接').toBe(cursor);
+      cursor = c.ganttTo;
+    }
+    expect(cursor, '全部轨道行都上了纸').toBe(vm.stages.length);
+    // 首段之外的段都带续段标记（渲染层据 data-gantt-cont 出「（续）」）
+    expect(chunks[0]!.ganttFrom, '首段从第 0 行起').toBe(0);
+    expect(chunks.slice(1).every((c) => c.ganttFrom > 0)).toBe(true);
   });
 
   it('阶段清单关掉 ⇒ 单页；阶段清单的每一页都承载阶段（纸壳页不出空态）', () => {
@@ -499,15 +517,24 @@ describe('批 1 地基 · L5 A 版五块形态的页装配与自适应行高', (
     expect(plans[plans.length - 1]!.last).toBe(true);
   });
 
-  it('B2 行高自适应：阶段越多行越矮（夹在 14–28），且 125 阶段仍给得出行高', () => {
+  it('B2 行高两档：≤阈值压缩（≥实测可读下限 16），>阈值回基线 28 并改续页', () => {
+    // 单页档：阶段越少行越高，压到可读下限为止
     expect(swissGanttPitch(2), '2 阶段：设计基线 28').toBe(28);
     expect(swissGanttPitch(9), '9 阶段：仍 28').toBe(28);
-    expect(swissGanttPitch(20), '20 阶段：压到可读下限之上').toBeLessThan(28);
-    expect(swissGanttPitch(20)).toBeGreaterThanOrEqual(14);
-    expect(swissGanttPitch(40), '40 阶段：下限 14（再压会与字号打架）').toBe(14);
-    for (const n of [1, 5, 12, 33, 125]) {
+    expect(swissGanttPitch(20), '20 阶段：压到 19（可读）').toBe(19);
+    expect(swissGanttPitch(SWISS_GANTT_SINGLE_PAGE_MAX_STAGES), '阈值处到底：可读下限 16').toBe(16);
+    // 超阈值档：**不再往下压**（12/14px 实测叠字），回到设计基线并交续页
+    expect(
+      swissGanttPitch(SWISS_GANTT_SINGLE_PAGE_MAX_STAGES + 1),
+      '超过阈值 ⇒ 回基线 28（续页档）',
+    ).toBe(28);
+    expect(swissGanttPitch(40)).toBe(28);
+    expect(swissGanttPitch(125)).toBe(28);
+    // 阈值是命名的常量、且由纸面预算 ÷ 可读下限推出（不许硬编码 23/27 这类数）
+    expect(SWISS_GANTT_SINGLE_PAGE_MAX_STAGES, '阈值在合理区间（实测 23）').toBe(23);
+    for (const n of [1, 5, 12, 21, 23]) {
       const p = swissGanttPitch(n);
-      expect(p).toBeGreaterThanOrEqual(14);
+      expect(p, `${n} 阶段：单页档行高不低于实测可读下限 16`).toBeGreaterThanOrEqual(16);
       expect(p).toBeLessThanOrEqual(28);
     }
   });

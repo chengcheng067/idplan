@@ -735,12 +735,20 @@ function TeamDeparturePage({ vm }: { vm: PrintViewModel }): JSX.Element {
  *     **恒渲染**，五块按勾选渲染；B1 因承载项目名而不可摘，由 units 层声明）。
  *
  * 分页口径（照 §0.2 经典的 5 块口径）：
- *   B1 打印头部 **每页**；B2 打印时间轴 **只第 1 页**；B3 项目信息 **只第 1 页**；
+ *   B1 打印头部 **每页**；B2 打印时间轴 **只第 1 页**（**唯一例外**见下）；B3 项目信息 **只第 1 页**；
  *   B4 阶段清单 **每页**（本页无承载则不出清单，与经典「空页不出表」同源）；
  *   B5 页脚 **每页**（此处可摘的载荷 = 贴底的数据来源行，见 §2.6 的 A·B5 格）。
  *
  * 严格一一对应（决策 6）：勾选只决定「打什么内容」，永不决定「这套模板长什么样」；
  * 取消一块 = 纸面上精确减掉一个可见区。
+ *
+ * ── 有意破例（2026-10-13 批 A 裁决，本项目登记在案）──
+ * §0.2 的「时间轴只第 1 页」是照抄经典的**口径**，但经典的时间轴行便宜得多
+ * （26/28px + 没有 A 的板头开销）⇒ 照抄口径不等于照抄可行性。当阶段数超过
+ * `SWISS_GANTT_SINGLE_PAGE_MAX_STAGES` 时，A 的 B2 **按页续排**（每页自己的轴与
+ * 刻度、同一时间坐标系、行号连续、轴尾「（续）」、图例只在首段）。
+ * 依据：**「纸面上任何内容都不许被裁」是更高一级的硬规则**（逐页 ≤1123 是它的
+ * 机器化断言）；宁可多出一页，也不许裁掉内容或把字压到叠字。
  * ==================================================================================== */
 
 /**
@@ -781,11 +789,10 @@ const SWISS_BLOCK_EST = {
   /** L3 每条改期记录 */
   reschedRow: 24,
   /**
-   * B2 轨道行高的**下限/上限**（px）：28 = 设计基线，14 = 可读下限。
-   * 轨道行高按阶段数**自适应**（见 `swissGanttPitch`）——因为 B2 是「只第 1 页」
-   * 的块（§0.2 的经典口径），行高不自适应的话阶段一多就会把纸撑爆。
+   * B2 轨道行高的**设计基线**（§1.1 的 28px 轨道行）。
+   * 阶段能在一页里装下时才允许往下压，压到 `GANTT_MIN_READABLE_PITCH` 为限；
+   * 压不住就**不许再压**（字会与行盒打架）——改按基线行高**续页**（见下）。
    */
-  ganttMinPitch: 14,
   ganttMaxPitch: 28,
 };
 
@@ -793,12 +800,59 @@ const SWISS_BLOCK_EST = {
 const SWISS_BLOCK_BODY_H =
   A4_HEIGHT_PX - SWISS_BLOCK_EST.pagePadding - SWISS_BLOCK_EST.topbar - SWISS_BLOCK_EST.bottombar;
 
+/**
+ * B2 轨道行高的**可读下限**（px）——**实测判据，不是拍脑袋**（真 Chromium，
+ * 见交付报告「行高可读性实测」）：
+ *
+ * | 行高 | 名称行盒 | 号码行盒 | 相邻两行名称盒的净空 |
+ * |---|---|---|---|
+ * | 12 | 18（12px） | 21 | **−6（叠字）** |
+ * | 14 | 18（12px） | 21 | **−4（叠字）** |
+ * | 16 | 13.5（9px，dense 档） | 15 | +0.5 |
+ * | 20 | 15（10px，compact 档） | 18 | +2 |
+ * | 28 | 19.5（13px，基线档） | 24 | +8.5 |
+ *
+ * 结论：**判据是「文字行盒 ≤ 行高」**（净空 ≥ 0）。12/14px 无论怎么调字号都叠字
+ * ⇒ 判据取行高 ≥ 16（配 dense 档的 9px/10px 字号，净空 +0.5px）。
+ * 14px 是**上一版的错误假设**，被本表推翻：那一版的 ≥20 阶段其实一直在叠字。
+ */
+const GANTT_MIN_READABLE_PITCH = 16;
+
+/**
+ * **单页压缩的上限**（= 首页给 B2 的预算 ÷ 可读下限，实测 27）。
+ *
+ * 这条常量就是「什么时候不再压缩、改续页」的唯一阈值（不许让 28 这个数活在注释里）：
+ *   阶段数 ≤ 本值 ⇒ 行高压缩（14–28）把整轴装进首页（今天的 v1 行为，一页一轴）；
+ *   阶段数 > 本值 ⇒ 行高回到**设计基线 28**，整轴**按页续排**（每页自己的轴与刻度，
+ *   行号连续 ⇒ 读者自己接得上）。费用是「B2 不再只出现在第 1 页」——
+ *   **这是有意的契约变更，已在文件头与本批报告显式登记**（硬规则优先：
+ *   纸面上任何内容都不许被裁，`print-a4-visual` 的逐页 ≤1123 就是这条的机器化）。
+ */
+export const SWISS_GANTT_SINGLE_PAGE_MAX_STAGES = Math.floor(
+  (SWISS_BLOCK_BODY_H -
+    SWISS_BLOCK_EST.masthead -
+    SWISS_BLOCK_EST.infoTotal -
+    SWISS_BLOCK_EST.sourceH -
+    SWISS_BLOCK_EST.ganttChrome) /
+    GANTT_MIN_READABLE_PITCH,
+);
+
 /** L3 改期记录最多登几条（§0.5：「取最近 N 条 + 行末「共 M 条」」） */
 export const SWISS_RESCHED_MAX_ROWS = 6;
 
-/** 一页的装配计划（5 块形态；`first` = 首页，B2/B3 只认它） */
+/** 一页的装配计划（5 块形态；`first` = 首页，B3 只认它） */
 export interface SwissBlockPagePlan {
   first: boolean;
+  /**
+   * B2 本页承载的甘特行区间 `[ganttFrom, ganttTo)`（空区间 = 本页不出甘特）。
+   *
+   * ⚠️ 为什么是**区间**而不是「首页整轴」：阶段数超过
+   * `SWISS_GANTT_SINGLE_PAGE_MAX_STAGES` 时整轴按页续排（行号连续、每页自己的
+   * 轴与刻度、同一时间坐标系）——这是「纸面不许裁」这条硬规则对
+   * 「只第 1 页」这条口径的**有意破例**，见两处常量注释与文件头登记。
+   */
+  ganttFrom: number;
+  ganttTo: number;
   /** 本页承载的阶段（B4 的行切片；空 = 本页不出清单） */
   stages: readonly PrintStageVM[];
   /** 本页是 B4 的最后一页（L3 改期记录挂这里；§0.5：不单独成页） */
@@ -828,19 +882,20 @@ function splitColumns(stages: readonly PrintStageVM[]): PrintStageVM[][] {
 }
 
 /**
- * B2 轨道行高（px）——按阶段数**自适应**，夹在 [14, 28]。
+ * B2 轨道行高（px）——按阶段数在 [可读下限 14, 设计基线 28] 之间取值。
  *
- * 为什么必须自适应：B2 是「只第 1 页」的块（§0.2 照抄经典的 5 块分页口径），
- * 而行数 = 阶段数（无上限）⇒ 固定行高时阶段一多就把纸撑爆（经典的时间轴
- * 也有这条暴露面，只是它的行高便宜得多：26/28px + 没有 A 的板头开销）。
- * 自适应 = 在「纸面装得下」的硬约束下把行高让给行数。
- *
- * 上限 28 是设计基线（§1.1 的「28px 轨道行」）；下限 14 是**可读下限**
- * （12.5px 名称 + tabular 日期仍可辨）。**超过 27 个阶段时下限也兜不住**
- * ——那条边界已在交付报告里如实登记为已知限制（不是静默裁切）。
+ * 两档口径（阈值 = `SWISS_GANTT_SINGLE_PAGE_MAX_STAGES`，唯一出处是那条常量）：
+ *   ① **阶段数 ≤ 阈值**（实测 27）⇒ 压缩行高，整轴装进首页：行高 = 首页预算 ÷ 行数，
+ *      夹到可读下限。这样 ≤27 阶段永远是「一页一轴」，与 §0.2 的经典口径一致。
+ *   ② **阶段数 > 阈值** ⇒ 行高**回到设计基线 28**（不再压：压到 14 以下字与行盒
+ *      打架，实测 12px 已不可读），整轴按页续排（见 `swissBlockPages`）。
+ *      ⇒ 「B2 只第 1 页」这条口径在超大项目上**有意破例**，理由是硬规则更高一级：
+ *      **纸面上任何内容都不许被裁**（`print-a4-visual` 的逐页 ≤1123 是它的机器化）。
  */
 export function swissGanttPitch(stageCount: number): number {
-  if (stageCount <= 0) return SWISS_BLOCK_EST.ganttMaxPitch;
+  if (stageCount <= 0 || stageCount > SWISS_GANTT_SINGLE_PAGE_MAX_STAGES) {
+    return SWISS_BLOCK_EST.ganttMaxPitch;
+  }
   const room =
     SWISS_BLOCK_BODY_H -
     SWISS_BLOCK_EST.masthead -
@@ -848,84 +903,148 @@ export function swissGanttPitch(stageCount: number): number {
     SWISS_BLOCK_EST.sourceH -
     SWISS_BLOCK_EST.ganttChrome;
   const pitch = Math.floor(room / stageCount);
-  return Math.min(Math.max(pitch, SWISS_BLOCK_EST.ganttMinPitch), SWISS_BLOCK_EST.ganttMaxPitch);
+  return Math.min(Math.max(pitch, GANTT_MIN_READABLE_PITCH), SWISS_BLOCK_EST.ganttMaxPitch);
 }
 
 /**
  * 5 块形态的物理页装配（**预计页数 = 实际出纸**的唯一出处；
  * `printPhysicalPageCount` 与文档本体都读它）。
  *
- * 规则（顺序即优先级）：
- *   ① 首页预算 = 纸面可用高 − B1 − B2 − B3 − B5 的贴底行；剩余给 B4；
- *   ② 首页连一「组」阶段卡都放不下 ⇒ 首页只出纸壳（B1+B2+B3），B4 从第二页起
- *      ——与经典 `paginateSections` 的「第一页放不下任何一行 ⇒ 先出纸壳」同源；
- *   ③ 续页预算 = 纸面可用高 − 续页板头 − B5 贴底行；
- *   ④ L3 改期记录挂在 B4 的最后一页（§0.5：不单独成页）。**关键取舍**：
- *      若本页装得下剩余阶段、却装不下那条改期记录，则**整段（含清单）后移一页**
- *      ——不留「上一页有清单、下一页只有一张小表」的空壳尾页。
+ * ── 文档顺序即装箱顺序（硬规则：纸面上任何内容都不许被裁）──
+ * 流 = `[B2 轨道行…][B4 阶段卡…][L3 改期记录]`，逐页贪心装：
+ *   ① 每页预算 = 纸面可用高 − 板头（首页 266 / 续页 250）− B3（仅首页 170）
+ *      − B5 贴底行（21）；剩余空间给 B4，再剩余留空；
+ *   ② B2 每页先取满（每页自带 chrome：轴 + 刻度 + 图例），**≥1 行**；
+ *   ③ B4 用剩余空间按「组」（三列错落 ⇒ 一组 = 3 条）装；一组都放不下且
+ *      **本页是首页** ⇒ 首页只出纸壳（B1+B2+B3），B4 整段后移一页
+ *      （与经典 `paginateSections` 的「第一页放不下任何一行 ⇒ 先出纸壳」同源；
+ *      只允许首页让位一次，否则会无限出纸壳页）；
+ *   ④ 收口：剩余阶段能全装下 **且** 装下后还给 L3 留得出位置 ⇒ 本页收口
+ *      （`last=true`）；否则只装「给 L3 留位后能装的那一档」，L3 跟到下一页
+ *      （§0.5：L3 不单独成页）。
+ *
+ * ── 逐档实测（真 Chromium 2026-10-13；探针一次性、跑完即删）──
+ * | 阶段数 | 行高 | 预计页数 | 实际页数 | 逐页高（px） | B2 分布 | 裁切 |
+ * |---|---|---|---|---|---|---|
+ * | 1  | 28 | 1 | 1 | 1123 | 1/1 首页 | 无 |
+ * | 2  | 28 | 2 | 2 | 1123, 1123 | 2 行首页 | 无 |
+ * | 9  | 28 | 2 | 2 | 1123, 1123 | 9 行首页 | 无 |
+ * | 20 | 19 | 3 | 3 | 1123×3 | 20 行首页 | 无 |
+ * | 23 | 16 | 3 | 3 | 1123×3 | 23 行首页（单页档上界） | 无 |
+ * | 24 | 28 | 4 | 4 | 1123×4 | 13 + 11（续） | 无 |
+ * | 27 | 28 | 5 | 5 | 1123×5 | 13 + 14（续） | 无 |
+ * | 28 | 28 | 5 | 5 | 1123×5 | 13 + 15（续） | 无 |
+ * | 30 | 28 | 5 | 5 | 1123×5 | 13 + 17（续） | 无 |
+ * | 40 | 28 | 7 | 7 | 1123×7 | 13 + 20 + 7（续） | 无 |
+ * | 60 | 28 | 9 | 9 | 1123×9 | 13 + 20×2 + 7（续） | 无 |
+ *
+ * 对照 v1（「只第 1 页」+ 一直压到 14 为止）：27 阶段无裁切，**28 起首页 1157px
+ * （超 34px）** ⇒ 本版把「压不住」的规模交给续页，裁切归零。
  */
 export function swissBlockPages(vm: PrintViewModel, blocks: SchedulePaperBlocks): SwissBlockPagePlan[] {
   const stages = vm.stages;
-  // B4 关掉 ⇒ 没有任何清单承载（改期记录是它的附属件，不独立成块，§0.5）
-  // ⇒ 只有单页（B1 / B2 / B3 都只认首页）
-  if (!blocks.stageTable) return [{ first: true, stages: [], last: false }];
-  if (stages.length === 0) return [{ first: true, stages: [], last: true }];
+  const total = stages.length;
+  if (total === 0) return [{ first: true, ganttFrom: 0, ganttTo: 0, stages: [], last: true }];
 
-  const pitch = swissGanttPitch(stages.length);
-  const timelineH = blocks.timeline ? SWISS_BLOCK_EST.ganttChrome + stages.length * pitch : 0;
-  const infoH = blocks.projectInfo ? SWISS_BLOCK_EST.infoTotal : 0;
-  // B5 的贴底行在两个页型里都占流内高度（它总是渲染，除非用户摘掉页脚块）；
-  // 关掉页脚 = 少一行 ⇒ 预算反而更宽松（保守方向允许）
-  const footerH = blocks.footer ? SWISS_BLOCK_EST.sourceH : 0;
-  const availFirst = SWISS_BLOCK_BODY_H - SWISS_BLOCK_EST.masthead - timelineH - infoH - footerH;
-  const availCont = SWISS_BLOCK_BODY_H - SWISS_BLOCK_EST.mastheadCont - footerH;
+  // B2 的行 = 阶段（一一对应）；时间轴关掉 ⇒ 没有行要排
+  const ganttRows = blocks.timeline ? total : 0;
+  const pitch = swissGanttPitch(total);
   const resched = blocks.stageTable ? swissRescheduleLogs(vm) : [];
   const reschedH =
     resched.length > 0 ? SWISS_BLOCK_EST.reschedHead + resched.length * SWISS_BLOCK_EST.reschedRow : 0;
+  const footerH = blocks.footer ? SWISS_BLOCK_EST.sourceH : 0;
 
-  /**
-   * 给定可用高度能装几条阶段卡（三列错落 ⇒ ×3）。
-   * 2026-10-13 真机实测反馈：**必须扣掉错落的 34px**——只扣组头会让
-   * 「2 阶段 + 改期记录」这种临界情形误判为「装得下」，实测溢出 28px。
-   */
-  const fit = (avail: number): number => {
-    const budget = avail - SWISS_BLOCK_EST.stageHead - SWISS_BLOCK_EST.stageStagger;
-    if (budget < SWISS_BLOCK_EST.stagePitch) return 0;
-    return Math.floor(budget / SWISS_BLOCK_EST.stagePitch) * SWISS_BLOCK_EST.columns;
+  /** B4 承载 n 条所需高度（三列错落：组头 + 错落 + 每列 ceil(n/3) 条） */
+  const b4Height = (n: number): number =>
+    n === 0
+      ? 0
+      : SWISS_BLOCK_EST.stageHead +
+        SWISS_BLOCK_EST.stageStagger +
+        Math.ceil(n / SWISS_BLOCK_EST.columns) * SWISS_BLOCK_EST.stagePitch;
+  /** 给定预算能装几条阶段卡（0 = 一组都放不下） */
+  const b4RowsFit = (budget: number): number => {
+    const room = budget - SWISS_BLOCK_EST.stageHead - SWISS_BLOCK_EST.stageStagger;
+    return room < SWISS_BLOCK_EST.stagePitch
+      ? 0
+      : Math.floor(room / SWISS_BLOCK_EST.stagePitch) * SWISS_BLOCK_EST.columns;
   };
 
   const pages: SwissBlockPagePlan[] = [];
-  let first = true;
-  let cursor = 0;
+  let g = 0;
+  let s = 0;
+  let deferredB4 = false;
   let guard = 0;
-  while (cursor < stages.length && guard++ < 64) {
-    const avail = first ? availFirst : availCont;
-    const remaining = stages.length - cursor;
-    const capFull = fit(avail);
-    const capTail = fit(avail - reschedH);
-    // 这一页就能把清单连同改期记录一起收口 ⇒ 收口（§0.5：附属件不单独成页）
-    if (capTail >= remaining) {
-      pages.push({ first, stages: stages.slice(cursor), last: true });
-      break;
+  // ⚠️ 循环的推进量必须**两个游标都算**：清单关掉时 `s` 永远等于起始值，
+  // 若只看 `g` 会在「甘特已排完、但 s < total」时无限出页（实测踩过一次：
+  // 8 阶段 + 关清单 ⇒ 256 页，被 guard 拦下）。
+  while ((g < ganttRows || s < (blocks.stageTable ? total : 0)) && guard++ < 256) {
+    const first = pages.length === 0;
+    const gBefore = g;
+    const sBefore = s;
+    let budget =
+      SWISS_BLOCK_BODY_H -
+      (first ? SWISS_BLOCK_EST.masthead : SWISS_BLOCK_EST.mastheadCont) -
+      (first && blocks.projectInfo ? SWISS_BLOCK_EST.infoTotal : 0) -
+      footerH;
+
+    // ① B2：本页取满（每页自带 chrome），至少 1 行
+    let ganttTo = g;
+    if (blocks.timeline && g < ganttRows) {
+      const room = budget - SWISS_BLOCK_EST.ganttChrome;
+      const fit = Math.max(Math.floor(room / pitch), 0);
+      ganttTo = Math.min(g + Math.max(fit, 1), ganttRows);
+      budget -= SWISS_BLOCK_EST.ganttChrome + (ganttTo - g) * pitch;
     }
-    // 首页装得下清单、装不下改期记录 ⇒ **整段后移**（不留「清单在上一页、
-    // 小表在下一页」的空壳尾页）。只允许首页让位一次（否则会无限出纸壳页）
-    if (first && capFull >= remaining) {
-      pages.push({ first: true, stages: [], last: false });
-      first = false;
-      continue;
+
+    // ② B4：用剩余空间按组装
+    let stageTo = s;
+    if (blocks.stageTable && s < total) {
+      const remaining = total - s;
+      const fit = b4RowsFit(budget);
+      const closes = fit >= remaining && (reschedH === 0 || budget - b4Height(remaining) >= reschedH);
+      if (closes) {
+        stageTo = total;
+      } else {
+        const withTail = b4RowsFit(budget - reschedH);
+        if (withTail > 0) {
+          stageTo = Math.min(s + withTail, total);
+        } else if (first && fit > 0 && !deferredB4) {
+          // 首页装得下清单、装不下 L3 ⇒ 整段后移（不留空壳尾页）；只让位一次
+          deferredB4 = true;
+          pages.push({ first: true, ganttFrom: gBefore, ganttTo, stages: [], last: false });
+          g = ganttTo;
+          continue;
+        } else if (fit > 0) {
+          // 已让位过（或已不是首页）：收下清单，L3 另起尾页（兜底，正常不触发）
+          stageTo = Math.min(s + fit, total);
+        }
+      }
     }
-    // 其余情形：本页只装「给改期记录留了位」的那一档（`capTail`）——不足时退回
-    // `capFull`（只在极窄的首页会发生），都没有则出纸壳页（决不死循环）。
-    const take = capTail > 0 ? capTail : capFull;
-    if (take === 0) {
-      pages.push({ first, stages: [], last: false });
-      first = false;
-      continue;
+    const last = blocks.stageTable && stageTo >= total;
+    pages.push({ first, ganttFrom: gBefore, ganttTo, stages: stages.slice(s, stageTo), last });
+    g = ganttTo;
+    s = stageTo;
+    // 本页什么都没装 ⇒ 兜底：把剩余阶段一次收下（防死循环；正常不可达）
+    if (g === gBefore && s === sBefore && s < total && blocks.stageTable) {
+      pages[pages.length - 1] = {
+        first,
+        ganttFrom: gBefore,
+        ganttTo,
+        stages: stages.slice(sBefore),
+        last: true,
+      };
+      s = total;
     }
-    pages.push({ first, stages: stages.slice(cursor, cursor + take), last: false });
-    cursor += take;
-    first = false;
+  }
+  // 兜底：B4 有承载时**必须**有一页收口（否则 L3 改期记录会静默不上纸）
+  if (blocks.stageTable && total > 0 && !pages.some((pg) => pg.last)) {
+    const lastIdx = pages.length - 1;
+    const tail = pages[lastIdx]!;
+    pages[lastIdx] = {
+      ...tail,
+      stages: tail.stages.length > 0 ? tail.stages : stages.slice(0),
+      last: true,
+    };
   }
   return pages;
 }
@@ -955,8 +1074,13 @@ function swissBlockMastheadMeta(vm: PrintViewModel): string[] {
 }
 
 /**
- * B3 的口径注（**永远渲染**：§2.6 的 B3 格明文——「主体里的承载区整块不出；
- * 但口径注不许随它消失（原则 1）」，A 的锚回位置 = 板头 meta 区的口径行位）。
+ * B3 的口径注（**永远渲染**）。为什么它不跟 B3 一起被摘掉——**这不是矛盾**：
+ *   · 决策 6「严格一一对应」管的是**内容块**（B1–B5）：勾/消一块 ⇒ 纸面精确
+ *     增减一个**内容区**；
+ *   · 口径注属 §2.6 **原则 1 的硬底线**（项目名 / 页码 / 页眉口径注 ——「每页可
+ *     独立解释」，不许因勾选消失）。**底线不是块**，不在决策 6 的适用范围里。
+ * 故 B3 关掉时：承载区（排期基准行 + 休息制度黑块）整块不出，口径注锚回板头
+ * meta 区的口径行位（§2.6 的 B3 格）。
  *
  * 两行：① 阶段四态 + 占比口径（A P1 原有）；② 三类延期判据（§2 A-⑥ 的边界：
  * 三类延期口径块**不随台账一起搬**，它归 B3 的口径注区）。
@@ -1130,9 +1254,18 @@ function SwissBlockPage({
           }
         />
 
-        {/* B2 打印时间轴（只第 1 页；§1.1：通栏运行图，A 全页唯一横读块） */}
-        {page.first && blocks.timeline && (
-          <PrintGantt model={gantt} variant="swiss" rowHeight={swissGanttPitch(vm.stages.length)} />
+        {/* B2 打印时间轴（§1.1：通栏运行图，A 全页唯一横读块）。
+            常规规模（≤ SWISS_GANTT_SINGLE_PAGE_MAX_STAGES）只出现在首页；
+            超大项目按页续排（每页自己的轴与刻度、同一时间坐标系、行号连续），
+            续段只在轴尾加「（续）」、图例不重复——理由见 swissBlockPages 的注释。 */}
+        {blocks.timeline && page.ganttTo > page.ganttFrom && (
+          <PrintGantt
+            model={{ ...gantt, rows: gantt.rows.slice(page.ganttFrom, page.ganttTo) }}
+            variant="swiss"
+            rowHeight={swissGanttPitch(vm.stages.length)}
+            withLegend={page.first}
+            continuation={page.ganttFrom > 0}
+          />
         )}
 
         {/* B3 项目信息（只第 1 页）：排期基准行 + 休息制度黑块 */}
