@@ -431,7 +431,15 @@ export function MemberBoardPage(): JSX.Element {
              32%，列内容顶对齐 ⇒ 大片空洞）。**注意这一版是 gen3、即本轮被替换掉的那一版**：
              它把 `max` 由不定 `1fr` 改成定值 360 ⇒ 计数依据换成 360 ⇒ 默认窗口掉成 2 列，
              而本轮 262/262 正是为了把默认窗口拿回 4 列。机制与四代历史见
-             `BOARD_COLUMN_TEMPLATE` 注释（含「重复数按确定的 max 计」的判别性实测）。 */
+             `BOARD_COLUMN_TEMPLATE` 注释（含「重复数按确定的 max 计」的判别性实测）。
+
+             ★ 高度：本处**必须保留 `items-start`**（不带它 = grid 默认 `align-items: stretch`，
+             会把每张项目卡拉到"最高卡"的高度）。**卡片高度是「数据该有的样子」，不是排版留白**
+             —— 禁止用拉伸去填满列高（内容少 ⇒ 卡片矮，是正确的）。
+             ⚠️ 任务三块那一边**刻意相反**：它**去掉** `items-start` ⇒ 三块等高。
+             判据是「**这一格代表数据还是代表排版**」：项目卡 = 数据，任务三块面板 = 排版。
+             两处方向相反且同时成立，**严禁"统一"**（见 `MemberTaskTriage` 与
+             `TRIAGE_COLUMN_TEMPLATE` 两处注释）。 */
           className="grid items-start justify-center gap-3 sm:gap-4"
           style={{ gridTemplateColumns: BOARD_COLUMN_TEMPLATE }}
         >
@@ -574,7 +582,15 @@ const BOARD_COLUMN_TEMPLATE = 'repeat(auto-fit, minmax(min(100%, 262px), 262px))
  *   · 976（1280 极窄档）：2 轨换行（与解耦前同档同值，不是回归）。
  * 与看板列一样，`max` = `min` ⇒ **轨道恒 340、永不被拉伸**（`1fr` 时代的 448 级拉伸同样不复发）。
  * 340 保留自卡片设计的原基准宽（见 `ProjectCard.tsx`），即这三块在宽窗下仍按**设计宽**呈现。
- */
+ *
+ * ── 高度口径（2026-10-12 用户拍板「三块等高」）──
+ * 本常量只管**横向**（列宽 / 轨数）。**纵向**由 `MemberTaskTriage` 那个 `section` 的
+ * `align-items` 决定：它**刻意不带 `items-start`**（退回 grid 默认的 `stretch`）
+ * ⇒ 三块被拉齐到行高 = 三块里最高那块，底边对齐（空洞从"块外"挪进"块内"）。
+ * ⚠️ 这与看板列 `section` **刻意相反**（那一边必须带 `items-start`、项目卡不许被拉伸），
+ * 判据是「**这一格代表数据还是代表排版**」：项目卡 = 数据（高度随信息量），
+ * 任务三块 = 排版面板（等高本身就是意图）。两处不是历史遗留，**严禁合并**——详见
+ * `MemberTaskTriage` 里那段注释。 */
 const TRIAGE_COLUMN_TEMPLATE = 'repeat(auto-fit, minmax(min(100%, 340px), 340px))';
 
 /* ------------------------------ 成员任务三块（反馈 #5） ------------------------------ */
@@ -674,8 +690,24 @@ function MemberTaskTriage({
     <section
       /* v1.0.x：任务三块**不再共用**看板列的几何常量（0.9.x 曾共用，那时两处同宽同轨数）。
          理由与取值见 `TRIAGE_COLUMN_TEMPLATE` 注释：三块恒 3 个，定宽 340 ⇒ 默认窗口
-         section 1096 恰好 3 轨并排一行；若沿用看板列的 262 会排成 4 轨、第 4 轨永远空着。 */
-      className="grid items-start justify-center gap-3 sm:gap-4"
+         section 1096 恰好 3 轨并排一行；若沿用看板列的 262 会排成 4 轨、第 4 轨永远空着。
+
+         ★ 2026-10-12 **用户亲口拍板「三块等高」**（他附截图、红箭头圈出三块下方的两片空洞：
+         三块内容量 4 / 9 / 1 条 ⇒ 第 1、3 块的盒子比最高的「进行中」矮，下面各空一片）。
+         做法：**去掉 `items-start`** ⇒ grid 回到默认的 `align-items: stretch`，
+         三块被拉齐到行高（= 三块里最高的那块），空洞从"块外"挪进"块内"，三块底边对齐。
+
+         ⚠️⚠️ 本处的行为与**看板列那个 `section`**（本文件上方、用 `BOARD_COLUMN_TEMPLATE` 的
+         那一个）**刻意相反 —— 这不是历史遗留，严禁"统一"**：
+           · 看板列：**必须保留 `items-start`**。那里的每格是一张**项目卡**，卡高由卡片自身
+             设计档决定（xl 185 / 非 xl 168）；**拉伸卡片高度去填满列高是被明确禁止的** ——
+             卡片高度是「**数据该有的样子**」（信息有多少就多高），不是用来消化留白的；
+           · 任务三块：每格是一块**分类面板**（已逾期 / 进行中 / 近期完成），面板等高是
+             「**排版意图**」（三块并排、底边对齐），它不冒充任何数据。
+         ⇒ 两条纪律方向相反且**同时成立**。判据只有一条：**「这一格代表数据，还是代表排版？」**
+           数据 ⇒ 保 `items-start`（不拉伸）；排版 ⇒ 不带（等高）。
+         ⚠️ 要改任何一处前先回到这条判据，**不要**去比对另一处的写法。 */
+      className="grid justify-center gap-3 sm:gap-4"
       style={{ gridTemplateColumns: TRIAGE_COLUMN_TEMPLATE }}
     >
       <TaskGroup
