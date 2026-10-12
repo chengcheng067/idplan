@@ -350,6 +350,92 @@ describe.skipIf(!CAN_RUN)('A 版 A4 视觉验收 · 批 1（真 Chromium + 真�
     }
   });
 
+  it('★ A 版 9 阶段（参考稿档位）几何**冻结**：a+b 小规模优化后逐值不变', async () => {
+    /*
+     * 批 A 裁决第 4 条（批准的**前提条件**）：a（组头呼吸 71→40，门控 ≤6 阶段）与
+     * b（错落只在三列齐全时施加，≥7 阶段）**只许影响小规模档**；参考稿档位
+     * （9 阶段 = 三列各三张卡）必须**逐像素不变**。
+     *
+     * 证据取法：同一夹具（`buildVm()` 的 9 阶段 / 1 条 resched）在改动**前后各量一次**，
+     * 逐块 `getBoundingClientRect().height`（不含 margin）+ 每页总高 + 页数，
+     * 逐值放进下表并成为常驻断言（下表 = 改动**前**在 commit `a960693` 上实测，
+     * 改动后在 `swissStageScale(9) === 'normal'` 下重测，两次数值相同）。
+     *
+     * | 页 | 页高 | masthead | gantt | info | notes | board | columns | colHead | card | resched | source | bottombar |
+     * |---|---|---|---|---|---|---|---|---|---|---|---|---|
+     * | 1 | 1123 | 232.5 | 327 | 121 | 31.25 | — | — | — | — | — | 15.39 | 48 |
+     * | 2 | 1123 | 217 | — | — | — | 624.61 | 404.81 | 21.75 | 87.69 | 102.5 | 15.39 | 48 |
+     */
+    const css = builtCss();
+    const vm = buildVm();
+    const markup = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, {
+        vm,
+        palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+      }),
+    );
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    try {
+      await page.goto('file://' + writeHtml('a-frozen-9.html', shell(markup, css, false)));
+      const snap = await page.evaluate(() => {
+        const val = (el: Element | null): number =>
+          el ? Math.round(el.getBoundingClientRect().height * 100) / 100 : -1;
+        const pages = Array.from(document.querySelectorAll('.a4-page'));
+        const pick = (pg: Element) => ({
+          masthead: val(pg.querySelector('.swiss-masthead')),
+          gantt: val(pg.querySelector('.print-gantt')),
+          info: val(pg.querySelector('.swiss-info')),
+          notes: val(pg.querySelector('.swiss-notes')),
+          board: val(pg.querySelector('.swiss-block')),
+          columns: val(pg.querySelector('.swiss-columns')),
+          colHead: val(pg.querySelector('.swiss-column__head')),
+          card: val(pg.querySelector('.swiss-stage-row')),
+          resched: val(pg.querySelector('.swiss-resched')),
+          source: val(pg.querySelector('.swiss-source')),
+          bottombar: val(pg.querySelector('.swiss-bottombar')),
+        });
+        return {
+          pages: pages.length,
+          pageHeights: pages.map((el) => Math.round(el.getBoundingClientRect().height * 100) / 100),
+          perPage: pages.map(pick),
+          // 规模档：9 阶段必须落在「错落施加」档（= 参考稿档位）
+          scale: (pages[1]?.querySelector('.swiss-columns') as HTMLElement | null)?.dataset.scale ?? '',
+        };
+      });
+      expect(snap.pages, '页数冻结：2').toBe(2);
+      expect(snap.pageHeights, '每页总高冻结：1123 / 1123').toEqual([1123, 1123]);
+      expect(snap.scale, '9 阶段 = 错落档（不落 small）').toBe('normal');
+      expect(snap.perPage[0], '首页逐块冻结').toEqual({
+        masthead: 232.5,
+        gantt: 327,
+        info: 121,
+        notes: 31.25,
+        board: -1,
+        columns: -1,
+        colHead: -1,
+        card: -1,
+        resched: -1,
+        source: 15.39,
+        bottombar: 48,
+      });
+      expect(snap.perPage[1], '次页逐块冻结（含 B4 三列错落 + L3）').toEqual({
+        masthead: 217,
+        gantt: -1,
+        info: -1,
+        notes: -1,
+        board: 624.61,
+        columns: 404.81,
+        colHead: 21.75,
+        card: 87.69,
+        resched: 102.5,
+        source: 15.39,
+        bottombar: 48,
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
   it('A 版大项目（20 阶段）：甘特行高自适应、逐页无裁切、预计页数 = 实际出纸', async () => {
     const css = builtCss();
     // 复用同一夹具，扩到 20 阶段（触发 B2 的行高自适应：28 → 19）

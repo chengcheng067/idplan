@@ -39,9 +39,12 @@ import { PRINT_TEMPLATE_IDS } from '../src/components/print/print-templates';
 import { DEFAULT_SCHEDULE_PAPER_BLOCKS } from '../src/lib/schedule-print';
 import {
   SWISS_GANTT_SINGLE_PAGE_MAX_STAGES,
+  SWISS_GROUP_HEAD_TIGHT_MARGIN,
+  SWISS_STAGGER_MIN_STAGES,
   SwissScheduleDocument,
   swissBlockPages,
   swissGanttPitch,
+  swissStageScale,
 } from '../src/print/documents/SwissScheduleDocument';
 import { buildPrintViewModel } from '../src/print/adapters/project-print-adapter';
 import { PRINT_TEMPLATE_PALETTES } from '../src/print/model/print-palette';
@@ -551,14 +554,76 @@ describe('批 1 地基 · L5 A 版五块形态的页装配与自适应行高', (
     const all = (admin.match(/swiss-masthead__meta-line swiss-num">[^<]*</g) ?? []).map((m) =>
       m.slice(m.indexOf('">') + 2, -1),
     );
-    // 本夹具 2 页（每页一枚板头 ⇒ 6 行）；判据只看首页那三行
+    // 本夹具 1 页（2 阶段 + 1 条改期记录 → 小规模档，单页）⇒ 3 行
     const lines = all.slice(0, 3);
-    expect(all.length, '每页一枚板头、每枚三行').toBe(6);
+    expect(all.length, '每页一枚板头、每枚三行').toBe(3);
     expect(lines).toHaveLength(3);
     expect(lines[0], '可见阶段恒在第一行').toContain('可见阶段 2 / 2');
     expect(lines[0], 'admin 且有委托方 ⇒ 同行附加').toContain('委托方 客户甲');
     expect(lines[1]).toContain('阶段套餐');
     expect(lines[2]).toContain('打印日期');
+  });
+
+  it('★ 小规模档（a+b）：命名常量 + 门控 + 实测边界表（1..8 阶段 × 有/无改期记录）', () => {
+    /*
+     * 批 A 裁决第 1/2 条：错落只在「三列齐全」时施加、组头呼吸只在小规模收紧，
+     * 两处都用命名常量表达。下面这张期望表 = 真 Chromium 逐档实测（探针一次性）：
+     *
+     * | 阶段数 | 无改期记录 | 有改期记录 |
+     * |---|---|---|
+     * | 1 / 2 / 3 | 1 页 | 1 页 |
+     * | 4 | 1 页 | 2 页 |
+     * | 5 / 6 | 2 页 | 2 页 |
+     * | 7 / 8 | 2 页 | 2 页 |
+     *
+     * a+b 之前：2 阶段带改期 = 2 页、3 阶段带改期 = 2 页、4 阶段无改期 = 2 页
+     * （旧的「n ≥ 4 恒 2 页」已作废）。
+     */
+    expect(SWISS_STAGGER_MIN_STAGES, '错落门槛 = columns × 每列满卡 3 − (columns−1) = 7').toBe(7);
+    expect(SWISS_GROUP_HEAD_TIGHT_MARGIN, '小规模组头呼吸 40').toBe(40);
+    for (const [n, scale] of [
+      [1, 'small'],
+      [6, 'small'],
+      [SWISS_STAGGER_MIN_STAGES - 1, 'small'],
+      [SWISS_STAGGER_MIN_STAGES, 'normal'],
+      [9, 'normal'],
+      [60, 'normal'],
+    ] as const) {
+      expect(swissStageScale(n), `${n} 阶段 ⇒ ${scale} 档`).toBe(scale);
+    }
+    const EXPECTED: Array<{ log: boolean; pages: number[] }> = [
+      { log: false, pages: [1, 1, 1, 1, 2, 2, 2, 2] },
+      { log: true, pages: [1, 1, 1, 2, 2, 2, 2, 2] },
+    ];
+    for (const row of EXPECTED) {
+      const actual = [1, 2, 3, 4, 5, 6, 7, 8].map(
+        (n) => swissBlockPages(vmOf(n, row.log), DEFAULT_SCHEDULE_PAPER_BLOCKS).length,
+      );
+      expect(actual, `${row.log ? '有' : '无'}改期记录的 1..8 阶段页数`).toEqual(row.pages);
+      // 预计页数 = 实际出纸（同一份夹具、文档层再数一遍）
+      const rendered = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => renderedPages(n, row.log));
+      expect(rendered, '预计页数 ≡ 实际出纸').toEqual(row.pages);
+    }
+    // 门控落在渲染面上：data-scale 属性（CSS 据它关错落 / 收呼吸）
+    const small = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, {
+        vm: vmOf(3),
+        palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+      }),
+    );
+    const normal = renderToStaticMarkup(
+      createElement(SwissScheduleDocument, {
+        vm: vmOf(9),
+        palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline,
+      }),
+    );
+    expect(small, '小规模 ⇒ data-scale="small"').toContain('data-scale="small"');
+    expect(normal, '参考稿档位 ⇒ 不带 small').not.toContain('data-scale="small"');
+    // 两条覆写规则在 CSS 里，且**只**命中 small 档（否则 9 阶段就被改了）
+    const cssSrc = read('src/print/styles/swiss-schedule.css');
+    expect(cssSrc).toContain(".swiss-columns[data-scale='small'] .swiss-column[data-col='2']");
+    expect(cssSrc).toContain(".swiss-columns[data-scale='small'] .swiss-column__head");
+    expect(cssSrc, '小规模组头呼吸 40（与常量同源）').toContain('margin-bottom: 40px');
   });
 
   it('无改期记录的小项目：单页（§3 速查表「A 纸面 1 页」的常见形态）', () => {

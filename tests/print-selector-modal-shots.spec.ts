@@ -254,4 +254,46 @@ describe.skipIf(!CAN_RUN)('期六 · 选择器弹窗截图（真 Chromium + 真�
       await page.close();
     }
   });
+
+  it('④ A 的五块清单（决策 1 之后的中截）：4 行可勾 + 一句不可摘说明 ⇒ selector-modules-a.png', async () => {
+    /*
+     * 这张图是给用户看的「A 现在长什么样」：11 个内容模块的清单**已从 A 消失**
+     * （决策 1/2），中截只剩五块里的 4 行（B1「打印头部」由刊头承担 ⇒ 不进清单），
+     * 并在清单下方写明为什么。
+     */
+    const css = builtCss();
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    try {
+      await page.goto('file://' + writeHtml('selector-modules-a.html', shell(panelMarkup(), css)));
+      // 4 行可勾，且**没有** 11 模块行
+      const rows = await page.$$('input[data-print-block]');
+      expect(rows, 'A 的中截应是 4 行可勾的五块清单').toHaveLength(4);
+      expect(await page.$$('[data-print-module-row]'), 'A 不该再有 11 模块行').toHaveLength(0);
+      const labels = await page.$$eval('input[data-print-block]', (els) =>
+        els.map((el) => (el as HTMLInputElement).dataset.printBlock),
+      );
+      expect(labels, '行序 = 五块里的可勾项').toEqual([
+        'timeline',
+        'projectInfo',
+        'stageTable',
+        'footer',
+      ]);
+      // 全部默认勾选（缺键 = 默认开）
+      const checked = await page.$$eval(
+        'input[data-print-block]',
+        (els) => els.filter((el) => (el as HTMLInputElement).checked).length,
+      );
+      expect(checked, '四行默认全勾').toBe(4);
+      // 那句不可摘说明（裁决第 5 条的文案）
+      const note = await page.$eval('[data-print-selector-panel]', (el) => el.textContent ?? '');
+      expect(note).toContain('由该模板的刊头承载项目名与页序，属版式构件');
+      expect(note).toContain('该模板当前不可摘');
+      expect(note).toContain('可摘项随版式而定');
+      await (await page.$('[data-print-selector-panel]'))!.screenshot({
+        path: join(OUT_DIR, 'selector-modules-a.png'),
+      });
+    } finally {
+      await page.close();
+    }
+  });
 });

@@ -259,22 +259,25 @@ afterEach(() => {
  * ==================================================================================== */
 
 describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
-  it('① 缺省 = 五块形态（本夹具 2 页）；显式 sheets 仍出旧四页（代码与 spec 全留）', () => {
+  it('① 缺省 = 五块形态（本夹具 1 页）；显式 sheets 仍出旧四页（代码与 spec 全留）', () => {
     render();
     const rootEl = q('.print-root');
     expect(rootEl).not.toBeNull();
     expect(rootEl!.className).toContain('print-template-swiss-schedule');
     /*
-     * 五块形态的页数：本夹具 2 阶段 **且带 1 条 rescheduled 流水** ⇒ 2 页。
-     * 真机实测（2026-10-13 批 1，见 print-a4-visual 的 20 阶段用例与交付报告）：
-     * A 的首页被 B1（板头 265.5）+ B2（2 行甘特 131）+ B3（168）+ 贴底行（20）
-     * 吃掉 ~585px，剩 ~330px 给 B4；而 B4（组头 93 + 一列卡 95 + 错落 34）
-     * + L3 改期记录（124.5）需 ~366px ⇒ **整段后移一页**（不留空壳尾页）。
+     * 五块形态的页数：本夹具 2 阶段 **且带 1 条 rescheduled 流水** ⇒ **1 页**。
+     *
+     * 这一档在 2026-10-13 批 A 裁决第 1/2 条之前是 2 页（首页被 B1 265.5 + B2 131
+     * + B3 168 + 贴底行 20 吃掉 ~585px，剩 ~330px，装不下「B4 366px」⇒ 整段后移）。
+     * 裁决后小规模档（阶段数 < `SWISS_STAGGER_MIN_STAGES`=7）收紧了两处只在**小规模**
+     * 生效的间距：组头呼吸 71→40、错落 34 不施加（错落是三列语法件）⇒ 页面回 1 页，
+     * 参考稿档位（9 阶段起）逐像素不变（print-a4-visual 有冻结值断言）。
+     * 实测边界：1–3 阶段恒 1 页；4 阶段仅带改期记录时 2 页；5 阶段起恒 2 页。
      */
-    expect(qa('.a4-page')).toHaveLength(2);
+    expect(qa('.a4-page')).toHaveLength(1);
     expect(q('.a4-page')!.getAttribute('data-print-page'), '五块形态的纸面标识').toBe('blocks');
     // 受保护选择器不被改名（02 §5 契约：.print-root / .a4-page）
-    expect(qa('.print-root .a4-page').length).toBe(2);
+    expect(qa('.print-root .a4-page').length).toBe(1);
     // 旧四页路径（额外内容页 / 通用模块；选择器不再暴露，代码与 spec 全留 —— 决策 2）
     render(SWISS_SCHEDULE_PAGES);
     expect(qa('.a4-page')).toHaveLength(4);
@@ -473,7 +476,7 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
   });
 
   it('⑥ pageRef 收集页面元素（PNG 逐页导出的前提）', () => {
-    // 五块形态：本夹具 2 页（见 ① 的实测说明）
+    // 五块形态：本夹具 1 页（见 ① 的实测说明）
     const collected: Array<HTMLDivElement | null> = [];
     act(() => {
       root.render(
@@ -486,7 +489,7 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
         />,
       );
     });
-    expect(collected).toHaveLength(2);
+    expect(collected).toHaveLength(1);
     for (const el of collected) {
       expect(el).not.toBeNull();
       expect(el!.className).toContain('a4-page');
@@ -514,10 +517,7 @@ describe('A 版 · SwissScheduleDocument（02 §9 组件测试）', () => {
 
   it('⑦ 缺省 = 五块形态（决策 1）；显式四页时页序与旧默认逐页一致', () => {
     render();
-    expect(qa('.a4-page').map((el) => el.getAttribute('data-print-page'))).toEqual([
-      'blocks',
-      'blocks',
-    ]);
+    expect(qa('.a4-page').map((el) => el.getAttribute('data-print-page'))).toEqual(['blocks']);
     render(SWISS_SCHEDULE_PAGES);
     expect(SWISS_SCHEDULE_PAGES).toHaveLength(4);
     expect(qa('.a4-page').map((el) => el.getAttribute('data-print-page'))).toEqual([
