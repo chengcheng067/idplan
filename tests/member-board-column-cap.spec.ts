@@ -27,29 +27,36 @@ import {
  * ——「两处列宽 ∈[339,372]」。因为那两处当时共用同一个常量（基准 340 / 上限 360），
  * 事实上也确实同宽同轨数。
  *
- * **新设计**：两处**解耦**，各用各的定宽（`max` = `min` ⇒ 永不被拉伸）：
- *   · 看板列 `BOARD_COLUMN_TEMPLATE` = `262px`：默认窗口 1400 ⇒ section 1096 ⇒
- *     **4 列**（旧：`360` ⇒ 2 列）。262 是「1096 宽下出 4 轨」的临界值
- *     （`(1096+16)/(t+16) ≥ 4 ⇒ t ≤ 262`），卡片随之 232（= 262 − 列盒 30）。
- *   · 任务三块 `TRIAGE_COLUMN_TEMPLATE` = `340px`：默认窗口 ⇒ **3 轨并排**（旧：2 轨）。
- *     三块恒 3 个，若沿用 262 会排 4 轨、第 4 轨永远空着。
+ * **gen4（上一版）**：两处解耦、各用各的**定宽**（`max` = `min`）：
+ *   · 看板列 `262px`（headless 1096 下 4 列）；· 任务三块 `340px`（3 轨）。
+ *   ⚠️ gen4 在 **headless 的 1096** 成立，但**真机是 1088**（少一条 8px 纵向滚动条）⇒
+ *   `floor(1104/278) = 3` ⇒ 用户看到 3 列（**他报的 bug**）。定宽还留下两个副作用：
+ *   余量靠 `justify-center` 消化 ⇒ 看板列左边缘 143、任务三块 26，**都与统计卡不齐**（"不工整"）。
  *
- * **为什么旧数字两边都不成立**（不是"放宽"，是契约本身换了对象）：
- *   旧契约要求「列宽 ≥339」——那是**卡片设计宽 340 的护城河**（反馈 #10.4 的教训：
- *   105–130px 窄卡全面报废）。新设计把看板列主动压到 262（产品要 4 列），
- *   所以「列宽 ≥339」对看板列**必须作废**；但护城河的**本意**（卡内不许报废）
- *   没有作废，它改由 `tests/member-board-narrow-card.spec.ts` 下的**卡内逐元素断言**
- *   承接（到期日不截断 / 胶囊不折行 / 头像不越界 / 进度条贴合 / 无纵向溢出）。
- *   任务三块则仍按 340 设计宽呈现（它没有"要 4 列"的约束）。
+ * **gen5（本版，2026-10-13）**：两处都改成 `repeat(auto-fit, minmax(min(100%, base), 1fr))`
+ * 并删掉 `justify-center`：
+ *   · 看板列 `base = 245`：门槛 `4×245 + 3×16 = 1028 ≤ 1088` ⇒ **真机 4 列**（余量 60px）；
+ *     轨道由 `1fr` **均分该行** ⇒ 1088 下每轨 **260**、卡片 **230**、内容宽 **182**；
+ *     **轨道恒 ≥ 245**（4 轨成立的前提）。
+ *   · 任务三块 `base = 340`：真机 1088 ⇒ `floor(1104/356) = 3` 轨 × **352**（铺满整行）。
+ *   · 两处左边缘都落在 **272** = 统计卡左缘（"工整"的可测定义）。
  *
- * 本 spec 的职责（拆成三条契约，各自给数）：
- *   B-01a 看板列：轨道恒 **262**、默认窗口 **4 列**、且**轨道宽不随容器宽增长**
- *         （新增的反拉伸断言：1600 与 1920 的 section 不同、轨道必须同值）
- *   B-01b 任务三块：轨道恒 **340**、默认窗口 **3 轨**、**三块等高**（2026-10-12 拍板）
+ * **契约变更（必须点名，因为它把一条旧断言作废了）**：
+ *   gen4 的跨宽契约是「**轨道宽不随容器宽增长**」；gen5 用 `1fr` ⇒ 轨道**会**随 section
+ *   变宽而变宽（这是"铺满该行 ⇒ 左边缘对齐"的目的）。⇒ 旧 ⑤ 整条重定成三条：
+ *   列数按 `floor((section+16)/261)`、每轨 ≥ 245 且行内等宽、更宽 ⇒ 轨道更宽且列数不减。
+ *   旧数字「列宽 ≥339（卡片设计宽护城河）」对看板列早已作废（gen4 起就是 262/232），
+ *   护城河的**本意**（卡内不许报废）由 `tests/member-board-narrow-card.spec.ts` 的
+ *   **卡内逐元素断言**承接（到期日不截断 / 胶囊不折行 / 头像不越界 / 无纵向溢出），
+ *   并在 gen5 的**最坏轨道 245**（N-02b）上补测 —— 那一格旧设计从没测过。
+ *
+ * 本 spec 的职责（三条契约，各自给数）：
+ *   B-01a 看板列（gen5）：真机 1088 ⇒ **4 列 × 260**、每轨 ≥ 245、行内等宽、`justify-center` 已去、
+ *         列盒贴合内容（`voidPx ≤ 2`）、卡片 = 轨道 − 30、页面无横向溢出；另含跨宽三条（见上）
+ *   B-01b 任务三块：真机 1088 ⇒ **3 轨 × 352**、每轨 ≥ 340、**三块等高**（2026-10-12 拍板）
  *   B-01c 守闸：**两条纪律方向相反且同时成立** —— 看板列不许被拉齐、任务三块必须等高
- *   「**列盒贴合内容**（内部空洞 ≤2px）」这条只留给 **B-01a**：看板列每列贴合自己的内容，
- *   它正是"看板列没被拉伸"的**零数据依赖**表达式（任务三块那一边刻意不贴合，见 B-01b）。
- *   两条都仍然要求**页面无横向溢出**。
+ *   「**列盒贴合内容**（内部空洞 ≤2px）」只留给 **B-01a**：看板列每列贴合自己的内容，
+ *   它正是"看板列没被纵向拉伸"的**零数据依赖**表达式（任务三块那一边刻意不贴合，见 B-01b）。
  *
  * ── 2026-10-12 用户拍板「任务三块等高」（本批新增，方案 B）──
  * 他附截图 + 三个红箭头圈出「任务三块」下方的两片空洞：「成员的窗口看板，在这个界面下把这个
@@ -60,10 +67,10 @@ import {
  * ⚠️ 看板列那个 `section` 的 `items-start` **一个字母都不许动**（两条纪律刻意相反，见 B-01c）。
  *
  * ── 变异自证（产物还原后重建 md5 与变异前逐字节一致）──
- *   M1 · 只把 `BOARD_COLUMN_TEMPLATE` 退回 gen3 `340/360`：
- *     **B-01a 红** —— 红点是 `默认窗口 1400 看板列轨道数应为 floor((section+16)/278) = 4`，
- *     实测 **2**（断言按序执行，故第 ⑤ 条反拉伸断言没轮到；它守的是另一段：
- *     旧模板在宽档会被抻宽，新模板恒 262）。
+ *   M1 · **gen4 时代**的变异：只把 `BOARD_COLUMN_TEMPLATE` 退回 gen3 `340/360`：
+ *     当时 **B-01a 红** —— 红点是 `默认窗口 1400 看板列轨道数应为 floor((section+16)/278) = 4`，
+ *     实测 **2**。（gen5 重定后这条断言的文字已换成 `floor((section+16)/261)`，
+ *     但判别力同源：模板退回大基准 ⇒ 列数不足 ⇒ 红点仍在列数那一句。）
  *   纯函数单测（`member-board-columns.spec.ts`）在此变异下 **5 条全绿**——它看不见几何常量，
  *   这就是为什么几何必须有真机闸。
  *   M2 · 把 `items-start` 加回**任务三块**那个 `section` ⇒ **两条红**（实测原文）：
@@ -80,7 +87,16 @@ import {
  *     有卡行照旧高）⇒ 那条断言永远红不了。能判红的只有
  *     `align-items` 计算值（`flex-start` → `normal`）与**行内**是否被拉齐、
  *     以及 B-01a ③ 的 `voidPx`（0 → 152.5）。证据：`qa-scratch/mbcols/probe18-m2.log`。
- *   ⚠️ 编号对照（避免误读）：team-lead 本批派单里点名的「M1 = 把 `items-start` 加回任务三块」
+ *   ── gen5 批次（2026-10-13）的变异自证（三条都做；每次还原后产物 md5 逐字节一致）──
+ *     M4 · 看板退回 `262/262` ⇒ **B-01a 红**：`realwindow-1392 看板列轨道数应为
+ *          floor((section+16)/261) = 4: expected 3 to be 4`（另带 narrow 4 条 + layout 2 条）。
+ *     M5 · 任务三块退回定值 `340/340` ⇒ **B-01b 红**：`任务三块第 1 轨应为 (1088−32)/3 = 352
+ *          （1fr 均分）: expected 340 to be 352`。
+ *          ⚠️ team-lead 预期这条打中「左边缘对齐」，**实测没红** —— 删掉 `justify-center` 后，
+ *          定值模板的余量被甩到**右侧**，左边缘照样与统计卡齐平。⇒「铺满」只能靠
+ *          **Σ轨道 + (n−1)×gap = section 宽** 判定（B-01a ⑥ / B-01b 里已补，M5 也红在那一条的下游）。
+ *     M6 · 看板基准 `245 → 262`（保留 `1fr`）⇒ **B-01a 红**，红点同 M4。
+ *   ⚠️ 编号对照（避免误读）：team-lead 上一批派单里点名的「M1 = 把 `items-start` 加回任务三块」
  *     与「M2 = 删掉看板列的 `items-start`」，在本文件里分别记作 **M2 / M3** —— 因为
  *     **M1 这个编号在本文件已属"退回 gen3 几何"那条历史变异**（见上），不改它的编号免得
  *     与既有提交信息、其他 spec 的引用对不上。
@@ -96,12 +112,13 @@ async function columnMetrics(
   tracks: number[];
   sectionW: number;
   align: string;
+  justify: string;
 }> {
   return page.evaluate((idx: number) => {
     const R = (n: number): number => Math.round(n * 10) / 10;
     const sections = Array.from(document.querySelectorAll('section.grid'));
     const sec = sections[idx];
-    if (!sec) return { found: false, cols: [], tracks: [], sectionW: 0, align: '' };
+    if (!sec) return { found: false, cols: [], tracks: [], sectionW: 0, align: '', justify: '' };
     const cols = Array.from(sec.children) as HTMLElement[];
     const tracks = getComputedStyle(sec)
       .gridTemplateColumns.split(' ')
@@ -117,6 +134,8 @@ async function columnMetrics(
        * —— 它**零数据依赖**，比"量出来高不一样"更硬（见 B-01c 注释）。
        */
       align: getComputedStyle(sec).alignItems,
+      /** gen5 删掉了 `justify-center`：`1fr` 下没有余量可居中，留着会掩盖"轨道没铺满" */
+      justify: getComputedStyle(sec).justifyContent,
       cols: cols.map((c) => {
         const cr = c.getBoundingClientRect();
         const last = c.lastElementChild as HTMLElement | null;
@@ -157,10 +176,17 @@ const TRIAGE_SECTION = 0;
 const KANBAN_SECTION = 1;
 
 /** 新设计的两个定宽（与 MemberBoardPage 的两个常量同值；这里显式写数是为了让本 spec 能独立判红） */
-const KANBAN_TRACK = 262;
+/** gen5：看板列的**基准**（`minmax(min(100%, 245px), 1fr)` 的 min）；轨道恒 ≥ 它 */
+const KANBAN_BASE = 245;
 /** 看板列盒内边距 30 = p-3.5(14×2) + .glass-light 边框(1×2) ⇒ 卡片宽 = 轨道 − 30 */
-const KANBAN_CARD = 232;
-const TRIAGE_TRACK = 340;
+const COL_BOX_PAD = 30;
+const TRIAGE_BASE = 340;
+/** 真机默认窗口的 section 宽 = 窗口 1400 − Chrome 纵向滚动条 8 − 侧栏 240 − 内边距 64 */
+const USER_SECTION_W = 1088;
+/** 真机同宽探针视口 = 1400 − 8（headless 是 overlay 滚动条，占 0px） */
+const VP_REAL_WINDOW = 1392;
+/** 真机同宽实测：轨道 260（= (1088 − 3×16)/4） */
+const TRACK_REAL = 260;
 
 /** 页面无横向溢出（两条契约都要） */
 async function expectNoHorizontalOverflow(page: Page, label: string): Promise<void> {
@@ -169,7 +195,7 @@ async function expectNoHorizontalOverflow(page: Page, label: string): Promise<vo
 }
 
 describe.skipIf(!CAN_RUN_FRESH)(
-  'Bug B · 成员看板列几何（真 Chromium，宽视口）——v1.0.x：看板列 262 / 任务三块 340 两条契约',
+  'Bug B · 成员看板列几何（真 Chromium）——gen5：看板列 245/1fr、任务三块 340/1fr（含 B-01c 守闸）',
   () => {
     let browser: Browser;
     let server: { url: string; close(): Promise<void> };
@@ -185,13 +211,21 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await server?.close();
     });
 
-    it('B-01a · 看板列：轨道恒 262、默认窗口 1400 出 4 列、轨道宽不随容器宽增长', async () => {
-      // 三个宽度一次测完：「反拉伸」只有在**同一轨道尺寸跨不同 section 宽**时才可判
-      // （单宽度只能证明"恰好 262"，证明不了"不随容器增长"）。
+    it('B-01a · 看板列（gen5）：真机 1088 下 4 列、轨道 ≥ 基准 245、行内等宽、左边缘与统计卡对齐', async () => {
+      /*
+       * ★ gen5 把「轨道恒 262 / 不随容器宽增长」这条**主动作废**了 —— 换成 `1fr` 后
+       *   轨道**会**随 section 变宽而变宽（这是"铺满该行 ⇒ 左边缘对齐"的代价与目的）。
+       *   新的跨宽契约是三条：① 每档列数 = `floor((section+16)/261)`（按基准 245 计数）；
+       *   ② 每档每轨 ≥ 基准 245（`1fr` 不会低于 min）且**行内等宽**；
+       *   ③ 更宽 ⇒ 轨道更宽、列数不减（旧的"不变"改成"按公式变"）。
+       * ⚠️ 旧 ⑤「轨道宽不得跟着变」若照抄，会在 gen5 下**必然红**（那是旧口径的断言），
+       *   故本条整体重定；看板列真正要守的东西（不许被纵向拉伸、列盒贴合内容）留在 ③。
+       */
       const measured: Array<{ vp: number; sectionW: number; tracks: number[] }> = [];
       for (const vp of [
-        { w: 1400, h: 900, name: 'default-1400' },
-        { w: 1600, h: 900, name: 'wide-1600' },
+        { w: VP_REAL_WINDOW, h: 900, name: 'realwindow-1392' },
+        { w: 1332, h: 900, name: 'worst-1332' },
+        { w: 1320, h: 900, name: 'below-threshold-1320' },
         { w: 1920, h: 1080, name: 'wide-1920' },
       ] as const) {
         const ctx: BrowserContext = await newContext(browser, { width: vp.w, height: vp.h });
@@ -205,37 +239,80 @@ describe.skipIf(!CAN_RUN_FRESH)(
           expect(m.found, `${vp.name} 应找到「看板列」section`).toBe(true);
           expect(m.cols.length, `${vp.name}「看板列」应有列`).toBeGreaterThan(0);
 
-          // ① 轨道数按定值 262 计（floor((W+16)/278)）：默认窗口 4 列、1600 ⇒ 4、1920 ⇒ 5
-          const expected = Math.max(1, Math.floor((m.sectionW + 16) / (KANBAN_TRACK + 16)));
-          expect(m.tracks.length, `${vp.name} 看板列轨道数应为 floor((section+16)/278) = ${expected}`).toBe(expected);
-          if (vp.w === 1400) {
-            expect(m.tracks.length, '默认窗口（1400 ⇒ section 1096）必须是 4 列——这是产品拍板的那一格').toBe(4);
-          }
+          // ① 列数按**基准 245** 计（`1fr` 是"不定 max" ⇒ 计数退回 min）
+          const expected = Math.max(1, Math.floor((m.sectionW + 16) / (KANBAN_BASE + 16)));
+          expect(
+            m.tracks.length,
+            `${vp.name} 看板列轨道数应为 floor((section+16)/261) = ${expected}`,
+          ).toBe(expected);
 
-          // ② 轨道恒 262：既不被拉伸（>262），也不被压窄（<262）
-          for (const [i, t] of m.tracks.entries()) {
-            expect(t, `${vp.name} 看板第 ${i + 1} 轨应恒为 ${KANBAN_TRACK}（定宽 min=max，永不被拉伸）`).toBe(KANBAN_TRACK);
+          // ② 每轨 ≥ 基准、行内等宽
+          for (const [k, t] of m.tracks.entries()) {
+            expect(t, `${vp.name} 看板第 ${k + 1} 轨不得低于基准 ${KANBAN_BASE}`).toBeGreaterThanOrEqual(KANBAN_BASE);
           }
-          measured.push({ vp: vp.w, sectionW: m.sectionW, tracks: m.tracks });
+          expect(
+            new Set(m.tracks.map((t) => Math.round(t))).size,
+            `${vp.name} 行内各轨应等宽（1fr 均分该行），实测 ${JSON.stringify(m.tracks)}`,
+          ).toBe(1);
 
-          // ③ 旧契约里仍然有效的一件：列盒贴合内容（内部空洞 ≤2px）。
-          //    ⚠️ 这条**只对看板列成立**（任务三块那一边被刻意拉伸，见 B-01b）。
-          //    它同时是"看板列没被拉伸"的**零数据依赖**表达式：删掉 `items-start` 后，
-          //    矮列的盒底会被拉到行底 ⇒ voidPx 立刻变成上百 px（见 B-01c 与 M3）。
-          for (const [i, col] of m.cols.entries()) {
+          // ③ 列盒贴合内容（看板列**不许**被纵向拉伸；删 items-start 即红，见 B-01c）
+          for (const [k, col] of m.cols.entries()) {
             expect(
               col.voidPx,
-              `${vp.name} 看板第 ${i + 1} 列盒应贴合内容（内部空洞 ≤2px；被拉伸即红）`,
+              `${vp.name} 看板第 ${k + 1} 列盒应贴合内容（内部空洞 ≤2px；被拉伸即红）`,
             ).toBeLessThanOrEqual(2);
           }
 
-          // ④ 卡片跟着列走（撑满列宽 − 列盒内边距 30）
+          // ④ 卡片跟着轨道走（撑满轨道 − 列盒内边距 30）
+          //    ⚠️ 用容差而不是相等：`1fr` 均分出来的轨道宽可能是**小数**（1920 档实测 262.4），
+          //    卡片宽随之是 232.4 —— 那是正确的"铺满"，不是误差。
           const filled = m.cols.filter((c) => c.cardW !== null);
           expect(filled.length, `${vp.name} 至少一列应含项目卡`).toBeGreaterThan(0);
-          for (const [i, col] of filled.entries()) {
-            expect(col.cardW!, `${vp.name} 看板第 ${i + 1} 列卡片宽应为 轨道 − 30 = ${KANBAN_CARD}`).toBe(KANBAN_CARD);
+          for (const [k, col] of filled.entries()) {
+            expect(
+              Math.abs(col.cardW! - (m.tracks[0] - COL_BOX_PAD)),
+              `${vp.name} 看板第 ${k + 1} 列卡片宽应为 轨道 − 30 = ${Math.round((m.tracks[0] - COL_BOX_PAD) * 10) / 10}，实测 ${col.cardW}`,
+            ).toBeLessThanOrEqual(1);
           }
 
+          // ⑤ gen5：`justify-center` 已删（`1fr` 铺满该行 ⇒ 没有余量可居中）
+          expect(m.justify, `${vp.name} 看板列不应再有 justify-center（1fr 下无余量可居中）`).not.toBe('center');
+
+          /*
+           * ⑥ ★「铺满该行」的可测定义（这才是"工整"的实质，也是**定值模板的判红点**）：
+           *      Σ轨道 + (n−1)×gap === sectionW（容差 1px）
+           *    ⚠️ 别用"左边缘对齐"去判定值模板会不会破 —— 删掉 `justify-center` 之后，
+           *    `justify-content: normal` 会把余量甩到**右侧**，左边缘**照样对齐**（实测：
+           *    定值 340 时三块左缘仍是 272）。真正会露馅的是"没铺满"这一条。
+           */
+          const filledW = m.tracks.reduce((a, t) => a + t, 0) + (m.tracks.length - 1) * 16;
+          expect(
+            Math.abs(filledW - m.sectionW),
+            `${vp.name} 轨道之和 + 间隙应为 section 宽（铺满该行），实测 ${Math.round(filledW * 10) / 10} vs ${m.sectionW}`,
+          ).toBeLessThanOrEqual(1);
+
+          if (vp.w === VP_REAL_WINDOW) {
+            expect(m.sectionW, `真机同宽下 section 应为 ${USER_SECTION_W}`).toBe(USER_SECTION_W);
+            expect(m.tracks.length, '真机 1088 必须是 **4 列** —— 这就是用户报的 bug 那一格').toBe(4);
+            for (const [k, t] of m.tracks.entries()) {
+              expect(t, `真机同宽第 ${k + 1} 轨应为 ${TRACK_REAL}`).toBe(TRACK_REAL);
+            }
+          }
+          if (vp.w === 1332) {
+            // 临界格：section 1028 = 4×245 + 3×16 ⇒ 4 轨、每轨正好等于基准
+            expect(m.sectionW, '视口 1332 ⇒ section 1028（4 轨的临界宽）').toBe(1028);
+            expect(m.tracks.length, '临界宽下仍应 4 轨').toBe(4);
+            for (const [k, t] of m.tracks.entries()) {
+              expect(t, `临界宽第 ${k + 1} 轨应正好是基准 ${KANBAN_BASE}`).toBe(KANBAN_BASE);
+            }
+          }
+          if (vp.w === 1320) {
+            // 判别性：section 1016 < 1028 ⇒ 必须掉成 3 轨（证明 1088 的 4 列不是撞上的）
+            expect(m.sectionW, '视口 1320 ⇒ section 1016 < 1028').toBe(1016);
+            expect(m.tracks.length, '门槛以下必须掉成 3 轨（证明门槛就在 1028）').toBe(3);
+          }
+
+          measured.push({ vp: vp.w, sectionW: m.sectionW, tracks: m.tracks });
           await expectNoHorizontalOverflow(page, vp.name);
           await page.screenshot({
             path: resolve(__dirname, '..', 'qa-scratch', 'member-board-column-cap', `B-01a-${vp.name}.png`),
@@ -246,25 +323,25 @@ describe.skipIf(!CAN_RUN_FRESH)(
         }
       }
 
-      // ⑤ ★ 反拉伸（team-lead 点名的跨宽契约）：section 变宽 ⇒ 轨道**必须不变**。
-      //    旧模板（`1fr` 或大上限）在宽档会把轨道抻大（1920 曾实测 448px）。
-      //    ⚠️ 诚实登记：这条与 ② 的判别力**重叠** —— ② 已在每个宽度上要求「轨道恒 262」，
-      //    凡轨道会被抻宽的写法都会先在 ② 处红；⑤ 只在「列数恰好对齐、但轨道宽度偷偷长」
-      //    这种更窄的假想里成为第一红点。保留它是因为它是**跨宽**的表述（一条断言里同时
-      //    看到 section 变宽与轨道不变），可读性上比逐宽断言更直接；不做独立判别力声明。
-      const wide = measured.find((m) => m.vp === 1600)!;
-      const wider = measured.find((m) => m.vp === 1920)!;
-      expect(wider.sectionW, '1920 的 section 必须确实比 1600 宽（否则本断言无判别力）').toBeGreaterThan(wide.sectionW);
+      /*
+       * ⑥ ★ 跨宽契约（gen5 版）：更宽 ⇒ 轨道**更宽**、列数不减、且每档都 ≥ 基准。
+       *    （旧版这条写的是「轨道必须不变」——那是 `min=max` 时代的契约，`1fr` 下已作废。）
+       */
+      const real = measured.find((m) => m.vp === VP_REAL_WINDOW)!;
+      const wide = measured.find((m) => m.vp === 1920)!;
+      expect(wide.sectionW, '1920 的 section 必须确实更宽（否则本断言无判别力）').toBeGreaterThan(real.sectionW);
+      expect(wide.tracks.length, '更宽只应多列（不得少列）').toBeGreaterThanOrEqual(real.tracks.length);
       expect(
-        wider.tracks.slice(0, wide.tracks.length),
-        `section 从 ${wide.sectionW} 增到 ${wider.sectionW}，轨道宽不得跟着变（反拉伸）`,
-      ).toEqual(wide.tracks);
-      // 且列数只允许增加（多出来的宽度用于**多一列**，不是把已有列抻宽）
-      expect(wider.tracks.length, '更宽只应多出一列').toBeGreaterThan(wide.tracks.length);
-    }, 180000);
+        wide.tracks[0],
+        `更宽的 section 下轨道应更宽（1fr 均分），实测 ${real.tracks[0]} → ${wide.tracks[0]}`,
+      ).toBeGreaterThan(real.tracks[0]);
+      for (const m of measured) {
+        expect(m.tracks[0], `vp ${m.vp} 的轨道不得低于基准 ${KANBAN_BASE}`).toBeGreaterThanOrEqual(KANBAN_BASE);
+      }
+    }, 240000);
 
-    it('B-01b · 任务三块：轨道恒 340、默认窗口 3 轨并排、三块等高（2026-10-12 拍板）', async () => {
-      const ctx: BrowserContext = await newContext(browser, { width: 1400, height: 900 });
+    it('B-01b · 任务三块（gen5）：真机 1088 下 3 轨 × 352 铺满整行、三块等高', async () => {
+      const ctx: BrowserContext = await newContext(browser, { width: VP_REAL_WINDOW, height: 900 });
       const page: Page = await ctx.newPage();
       try {
         await bootstrapAdminWithDemo(page, server.url);
@@ -275,12 +352,24 @@ describe.skipIf(!CAN_RUN_FRESH)(
         expect(m.found, '应找到「任务三块」section').toBe(true);
         expect(m.cols.length, '任务三块应有 3 块').toBe(3);
 
-        // 旧数字：同一档位下任务三块走 340/360 定值 max ⇒ floor((1096+16)/376) = **2 轨**
-        // （两块一行、第三块换行）。新数字：定宽 340 ⇒ floor(1112/356) = **3 轨** ⇒ 三块一处并排。
-        expect(m.tracks.length, '默认窗口（section 1096）任务三块必须是 3 轨并排（旧：2 轨）').toBe(3);
+        // gen5 数字：真机 section 1088、基准 340 + `1fr` ⇒ floor(1104/356) = **3 轨**、
+        // 每轨 (1088 − 2×16)/3 = **352** ⇒ 三块一行**铺满整行**，左边缘落在 272（与统计卡齐平）。
+        // 旧数字（gen4）：定值 340 ⇒ floor(1112/356) = 3 轨、每轨恒 340、余 36 被 justify-center 居中。
+        expect(m.sectionW, `真机同宽下 section 应为 ${USER_SECTION_W}`).toBe(USER_SECTION_W);
+        expect(m.tracks.length, '任务三块在真机 1088 下必须是 3 轨并排').toBe(3);
         for (const [i, t] of m.tracks.entries()) {
-          expect(t, `任务三块第 ${i + 1} 轨应恒为 ${TRIAGE_TRACK}（定宽 min=max，永不被拉伸）`).toBe(TRIAGE_TRACK);
+          expect(t, `任务三块第 ${i + 1} 轨应为 (1088−32)/3 = 352（1fr 均分）`).toBe(352);
+          expect(t, `任务三块第 ${i + 1} 轨不得低于基准 ${TRIAGE_BASE}`).toBeGreaterThanOrEqual(TRIAGE_BASE);
         }
+        expect(m.justify, '任务三块不应再有 justify-center').not.toBe('center');
+        // 「三块铺满整行」的可测定义：Σ轨道 + 2×gap = section 宽（容差 1px）。
+        // ⚠️ 这条是**定值模板（`340/340`）的判红点** —— 删掉 `justify-center` 后余量甩到右侧，
+        // 左边缘仍对齐，故只有"有没有铺满"能区分 `1fr` 与定值（M5 就红在这一条）。
+        const filled = m.tracks.reduce((a, t) => a + t, 0) + (m.tracks.length - 1) * 16;
+        expect(
+          Math.abs(filled - m.sectionW),
+          `三块轨道之和 + 间隙应铺满 section（实测 ${Math.round(filled * 10) / 10} vs ${m.sectionW}）`,
+        ).toBeLessThanOrEqual(1);
 
         /*
          * ★ 纵向：三块**等高**（2026-10-12 用户拍板；旧断言是「列盒贴合内容 voidPx ≤ 2」，本批换掉）。

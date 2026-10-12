@@ -21,14 +21,21 @@ import { listenOnSafePort } from './helpers/safe-listen';
  * 前置：`npm run build` 先跑过；产物/Chromium 缺失或产物过期 → 整组 skip。
  *
  * ═══ v1.0.x 重定（产品拍板「默认窗口每行 4 列」）═══
- * 看板列几何由「基准 340 / 上限 360」改为**定宽 262**（默认窗口 1400 ⇒ section 1096 ⇒ 4 列），
- * 卡片随之 330 → **232**，卡内两行重排（头像组从底部元信息行移到委托方行）。
+ * 看板列几何由「基准 340 / 上限 360」一路改到 **gen5**（`minmax(min(100%,245px), 1fr)`）
+ * —— 卡片随之 330 → 232（gen4）→ **230（gen5，真机同宽）**，卡内两行重排
+ * （头像组从底部元信息行移到委托方行）。
  * 于是本 spec 的两条旧数字必须换对象：
- *   · M-01 旧契约「1440 档卡片 ≥330、标题不截断」→ 新契约「4 列 / 232×185、标题**单行省略**、
- *     标题可用宽 ≥120、卡内无纵向溢出」。**「标题不截断」在新设计下不成立**（232 宽的卡片装不下
- *     长标题；标题与委托方是本卡仅有的两个允许单行省略的字段），护城河改由「单行 + 可用宽下限」
- *     承接 —— 下限 120 正是为了守住 #10.4 的「105px 窄卡全面报废」那条线。
- *   · M-02 旧契约「1152 档 ≥280」→ 新契约「3 列 / 232×**168**、委托方行不被压成 0 高」。
+ *   · M-01 旧契约「1440 档卡片 ≥330、标题不截断」→ 新契约「**真机同宽（视口 1392 ⇒ section 1088）**
+ *     下 4 列 × 260、卡片 230×185、标题**单行省略**、标题可用宽 ≥120、卡内无纵向溢出」。
+ *     **「标题不截断」在新设计下不成立**（230/232 宽的卡片装不下长标题；标题与委托方是本卡仅有的
+ *     两个允许单行省略的字段），护城河改由「单行 + 可用宽下限」承接 —— 下限 120 正是为了守住
+ *     #10.4 的「105px 窄卡全面报废」那条线。
+ *   · M-02 旧契约「1152 档 ≥280」→ 新契约「**4 列** / 卡片 230 × **168**、委托方行不被压成 0 高」。
+ *     ⚠️ 1152 这一档的 section 宽**也是 1088**（<xl 时侧栏变 32px 细档 ⇒ 视口 − 64），
+ *     故它与真机默认窗口同宽、同样 4 列；gen4 时它是 3 列（定宽 262 的门槛 1096 差 8px）。
+ * ⚠️ **探针视口**：真机默认窗口的内容宽是 **1088**（1400 − Chrome 纵向滚动条 8 − 侧栏 240 −
+ *   内边距 64），而 headless 用 overlay 滚动条（占 0px）只能给 1096 ⇒ 本 spec 用 **1392**
+ *   （= 1400 − 8）复现真机宽度。旧的「1440 档 / section 1136」是**用户没有的宽度**。
  * 卡内**逐元素**约束（到期日不截断 / 胶囊不折行 / 头像不越界 / 进度条贴合 / 无纵向溢出）
  * 见 `tests/member-board-narrow-card.spec.ts`（新增，1400 档）。
  *
@@ -304,21 +311,22 @@ describe.skipIf(!CAN_RUN_FRESH)(
     }
 
 
-    it('M-01 · 1440 档：看板 4 列、卡片 232×185、标题单行省略不纵向裁切、头像横排', async () => {
-      const ctx: BrowserContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    it('M-01 · 真机同宽（探针 1392 ⇒ section 1088）：看板 4 列 × 260、卡片 230×185、标题单行省略', async () => {
+      const ctx: BrowserContext = await browser.newContext({ viewport: { width: 1392, height: 900 } });
       const page: Page = await ctx.newPage();
       try {
         await enterMemberBoard(page, server.url);
         const m = await firstCardMetrics(page);
         expect(m).not.toBeNull();
-        // 旧数字：卡片 330×185、看板 3 列（列基准 340 + 定值上限 360）。
-        // 新数字：卡片 232×185、看板 **4 列**、轨道恒 262 —— 产品拍板「默认窗口 4 列」，
-        // 262 是 section 1136 下出 4 轨的临界值（floor((1136+16)/(t+16)) ≥ 4 ⇒ t ≤ 278−16）。
-        expect(m!.colCount, '1440 档看板应为 4 列（旧 3 列）').toBe(4);
-        expect(m!.tracks.every((t) => t === 262), `1440 档轨道应恒 262，实测 ${JSON.stringify(m!.tracks)}`).toBe(true);
+        // 数值演进（**旧 → 新**）：
+        //   · 卡片宽 330（gen1/2）→ 232（gen4，headless 1096 ⇒ 轨道 262）→ **230**（gen5，section 1088 ⇒ 轨道 260）
+        //   · 看板列 3 列（gen4 之前的真机档，因为门槛 1096 > 真机 1088）→ **4 列**（gen5，门槛 1028）
+        //   · 探针视口 1440（section 1136，**用户没有的宽度**）→ **1392**（section 1088 = 真机同宽）
+        expect(m!.colCount, '真机同宽下看板应为 4 列（gen4 在这一档只有 3 列）').toBe(4);
+        expect(m!.tracks.every((t) => t === 260), `真机同宽轨道应为 260（(1088−48)/4），实测 ${JSON.stringify(m!.tracks)}`).toBe(true);
         expect(m!.h, '卡片高度应仍是 xl 设计档 185（修复前曾被抅到 340）').toBe(185);
-        expect(m!.w, '卡片宽度应为 轨道 − 列盒内边距 30 = 232（旧设计 330）').toBe(232);
-        // 「标题不截断」这条旧断言在新设计下**不再成立**（232 宽的卡片放不下长标题，
+        expect(m!.w, '卡片宽度应为 轨道 − 列盒内边距 30 = 230（旧设计 330 / gen4 232）').toBe(230);
+        // 「标题不截断」这条旧断言在新设计下**不再成立**（230 宽的卡片放不下长标题，
         // 标题与委托方是本卡**仅有的两个允许单行省略的字段**）。护城河改为：
         //   ① 标题必须是**单行**（不换行 ⇒ 行高 == line-height，不允许折成两行把卡撑变形）；
         //   ② 标题可用宽不得低于 120px（≥ 8 个汉字）——守住 #10.4「105px 窄卡全面报废」那条线。
@@ -331,7 +339,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         expect(m!.boxOverflow, 'xl 档卡内不得纵向溢出（几何口径：子元素不得越过卡片边框盒）').toBeLessThanOrEqual(0);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow, '页面不应出现横向滚动').toBeLessThanOrEqual(0);
-        await page.screenshot({ path: resolve(SHOT_DIR, 'M-01-member-board-1440.png') });
+        await page.screenshot({ path: resolve(SHOT_DIR, 'M-01-member-board-1392.png') });
       } finally {
         await ctx.close();
       }
@@ -344,17 +352,19 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await enterMemberBoard(page, server.url);
         const m = await firstCardMetrics(page);
         expect(m).not.toBeNull();
-        // 旧数字：≥280（当时是 360 轨道 ⇒ 卡片 330）。新数字：定宽 262 ⇒ 卡片恒 **232**。
+        // 数值演进（**旧 → 新**）：卡片宽 ≥280（gen2 的 360 轨道 ⇒ 330）→ 232（gen4 定宽 262）
+        // → **230**（gen5：section 1088 ⇒ 轨 260）；列数 **3 → 4**（gen5 门槛降到 1028）。
         // ⚠️ 这一档（视口 ≤1279）走**非 xl 档**：旧版与首页共用 `h-[124px]`，实测后果是
         //    委托方行被 flex 压成 **0 高**（客户名完全不可见）、且内容越出卡片边框盒 **26px**
         //    （= 21% 卡高 ⇒ 压到下一张卡上）。v1.0.x 差口① 已修：本档改成**专属的 168**
         //    （= 逐行实测的自然高度 166 向上取 4 的整数档，算式见 `ProjectCard` 的
         //    「非 xl 高度」注释）⇒ 旧数字 124 换 168，并把「无溢出」正式钉住
         //    （修好之后就该钉；此前不钉是因为"钉一个已知破损的数字等于把破损写进契约"）。
-        expect(m!.colCount, '1152 档（section 1088）看板应为 3 列').toBe(3);
-        expect(m!.tracks.every((t) => t === 262), '1152 档轨道同样恒 262').toBe(true);
+        // 1152 档的 section 宽与真机默认窗口同为 1088（<xl 侧栏收成 32px 细档 ⇒ 视口 − 64）
+        expect(m!.colCount, '1152 档（section 1088）看板应为 4 列（gen4 时是 3 列）').toBe(4);
+        expect(m!.tracks.every((t) => t === 260), `1152 档轨道应为 260，实测 ${JSON.stringify(m!.tracks)}`).toBe(true);
         expect(m!.h, '非 xl 档卡片应为本档专属高度 168（旧：与首页共用 124 ⇒ 溢出 26px）').toBe(168);
-        expect(m!.w, 'xl 以下卡片同样应撑满列宽（修复前被 md:w-[50%-10px] 压到 105px）').toBe(232);
+        expect(m!.w, 'xl 以下卡片同样应撑满列宽（修复前被 md:w-[50%-10px] 压到 105px）').toBe(230);
         expect(m!.delegatorH, '委托方行不得被压成 0 高（旧版实测塌陷）').toBeGreaterThanOrEqual(19);
         expect(m!.boxOverflow, '非 xl 档卡内不得纵向溢出（几何口径；旧 124 档实测 +26）').toBeLessThanOrEqual(0);
         expect(m!.avatarsSameRow, '头像必须横排').toBe(true);
