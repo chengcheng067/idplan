@@ -585,6 +585,51 @@ describe.skipIf(!CAN_RUN)('E 版 · 五块形态（批 C：跨度条 vs 占比 /
       );
       expect(metaFacts.tokTexts.join(''), '三片拼起来 === 原串').toBe(metaFacts.text);
 
+      // 项目名的**断行平衡**（批 C 裁决第 4 条）：「不出现单字行」。
+      // 用 Range 逐字量行盒：13 字项目名在 160px 栏里默认断成 12/1 ⇒ 第二行
+      // 只有一个孤字。判据 = 每行至少 2 个字（`text-wrap: balance` 后实测 7/6）。
+      const nameLines = await page.evaluate(() => {
+        const el = document.querySelector('.ei-head__project') as HTMLElement;
+        const node = el.firstChild as Text;
+        const text = el.textContent ?? '';
+        const perLine: number[] = [];
+        let lineTop: number | null = null;
+        let count = 0;
+        for (let i = 0; i < text.length; i++) {
+          const r = document.createRange();
+          r.setStart(node, i);
+          r.setEnd(node, i + 1);
+          const rect = r.getClientRects()[0];
+          if (!rect) continue;
+          const top = Math.round(rect.top * 10) / 10;
+          if (lineTop === null || Math.abs(top - lineTop) > 1) {
+            if (lineTop !== null) perLine.push(count);
+            lineTop = top;
+            count = 1;
+          } else count++;
+        }
+        if (lineTop !== null) perLine.push(count);
+        return { text, perLine, h: Math.round(el.getBoundingClientRect().height * 10) / 10 };
+      });
+      expect(nameLines.text.length, '项目名本体（13 字）').toBe(13);
+      expect(nameLines.perLine.length, '项目名两行').toBe(2);
+      expect(
+        Math.min(...nameLines.perLine),
+        `不许出现单字行（实测每行字数 ${nameLines.perLine.join('/')}）`,
+      ).toBeGreaterThanOrEqual(2);
+      expect(
+        Math.max(...nameLines.perLine) - Math.min(...nameLines.perLine),
+        `balance 应把两行断得接近（差 ≤1 字；实测 ${nameLines.perLine.join('/')}）`,
+      ).toBeLessThanOrEqual(1);
+      // 字号与栏宽**一格没动**（裁决第 4 条：只许重排断点）
+      const nameBox = await page.evaluate(() => {
+        const el = document.querySelector('.ei-head__project') as HTMLElement;
+        const s = getComputedStyle(el);
+        return { fs: s.fontSize, w: Math.round(el.getBoundingClientRect().width) };
+      });
+      expect(nameBox.fs, '字号未动（13px）').toBe('13px');
+      expect(nameBox.w, '栏宽未动（160px）').toBe(160);
+
       // 关 B3 ⇒ 承载区（元信息行 + 基准行）整块不出，**口径行两页都还在**
       await page.goto('file://' + writeHtml('e-blocks-no-b3.html', shell(markupWith(noB3), css, false)));
       const off = await page.evaluate(() => {
