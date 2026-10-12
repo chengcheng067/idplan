@@ -26,12 +26,7 @@ import type { CSSProperties, Ref } from 'react';
 import { MemberActorKind, StageLogType, StageStatus, TASK_STATUS_LABELS } from '../../core/types/enums';
 import { formatTaskNo } from '../../core/lib/task-no';
 import { relativeLuminance } from '../../core/color/contrast';
-import {
-  A4_WIDTH_PX,
-  A4_HEIGHT_PX,
-  DEFAULT_SCHEDULE_PAPER_BLOCKS,
-  type SchedulePaperBlocks,
-} from '../../lib/schedule-print';
+import { A4_WIDTH_PX, A4_HEIGHT_PX, type SchedulePaperBlocks } from '../../lib/schedule-print';
 import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-templates';
 import type { PrintSheet } from '../../components/print/print-templates';
 
@@ -43,6 +38,13 @@ import type {
 } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
 import { buildPrintGantt, type PrintGanttModel } from '../model/print-gantt';
+import {
+  blockRecordOf,
+  resolveUnits,
+  unitEnabled,
+  type PrintUnitId,
+  type ResolvedPrintUnit,
+} from '../model/print-units';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
 import { PrintGantt } from '../parts/PrintGantt';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
@@ -118,17 +120,21 @@ export interface SwissScheduleDocumentProps {
    */
   sheets?: readonly PrintSheet[];
   /**
-   * 五块打印内容（决策 1：选择器只暴露这 5 块）。**缺省 = 五块全开**。
-   * 未传 `sheets` 时（= 应用内预览面板与所有新形态宿主）走「5 块形态」：
+   * **解析好的单元**（`resolveUnits('swiss-schedule', prefs)` 的结果：5 块 + 3 件
+   * 版性装置）。未传 `sheets` 时（= 应用内预览面板与所有新形态宿主）走「5 块形态」：
    * B1 打印头部 / B2 打印时间轴 / B3 项目信息 / B4 阶段清单（含 L3 改期记录）
-   * / B5 页脚——版性装置（黑顶栏 / 板头巨字 / 黑底栏）按 §2.6 恒在。
+   * / B5 页脚 + 版性装置（黑顶栏 / 板头巨字 / 黑底栏）。
    *
-   * ⚠️ 本组件是**哑渲染层**：`blocks` 说什么就画什么。**「A 的 B1 不可摘」这条
-   * 纪律住在单元层**（`resolveUnits('swiss-schedule')` 把 header 标成 `forced` ⇒
-   * `blockRecordOf` 恒给 true），所有宿主都从那里取布尔值 ⇒ 单一裁决点，
-   * 文档层不重复判一次（否则两处判断必然漂移）。
+   * ⚠️ 为什么传「单元」而不是传「五块布尔值」（决策 5 第 2 条的硬要求）：
+   * 装配与渲染必须走**同一条解析路径**——内容块与版性装置都从同一个
+   * `ResolvedPrintUnit[]` 取「今天渲不渲染」。这样将来把装置开放成可勾时，
+   * 只改注册表里的 `forced`（`resolveUnits` 的数据源），**本组件一行都不用动**；
+   * 若这里收的是布尔值 + 装置写死渲染，那次开放就要在本文件里再开一个分支。
+   *
+   * 缺省 = `resolveUnits('swiss-schedule', undefined)` ⇒ 五块全开、装置全开
+   * （与经典纸面「不传偏好 = 视觉零变化」同口径）。
    */
-  blocks?: SchedulePaperBlocks;
+  units?: readonly ResolvedPrintUnit[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，黑顶栏左端显示「ID Plan」文字标） */
@@ -175,18 +181,22 @@ export function swissSchedulePhysical(vm: PrintViewModel, sheets: readonly Print
 export function SwissScheduleDocument({
   vm,
   sheets,
-  blocks,
+  units,
   palette,
   logo = null,
   pageRef,
 }: SwissScheduleDocumentProps): JSX.Element {
+  // 同一条解析路径（决策 5 第 2 条）：宿主不给单元就按缺省解析一次
+  const resolvedUnits = units ?? resolveUnits('swiss-schedule', undefined);
+  const blocks = blockRecordOf(resolvedUnits);
+  const show = (id: PrintUnitId): boolean => unitEnabled(resolvedUnits, id);
   /**
    * 两种形态的分流（**唯一分叉点**，其余全部共用/沿革）：
    *   · 传了 `sheets` ⇒ legacy 页路径（额外内容页 + 通用模块；出选择器但代码全留）；
    *   · 否则 ⇒ 5 块形态（决策 1：选择器只暴露这 5 块；缺省 = 五块全开）。
    */
   const physical = sheets ? swissSchedulePhysical(vm, sheets) : null;
-  const blockPages = physical === null ? swissBlockPages(vm, blocks ?? DEFAULT_SCHEDULE_PAPER_BLOCKS) : null;
+  const blockPages = physical === null ? swissBlockPages(vm, blocks) : null;
   const total = physical ? physical.length : (blockPages?.length ?? 0);
   /**
    * 顶栏明暗（决定 logo 反不反白）：栏底 = --tpl-line 槽位。基线黑栏 ⇒
@@ -195,7 +205,6 @@ export function SwissScheduleDocument({
    * 否则三个浅栏预设下白 logo 直接消失。
    */
   const barIsDark = relativeLuminance(palette.line) < 0.2;
-  const effectiveBlocks = blocks ?? DEFAULT_SCHEDULE_PAPER_BLOCKS;
   /** 甘特模型（5 块形态专用；legacy 页路径不消费——经典甘特是它自己的私有实现） */
   const gantt = physical === null ? swissGanttModel(vm) : null;
   const reschedLogs = physical === null ? swissRescheduleLogs(vm) : [];
@@ -230,7 +239,8 @@ export function SwissScheduleDocument({
           <SwissBlockPage
             key={`blocks-${idx}`}
             vm={vm}
-            blocks={effectiveBlocks}
+            blocks={blocks}
+            show={show}
             gantt={gantt}
             reschedLogs={reschedLogs}
             page={p}
@@ -1032,6 +1042,7 @@ function SwissStageColumn({ col, index }: { col: readonly PrintStageVM[]; index:
 function SwissBlockPage({
   vm,
   blocks,
+  show,
   gantt,
   reschedLogs,
   page,
@@ -1043,6 +1054,8 @@ function SwissBlockPage({
 }: {
   vm: PrintViewModel;
   blocks: SchedulePaperBlocks;
+  /** 单元解析结果读点（装置与内容块同一出处；今天装置恒 true） */
+  show: (id: PrintUnitId) => boolean;
   gantt: PrintGanttModel;
   reschedLogs: readonly PrintStageLogVM[];
   page: SwissBlockPagePlan;
@@ -1067,8 +1080,11 @@ function SwissBlockPage({
       className="a4-page swiss-page"
       style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
     >
-      {/* 装置 · 黑顶栏（§2.6 原则 2：装置本体从不因勾选消失） */}
-      <header className="swiss-topbar">
+      {/* 装置 · 黑顶栏（§2.6 原则 2：装置本体从不因勾选消失）。
+          注意判定走 `show()`——与 B1..B5 同一条解析结果，将来开放装置勾选
+          只需改注册表（本文件零改动）。 */}
+      {show('swiss-topbar') && (
+        <header className="swiss-topbar">
         <div className="swiss-topbar__nav" aria-label="栏目">
           <PrintLogoMark logo={logo} height={24} tone={barIsDark ? 'on-dark' : 'ink'} />
           {SWISS_BLOCK_NAV.map((n) => (
@@ -1082,15 +1098,16 @@ function SwissBlockPage({
           ))}
         </div>
         <div className="swiss-topbar__title">{page.first ? '阶段总览' : '阶段总览（续）'}</div>
-        <div className="swiss-topbar__meta">
-          <span className="swiss-num">
-            ID PLAN · {nn} / {NN}
-          </span>
-          <span className="swiss-num">
-            {vm.project.plannedStartAt.slice(0, 10)} — {vm.project.plannedEndAt.slice(0, 10)}
-          </span>
-        </div>
-      </header>
+          <div className="swiss-topbar__meta">
+            <span className="swiss-num">
+              ID PLAN · {nn} / {NN}
+            </span>
+            <span className="swiss-num">
+              {vm.project.plannedStartAt.slice(0, 10)} — {vm.project.plannedEndAt.slice(0, 10)}
+            </span>
+          </div>
+        </header>
+      )}
 
       <div className="swiss-body">
         {/* B1 打印头部（每页；§2.6 A·B1 = 不可取消：项目名住在板头站名） */}
@@ -1101,7 +1118,7 @@ function SwissBlockPage({
           }
           meta={swissBlockMastheadMeta(vm)}
           anchor={
-            page.first
+            page.first && show('swiss-percent')
               ? {
                   value: `${Math.round(vm.project.percent)}%`,
                   // 口径：完成度按可见阶段数统计（01 §3.1），不按 ratioPercent 加权
@@ -1159,12 +1176,14 @@ function SwissBlockPage({
       </div>
 
       {/* 装置 · 黑底栏（署名 + 页码 + 数据时间；页码在此 ⇒ 原则 1 的落点） */}
-      <footer className="swiss-bottombar">
-        <span>ID Plan · 项目排期与交付管理</span>
-        <span className="swiss-num">
-          第 {pageIndex + 1} / {pageTotal} 页 · 数据时间 {stamp}
-        </span>
-      </footer>
+      {show('swiss-bottombar') && (
+        <footer className="swiss-bottombar">
+          <span>ID Plan · 项目排期与交付管理</span>
+          <span className="swiss-num">
+            第 {pageIndex + 1} / {pageTotal} 页 · 数据时间 {stamp}
+          </span>
+        </footer>
+      )}
     </div>
   );
 }

@@ -913,7 +913,8 @@ export function PrintPreviewDialog({
                   /* 走五块形态时**不传** sheets（那是 legacy 页路径的开关）；
                      D/E/H 批 2/3/4 之前仍按模块清单传 sheets（它们不在本批范围） */
                   sheets={meta.usesBlocks ? undefined : enabledSheets}
-                  blocks={blocks}
+                  /* 决策 5 第 2 条：内容块与版性装置走**同一份**解析结果 */
+                  units={units}
                   palette={
                     palette['swiss-schedule'] ?? PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline
                   }

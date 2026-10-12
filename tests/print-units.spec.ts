@@ -532,12 +532,26 @@ describe('批 1 地基 · L4 静态锁', () => {
     expect(src).toContain('export function printTemplateUnits');
   });
 
-  it('渲染侧：A 的文档只有**一处**分叉（sheets / blocks），装置不吃勾选', () => {
+  it('渲染侧：A 的文档只有**一处**分叉（sheets / 五块形态），装置与内容块同一出处', () => {
     const src = read('src/print/documents/SwissScheduleDocument.tsx');
     expect(src).toContain('const physical = sheets ? swissSchedulePhysical(vm, sheets) : null');
-    // 装置三件恒渲染：黑顶栏 / 黑底栏都不在任何 blocks.* 条件里
-    expect(src).toMatch(/<header className="swiss-topbar">/);
-    expect(src).toMatch(/<footer className="swiss-bottombar">/);
-    expect(src, '黑顶栏不得被 blocks 条件包裹').not.toMatch(/blocks\.\w+ && \s*<header className="swiss-topbar"/);
+    // 决策 5 第 2 条：渲染侧收的是**单元解析结果**，不是五块布尔值 + 写死装置
+    expect(src, '文档层收 ResolvedPrintUnit[]').toContain('units?: readonly ResolvedPrintUnit[]');
+    expect(src).toContain("const resolvedUnits = units ?? resolveUnits('swiss-schedule', undefined)");
+    expect(src, '块布尔值从单元派生').toContain('blockRecordOf(resolvedUnits)');
+    // 三件装置都经 show()（= unitEnabled）判定 —— 将来开放勾选只需改注册表
+    for (const device of ['swiss-topbar', 'swiss-bottombar', 'swiss-percent']) {
+      expect(src, `装置 ${device} 必须走 show()`).toContain(`show('${device}')`);
+    }
+    expect(src, '黑顶栏不得无条件渲染（必须被 show() 包住）').toMatch(
+      /show\('swiss-topbar'\) && \(\s*\n\s*<header className="swiss-topbar">/,
+    );
+    expect(src, '黑底栏不得无条件渲染（必须被 show() 包住）').toMatch(
+      /show\('swiss-bottombar'\) && \(\s*\n\s*<footer className="swiss-bottombar">/,
+    );
+    // 五块**全部**经 blocks.* 判定（决策 6 的一一对应在渲染层的落点）
+    for (const key of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
+      expect(src, `B 块 ${key} 应经 blocks 判定`).toContain(`blocks.${key}`);
+    }
   });
 });
