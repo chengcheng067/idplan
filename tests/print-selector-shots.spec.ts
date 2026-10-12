@@ -16,8 +16,18 @@
  * 前置：`npm run build --outDir build-dist`（产物在 build-dist/）与本机
  * chromium；缺任一则整组 skip（与 print-a4-visual.spec.ts 同口径）。
  *
- * 产物落点：`outputs/print-a4-shots/selector-modules-{a,d,e,h}.png`
+ * 产物落点：`outputs/print-a4-shots/selector-moduleform-{a,d,e,h}.png`
  * （工作区交付目录，不进 git）。
+ *
+ * ⚠️ 2026-10-13 批 C 改名说明：本 spec 拍的是 **`PrintModuleSection` 这个组件
+ * 本身**（11 模块表单的三态），不是「某套外表在选择器里长什么样」。
+ * 批 C 后 A/D/E 三套的中截已经是**五块清单**（决策 1），只有 H 还出这张模块
+ * 表单 —— 所以文件从 `selector-modules-*` 改名为 `selector-moduleform-*`：
+ *   · 避免与 `print-selector-modal-shots.spec.ts` 出的**真选择器中截**
+ *     （`selector-modules-a.png` / `selector-modules-e.png`）撞名（两张图内容
+ *     不同，同名会互相覆盖，谁后跑谁赢）；
+ *   · 名字如实说明它是「模块表单组件」，不再冒充「E 的选择器」。
+ * 组件级三态覆盖**一条没减**（决策 2：代码与 spec 全留，只是不再有暴露面）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -122,7 +132,7 @@ describe.skipIf(!CAN_RUN)('选择器模块化 · 四套外表模块勾选态截�
             enabledModules: printTemplateDefaultModuleIds(c.template),
           }),
         );
-        const htmlPath = writeHtml(`selector-modules-${c.tag}.html`, shell(markup, css));
+        const htmlPath = writeHtml(`selector-moduleform-${c.tag}.html`, shell(markup, css));
         await page.goto('file://' + htmlPath);
 
         // 11 行齐全（四套外表同一个模块表单，三态随外表变）
@@ -169,7 +179,7 @@ describe.skipIf(!CAN_RUN)('选择器模块化 · 四套外表模块勾选态截�
         expect(note).toContain('将随通用渲染陆续支持');
 
         await (await page.$('[data-selector-shot]'))!.screenshot({
-          path: join(OUT_DIR, `selector-modules-${c.tag}.png`),
+          path: join(OUT_DIR, `selector-moduleform-${c.tag}.png`),
         });
       }
     } finally {

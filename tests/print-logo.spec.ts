@@ -474,7 +474,12 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     // 2026-10-11 P0-16：内容区那处重复 logo 已删（参考稿内容区无 logo），
     // logo 收回页头左格 ⇒ 每物理页仍恰好一枚，且不再出现在章节粗线之下
     const logos = doc.querySelectorAll('.a4-page .print-logo');
-    expect(logos.length, 'E 版每物理页一枚（默认 = 3 原生签名页；通用 M2 默认不勾）').toBe(3);
+    // 2026-10-13 批 C 重定：E 默认 = 五块形态（决策 1），页数由数据驱动 ⇒
+    // 判据与 D 同口径收紧为「logo 数 === 页数，且每枚 22px」（写死 3 反而
+    // 测不出「漏了某页」）
+    const ePages = doc.querySelectorAll('.a4-page').length;
+    expect(ePages, 'E 五块形态：本夹具 2 阶段 ⇒ 1 页').toBe(1);
+    expect(ePages, 'E 每物理页一枚（logo 数与页数对齐）').toBe(logos.length);
     const page = doc.querySelector('.a4-page')!;
     const head = page.querySelector('.ei-head')!;
     const logo = head.querySelector('.ei-head__logo .print-logo');
@@ -482,7 +487,7 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     // 内容区不得再有 logo（章节粗线之下的主体区）
     expect(page.querySelector('.ei-body .print-logo'), '内容区不得再有 logo').toBeNull();
     expect(doc.querySelectorAll('.ei-logo-row').length, '独立的「内容区 logo 行」已退役').toBe(0);
-    expect(logoHeights(doc)).toEqual([22, 22, 22]);
+    expect(logoHeights(doc)).toEqual([22]);
   });
 
   it('H 版：人类三页各一枚 logo（巨字墨迹之下的 logo 行，22px）；中轴/栏区无 logo', () => {

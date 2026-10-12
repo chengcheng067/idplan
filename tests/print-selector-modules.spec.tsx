@@ -296,6 +296,26 @@ function moduleRow(module: string): HTMLElement {
   return el;
 }
 
+/**
+ * 五块清单行（中截；走五块清单的外表 —— 批 1 的 A、批 B 的 D、批 C 的 E 与 classic）。
+ * 属性名 `data-print-block` 从经典时代就在，本 refactor 一个字没动。
+ */
+function blockCheckbox(key: string): HTMLInputElement | null {
+  return document.querySelector<HTMLInputElement>(`input[data-print-block="${key}"]`);
+}
+
+/** 勾 / 消一个五块（幂等；校验点击后 checked 确实到位） */
+function setBlockChecked(key: string, on: boolean): void {
+  const el = blockCheckbox(key);
+  if (!el) throw new Error(`找不到五块勾选框：${key}`);
+  if (el.checked !== on) {
+    act(() => {
+      el.click();
+    });
+  }
+  expect(blockCheckbox(key)!.checked, `勾选五块 ${key} 后期望 ${on}`).toBe(on);
+}
+
 const paperPages = (): number => document.querySelectorAll('.a4-page').length;
 const bodyContains = (t: string): boolean => (document.body.textContent ?? '').includes(t);
 
@@ -582,13 +602,14 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
    * 挂回五块模板就没人拦。
    *
    * 用法：每批落地一套就把它加进下面的数组（数组是这条锁的唯一参数）。
-   * 批 1 加了 A、批 B 加了 D；E/H 落地时继续加。
+   * 批 1 加了 A、批 B 加了 D、**批 C 加了 E**；H 落地时继续加。
    */
-  it('★ A / classic 的选择器里不存在 11 模块行（模块清单已无暴露面）', () => {
+  it('★ A / D / E / classic 的选择器里不存在 11 模块行（模块清单已无暴露面）', () => {
     const BLOCK_TEMPLATES: readonly PrintTemplateId[] = [
       'classic',
       'swiss-schedule',
       'data-editorial',
+      'editorial-index',
     ];
     for (const id of BLOCK_TEMPLATES) {
       renderDialog(true);
@@ -605,35 +626,73 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     }
   });
 
-  it('E 外表：3 原生默认全选 + 1 通用可勾不默认 + 7 暂不可用禁用（禁用态带原因）', () => {
+  /**
+   * ★★ 三态收敛（2026-10-13 批 C 重定，**判据一条没松，只是载体用尽**）。
+   *
+   * 本用例的前身是「E 外表：3 原生 + 1 通用 + 7 禁用」——它验的是选择器里三态
+   * **都能渲染**。批 C 把 E 也切成五块清单后，11 模块通路**只剩 H**；而 H 的通用
+   * 模块早在人类化批次升格为原生 ⇒ 四套模板的暴露面里**再没有一处**能画出
+   * 「通用渲染」那一态。这是决策 1 的必然后果，不是缺陷。
+   *
+   * 所以这条用例拆成两头锁，缺一头都不算数：
+   *   ① **能力表侧**（决策 2 的账本）：E 的 M2 仍是 `generic`、`enabledSheetsOf`
+   *      仍能按它派页 ⇒ 通用通路**代码与行为全留**，将来开放勾选时是数据源切换；
+   *   ② **暴露面侧**：仍在 11 模块通路的 H，11 行里 `data-avail="generic"` 的行
+   *      **一个都没有** ⇒ 通用态确实没有暴露面（与上面那条反向锁同向、不重复：
+   *      那条锁「五块模板没有模块行」，这条锁「模块行里没有通用态行」）。
+   *
+   * 少了 ①，将来有人顺手把通用通路整条删掉没人拦；少了 ②，将来有人把通用行
+   * 挂回五块模板也没人拦。
+   */
+  it('★ 三态收敛：11 模块通路只剩 H（原生 3 / 禁用 8），通用态仅存能力表（决策 2）', () => {
+    // ① 能力表侧：通用态仍在账本里，派生行为照旧
+    expect(
+      printTemplateGenericModuleIds('editorial-index'),
+      'E 的通用条目保留在能力表（决策 2：代码与 spec 全留）',
+    ).toEqual(['task-list']);
+    expect(moduleAvailability('editorial-index', 'task-list')).toBe('generic');
+    expect(enabledSheetsOf('editorial-index', ['task-list']), '通用通路仍能派页').toEqual([
+      { type: 'generic', module: 'task-list' },
+    ]);
+    // 四套外表里只剩 H 走模块表（其余三套 + classic 都是五块清单）
+    expect(
+      PRINT_TEMPLATES.filter((t) => !t.usesBlocks).map((t) => t.id),
+      '11 模块通路只剩 H（批 C 后 E 也改走五块清单）',
+    ).toEqual(['agent-poster']);
+
+    // ② 暴露面侧：H 的选择器 11 行，且一行 generic 都没有
     renderDialog(true);
     openSelector();
-    /*
-     * ⚠️ 2026-10-13：本用例的样本被换过两次 —— A（批 1 前）→ D（批 1 后）→
-     * **E**（批 B 后，D 也改成五块清单了）。模块清单的存在性证据必须由**仍在
-     * 11 模块通路**的模板承担；批 B 后只剩 E / H 两套（本用例取 E：它同时有
-     * 原生 + 通用 + 暂不可用三态）。
-     * 判据本身一个字没改：原生可勾且默认全选、通用可勾但默认不勾、其余禁用带原因。
-     */
-    pickTemplate('editorial-index');
-
-    // 11 行齐全（4 套模板都是同一个 11 模块表单，三态随外表变）
+    pickTemplate('agent-poster');
     expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
-    // 原生：可勾选且默认全选（01 §8），行带归属页名
-    for (const m of ['stage-list', 'member-roster', 'artifact-list']) {
+    expect(
+      document.querySelectorAll('[data-print-module-row][data-avail="generic"]'),
+      '通用态已无暴露面（决策 1 的必然后果）',
+    ).toHaveLength(0);
+    expect(
+      Array.from(document.querySelectorAll('[data-print-module-row]')).map((el) =>
+        el.getAttribute('data-avail'),
+      ),
+      'H 的 11 行只有 native / off 两态',
+    ).toEqual([
+      'native',
+      'native',
+      'off',
+      'native',
+      'off',
+      'off',
+      'off',
+      'off',
+      'off',
+      'off',
+      'off',
+    ]);
+    // 原生：可勾选且默认全选（01 §8）
+    for (const m of ['stage-list', 'task-list', 'member-roster']) {
       const input = moduleCheckbox(m);
       expect(input.disabled, `${m} 原生应可勾`).toBe(false);
       expect(input.checked, `${m} 默认应勾选`).toBe(true);
-      expect(moduleRow(m).getAttribute('data-avail')).toBe('native');
     }
-    expect(moduleRow('stage-list').textContent, '原生行标注归属页名').toContain('阶段目录');
-    expect(moduleRow('artifact-list').textContent).toContain('产出物清单');
-    // 通用渲染：可勾、默认不勾（默认态 = 原生签名页）+ 行内标注「通用渲染」
-    const generic = moduleCheckbox('task-list');
-    expect(generic.disabled, 'task-list 通用应可勾').toBe(false);
-    expect(generic.checked, 'task-list 通用默认不勾').toBe(false);
-    expect(moduleRow('task-list').getAttribute('data-avail')).toBe('generic');
-    expect(moduleRow('task-list').textContent).toContain('通用渲染');
     // 暂不可用：禁用 + 不勾 + 原因文案（不装能打）
     for (const m of [
       'delay-ledger',
@@ -641,17 +700,17 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
       'dependency-network',
       'workload-composition',
       'milestone-acceptance',
+      'artifact-list',
       'agent-execution',
       'writeback-proposals',
     ]) {
       const input = moduleCheckbox(m);
-      expect(input.disabled, `${m} 在 E 外表下应禁用`).toBe(true);
+      expect(input.disabled, `${m} 在 H 外表下应禁用`).toBe(true);
       expect(input.checked, `${m} 禁用态不勾选`).toBe(false);
-      expect(moduleRow(m).getAttribute('data-avail')).toBe('off');
       expect(moduleRow(m).textContent, '禁用行带原因').toContain('该外表下暂不可用');
     }
     // 禁用行点不动：store 不收暂不可用模块的勾选
-    expect(usePrintPrefsStore.getState().modules['editorial-index']).toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['agent-poster']).toBeUndefined();
   });
 
   it('人类化后的 H 外表：3 人类原生默认勾选 + 8 暂不可用（M10/M11 已下架）', () => {
@@ -745,57 +804,77 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     expect(paperPages()).toBe(3);
   });
 
-  it('勾选态按外表各存一套：E 摘产出物清单 → 切 H → 回 E 仍摘着', async () => {
+  it('勾选态按外表各存一套：E 摘「阶段清单」→ 切 D / H → 回 E 仍摘着；两套键互不干扰', async () => {
     /*
-     * ⚠️ 2026-10-13：载体换过两次 —— A（批 1 前）→ 批 1 换成 E 作主样本；
-     * 批 B 后 D 也走五块清单，故「中间那套」从 D 换成 **H**（仍在 11 模块通路）。
-     * 主样本仍是 E（原生 3 + 通用 1，正好覆盖「原生摘掉」与「通用可勾但不默认」）。
+     * ⚠️ 2026-10-13 批 C：载体换到第三次 —— A（批 1 前）→ E（批 1）→ **E 的五块清单**
+     * （批 C 后 E 也改走五块，11 模块通路只剩 H）。
+     *
+     * 判据本身一个字没改，只是「勾选态」换了键：批 A 起 E 的正主从 `modules`
+     * 迁到 `units`（决策 5 第 4 条），所以本用例现在验的是
+     *   · `units['editorial-index']` 按外表分键、换模板不丢；
+     *   · 五块摘除只动 E 的键，**不串到 D 的五块**、也不串到 H 的 11 模块勾选；
+     *   · 落库形状是单元 id 集合（不是旧页 id，也不是模块 id）。
      */
     renderDialog(true);
     openSelector();
     pickTemplate('editorial-index');
+    // 五块清单：4 行可勾（B1「打印头部」由刊头承担 ⇒ 不可摘、不进清单）
+    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    expect(blockCheckbox('header'), 'E 的 B1 不进清单').toBeNull();
     const base = paperPages();
-    expect(base, 'E 默认 = 3 原生签名页').toBe(3);
-    // 摘一个**原生**模块（产出物清单）⇒ 纸面少一页
-    setModuleChecked('artifact-list', false);
-    expect(paperPages()).toBe(base - 1);
+    expect(base, 'E 默认（五块全开）= 1 页').toBe(1);
+    const barsBefore = document.querySelectorAll('.ei-span__bar').length;
+    expect(barsBefore, 'E 的两条跨度条在').toBe(2);
 
-    // 切 H：中截按 H 重建（默认 = 3 原生签名页），E 的勾选不动
+    // 摘一个**可摘**块（B4 阶段清单）⇒ 只有那一个可见区消失；B2 逐值不变
+    setBlockChecked('stageTable', false);
+    expect(document.querySelectorAll('.ei-index .ei-row'), '摘 B4 ⇒ 巨编号目录消失').toHaveLength(0);
+    expect(
+      document.querySelectorAll('.ei-span__bar').length,
+      '摘 B4 不得动 B2',
+    ).toBe(barsBefore);
+
+    // 切 D：D 自己的五块默认全开（E 的摘除不串台）
+    pickTemplate('data-editorial');
+    expect(blockCheckbox('stageTable').checked, 'D 的 stageTable 不受 E 影响').toBe(true);
+    expect(blockCheckbox('timeline').checked, 'D 的 timeline 默认勾选').toBe(true);
+
+    // 切 H：仍在 11 模块通路，H 的模块勾选与 E 的五块勾选互不干扰
     pickTemplate('agent-poster');
     const hBase = paperPages();
-    expect(hBase, 'H 默认 = 3（人类原生海报页）').toBeGreaterThan(0);
+    expect(hBase, 'H 默认 = 人类原生海报页').toBeGreaterThan(0);
     expect(moduleCheckbox('stage-list').checked, 'H 的 stage-list 默认勾选').toBe(true);
     expect(moduleCheckbox('member-roster').checked, 'H 的 member-roster 默认勾选').toBe(true);
-    expect(
-      Array.from(document.querySelectorAll('.a4-page')).map((el) =>
-        el.getAttribute('data-print-page'),
-      ),
-      'H 默认纸面只落人类三页 kind',
-    ).toEqual(
-      Array.from(new Set(
-        Array.from(document.querySelectorAll('.a4-page')).map((el) =>
-          el.getAttribute('data-print-page'),
-        ),
-      )),
-    );
-    // H 的 native 集合里没有 artifact-list ⇒ 该行在 H 下是禁用态（与 E 的勾选态互不干扰）
-    expect(moduleCheckbox('artifact-list').disabled, 'artifact-list 在 H 下不可用').toBe(true);
     expect(paperPages(), 'H 的页数不受 E 勾选影响').toBe(hBase);
+    // 五块清单与 11 模块清单**不会同时出现**（分流是互斥的）
+    expect(document.querySelectorAll('input[data-print-block]'), 'H 不出五块清单').toHaveLength(0);
 
-    // 回 E：artifact-list 仍被摘着（按模板分键，换模板不丢）
+    // 回 E：stageTable 仍被摘着（按模板分键，换模板不丢）
     pickTemplate('editorial-index');
-    expect(moduleCheckbox('artifact-list').checked, '回 E 后 artifact-list 仍摘着').toBe(false);
-    expect(moduleCheckbox('stage-list').checked, '没动的模块仍勾着').toBe(true);
-    expect(paperPages()).toBe(base - 1);
+    expect(blockCheckbox('stageTable').checked, '回 E 后 stageTable 仍摘着').toBe(false);
+    expect(blockCheckbox('timeline').checked, '没动的块仍勾着').toBe(true);
+    expect(document.querySelectorAll('.ei-index .ei-row')).toHaveLength(0);
+    expect(document.querySelectorAll('.ei-span__bar')).toHaveLength(barsBefore);
 
-    // 落库形状：模块 id（不是旧页 id）；E 的集合里没有 artifact-list
+    // 落库形状：单元 id 集合（不是旧页 id、不是模块 id）；E 的键里没有 stageTable，
+    // 装置（今天不可摘）也在集合里 —— 将来开放装置勾选时它们天然保持开启。
     await flush();
     const raw = localStorage.getItem(PRINT_PREFS_STORAGE_KEY);
     expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!) as { state: { pages: Record<string, string[]>; modules: Record<string, string[]> } };
-    // 债② 双写：modules 是正主，pages 是兼容旧读者的镜像键，两键同值
-    expect(parsed.state.modules['editorial-index']).toEqual(['stage-list', 'member-roster']);
-    expect(parsed.state.pages['editorial-index']).toEqual(parsed.state.modules['editorial-index']);
+    const parsed = JSON.parse(raw!) as {
+      state: { units: Record<string, string[]>; modules: Record<string, string[]> };
+    };
+    expect(parsed.state.units['editorial-index']).toEqual([
+      'header',
+      'timeline',
+      'projectInfo',
+      'footer',
+      'ei-giant-title',
+      'ei-sheet-tag',
+    ]);
+    // H 的键不受 E 影响（两套键各存一套，谁也不覆盖谁）
+    expect(parsed.state.units['agent-poster'], 'H 的五块键不该被 E 的走动造出来').toBeUndefined();
+    expect(parsed.state.modules['editorial-index'], 'E 不再走模块键').toBeUndefined();
   });
 });
 

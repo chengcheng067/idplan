@@ -100,7 +100,9 @@ describe('批 1 地基 · L1-a 统一注册表（5 块 + 逐套装置声明）',
     expect(deviceIds('classic'), '经典无版性装置（五块全可摘）').toEqual([]);
     expect(deviceIds('swiss-schedule')).toEqual(['swiss-topbar', 'swiss-percent', 'swiss-bottombar']);
     expect(deviceIds('data-editorial')).toEqual(['de-head', 'de-band']);
-    expect(deviceIds('editorial-index')).toEqual(['ei-giant-title']);
+    // E 的 SHEET 页签（2026-10-13 批 C 新增）：刊头身份装置，与页脚页码**并存**
+    // （裁决第 2 条：不清理页脚页码）—— 故它是**第二个**装置，不是替换。
+    expect(deviceIds('editorial-index')).toEqual(['ei-giant-title', 'ei-sheet-tag']);
     expect(deviceIds('agent-poster')).toEqual([
       'ap-flood-top',
       'ap-flood-bottom',

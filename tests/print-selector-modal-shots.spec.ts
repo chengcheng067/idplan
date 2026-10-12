@@ -297,4 +297,48 @@ describe.skipIf(!CAN_RUN)('期六 · 选择器弹窗截图（真 Chromium + 真�
       await page.close();
     }
   });
+
+  it('⑤ E 的五块清单（批 C 之后的中截）：4 行可勾 + 句序同为「五块」⇒ selector-modules-e.png', async () => {
+    /*
+     * 2026-10-13 批 C：E 也切到五块清单 —— 这张图是给用户看的「E 现在长什么样」。
+     * 与 ④ 的 A 图同范式、判据**逐条同源**（4 行可勾、行序 = 五块里的可勾项、
+     * 默认全勾、那句不可摘说明），差别只在左列选中的模板：
+     *   · E 的巨题装置（两行 92px）是**纸张上的**身份装置，与选择器无关；
+     *   · E 与 A/D 共用同一套五块清单（这正是决策 1 的目的：清单不随外表变）。
+     * 同时锁死「E 的 11 模块行已消失」——批 C 之后 A/D/E/classic 四套都没有了。
+     */
+    const css = builtCss();
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    try {
+      await page.goto(
+        'file://' + writeHtml('selector-modules-e.html', shell(panelMarkup('editorial-index'), css)),
+      );
+      const rows = await page.$$('input[data-print-block]');
+      expect(rows, 'E 的中截应是 4 行可勾的五块清单').toHaveLength(4);
+      expect(await page.$$('[data-print-module-row]'), 'E 不该再有 11 模块行').toHaveLength(0);
+      const labels = await page.$$eval('input[data-print-block]', (els) =>
+        els.map((el) => (el as HTMLInputElement).dataset.printBlock),
+      );
+      expect(labels, '行序 = 五块里的可勾项（与 A/D 逐项一致）').toEqual([
+        'timeline',
+        'projectInfo',
+        'stageTable',
+        'footer',
+      ]);
+      const checked = await page.$$eval(
+        'input[data-print-block]',
+        (els) => els.filter((el) => (el as HTMLInputElement).checked).length,
+      );
+      expect(checked, '四行默认全勾').toBe(4);
+      const note = await page.$eval('[data-print-selector-panel]', (el) => el.textContent ?? '');
+      expect(note).toContain('由该模板的刊头承载项目名与页序，属版式构件');
+      expect(note).toContain('该模板当前不可摘');
+      expect(note).toContain('可摘项随版式而定');
+      await (await page.$('[data-print-selector-panel]'))!.screenshot({
+        path: join(OUT_DIR, 'selector-modules-e.png'),
+      });
+    } finally {
+      await page.close();
+    }
+  });
 });

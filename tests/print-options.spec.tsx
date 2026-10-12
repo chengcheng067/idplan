@@ -603,31 +603,52 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(dText, '口径注恒在（§2.6 原则 1）').toContain('占比=ratioPercent≠完成度');
     expect(dText, '每页的完成度横带装置（丙）').toContain('项目完成度');
 
-    // 切 E：默认 = 3 原生签名页（M2 任务清单是通用渲染，默认不勾）
+    // 切 E：**五块形态**（2026-10-13 批 C · 决策 1）。本夹具 8 阶段、**无 StageLog**
+    // ⇒ L3 改期记录不出 ⇒ 紧凑档 8 行正好一页（带一条改期记录时同规模是 2 页，
+    // 见 print-a4-visual-e 的页数表用例与 print-a4-visual-d 的同款说明）
     pickTemplate('editorial-index');
     expect(paperRoot()!.className).toContain('print-template-editorial-index');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
-    expect(bodyContains('预计 3 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(1);
+    expect(bodyContains('预计 1 页')).toBe(true);
     expect(printButton()!.disabled, 'E 版可打印').toBe(false);
-    expect(moduleCheckbox('task-list').checked, 'E 的 task-list 默认不勾（通用渲染）').toBe(false);
-    const eText = paperRoot()!.textContent ?? '';
-    for (const title of ['阶段目录', '成员执行体目录', '产出物清单']) {
-      expect(eText, `E 版纸面应含页题「${title}」`).toContain(title);
-    }
-    // 本夹具任务无产出物 ⇒ P3 走标准空态（02 §8 文案，不造数据填版）
+    // 中截 = 五块清单：4 行可勾（B1「打印头部」由刊头承担 ⇒ 不可摘、不进清单）
+    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    expect(document.querySelector('input[data-print-block="header"]'), 'E 的 B1 不进清单').toBeNull();
     expect(
-      document.querySelector('[data-print-empty="artifacts"]'),
-      'E P3 无产出物 ⇒ 明确空态',
-    ).not.toBeNull();
+      document.querySelector('[data-print-module-row]'),
+      '批 C 后 E 的选择器中截不再是 11 个内容模块（决策 1：只暴露 5 块）',
+    ).toBeNull();
+    for (const k of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
+      expect(checkbox(k).checked, `E 的 ${k} 默认勾选`).toBe(true);
+    }
+    expect(selectorPanel()!.textContent, 'E 也写明不可摘的原因（§2.6 纪律 1）').toContain(
+      '由该模板的刊头承载项目名与页序，属版式构件',
+    );
+    // 纸面：五块形态的页壳 + 巨题（两行**内容类型词**）+ B2 编年跨度目录 + B4 巨编号目录
+    const eText = paperRoot()!.textContent ?? '';
+    expect(
+      Array.from(document.querySelectorAll('.a4-page')).map((el) => el.getAttribute('data-print-page')),
+    ).toEqual(['blocks']);
+    expect(
+      Array.from(paperRoot()!.querySelectorAll('.ei-head__title-line')).map((el) =>
+        (el.textContent ?? '').trim(),
+      ),
+      'E 的巨题 = 内容类型词（阶段 / 目录），项目名在刊头 meta 行',
+    ).toEqual(['阶段', '目录']);
+    expect(eText, 'E 刊头带项目名（B1 归位）').toContain('云栖·湖畔茶室');
+    expect(document.querySelector('.ei-span'), 'B2 编年跨度目录在纸面上').not.toBeNull();
+    expect(document.querySelector('.ei-span__bar'), 'B2 有跨度条').not.toBeNull();
+    expect(document.querySelector('.ei-span__track'), 'B2 有时间标尺').not.toBeNull();
+    expect(document.querySelector('.ei-index .ei-row'), 'B4 巨编号目录在纸面上').not.toBeNull();
+    expect(document.querySelectorAll('.ei-index .ei-row'), '8 阶段全在本页').toHaveLength(8);
+    expect(document.querySelectorAll('.ei-span__bar'), 'B2 每阶段一条跨度条').toHaveLength(8);
+    expect(eText, '口径句恒在（§2.6 原则 1）').toContain('条 = 日期跨度');
+    expect(eText, 'SHEET 页签（批 C 新增的身份装置）').toContain('SHEET 01 / 01 · A4');
+    expect(eText, '页脚页码与 SHEET 并存（裁决 2：不清理）').toContain('第 1 / 1 页');
     // 未上传 logo ⇒ 每页左上角发丝线下方是「ID Plan」文字标（不留空）
     const eLogos = document.querySelectorAll('.a4-page [data-print-logo="text"]');
-    expect(eLogos.length, 'E 三页各一枚文字标').toBe(3);
+    expect(eLogos.length, 'E 单页一枚文字标').toBe(1);
     expect((eLogos[0]!.textContent ?? '').trim()).toBe('ID Plan');
-    // 手动勾 M2 ⇒ 通用任务清单页上纸（期三通用渲染在 E 的落地）
-    setModuleChecked('task-list', true);
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
-    expect(paperRoot()!.textContent, 'E 版纸面应含通用页题「任务清单」').toContain('任务清单');
-    setModuleChecked('task-list', false);
 
     // 切 H：默认 = 3 **人类原生海报页**（阶段 / 任务 / 成员；2026-10-11 人类化批次）。
     // 上一代的「无 Agent 数据 ⇒ 整版只读空态」已作废：H 三页现在打人类内容，
