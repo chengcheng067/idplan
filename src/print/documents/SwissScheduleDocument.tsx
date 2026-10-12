@@ -776,8 +776,10 @@ const SWISS_BLOCK_EST = {
   infoTotal: 170,
   /** B5 的贴底数据来源行（在 body 流里占位）：实测 20.39 */
   sourceH: 21,
-  /** B4 组头（标签 + 2px 粗线 + 其下呼吸）：实测 92.75 */
+  /** B4 组头（标签 + 2px 粗线 + 其下呼吸 71）：实测 92.75 */
   stageHead: 94,
+  /** B4 组头·**小规模档**（呼吸收到 SWISS_GROUP_HEAD_TIGHT_MARGIN=40）：实测 61.75 */
+  stageHeadTight: 63,
   /** 三列错落的中列下移：实测 34（`[data-col='2']` 的 margin-top） */
   stageStagger: 34,
   /** B4 一条阶段卡（含卡间间距）：实测 95.19 */
@@ -836,6 +838,38 @@ export const SWISS_GANTT_SINGLE_PAGE_MAX_STAGES = Math.floor(
     SWISS_BLOCK_EST.ganttChrome) /
     GANTT_MIN_READABLE_PITCH,
 );
+
+/**
+ * 每列排满几张卡，才算「三列齐全」（= 错落这件**三列语法件**的前提）。
+ * `splitColumns` 按 `ceil(n/3)` 均分 ⇒ 「每列 ≥ 本值」等价于 `n ≥ 3×本值−(3−1)`。
+ */
+const SWISS_COLUMN_FULL_CARDS = 3;
+
+/**
+ * **错落的施加门槛（阶段数，实测 7）**：低于它 ⇒ 错落**不施加**、三列只是普通等距网格。
+ *
+ * 语义（2026-10-13 批 A 裁决第 2 条）：错落是**三列语法件**（参考稿 9 阶段页实测：
+ * 列 2 +34 / 列 3 −34）。1–2 张/列时它不构成「三列」语义 —— 只是三张卡各错一个
+ * 高度，白占 34px 纵向空间，还可能把小项目顶到第二页。
+ * 推导（不写死数字）：`ceil(n / columns) ≥ SWISS_COLUMN_FULL_CARDS ⇔ n ≥ columns × 本值 − (columns − 1)`
+ * ⇒ 3×3−2 = **7**。
+ */
+export const SWISS_STAGGER_MIN_STAGES =
+  SWISS_BLOCK_EST.columns * SWISS_COLUMN_FULL_CARDS - (SWISS_BLOCK_EST.columns - 1);
+
+/**
+ * **小规模档**（阶段数 < `SWISS_STAGGER_MIN_STAGES`）下组头下方的「呼吸」（px）。
+ *
+ * 参考稿的 71px 是 9 阶段页（三列各三张卡）的版面值：组头 2px 粗线 → 首卡之间那口
+ * 气。卡片少时这口 71px 是**纯空气**（一列才一张卡），故小规模收到 40 —— 40 仍是
+ * 「组头 → 首卡」的界面距（3px 卡内距 + 37 呼吸），不是把间距抹平。
+ */
+export const SWISS_GROUP_HEAD_TIGHT_MARGIN = 40;
+
+/** B4 的规模档（小规模 = 阶段数 < 错落门槛）：分页估高与渲染**同一个出处** */
+export function swissStageScale(stageCount: number): 'small' | 'normal' {
+  return stageCount < SWISS_STAGGER_MIN_STAGES ? 'small' : 'normal';
+}
 
 /** L3 改期记录最多登几条（§0.5：「取最近 N 条 + 行末「共 M 条」」） */
 export const SWISS_RESCHED_MAX_ROWS = 6;
@@ -924,10 +958,11 @@ export function swissGanttPitch(stageCount: number): number {
  *      （§0.5：L3 不单独成页）。
  *
  * ── 逐档实测（真 Chromium 2026-10-13；探针一次性、跑完即删）──
+ * 大项目（夹具带 1 条 rescheduled 流水）：
  * | 阶段数 | 行高 | 预计页数 | 实际页数 | 逐页高（px） | B2 分布 | 裁切 |
  * |---|---|---|---|---|---|---|
  * | 1  | 28 | 1 | 1 | 1123 | 1/1 首页 | 无 |
- * | 2  | 28 | 2 | 2 | 1123, 1123 | 2 行首页 | 无 |
+ * | 2  | 28 | 1 | 1 | 1123 | 2 行首页 | 无 |
  * | 9  | 28 | 2 | 2 | 1123, 1123 | 9 行首页 | 无 |
  * | 20 | 19 | 3 | 3 | 1123×3 | 20 行首页 | 无 |
  * | 23 | 16 | 3 | 3 | 1123×3 | 23 行首页（单页档上界） | 无 |
@@ -937,6 +972,17 @@ export function swissGanttPitch(stageCount: number): number {
  * | 30 | 28 | 5 | 5 | 1123×5 | 13 + 17（续） | 无 |
  * | 40 | 28 | 7 | 7 | 1123×7 | 13 + 20 + 7（续） | 无 |
  * | 60 | 28 | 9 | 9 | 1123×9 | 13 + 20×2 + 7（续） | 无 |
+ *
+ * **小规模边界**（n=1..8 × 有/无改期记录，逐档实测；批 A 裁决 a+b 之后的值）：
+ * | 阶段数 | 无改期记录 | 有改期记录 |
+ * |---|---|---|
+ * | 1 / 2 / 3 | **1 页** | **1 页** |
+ * | 4 | **1 页** | 2 页 |
+ * | 5 / 6 | 2 页 | 2 页 |
+ * | 7 / 8 | 2 页 | 2 页 |
+ * （批 A 裁决前的同一张表：1 → 1；2 → 1 / **2**；3 → 1 / **2**；4 → **2** / 2；
+ *  5–8 → 2。即 a+b 把「2/3 阶段带改期记录」与「4 阶段无改期记录」三档压回了 1 页，
+ *  其余档位不变 —— 旧的「n ≥ 4 恒 2 页」的说法**已作废**。）
  *
  * 对照 v1（「只第 1 页」+ 一直压到 14 为止）：27 阶段无裁切，**28 起首页 1157px
  * （超 34px）** ⇒ 本版把「压不住」的规模交给续页，裁切归零。
@@ -954,16 +1000,23 @@ export function swissBlockPages(vm: PrintViewModel, blocks: SchedulePaperBlocks)
     resched.length > 0 ? SWISS_BLOCK_EST.reschedHead + resched.length * SWISS_BLOCK_EST.reschedRow : 0;
   const footerH = blocks.footer ? SWISS_BLOCK_EST.sourceH : 0;
 
-  /** B4 承载 n 条所需高度（三列错落：组头 + 错落 + 每列 ceil(n/3) 条） */
+  /**
+   * 规模档（批 A 裁决第 1/2 条）：小规模 ⇒ 组头呼吸收紧 + **错落不施加**
+   * （错落是三列语法件，1–2 张/列时它不构成三列语义）。两条都只在小规模生效，
+   * **≥ SWISS_STAGGER_MIN_STAGES 的档位（含参考稿的 9 阶段页）逐像素不变**。
+   */
+  const scale = swissStageScale(total);
+  const stageHead = scale === 'small' ? SWISS_BLOCK_EST.stageHeadTight : SWISS_BLOCK_EST.stageHead;
+  const stageStagger = scale === 'small' ? 0 : SWISS_BLOCK_EST.stageStagger;
+
+  /** B4 承载 n 条所需高度（组头 + 错落 + 每列 ceil(n/3) 条） */
   const b4Height = (n: number): number =>
     n === 0
       ? 0
-      : SWISS_BLOCK_EST.stageHead +
-        SWISS_BLOCK_EST.stageStagger +
-        Math.ceil(n / SWISS_BLOCK_EST.columns) * SWISS_BLOCK_EST.stagePitch;
+      : stageHead + stageStagger + Math.ceil(n / SWISS_BLOCK_EST.columns) * SWISS_BLOCK_EST.stagePitch;
   /** 给定预算能装几条阶段卡（0 = 一组都放不下） */
   const b4RowsFit = (budget: number): number => {
-    const room = budget - SWISS_BLOCK_EST.stageHead - SWISS_BLOCK_EST.stageStagger;
+    const room = budget - stageHead - stageStagger;
     return room < SWISS_BLOCK_EST.stagePitch
       ? 0
       : Math.floor(room / SWISS_BLOCK_EST.stagePitch) * SWISS_BLOCK_EST.columns;
@@ -1292,7 +1345,7 @@ function SwissBlockPage({
             {columns.length === 0 ? (
               <EmptyPrintState kind="stages" />
             ) : (
-              <div className="swiss-columns">
+              <div className="swiss-columns" data-scale={swissStageScale(vm.stages.length)}>
                 {columns.map((col, ci) => (
                   <SwissStageColumn key={ci} col={col} index={ci} />
                 ))}

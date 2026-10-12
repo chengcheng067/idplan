@@ -1035,3 +1035,20 @@
   top: 2px;
   bottom: 2px;
 }
+
+/* ── B4 · 小规模档（阶段数 < SWISS_STAGGER_MIN_STAGES=7；阈值在 SwissScheduleDocument）──
+   批 A 裁决第 1/2 条：小规模下三列是**普通等距网格**，不是错落。
+   · 错落 34px 是三列语法件的排版手法（参考稿 9 阶段页：列 2 +34 / 列 3 −34）。
+     1–2 张/列时它不构成「三列」语义 —— 只是三张卡各错一个高度，白占纵向空间。
+   · 组头下方的 71px「呼吸」同理：那是三列各三张卡的板面值，一列一张卡时是纯空气，
+     收到 SWISS_GROUP_HEAD_TIGHT_MARGIN=40（仍是「组头 → 首卡」的界面距）。
+   **≥7 阶段（含参考稿档位）一行不改** —— 9 阶段几何有冻结值断言守着。 */
+.print-root.print-template-swiss-schedule .swiss-columns[data-scale='small'] .swiss-column[data-col='2'],
+.print-root.print-template-swiss-schedule .swiss-columns[data-scale='small'] .swiss-column[data-col='3'] {
+  margin-top: 0;
+}
+
+.print-root.print-template-swiss-schedule .swiss-columns[data-scale='small'] .swiss-column__head {
+  /* 40 = SWISS_GROUP_HEAD_TIGHT_MARGIN（组件层常量；此处是纸面落值，两处同源） */
+  margin-bottom: 40px;
+}
