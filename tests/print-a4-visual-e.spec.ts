@@ -467,6 +467,14 @@ describe.skipIf(!CAN_RUN)('E 版 · 五块形态（批 C：跨度条 vs 占比 /
       const barsBefore = (await page.$$('.ei-span__bar')).length;
       expect(rowsBefore, 'B4 行在').toBeGreaterThan(0);
       expect(barsBefore, 'B2 条在').toBeGreaterThan(0);
+      // L3 改期记录（B4 的附属件，§0.5）：本夹具带 1 条 StageLog ⇒ **必须**上纸。
+      // 这条是「条件分支静默丢内容」的正面锁 —— 少了它，`plan.last` 那条闭包
+      // 兜底一旦失效，页数照样对、纸面却少了整张表，没有任何断言会红。
+      expect(await page.$$('[data-print-resched]'), 'L3 改期记录在（B4 开着）').toHaveLength(1);
+      expect(
+        await page.$$eval('[data-print-resched] .ei-l3__row:not(.ei-l3__row--head)', (els) => els.length),
+        'L3 有 1 条明细行',
+      ).toBe(1);
 
       // 关 B2 ⇒ 整块跨度目录消失（标尺 + 条都没了），B4 行**逐值不变**
       await page.goto('file://' + writeHtml('e-blocks-no-b2.html', shell(markupWith(noB2), css, false)));
@@ -478,6 +486,7 @@ describe.skipIf(!CAN_RUN)('E 版 · 五块形态（批 C：跨度条 vs 占比 /
       // 关 B4 ⇒ 巨编号目录消失，B2 条**逐值不变**
       await page.goto('file://' + writeHtml('e-blocks-no-b4.html', shell(markupWith(noB4), css, false)));
       expect(await page.$$('.ei-index .ei-row'), '关 B4 ⇒ 巨编号目录消失').toHaveLength(0);
+      expect(await page.$$('[data-print-resched]'), '附属件随 B4 一起不出（§0.5）').toHaveLength(0);
       expect((await page.$$('.ei-span__bar')).length, '关 B4 不得动 B2').toBe(barsBefore);
       expect(await page.$$('.a4-page'), '关 B4 的页数联动').toHaveLength(expected.noB4);
     } finally {
