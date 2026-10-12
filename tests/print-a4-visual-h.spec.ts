@@ -1161,6 +1161,12 @@ describe.skipIf(!CAN_RUN)('H 版 · 五块形态（批 D：双栏分段轴甘特
             }
             return bad;
           })(),
+          // 覆盖段的几何（测试侧独立复算，见下）
+          cover: Array.from(spanPage.querySelectorAll('.ap-span-band__seg')).map((e) => ({
+            tone: (e as HTMLElement).getAttribute('data-tone'),
+            left: Number.parseFloat((e as HTMLElement).getAttribute('data-cover-left') ?? 'NaN'),
+            width: Number.parseFloat((e as HTMLElement).getAttribute('data-cover-width') ?? 'NaN'),
+          })),
         };
       });
       expect(m.bandSegs, '① 覆盖带有合并覆盖段').toBeGreaterThan(0);
@@ -1179,6 +1185,45 @@ describe.skipIf(!CAN_RUN)('H 版 · 五块形态（批 D：双栏分段轴甘特
       // 刻度不许越盒（第一版把刻度放在盒外用 padding 让位，实测骑到栏注上）
       expect(m.bandTickOverflow, '覆盖带刻度不得越出通栏').toBe(0);
       expect(m.colTickOverflow, '栏内刻度不得越出本栏').toBe(0);
+
+      // ①的**独立复算**：测试侧自己按「阶段起止 → 天偏移 → 合并同色调区间」算一遍
+      // 覆盖带，与 DOM 的 data-cover-* 逐段对账（不调源码的派生函数，避免自证）。
+      const day = 86400000;
+      const iso = (s: string): number => Date.parse(s.slice(0, 10) + 'T00:00:00Z');
+      const viewStart = Math.min(iso(vm.project.plannedStartAt), ...vm.stages.map((s) => iso(s.startAt)));
+      const viewEnd = Math.max(iso(vm.project.plannedEndAt), ...vm.stages.map((s) => iso(s.endAt)));
+      const viewDays = Math.round((viewEnd - viewStart) / day) + 1;
+      const merge = (xs: [number, number][]): [number, number][] => {
+        const out: [number, number][] = [];
+        for (const [lo, hi] of [...xs].sort((a, b) => a[0] - b[0])) {
+          const last = out[out.length - 1];
+          if (last && lo <= last[1] + 1) last[1] = Math.max(last[1], hi);
+          else out.push([lo, hi]);
+        }
+        return out;
+      };
+      const byTone = new Map<string, [number, number][]>();
+      for (const s of vm.stages) {
+        const tone =
+          s.status === StageStatus.Delayed || s.status === StageStatus.NotStarted ? 'gate' : 'ink';
+        const lo = Math.round((iso(s.startAt) - viewStart) / day);
+        const hi = Math.round((iso(s.endAt) - viewStart) / day);
+        byTone.set(tone, [...(byTone.get(tone) ?? []), [lo, hi]]);
+      }
+      const expected: { tone: string; left: number; width: number }[] = [];
+      for (const tone of ['gate', 'ink']) {
+        for (const [lo, hi] of merge(byTone.get(tone) ?? [])) {
+          expected.push({
+            tone,
+            left: Number(((lo / viewDays) * 100).toFixed(4)),
+            width: Number((((hi - lo + 1) / viewDays) * 100).toFixed(4)),
+          });
+        }
+      }
+      expect(
+        [...m.cover].sort((a, b) => a.left - b.left || a.width - b.width),
+        '① 覆盖段 = 独立复算的「阶段区间按色调合并」（逐段逐值）',
+      ).toEqual(expected.sort((a, b) => a.left - b.left || a.width - b.width));
     } finally {
       await page.close();
     }
