@@ -427,8 +427,14 @@ describe('打印 logo · L3 四版挂点与空态文字标（静态纸面）', (
     expect(topbarLogo, 'A 版 logo 应在黑顶栏左端（nav 行首）').not.toBeNull();
     expect((topbarLogo as HTMLElement).style.height).toBe('24px');
     expect(topbarLogo!.getAttribute('data-tone'), '基线黑栏 ⇒ 反白').toBe('on-dark');
-    // 四页都在顶栏左端
-    expect(logoHeights(doc)).toEqual([24, 24, 24, 24]);
+    // 每页顶栏左端一枚（2026-10-13 批 1 重定：原断言写死 4 页；A 走五块形态后
+    // 页数由数据驱动 ⇒ 判据收紧为「logo 数 === 页数，且每枚 24px」，
+    // 比写死 4 更能抓住「漏了某页的 logo」）
+    const aPages = doc.querySelectorAll('.a4-page').length;
+    expect(aPages, 'A 五块形态：本夹具 1 页').toBe(1);
+    expect(logoHeights(doc), `A 每页一枚顶栏 logo（${aPages} 页）`).toEqual(
+      Array.from({ length: aPages }, () => 24),
+    );
 
     // 站台蓝预设：栏底（line）改亮 ⇒ logo 原样（不反白），否则白 logo 在亮栏上消失
     const preset = PRINT_TEMPLATE_PALETTES['swiss-schedule'].presets.find((p) => p.id === 'platform-blue')!;

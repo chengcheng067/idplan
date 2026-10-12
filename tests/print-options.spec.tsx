@@ -542,13 +542,27 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
       ).not.toBeNull();
     }
 
-    // 切 A：纸面换成 A 版四页 + 模板类
+    // 切 A：**五块形态**（2026-10-13 批 1 · 决策 1：选择器只暴露那 5 块）
+    // 本夹具 8 阶段 ⇒ 首页 B1+B2+B3 装不下清单（纸壳页）+ 第 2 页 B4 = 2 页
     pickTemplate('swiss-schedule');
     const rootEl = paperRoot()!;
     expect(rootEl.className).toContain('print-template-swiss-schedule');
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
-    expect(bodyContains('预计 4 页')).toBe(true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(2);
+    expect(bodyContains('预计 2 页')).toBe(true);
     expect(printButton()!.disabled, 'A 版可打印').toBe(false);
+    // 中截 = 五块清单：4 行可勾（B1「打印头部」由刊头承担 ⇒ 不可摘、不进清单）
+    expect(document.querySelectorAll('input[data-print-block]')).toHaveLength(4);
+    expect(document.querySelector('input[data-print-block="header"]'), 'B1 不进清单').toBeNull();
+    for (const k of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
+      expect(checkbox(k).checked, `A 的 ${k} 默认勾选`).toBe(true);
+    }
+    expect(selectorPanel()!.textContent, '选择器写明不可摘的原因（§2.6 纪律 1）').toContain(
+      '由模板刊头承担，不可摘',
+    );
+    // 五块的纸面标识（每页都是五块形态的页壳）
+    expect(
+      Array.from(document.querySelectorAll('.a4-page')).map((el) => el.getAttribute('data-print-page')),
+    ).toEqual(['blocks', 'blocks']);
 
     // 切 D：默认 = 4 原生签名页（她 10-09 23:38 反馈修复：第一页是进度
     // 矩阵，不再是通用「阶段清单」表格——参考稿那个味道）
@@ -644,31 +658,76 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
     expect(document.querySelector('.ap-block'), '阶段块上纸').not.toBeNull();
   });
 
-  it('⑥【新】模块勾选：四版默认全选原生、可摘模块、页码/预计页数联动', () => {
+  it('⑥【新】五块勾选（A）：逐块可摘 = 纸面精确减掉一个可见区 + 页码/预计页数联动', async () => {
     renderDialog(true);
     openBlocksPanel();
     pickTemplate('swiss-schedule');
-    // 默认全选原生模块（01 §8；期二：勾的是模块，纸面落原生页）
-    for (const m of ['stage-list', 'task-list', 'delay-ledger', 'member-roster']) {
-      expect(moduleCheckbox(m).checked, `${m} 默认应勾选`).toBe(true);
+    // 默认四行全勾（B1 不可摘、不进清单）
+    for (const k of ['timeline', 'projectInfo', 'stageTable', 'footer']) {
+      expect(checkbox(k).checked, `${k} 默认应勾选`).toBe(true);
     }
-    // 摘一个模块 ⇒ 纸面 3 页 + 页码重排 + 预计联动
-    setModuleChecked('task-list', false);
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(3);
-    expect(bodyContains('预计 3 页')).toBe(true);
-    expect(document.querySelector('.a4-page')!.getAttribute('data-print-page')).toBe('stage-overview');
-    expect(document.body.textContent).toContain('第 1 / 3 页');
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(2);
 
-    // 反选 ⇒ 0 页；全选 ⇒ 回 4 页
-    act(() => {
-      document.querySelector<HTMLButtonElement>('[data-print-modules-none]')!.click();
+    // ── 决策 6：取消勾一块 = 纸面上精确减掉一个可见区（逐块巡检）──
+    // ① 摘 B2 打印时间轴 ⇒ 甘特整块消失，其余不动
+    setBlockChecked('timeline', false);
+    expect(paperRoot()!.querySelector('.print-gantt'), 'B2 摘掉 ⇒ 甘特整块消失').toBeNull();
+    expect(paperRoot()!.textContent, '其余块不动：B4 阶段卡仍在').toContain('阶段1');
+    expect(paperRoot()!.textContent, 'B3 项目信息仍在').toContain('排期基准');
+    expect(paperRoot()!.textContent, '口径注不随 B3 消失（§2.6）').toContain('阶段四态');
+    setBlockChecked('timeline', true);
+    expect(paperRoot()!.querySelector('.print-gantt'), '勾回 ⇒ 甘特回来').not.toBeNull();
+
+    // ② 摘 B3 项目信息 ⇒ 承载区（排期基准行 + 休息制度块）消失，**口径注留下**
+    setBlockChecked('projectInfo', false);
+    expect(paperRoot()!.textContent, 'B3 摘掉 ⇒ 排期基准消失').not.toContain('排期基准');
+    expect(paperRoot()!.textContent, '休息制度黑块随 B3 消失').not.toContain('休息制度');
+    expect(paperRoot()!.textContent, '口径注锚回（原则 1）').toContain('阶段四态');
+    setBlockChecked('projectInfo', true);
+    expect(paperRoot()!.textContent, '勾回 ⇒ 排期基准回来').toContain('排期基准');
+
+    // ③ 摘 B5 页脚 ⇒ 只摘「数据来源行」；黑底栏装置（署名 + 页码）永在
+    setBlockChecked('footer', false);
+    expect(paperRoot()!.textContent, 'B5 摘掉 ⇒ 数据来源行消失').not.toContain('数据来源');
+    expect(paperRoot()!.textContent, '黑底栏装置仍在（§2.6 A·B5 = 甲）').toContain(
+      'ID Plan · 项目排期与交付管理',
+    );
+    expect(document.body.textContent, '页码永在（原则 1）').toContain('第 1 / 2 页');
+    setBlockChecked('footer', true);
+    expect(paperRoot()!.textContent, '勾回 ⇒ 数据来源行回来').toContain('数据来源');
+
+    // ④ 摘 B4 阶段清单 ⇒ 整块（含 L3 改期记录）消失 + 页码/预计页数联动到 1 页
+    //    （首页只剩 B1+B2+B3；B4 是唯一跨页块 ⇒ 页数 2 → 1）
+    setBlockChecked('stageTable', false);
+    expect(paperRoot()!.querySelector('.swiss-stage-row'), 'B4 摘掉 ⇒ 阶段卡消失').toBeNull();
+    expect(paperRoot()!.querySelector('.swiss-resched'), '附属件随 B4 一起不出（§0.5）').toBeNull();
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(1);
+    expect(bodyContains('预计 1 页')).toBe(true);
+    expect(document.body.textContent, '页码随页数重排').toContain('第 1 / 1 页');
+    setBlockChecked('stageTable', true);
+    expect(document.querySelectorAll('.a4-page')).toHaveLength(2);
+
+    // 反选 / 全选（模块清单那两个按钮不属于五块清单 ⇒ 五块清单没有它们）
+    expect(document.querySelector('[data-print-modules-none]'), '五块清单无模块按钮').toBeNull();
+    expect(document.querySelector('[data-print-modules-all]')).toBeNull();
+    // 落库形状：units[template]（正主），旧键三件不动
+    await flush();
+    const raw = localStorage.getItem(PRINT_PREFS_STORAGE_KEY);
+    const parsed = JSON.parse(raw!) as { state: Record<string, unknown> };
+    expect(parsed.state.units).toEqual({
+      'swiss-schedule': [
+        'header',
+        'timeline',
+        'projectInfo',
+        'stageTable',
+        'footer',
+        'swiss-topbar',
+        'swiss-percent',
+        'swiss-bottombar',
+      ],
     });
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(0);
-    expect(bodyContains('预计 0 页')).toBe(true);
-    act(() => {
-      document.querySelector<HTMLButtonElement>('[data-print-modules-all]')!.click();
-    });
-    expect(document.querySelectorAll('.a4-page')).toHaveLength(4);
+    expect(parsed.state).toHaveProperty('blocks');
+    expect(parsed.state).toHaveProperty('modules');
   });
 
   it('⑦【新】配色硬闸门：不达标禁存（store 一个字节都不落库）；达标才落', async () => {

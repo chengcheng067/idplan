@@ -30,6 +30,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 
 import { PrintSelectorPanel } from '../src/components/print/PrintPreviewDialog';
+import { printToggleableUnits } from '../src/print/model/print-units';
+import type { PrintBlockId } from '../src/print/model/print-units';
+import { printTemplateMeta } from '../src/components/print/print-templates';
+import type { PrintTemplateId } from '../src/components/print/print-templates';
 import { printTemplateModuleIds } from '../src/components/print/print-templates';
 import { builtCss as readBuiltCss } from './helpers/built-css';
 
@@ -72,20 +76,35 @@ function builtCss(): string {
   return readBuiltCss(ROOT);
 }
 
-/** 弹窗 markup（A 外表 + 全选原生模块）；缩略图 src 改写成 file:// 可加载的相对路径 */
-function panelMarkup(): string {
+/**
+ * 弹窗 markup（A 外表 + 五块全开）；缩略图 src 改写成 file:// 可加载的相对路径。
+ *
+ * ⚠️ 2026-10-13「5 块 × 4 模板」重构 · 批 1：A 走**五块清单**（决策 1），
+ * 中截不再是 11 个模块复选框 ⇒ 样本的 props 与状态条读数跟着改
+ * （4 行可勾：B1 由刊头承担、不可摘、不进清单）。
+ */
+function panelMarkup(template: PrintTemplateId = 'swiss-schedule'): string {
+  const meta = printTemplateMeta(template);
   const raw = renderToStaticMarkup(
     createElement(PrintSelectorPanel, {
-      template: 'swiss-schedule',
-      pagesCount: 4,
-      enabledModuleCount: 4,
-      enabledModules: printTemplateModuleIds('swiss-schedule'),
+      template,
+      pagesCount: meta.usesBlocks ? 2 : 4,
+      enabledModuleCount: meta.usesBlocks
+        ? printToggleableUnits(template).length
+        : printTemplateModuleIds(template).length,
+      enabledModules: printTemplateModuleIds(template),
       onTemplatePick: () => {},
       onToggleModule: () => {},
       onSelectAllModules: () => {},
       onSelectNoneModules: () => {},
-      blocks: { header: true, timeline: true, projectInfo: true, stageTable: true, footer: true },
-      onToggleBlock: () => {},
+      unitRows: printToggleableUnits(template).map((u) => ({
+        id: u.id as PrintBlockId,
+        label: u.label,
+        hint: u.hint,
+        checked: true,
+      })),
+      onToggleUnit: () => {},
+      forcedNote: meta.usesBlocks && template !== 'classic' ? '「打印头部」由模板刊头承担，不可摘。' : '',
       onClose: () => {},
     }),
   );
@@ -151,9 +170,12 @@ describe.skipIf(!CAN_RUN)('期六 · 选择器弹窗截图（真 Chromium + 真�
       const box = await (await page.$('[data-print-selector-panel]'))!.boundingBox();
       expect(box!.y).toBeGreaterThanOrEqual(0);
       expect(box!.y + box!.height).toBeLessThanOrEqual(900);
-      // 状态条读数（A 外表 4 模块 · 预计 4 页）
+      // 状态条读数（A 的五块清单：4 行可勾 · 预计 2 页）
       const status = await page.$eval('[data-print-selector-panel]', (el) => el.textContent ?? '');
-      expect(status).toContain('当前 4 个模块 · 预计 4 页');
+      expect(status).toContain('当前 4 块 · 预计 2 页');
+      // 五块清单的纪律文案（§2.6 纪律 1/2：不可摘的原因 + 装置不在此列）
+      expect(status).toContain('由模板刊头承担，不可摘');
+      expect(status).toContain('可摘项随版式而定');
 
       await (await page.$('[data-print-selector-panel]'))!.screenshot({
         path: join(OUT_DIR, 'selector-modal-full.png'),
@@ -167,7 +189,11 @@ describe.skipIf(!CAN_RUN)('期六 · 选择器弹窗截图（真 Chromium + 真�
     const css = builtCss();
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     try {
-      await page.goto('file://' + writeHtml('selector-modal-small.html', shell(panelMarkup(), css)));
+      // ⚠️ 批 1：A 改五块清单后内容恰好装下，本用例的「内部滚」判据需要内容更高的
+      // 样本 ⇒ 改用仍在 11 模块通路的 **D**（她的原场景不变量「不裁切」因此被完整保留）
+      await page.goto(
+        'file://' + writeHtml('selector-modal-small.html', shell(panelMarkup('data-editorial'), css)),
+      );
 
       // xl 仍生效 ⇒ 主从式（她的桌面场景：窗口没最大化，但不是窄屏）
       const dir = await page.$eval('[role="radiogroup"]', (el) => getComputedStyle(el).flexDirection);

@@ -11,6 +11,8 @@
  *
  * ── 六项各落在哪 ──
  *   ① 默认态页数：四版同 VM 真实渲染，逐页 794×1123 无裁切 + 结构标记
+ *      （2026-10-13「5 块 × 4 模板」重构 · 批 1：A 由「4 个原生模块页」改为
+ *      五块形态 ⇒ 合计 15 → **13** 页；D/E/H 本批未动，仍是 4/4/3）
  *      （A 有顶/底栏、E/H 无底栏、D 有 3px 头线、H 有局部中轴）——「与
  *      设计稿比对」的可断言部分（逐像素比对设计稿是人工活，spec 锁几何
  *      与结构，A/D 的先例 spec 同口径）。她 10-09 23:38 反馈修复后默认态
@@ -442,7 +444,7 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实�
     browser = await chromium.launch({ executablePath: CHROMIUM_PATH! });
   });
 
-  it('四版默认态：4 + 4 + 4 + 3 = 15 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
+  it('四版默认态：2 + 4 + 4 + 3 = 13 页，逐页 794×1123 无裁切，结构标记各就位', async () => {
     const css = builtCss();
     const vm = adminVm();
     const cases: Array<{ tag: string; markup: string; expected: number }> = [
@@ -451,7 +453,11 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实�
         markup: renderToStaticMarkup(
           createElement(SwissScheduleDocument, { vm, palette: PRINT_TEMPLATE_PALETTES['swiss-schedule'].baseline }),
         ),
-        expected: 4,
+        // 2026-10-13「5 块 × 4 模板」重构 · 批 1：A 从「4 个原生模块页」改为
+        // **五块形态**（决策 1）。本夹具 6 可见阶段：首页出 B1+B2+B3（甘特
+        // 6 条轨道 + 休息制度块把清单挤到下一页，与经典「首页只出时间轴」
+        // 同一口径），第 2 页出 B4（三列错落 + L3 改期记录）
+        expected: 2,
       },
       {
         tag: 'd',
@@ -499,7 +505,9 @@ describe.skipIf(!CAN_RUN)('批 5 · ① 默认态 15 页（四版同 VM 真实�
           await pages[i]!.screenshot({ path: join(OUT_DIR, `final-${c.tag}-p${i + 1}-color.png`) });
         }
       }
-      expect(totalPages, '四版合计 15 页（默认态收敛：全部落在原生签名页）').toBe(15);
+      // 2026-10-13 批 1：A 从 4 页（四个原生模块页）变 2 页（五块形态）
+      // ⇒ 合计 15 → 13；D/E/H 三版本批未动，仍是 4 + 4 + 3
+      expect(totalPages, '四版合计 13 页（A 五块形态 2 页 + D4 + E4 + H3）').toBe(13);
     } finally {
       await page.close();
     }

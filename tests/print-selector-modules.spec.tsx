@@ -573,40 +573,51 @@ describe('期二+期三 · L1-b 打印零变化红线（缺键 = 原生签名页
  * ==================================================================================== */
 
 describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
-  it('A 外表：4 原生默认全选 + 7 暂不可用禁用（禁用态带原因）', () => {
+  it('D 外表：4 原生默认全选 + 3 通用可勾不默认 + 4 暂不可用禁用（禁用态带原因）', () => {
     renderDialog(true);
     openSelector();
-    pickTemplate('swiss-schedule');
+    /*
+     * ⚠️ 2026-10-13「5 块 × 4 模板」重构 · 批 1：本用例原以 **A** 为样本
+     * （「4 原生默认全选 + 7 暂不可用禁用」）。批 1 后 A 走**五块清单**（决策 1），
+     * 模块清单的存在性证据必须由仍在模块通路的模板承担 ⇒ 样本换成 **D**。
+     * D 的形状更全：4 原生 + 3 通用 + 4 暂不可用（A 没有通用）。
+     */
+    pickTemplate('data-editorial');
 
     // 11 行齐全（4 套模板都是同一个 11 模块表单，三态随外表变）
     expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
     // 原生：可勾选且默认全选（01 §8），行带归属页名
-    for (const m of ['stage-list', 'task-list', 'delay-ledger', 'member-roster']) {
-      const input = moduleCheckbox(m);
-      expect(input.disabled, `${m} 原生应可勾`).toBe(false);
-      expect(input.checked, `${m} 默认应勾选`).toBe(true);
-      expect(moduleRow(m).getAttribute('data-avail')).toBe('native');
-    }
-    expect(moduleRow('stage-list').textContent, '原生行标注归属页名').toContain('阶段总览');
-    expect(moduleRow('member-roster').textContent).toContain('成员责任表');
-    // 暂不可用：禁用 + 不勾 + 原因文案（M3/M5-M11 等后续批次，不装能打）
     for (const m of [
       'progress-matrix',
       'dependency-network',
       'workload-composition',
       'milestone-acceptance',
-      'artifact-list',
-      'agent-execution',
-      'writeback-proposals',
     ]) {
       const input = moduleCheckbox(m);
-      expect(input.disabled, `${m} 在 A 外表下应禁用`).toBe(true);
+      expect(input.disabled, `${m} 原生应可勾`).toBe(false);
+      expect(input.checked, `${m} 默认应勾选`).toBe(true);
+      expect(moduleRow(m).getAttribute('data-avail')).toBe('native');
+    }
+    expect(moduleRow('progress-matrix').textContent, '原生行标注归属页名').toContain('阶段进度矩阵');
+    expect(moduleRow('milestone-acceptance').textContent).toContain('里程碑与验收');
+    // 通用渲染：可勾、默认不勾（默认态 = 原生签名页）+ 行内标注「通用渲染」
+    for (const m of ['stage-list', 'task-list', 'member-roster']) {
+      const input = moduleCheckbox(m);
+      expect(input.disabled, `${m} 通用应可勾`).toBe(false);
+      expect(input.checked, `${m} 通用默认不勾`).toBe(false);
+      expect(moduleRow(m).getAttribute('data-avail')).toBe('generic');
+      expect(moduleRow(m).textContent).toContain('通用渲染');
+    }
+    // 暂不可用：禁用 + 不勾 + 原因文案（后续批次，不装能打）
+    for (const m of ['delay-ledger', 'artifact-list', 'agent-execution', 'writeback-proposals']) {
+      const input = moduleCheckbox(m);
+      expect(input.disabled, `${m} 在 D 外表下应禁用`).toBe(true);
       expect(input.checked, `${m} 禁用态不勾选`).toBe(false);
       expect(moduleRow(m).getAttribute('data-avail')).toBe('off');
       expect(moduleRow(m).textContent, '禁用行带原因').toContain('该外表下暂不可用');
     }
     // 禁用行点不动：store 不收暂不可用模块的勾选
-    expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toBeUndefined();
+    expect(usePrintPrefsStore.getState().modules['data-editorial']).toBeUndefined();
   });
 
   it('人类化后的 H 外表：3 人类原生默认勾选 + 8 暂不可用（M10/M11 已下架）', () => {
@@ -700,14 +711,22 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     expect(paperPages()).toBe(3);
   });
 
-  it('勾选态按外表各存一套：A 摘任务清单 → 切 D → 回 A 仍摘着', async () => {
+  it('勾选态按外表各存一套：E 摘产出物清单 → 切 D → 回 E 仍摘着', async () => {
+    /*
+     * ⚠️ 2026-10-13 批 1：本用例原以 **A** 为载体（A 摘任务清单 → 切 D → 回 A）。
+     * A 走五块清单后模块勾选态不再属于它的界面面，故载体换成 **E**
+     * （原生 3 + 通用 1，正好覆盖「原生摘掉」与「通用可勾但不默认」两件事）。
+     */
     renderDialog(true);
     openSelector();
-    pickTemplate('swiss-schedule');
-    setModuleChecked('task-list', false);
-    expect(paperPages()).toBe(3);
+    pickTemplate('editorial-index');
+    const base = paperPages();
+    expect(base, 'E 默认 = 3 原生签名页').toBe(3);
+    // 摘一个**原生**模块（产出物清单）⇒ 纸面少一页
+    setModuleChecked('artifact-list', false);
+    expect(paperPages()).toBe(base - 1);
 
-    // 切 D：中截按 D 重建（默认 = 4 原生签名页 ⇒ 4 页），A 的勾选不动
+    // 切 D：中截按 D 重建（默认 = 4 原生签名页 ⇒ 4 页），E 的勾选不动
     pickTemplate('data-editorial');
     expect(paperPages()).toBe(4);
     expect(bodyContains('预计 4 页')).toBe(true);
@@ -743,20 +762,20 @@ describe('期二+期三 · L1-c 选择器中截（真实对话框）', () => {
     ]);
     setModuleChecked('task-list', false);
 
-    // 回 A：task-list 仍被摘着（按模板分键，换模板不丢）
-    pickTemplate('swiss-schedule');
-    expect(moduleCheckbox('task-list').checked, '回 A 后 task-list 仍摘着').toBe(false);
+    // 回 E：artifact-list 仍被摘着（按模板分键，换模板不丢）
+    pickTemplate('editorial-index');
+    expect(moduleCheckbox('artifact-list').checked, '回 E 后 artifact-list 仍摘着').toBe(false);
     expect(moduleCheckbox('stage-list').checked, '没动的模块仍勾着').toBe(true);
-    expect(paperPages()).toBe(3);
+    expect(paperPages()).toBe(base - 1);
 
-    // 落库形状：模块 id（不是旧页 id）
+    // 落库形状：模块 id（不是旧页 id）；E 的集合里没有 artifact-list
     await flush();
     const raw = localStorage.getItem(PRINT_PREFS_STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!) as { state: { pages: Record<string, string[]>; modules: Record<string, string[]> } };
     // 债② 双写：modules 是正主，pages 是兼容旧读者的镜像键，两键同值
-    expect(parsed.state.modules['swiss-schedule']).toEqual(['stage-list', 'delay-ledger', 'member-roster']);
-    expect(parsed.state.pages['swiss-schedule']).toEqual(parsed.state.modules['swiss-schedule']);
+    expect(parsed.state.modules['editorial-index']).toEqual(['stage-list', 'member-roster']);
+    expect(parsed.state.pages['editorial-index']).toEqual(parsed.state.modules['editorial-index']);
   });
 });
 
@@ -1032,9 +1051,10 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
       previewCloseCalls += 1;
     });
     openSelector();
-    pickTemplate('swiss-schedule');
-    // 关掉一个模块（即时生效）
-    setModuleChecked('task-list', false);
+    // ⚠️ 批 1：原以 A 为载体，A 走五块清单后改用 D（仍在模块通路）
+    pickTemplate('data-editorial');
+    // 勾一个通用模块（即时生效）
+    setModuleChecked('task-list', true);
     expect(document.querySelectorAll('[data-print-module-row]')).toHaveLength(11);
 
     act(() => {
@@ -1070,10 +1090,13 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     expect(previewCloseCalls, '第二次 Esc 才轮到下层（栈顶随出栈转移到预览）').toBe(1);
 
     // 关闭后纸面仍是改过的勾选态（即时重渲染，无待确认）
-    expect(usePrintPrefsStore.getState().modules['swiss-schedule']).toEqual([
-      'stage-list',
-      'delay-ledger',
-      'member-roster',
+    // 起手 = D 的默认集（原生四模块）⇒ 勾上通用 task-list 后 = 五条，按 M1→M11 序
+    expect(usePrintPrefsStore.getState().modules['data-editorial']).toEqual([
+      'task-list',
+      'progress-matrix',
+      'dependency-network',
+      'workload-composition',
+      'milestone-acceptance',
     ]);
   });
 
