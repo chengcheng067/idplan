@@ -375,3 +375,66 @@ describe('批 1 地基 · 等价性：新派生层 ≡ 经典私有派生（跨�
     ).toBeLessThan(1e-9);
   });
 });
+
+/* ====================================================================================
+ * 批 B 裁决「顺带补一件」：**A 与 D 的视图窗口等价**（跨实现比对）
+ * ====================================================================================
+ * 裁决原文（批 B 落地后的裁决区）：
+ *   「A 与 D 的窗口等价性断言：`deMatrixWindow` 与 `buildPrintGantt` 的视图窗口
+ *    （计划窗口 ∪ 阶段起止、空串脏行过滤）**逐值相等**，落成常驻断言。口径同你在
+ *    A 批做过的那条（同一夹具、**跨实现比对**，不是调两次同一个函数）。」
+ *
+ * 为什么必须两处同口径：A 用**条**表达时间、D 用**格**表达时间，两者是同一张纸族
+ * 的两把尺子——窗口差一天，同一个项目在两套模板上画出的时间范围就不一样，读者按
+ * D 的格去读 A 的条会错位。两个实现各自独立（`buildPrintGantt` 走 reduce 求 union、
+ * `deMatrixWindow` 走独立的 min/max），故这里是**真·跨实现比对**。
+ * 变异自证：把 `deMatrixWindow` 的空串过滤删掉（或改成不取 union）⇒ 本组转红。
+ */
+import { deMatrixWindow } from '../src/print/pages/data-editorial/matrix';
+
+describe('批 B 裁决 · A 与 D 的视图窗口等价（跨实现，含空串脏行）', () => {
+  /** 夹具：双侧越出计划窗口 + 一条空串脏行（与 A 组同一构造思路） */
+  const dirty = [
+    ...GANTT_INPUT,
+    {
+      id: 'dirty-row',
+      orderIndex: 9,
+      name: '脏行',
+      startAt: '',
+      endAt: '',
+      status: StageStatus.NotStarted,
+      colorIndex: 9,
+      customColor: null,
+    },
+  ];
+  const project = { plannedStartAt: PROJECT.plannedStartAt, plannedEndAt: PROJECT.plannedEndAt };
+
+  it('★ 同一夹具下 viewStart / viewEnd 逐值相等（空串脏行不得改变窗口）', () => {
+    for (const [label, stages] of [
+      ['干净夹具', GANTT_INPUT],
+      ['带空串脏行', dirty],
+    ] as const) {
+      const gantt = buildPrintGantt(project, stages);
+      const matrix = deMatrixWindow(project, stages);
+      expect(matrix.viewStart, `${label}：viewStart 与 buildPrintGantt 逐值相等`).toBe(
+        gantt.viewStart,
+      );
+      expect(matrix.viewEnd, `${label}：viewEnd 与 buildPrintGantt 逐值相等`).toBe(
+        gantt.viewEnd,
+      );
+      // 两侧都被 union 撑开（不是只取计划窗口）：越界阶段确实参与取 min/max
+      expect(gantt.viewStart, `${label}：窗口左端被越界阶段撑开`).toBe(EXPECTED_VIEW_START);
+      expect(gantt.viewEnd, `${label}：窗口右端被越界阶段撑开`).toBe(EXPECTED_VIEW_END);
+    }
+  });
+
+  it('★ 脏行不参与窗口：带脏行与不带脏行的两个实现**同时**给出同一个窗口', () => {
+    const clean = deMatrixWindow(project, GANTT_INPUT);
+    const withDirty = deMatrixWindow(project, dirty);
+    expect(withDirty).toEqual(clean);
+    expect(withDirty.viewStart, '空串脏行不得把 viewStart 拉成空串').not.toBe('');
+    // 两实现交叉：A 的实现（脏行）与 D 的实现（干净）也须一致
+    expect(buildPrintGantt(project, dirty).viewStart).toBe(clean.viewStart);
+    expect(buildPrintGantt(project, dirty).viewEnd).toBe(clean.viewEnd);
+  });
+});
