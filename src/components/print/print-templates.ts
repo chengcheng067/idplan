@@ -315,7 +315,9 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     scene: '跳读大编号索引：阶段 / 成员 / 产出物归档',
     thumb: '/print-thumbs/E-editorial-index-p1.png',
     implemented: true,
-    usesBlocks: false,
+    // 2026-10-13 批 C：E 起走**五块模型**（决策 1）；3 个原生模块条目保留在
+    // 能力表里（代码与 spec 全留，只是不再有暴露面）。H 仍走模块清单（批 D）。
+    usesBlocks: true,
     // 期三第一批：M2 任务清单在 E 无原生页 ⇒ 通用渲染；M1/M4 已有原生目录页
     modules: [
       {

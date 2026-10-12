@@ -63,6 +63,8 @@ export type PrintDeviceId =
   | 'de-band'
   /** E · 两行巨题装置（衬线，行 1 墨 / 行 2 赭红） */
   | 'ei-giant-title'
+  /** E · `SHEET nn / NN · A4` 页签（刊头身份装置；与页脚页码**并存**，职责不同） */
+  | 'ei-sheet-tag'
   /** H · 页顶出血巨字（品牌词 + 叠字主题词） */
   | 'ap-flood-top'
   /** H · 页底出血巨字 IDPLAN（B5 的署名由它承担，**不许摘**） */
@@ -146,11 +148,13 @@ function deviceSpec(id: PrintDeviceId, label: string, hint: string): PrintUnitSp
 /**
  * 逐套模板的单元表（**决策 5 第 1 条的唯一出处**）。
  *
- * ⚠️ 读表须知：D/E/H 三套的单元**已经在册**（注册表是一等公民，批 2/3/4 的
- * 文档层直接接消费者），但这不代表它们今天走这套模型渲染——今天的消费者只有
- * classic 与 `swiss-schedule`（`printTemplateUnits` 的调用方按 `usesBlocks` 分流，
- * 见 `PrintPreviewDialog`）。把它们先写全，是为了让「开放装置勾选」那次改动
- * **不必再补一轮注册表**（决策 5 的「不开刀、只换数据源」）。
+ * ⚠️ 读表须知（2026-10-13 批 C 后订正）：**A / D / E / classic 四套已经在册并
+ * 在跑**——它们的文档层直接消费 `resolveUnits(...)` 的结果（`usesBlocks` 分流，
+ * 见 `PrintPreviewDialog`）。**H 的条目先在册、今天还不消费**（批 D 才切）：
+ * `printTemplateUnits` 的调用方按 `usesBlocks` 分流，H 仍走 11 模块通路，
+ * 但注册表已经写全——这样「开放装置勾选」那次改动**不必再补一轮注册表**
+ * （决策 5 的「不开刀、只换数据源」）。H 的 `agent-poster` 条目今天也照样被
+ * `printTemplateUnitIds` 读到，选择器分流的判据是 `usesBlocks` 而不是本表。
  */
 export const PRINT_TEMPLATE_UNITS: Record<PrintTemplateId, readonly PrintUnitSpec[]> = {
   classic: [
@@ -172,6 +176,7 @@ export const PRINT_TEMPLATE_UNITS: Record<PrintTemplateId, readonly PrintUnitSpe
   'editorial-index': [
     ...blockSpecs(['header']),
     deviceSpec('ei-giant-title', '两行巨题', '衬线巨题（目录身份装置）'),
+    deviceSpec('ei-sheet-tag', 'SHEET 页签', 'SHEET nn / NN · A4（刊头身份；与页脚页码并存）'),
   ],
   'agent-poster': [
     // H：B1 不可取消（项目名只在 meta 行） + B5 不可取消（页码与品牌装置，§2.6）

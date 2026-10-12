@@ -33,8 +33,20 @@ import { A4_WIDTH_PX, A4_HEIGHT_PX } from '../../lib/schedule-print';
 import { enabledSheetsOf, printTemplateClass } from '../../components/print/print-templates';
 import type { PrintSheet } from '../../components/print/print-templates';
 
+import { StageStatus } from '../../core/types/enums';
 import type { PrintMemberVM, PrintPageKind, PrintStageVM, PrintViewModel } from '../model/print-view-model';
 import type { PrintPalette } from '../model/print-palette';
+import { buildPrintGantt, type PrintGanttModel } from '../model/print-gantt';
+import {
+  blockRecordOf,
+  resolveUnits,
+  unitEnabled,
+  type PrintUnitId,
+  type ResolvedPrintUnit,
+} from '../model/print-units';
+import { EI_SPAN_ROW_H, SpanIndex } from '../pages/editorial-index/SpanIndex';
+import { EiReschedule } from '../pages/editorial-index/Reschedule';
+import type { SchedulePaperBlocks } from '../../lib/schedule-print';
 import { EmptyPrintState } from '../parts/EmptyPrintState';
 import { PrintLogoMark } from '../parts/PrintLogoMark';
 import { GenericModuleBody } from '../pages/generic/GenericModuleBody';
@@ -44,7 +56,15 @@ import {
   planGenericModule,
   type GenericPlan,
 } from '../pages/generic/shared';
-import { paginateEiEntries, stampOf, type EiEntry } from '../pages/editorial-index/shared';
+import {
+  EI_BLOCK_NOTE,
+  eiRescheduleRows,
+  paginateEiEntries,
+  STAGE_GLYPH,
+  stageStatusLabel,
+  stampOf,
+  type EiEntry,
+} from '../pages/editorial-index/shared';
 import {
   ArtifactIndexEmpty,
   ArtifactIndexPage,
@@ -138,6 +158,12 @@ export interface EditorialIndexDocumentProps {
    * E 的 M2 任务清单无原生页 ⇒ 走通用渲染（该外表基础排版承接）。
    */
   sheets?: readonly PrintSheet[];
+  /**
+   * **解析好的单元**（`resolveUnits('editorial-index', prefs)` 的结果：5 块 + 2 件
+   * 版性装置 `ei-giant-title` / `ei-sheet-tag`）。未传 `sheets` 时走「5 块形态」。
+   * 与 A/D 同一条路（决策 5 第 2 条）：将来开放装置勾选只改 registry。
+   */
+  units?: readonly ResolvedPrintUnit[];
   /** 有效配色（自定义或设计师基线；三枚 hex） */
   palette: PrintPalette;
   /** 全局打印 logo（base64 dataURL；null = 未上传，显示「ID Plan」文字标） */
@@ -149,12 +175,25 @@ export interface EditorialIndexDocumentProps {
 export function EditorialIndexDocument({
   vm,
   sheets,
+  units,
   palette,
   logo = null,
   pageRef,
 }: EditorialIndexDocumentProps): JSX.Element {
-  const physical = editorialIndexPhysical(vm, sheets ?? enabledSheetsOf('editorial-index', undefined));
-  const total = physical.length;
+  // 同一条解析路径（决策 5 第 2 条；与 A/D 逐字同款）
+  const resolvedUnits = units ?? resolveUnits('editorial-index', undefined);
+  const blocks = blockRecordOf(resolvedUnits);
+  const show = (id: PrintUnitId): boolean => unitEnabled(resolvedUnits, id);
+  /**
+   * 两种形态的分流（**唯一分叉点**）：
+   *   · 传了 `sheets` ⇒ legacy 原生页路径（三页 + 通用模块；出选择器但代码全留）；
+   *   · 否则 ⇒ 5 块形态（决策 1：选择器只暴露 5 块；缺省 = 五块全开）。
+   */
+  const legacy = sheets ? editorialIndexPhysical(vm, sheets) : null;
+  const blockPages = legacy === null ? eiBlockPages(vm, blocks) : null;
+  const total = legacy ? legacy.length : (blockPages?.length ?? 0);
+  /** B2 的甘特模型：与 A/D 同一套派生（`buildPrintGantt`），只算一次 */
+  const gantt = legacy === null ? buildPrintGantt(vm.project, vm.stages) : null;
 
   return (
     <div
@@ -167,17 +206,34 @@ export function EditorialIndexDocument({
         } as CSSProperties
       }
     >
-      {physical.map((p, idx) => (
-        <EiPage
-          key={`${p.kind}-${idx}`}
-          page={p}
-          vm={vm}
-          logo={logo}
-          pageIndex={idx}
-          pageTotal={total}
-          pageRef={pageRef?.(idx)}
-        />
-      ))}
+      {legacy &&
+        legacy.map((p, idx) => (
+          <EiPage
+            key={`${p.kind}-${idx}`}
+            page={p}
+            vm={vm}
+            logo={logo}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+          />
+        ))}
+      {blockPages &&
+        gantt &&
+        blockPages.map((plan, idx) => (
+          <EiBlockPage
+            key={`blocks-${idx}`}
+            vm={vm}
+            blocks={blocks}
+            show={show}
+            plan={plan}
+            gantt={gantt}
+            logo={logo}
+            pageIndex={idx}
+            pageTotal={total}
+            pageRef={pageRef?.(idx)}
+          />
+        ))}
     </div>
   );
 }
@@ -195,11 +251,20 @@ export type EiPhysical =
       plan: GenericPlan | null;
       chunkIndex: number;
       chunkTotal: number;
-    };
+    }
+  /** 5 块形态的纸面（批 C）：B1..B5 的物理页（B2/B4 各自按页预算切片） */
+  | { kind: 'blocks'; plan: EiBlockPagePlan };
 
-/** 逻辑页 → 物理页组（条目构造 + 分页；空逻辑页 = 一张空态纸） */
-export function editorialIndexPhysical(vm: PrintViewModel, sheets: readonly PrintSheet[]): EiPhysical[] {
-  const out: EiPhysical[] = [];
+/**
+ * 逻辑页 → 物理页组（条目构造 + 分页；空逻辑页 = 一张空态纸）。
+ * 返回类型收窄掉 'blocks'（5 块形态不走本函数）——两套粒度在同一份物理页联合类型
+ * 里共存，但**装配器各管各的**，类型上就不会串。
+ */
+export function editorialIndexPhysical(
+  vm: PrintViewModel,
+  sheets: readonly PrintSheet[],
+): Exclude<EiPhysical, { kind: 'blocks' }>[] {
+  const out: Exclude<EiPhysical, { kind: 'blocks' }>[] = [];
 
   for (const sheet of sheets) {
     if (sheet.type === 'generic') {
@@ -296,7 +361,8 @@ function EiPage({
   pageTotal,
   pageRef,
 }: {
-  page: EiPhysical;
+  /** 只接 legacy 页（5 块形态走 `EiBlockPage`）⇒ 类型收窄，'blocks' 不可达 */
+  page: Exclude<EiPhysical, { kind: 'blocks' }>;
   vm: PrintViewModel;
   logo: string | null;
   pageIndex: number;
@@ -322,39 +388,16 @@ function EiPage({
           logo 就住在本页头左上格（2026-10-11 P0-16：内容区那处重复 logo 已删，
           参考稿的内容区没有 logo；产品要求每页仍须有且只有一枚）。
           页题拆两行（P0-12）：行1 墨 / 行2 焦点色，衬线巨字。 */}
-      <header className="ei-head">
-        <div className="ei-head__left">
-          <div className="ei-head__logo">
-            <PrintLogoMark logo={logo} height={22} />
-          </div>
-          <p className="ei-head__kicker">
-            <span className="ei-head__signal" aria-hidden />
-            {title.en}
-          </p>
-          <h1 className="ei-head__title">
-            {titleLines.map((line, i) => (
-              <span
-                key={`${line}-${i}`}
-                className="ei-head__title-line"
-                data-tone={i === titleLines.length - 1 ? 'accent' : 'ink'}
-              >
-                {line}
-              </span>
-            ))}
-          </h1>
-        </div>
-        <div className="ei-head__right">
-          {/* 项目名最多两行，超出截断；完整文本经 title 可访问（02 §8） */}
-          <p className="ei-head__project" title={vm.project.name}>
-            {vm.project.name}
-          </p>
-          <p className="ei-head__meta">
-            {vm.project.scheduleBasisLabel} · {vm.project.plannedStartAt} – {vm.project.plannedEndAt}
-            {vm.project.clientName ? ` · 委托人 ${vm.project.clientName}` : ''}
-          </p>
-        </div>
-        <div className="ei-head__rule" aria-hidden />
-      </header>
+      {/* 刊头装置（两行巨题 + SHEET 页签；批 C 把页头抽成共享件 `EiHead`）。
+          装置形态不因 5 块改造而变（批 B 裁决第 5 条的一般规则）——只换载荷。 */}
+      <EiHead
+        vm={vm}
+        logo={logo}
+        pageIndex={pageIndex}
+        pageTotal={pageTotal}
+        titleLines={titleLines}
+        sheetTag={true}
+      />
 
       {/* 主体：目录条目（分页产物）/ 通用模块（期三）；空逻辑页走明确空态 */}
       <div className="ei-body">
@@ -384,7 +427,13 @@ function GenericModuleEmpty({
 }
 
 /** 逻辑页主体分发（每页组件独立；联合类型收窄，无 any cast；空态/通用模块同口） */
-function LogicalBody({ page, vm }: { page: EiPhysical; vm: PrintViewModel }): JSX.Element {
+function LogicalBody({
+  page,
+  vm,
+}: {
+  page: Exclude<EiPhysical, { kind: 'blocks' }>;
+  vm: PrintViewModel;
+}): JSX.Element {
   if (page.kind === 'generic') {
     return page.plan === null ? (
       <GenericModuleEmpty module={page.module} />
@@ -416,3 +465,415 @@ function LogicalEmpty({ kind }: { kind: PrintPageKind }): JSX.Element {
       return <EmptyPrintState kind="stages" text="该页属于其他版本模板" />;
   }
 }
+
+/* ====================================================================================
+ * 刊头装置（共享件）+ 5 块形态（2026-10-13 「5 块 × 4 模板」重构 · 批 C）
+ * ====================================================================================
+ * 依据 `deliverables/gstack/print-5blocks-mapping-2026-10-13.md`：
+ *   · §1.3 = E 的 5 块映射（逐格照做）；§0.5 = B4 的 L3「改期记录」；
+ *   · §2.6 = 装置 vs 内容（E 的两行巨题 / `SHEET` 页签恒在、不可摘）；
+ *   · §3 铁律①= B1 ∪ B3 是同一组字段全集（分界线按各版刊头承载能力走）。
+ * ==================================================================================== */
+
+/**
+ * 刊头装置（B1 的承载 + 两行巨题 + `SHEET` 页签）。
+ *
+ * ── 逐字段自查（批 C 移交项：任何条件组合下不许丢字段）──
+ *   · 项目名 `ei-head__project` —— 恒渲染（B1 在 E 是 forced、不可取消）；
+ *   · 周期 —— 恒渲染，无任何条件分支包裹；
+ *   · 打印日期 —— 恒渲染（§1.3 的乙项，本次新增登纸）；
+ *   · 委托人 —— **权限语义的「本来就没有」**（VM 层对非 admin 恒 undefined），
+ *     admin 且有值时与周期同排出现，不与其他字段互斥；
+ *   · 排期基准 / 阶段套餐 —— **归 B3**（同页两处印同一个值是被用户点名过的排版病）。
+ * ── `SHEET` 页签（批 C 新增，§1.3 乙项）──
+ * 与 B5 的「阶段目录 · 第 n / N 页」**并存**：页签是刊头身份装置（参考稿有），
+ * 页码在页脚是页序告知，职责不同（批 C 裁决第 2 条：不清理后者）。
+ */
+function EiHead({
+  vm,
+  logo,
+  pageIndex,
+  pageTotal,
+  titleLines,
+  sheetTag,
+}: {
+  vm: PrintViewModel;
+  logo: string | null;
+  pageIndex: number;
+  pageTotal: number;
+  titleLines: readonly string[];
+  sheetTag: boolean;
+}): JSX.Element {
+  return (
+    <header className="ei-head">
+      <div className="ei-head__left">
+        <div className="ei-head__logo">
+          <PrintLogoMark logo={logo} height={22} />
+        </div>
+        <div className="ei-head__kicker-row">
+          <p className="ei-head__kicker">
+            <span className="ei-head__signal" aria-hidden />
+            {EI_PAGE_TITLES['stage-index']!.en}
+          </p>
+          {sheetTag && (
+            <span className="ei-head__sheet de-num" data-print-sheet-tag="">
+              SHEET {String(pageIndex + 1).padStart(2, '0')} /{' '}
+              {String(pageTotal).padStart(2, '0')} · A4
+            </span>
+          )}
+        </div>
+        <h1 className="ei-head__title">
+          {titleLines.map((line, i) => (
+            <span
+              key={`${line}-${i}`}
+              className="ei-head__title-line"
+              data-tone={i === titleLines.length - 1 ? 'accent' : 'ink'}
+            >
+              {line}
+            </span>
+          ))}
+        </h1>
+      </div>
+      <div className="ei-head__right">
+        <p className="ei-head__project" title={vm.project.name}>
+          {vm.project.name}
+        </p>
+        <p className="ei-head__meta">
+          {vm.project.plannedStartAt} – {vm.project.plannedEndAt}
+          {vm.project.clientName ? ` · 委托人 ${vm.project.clientName}` : ''}
+          {` · 打印日期 ${vm.generatedAt.slice(0, 10)}`}
+        </p>
+      </div>
+      <div className="ei-head__rule" aria-hidden />
+    </header>
+  );
+}
+
+/**
+ * E 5 块形态的纸面几何常量（px；纪律同 A/D：实测校准、**只许偏大不许偏小**）。
+ *
+ * ── 实测对照（2026-10-13 批 C · 真 Chromium 794×1123 · 9 阶段首页）──
+ *
+ *   | 常量            | 取的估值 | 单件实测         | 差    |
+ *   |-----------------|---------:|------------------|-------|
+ *   | `pageShell`     |      400 | 刊头 330.22 + 页脚 40 + 内距 20 = 390.22 | +9.78 |
+ *   | `b2Chrome`      |       44 | caption 14.25 + 标尺 19 | +10.75 |
+ *   | `b3`            |       47 | 元信息行 30.5 + 基准行 15.75 = 46.25 | +0.75 |
+ *   | `noteH`         |       44 | 口径行 44         |  0    |
+ *   | `reschedHead`   |      106 | L3 头 101         | +5    |
+ *   | `reschedRow`    |       24 | 每条 24           |  0    |
+ *   | B2 行 `EI_SPAN_ROW_H` | 30 | 行实测 30        |  0    |
+ *   | B4 行 `EI_ROW_H.stage.normal` | 69 | 巨编号行 69 |  0    |
+ *
+ * **每一项都 ≥ 实测**（`b3` 取整进位到 47）——估值偏小就会少算页数、实际出纸
+ * 溢出，那是「预计 ≠ 实际」里最坏的一种（少报）。整表由
+ * `print-a4-visual-e.spec.ts` 的页数表用例逐档核到「预计 = 实际 + 逐页 ≤1123」。
+ */
+const EI_BLOCK_EST = {
+  /** 页壳：刊头 334（与 legacy 同源）+ 页脚 46 + 主体内距 20 */
+  pageShell: EI_HEAD_H + EI_FOOT_H + EI_BODY_PADDING,
+  /** B2 chrome：caption 行 + 时间标尺（1px + 月份小字） */
+  b2Chrome: 44,
+  /** B3 簇的**承载区**（元信息行 + 排期基准行）——只首页 */
+  b3: 47,
+  /**
+   * 口径行（`.ei-note`）的高度 —— **每页都占位**（§2.6 原则 1：口径行恒在）。
+   * ⚠️ 批 C 探针抓到：第一版把它算进 B3（只首页），于是续页的预算多了 44px
+   * ⇒ 16 阶段第 2 页实测溢出 32px。口径行与 B3 是**两件事**：B3 关掉它也在
+   * （锚回主体底部），续页它也在。
+   */
+  noteH: 44,
+  /** L3 改期记录固定头 + 每条（与 D 同源） */
+  reschedHead: 106,
+  reschedRow: 24,
+} as const;
+
+const EI_BLOCK_AVAIL = A4_HEIGHT_PX - EI_BLOCK_EST.pageShell;
+
+/** 一页的 5 块装配计划（B2 与 B4 共用 `stages` 切片） */
+export interface EiBlockPagePlan {
+  first: boolean;
+  stages: readonly PrintStageVM[];
+  /** 本页是 B4 的最后一页（L3 挂这里；§0.5） */
+  last: boolean;
+}
+
+/**
+ * 5 块形态的物理页装配（**预计页数 = 实际出纸**的唯一出处）。
+ *
+ * ⚠️ 行成本的对价（批 B 的教训）：**两个块各自在才算自己的行高** —— B2 一行
+ * （`EI_SPAN_ROW_H`）与 B4 一行（`EI_ROW_H.stage`，紧凑档更小）**都要付**
+ * （两者共用同一切片）；关掉任一块时只收留下那块的成本。
+ *
+ * ── 实测页数表（2026-10-13 批 C · 真 Chromium 794×1123 · 预计 = 实际逐档核过）──
+ * 夹具：`print-a4-visual-e.spec.ts` 的 `buildVm(n)`（含 1 条改期记录 ⇒ L3 上纸）。
+ *
+ *   | 阶段 n | 无改期记录 | 有改期记录 | 档位      |
+ *   |-------:|-----------:|-----------:|-----------|
+ *   |   1–5  |          1 |          1 | normal    |
+ *   |   6–7  |          1 |          1 | compact   |
+ *   |   8     |          1 |          2 | normal    |
+ *   |   9–10  |          2 |          2 | normal/紧凑 |
+ *   |  12    |          2 |          2 | compact   |
+ *   |  16–17 |          2 |          3 | compact   |
+ *   |  20    |          3 |          3 | compact   |
+ *   |  24    |          3 |          4 | compact   |
+ *   |  30    |          4 |          4 | compact   |
+ *   |  40    |          5 |          6 | compact   |
+ *   |  60    |          7 |          8 | compact   |
+ *
+ * 两条读表须知：
+ *   ① **L3 改期记录会多吃一页**（8 阶段起可见）：它是 B4 的附属件（§0.5），
+ *      关掉 B4 时一并消失（§2.6「附属件随主块」）；
+ *   ② 只关 B2 / 只关 B4 的页数各有一份独立表（`print-a4-visual-e` 的块独立用例
+ *      逐档核过：「关 B2 只跨度目录消失、关 B4 只巨编号目录消失，页数各自联动」）。
+ */
+/** 某页（首页 / 续页）留给「阶段行」的预算：扣 B3 承载区（仅首页）与**口径行（每页）** */
+function eiBlockAvailOf(first: boolean, blocks: SchedulePaperBlocks): number {
+  return (
+    EI_BLOCK_AVAIL -
+    (first ? EI_BLOCK_EST.b3 : 0) -
+    EI_BLOCK_EST.noteH -
+    (blocks.timeline ? EI_BLOCK_EST.b2Chrome : 0)
+  );
+}
+
+/** 按给定「清单行高」跑一遍贪心装页（确定性纯函数；两档各跑一次，见 `eiBlockPages`） */
+function planEiBlockPages(
+  vm: PrintViewModel,
+  blocks: SchedulePaperBlocks,
+  listRow: number,
+): EiBlockPagePlan[] {
+  const stages = vm.stages;
+  const total = stages.length;
+  if (total === 0) return [{ first: true, stages: [], last: true }];
+
+  const resched = blocks.stageTable ? eiRescheduleRows(vm) : [];
+  const reschedH =
+    resched.length > 0 ? EI_BLOCK_EST.reschedHead + resched.length * EI_BLOCK_EST.reschedRow : 0;
+
+  /**
+   * 某页能装几行阶段：**两个块各自在才算自己的行高**（批 B 的教训）——
+   * B2 一行（`EI_SPAN_ROW_H`）与 B4 一行（本档的 `listRow`）**都要付**
+   * （两者共用同一切片）；关掉任一块时只收留下那块的成本。
+   */
+  const capOf = (avail: number): number => {
+    const perRow = (blocks.timeline ? EI_SPAN_ROW_H : 0) + (blocks.stageTable ? listRow : 0);
+    if (perRow <= 0) return 0;
+    return Math.max(Math.floor(avail / perRow), 0);
+  };
+
+  const pages: EiBlockPagePlan[] = [];
+  let cursor = 0;
+  let shelled = false;
+  let guard = 0;
+  while (cursor < total && guard++ < 512) {
+    const first = pages.length === 0;
+    const avail = eiBlockAvailOf(first, blocks);
+    const remaining = total - cursor;
+    const cap = capOf(avail);
+    const capTail = capOf(avail - reschedH);
+    if (cap >= remaining && capTail >= remaining) {
+      pages.push({ first, stages: stages.slice(cursor), last: true });
+      break;
+    }
+    const take = Math.max(Math.min(capTail > 0 ? capTail : cap, remaining), 0);
+    if (take > 0) {
+      pages.push({ first, stages: stages.slice(cursor, cursor + take), last: false });
+      cursor += take;
+      continue;
+    }
+    if (!shelled) {
+      shelled = true;
+      pages.push({ first, stages: [], last: false });
+      continue;
+    }
+    pages.push({ first, stages: stages.slice(cursor), last: true });
+    break;
+  }
+  // 兜底：B4 有承载时**必须**有一页收口（否则 L3 会静默不上纸）
+  if (blocks.stageTable && total > 0 && !pages.some((pg) => pg.last)) {
+    const i = pages.length - 1;
+    pages[i] = {
+      ...pages[i]!,
+      stages: pages[i]!.stages.length > 0 ? pages[i]!.stages : stages.slice(),
+      last: true,
+    };
+  }
+  return pages;
+}
+
+/**
+ * 5 块形态的物理页装配（**预计页数 = 实际出纸**的唯一出处）。
+ *
+ * ── 档位选择：**紧凑档只在它确实少出纸时才启用**（批 C 探针后的订正）──
+ * legacy 页的老纪律是「切档点 = normal 容量」（legacy 容量 9 ⇒ 9 行 normal 与
+ * 10 行 compact 都一页，页数曲线单调）。5 块形态里 B2 与 B4 各行都要付，
+ * normal 容量掉到 ~5、compact ~8（密 1.6 倍）⇒ **任何固定切档点都会出现
+ * 「阶段多了、页数反而少了」的倒挂**（实测：16 阶段 4 页 → 17 阶段 3 页）。
+ * 故改成「两档各算一遍页数、取少者」：
+ *   · 页数曲线**按构造单调不减**（min 两个非减函数）；
+ *   · 参考稿档位（9 阶段）两档页数相同 ⇒ 自动留在 **normal**（44px 巨编号的原味）。
+ */
+export function eiBlockPages(vm: PrintViewModel, blocks: SchedulePaperBlocks): EiBlockPagePlan[] {
+  const normalPlan = planEiBlockPages(vm, blocks, EI_ROW_H.stage.normal);
+  const compactPlan = planEiBlockPages(vm, blocks, EI_ROW_H.stage.compact);
+  return compactPlan.length < normalPlan.length ? compactPlan : normalPlan;
+}
+
+/** 本套模板在本 VM 下是否走紧凑档（渲染侧读它；与 `eiBlockPages` 同一裁决） */
+export function eiBlockIsCompact(vm: PrintViewModel, blocks: SchedulePaperBlocks): boolean {
+  return (
+    planEiBlockPages(vm, blocks, EI_ROW_H.stage.compact).length <
+    planEiBlockPages(vm, blocks, EI_ROW_H.stage.normal).length
+  );
+}
+
+/** 5 块形态的一个物理页（B1 + B2/B3/B4 + B5；装置 `ei-head` / `SHEET` 恒在） */
+function EiBlockPage({
+  vm,
+  blocks,
+  show,
+  plan,
+  gantt,
+  logo,
+  pageIndex,
+  pageTotal,
+  pageRef,
+}: {
+  vm: PrintViewModel;
+  blocks: SchedulePaperBlocks;
+  show: (id: PrintUnitId) => boolean;
+  plan: EiBlockPagePlan;
+  gantt: PrintGanttModel;
+  logo: string | null;
+  pageIndex: number;
+  pageTotal: number;
+  pageRef?: Ref<HTMLDivElement>;
+}): JSX.Element {
+  const resched = blocks.stageTable ? eiRescheduleRows(vm) : [];
+  const reschedTotal = vm.stageLogs.filter((l) => l.type === 'rescheduled').length;
+  const dense = eiBlockIsCompact(vm, blocks);
+  const agentOwnerIds = new Set(vm.members.filter((m) => m.actorKind === 'agent').map((m) => m.id));
+  return (
+    <div
+      ref={pageRef}
+      data-print-page="blocks"
+      data-page-index={pageIndex}
+      className="a4-page ei-page"
+      style={{ width: A4_WIDTH_PX, minHeight: A4_HEIGHT_PX }}
+    >
+      {/* 刊头装置：巨题 = **内容类型词**（阶段 / 目录）——设计侧已撤回「改成项目名」
+          的误读（项目名住元信息行小字位，批 C 裁决第 1 条）。 */}
+      <EiHead
+        vm={vm}
+        logo={logo}
+        pageIndex={pageIndex}
+        pageTotal={pageTotal}
+        titleLines={EI_TYPE_TITLE_LINES}
+        sheetTag={show('ei-sheet-tag')}
+      />
+
+      <div className="ei-body">
+        {/* B2 编年跨度目录（与 B4 同一批切片；条 = 日期跨度，非完成度） */}
+        {blocks.timeline && plan.stages.length > 0 && (
+          <SpanIndex vm={vm} rows={plan.stages} model={gantt} />
+        )}
+
+        {/* B4 巨编号目录行（今天 E P1 原样）+ L3 改期记录 */}
+        {blocks.stageTable && plan.stages.length > 0 && (
+          <div
+            className="ei-index"
+            data-density={dense ? 'compact' : undefined}
+            data-print-block="stageTable"
+          >
+            {plan.stages.map((s) => (
+              <EiStageRow
+                key={s.id}
+                stage={s}
+                agentOwned={s.ownerId !== null && agentOwnerIds.has(s.ownerId)}
+              />
+            ))}
+            {plan.last && resched.length > 0 && <EiReschedule rows={resched} total={reschedTotal} />}
+          </div>
+        )}
+        {blocks.stageTable && vm.stages.length === 0 && plan.stages.length === 0 && (
+          <div data-print-block="stageTable">
+            <StageIndexEmpty />
+          </div>
+        )}
+
+        {/* B3 项目信息簇（只首页；§1.3 的「甲 · 归并」——今天散在三处，收成一块）：
+            元信息行（可见阶段 / 完成度 / 阶段套餐）+ 排期基准 · 打印时间。
+            **口径行恒在**（§2.6 原则 1）：它在下面**每页**都渲染 —— B3 开着时与这两行
+            同簇，B3 关掉或续页时就是主体底部那一行（E 今天的位置）。 */}
+        {plan.first && blocks.projectInfo && (
+          <p className="ei-meta" data-print-block="projectInfo">
+            可见阶段 {vm.stages.length} / {vm.project.visibleStageCount} · 完成度{' '}
+            {Math.round(vm.project.percent)}%
+            {` · 阶段套餐 ${eiPresetText(vm)}（${vm.stages.length} 项）`}
+          </p>
+        )}
+        {plan.first && blocks.projectInfo && (
+          <p className="ei-info__line de-num">
+            排期基准 {vm.project.scheduleBasisLabel}　·　打印时间 {stampOf(vm.generatedAt)}
+          </p>
+        )}
+        <p className="ei-note">{EI_BLOCK_NOTE}</p>
+      </div>
+
+      {/* B5 页脚（甲·原样）：发丝线 + 署名 + 页题 · 第 n / N 页 · 数据时间。
+          关 B5 ⇒ **只摘数据时间**（署名与页码永在，原则 1）。 */}
+      <footer className="ei-foot">
+        <span className="ei-foot__brand">ID Plan · 项目排期与交付管理</span>
+        <span className="ei-foot__page">
+          阶段目录 · 第 {pageIndex + 1} / {pageTotal} 页
+          {blocks.footer ? ` · 数据时间 ${stampOf(vm.generatedAt)}` : ''}
+        </span>
+      </footer>
+    </div>
+  );
+}
+
+/** 阶段套餐展示串（B3 的元信息行用；与 legacy 页的口径一致） */
+function eiPresetText(vm: PrintViewModel): string {
+  const key = vm.project.stagePresetKey ?? null;
+  return key ? `${key} v${vm.project.stageTemplateVersion ?? 0}` : '—';
+}
+
+/** B4 的目录行（**今天 E P1 原样**：巨编号独立列 + 四态 + 日期 + 负责人 + 占比） */
+function EiStageRow({ stage, agentOwned }: { stage: PrintStageVM; agentOwned: boolean }): JSX.Element {
+  const delayed = stage.status === StageStatus.Delayed;
+  return (
+    <div
+      className="ei-row"
+      data-state={stage.status}
+      data-agent={agentOwned || undefined}
+      data-testid={`ei-stage-row-${stage.orderIndex}`}
+    >
+      <span className="ei-row__no" data-focus={delayed || agentOwned || undefined}>
+        {String(stage.orderIndex).padStart(2, '0')}
+      </span>
+      <span className="ei-row__name" title={stage.name}>
+        {stage.name}
+      </span>
+      <span className="ei-row__state" data-focus={delayed || undefined}>
+        <span className="ei-row__glyph" aria-hidden>
+          {STAGE_GLYPH[stage.status]}
+        </span>
+        {stageStatusLabel(stage.status)}
+      </span>
+      <span className="ei-row__date">
+        {stage.startAt} — {stage.endAt}
+      </span>
+      <span className="ei-row__owner" data-agent={agentOwned || undefined}>
+        {stage.ownerName ?? '—'}
+        {agentOwned && <span className="ei-row__agent-tag">执行体</span>}
+      </span>
+      <span className="ei-row__ratio">{stage.ratioPercent}%</span>
+    </div>
+  );
+}
+
+/** 5 块形态的巨题两行（内容类型词 阶段 / 目录；与 legacy 的页题拆行同构） */
+const EI_TYPE_TITLE_LINES: readonly string[] = eiTitleLines(EI_PAGE_TITLES['stage-index']!.cn);

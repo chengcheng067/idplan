@@ -524,3 +524,185 @@
     print-color-adjust: exact;
   }
 }
+
+/* ====================================================================================
+ * 5 块形态（2026-10-13 「5 块 × 4 模板」重构 · 批 C · E 版）
+ * ====================================================================================
+ * 依据 `deliverables/gstack/print-5blocks-mapping-2026-10-13.md` §1.3（E 逐格）。
+ * 本区**只加不改**：上方既有规则（参考稿还原批次逐像素校准过）一行不动，
+ * legacy 原生页路径因此逐字不变。
+ * ==================================================================================== */
+
+/* ── 刊头：kicker 行 = 左英文页题 + 右 `SHEET` 页签（批 C 新增，§1.3 乙项）──
+   页签与页脚页码**并存**：前者是刊头身份装置、后者是页序告知（裁决第 2 条）。 */
+.print-root.print-template-editorial-index .ei-head__kicker-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.print-root.print-template-editorial-index .ei-head__sheet {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+/* ── B3 项目信息簇的「排期基准 · 打印时间」行（5 块形态）── */
+.print-root.print-template-editorial-index .ei-info__line {
+  margin: 0 0 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--tpl-ink);
+  opacity: 0.86;
+}
+
+/* ── B2 编年跨度目录（§1.3 B2）──────────────────────────────────────────────
+   时间标尺（1px 发丝线 + 月份 tabular 小字）→ 每阶段一行（沿用 E 的目录 grid
+   语法：编号列（降为小号 mono）/ 阶段名 / 行内跨度条 / 两端日期）+ 行间发丝线。
+   ★ 条 = **日期跨度**（1px 发丝线基线上叠 4px 赭红实心段），**不写数字** ——
+   E 的目录行里本来就有一个百分比（占比），条必须与它形态/位置/角色都不同。 */
+.print-root.print-template-editorial-index .ei-span {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.print-root.print-template-editorial-index .ei-span__caption {
+  margin: 0 0 6px;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  opacity: 0.72;
+}
+
+/* 四列栅格：编号 / 阶段名 / 跨度轨道（弹性）/ 两端日期。
+   标尺行与数据行**同一套列宽** ⇒ 刻度与条在同一坐标系（与经典/A 的纪律同源）。 */
+.print-root.print-template-editorial-index .ei-span__ruler,
+.print-root.print-template-editorial-index .ei-span__row {
+  display: grid;
+  grid-template-columns: 34px 186px 1fr 152px;
+  gap: 12px;
+  align-items: center;
+}
+
+.print-root.print-template-editorial-index .ei-span__ruler {
+  padding-bottom: 3px;
+}
+
+.print-root.print-template-editorial-index .ei-span__row {
+  height: 30px;
+  border-bottom: 1px solid var(--tpl-line);
+}
+
+.print-root.print-template-editorial-index .ei-span__no {
+  font-size: 10px;
+  opacity: 0.72;
+}
+
+.print-root.print-template-editorial-index .ei-span__name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 轨道：底部 1px 发丝线是**时间轴本体**（0→100%），条叠在它上面 */
+.print-root.print-template-editorial-index .ei-span__track {
+  position: relative;
+  height: 16px;
+  min-width: 0;
+}
+
+.print-root.print-template-editorial-index .ei-span__track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--tpl-line);
+}
+
+.print-root.print-template-editorial-index .ei-span__bar {
+  position: absolute;
+  bottom: 3px;
+  height: 4px;
+  background: var(--tpl-accent);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* 延期阶段的条：**同一条**，只加上缘一档加粗（灰度可辨的第二重编码）。
+   ⚠️ 语义不变：条的**长度永远是跨度**，与状态无关 —— 状态不改变长度。 */
+.print-root.print-template-editorial-index .ei-span__bar[data-span-state='delayed'] {
+  height: 6px;
+  bottom: 2px;
+}
+
+.print-root.print-template-editorial-index .ei-span__tick {
+  position: absolute;
+  bottom: 3px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.print-root.print-template-editorial-index .ei-span__dates {
+  font-size: 9.5px;
+  text-align: right;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+/* ── L3「改期记录」（§0.5：E 走**目录行 grid**——发丝线 + mono 日期，不用巨编号）── */
+.print-root.print-template-editorial-index .ei-l3 {
+  margin-top: 22px;
+}
+
+.print-root.print-template-editorial-index .ei-l3__title {
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--tpl-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--tpl-ink);
+}
+
+.print-root.print-template-editorial-index .ei-l3__grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.print-root.print-template-editorial-index .ei-l3__row {
+  display: grid;
+  grid-template-columns: 1.5fr 0.9fr 0.9fr 2fr 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--tpl-line);
+  font-size: 10.5px;
+}
+
+.print-root.print-template-editorial-index .ei-l3__row--head {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  opacity: 0.72;
+}
+
+.print-root.print-template-editorial-index .ei-l3__reason {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.print-root.print-template-editorial-index .ei-l3__more {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  text-align: right;
+  opacity: 0.72;
+}

@@ -19,7 +19,7 @@ import type { SchedulePaperBlocks } from '../../lib/schedule-print';
 import type { PrintViewModel } from '../model/print-view-model';
 import { agentPosterPhysical } from './AgentPosterDocument';
 import { dataEditorialPhysical, deBlockPages } from './DataEditorialDocument';
-import { editorialIndexPhysical } from './EditorialIndexDocument';
+import { editorialIndexPhysical, eiBlockPages } from './EditorialIndexDocument';
 import { swissBlockPages, swissSchedulePhysical } from './SwissScheduleDocument';
 
 /**
@@ -43,7 +43,7 @@ export function printPhysicalPageCount(
     case 'data-editorial':
       return blocks ? deBlockPages(vm, blocks).length : dataEditorialPhysical(vm, sheets).length;
     case 'editorial-index':
-      return editorialIndexPhysical(vm, sheets).length;
+      return blocks ? eiBlockPages(vm, blocks).length : editorialIndexPhysical(vm, sheets).length;
     case 'agent-poster':
       return agentPosterPhysical(vm, sheets).length;
     default:

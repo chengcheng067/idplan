@@ -13,7 +13,8 @@
  * 单测可钉——视觉 spec 再用真 Chromium 断言每个物理页 794×1123 无溢出。
  */
 
-import { StageStatus, TASK_STATUS_LABELS, TaskStatus } from '../../../core/types/enums';
+import { StageLogType, StageStatus, TASK_STATUS_LABELS, TaskStatus } from '../../../core/types/enums';
+import type { PrintStageLogVM, PrintViewModel } from '../../model/print-view-model';
 
 /** 阶段四态标签（全仓无既有中文出处，打印纸面专用） */
 export function stageStatusLabel(status: StageStatus): string {
@@ -174,3 +175,31 @@ function continuationChapter<T>(chapter: EiEntry<T>): EiEntry<T> {
     chapter: { ...c, label: `${c.label}（续）` },
   };
 }
+
+/* ------------------------------------------------------------------ L3 改期记录 + 5 块形态口径 */
+
+/** L3 最多登几条（与 D 的 `DE_RESCHED_MAX_ROWS` 同值；两套互相认得出） */
+export const EI_RESCHED_MAX_ROWS = 6;
+
+/**
+ * B4 的 L3 附属件「改期记录」的行（StageLog type=rescheduled，**最近的在前**）。
+ * 数据源与 A/D 一字不差（`vm.stageLogs`）——§0.5 明文「四套零数据代价」。
+ */
+export function eiRescheduleRows(vm: PrintViewModel): readonly PrintStageLogVM[] {
+  return vm.stageLogs
+    .filter((l) => l.type === StageLogType.Rescheduled)
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .slice(0, EI_RESCHED_MAX_ROWS);
+}
+
+/**
+ * 5 块形态的口径行（B3 簇的最后一行；§2.6 原则 1：**恒在**）。
+ *
+ * 与 legacy 页的 `.ei-note` 同一口径，**多一句「条 = 日期跨度，非完成度」** ——
+ * 批 C 任务书的验收核心：E 的目录行里本来就有一个百分比（占比），B2 的跨度条
+ * 极易被读成「完成到哪了」，故纸面上必须有一句明说（B2 的 caption 里也有一份）。
+ * legacy 页的文案不动（它没有 B2，没有这条误读风险）。
+ */
+export const EI_BLOCK_NOTE =
+  '口径：条 = 日期跨度，非完成度（条长按阶段起止算）；占比 = 阶段工作量分配（ratioPercent），不等于完成度（完成度 = 已完成可见阶段数 ÷ 可见阶段总数）；隐藏阶段不进入本目录，也不参与统计。';

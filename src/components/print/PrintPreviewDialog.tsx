@@ -948,7 +948,10 @@ export function PrintPreviewDialog({
               {template === 'editorial-index' && printVm.vm && (
                 <EditorialIndexDocument
                   vm={printVm.vm}
-                  sheets={enabledSheets}
+                  /* 走五块形态时不传 sheets（那是 legacy 页路径的开关） */
+                  sheets={meta.usesBlocks ? undefined : enabledSheets}
+                  /* 决策 5 第 2 条：内容块与版性装置走同一份解析结果 */
+                  units={units}
                   palette={
                     palette['editorial-index'] ?? PRINT_TEMPLATE_PALETTES['editorial-index'].baseline
                   }
