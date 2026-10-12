@@ -33,6 +33,18 @@
  *   k=4 ⇒ `167 − 8 − 78 =` **81 < 90**（此时委托方仍可见、只是更早省略）。该档 section = 1028
  *   **小于真机 1088**，不在用户的窗口里；是否要为它再收窄 `max` 由 team-lead 定。
  *
+ * ── ⚠️ 判据纪律：**容差只属于几何连续性判据**（2026-10-13 收口）──
+ *   容差（±1 / ±0.5）**只许**用在**几何连续性**判据上：盒高 ±1、贴合 ±0.5（`avatarOverflow`、
+ *   `trackW ↔ contentW`、委托方可用宽与公式对表那一类）。
+ *   「**截断 / 折行 / 是否单行 / 计数**」这类**离散**判据只有「有 / 没有」两面，
+ *   没有"亚像素连续变化"可言 ⇒ 必须**零容差**；给它们容差等于把判据本身废掉。
+ *   **实证（2026-10-12）**：有人用 `scrollWidth > clientWidth + 1` 判「单行省略文本是否被截断」，
+ *   那个 **`+1` 正好吞掉 0.83px 的截断**（同一夹具真值：文本真实宽 **96.83px** / 可用 **96px**，
+ *   即 gen5 用 2px 换 4 列的对价）⇒ 得出「**名字完整显示**」的**错误结论**；只有换**亚像素复测**
+ *   （`getBoundingClientRect` 取小数 + `Range` 逐字量）才把它推翻。
+ *   ⇒ 本闸现行两条**零容差**判据（N-02 四档 + N-02b 各一份）：到期日 `dueNeed − dueAvail ≤ 0`、
+ *     胶囊折行 `tagOverflow ≤ 0`。**它们红了就是真的坏了 —— 不许改回带容差的写法。**
+ *
  * ── 断言 ──
  *   N-00 防假绿（并入 N-01）：`sectionW ≤ 1088` + 纯算式 `4×245 + 3×16 ≤ 1088 − 48`（不依赖浏览器）
  *   N-01 视口 **1392**（= 真机同宽）：section **1088**、每行 **4 列**、轨道 **260**、
@@ -514,11 +526,16 @@ describe.skipIf(!CAN_RUN_FRESH)(
             expect(m!.cardH, `${label} 卡高必须仍是 ${CARD_H}（不许为塞头像加高）`).toBe(CARD_H);
 
             // ③-1 到期日不得截断（旧版在 n=2 就被挤掉）
-            expect(m!.dueNeed, `${label} 到期日不得截断（需 ${m!.dueNeed} ≤ 可用 ${m!.dueAvail}）`).toBeLessThanOrEqual(
-              m!.dueAvail + 1,
-            );
+            //      ⚠️ **零容差**（离散判据：截断只有"有 / 没有"两面，见文件头「判据纪律」）。
+            //      旧版写成 `≤ dueAvail + 1` —— 那 1px 正好吞掉亚像素截断，判据等于作废。
+            //      实测（本夹具四档）：需 53 / 可用 53 ⇒ 差值 0，收紧后仍绿。
+            expect(
+              m!.dueNeed - m!.dueAvail,
+              `${label} 到期日不得截断（需 ${m!.dueNeed} ≤ 可用 ${m!.dueAvail}）`,
+            ).toBeLessThanOrEqual(0);
             // ③-2 阶段胶囊不得折行（scrollHeight > clientHeight 即折行）
-            expect(m!.tagOverflow, `${label} 阶段胶囊不得折行`).toBeLessThanOrEqual(1);
+            //      ⚠️ **零容差**：折行量是离散量（实测 0），1px 的容差同样会把"折了一行"吞掉。
+            expect(m!.tagOverflow, `${label} 阶段胶囊不得折行`).toBeLessThanOrEqual(0);
             expect(m!.tagH, `${label} 胶囊高应为 22（阶段色签档）`).toBe(22);
             // ③-3 头像组右缘不得越过卡片内容盒右缘
             expect(m!.avatarOverflow, `${label} 头像组右缘不得超出卡片内容盒`).toBeLessThanOrEqual(0.5);
@@ -601,10 +618,13 @@ describe.skipIf(!CAN_RUN_FRESH)(
           m!.titleNode,
           '标题仍应是"单行省略"那个 span（不许退回换行/溢出）',
         ).toContain('truncate');
-        expect(m!.dueNeed, `到期日不得截断（需 ${m!.dueNeed} ≤ 可用 ${m!.dueAvail}）`).toBeLessThanOrEqual(
-          m!.dueAvail + 1,
-        );
-        expect(m!.tagOverflow, '阶段胶囊不得折行').toBeLessThanOrEqual(1);
+        // ③ 到期日不截断 / ④ 胶囊不折行：两条都是**离散**判据 ⇒ **零容差**
+        //    （文件头「判据纪律」；旧版 `+1` 的容差正好吞掉亚像素截断，实测需/可用 53/53）
+        expect(
+          m!.dueNeed - m!.dueAvail,
+          `到期日不得截断（需 ${m!.dueNeed} ≤ 可用 ${m!.dueAvail}）`,
+        ).toBeLessThanOrEqual(0);
+        expect(m!.tagOverflow, '阶段胶囊不得折行').toBeLessThanOrEqual(0);
         expect(m!.avatarOverflow, '头像组右缘不得越过卡片内容盒右缘').toBeLessThanOrEqual(0.5);
         // 纵向与可见性
         expect(m!.boxOverflow, '卡内不得纵向溢出').toBeLessThanOrEqual(0);
