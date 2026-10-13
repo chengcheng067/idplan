@@ -22,6 +22,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+
+/*
+ * ⚠️ 复用 cjk-locator-guard 里的 maskComments（team-lead：别写第二份实现）。
+ *   模块名带 cjk 是历史原因（它最先为「中文定位扫描」而写），但**剥注释**这件事与语言无关，
+ *   任何「源码 contain 锁」都该先用它。
+ */
+import { maskComments } from './helpers/cjk-locator-guard';
 import { resolve } from 'node:path';
 
 import { buildDemoBackup, DEMO_PRESETS, demoPresetReadiness } from '../src/core/demo/demoDataFactory';
@@ -142,9 +149,31 @@ describe('demo 运行时工厂（buildDemoBackup）', () => {
   });
 
   it('⑤ 入口守门：useBackupIo.loadDemo 走工厂而非 fetch 静态 json（防回潮）', () => {
-    const src = readFileSync(resolve(__dirname, '..', 'src/components/layout/useBackupIo.tsx'), 'utf8');
+    const raw = readFileSync(
+      resolve(__dirname, '..', 'src/components/layout/useBackupIo.tsx'),
+      'utf8',
+    );
+    /*
+     * ★ 2026-10-13 锁升级（team-lead 裁决）：**剥注释后再匹配**。
+     *
+     * 原判据是 `expect(src).toContain('buildDemoBackup()')`，其中 `src` 读的是**原始源码、不剥注释**
+     * ⇒ 该文件里**任何注释**只要含这串就满足它。实测：`useBackupIo.tsx:121` 一条说明性注释
+     * 正好含 `buildDemoBackup()`，于是**代码行被改坏时这条锁仍然绿**。
+     *
+     * ⇒ **类名（可复用的一句话）：源码 contain 锁必须「剥注释后再匹配」，
+     *    否则任何注释都能满足它。**
+     *    （同族的还有：中文锚点当定位契约、fileProofs 脆性、matchMedia 假绿 ——
+     *      都是「看起来锁住了」。）
+     */
+    const src = maskComments(raw);
     expect(src).toContain('buildDemoBackup()');
     expect(src).not.toContain('demo-backup.json');
+    // 反向自证：剥注释这个动作**确实起作用**（否则上面两条会退化成「拿原文匹配」的假绿）。
+    // ⚠️ 这里**不能用长度**判据：`maskComments` 是**等长替换**（把注释内容原地抹成空格，
+    //    为的是让行号/列位不漂）⇒ `src.length === raw.length` 恒成立。
+    //    故改用**内容**判据：找一句**只出现在注释里**的话，剥完后必须消失。
+    expect(raw, '原文里该注释句在场（它就是能骗过旧锁的那种注释）').toContain('有源码守门');
+    expect(src, '剥注释后该注释句必须消失').not.toContain('有源码守门');
     // demoPresetReadiness 全 ready（设计师 D5 demoReady 门控的数据源）
     expect(demoPresetReadiness().every((r) => r.ready)).toBe(true);
   });
