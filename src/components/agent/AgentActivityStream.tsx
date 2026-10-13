@@ -65,14 +65,14 @@ export function AgentActivityStream({
 }: {
   groups: readonly ActivityExecutionGroup[];
 }): JSX.Element | null {
-  // 订阅语言变化（状态 chip 文案在渲染期取）
-  useLang();
+  // 取词 + 订阅语言变化（状态 chip 与标题在渲染期取）
+  const { t } = useLang();
   if (groups.length === 0) return null;
   return (
-    <section data-agent-activity="" aria-label="Agent 活动流" className="space-y-3">
+    <section data-agent-activity="" aria-label={t('agent.activity.aria')} className="space-y-3">
       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
         <Bot size={14} className="text-mist" aria-hidden />
-        Agent 活动
+        {t('agent.activity.title')}
       </h3>
       <ol className="space-y-2">
         {groups.map(({ execution, events, proposals }) => (
@@ -125,7 +125,7 @@ export function AgentActivityStream({
                   >
                     <FileDiff size={12} className="shrink-0 text-mist" aria-hidden />
                     <span className="text-[12px] text-ink">
-                      {p.operations.length} 项变更
+                      {t('agent.activity.changes', { count: p.operations.length })}
                     </span>
                     <span
                       className={cn(
@@ -145,7 +145,7 @@ export function AgentActivityStream({
       {groups.some((g) => g.proposals.some((p) => p.status === 'proposed')) && (
         <p className="flex items-center gap-1 text-[11px] text-mist">
           <ChevronDown size={11} aria-hidden />
-          有待审提案——在「写回」标签页批量处理
+          {t('agent.activity.pendingProposals')}
         </p>
       )}
     </section>

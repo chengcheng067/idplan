@@ -209,11 +209,11 @@ export function AgentIngressPanel({
     >
       {/* 头部 */}
       <div className="mb-3 flex items-center justify-between gap-4">
-        <h2 className="font-display text-display-md">接入外部写入方</h2>
+        <h2 className="font-display text-display-md">{t('ingress.title')}</h2>
         <button
           type="button"
           onClick={onClose}
-          aria-label="关闭"
+          aria-label={t('common.close')}
           className="rounded-md p-1 text-mist hover:bg-sand"
         >
           <X size={16} />
@@ -228,11 +228,13 @@ export function AgentIngressPanel({
       <div className="mb-3 flex items-start gap-2 rounded-md bg-sunken px-3.5 py-2.5 text-xs text-mist">
         <Info size={13} className="mt-0.5 shrink-0 text-pine" aria-hidden />
         <span>
-          在 Windows 桌面版的<strong className="text-ink">本机模式</strong>下，点下方「生成接入信息」即可：
-          访问令牌自动生成，接入信息（地址 / 令牌 / 端点 / payload 格式）写入固定路径的{' '}
-          <code className="font-mono text-ink">agent-ingress.json</code>，WorkBuddy 等写入方
-          <strong className="text-ink">读这个文件即完成接入</strong>。
-          <strong className="text-ink">NAS 模式当前只支持连通探测，远程自动写入尚未启用。</strong>
+          {t('ingress.explain.before')}
+          <strong className="text-ink">{t('ingress.explain.localMode')}</strong>
+          {t('ingress.explain.afterA')}
+          {t('ingress.explain.afterB')}{' '}
+          <code className="font-mono text-ink">agent-ingress.json</code>{t('ingress.explain.writers')}
+          <strong className="text-ink">{t('ingress.explain.readFile')}</strong>。
+          <strong className="text-ink">{t('ingress.explain.nasNote')}</strong>
         </span>
       </div>
 
@@ -240,12 +242,12 @@ export function AgentIngressPanel({
       <section className="rounded-md border border-line bg-paper p-3.5">
         <div className="mb-2 flex items-center gap-2">
           <Plug size={13} className="shrink-0 text-mist" aria-hidden />
-          <h3 className="text-xs font-semibold text-ink">服务地址</h3>
+          <h3 className="text-xs font-semibold text-ink">{t('ingress.addressTitle')}</h3>
 
           {/* 档位切换（分段控件；本批只切展示形态，不触发任何请求） */}
           <div
             role="tablist"
-            aria-label="通道档位"
+            aria-label={t('ingress.modeTablistAria')}
             className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md bg-sunken p-1"
           >
             {MODE_ORDER.map((m) => (
@@ -275,7 +277,7 @@ export function AgentIngressPanel({
             aria-readonly={isLocal}
             value={shownAddress}
             onChange={(e) => onAddressChange(e.target.value)}
-            aria-label="服务地址"
+            aria-label={t('ingress.addressAria')}
             spellCheck={false}
             placeholder="https://nas.example.com:7788"
             className={cn(
@@ -287,8 +289,8 @@ export function AgentIngressPanel({
 
         <p className="mt-1.5 text-[11px] text-mist">
           {isLocal
-            ? '本机模式仅监听 127.0.0.1，不对外暴露；生成接入信息后即可接收自动导入。'
-            : 'NAS 模式当前仅支持地址与令牌的连通探测；远程自动写入尚未启用。'}
+            ? t('ingress.localAddressHint')
+            : t('ingress.nasAddressHint')}
         </p>
       </section>
 
@@ -296,7 +298,7 @@ export function AgentIngressPanel({
       {isLocal ? (
         <section className="mt-3 rounded-md border border-line bg-paper p-3.5">
           <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-xs font-semibold text-ink">接入信息</h3>
+            <h3 className="text-xs font-semibold text-ink">{t('ingress.fileTitle')}</h3>
             <span
               data-ingress-token-state={tokenConfigured ? 'configured' : 'unset'}
               className={cn(
@@ -304,7 +306,7 @@ export function AgentIngressPanel({
                 tokenConfigured ? 'bg-pine-soft text-pine' : 'bg-sand text-mist',
               )}
             >
-              {tokenConfigured ? '令牌已生成' : '未生成'}
+              {tokenConfigured ? t('ingress.tokenGenerated') : t('ingress.tokenNotGenerated')}
             </span>
           </div>
 
@@ -315,7 +317,7 @@ export function AgentIngressPanel({
               onClick={() => onGenerateIngress(false)}
               className="inline-flex h-[38px] shrink-0 items-center rounded-md bg-pine px-3.5 text-sm text-white transition-colors hover:bg-pine-deep"
             >
-              生成接入信息
+              {t('ingress.generate')}
             </button>
             {tokenConfigured && (
               /* 轮换是显式动作：换新令牌后旧令牌立即失效，写入方需重读文件 */
@@ -324,9 +326,9 @@ export function AgentIngressPanel({
                 data-ingress-regenerate=""
                 onClick={() => onGenerateIngress(true)}
                 className="inline-flex h-[38px] shrink-0 items-center rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken"
-                title="生成新令牌并重写接入文件（旧令牌立即失效）"
+                title={t('ingress.regenerateTitle')}
               >
-                重新生成
+                {t('ingress.regenerate')}
               </button>
             )}
             <button
@@ -337,7 +339,7 @@ export function AgentIngressPanel({
               className="inline-flex h-[38px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
             >
               <Copy size={13} aria-hidden />
-              复制文件路径
+              {t('ingress.copyPath')}
             </button>
             <button
               type="button"
@@ -345,10 +347,10 @@ export function AgentIngressPanel({
               onClick={onCopyIngressInstruction}
               disabled={!tokenConfigured}
               className="inline-flex h-[38px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
-              title="复制完整接入指令（给不能读文件的写入方兜底）"
+              title={t('ingress.copyInstructionTitle')}
             >
               <Copy size={13} aria-hidden />
-              复制接入指令
+              {t('ingress.copyInstruction')}
             </button>
           </div>
 
@@ -361,18 +363,18 @@ export function AgentIngressPanel({
             </p>
           ) : (
             <p className="mt-1.5 text-[11px] text-mist">
-              尚未生成。点「生成接入信息」后，把文件路径提供给写入方（或让它直接读这个固定路径）。
+              {t('ingress.fileNotReady')}
             </p>
           )}
           <p className="mt-1.5 text-[11px] text-mist">
-            令牌由本机自动生成，无需手动设置；轮换后以接入文件的最新版本为准。
+            {t('ingress.tokenAutoNote')}
           </p>
         </section>
       ) : (
         /* ---------------- ②' NAS 档：服务端令牌（由服务端 env 配置，粘贴即可用） ---------------- */
         <section className="mt-3 rounded-md border border-line bg-paper p-3.5">
           <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-xs font-semibold text-ink">访问令牌</h3>
+            <h3 className="text-xs font-semibold text-ink">{t('ingress.tokenTitle')}</h3>
             <span
               data-ingress-token-state-nas={tokenConfigured ? 'configured' : 'unset'}
               className={cn(
@@ -380,7 +382,7 @@ export function AgentIngressPanel({
                 tokenConfigured ? 'bg-pine-soft text-pine' : 'bg-sand text-mist',
               )}
             >
-              {tokenConfigured ? '已配置' : '未配置'}
+              {tokenConfigured ? t('ingress.tokenConfigured') : t('ingress.tokenUnconfigured')}
             </span>
           </div>
 
@@ -391,8 +393,12 @@ export function AgentIngressPanel({
               autoComplete="off"
               value={tokenDraft}
               onChange={(e) => setTokenDraft(e.target.value)}
-              aria-label="访问令牌"
-              placeholder={tokenConfigured ? '重新输入以替换现有令牌' : '粘贴 NAS 服务端配置的访问令牌'}
+              aria-label={t('ingress.tokenAria')}
+              placeholder={
+                tokenConfigured
+                  ? t('ingress.tokenReplacePlaceholder')
+                  : t('ingress.tokenPastePlaceholder')
+              }
               className="h-[38px] min-w-0 flex-1 rounded-md border border-line bg-paper px-3 font-mono text-xs text-ink outline-none focus:border-pine"
             />
             <button
@@ -402,7 +408,7 @@ export function AgentIngressPanel({
               disabled={tokenDraft.trim().length === 0}
               className="inline-flex h-[38px] shrink-0 items-center rounded-md bg-pine px-3.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-40"
             >
-              保存
+              {t('ingress.save')}
             </button>
             {/* 复制走回调取件 —— 绝不从 DOM 读值（DOM 里根本没有原文） */}
             <button
@@ -410,16 +416,16 @@ export function AgentIngressPanel({
               data-ingress-token-copy=""
               onClick={onCopyToken}
               disabled={!tokenConfigured}
-              aria-label="复制令牌"
+              aria-label={t('ingress.copyTokenAria')}
               className="inline-flex h-[38px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-sm text-ink transition-colors hover:bg-sunken disabled:opacity-40"
             >
               <Copy size={13} aria-hidden />
-              复制
+              {t('ingress.copy')}
             </button>
           </div>
 
           <p className="mt-1.5 text-[11px] text-mist">
-            NAS 档的令牌由服务端环境变量配置（与 NAS 上设置的保持一致）；保存后不再回显原文。
+            {t('ingress.nasTokenNote')}
           </p>
         </section>
       )}
@@ -430,7 +436,7 @@ export function AgentIngressPanel({
         className="mt-3 rounded-md border border-line bg-paper p-3.5"
       >
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-xs font-semibold text-ink">服务状态</h3>
+          <h3 className="text-xs font-semibold text-ink">{t('ingress.statusTitle')}</h3>
           <button
             type="button"
             data-ingress-probe-action=""
@@ -438,7 +444,7 @@ export function AgentIngressPanel({
             className="ml-auto inline-flex h-[30px] shrink-0 items-center gap-1 rounded-md border border-line px-3 text-xs text-ink transition-colors hover:bg-sunken"
           >
             <RefreshCw size={12} aria-hidden />
-            一键探测
+            {t('ingress.probe')}
           </button>
         </div>
 
@@ -452,7 +458,7 @@ export function AgentIngressPanel({
                   probeResult.ok ? 'bg-pine-soft text-pine' : 'bg-clay-soft text-clay',
                 )}
               >
-                {probeResult.ok ? '可连通' : '不可连通'}
+                {probeResult.ok ? t('ingress.probeOk') : t('ingress.probeFail')}
               </span>
               <span className="font-mono text-[11px] text-mist">version {probeResult.version}</span>
               {probeResult.dataLayer && (
@@ -467,22 +473,27 @@ export function AgentIngressPanel({
                     probeResult.dataLayer === 'ready' ? 'bg-sand text-mist' : 'bg-amber-soft text-amber',
                   )}
                 >
-                  {probeResult.dataLayer === 'ready' ? '数据层就绪' : '数据层不可用'}
+                  {probeResult.dataLayer === 'ready' ? t('ingress.dataLayerReady') : t('ingress.dataLayerUnavailable')}
                 </span>
               )}
             </div>
             {probeResult.dataLayer === 'unavailable' && (
               <p role="alert" className="text-[11px] text-amber">
-                ID Plan 未运行（或数据层未就绪）——请先打开应用再重试。
+                {t('ingress.appNotRunning')}
               </p>
             )}
             {(probeResult.projectCount !== undefined || probeResult.seatLimit !== undefined) && (
               <p className="text-[11px] text-mist">
-                {probeResult.projectCount !== undefined && <>项目 {probeResult.projectCount} 个</>}
+                {probeResult.projectCount !== undefined && (
+                  <>{t('ingress.projectCount', { count: probeResult.projectCount })}</>
+                )}
                 {probeResult.projectCount !== undefined && probeResult.seatLimit !== undefined && ' · '}
                 {probeResult.seatLimit !== undefined && (
                   <>
-                    席位 {probeResult.seatUsed ?? 0} / {probeResult.seatLimit}
+                    {t('ingress.seatUsage', {
+                      used: probeResult.seatUsed ?? 0,
+                      limit: probeResult.seatLimit,
+                    })}
                   </>
                 )}
               </p>
@@ -490,7 +501,7 @@ export function AgentIngressPanel({
           </div>
         ) : (
           <p data-ingress-probe-empty="" className="text-[11px] text-mist">
-            尚未探测。点「一键探测」检查服务是否可连通。
+            {t('ingress.probeEmpty')}
           </p>
         )}
       </section>
@@ -500,17 +511,17 @@ export function AgentIngressPanel({
         data-ingress-sync=""
         className="mt-3 rounded-md border border-line bg-paper p-3.5"
       >
-        <h3 className="mb-2 text-xs font-semibold text-ink">最近同步记录</h3>
+        <h3 className="mb-2 text-xs font-semibold text-ink">{t('ingress.syncTitle')}</h3>
         {status ? (
           <dl className="flex flex-col gap-1 text-[11px]">
             <div className="flex gap-2">
-              <dt className="shrink-0 text-mist">最近同步</dt>
+              <dt className="shrink-0 text-mist">{t('ingress.syncAt')}</dt>
               <dd data-ingress-sync-at="" className="min-w-0 font-mono text-ink">
                 {formatSyncAt(status.lastSyncAt)}
               </dd>
             </div>
             <div className="flex gap-2">
-              <dt className="shrink-0 text-mist">结果</dt>
+              <dt className="shrink-0 text-mist">{t('ingress.syncResult')}</dt>
               <dd data-ingress-sync-summary="" className="min-w-0 text-ink">
                 {status.lastSyncSummary ?? '—'}
               </dd>
@@ -518,7 +529,7 @@ export function AgentIngressPanel({
           </dl>
         ) : (
           <p data-ingress-sync-empty="" className="text-[11px] text-mist">
-            {isLocal ? '尚未收到本机自动写入。' : 'NAS 远程自动写入尚未启用，因此没有同步记录。'}
+            {isLocal ? t('ingress.syncEmptyLocal') : t('ingress.syncEmptyNas')}
           </p>
         )}
       </section>
@@ -531,14 +542,14 @@ export function AgentIngressPanel({
           onClick={onOpenManual}
           className="mr-auto rounded-md text-xs text-pine underline underline-offset-2"
         >
-          改为手动粘贴排期文件
+          {t('ingress.openManual')}
         </button>
         <button
           type="button"
           onClick={onClose}
           className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
         >
-          关闭
+          {t('common.close')}
         </button>
       </div>
     </div>

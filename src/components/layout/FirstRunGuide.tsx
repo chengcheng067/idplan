@@ -35,6 +35,7 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useHumanProjects } from '../../core/project/visibility';
 import { logUser } from '../../core/services/log.service';
 import { cn } from '../../lib/cn';
+import { useLang, type MessageKey } from '../../i18n';
 
 const GUIDE_SEEN_KEY = 'idplan.firstRunGuideSeen';
 
@@ -58,17 +59,17 @@ const GUIDE_SEEN_KEY = 'idplan.firstRunGuideSeen';
  */
 const GUIDE_CARDS: ReadonlyArray<{
   domain: string;
-  label: string;
+  labelKey: MessageKey;
   Icon: LucideIcon;
-  lines: string;
+  linesKey: MessageKey;
   bars: ReadonlyArray<{ w: string; tone: string }>;
   demoReady: boolean;
 }> = [
   {
     domain: 'software',
-    label: '软件',
+    labelKey: 'guide.card.software',
     Icon: Code2,
-    lines: '选它就带出该行业的阶段与看板列——规划到发布五个阶段排在一张板上',
+    linesKey: 'guide.line.software',
     bars: [
       { w: 'w-4', tone: 'bg-stage-s1' },
       { w: 'w-4', tone: 'bg-stage-s2' },
@@ -80,9 +81,9 @@ const GUIDE_CARDS: ReadonlyArray<{
   },
   {
     domain: 'travel',
-    label: '旅游',
+    labelKey: 'guide.card.travel',
     Icon: Plane,
-    lines: '选它就带出该行业的阶段与看板列，线路策划到出行结算节点再多也不丢',
+    linesKey: 'guide.line.travel',
     bars: [
       { w: 'w-5', tone: 'bg-stage-s1' },
       { w: 'w-5', tone: 'bg-stage-s2' },
@@ -93,9 +94,9 @@ const GUIDE_CARDS: ReadonlyArray<{
   },
   {
     domain: 'indoor',
-    label: '室内',
+    labelKey: 'guide.card.indoor',
     Icon: Sofa,
-    lines: '选它就带出该行业的阶段与看板列，一图看清走到哪',
+    linesKey: 'guide.line.indoor',
     bars: [
       { w: 'w-6', tone: 'bg-pine' },
       { w: 'w-6', tone: 'bg-amber' },
@@ -107,6 +108,8 @@ const GUIDE_CARDS: ReadonlyArray<{
 
 export function FirstRunGuide(): JSX.Element | null {
   const projects = useHumanProjects();
+  /** 取词 + 语言变化订阅点（引导卡文案在渲染期取） */
+  const { t } = useLang();
   const { loadDemo, fileInput, confirmDialog } = useBackupIo();
   const [dismissed, setDismissed] = useState(
     () => (typeof localStorage !== 'undefined' ? localStorage.getItem(GUIDE_SEEN_KEY) === '1' : false),
@@ -164,7 +167,7 @@ export function FirstRunGuide(): JSX.Element | null {
     <>
       {fileInput}
       {confirmDialog}
-      <Modal open onClose={close} ariaLabel="首次运行引导">
+      <Modal open onClose={close} ariaLabel={t('guide.aria')}>
         {/* v0.8.5 B 规范面板：glass-strong + iridescent-border + dialog-pop——
             与全站其它弹窗（建档/设置）观感统一；旧版直接坐遮罩上的裸 div 回收。 */}
         <div
@@ -175,12 +178,12 @@ export function FirstRunGuide(): JSX.Element | null {
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-pine-soft">
               <Sparkles size={16} className="text-pine" aria-hidden />
             </span>
-            <h2 className="font-display text-base font-semibold text-ink">欢迎使用 ID Plan</h2>
+            <h2 className="font-display text-base font-semibold text-ink">{t('guide.title')}</h2>
             <span className="ml-auto" />
             <button
               type="button"
               onClick={close}
-              aria-label="先四处看看"
+              aria-label={t('guide.dismissAria')}
               className="rounded-md p-1 text-mist transition-colors hover:bg-sand hover:text-ink"
             >
               <X size={16} aria-hidden />
@@ -188,20 +191,21 @@ export function FirstRunGuide(): JSX.Element | null {
           </div>
           <div className="space-y-1.5 text-[13px] leading-relaxed text-mist">
             <p>
-              它把一份项目合同，变成一张<strong className="text-ink">看得懂的阶段时间轴</strong>
-              ——看板、月历、甘特、打印，四种看法同一份数据。
+              {t('guide.lead.before')}
+              <strong className="text-ink">{t('guide.lead.strong')}</strong>
+              {t('guide.lead.after')}
             </p>
-            <p>数据存在你自己机器上，离线可用，不上传。</p>
+            <p>{t('guide.privacy')}</p>
           </div>
 
           <div>
-            <p className="mb-2 text-[11px] text-mist">想先看看哪个行业的样子？</p>
+            <p className="mb-2 text-[11px] text-mist">{t('guide.pickDomain')}</p>
             {/* 卡片网格：一条 auto-fit 规则兼容 1–9 套（demo 扩容时零 CSS 改动） */}
             <div
               data-first-run-cards=""
               className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(148px,1fr))]"
             >
-              {GUIDE_CARDS.map(({ domain, label, Icon, lines, bars, demoReady }) => (
+              {GUIDE_CARDS.map(({ domain, labelKey, Icon, linesKey, bars, demoReady }) => (
                 <button
                   key={domain}
                   type="button"
@@ -211,7 +215,7 @@ export function FirstRunGuide(): JSX.Element | null {
                   //  旧单按钮版用「不渲染」，三卡版渲染骨架+禁用：行业形态预览
                   //  对所有身份都有信息价值，只是不能触发覆盖式导入）。
                   disabled={importing || !demoReady || !isAdmin}
-                  title={isAdmin ? undefined : '仅管理员可载入示例项目'}
+                  title={isAdmin ? undefined : t('guide.adminOnlyTitle')}
                   onClick={() => {
                     if (!isAdmin || !demoReady) return; // 双保险（disabled 已拦，防键盘/读屏误触）
                     // 看过 flag 立即落（确认弹窗无论确认与否都不再重弹首启卡）
@@ -237,9 +241,9 @@ export function FirstRunGuide(): JSX.Element | null {
                       <Icon size={16} className="text-pine" aria-hidden />
                     )}
                   </span>
-                  <span className="text-[13px] font-semibold text-ink">{label}</span>
+                  <span className="text-[13px] font-semibold text-ink">{t(labelKey)}</span>
                   <span className="line-clamp-2 text-[11px] leading-4 text-mist">
-                    {demoReady ? lines : '示例筹备中'}
+                    {demoReady ? t(linesKey) : t('guide.demoNotReady')}
                   </span>
                   {/* 列形态微预览：信息载体=真实列形态，不是装饰（零图片资源） */}
                   <span className="mt-auto flex gap-1 pt-2">
@@ -258,9 +262,9 @@ export function FirstRunGuide(): JSX.Element | null {
               onClick={close}
               className="flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-[13px] text-mist transition-colors hover:bg-sand hover:text-ink"
             >
-              先四处看看（不进示例）
+              {t('guide.lookAround')}
             </button>
-            <span className="ml-auto text-[11px] text-mist">随时可在侧栏「载入示例项目」回看</span>
+            <span className="ml-auto text-[11px] text-mist">{t('guide.canReturn')}</span>
           </div>
         </div>
       </Modal>

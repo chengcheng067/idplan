@@ -27,6 +27,7 @@ import {
 import { computeProjectStatus } from '../../lib/progress';
 import type { Project, Stage } from '../../core/types/entities';
 import { cn } from '../../lib/cn';
+import { useLang } from '../../i18n';
 
 /**
  * 左侧边栏（v0.7 · 子系统 ① · N01 / T20，D3 拍板）。
@@ -119,6 +120,8 @@ export function Sidebar(): JSX.Element | null {
  */
 function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   const { isAdmin, currentMember } = useRoleGuard();
+  /** 取词 + 语言变化订阅点（底部区与项目列表文案在渲染期取） */
+  const { t } = useLang();
   const openManualForm = useUiStore((s) => s.openManualForm);
 
   const sidebarExpanded = useLayoutStore((s) => s.sidebarExpanded);
@@ -374,14 +377,14 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                 这正是成员该看到的「全部」形态，故一个 to="/" 同时满足两种身份。
               */}
               <div className="flex h-7 items-center justify-between pb-1">
-                <span className="text-[11px] font-medium text-mist">项目</span>
+                <span className="text-[11px] font-medium text-mist">{t('nav.projects')}</span>
                 <Link
                   to="/"
                   data-sidebar-see-all=""
-                  title="查看全部项目"
+                  title={t('sidebar.viewAllProjectsTitle')}
                   className="rounded-sm text-[11px] text-pine outline-none transition-colors hover:text-pine-deep focus-visible:ring-2 focus-visible:ring-pine/40"
                 >
-                  查看全部
+                  {t('sidebar.viewAll')}
                 </Link>
               </div>
               {/*
@@ -462,12 +465,12 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                       data-sidebar-more-projects=""
                       onClick={() => setProjectsExpanded(true)}
                       aria-expanded={projectsExpanded}
-                      title={`展开显示全部 ${projects.length} 个项目`}
+                      title={t('sidebar.expandAllProjects', { count: projects.length })}
                       className="flex h-7 w-full items-center gap-1 rounded-md px-2 text-left text-[11px] text-pine outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
                     >
                       <ChevronDown size={12} aria-hidden className="shrink-0" />
                       <span className="truncate">
-                        还有 {projects.length - SIDEBAR_PROJECT_LIMIT} 个项目…
+                        {t('sidebar.remainingProjects', { count: projects.length - SIDEBAR_PROJECT_LIMIT })}
                       </span>
                     </button>
                   </li>
@@ -486,8 +489,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               // anchor 链路（settingsAnchor / Modal float）已整个移除。
               setSettingsOpen(true);
             }}
-            aria-label="设置"
-            title="设置（导出日志 / 清空日志）"
+            aria-label={t('settings.title')}
+            title={t('sidebar.settingsTitle')}
             className={cn(navItemClass(false, false, inDrawer), 'relative')}
           >
             <span className="relative inline-flex shrink-0">
@@ -507,11 +510,11 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
                 <span
                   data-update-dot="expanded"
                   className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-clay ring-2 ring-paper"
-                  aria-label="有新版本可用"
+                  aria-label={t('common.updateAvailableAria')}
                 />
               )}
             </span>
-            <span className="truncate text-[13px] text-ink">设置</span>
+            <span className="truncate text-[13px] text-ink">{t('settings.title')}</span>
           </button>
 
           {/*
@@ -532,33 +535,33 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             <button
               type="button"
               onClick={() => void loadDemo()}
-              aria-label="载入示例项目"
-              title="载入 5 个演示项目（覆盖式替换当前数据）——用来快速看懂产品"
+              aria-label={t('sidebar.loadDemo')}
+              title={t('sidebar.loadDemoTitle')}
               className={cn(navItemClass(false, false, inDrawer))}
             >
               <Sparkles size={18} className="shrink-0 text-mist" aria-hidden />
-              <span className="truncate text-[13px] text-ink">载入示例项目</span>
+              <span className="truncate text-[13px] text-ink">{t('sidebar.loadDemo')}</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => void save()}
-            aria-label="保存备份"
-            title="保存备份（导出为本地 JSON 文件）"
+            aria-label={t('sidebar.saveBackup')}
+            title={t('sidebar.saveBackupTitle')}
             className={cn(navItemClass(false, false, inDrawer))}
           >
             <Save size={18} className="shrink-0 text-mist" aria-hidden />
-            <span className="truncate text-[13px] text-ink">保存备份</span>
+            <span className="truncate text-[13px] text-ink">{t('sidebar.saveBackup')}</span>
           </button>
           <button
             type="button"
             onClick={() => pick()}
-            aria-label="加载备份"
-            title="加载备份（从本地 JSON 文件恢复，会替换当前全部数据）"
+            aria-label={t('sidebar.loadBackup')}
+            title={t('sidebar.loadBackupTitle')}
             className={cn(navItemClass(false, false, inDrawer))}
           >
             <Upload size={18} className="shrink-0 text-mist" aria-hidden />
-            <span className="truncate text-[13px] text-ink">加载备份</span>
+            <span className="truncate text-[13px] text-ink">{t('sidebar.loadBackup')}</span>
           </button>
 
           {/* 新建项目：管理员 + 项目相关页（沿用原 TopBar 的 isAdmin && onProjectPage 口径） */}
@@ -566,12 +569,12 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             <button
               type="button"
               onClick={openManualForm}
-              aria-label="新建项目"
-              title="新建项目"
+              aria-label={t('sidebar.newProject')}
+              title={t('sidebar.newProject')}
               className="btn-aura flex w-full items-center justify-center gap-2.5 rounded-2xl px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
             >
               <PenLine size={18} className="shrink-0" aria-hidden />
-              <span className="truncate">新建项目</span>
+              <span className="truncate">{t('sidebar.newProject')}</span>
             </button>
           )}
 
@@ -700,8 +703,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               // 同展开态：抽屉形态与点击位置无关（反馈 #4，anchor 链路已删）
               setSettingsOpen(true);
             }}
-            aria-label="设置"
-            title="设置"
+            aria-label={t('settings.title')}
+            title={t('settings.title')}
             className="relative flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <Settings size={18} aria-hidden />
@@ -712,7 +715,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               <span
                 data-update-dot="collapsed"
                 className="absolute right-1 top-1 h-2 w-2 rounded-full bg-clay ring-2 ring-paper"
-                aria-label="有新版本可用"
+                aria-label={t('common.updateAvailableAria')}
               />
             )}
           </button>
@@ -720,8 +723,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           <button
             type="button"
             onClick={() => void save()}
-            aria-label="保存备份"
-            title="保存备份（导出为本地 JSON 文件）"
+            aria-label={t('sidebar.saveBackup')}
+            title={t('sidebar.saveBackupTitle')}
             className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <Save size={18} aria-hidden />
@@ -729,8 +732,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           <button
             type="button"
             onClick={() => pick()}
-            aria-label="加载备份"
-            title="加载备份（从本地 JSON 文件恢复，会替换当前全部数据）"
+            aria-label={t('sidebar.loadBackup')}
+            title={t('sidebar.loadBackupTitle')}
             className="flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <Upload size={18} aria-hidden />
@@ -739,8 +742,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             <button
               type="button"
               onClick={openManualForm}
-              aria-label="新建项目"
-              title="新建项目"
+              aria-label={t('sidebar.newProject')}
+              title={t('sidebar.newProject')}
               className="btn-aura flex h-10 w-10 items-center justify-center rounded-md text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
             >
               <PenLine size={18} aria-hidden />
