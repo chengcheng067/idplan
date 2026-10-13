@@ -560,11 +560,17 @@ describe('④b 月历：节日名 / 「班」小字与底纹（jsdom）', () => 
       cellOf('2026-09-30').click();
     });
     // 切「周」：同一套日期格（grid(weekDays)）
+    // ⚠️ 先断言存在、再点（静默前置扫雷批）：旧写法 `btn?.click()` 找不到就静默点空，
+    //    于是下面断的其实是**默认视图**（月），失败信息会指向"国庆节没显示"而非"视图没切"。
+    const weekTab = [...document.querySelectorAll<HTMLElement>('button')].find(
+      (b) => (b.textContent ?? '').trim() === '周',
+    );
+    expect(
+      weekTab,
+      '找不到「周」视图分段 ⇒ 视图没切（旧写法静默点空，会让"没切视图"伪装成"日期格内容不对"）',
+    ).toBeTruthy();
     act(() => {
-      const btn = [...document.querySelectorAll<HTMLElement>('button')].find(
-        (b) => (b.textContent ?? '').trim() === '周',
-      );
-      btn?.click();
+      weekTab!.click();
     });
     const gq = cellOf(GUOQING);
     expect(gq.textContent).toContain('国庆节');

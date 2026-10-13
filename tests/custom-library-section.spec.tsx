@@ -59,6 +59,24 @@ function btn(container: HTMLElement, text: string): HTMLButtonElement | undefine
 }
 
 /**
+ * 与 `btn` 同源，但**找不到就红** —— 用于「这一下必须点到」的交互。
+ *
+ * 为什么单独加一个而不是改 `btn`：`btn` 还有**合理地接受不存在**的用法
+ * （例如 `expect(btn(...) ?? container.textContent?.includes(...)).toBeTruthy()`）。
+ * 而 `btn(...)?.click()` 那种写法在找不到时**静默点空** ⇒ 「这一步没发生」会被
+ * 后面的断言/取值当成别的问题（假绿或指错方向的红）。
+ * 2026-10-14 静默前置扫雷批。
+ */
+function mustBtn(container: HTMLElement, text: string): HTMLButtonElement {
+  const el = btn(container, text);
+  expect(
+    el,
+    `用例前置失效：找不到按钮「${text}」⇒ 这一步没发生（旧写法 btn(...)?.click() 会静默点空）`,
+  ).toBeTruthy();
+  return el!;
+}
+
+/**
  * 走「选文件」链路：jsdom 25 的 File 没有 .text()（jsdom 26 才补），
  * 用 node:buffer 的 File（size/text 齐全）做替身——组件侧 API 不变。
  */
@@ -124,7 +142,7 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
       note.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await act(async () => {
-      btn(container, '复制提示词')?.click();
+      mustBtn(container, '复制提示词').click();
     });
     expect(clipboard.writeText).toHaveBeenCalledTimes(1);
     const copied = String(clipboard.writeText.mock.calls[0]![0]);
@@ -150,7 +168,7 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
     ];
     await renderInto(container);
     await act(async () => {
-      btn(container, '复制提示词')?.click();
+      mustBtn(container, '复制提示词').click();
     });
     let copied = String(clipboard.writeText.mock.calls[0]![0]);
     expect(copied).not.toContain('已有库X');
@@ -161,7 +179,7 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
       checkbox.click();
     });
     await act(async () => {
-      btn(container, '复制提示词')?.click();
+      mustBtn(container, '复制提示词').click();
     });
     copied = String(clipboard.writeText.mock.calls[1]![0]);
     expect(copied).toContain('【用户当前的行业库');

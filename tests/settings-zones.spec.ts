@@ -782,12 +782,20 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
         await waitSettingsDrawer(page);
         if (theme === 'dark') {
           // 真实切换路径：抽屉内点「深色」（默认停在「外观」区，主题三选在场）
-          await page.evaluate(() => {
+          // ⚠️ 静默前置扫雷批（2026-10-14）：先断言存在再点。旧写法 `b?.click()` 点空后
+          //    主题没切，而后续断言断的是**暗色下的几何/颜色** ⇒ 会变成假绿或指错方向的红。
+          const darkClicked = await page.evaluate(() => {
             const b = Array.from(document.querySelectorAll<HTMLElement>('[data-settings-drawer] button')).find(
               (x) => (x.textContent ?? '').trim() === '深色',
             );
-            b?.click();
+            if (!b) return false;
+            b.click();
+            return true;
           });
+          expect(
+            darkClicked,
+            '设置抽屉里找不到「深色」按钮 ⇒ 主题未切换（旧写法静默点空 ⇒ 后面断的是亮色主题下的值）',
+          ).toBe(true);
           await page.waitForTimeout(500);
         }
 

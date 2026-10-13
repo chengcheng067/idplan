@@ -221,12 +221,17 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
     page: Page,
     name: string,
   ): Promise<{ x: number; y: number } | null> {
-    await page.evaluate(() => {
+    // ⚠️ 静默前置扫雷批：先断言存在再点（旧写法 `b?.click()` 找不到就静默点空，
+    //    后面 `input[placeholder*="某某项目"]` 会超时，那句不指向「按钮没找到」）
+    const openedCreate = await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('新建项目'),
       );
-      b?.click();
+      if (!b) return false;
+      b.click();
+      return true;
     });
+    expect(openedCreate, '找不到「新建项目」入口 ⇒ 建档流程没开始（旧写法静默点空，失败会推到下一步等输入框）').toBe(true);
     await page.waitForTimeout(500);
     await page.locator('input[placeholder*="某某项目"]').fill(name);
     /*
@@ -242,12 +247,20 @@ await page.click('[data-industry-select-option="indoor"]');
     const dates = await page.$$('input[type="date"]');
     if (dates[0]) await dates[0].fill('2026-01-05');
     if (dates[1]) await dates[1].fill('2026-06-30');
-    await page.evaluate(() => {
+    // ⚠️ 静默前置扫雷批：先断言存在再点。旧写法 `b?.click()` 点空后，后面只等 2s 就
+    //    去读 SVG 彩条 —— 读不到会返回 null（但那是"没建成"，不是"点到了但没生成"）。
+    const submittedCreate = await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('建档（按所选'),
       );
-      b?.click();
+      if (!b) return false;
+      b.click();
+      return true;
     });
+    expect(
+      submittedCreate,
+      '找不到「建档（按所选…）」按钮 ⇒ 建档未提交（旧写法静默点空 ⇒ 之后读彩条拿到 null，方向指错）',
+    ).toBe(true);
     await page.waitForTimeout(2000);
     return page.evaluate(() => {
       const rects: DOMRect[] = [];
@@ -391,12 +404,20 @@ await page.click('[data-industry-select-option="indoor"]');
     const dates = await page.$$('input[type="date"]');
     if (dates[0]) await dates[0].fill('2026-01-05');
     if (dates[1]) await dates[1].fill('2026-06-30');
-    await page.evaluate(() => {
+    // ⚠️ 静默前置扫雷批：先断言存在再点。旧写法 `b?.click()` 点空后，后面只等 2s 就
+    //    去读 SVG 彩条 —— 读不到会返回 null（但那是"没建成"，不是"点到了但没生成"）。
+    const submittedCreate = await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('建档（按所选'),
       );
-      b?.click();
+      if (!b) return false;
+      b.click();
+      return true;
     });
+    expect(
+      submittedCreate,
+      '找不到「建档（按所选…）」按钮 ⇒ 建档未提交（旧写法静默点空 ⇒ 之后读彩条拿到 null，方向指错）',
+    ).toBe(true);
     await page.waitForTimeout(2000);
     // 建档成功会跳到项目详情页 → 回首页继续
     await page.goto(DIST_URL);
@@ -828,13 +849,19 @@ await page.click('[data-industry-select-option="indoor"]');
         await becomeAdmin(page);
         // <xl 侧栏是抽屉：先开汉堡，再从抽屉里点「设置」；≥xl 持久侧栏直接点
         // （只点一次——合成 click 的 clientX/Y 是 0，重复点会把浮动面板锚到 (0,0)）
-        await page.evaluate(() => {
+        /*
+         * ⚠️ 静默前置扫雷批（2026-10-14）：原来这里是 `?.click()`——点了谁、有没有点到，
+         *   调用方**都不知道**。现在 evaluate **返回它走了哪条路**，调用方当场断言
+         *   ⇒ 「打不开设置入口」变成**立刻红且说清是哪个控件没找到**，
+         *   而不是等 :859 那句 `[role="dialog"] > 0` 超时（那句不指向真因）。
+         */
+        const navOpened = await page.evaluate(() => {
           const direct = Array.from(
             document.querySelectorAll<HTMLButtonElement>('[data-app-sidebar] button'),
           ).find((x) => x.getAttribute('aria-label') === '设置');
           if (direct) {
             direct.click();
-            return;
+            return 'direct';
           }
           /*
            * <xl 没有持久侧栏：先点顶栏汉堡开侧栏抽屉，再点其中的「设置」。
@@ -845,15 +872,30 @@ await page.click('[data-industry-select-option="indoor"]');
            * ⚠️ 别拿 `data-mobile-more-trigger` 顶替：那是 ⋮「更多操作」（<768 可见、
            *    开的是更多菜单），本行要点的是汉堡（<1280 可见、开的是侧栏抽屉）。
            */
-          document.querySelector<HTMLButtonElement>('[data-nav-menu-trigger]')?.click();
+          const burger = document.querySelector<HTMLButtonElement>('[data-nav-menu-trigger]');
+          if (!burger) return 'no-burger';
+          burger.click();
+          return 'burger';
         });
+        expect(
+          navOpened === 'direct' || navOpened === 'burger',
+          `打不开侧栏「设置」入口：既没有持久侧栏的设置按钮，也没找到汉堡 [data-nav-menu-trigger]（返回 ${navOpened}）。` +
+            '—— 旧写法是 `?.click()` 静默点空，失败会在下一步「等设置抽屉」处冒出，方向指错。',
+        ).toBe(true);
         if (w < 1280) {
           await page.waitForTimeout(400);
-          await page.evaluate(() => {
-            Array.from(document.querySelectorAll<HTMLButtonElement>('[data-app-sidebar] button'))
-              .find((x) => x.getAttribute('aria-label') === '设置')
-              ?.click();
+          // ⚠️ 同批：原来这里也是 `?.click()`（静默点空）；现在找不到就当场红并点名控件。
+          const sidebarSettingsClicked = await page.evaluate(() => {
+            const b = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-app-sidebar] button'))
+              .find((x) => x.getAttribute('aria-label') === '设置');
+            if (!b) return false;
+            b.click();
+            return true;
           });
+          expect(
+            sidebarSettingsClicked,
+            '侧栏抽屉里没找到「设置」按钮（旧写法静默点空 ⇒ 失败会推到后面等设置抽屉处，方向指错）',
+          ).toBe(true);
         }
         await page.waitForTimeout(600);
         expect(await page.locator('[role="dialog"]').count()).toBeGreaterThan(0);
@@ -961,12 +1003,16 @@ await page.click('[data-industry-select-option="indoor"]');
 
         if (theme === 'dark') {
           // 真实切换路径：抽屉内点「深色」→ useTheme.setMode → apply()
-          await page.evaluate(() => {
+          // ⚠️ 静默前置扫雷批：先断言存在再点（旧写法点空 ⇒ 主题没切，而后面断的是"切换后"的样子）
+          const darkClicked = await page.evaluate(() => {
             const b = Array.from(document.querySelectorAll<HTMLElement>('[data-settings-drawer] button')).find(
               (x) => (x.textContent ?? '').trim() === '深色',
             );
-            b?.click();
+            if (!b) return false;
+            b.click();
+            return true;
           });
+          expect(darkClicked, '设置抽屉里找不到「深色」按钮 ⇒ 主题未切换（旧写法静默点空，后面断的是旧主题）').toBe(true);
           await page.waitForTimeout(500);
         }
 

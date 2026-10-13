@@ -281,11 +281,21 @@ function entryCount(cell: HTMLElement): number {
 
 /** 切视图密度（点分段 ⇒ onChange ⇒ 重渲染） */
 function switchDensity(label: string): void {
+  /*
+   * ⚠️ **先断言存在、再点**（2026-10-14 静默前置扫雷批）：
+   *   旧写法 `btn?.click()` 在找不到那枚分段时**静默点空** —— 于是「密度没切」这件事
+   *   会被后面的断言当成「切了但数据不对」，甚至可能**带着旧密度通过**（假绿）。
+   *   现在找不到就当场红，并且说清是**哪一枚分段**没找到。
+   */
+  const tab = [...document.querySelectorAll<HTMLElement>('button[role="tab"]')].find(
+    (b) => (b.textContent ?? '').trim() === label,
+  );
+  expect(
+    tab,
+    `找不到视图分段「${label}」⇒ 密度没切（旧写法是静默点空，会把前置失效藏进后面的断言）`,
+  ).toBeTruthy();
   act(() => {
-    const btn = [...document.querySelectorAll<HTMLElement>('button[role="tab"]')].find(
-      (b) => (b.textContent ?? '').trim() === label,
-    );
-    btn?.click();
+    tab!.click();
   });
 }
 
