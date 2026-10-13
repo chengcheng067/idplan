@@ -9,6 +9,7 @@ import { createProjectActions } from '../store/useProjectsStore';
 import { useUiStore } from '../store/useUiStore';
 import { useMembersStore } from '../store/useMembersStore';
 import { useRepos } from '../hooks/useRepos';
+import { usePluginEnabled } from '../core/plugin/PluginRegistryProvider';
 import {
   needsDomainConfirm,
   projectKindOf,
@@ -101,6 +102,19 @@ export function ProjectDetailPage(): JSX.Element {
   const members = useMembersStore((s) => s.members);
   const { role, currentMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
+  /*
+   * ★ v0.8.6 阶段 2：agent-board 插件的启用态。
+   *
+   * 本页的「Agent Board」按钮走 `window.location.assign('/agent')` —— 而 `/agent`
+   * 是**插件贡献的路由**（`plugins/agent-board/manifest.tsx`），插件停用时它真的
+   * 从 children 里消失（`registry.ts::resolveRoutes` 只取启用中的），深链落到
+   * `main.tsx` 的 `Navigate to="/"`。于是停用插件后这颗按钮 = **点了就回首页的
+   * 死链**（界面入口本该随插件一起消失）。
+   *
+   * 故按插件开关**整颗按钮不渲染**（不是置灰：置灰仍在承诺一个不存在的去处）。
+   * 与 `/agent` 路由的存在性同源 —— 二者都由同一个 enabled 派生，不会各说各话。
+   */
+  const agentBoardOn = usePluginEnabled('agent-board').enabled;
   const isNarrow = useIsNarrowViewport();
   // 0.8.4 打印内置化：日程表改应用内预览面板（替代 window.open 新窗口）
   const [printPreviewId, setPrintPreviewId] = useState<string | null>(null);
@@ -305,8 +319,13 @@ export function ProjectDetailPage(): JSX.Element {
                   `!memberView`（管"谁"）由外层负责，`projectKindOf(project) === 'agent'`
                   （管"哪一个"）由本行负责，与上方打印按钮同一套写法（用 `projectKindOf`
                   而非裸 `project.kind`：读时回落只允许有一个出处，老库无该列）。
+
+                ── v0.8.6 阶段 2：本行现在是**三道**门 ──
+                  上述两道之外，本按钮还受 `agentBoardOn`（agent-board 插件启用态）门控——
+                  理由见组件体内 `agentBoardOn` 的注释：`/agent` 是插件路由，停用时
+                  这颗按钮就是一条点了回首页的死链。三道门都成立才渲染。
               */}
-              {projectKindOf(project) === 'agent' && (
+              {agentBoardOn && projectKindOf(project) === 'agent' && (
                 <button
                   type="button"
                   onClick={() => {
