@@ -18,6 +18,7 @@ import { useKeyboardPan } from '../../hooks/useKeyboardPan';
 import { useDragReschedule } from '../../hooks/useDragReschedule';
 import { addWorkdaysSigned, countWorkdays, snapShiftDate } from '../../lib/workdays';
 import { MonthScaleHeader } from './MonthScaleHeader';
+import { useLang } from '../../i18n';
 import { StageRowsColumn } from './StageRowsColumn';
 import { StageBar, StageBarDefs } from './StageBar';
 import { TodayLine } from './TodayLine';
@@ -83,6 +84,8 @@ export function TimelineView({
   members?: Member[];
   memberView?: boolean;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点（工具行文案在渲染期取） */
+  const { t } = useLang();
   const zoom = useUiStore((s) => s.timelineZoom);
   const setZoom = useUiStore((s) => s.setTimelineZoom);
   const openDrawer = useUiStore((s) => s.openStageDrawer);
@@ -230,12 +233,12 @@ export function TimelineView({
     <div className="relative">
       {/* 缩放档位切换 */}
       <div className="mb-2 hidden items-center justify-between text-xs text-mist sm:flex">
-        <span>提示：拖动彩条边缘改期；←/→ 键平移时间轴（Shift 加速）</span>
+        <span>{t('timeline.hint')}</span>
         <div className="flex overflow-hidden rounded-md border border-line">
           {(
             [
-              ['month', '月'],
-              ['half-month', '双周'],
+              ['month', t('timeline.zoom.month')],
+              ['half-month', t('timeline.zoom.halfMonth')],
             ] as Array<[TimelineZoom, string]>
           ).map(([z, label]) => (
             <button
@@ -295,7 +298,7 @@ export function TimelineView({
                 height={stages.length * (ROW_H + ROW_GAP)}
                 className="block select-none"
               role="img"
-              aria-label="九阶段时间轴"
+              aria-label={t('timeline.aria')}
             >
               {/* 共享 defs：激活发光（挂在 SVG 根，filter 的 url(#stage-glow) 才能解析） */}
               <StageBarDefs />

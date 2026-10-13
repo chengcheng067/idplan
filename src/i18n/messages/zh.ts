@@ -390,6 +390,22 @@ export const zhMessages = {
   'project.itineraryHint': '客户行程单按天列出交通、住宿、安排与费用，可直接发给客户或打印。',
   'project.itineraryTitle': '打开客户行程单（新窗口，只读导出）',
   'project.itinerary': '客户行程单',
+  /* ─────────────────── 时间轴工具栏（TimelineView）─────────────────── */
+  'timeline.hint': '提示：拖动彩条边缘改期；←/→ 键平移时间轴（Shift 加速）',
+  'timeline.zoom.month': '月',
+  'timeline.zoom.halfMonth': '双周',
+  'timeline.aria': '九阶段时间轴',
+
+  /* ─────────────────── 月历工具行（MonthlyCalendarView）─────────────────── */
+  'calendar.density.month': '月',
+  'calendar.density.week': '周',
+  'calendar.density.agenda': '日程',
+  'calendar.prevMonth': '上个月',
+  'calendar.nextMonth': '下个月',
+  'calendar.today': '今天',
+  'calendar.densityAria': '月历视图密度',
+  'calendar.thisWeek': '本周（周一 ~ 周日）',
+  'calendar.view': '查看',
 } as const;
 
 /**

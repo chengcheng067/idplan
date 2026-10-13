@@ -44,7 +44,7 @@ import { CalendarEmptyStates, type EmptyKind } from './CalendarEmptyStates';
 import { MonthDayCell, stageLabelOf } from './MonthDayCell';
 import { EntryDot } from './EntryDot';
 import { DayItemsPopover, type PopoverAnchorRect } from './DayItemsPopover';
-import { useLang, weekdayShortLabel } from '../../i18n';
+import { useLang, weekdayShortLabel, type MessageKey } from '../../i18n';
 
 /**
  * 月历看板（v0.7 画板 14 亮色 / 15 暗色 / 16-17 空状态四态 / 18 拥挤方案 A / 19 移动端）。
@@ -81,11 +81,13 @@ import { useLang, weekdayShortLabel } from '../../i18n';
 /** 视图密度（画板 14 工具行右端的分段控件；§7.2 D2「方案 A 为主 + 允许切周」的配套） */
 type CalendarDensity = 'month' | 'week' | 'agenda';
 
-const DENSITY_OPTIONS = [
-  { value: 'month' as const, label: '月' },
-  { value: 'week' as const, label: '周' },
-  { value: 'agenda' as const, label: '日程' },
-];
+/** 密度值的**稳定内部键**；显示名在渲染期取词（本文件顶部模块级常量不读语言） */
+const DENSITY_VALUES = ['month', 'week', 'agenda'] as const;
+const DENSITY_LABEL_KEYS: Record<CalendarDensity, MessageKey> = {
+  month: 'calendar.density.month',
+  week: 'calendar.density.week',
+  agenda: 'calendar.density.agenda',
+};
 
 /** 手机（<768px）判定：月历手机适配用（纯 CSR SPA，window 可用） */
 function useIsMobile(): boolean {
@@ -107,12 +109,14 @@ function MonthArrow({
   direction: 'prev' | 'next';
   onClick(): void;
 }): JSX.Element {
+  /** 取词 + 订阅语言变化（本模块级组件自己订阅） */
+  const { t } = useLang();
   const Icon = direction === 'prev' ? ChevronLeft : ChevronRight;
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={direction === 'prev' ? '上个月' : '下个月'}
+      aria-label={direction === 'prev' ? t('calendar.prevMonth') : t('calendar.nextMonth')}
       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-line bg-paper text-ink transition-colors hover:bg-sunken md:h-[32px] md:w-[32px]"
     >
       <Icon size={16} aria-hidden />
@@ -123,8 +127,9 @@ function MonthArrow({
 export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.Element {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  // 订阅语言变化（星期表头在渲染期取词）
-  useLang();
+  // 取词 + 订阅语言变化（星期表头 / 工具行文案在渲染期取词）
+  const { t } = useLang();
+  const densityOptions = DENSITY_VALUES.map((v) => ({ value: v, label: t(DENSITY_LABEL_KEYS[v]) }));
   const { theme } = useTheme();
   const calendarMonth = useUiStore((s) => s.calendarMonth);
   const setCalendarMonth = useUiStore((s) => s.setCalendarMonth);
@@ -430,15 +435,15 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
                 'px-[16px] md:px-[14px]',
               )}
             >
-              今天
+              {t('calendar.today')}
             </button>
           </div>
           <div className="md:flex md:shrink-0 md:justify-end">
             <SegmentedControl
               value={density}
               onChange={setDensity}
-              options={DENSITY_OPTIONS}
-              ariaLabel="月历视图密度"
+              options={densityOptions}
+              ariaLabel={t('calendar.densityAria')}
             />
           </div>
         </div>
@@ -486,7 +491,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
           <>
             {/* 周视图（画板 18-C / §7.2 D2「允许切周」）：同一套日期格，7 列一行 */}
             <div className="pb-[2px] text-[11px] text-mist">
-              {meta.label} · 本周（周一 ~ 周日）
+              {meta.label} · {t('calendar.thisWeek')}
             </div>
             {weekdayHeader}
             {grid(weekDays)}
@@ -523,7 +528,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
                     onClick={() => open(e.project.id)}
                     className="ml-auto shrink-0 text-[12px] text-pine hover:underline"
                   >
-                    查看
+                    {t('calendar.view')}
                   </button>
                 </div>
               ))}

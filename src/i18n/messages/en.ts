@@ -382,4 +382,20 @@ export const enMessages: Record<MessageKey, string> = {
     'The client itinerary lists transport, lodging, plans and costs day by day — send it to the client or print it directly.',
   'project.itineraryTitle': 'Open the client itinerary (new window, read-only export)',
   'project.itinerary': 'Client itinerary',
+  /* ─────────────────── Timeline toolbar ─────────────────── */
+  'timeline.hint': 'Tip: drag a bar edge to reschedule; ←/→ pan the timeline (hold Shift to speed up)',
+  'timeline.zoom.month': 'Month',
+  'timeline.zoom.halfMonth': 'Fortnight',
+  'timeline.aria': 'Nine-stage timeline',
+
+  /* ─────────────────── Calendar toolbar ─────────────────── */
+  'calendar.density.month': 'Month',
+  'calendar.density.week': 'Week',
+  'calendar.density.agenda': 'Agenda',
+  'calendar.prevMonth': 'Previous month',
+  'calendar.nextMonth': 'Next month',
+  'calendar.today': 'Today',
+  'calendar.densityAria': 'Calendar density',
+  'calendar.thisWeek': 'this week (Mon ~ Sun)',
+  'calendar.view': 'View',
 };
