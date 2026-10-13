@@ -1682,4 +1682,121 @@ describe.skipIf(!CAN_RUN)('H 版 · 五块形态（批 D：双栏分段轴甘特
       await page.close();
     }
   });
+
+  /**
+   * ★★ 月份刻度不得叠字 —— **跨 5 个月**的真实跨度（`lead`→`tail` 跃迁的判据盲区）。
+   *
+   * ── 这条用例存在的理由（是补盲区，不是补一条好看的）──
+   * 本文件既有夹具的 stage 全落在 2026-01 内 ⇒ 栏内轴只有 1–2 枚月份刻度 ⇒
+   * `layoutTicks` 里「末尾那枚贴右缘 ⇒ 切 `tail` 档」这条路径**从来没被走到过**。
+   * 而 `tail` 档的含义是**整枚标签左移自身宽度**（右对齐于刻度）——它与**上一枚
+   * `lead` 档**标签的右缘是否相交，旧实现根本没查（`pruneTicks` 只比刻度位置）。
+   * 真实后果（2026-10-13 实测，跨度 2026-08-03 → 2026-12-17）：栏内标尺上
+   * 「2026年11月」盒 [224,280] 与「2026年12月」盒 [242,298] 相交 ⇒ 渲染成
+   * 一团「2026年2?年12月」。
+   *
+   * 跨月项目是**常态**（本文件那个只跨 1 月的夹具才是特例）⇒ 这不是边角，
+   * 用户点「载入示例项目」就会撞到。故夹具必须覆盖真实跨度，断言必须落在
+   * **标签盒**（不是刻度位置）上。
+   */
+  it('★★ 月份刻度不叠字：跨 5 个月的真实跨度（末枚切 tail 档那一次）', async () => {
+    const css = builtCss();
+    /** 8 个阶段首尾相接铺满 2026-08-03 → 2026-12-17（= 跨 5 个月的常态跨度） */
+    const LONG_SPANS: ReadonlyArray<readonly [string, string]> = [
+      ['2026-08-03', '2026-08-19'],
+      ['2026-08-20', '2026-09-05'],
+      ['2026-09-06', '2026-09-22'],
+      ['2026-09-23', '2026-10-09'],
+      ['2026-10-10', '2026-10-26'],
+      ['2026-10-27', '2026-11-12'],
+      ['2026-11-13', '2026-11-30'],
+      ['2026-12-01', '2026-12-17'],
+    ];
+    const longStages: Stage[] = LONG_SPANS.map(([startAt, endAt], i) => ({
+      ...makeStage(i + 1, StageStatus.NotStarted, `阶段${i + 1}`),
+      startAt,
+      endAt,
+    }));
+    const vm = buildVm({
+      project: { ...PROJECT, plannedStartAt: '2026-08-03', plannedEndAt: '2026-12-17' },
+      stages: longStages,
+      tasks: [],
+    });
+
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1400 } });
+    try {
+      await page.goto(
+        'file://' +
+          writeHtml('h-blocks-month-ticks-long.html', shell(blocksMarkupOf(vm), css, false)),
+      );
+
+      /*
+       * 按**轴容器**分组量：月份刻度在三处各有一份（① 通栏覆盖带 1 条 + 栏内标尺 2 条）。
+       * 必须分组比 —— 跨容器比会拿「带上的 12 月」去撞「左栏的 9 月」，那是假阳性。
+       */
+      const axes = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('.ap-span-band__axis, .ap-col__ruler-axis')).map((host) =>
+          Array.from(host.querySelectorAll('[data-print-month-tick]')).map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              label: (el.textContent ?? '').trim(),
+              left: +r.left.toFixed(2),
+              right: +r.right.toFixed(2),
+              align: (el as HTMLElement).dataset.tickAlign ?? '',
+              track: +((el.closest('.ap-span-band__axis, .ap-col__ruler-axis') as HTMLElement)
+                .getBoundingClientRect().width).toFixed(2),
+            };
+          }),
+        ),
+      );
+      console.log(
+        '[H 月份刻度实测] ' +
+          axes
+            .map(
+              (ticks, i) =>
+                `轴${i + 1}(w=${ticks[0]?.track ?? 0}): ` +
+                ticks.map((t) => `${t.label}[${t.left},${t.right}]/${t.align}`).join(' '),
+            )
+            .join('\n                 '),
+      );
+
+      // 轴容器共 4 条：通栏覆盖带 ×2（span 页 + list 页各一条）+ 栏内标尺 ×2（左右栏）
+      expect(axes.length, '纸面应有 4 条轴：通栏覆盖带 ×2（span/list 页）+ 栏内标尺 ×2').toBe(4);
+
+      /*
+       * 反假绿：本夹具**必须真的走到 `tail` 档**。
+       * 没有这一条，将来有人把夹具换回 1 月内（只有 1–2 枚刻度、一枚都不落 tail），
+       * 下面的「不叠字」会在**根本没覆盖该路径**的情况下继续绿 —— 那正是本次要堵的洞。
+       */
+      const tails = axes.flat().filter((t) => t.align === 'tail');
+      expect(
+        tails.length,
+        '夹具必须走到 lead→tail 跃迁（否则本用例空转）：至少一枚刻度落 tail 档',
+      ).toBeGreaterThan(0);
+      expect(
+        axes.flat().length,
+        '夹具必须是多枚刻度（跨 5 个月 ⇒ 5 枚月份刻度 × 3 条轴，去重后 ≥8）',
+      ).toBeGreaterThanOrEqual(8);
+
+      // 判据本体：同一条轴内，相邻两枚**标签盒**不得相交
+      for (let i = 0; i < axes.length; i++) {
+        const ticks = axes[i]!;
+        for (let k = 1; k < ticks.length; k++) {
+          const a = ticks[k - 1]!;
+          const b = ticks[k]!;
+          expect(
+            a.right <= b.left + 0.5,
+            `轴${i + 1} 相邻刻度标签不得叠字：` +
+              `「${a.label}」右缘 ${a.right}（${a.align}）越过了「${b.label}」左缘 ${b.left}（${b.align}）`,
+          ).toBe(true);
+        }
+      }
+
+      await (await page.$('.a4-page'))!.screenshot({
+        path: join(OUT_DIR, 'h-blocks-month-ticks-long.png'),
+      });
+    } finally {
+      await page.close();
+    }
+  });
 });

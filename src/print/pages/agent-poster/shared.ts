@@ -803,20 +803,62 @@ export function pruneTicks(
 }
 
 /**
- * 抽稀 + 标贴右缘的对齐档（**必须两步一起**：只抽稀不标对齐，最后一枚会越盒）。
- * 贴右缘的那一段刻度会被连续标成 `tail`（它们之间都有 ≥minGap 的间距、
- * 且都右对齐 ⇒ 彼此不叠，这也是「同段同档」的原因）。
+ * 抽稀 + 标贴右缘的对齐档 + **按标签盒去叠**（三步必须一起，少一步纸上就是一团）。
+ *
+ * ── 第 ③ 步（按标签盒去叠）为什么必须有（2026-10-13 修，判据盲区）──
+ * 前两步各自只解决一半，交集处漏了一档：`pruneTicks` 比的是**刻度位置**间距
+ * （≥minGap%），而第 ② 步给末枚标 `tail` 时会把它**整枚左移自身宽度**（右对齐于
+ * 刻度）。于是「上一枚 `lead` 的右缘」与「本枚 `tail` 的左缘」**没人查**：
+ *
+ *   跨度 2026-08-03 → 2026-12-17、栏内轨宽 338 时实测（真机，DPR 无关的 CSS px）：
+ *     `2026年11月` 盒 [365.03, 418.42] / lead
+ *     `2026年12月` 盒 [385.66, 439.05] / tail   ← 左缘 385.66 < 418.42 ⇒ 相交 32.76px
+ *   渲染出来是「2026年2?年12月」——不是观感问题，是**读不出月份**。
+ *
+ * 旧注释里「贴右缘那一段会连续标成 tail（彼此不叠）」只覆盖了 **tail→tail**，
+ * 漏掉了 **lead→tail 这一次跃迁**。既有 spec 的夹具全在 1 个月以内 ⇒ 栏内轴只有
+ * 1–2 枚刻度、一枚都不落 tail ⇒ 这条路径**从来没被走到过**（盲区的形态：
+ * 断言在，夹具不在）。跨月项目是常态，所以这是产品缺陷而不是夹具问题。
+ *
+ * ── 去叠策略：留**后一枚**（即那枚 tail），回退掉被它压住的**前一枚** ──
+ * 与 `pruneTicks` 的「位置太近就丢后一枚」刻意不同，理由有两条：
+ *   ① `align` 机制本身就是为**末枚**存在的（它不切 tail 就会越出盒子）——
+ *      把末枚丢掉等于让这个机制白做；
+ *   ② 末枚标的是**时间轴的收尾月份**，丢了读者不知道轴画到哪里。
+ * 于是判据是「标签盒不相交」而不是「刻度位置间距 ≥ X」——盒宽（`AP_SPAN_TICK_PX`）
+ * 才是真正决定看不看得清的量。
+ *
+ * 自证：`tests/print-a4-visual-h.spec.ts` 的「★★ 月份刻度不叠字：跨 5 个月的真实
+ * 跨度」用例（修复前红点原文可从 git 历史取；该用例另带反假绿断言「必须走到 tail 档」）。
  */
 export function layoutTicks(
   ticks: readonly { label: string; leftPercent: number }[],
   minGapPct: number,
   trackPx: number,
 ): readonly ApTick[] {
-  return pruneTicks(ticks, minGapPct).map((t) => ({
+  // ① 位置抽稀 → ② 标对齐档（贴右缘的末枚切 tail，否则整枚越出盒子）
+  const anchored: ApTick[] = pruneTicks(ticks, minGapPct).map((t) => ({
     label: t.label,
     leftPercent: t.leftPercent,
     align: (t.leftPercent / 100) * trackPx + AP_SPAN_TICK_PX > trackPx ? 'tail' : 'lead',
   }));
+
+  /** 标签盒（轨内 px）：`lead` 左对齐于刻度位置、`tail` 右对齐于刻度位置 */
+  const boxOf = (t: ApTick): { left: number; right: number } => {
+    const x = (t.leftPercent / 100) * trackPx;
+    return t.align === 'tail'
+      ? { left: x - AP_SPAN_TICK_PX, right: x }
+      : { left: x, right: x + AP_SPAN_TICK_PX };
+  };
+
+  // ③ 从左往右按盒收，压住前一枚就把它回退掉（可能连续回退多枚）
+  const kept: ApTick[] = [];
+  for (const t of anchored) {
+    const box = boxOf(t);
+    while (kept.length > 0 && boxOf(kept[kept.length - 1]!).right > box.left) kept.pop();
+    kept.push(t);
+  }
+  return kept;
 }
 
 /** 双栏分段轴甘特的一行 */
