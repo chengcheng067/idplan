@@ -211,16 +211,21 @@ describe.skipIf(!CAN_RUN_FRESH)('F3-BROWSER · 退出身份后侧栏不显示项
       await page.waitForTimeout(600);
 
       /*
-       * 重新进入身份：示例导入整库替换 members 后，此前手工建立的管理员
-       * （m-xxx）已不在库里，localStorage 里的 currentMemberId 失效 ⇒ 应用
-       * 停在「还未进入身份」态（这正是 2ec2d3c 修的空态本身）。用演示数据
-       * 里的真实成员「负责人甲」走 name_input 流程进入。
+       * 重新建立身份 —— ⚠️ 订正（2026-10-14）：本段原先点「点击进入」→ 走 name_input 填
+       * 「负责人甲」，前提是「示例导入整库替换 members 后停在『未进入身份』态」。
+       * **那条前提已经被有意移除**：demo 包自带 `settings.currentMemberId='demo_admin'`
+       * （= 本包 members 里的「负责人甲」），而 `useRepos.bootstrapAllStores` 的身份候选
+       * 阶梯（`9dd3d77`，每一档必须命中当前 members）让这条兜底真的生效
+       * ⇒ 导入后**身份已被自动建立为「负责人甲」**，页面上**没有**「点击进入」可点
+       *（旧写法在这里 30s 超时，且失败信息长得像「侧栏坏了」，方向是错的）。
+       * ⇒ 现在改成**自检身份已建立**：目标身份没变（仍是示例包的管理员），只是不再需要人工输入。
        */
-      await page.locator('button', { hasText: '点击进入' }).first().click();
+      await page.waitForFunction(
+        () => (document.body.textContent ?? '').includes('负责人甲'),
+        undefined,
+        { timeout: 15000 },
+      );
       await page.waitForTimeout(400);
-      await page.locator('input[placeholder="你的姓名"]').fill('负责人甲');
-      await page.locator('button', { hasText: '下一步' }).first().click();
-      await page.waitForTimeout(800);
 
       // ── 对照（有身份）：两态都有项目，断言才有判别力 ──
       const withId = await sidebarProjectCounts(page);

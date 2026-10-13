@@ -3,7 +3,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { listenOnSafePort } from './helpers/safe-listen';
-import { staleInputs } from './helpers/board-env';
+import { staleInputs, enterMemberBoard as enterMemberBoardShared } from './helpers/board-env';
 
 
 /**
@@ -161,10 +161,18 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
 const SHOT_DIR = resolve(__dirname, '..', 'qa-scratch', 'member-board-layout');
 
 /**
- * 进入「成员 执行乙 的成员看板」：首启建管理员 → 载入 indoor 示例 → 退出后以
- * 「执行乙」进入 → SPA 导航到成员看板。
- * （执行乙是 indoor 种子里的 stage owner，其名下必有相关项目；整库导入会替换
- * members，管理员身份随之失效，故导入后重新进入身份。）
+ * 进入「成员 执行乙 的成员看板」：首启建管理员 → 载入 indoor 示例 →
+ * **切成成员「执行乙」** → SPA 导航到成员看板。
+ *
+ * ⚠️ 订正（2026-10-14）：本函数尾部原先自己点「点击进入」再填姓名，前提是
+ * 「整库导入后**身份为空**」——那条前提**已经死了、且是有意移除的**：
+ * demo 包自带 `settings.currentMemberId='demo_admin'`（=「负责人甲」），
+ * 而 `useRepos.bootstrapAllStores` 的身份候选阶梯（`9dd3d77`）让这条兜底真的生效
+ * ⇒ **导入后身份已被自动建立为管理员**，「点击进入」根本不存在。
+ * ⇒ 那一段改为**复用共享 helper**（`helpers/board-env.ts` 的 `enterMemberBoard`）：
+ *    它有 ① 身份自检（失败直说「旧语义过期」而不是 15s 超时）② 实测验证过的
+ *    「切换身份 → 执行乙」三步 ③ 切完断言 `/member-board` 入口出现（否则响亮失败）。
+ *    本函数只保留它自己的前半段（goto + 建管理员 + 载入示例）——那部分是它独有的。
  */
 async function enterMemberBoard(page: Page, serverUrl: string): Promise<void> {
   await page.goto(serverUrl);
@@ -190,24 +198,8 @@ async function enterMemberBoard(page: Page, serverUrl: string): Promise<void> {
   await page.waitForFunction((name) => document.body.innerText.includes(name), '演示项目1', { timeout: 20000 });
   await page.waitForTimeout(1500);
 
-  await page.evaluate(() => {
-    const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '点击进入');
-    b?.click();
-  });
-  await page.waitForSelector('input[placeholder="你的姓名"]', { timeout: 15000 });
-  await page.locator('input[placeholder="你的姓名"]').fill('执行乙');
-  await page.evaluate(() => {
-    const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '下一步');
-    b?.click();
-  });
-  await page.waitForTimeout(1200);
-
-  await page.evaluate(() => {
-    const l = Array.from(document.querySelectorAll('a')).find((x) => (x.textContent ?? '').includes('成员看板'));
-    l?.click();
-  });
-  await page.waitForSelector('[role="button"].group', { timeout: 20000 });
-  await page.waitForTimeout(500);
+  // 身份已由示例包自动建立 ⇒ 交给共享 helper：切成「执行乙」并打开成员看板
+  await enterMemberBoardShared(page);
 }
 
 describe.skipIf(!CAN_RUN_FRESH)(
