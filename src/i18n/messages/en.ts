@@ -835,7 +835,14 @@ export const enMessages: Record<MessageKey, string> = {
     'The target project has no stages yet; add stages on its detail page first.',
   'agentTransfer.stagePlaceholder': '(choose a landing stage)',
   'agentTransfer.tasks': 'Tasks to move',
-  'agentTransfer.selectedCount': '{selected} of {total} selected',
+  /*
+   * ⚠️ 这个取值的**开头有一个空格**，不是手滑：它在 JSX 里的左邻居是一个**硬编码的
+   *    ` *` 必填标记**（`<span className="text-sm">{t('…tasks')}<span> *</span></span>`），
+   *    行内元素被折成一个单元后左段的文字以 `*` 结尾 ⇒ 按「左段不是取值时空格落右段开头」
+   *    的惯例，空格只能在这里。中文侧不需要（汉字前不加空格）。
+   *    本行是 `tests/i18n-jsx-space.spec.ts` 的 en 侧全仓扫描**当场报出来的**（首跑红 1 处）。
+   */
+  'agentTransfer.selectedCount': ' {selected} of {total} selected',
   'agentTransfer.noTask': 'This board has no tasks yet — nothing to move.',
   'agentTransfer.preview.convert':
     'Preview: turn board “{board}” into a full project in the human workspace ({count} tasks move with it).',
