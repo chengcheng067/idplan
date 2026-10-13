@@ -21,6 +21,7 @@ import { createServer } from 'node:http';
 import { join, extname, resolve } from 'node:path';
 
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 const ROOT = resolve(__dirname, '..');
 const DIST_INDEX = join(ROOT, 'build-dist', 'index.html');
@@ -65,28 +66,14 @@ const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
  * 产物过期守卫：src / tailwind.config.ts 等任一构建输入比 build-dist 新 ⇒ 整组 skip。
  * 过期时跑等于拿**上一版界面**下结论（假绿），比 skip 危险得多。
  */
-function staleInputs(): string[] {
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = statSync(DIST_INDEX).mtimeMs;
-  const files: string[] = [];
-  const walk = (dir: string): void => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
-      const full = join(dir, e.name);
-      if (e.isDirectory()) walk(full);
-      else if (e.isFile()) files.push(full);
-    }
-  };
-  walk(join(ROOT, 'src'));
-  for (const f of ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js']) {
-    const abs = join(ROOT, f);
-    if (existsSync(abs)) files.push(abs);
-  }
-  return files
-    .filter((f) => statSync(f).mtimeMs > distMs)
-    .map((f) => f.slice(ROOT.length + 1))
-    .slice(0, 3);
-}
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （带 `warnStaleOnce`：过期时会打印「哪些构建输入比产物新 + 先 npm run build」）。
+ *
+ * ⚠️ 本文件原先内联一份**语义近似、但没有告警**的复制体 ⇒ 过期时**静默 skip**（skip ≠ 通过）。
+ *    本次收敛补上告警。**有意扩大**的输入项见下方/提交说明（扩大不静默、且多 skip 几次
+ *    远好于「在可能过期的产物上真跑」那种静默的错误结果 —— team-lead 2026-10-14 已拍板）。
+ */
 const STALE = CAN_RUN ? staleInputs() : [];
 const CAN_RUN_FRESH = CAN_RUN && STALE.length === 0;
 const SKIP_NOTE = !CAN_RUN

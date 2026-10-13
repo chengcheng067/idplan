@@ -122,6 +122,7 @@ import {
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 import type { TimelineRange } from '../src/lib/date';
+import { staleInputs } from './helpers/board-env';
 
 /**
  * `ProjectCard` 经 `useRepos()` 读 Context（本 spec 没有 Provider 树），
@@ -1510,35 +1511,14 @@ function resolveChromium(): string | null {
   return null;
 }
 
-function collectFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectFiles(full));
-    else if (entry.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/** 产物是否落后于源码（R12 教训：只判「产物存在」会让本段在旧产物上变绿） */
-function staleInputs(): string[] {
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = statSync(DIST_INDEX).mtimeMs;
-  const repo = resolve(__dirname, '..');
-  const candidates = [
-    ...collectFiles(join(repo, 'src')),
-    join(repo, 'index.html'),
-    join(repo, 'vite.config.ts'),
-    join(repo, 'tailwind.config.ts'),
-    join(repo, 'postcss.config.js'),
-  ].filter((f) => existsSync(f));
-  return candidates
-    .filter((f) => statSync(f).mtimeMs > distMs)
-    .map((f) => f.slice(repo.length + 1))
-    .slice(0, 3);
-}
-
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （带 `warnStaleOnce`：过期时会打印「哪些构建输入比产物新 + 先 npm run build」）。
+ *
+ * ⚠️ 本文件原先内联一份**语义近似、但没有告警**的复制体 ⇒ 过期时**静默 skip**（skip ≠ 通过）。
+ *    本次收敛补上告警。**有意扩大**的输入项见下方/提交说明（扩大不静默、且多 skip 几次
+ *    远好于「在可能过期的产物上真跑」那种静默的错误结果 —— team-lead 2026-10-14 已拍板）。
+ */
 const CHROMIUM_PATH = resolveChromium();
 const STALE = existsSync(DIST_INDEX) ? staleInputs() : [];
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null && STALE.length === 0;

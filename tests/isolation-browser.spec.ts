@@ -45,6 +45,7 @@ import { deriveStageColors } from '../src/core/color/derive-stage-colors';
 import { stageColorAttrs, stageColorKeyOf } from '../src/components/timeline/stageColorKey';
 import { builtJs } from './helpers/built-css';
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 /**
  * ⚠️ Electron 把 `ELECTRON_RUN_AS_NODE=1` 注入到环境里。
@@ -93,38 +94,14 @@ function resolveChromium(): string | null {
 }
 
 /** 收集目录下所有文件（新鲜度判定用） */
-function collectFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectFiles(full));
-    else if (entry.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/**
- * 产物是否落后于源码（任一构建输入比 `build-dist/index.html` 新）。
- * R12 的教训：只判"产物存在"会让本 spec 在旧产物上变绿 —— 那是最危险的一类假绿。
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （带 `warnStaleOnce`：过期时会打印「哪些构建输入比产物新 + 先 npm run build」）。
+ *
+ * ⚠️ 本文件原先内联一份**语义近似、但没有告警**的复制体 ⇒ 过期时**静默 skip**（skip ≠ 通过）。
+ *    本次收敛补上告警。**有意扩大**的输入项见下方/提交说明（扩大不静默、且多 skip 几次
+ *    远好于「在可能过期的产物上真跑」那种静默的错误结果 —— team-lead 2026-10-14 已拍板）。
  */
-function staleInputs(): string[] {
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = statSync(DIST_INDEX).mtimeMs;
-  const repo = resolve(__dirname, '..');
-  const candidates = [
-    ...collectFiles(join(repo, 'src')),
-    join(repo, 'index.html'),
-    join(repo, 'vite.config.ts'),
-    join(repo, 'tailwind.config.ts'),
-    join(repo, 'postcss.config.js'),
-  ].filter((f) => existsSync(f));
-  return candidates
-    .filter((f) => statSync(f).mtimeMs > distMs)
-    .map((f) => f.slice(repo.length + 1))
-    .slice(0, 3);
-}
-
 const CHROMIUM_PATH = resolveChromium();
 const STALE = existsSync(DIST_INDEX) ? staleInputs() : [];
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null && STALE.length === 0;
