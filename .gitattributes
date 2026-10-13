@@ -1,0 +1,16 @@
+# .gitattributes —— 只声明「必须 LF」的文件类型，**不做全仓规范化**
+#
+# 为什么需要（2026-10-14 事故后加）：
+#   本机 `core.autocrlf = true`、仓内原先**没有** .gitattributes ⇒ 任何一次**全新 clone/checkout**
+#   都会把 CRLF 装进 `.sh`，而 CRLF 会让 shell 把 `set -u` 读成 `set -u\r`（"invalid option"）、
+#   把 `#!/usr/bin/env bash` 读成 `bash\r` ⇒ 脚本直接炸。
+#   受影响的不只是窗口仪器，还有 NAS 打包链 `ugnas/scripts/*.sh`（4 个）。
+#
+# 为什么可以这么窄：`.sh` **不在构建输入里**（构建输入 = src / electron / index.html /
+#   vite.config.* / tailwind.config.* / postcss.config.* / package.json）⇒ 不碰产物代。
+#
+# ⚠️ 绝不许改成 `* text=auto` 或任何全仓级 `text` 规则：
+#   那会触发大规模重规范化，把一整套不相关文件翻成 modified，并可能连产物代一起翻掉。
+#   加/改本文件后必须自证「零规范化」：`git status --short` 与 `git diff --stat`
+#   相对改动前的基线**逐行相同**，且 9 个 `.sh` 的 index blob 逐字节未变。
+*.sh text eol=lf
