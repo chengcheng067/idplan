@@ -1,0 +1,169 @@
+/**
+ * Agent 看板插件 · **它自己的设置**（v1.0 · 设置层级重做）
+ *
+ * ── 这个文件为什么存在 ──
+ * 她的原话：「Agent 实际上应该包含在下面那个箭头指的『插件』里面，给里面增加一个
+ * 设置按钮。**每一个插件都应该有自己对应的设置，它应该是在自己的板块里面**」。
+ *
+ * 在这之前，这三块（Agent 席位与本地库 / 自然语言通道 / Agent 看板入口）住在
+ * 宿主设置抽屉里，而且是**插件区里的一个固定二级分组**（`SettingsDialog` 的
+ * `PLUGIN_SUBS` 两段子导航）——那个形态把「插件」写死成只有 Agent 一家有事可说。
+ * 现在它们只是 **agent-board 这个插件自己的设置**：经该插件 manifest 的
+ * `settingsSlot` 挂载，宿主只认「插件声明的设置区块」这一条抽象。
+ *
+ * ── 内容零改动（只搬位置 + 换外壳）──
+ * 三块的标记、文案键、数值口径与原来逐字一致，唯一的删减是那枚
+ * `<Link to="/agent">` 的 `onClick={onClose}`：`onClose` 是宿主设置抽屉的
+ * 关闭回调，插件组件拿不到（`PluginSettingsSlot` 以 `<Slot />` 无 props 渲染，
+ * 见 `core/plugin/PluginRegistryProvider.tsx`），而给插件传宿主回调要改宿主
+ * 装配层。**行为差量：从这里点「打开 Agent 看板」不再自动收起设置抽屉**
+ * （抽屉是贴侧栏的 `left-rail`，导航后仍悬在新页面上，按 Esc 或点关闭可收）。
+ * 已上报 team-lead 待定；改法见报告。
+ *
+ * ── 权限口径：全员可见（**不许顺手加管理员墙**）──
+ * 搬家前这三块是全员可见的（原二级子导航与 `PLUGIN_SUBS` 都没有 `adminOnly`），
+ * 搬家后保持——`settingsSlot` 的渲染由插件启用态决定，与角色无关。
+ * 这不是遗漏，是口径：Agent 接入是每个使用者都会碰的东西。
+ *
+ * ── 为什么 defaultEnabled 的插件里放「席位/用量」这类全局信息 ──
+ * 它们是**展示**（B5：只展示不拦截），不是「Agent 插件的配置项」。放这里的理由
+ * 是归属：席位与本地库占用说的就是「Agent 这块功能占了你多少」，它属于 Agent，
+ * 不属于宿主的「数据与备份」。停用 agent-board ⇒ 整块随 slot 消失，用户不会在
+ * 关掉 Agent 之后还被一个「Agent 席位 已用 3/50」的卡片念叨。
+ */
+
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Bot, Database } from 'lucide-react';
+
+import { useLang } from '../../i18n';
+import { useRepos } from '../../hooks/useRepos';
+import { useMembersStore } from '../../store/useMembersStore';
+import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
+import {
+  estimateLocalDbUsage,
+  formatBytes,
+  type LocalDbUsage,
+} from '../../lib/storage-estimate';
+
+export function AgentSettingsPanel(): JSX.Element {
+  const { t } = useLang();
+
+  // —— v0.6 · T13：Agent 席位明示（B5：只展示不拦截）+ 本地库占用量 ——
+  const members = useMembersStore((st) => st.members);
+  const agentSeatUsed = members.filter((m) => m.actorKind === 'agent').length;
+  const agentSeatOver = agentSeatUsed > AGENT_SEAT_LIMIT;
+  const repos = useRepos();
+  /**
+   * 本地库占用：**本面板挂载时**估算一次，打开期间不轮询（展示用途足够）。
+   *
+   * 原实现在宿主抽屉里靠 `open` 布尔门控（「每次打开抽屉估一次」）。搬进来之后
+   * 挂载时机本身就是「用户点了齿轮、要看这个插件的设置」——`open` 这个前置条件
+   * 由宿主变成了本组件的生命周期，判据没有变松：依然是「一打开就估、开着不重估」。
+   */
+  const [dbUsage, setDbUsage] = useState<LocalDbUsage | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void estimateLocalDbUsage(async () => {
+      const projects = await repos.projects.list();
+      const stages = (
+        await Promise.all(projects.map((pj) => repos.stages.listByProject(pj.id)))
+      ).flat();
+      return {
+        projects,
+        stages,
+        tasks: await repos.tasks.list(),
+        members: await repos.members.list(),
+      };
+    }).then((u) => {
+      if (!cancelled) setDbUsage(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [repos]);
+
+  return (
+    <div className="space-y-5">
+      {/* Agent 与本地库区（v0.6 · T13：席位明示 + 库占用，只展示不拦截） */}
+      <section>
+        <div className="mb-2 flex items-center gap-1.5">
+          <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+            <Database size={14} className="text-mist" aria-hidden />
+            {t('settings.section.agentSeats')}
+          </h3>
+        </div>
+        <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5 text-xs leading-6">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-mist">Agent 席位</span>
+            <span className="font-mono text-ink">
+              已用 {agentSeatUsed}/{AGENT_SEAT_LIMIT}
+            </span>
+          </div>
+          {agentSeatOver && (
+            <p className="text-[11px] text-amber">
+              已超出免费席位额度（{AGENT_SEAT_LIMIT} 个）——不影响使用，仅作提示。
+            </p>
+          )}
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="text-mist">本地库占用</span>
+            <span className="font-mono text-ink">
+              {dbUsage ? formatBytes(dbUsage.bytes) : '—'}
+              {dbUsage && dbUsage.source === 'serialization-fallback' && (
+                <span className="ml-1 text-[10px] text-mist">（估算）</span>
+              )}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-mist">
+            未来单库超过约 50MB 时会在此提示清理 / 分库建议。
+          </p>
+        </div>
+      </section>
+
+      {/*
+        自然语言通道（说明性条目，不重复数据）：接入凭据的生成/管理在
+        Agent 看板的接入面板——那边是工作流现场，设置里只讲清口径。
+      */}
+      <section>
+        <div className="mb-2 flex items-center gap-1.5">
+          <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+            <Bot size={14} className="text-mist" aria-hidden />
+            {t('settings.section.naturalLanguage')}
+          </h3>
+        </div>
+        <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
+          外部 Agent 通过本机回环地址以<strong className="text-ink">结构化命令</strong>
+          接入 ID Plan；自然语言由 Agent 侧自己解析——ID Plan 不解析自然语言、不调用大模型。
+          接入地址与访问令牌在 Agent 看板的接入面板里生成与管理，此处不重复。
+        </p>
+      </section>
+
+      {/* Agent 看板入口（说明性：数据不复制进设置，点它去现场） */}
+      <section>
+        <div className="mb-2 flex items-center gap-1.5">
+          <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+            <Bot size={14} className="text-mist" aria-hidden />
+            {t('settings.section.agentBoard')}
+          </h3>
+        </div>
+        <p className="mb-2 rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
+          Agent 看板是 AI 工作区：执行记录、接入面板与任务队列都在那里。
+        </p>
+        {/*
+          这个 Link 只在 agent-board 启用时会被渲染（`PluginSettingsSlot` 判启用态，
+          停用就整块返回 null）——所以它**不再是死链**：从前它挂在宿主抽屉里，
+          插件关掉后 /agent 路由不存在，点过去落到 '*' 通配回首页且抽屉还开着。
+          ⚠️ 与搬家前的行为差量：少了 `onClick={onClose}`（拿不到宿主回调），
+             点它导航后设置抽屉不自动收。见文件头「内容零改动」段。
+        */}
+        <Link
+          to="/agent"
+          className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
+        >
+          <Bot size={15} className="text-mist" aria-hidden />
+          打开 Agent 看板
+        </Link>
+      </section>
+    </div>
+  );
+}

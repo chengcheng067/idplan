@@ -25,11 +25,20 @@
  * ── 为什么 defaultEnabled: true ──
  * 这是**已上线功能**的插件化，不是新功能上线。默认关会让所有人升级后突然
  * 看不到 Agent 看板（看起来像坏了吗）。默认开 + 她随时可关，才是升级友好。
+ *
+ * ── v1.0：本插件的**设置**也归它自己（`settingsSlot`）──
+ * 她的原话：「每一个插件都应该有自己对应的设置，它应该是在自己的板块里面」。
+ * Agent 席位与本地库 / 自然语言通道 / Agent 看板入口这三块因此从宿主设置抽屉
+ * 搬进 `AgentSettingsPanel`，挂在这里——主机侧不再有一份「Agent 该有哪些设置」
+ * 的名单（原先那份名单是设置抽屉里的 `PLUGIN_SUBS` 两段子导航，已删）。
+ * 可视化结果：设置 → 插件 → 「Agent 看板」卡上的齿轮 → 这三块；
+ * 关掉本插件 ⇒ 齿轮置灰、设置随 slot 一起消失。
  */
 
 import { AgentBoardPage } from '../../pages/AgentBoardPage';
 import { AgentExecutionConsolePage } from '../../pages/AgentExecutionConsolePage';
 import type { PluginManifest } from '../../core/plugin/types';
+import { AgentSettingsPanel } from './AgentSettingsPanel';
 
 export const agentBoardManifest: PluginManifest = {
   id: 'agent-board',
@@ -49,4 +58,7 @@ export const agentBoardManifest: PluginManifest = {
     // 插件只声明段标题与目标路由——**渲染权在宿主**，插件不自己画 UI。
     { to: '/agent', label: 'Agent 工作区', icon: 'bot', group: 'agent' },
   ],
+  // 本插件自己的设置（设置 → 插件 → 「Agent 看板」卡的齿轮就地展开）。
+  // 全员可见：与搬家前一致（原二级子导航没有 adminOnly 门控），不在此加管理员墙。
+  settingsSlot: AgentSettingsPanel,
 };

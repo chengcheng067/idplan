@@ -9,6 +9,20 @@
  *    停用后这些都不出现——不是「藏起来」，是从注册表里摘掉
  * ④ **默认态可见**：没动过的插件显示「默认启用/默认停用」，免得用户以为开关失灵
  *
+ * ── v1.0 · 反馈「每一个插件都应该有自己对应的设置，它应该是在自己的板块里面」──
+ * ⑧ **每张卡一枚齿轮**：设置不再是「插件区里的一个二级分组」（那套 `plugins` /
+ *    `agent` 两段子导航已整块拆掉，见 `SettingsDialog.tsx`），而是**每个插件
+ *    自己的**——点某张卡上的齿轮，就地展开该插件的 `manifest.settingsSlot`。
+ *    三条判据：
+ *      · **不隐藏、只置灰**——`manifest.settingsSlot` 为空的插件（如
+ *        `weekly-report`）齿轮置灰 `disabled`：「这个插件没有自己的设置」是
+ *        一个**可被看见**的事实，藏起来会让人以为界面坏了。
+ *      · 展开区就是 `PluginSettingsSlot`（`core/plugin/PluginRegistryProvider.tsx`），
+ *        它自己判启用态：**插件停用 ⇒ 返回 null，设置随之消失**——这正好把本文件
+ *        第 243 行那句「停用后……设置区块会立即消失」从空头支票变成真话。
+ *      · 展开态是**本组件内的瞬态**（`useState`），不落 URL、不落 KV：它是「我此刻
+ *        在看哪个插件的设置」，不是配置。同一时刻只展开一个（再点一次收起）。
+ *
  * ── v0.8.6 · L2「从文件安装」新增 ──
  * ⑤ **安装**：「从文件安装」选 manifest.json ⇒ 披露对话框（诚实说清：代码来自
  *    你选的文件、只读数据、**可以访问网络**、重启生效）⇒ 校验落盘 ⇒ 强制写
@@ -24,10 +38,10 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Check, FolderInput, Loader2, Puzzle, Trash2, X } from 'lucide-react';
+import { Check, FolderInput, Loader2, Puzzle, Settings, Trash2, X } from 'lucide-react';
 
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { usePluginRegistry } from '../../core/plugin/PluginRegistryProvider';
+import { PluginSettingsSlot, usePluginRegistry } from '../../core/plugin/PluginRegistryProvider';
 import type { PluginManifest } from '../../core/plugin/types';
 import { isDesktop } from '../../lib/desktopBridge';
 import { cn } from '../../lib/cn';
@@ -115,6 +129,12 @@ export function PluginsSection(): JSX.Element {
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingDisclosure | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<{ id: string; name: string } | null>(null);
+  /**
+   * 此刻展开着谁的设置（`manifest.id`；null = 都收起）。
+   * 瞬态、不落 URL / KV——「我正在看哪个插件的设置」是一种当下视图，不是配置。
+   * 同一时刻只开一个：再点同一个齿轮即收起，点别的齿轮就换人。
+   */
+  const [openSettings, setOpenSettings] = useState<string | null>(null);
 
   const rows = useMemo(
     () =>
@@ -281,91 +301,151 @@ export function PluginsSection(): JSX.Element {
         <ul className="divide-y divide-line">
           {rows.map(({ manifest, enabled, explicit, installed }) => {
             const busy = busyId === manifest.id;
+            /**
+             * 这个插件有没有自己的设置区块（manifest 声明式给出，见 PluginManifest.settingsSlot）。
+             * 没有 ⇒ 齿轮**置灰不隐藏**：「它没有自己的设置」是个该被看见的事实。
+             */
+            const hasOwnSettings = Boolean(manifest.settingsSlot);
+            const settingsExpanded = openSettings === manifest.id;
             return (
               <li
                 key={manifest.id}
                 data-plugin-row={manifest.id}
                 className={cn(
-                  'flex items-start gap-2.5 py-2.5',
+                  // 竖列：第一行是插件卡（原来的 `flex items-start gap-2.5` 原样收进内层），
+                  // 第二行是展开的设置区。行布局因此零变化（min-w-0 flex-1 + 两枚按钮同轴）。
+                  'flex flex-col py-2.5',
                   // 来源分层：member 自装插件左竖条（设计师规范：来源只用形态）
                   manifest.source === 'member' && 'border-l-2 border-line pl-2',
                 )}
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-[13px] font-medium text-ink">{manifest.name}</span>
-                    <span className="shrink-0 font-mono text-[10px] text-mist">
-                      v{manifest.version} · {sourceLabel(manifest)}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-mist">{manifest.summary}</p>
-                  <p className="mt-0.5 text-[10px] text-mist">
-                    能力：{capabilityText(manifest)}
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-mist">
-                    贡献：{contributionText(manifest)}
-                    {!explicit && (
-                      <span className="ml-1.5 text-mist/80">
-                        （尚未手动设置 · 默认{enabled ? '启用' : '停用'}）
+                <div className="flex items-start gap-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[13px] font-medium text-ink">{manifest.name}</span>
+                      <span className="shrink-0 font-mono text-[10px] text-mist">
+                        v{manifest.version} · {sourceLabel(manifest)}
                       </span>
-                    )}
-                  </p>
-                </div>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-mist">{manifest.summary}</p>
+                    <p className="mt-0.5 text-[10px] text-mist">
+                      能力：{capabilityText(manifest)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-mist">
+                      贡献：{contributionText(manifest)}
+                      {!explicit && (
+                        <span className="ml-1.5 text-mist/80">
+                          （尚未手动设置 · 默认{enabled ? '启用' : '停用'}）
+                        </span>
+                      )}
+                    </p>
+                  </div>
 
-                {/* 卸载：仅「从文件安装」的插件有（内置随包插件不给卸） */}
-                {installed && (
+                  {/* 卸载：仅「从文件安装」的插件有（内置随包插件不给卸） */}
+                  {installed && (
+                    <button
+                      type="button"
+                      aria-label={`卸载插件 ${manifest.name}`}
+                      data-plugin-uninstall={manifest.id}
+                      disabled={busy}
+                      onClick={() => {
+                        setError(null);
+                        setNotice(null);
+                        setUninstallTarget({ id: manifest.id, name: manifest.name });
+                      }}
+                      className={cn(
+                        'mt-0.5 shrink-0 rounded-md p-1.5 text-mist transition-colors',
+                        'hover:bg-clay/10 hover:text-clay',
+                        'outline-none focus-visible:ring-2 focus-visible:ring-clay/40 disabled:opacity-50',
+                      )}
+                    >
+                      <Trash2 size={13} aria-hidden />
+                    </button>
+                  )}
+
+                  {/*
+                    齿轮（本插件自己的设置）：夹在卸载与开关之间。
+                    `disabled` 的唯一判据 = 这个插件**声明了 settingsSlot 没有**——
+                    置灰而不是隐藏，让「它没有自己的设置」可被看见。
+                    没有另设「未启用也置灰」：那会把两个不同的事实压进同一个灰，
+                    而且 `PluginSettingsSlot` 自己就会在插件停用时返回 null（见文件头 ⑧）。
+                  */}
                   <button
                     type="button"
-                    aria-label={`卸载插件 ${manifest.name}`}
-                    data-plugin-uninstall={manifest.id}
-                    disabled={busy}
-                    onClick={() => {
-                      setError(null);
-                      setNotice(null);
-                      setUninstallTarget({ id: manifest.id, name: manifest.name });
-                    }}
+                    aria-label={`${manifest.name} 的设置`}
+                    data-plugin-settings={manifest.id}
+                    aria-expanded={hasOwnSettings ? settingsExpanded : undefined}
+                    disabled={!hasOwnSettings}
+                    title={hasOwnSettings ? `打开「${manifest.name}」自己的设置` : '这个插件没有自己的设置'}
+                    onClick={() =>
+                      setOpenSettings((cur) => (cur === manifest.id ? null : manifest.id))
+                    }
                     className={cn(
                       'mt-0.5 shrink-0 rounded-md p-1.5 text-mist transition-colors',
-                      'hover:bg-clay/10 hover:text-clay',
-                      'outline-none focus-visible:ring-2 focus-visible:ring-clay/40 disabled:opacity-50',
+                      'hover:bg-sand hover:text-ink',
+                      'outline-none focus-visible:ring-2 focus-visible:ring-pine/40',
+                      // 置灰态：cursor-not-allowed + 明确降透明度（与其余 disabled 同款 50%）
+                      'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-mist',
+                      settingsExpanded && hasOwnSettings && 'bg-pine-soft text-pine hover:text-pine',
                     )}
                   >
-                    <Trash2 size={13} aria-hidden />
+                    <Settings size={13} aria-hidden />
                   </button>
-                )}
 
-                {/* 开关：button + aria-pressed（键盘可达；不用裸 checkbox 以保证样式一致） */}
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={enabled}
-                  aria-label={`${enabled ? '停用' : '启用'}插件 ${manifest.name}`}
-                  disabled={busy}
-                  data-plugin-toggle={manifest.id}
-                  onClick={() => void onToggle(manifest.id, !enabled)}
-                  className={cn(
-                    'relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors',
-                    'outline-none focus-visible:ring-2 focus-visible:ring-pine/40 disabled:opacity-50',
-                    enabled ? 'border-pine bg-pine' : 'border-line bg-sunken',
-                  )}
-                >
-                  <span
-                    aria-hidden
+                  {/* 开关：button + aria-pressed（键盘可达；不用裸 checkbox 以保证样式一致） */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label={`${enabled ? '停用' : '启用'}插件 ${manifest.name}`}
+                    disabled={busy}
+                    data-plugin-toggle={manifest.id}
+                    onClick={() => void onToggle(manifest.id, !enabled)}
                     className={cn(
-                      'absolute top-0.5 h-3.5 w-3.5 rounded-full shadow-sm transition-all',
-                      'flex items-center justify-center',
-                      enabled ? 'left-[18px] bg-paper' : 'left-0.5 bg-mist/60',
+                      'relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors',
+                      'outline-none focus-visible:ring-2 focus-visible:ring-pine/40 disabled:opacity-50',
+                      enabled ? 'border-pine bg-pine' : 'border-line bg-sunken',
                     )}
                   >
-                    {busy ? (
-                      <Loader2 size={8} className="animate-spin text-ink/60" aria-hidden />
-                    ) : enabled ? (
-                      <Check size={8} className="text-pine" aria-hidden />
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'absolute top-0.5 h-3.5 w-3.5 rounded-full shadow-sm transition-all',
+                        'flex items-center justify-center',
+                        enabled ? 'left-[18px] bg-paper' : 'left-0.5 bg-mist/60',
+                      )}
+                    >
+                      {busy ? (
+                        <Loader2 size={8} className="animate-spin text-ink/60" aria-hidden />
+                      ) : enabled ? (
+                        <Check size={8} className="text-pine" aria-hidden />
+                      ) : (
+                        <X size={8} className="text-paper" aria-hidden />
+                      )}
+                    </span>
+                  </button>
+                </div>
+
+                {/*
+                  展开区 = 该插件**自己的**设置（`PluginSettingsSlot`）。
+                  插件停用时该 Slot 返回 null（它自己判启用态，见 PluginRegistryProvider）
+                  ⇒ 这里补一句人话把位置占住：否则「点了齿轮什么都没有」会被当成界面坏了，
+                  而这正是本文件第 243 行「停用后……设置区块会立即消失」的行为化。
+                */}
+                {hasOwnSettings && settingsExpanded && (
+                  <div
+                    data-plugin-settings-panel={manifest.id}
+                    className="mt-2.5 rounded-[10px] border border-line bg-cream/40 px-3 py-3"
+                  >
+                    {enabled ? (
+                      <PluginSettingsSlot pluginId={manifest.id} />
                     ) : (
-                      <X size={8} className="text-paper" aria-hidden />
+                      <p className="text-[11px] leading-relaxed text-mist">
+                        「{manifest.name}」当前是停用状态——启用它之后，它自己的设置会出现在这里。
+                      </p>
                     )}
-                  </span>
-                </button>
+                  </div>
+                )}
               </li>
             );
           })}

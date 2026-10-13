@@ -16,9 +16,23 @@ import { listenOnSafePort } from './helpers/safe-listen';
  * 里面，它属于插件的设置，和插件不应该是平级关系」——Agent 三项（席位/本地库、
  * 自然语言通道、看板入口）收进插件区顶部的两段子导航（插件 / Agent 与自动化）。
  *
+ * ── v1.0 · 设置层级再收一层（本 spec 本轮的契约变更）──
+ * 她的最新原话：「Agent 实际上应该包含在下面那个箭头指的『插件』里面，给里面
+ * 增加一个设置按钮。**每一个插件都应该有自己对应的设置，它应该是在自己的
+ * 板块里面**」。
+ * 上一轮那枚**两段子导航被整块拆掉**（它是把 Agent 写死成插件区唯一二级页的
+ * 硬编码清单）——现在「哪个插件有什么设置」由 manifest 的 `settingsSlot` 声明，
+ * 每张插件卡上一枚齿轮（`data-plugin-settings`），点开就地渲染
+ * `[data-plugin-settings-panel]`。于是本 spec 里：
+ *   · `data-plugins-subtab` 钩子**退役**（断言改为「一个都不剩」）；
+ *   · Agent 三句文案的断言**重指**到 agent-board 的插件设置面板内，并且
+ *     加了两条判别力断言（展开前抽屉全文不得出现它们；面板必须嵌在
+ *     `[data-settings-zone-panel="plugins"]` 里）——不许降级成「源码里有这句话」；
+ *   · 新增「没有 settingsSlot 的插件（weekly-report）齿轮置灰不隐藏」路径。
+ *
  * 本 spec 守六件用户能看见的事：
  *   ① 分区导航切换后，右侧内容**确实跟着换**（默认「外观」；点「数据与备份」
- *      见日志与备份、点「插件」见插件开关与子导航；当前区 aria-current 高亮移动）；
+ *      见日志与备份、点「插件」见插件列表与每卡齿轮；当前区 aria-current 高亮移动）；
  *   ② <xl 窄视口**不断裂**：左导航退化为顶部横向条，位于内容上方、可点可见，
  *      点完内容切换；抽屉自身不横向溢出视口；
  *   ③ 768–1279（<xl 非手机档）：六个导航按钮同屏可点，不依赖横滑；
@@ -364,35 +378,85 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       expect(dataText).toContain('数据存在哪');
       expect(dataText).not.toContain('休息制度');
 
-      // 切「插件」（图 5 第 1 点：Agent 与自动化并入插件区作二级分组）：
-      // 插件开关 + 从文件安装/卸载入口都在这里（桌面端渲染安装钮），
-      // 顶部两段子导航默认落在「插件」段
+      /*
+       * 切「插件」（v1.0 · 设置层级重做）：
+       * 插件区只剩**一张插件列表**——那枚两段子导航（插件 / Agent 与自动化）已整块拆掉，
+       * 换成「每张插件卡一枚齿轮，点开是该插件**自己的**设置」。
+       *
+       * 判别力怎么来的（为什么不是「反正文案还在源码里」）：
+       *   ① 展开**之前**，抽屉全文**不得**出现 Agent 那三块的任何一句——
+       *      这正是拆掉硬编码二级段的证据（旧实现一进插件区就能点到它们）；
+       *   ② 三句必须在 `[data-plugin-settings-panel="agent-board"]` 这个**容器内**
+       *      出现，且该容器必须**嵌在**插件区面板里（层级也要对，不是搬去别处）；
+       *   ③ 再点一次齿轮 ⇒ 面板收起（离散判据，零容差）。
+       */
       await page.locator('[data-settings-zone="plugins"]').click();
       const pluginsText = await drawer.innerText();
       expect(pluginsText).toContain('插件');
       expect(pluginsText).toContain('从文件安装');
       expect(pluginsText).toContain('已装');
       expect(pluginsText).not.toContain('前端日志');
-      expect(
-        await page.locator('[data-plugins-subtab="plugins"]').getAttribute('aria-selected'),
-      ).toBe('true');
-      expect(await page.locator('[data-plugins-subtab="agent"]').count()).toBe(1);
-      // 插件段内不得出现 Agent 子段内容（层级修正的判别力）
-      expect(pluginsText, '「插件」子段不得混入 Agent 内容').not.toContain('Agent 与本地库');
+      // ① 退役的二级子导航钩子必须**一个都不剩**（不是隐藏，是删掉）
+      expect(await page.locator('[data-plugins-subtab]').count()).toBe(0);
+      expect(pluginsText, '未展开任何插件的设置时，Agent 三块不得出现在插件区').not.toContain(
+        'Agent 与本地库',
+      );
+      expect(pluginsText).not.toContain('自然语言通道');
+      expect(pluginsText).not.toContain('打开 Agent 看板');
 
-      // 切子导航「Agent 与自动化」：席位/本地库 + 自然语言通道 + 看板入口；
-      // 插件子段内容随之消失（两段互斥，不是一区平铺）
-      await page.locator('[data-plugins-subtab="agent"]').click();
-      const agentText = await drawer.innerText();
-      expect(agentText).toContain('Agent 与本地库');
+      // 每张插件卡都有自己的齿轮；没有 settingsSlot 的插件（weekly-report）置灰不隐藏
+      expect(await page.locator('[data-plugin-settings="agent-board"]').count()).toBe(1);
+      expect(await page.locator('[data-plugin-settings="sample-projects"]').count()).toBe(1);
+      const wrGear = page.locator('[data-plugin-settings="weekly-report"]');
+      expect(await wrGear.count(), '没有设置的插件也要有齿轮（置灰，不是消失）').toBe(1);
+      expect(await wrGear.isDisabled(), 'weekly-report 未声明 settingsSlot ⇒ 齿轮置灰').toBe(true);
+      expect(
+        await page.locator('[data-plugin-settings="agent-board"]').isDisabled(),
+        'agent-board 声明了 settingsSlot ⇒ 齿轮可点',
+      ).toBe(false);
+
+      // ② 点 agent-board 的齿轮 ⇒ 它自己的设置就地展开
+      await page.locator('[data-plugin-settings="agent-board"]').click();
+      const agentPanel = page.locator('[data-plugin-settings-panel="agent-board"]');
+      expect(await agentPanel.count()).toBe(1);
+      // 层级证据：这块是**插件区面板里的**插件设置面板（两层层级都要对）
+      expect(
+        await page.locator('[data-settings-zone-panel="plugins"] [data-plugin-settings-panel="agent-board"]').count(),
+      ).toBe(1);
+      const agentText = await agentPanel.innerText();
+      expect(agentText, 'Agent 席位与本地库应在 agent-board 自己的设置面板内').toContain(
+        'Agent 与本地库',
+      );
       expect(agentText).toContain('自然语言通道');
       expect(agentText).toContain('打开 Agent 看板');
-      expect(
-        await page.locator('[data-plugins-subtab="agent"]').getAttribute('aria-selected'),
-      ).toBe('true');
-      expect(agentText, '切子段后插件段内容不得残留').not.toContain('从文件安装');
-      expect(agentText).not.toContain('保存备份');
-      // 左导航没有独立的「Agent 与自动化」一级分区了（图 5 第 1 点的形态要件）
+      // 展开态是离散事实：同一时刻只开一个，再点一次收起
+      await page.locator('[data-plugin-settings="agent-board"]').click();
+      expect(await page.locator('[data-plugin-settings-panel="agent-board"]').count()).toBe(0);
+      expect(await drawer.innerText()).not.toContain('Agent 与本地库');
+
+      // 没有设置的插件点了也不会长出面板（齿轮置灰 ⇒ 点不出东西，离散计数零容差）
+      expect(await page.locator('[data-plugin-settings-panel="weekly-report"]').count()).toBe(0);
+      expect(await page.locator('[data-plugin-settings-panel]').count(), '此刻不该有任何展开的面板').toBe(
+        0,
+      );
+
+      /*
+       * 「有设置、但插件当前停用」这一支：sample-projects 默认停用（manifest
+       * defaultEnabled:false），而 `PluginSettingsSlot` 自己判启用态、停用即返回 null
+       * ⇒ 展开区**不能是个空盒子**，必须给人话把位置占住。这条同时钉死了
+       * 「停用后设置区块会消失」这句界面文案从空头支票变成真话。
+       */
+      await page.locator('[data-plugin-settings="sample-projects"]').click();
+      const samplePanel = page.locator('[data-plugin-settings-panel="sample-projects"]');
+      expect(await samplePanel.count()).toBe(1);
+      expect(await samplePanel.innerText(), '停用插件的展开区必须给说明，不能空着').toContain(
+        '当前是停用状态',
+      );
+      expect(await samplePanel.locator('[data-sample-projects-load]').count()).toBe(0);
+      await page.locator('[data-plugin-settings="sample-projects"]').click();
+      expect(await page.locator('[data-plugin-settings-panel="sample-projects"]').count()).toBe(0);
+
+      // 左导航没有独立的「Agent 与自动化」一级分区（形态要件，六区全等）
       const keys = await page.evaluate(() =>
         Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
           b.getAttribute('data-settings-zone'),
@@ -595,8 +659,8 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
      * 所有人的建档器）；排程区实质内容「休息制度」本就是 admin-only，另一块
      * 「排期基准」是项目级设置的落脚说明（新建项目仅管理员可操作）⇒ 两个
      * 分区均**仅管理员可见**——成员身份下整分区从左导航**消失**（不是禁用
-     * 占位）；插件**保留给成员**（她明确「插件给成员保留」），Agent 与自动化
-     * 作为插件区的二级子段同样对成员可达（图 5 第 1 点）。对照组全走真 UI
+     * 占位）；插件**保留给成员**（她明确「插件给成员保留」），Agent 三块作为
+     * agent-board 插件自己的设置（v1.0 齿轮展开）同样对成员可达。对照组全走真 UI
      * （becomeMember 走示例数据 + 姓名进入），管理员/成员各起一个 context。
      */
     // ① 管理员：排程与行业与模板都在导航里，内容可点开（管理员导航键全集）
@@ -641,16 +705,19 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
         const drawerText = await page.locator('[data-settings-drawer]').innerText();
         expect(drawerText, '成员看不到排程区内容（休息制度/排期基准）').not.toContain('休息制度');
         expect(drawerText).not.toContain('排期基准');
-        // 插件保留给成员（她明确「插件给成员保留」）；Agent 与自动化是插件区的
-        // 二级子段（图 5 第 1 点），成员同样可达
+        // 插件保留给成员（她明确「插件给成员保留」）；Agent 三块在 v1.0 之后是
+        // **agent-board 插件自己的设置**（齿轮展开），成员同样可达——权限口径与
+        // 搬家前一致（原来那段也没有 adminOnly 门控），本条守住「没被顺手加墙」。
         expect(await page.locator('[data-settings-zone="plugins"]').count()).toBe(1);
         await page.locator('[data-settings-zone="plugins"]').click();
         const pluginsText = await page.locator('[data-settings-drawer]').innerText();
         expect(pluginsText).toContain('从文件安装');
         expect(pluginsText, '成员看不到行业库').not.toContain('行业库（自定义）');
-        expect(await page.locator('[data-plugins-subtab="agent"]').count()).toBe(1);
-        await page.locator('[data-plugins-subtab="agent"]').click();
-        expect(await page.locator('[data-settings-drawer]').innerText()).toContain('Agent 与本地库');
+        expect(pluginsText, '未展开时 Agent 设置不得出现在插件区').not.toContain('Agent 与本地库');
+        await page.locator('[data-plugin-settings="agent-board"]').click();
+        const memberAgentPanel = page.locator('[data-plugin-settings-panel="agent-board"]');
+        expect(await memberAgentPanel.count(), '成员也要能展开 agent-board 自己的设置').toBe(1);
+        expect(await memberAgentPanel.innerText()).toContain('Agent 与本地库');
 
         // 导航键集合 = 六区减去排程与行业与模板（顺序不变；无独立 Agent 一级分区）
         const keys = await page.evaluate(() =>
