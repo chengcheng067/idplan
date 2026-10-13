@@ -208,7 +208,7 @@ export function MembersPageSection(): JSX.Element | null {
 
       {visibleMembers.length === 0 ? (
         <p className="text-sm leading-6 text-mist">
-          还没有成员。添加后可在阶段清单中指派任务，并在顶栏输入姓名进入「我的任务」。
+          还没有成员。添加后可在阶段清单中指派任务，并在左侧导航最下方进入身份后查看「我的任务」。
         </p>
       ) : (
         <ul className="divide-y divide-sand/60">
