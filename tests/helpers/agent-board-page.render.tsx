@@ -64,7 +64,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { createElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 
-import { AgentBoardPage } from '../src/pages/AgentBoardPage';
+import { AgentBoardPage } from '../../src/pages/AgentBoardPage';
 
 /** 推进异步（与 `agent-console.spec.tsx` 同形的 pump） */
 export async function pump(times = 12): Promise<void> {
