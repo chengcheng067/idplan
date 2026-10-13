@@ -26,6 +26,16 @@ export interface SegmentedControlProps<T extends string> {
   size?: 'md' | 'sm' | 'lg';
   ariaLabel?: string;
   className?: string;
+  /**
+   * 只允许 **`data-*` 钩子**透传到容器（真机 spec 用它定位）。
+   *
+   * ★ 为什么需要：真机 spec 若按 `aria-label="中文"` 定位元素，等于把「中文文案」
+   *   当定位契约 —— 而文案现在走 i18n、可随语言变（`{lang}` 一切，元素就找不到，
+   *   失败还会伪装成「控件不存在」）。定位契约必须与语言解耦。
+   * ⚠️ 类型刻意收成 `Record<\`data-${string}\`, string>`：**不开任意 props 透传的洞**，
+   *   要透别的属性请单独开口子并说明理由。
+   */
+  dataAttrs?: Record<`data-${string}`, string>;
 }
 
 export function SegmentedControl<T extends string>({
@@ -35,6 +45,7 @@ export function SegmentedControl<T extends string>({
   size = 'md',
   ariaLabel,
   className,
+  dataAttrs,
 }: SegmentedControlProps<T>) {
   const isLg = size === 'lg';
   const textSize = size === 'sm' ? 'text-[11px]' : isLg ? 'text-[13px]' : 'text-[12px]';
@@ -42,6 +53,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
+      {...dataAttrs}
       className={cn(
         'inline-flex items-center bg-sunken',
         // md/sm：gap 2 / 圆角 8 / pad 4（画板 08）→ 容器 rounded-sm

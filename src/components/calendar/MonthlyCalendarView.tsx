@@ -443,6 +443,8 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
               value={density}
               onChange={setDensity}
               options={densityOptions}
+              /* ★ 语言无关定位钩子（同 MemberBoardPage 的视图切换） */
+              dataAttrs={{ 'data-calendar-density': '' }}
               ariaLabel={t('calendar.densityAria')}
             />
           </div>

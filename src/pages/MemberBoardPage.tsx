@@ -328,6 +328,8 @@ export function MemberBoardPage(): JSX.Element {
           </span>
           <SegmentedControl<MemberBoardView>
             size="lg"
+            /* ★ 语言无关定位钩子：真机 spec 一律用 data-* 定位，不拿中文 aria 当选择器 */
+            dataAttrs={{ 'data-member-view-switch': '' }}
             ariaLabel="成员看板视图切换"
             value={memberBoardView}
             onChange={setMemberBoardView}

@@ -74,12 +74,20 @@ const SEED_FIXTURE = resolve(__dirname, 'fixtures', 'v07-board-seed.json');
 /** 本 spec 的产物目录（派生种子 + 截图） */
 const OUT_DIR = resolve(__dirname, '..', 'qa-scratch', 'v07-stageD');
 
-/** 顶栏 ⋮ 的唯一锚点（`MobileMoreMenu.tsx` 的按钮 aria-label） */
-const MORE_BTN = 'button[aria-label="更多操作"]';
-/** 成员看板视图切换（`MemberBoardPage.tsx` 的 SegmentedControl ariaLabel） */
-const MEMBER_VIEW_SWITCH = '[role="tablist"][aria-label="成员看板视图切换"]';
+/*
+ * ★ 2026-10-13 定位契约升级（语言切换批 2a，team-lead 裁决 A2）：三个选择器原本都用
+ *   **中文 aria-label** 当锚点（`button[aria-label="更多操作"]` 等）。那三个中文串
+ *   现已走 i18n（`t('mobile.moreAria')` / `t('memberBoard.viewSwitchAria')` /
+ *   `t('calendar.densityAria')`）⇒ 它们在**默认中文**下仍逐字节相同、今天照样能跑，
+ *   但**一切到英文就找不到元素**，而失败会伪装成「控件不存在」。
+ *   ⇒ 改用与语言无关的 `data-*` 钩子。**aria-label 的无障碍契约没有被放弃**：
+ *     它仍由 `v07-dline-permission.spec.tsx:472` 与 `i18n.spec.tsx` 锁着。
+ */
+const MORE_BTN = '[data-mobile-more-trigger]';
+/** 成员看板视图切换（`MemberBoardPage.tsx` 的 SegmentedControl） */
+const MEMBER_VIEW_SWITCH = '[data-member-view-switch]';
 /** 月历视图密度切换（`MonthlyCalendarView.tsx`）——「月历真的挂上来了」的稳定证据 */
-const DENSITY_SWITCH = '[role="tablist"][aria-label="月历视图密度"]';
+const DENSITY_SWITCH = '[data-calendar-density]';
 /** 更新红点（P0-17 配套：Sidebar 两态各一枚） */
 const DOT = '[data-update-dot]';
 
