@@ -32,6 +32,8 @@ import type { LucideIcon } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useBackupIo } from './useBackupIo';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
+// 身份键名的**单一出处**（不要在别处手打字面量：历史上本文件与 useRepos 各手写过一份）
+import { CURRENT_MEMBER_ID_KEY } from '../../store/useSettingsStore';
 import { useHumanProjects } from '../../core/project/visibility';
 import { logUser } from '../../core/services/log.service';
 import { cn } from '../../lib/cn';
@@ -123,19 +125,19 @@ export function FirstRunGuide(): JSX.Element | null {
   /**
    * 身份流完成判据（0.8.3 双卡叠弹修复）：欢迎卡**必须等 IdentityDialog 走完再出现**，
    * 否则陌生人首次启动会看到两张模态叠在一起（身份卡在上、欢迎卡在下，都带遮罩）。
-   * 信号 = `changxia.currentMemberId`（useSettingsStore/useFirstRunGate 同一个键：
+   * 信号 = `CURRENT_MEMBER_ID_KEY`（useSettingsStore 导出的身份键；useFirstRunGate 同键）：
    * IdentityDialog 选完管理员/成员即写入；探针环境由 spec 预置）。
    * 用 state + effect 而非纯 render 期读：写入发生在对话框关闭时，要能触发重渲染。
    */
   const [identityDone, setIdentityDone] = useState(
     () =>
       typeof localStorage !== 'undefined' &&
-      localStorage.getItem('changxia.currentMemberId') !== null,
+      localStorage.getItem(CURRENT_MEMBER_ID_KEY) !== null,
   );
   useEffect(() => {
     if (identityDone) return;
     const t = window.setInterval(() => {
-      if (localStorage.getItem('changxia.currentMemberId') !== null) {
+      if (localStorage.getItem(CURRENT_MEMBER_ID_KEY) !== null) {
         setIdentityDone(true);
         window.clearInterval(t);
       }

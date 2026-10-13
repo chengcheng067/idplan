@@ -17,6 +17,7 @@ vi.mock('../src/core/project/visibility', () => ({
 }));
 
 import { FirstRunGuide } from '../src/components/layout/FirstRunGuide';
+import { CURRENT_MEMBER_ID_KEY } from '../src/store/useSettingsStore';
 
 /** 0.8.5 P0：欢迎卡示例按钮的 isAdmin 门控（产品官评审发现口径洞，spec 钉死） */
 const roleState = { isAdmin: true };
@@ -54,7 +55,7 @@ describe('FirstRunGuide（0.8.3 首启三幕·第二幕）', () => {
     localStorage.clear();
     // 身份流完成态（currentMemberId 落定）——0.8.3 起欢迎卡等 IdentityDialog
     // 走完才出现（双卡叠弹修复），默认用例在这个前提下测欢迎卡本身
-    localStorage.setItem('changxia.currentMemberId', 'm-spec');
+    localStorage.setItem(CURRENT_MEMBER_ID_KEY, 'm-spec');
     loadDemoSpy.mockClear();
     projectsState.value = [];
     // 上一用例 render 的 Modal portal 还挂在 body（未 unmount）——先清场，
@@ -126,7 +127,7 @@ describe('FirstRunGuide（0.8.3 首启三幕·第二幕）', () => {
   });
 
   it('③c 身份流未完成（currentMemberId 未落定）：卡不出现（等 IdentityDialog，防双卡叠弹）', async () => {
-    localStorage.removeItem('changxia.currentMemberId');
+    localStorage.removeItem(CURRENT_MEMBER_ID_KEY);
     await renderInto(container);
     expect(document.body.textContent).not.toContain('欢迎使用 ID Plan');
   });

@@ -30,7 +30,7 @@ import { HomePage } from '../src/pages/HomePage';
 import { MyTasksPage } from '../src/pages/MyTasksPage';
 import { MemberBoardPage } from '../src/pages/MemberBoardPage';
 import { useProjectsBootstrap } from '../src/hooks/useProjectsBootstrap';
-import { useSettingsStore } from '../src/store/useSettingsStore';
+import { CURRENT_MEMBER_ID_KEY, useSettingsStore } from '../src/store/useSettingsStore';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useMembersStore } from '../src/store/useMembersStore';
 
@@ -121,7 +121,7 @@ function memberFixture(): never {
 function resetStores(opts: { memberId?: string | null; hydrateError?: string | null; hydrated?: boolean } = {}): void {
   localStorage.clear();
   // 真实场景里的「上次进过身份」：值就在 localStorage 里，装载成功后 hydrate 会读回它
-  if (opts.memberId) localStorage.setItem('changxia.currentMemberId', opts.memberId);
+  if (opts.memberId) localStorage.setItem(CURRENT_MEMBER_ID_KEY, opts.memberId);
   act(() => {
     useProjectsStore.getState().replaceAll({ projects: [], stages: [], tasks: [] });
     useMembersStore.getState().setAll([]);
