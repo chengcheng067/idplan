@@ -85,6 +85,11 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
+// 共用「还原基线守卫」：起跑记基线 → 收尾复核 → 有差异即非零退出。
+// 本脚本的约束 ③ 由它兑现（比裸 `git diff --quiet` 多两件事：区分「我造成的」与「起跑就有的」脏条目、
+// 且能**指名到文件**）。手工变异会话也能直接用它的 CLI —— 见该文件头注释。
+import { beginRestoreGuard, endRestoreGuard } from './lib/restore-guard.mjs';
+
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 
 /* ============================================================================================
@@ -264,10 +269,34 @@ function restoreNow(reason) {
   }
 }
 
-/** 约束 ③：收尾断言工作树干净 */
+/**
+ * 本轮**还原基线**（`beginRestoreGuard` 的产物）。`assertTreeClean()` 以它为准做收尾复核。
+ * 为什么不用裸 `git diff --quiet`：那个判据只能说明「树不干净」，说不出**是谁的**改动
+ * （2026-10-14 的事故就是「变异忘了还原」以「树脏」的形态留下，而当时没人有基线可比）。
+ */
+let restoreGuardState = null;
+
+/** 约束 ③：收尾断言「本轮改过的文件都还原了」——判据来自共用工具 `restore-guard`。 */
 function assertTreeClean(stageLabel) {
-  if (gitDiffQuiet()) {
-    echo(`[clean] ${stageLabel}：git diff --quiet 通过，工作树无差异。`);
+  const quiet = gitDiffQuiet();
+  if (restoreGuardState) {
+    const r = endRestoreGuard(restoreGuardState);
+    if (!r.ok) {
+      console.error(`!! [clean] ${stageLabel}：还原基线复核**未通过**（详见上方红字：已指名文件/脏条目）。`);
+      console.error('!! 这意味着变异体没还原干净（或事后又被人改动过），本次结果不可信。');
+      return false;
+    }
+    if (!quiet) {
+      // 基线通过但 `git diff --quiet` 失败：说明差异**起跑前就有**（本脚本正常情况下会被约束 ① 拦住）
+      console.error(`!! [clean] ${stageLabel}：git diff --quiet 失败，但相对基线无新增改动 —— 差异来自起跑前。`);
+      return false;
+    }
+    console.log(`[clean] ${stageLabel}：还原基线复核通过（git diff --quiet 亦通过）。`);
+    return true;
+  }
+  // 没有基线（例如未进入主流程的模式）：退回裸判据
+  if (quiet) {
+    console.log(`[clean] ${stageLabel}：git diff --quiet 通过，工作树无差异。`);
     return true;
   }
   console.error(`!! [clean] ${stageLabel}：git diff --quiet 失败 —— 工作树里仍有差异！`);
@@ -526,8 +555,9 @@ function installSignalHandlers() {
       console.error(`\n!! 收到 ${sig}：正在还原源码并重建产物…`);
       const ok = restoreNow(`收到 ${sig}`);
       if (ok) rebuildProduct(`${sig} 中断后恢复产物一致性`);
-      assertTreeClean('中断收尾');
-      process.exit(ok ? 130 : 1);
+      // ★ 中断路径也必须让「未还原」反映到退出码上（原先这里忽略返回值 ⇒ 变异残留会被吞掉）
+      const clean = assertTreeClean('中断收尾');
+      process.exit(ok && clean ? 130 : 1);
     });
   }
   // 兜底：任何未捕获的同步异常也会走到这里
@@ -616,9 +646,21 @@ function main() {
     return 2;
   }
 
+  // ★ 起跑：记「还原基线」（目标文件 blob 哈希 + 起跑时的脏条目快照）。
+  //   收尾由 assertTreeClean() 复核（含中断路径）；差异会**指名文件**并以非零退出码结束。
+  //   状态文件落 `qa-scratch/restore-guard/<label>-<时间戳>.json`（轮次命名；不落固定名）。
+  if (WILL_MUTATE) {
+    restoreGuardState = beginRestoreGuard({
+      label: 'discriminative',
+      paths: selected.map((m) => m.file),
+      root: ROOT,
+      stateDir: join(ROOT, 'qa-scratch', 'restore-guard'),
+    });
+    echo(`[guard] 已记还原基线（${selected.length} 个目标文件）：${restoreGuardState.statePath}`);
+  }
+
   if (MODE_DRY_RUN) {
-    echo(`\n[dry-run] 将依次执行 ${selected.length} 条变异（每条：改源码 → npm run build → 跑探测用例 → 还原）：`);
-    for (const m of selected) {
+    echo(`\n[dry-run] 将依次执行 ${selected.length} 条变异（每条：改源码 → npm run build → 跑探测用例 → 还原）：`);    for (const m of selected) {
       echo(`  · ${m.id}：${m.file}`);
       echo(`      ${JSON.stringify(m.find)}`);
       echo(`   →  ${JSON.stringify(m.replace)}`);
