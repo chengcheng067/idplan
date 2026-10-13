@@ -80,9 +80,16 @@ export function buildHostRoutes(): RouteObject[] {
 /**
  * 应用外壳：注册表 hydrate 后才建 router。
  *
- * 为什么用 `key`：`createBrowserRouter` 创建的实例**不可中途改路由表**，
- * 所以启用状态变化时必须是「换一个 router 实例」。用 key 强制重建是最简做法
- * （代价是整棵树重挂——离线应用首屏装载本就幂等，且启停是极低频操作）。
+ * 为什么是「换一个 router 实例」：`createBrowserRouter` 创建的实例**不可中途改
+ * 路由表**，所以启用状态变化时必须换实例 —— 实现上**没有**用 `key` 强制重建
+ * （此处曾有一条错注释写「用 key 强制重建…代价是整棵树重挂」，是后续一次误判
+ * 的源头，已订正）。
+ *
+ * 代价（**实测口径**，别按直觉写）：换实例 = 订阅重建 + 匹配重算，元素树由 React
+ * 复用（`RouterProvider` 同类型同位置更新、路由 id 不变）⇒ **「整棵树重挂」不成立**，
+ * 壳层 state 一律保留 —— 拨插件开关不会关掉 `Sidebar` 的 `settingsOpen`
+ * （设置抽屉）。依据：换实例前后壳层 state / 页面 state / 抽屉均保留
+ * （jsdom + 真 react-router 6 实测）。
  */
 function AppRouter(): JSX.Element {
   const reg = usePluginRegistry();
