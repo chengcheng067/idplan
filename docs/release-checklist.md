@@ -37,6 +37,16 @@
 >
 > 本机装机验证仍缺（无 NAS 真机）⇒ 产物级认证到此为止，交付说明须如实写「未做真机安装」。
 
+- [ ] **0. 建回滚点（必须在 patch 之前做）**：`rootfs_<arch>/images/*.tar` 与 `ugnas/cache/`
+      **都在 `.gitignore` 内**（`.gitignore:21` build_dir / `:23` `ugnas/upk/rootfs_*/images/*.tar` / `:24` `ugnas/cache/`），
+      而 patch 是**原地覆盖** ⇒ `git checkout` **找不回**。先把它们复制到**仓库外**
+      （如 `qa-scratch/nas-backup-<YYYYMMDD>/`），并**逐件记下字节数 + sha256**。
+      ✱ 为什么有这一条：2026-10-13 出 1.0.0.0008 时，回滚点**完全靠这个仓库外备份才有**——
+      §7「回滚点」那句只覆盖 `release-*/` 里的双包，**覆盖不到 NAS 那两个 tar**。
+- [ ] **base 怎么选**：用 `rootfs_<arch>/images/` 里那份**上一代实际出货的 tar**，
+      **不要**去 `ugnas/cache/` 里挑候选（那里躺着几份更早的中间候选，离「上次真出货」更远）。
+      本轮把这条口径钉死过一次：`images/` 里两个 tar 与 `release-v260928/amd64_com.chengcheng.idplan_0.8.4.0001.upk`
+      **包内的两个 tar 逐字节相同**（前端 sha256 `b1ed4f29…` / 后端 `39769019…`）。
 - [ ] `python scripts/patch_oci_tar.py <上一代出货的前端tar> rootfs_amd64/images/idplan-amd64-upk.tar build-dist`
 - [ ] `python scripts/patch_backend_tar.py <上一代出货的后端tar> rootfs_amd64/images/idplan-backend-amd64-upk.tar server`
 - [ ] `python scripts/verify_chain.py` 双 tar 全绿
