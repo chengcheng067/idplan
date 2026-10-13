@@ -233,7 +233,7 @@ export function AgentIngressPanel({
           {t('ingress.explain.afterA')}
           {t('ingress.explain.afterB')}{' '}
           <code className="font-mono text-ink">agent-ingress.json</code>{t('ingress.explain.writers')}
-          <strong className="text-ink">{t('ingress.explain.readFile')}</strong>。
+          <strong className="text-ink">{t('ingress.explain.readFile')}</strong>
           <strong className="text-ink">{t('ingress.explain.nasNote')}</strong>
         </span>
       </div>

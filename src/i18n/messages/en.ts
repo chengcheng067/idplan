@@ -12,6 +12,14 @@
  *   ③ 界面宽度敏感处（设置六区导航、打印选择器）宁短勿长——英文比中文平均长约
  *      2.2 倍，`tests/settings-zones.spec.ts:508-510` 的 767px 同屏判据是硬线；
  *   ④ 插值占位符名（`{name}` / `{count}` …）必须与 `zh.ts` 一致。
+ *   ⑤ **一句拆成多段时，段间的空格归英文取值**。JSX 里
+ *      `{t('x')}<strong>{t('y')}</strong>{t('z')}` 这些**相邻表达式容器之间
+ *      JSX 不产生任何空白**（只有同一 JSXText 内部的换行才被折成一个空格——
+ *      实测见 `tests/i18n-jsx-space.spec.ts`）。中文不需要这种空格，所以只能写进
+ *      英文取值里，惯例是**尾随空格**：
+ *        `'agent.stanceBefore': 'The Agent board currently '`
+ *      句间空格则用 `{' '}` 显式写出来（中英都要，不能省）。
+ *      守卫：`tests/i18n-jsx-space.spec.ts`。
  */
 import type { MessageKey } from './zh';
 
@@ -106,7 +114,7 @@ export const enMessages: Record<MessageKey, string> = {
   'guide.aria': 'First-run guide',
   'guide.title': 'Welcome to ID Plan',
   'guide.dismissAria': 'Look around',
-  'guide.lead.before': 'It turns a project contract into a',
+  'guide.lead.before': 'It turns a project contract into a ',
   'guide.lead.strong': 'stage timeline you can actually read',
   'guide.lead.after': ' — board, calendar, gantt and print: four readings of one dataset.',
   'guide.privacy': 'Your data stays on your own machine, works offline, and is never uploaded.',
@@ -259,9 +267,9 @@ export const enMessages: Record<MessageKey, string> = {
   'ingress.explain.afterB':
     ' the access token is created automatically and everything a writer needs (address / token / endpoints / payload schema) is written to a fixed-path ',
   'ingress.explain.writers': ' file — WorkBuddy and other writers',
-  'ingress.explain.readFile': 'just read that file and they are connected',
+  'ingress.explain.readFile': ' just read that file and they are connected.',
   'ingress.explain.nasNote':
-    'NAS mode currently supports connectivity probing only; remote automatic write is not enabled yet.',
+    ' NAS mode currently supports connectivity probing only; remote automatic write is not enabled yet.',
   'ingress.addressTitle': 'Service address',
   'ingress.modeTablistAria': 'Channel mode',
   'ingress.addressAria': 'Service address',
@@ -377,15 +385,15 @@ export const enMessages: Record<MessageKey, string> = {
   'project.archive': 'Archive',
   'project.client': 'Client: {name}',
   'project.totalDays': '· {days} days total',
-  'project.currentStage': 'Now:',
+  'project.currentStage': 'Now: ',
   'project.itineraryHint':
     'The client itinerary lists transport, lodging, plans and costs day by day — send it to the client or print it directly.',
   'project.itineraryTitle': 'Open the client itinerary (new window, read-only export)',
   'project.itinerary': 'Client itinerary',
 
   /* ───────────── Agent board · status note box (data-agent-stance) ───────────── */
-  'agent.stanceBefore': 'The Agent board currently',
-  'agent.stanceStrong': 'only carries schedules from external writers',
+  'agent.stanceBefore': 'The Agent board currently ',
+  'agent.stanceStrong': 'only carries schedules from external writers ',
   'agent.stanceNl':
     '(local auto-import is available; NAS remote write is not enabled yet). This area is being redefined based on your feedback.',
   /* ───────────── Calendar empty states (E1–E4) ───────────── */
@@ -405,13 +413,13 @@ export const enMessages: Record<MessageKey, string> = {
   'agentList.emptyAria': 'Agent boards (none)',
   'agentList.emptyTitle': 'No Agent boards yet',
   'agentList.scopeLine':
-    'Only schedules from external writers (such as WorkBuddy) live here — never mixed with “My Projects”.',
+    'Only schedules from external writers (such as WorkBuddy) live here — never mixed with “My Projects”. ',
   'agentList.canCreate':
     'You can create a board yourself, or connect an external writer and let it create one for you.',
   'agentList.writerOnly':
     'Once an external writer is connected, it creates boards and writes tasks here directly.',
   'agentList.statusLine':
-    'Status: local auto-import (Windows desktop) works; NAS remote write is not enabled yet.',
+    'Status: local auto-import (Windows desktop) works; NAS remote write is not enabled yet. ',
   'agentList.redefineLine':
     'This area is being redefined based on your feedback and may change substantially.',
   'agentList.createButton': 'New Agent board',
@@ -420,7 +428,7 @@ export const enMessages: Record<MessageKey, string> = {
   /* ───────────── Payload import panel · prompt guidance (ApplyPayloadPanel A2) ───────────── */
   'agentPayload.promptAsk': "Not sure what to have WorkBuddy / Codex produce? Copy this prompt to it",
   'agentPayload.promptSend':
-    'Send it to the external agent together with your requirements — it will produce JSON in ID Plan’s import format;',
+    'Send it to the external agent together with your requirements — it will produce JSON in ID Plan’s import format; ',
   'agentPayload.promptPaste':
     'paste that JSON into the input area below (pasting previews it — no separate “validate” click).',
   /* ───────────────────── Backup / restore toasts (useBackupIo) ───────────────────── */
@@ -434,13 +442,13 @@ export const enMessages: Record<MessageKey, string> = {
   'backup.dialog.restoreTitle': 'Restore from backup',
   'backup.dialog.confirmLoad': 'Confirm load',
   'backup.dialog.confirmRestore': 'Confirm restore',
-  'backup.dialog.demo1': 'This will load',
+  'backup.dialog.demo1': 'This will load ',
   'backup.dialog.demoStrong': '5 demo projects',
-  'backup.dialog.demo2': ' (replacing everything),',
+  'backup.dialog.demo2': ' (replacing everything), ',
   'backup.dialog.replaceStrong': 'replacing all current data with no undo',
   'backup.dialog.demo3':
     '. A library with no real data is safe to load; if you have real data, save a backup first.',
-  'backup.dialog.restore1': 'Restoring will',
+  'backup.dialog.restore1': 'Restoring means ',
   'backup.dialog.restore2':
     '. Save a backup first, then confirm the restore.',
   'backup.dialog.filePrefix': 'File: ',

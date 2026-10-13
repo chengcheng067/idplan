@@ -274,7 +274,7 @@ export const zhMessages = {
   'ingress.explain.afterB':
     '访问令牌自动生成，接入信息（地址 / 令牌 / 端点 / payload 格式）写入固定路径的',
   'ingress.explain.writers': '，WorkBuddy 等写入方',
-  'ingress.explain.readFile': '读这个文件即完成接入',
+  'ingress.explain.readFile': '读这个文件即完成接入。',
   'ingress.explain.nasNote': 'NAS 模式当前只支持连通探测，远程自动写入尚未启用。',
   'ingress.addressTitle': '服务地址',
   'ingress.modeTablistAria': '通道档位',
