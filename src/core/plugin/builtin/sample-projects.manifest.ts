@@ -41,7 +41,7 @@ export const sampleProjectsManifest: PluginManifest = {
   //    设置区块只是 4 处入口中的 1 处，从来不是唯一入口。
   //
   // ── 「入口数 = 门控数」由闸门钉死，别只靠本注释 ──
-  //    `tests/plugin-registry.spec.ts` ⑩b 逐**调用点**校验：src/ 里 `loadDemo(` 的
+  //    `tests/plugin-registry.spec.ts` ⑩-b 逐**调用点**校验：src/ 里 `loadDemo(` 的
   //    调用点集合必须与它登记的清单严格一致（新增一处就红），每个未豁免调用点
   //    所在的条件作用域里必须出现 `usePluginEnabled('sample-projects')`，
   //    豁免点必须带得出可读理由。⇒ 改这里之前先看那条闸门。

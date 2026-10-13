@@ -37,15 +37,20 @@
  * 零新 token：pine（已启用）/ mist（未启用）/ clay（错误）/ amber（需注意）。
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check, FolderInput, Loader2, Puzzle, Settings, Trash2, X } from 'lucide-react';
 
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { PluginSettingsSlot, usePluginRegistry } from '../../core/plugin/PluginRegistryProvider';
+import type { SetPluginEnabledResult } from '../../core/plugin/PluginRegistryProvider';
 import type { PluginManifest } from '../../core/plugin/types';
 import { isDesktop } from '../../lib/desktopBridge';
 import { cn } from '../../lib/cn';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { useRoleGuard } from '../../hooks/useRoleGuard';
+import { appEnv } from '../../config/env';
+import { API_TOKEN_KEY } from '../../core/repositories/remote/rest.client';
+import { ChangxiaError, ChangxiaErrorCode } from '../../core/types/enums';
 
 /** 本机「启用前已披露」同意标记（localStorage：不进备份、不跟 ID 走） */
 const ACK_PREFIX = 'idplan.pluginAck.';
@@ -92,6 +97,60 @@ function sourceLabel(m: PluginManifest): string {
   return m.source === 'builtin' ? '随包分发' : '成员自装';
 }
 
+/**
+ * 本浏览器是否配了 NAS 访问令牌。
+ *
+ * 判据与 **设置 → NAS 服务** 的「已配置」状态**同源同键**（`API_TOKEN_KEY`，
+ * 见 `NasServiceSection.tsx` 的读取点）：那边只认 localStorage 手填值，这里也只认它。
+ * 刻意不在这里再实现一遍「localStorage → VITE_API_TOKEN」的优先级 —— 那是
+ * `createRemoteRepositories` 的职责，抄第二份必然漂移；而且两处显示的「是否已配置」
+ * 应当一致，否则用户会在两个界面看到互相矛盾的结论。
+ */
+function hasStoredApiToken(): boolean {
+  try {
+    return (localStorage.getItem(API_TOKEN_KEY) ?? '').trim() !== '';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 写入失败 → **如实**的文案（#17）。三类各自说各的，**不许**用一句通用话盖过两种原因。
+ *
+ * 事故形态（实测）：服务端配了 `IDPLAN_AGENT_TOKEN`、本浏览器没填令牌时，写 settings
+ * 走 `PUT /api/settings/:key`，被 `guardWrite` 401 掉；而旧文案写的是「本地存储可能
+ * 不可写」，把用户送去查一个**完全不相干**的东西。误导性的错误文案比没有文案更坏。
+ *
+ * 分类依据（都能在客户端诚实拿到）：
+ *   · `ChangxiaErrorCode.Storage` —— 本地仓储（Dexie）写失败。**只有这一类**才配说
+ *     「本地存储不可写」。
+ *   · `ChangxiaErrorCode.Network` —— rest.client 把「连不上」与「HTTP 非 2xx（含 401）」
+ *     都归到这一码。若本机是 remote(NAS) 形态**且**没填令牌，那最可能的就是 401，
+ *     这时给出「未配置访问令牌」并指到 **设置 → NAS 服务**（正确的去处）。
+ *   · 其余（含无 Provider 的纯 Error）—— 原样带上 message，不做猜测。
+ *
+ * ⚠️ **已知上限**（如实登记，不要让它看起来比实际更准）：令牌**填了但不对**的 401
+ * 与 5xx / 真连不上，在客户端**无法再分开** —— `rest.client.ts` 把 401 映射成
+ * `Network` 并丢掉了服务端错误体里结构化的 `error.code: 'Unauthorized'`。
+ * 要精确到「401」需要在那张映射表里加一档（不在本次划给我的文件内）。
+ */
+function describeToggleFailure(err: unknown): string {
+  if (err instanceof ChangxiaError) {
+    if (err.code === ChangxiaErrorCode.Storage) {
+      return '保存失败，开关未生效——本地存储不可写，请检查浏览器存储权限后重试';
+    }
+    if (err.code === ChangxiaErrorCode.Network) {
+      if (appEnv.dataSource === 'remote' && !hasStoredApiToken()) {
+        return '未配置访问令牌：本 NAS 的服务端要求写入携带访问令牌，请到 设置 → NAS 服务 填写后重试';
+      }
+      return `写入被服务端拒绝或服务端不可达：${err.userMessage}`;
+    }
+    return `保存失败，开关未生效：${err.userMessage}`;
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return `保存失败，开关未生效：${msg}`;
+}
+
 /** 待处理的披露对话（安装 / 首次启用两种入口，同一份诚实文本） */
 type PendingDisclosure = { kind: 'install'; filePath: string } | { kind: 'enable'; pluginId: string; name: string };
 
@@ -123,6 +182,16 @@ function DisclosureBody({ pluginName }: { pluginName?: string }): JSX.Element {
 export function PluginsSection(): JSX.Element {
   const reg = usePluginRegistry();
   const toast = useProjectsStore((s) => s.pushToast);
+  /**
+   * 插件开关 = **本 NAS/本机的全局设置**，不是个人偏好：一个人拨一下，所有人的侧栏
+   * 与路由都跟着变。故只有管理员能改（G3 · 用户已拍板走「管理员策略」）。
+   *
+   * ⚠️ **这是 UI 半门，不是完整防护**：服务端 v1 没有角色概念（`PUT /api/settings/:key`
+   * 只校验 Bearer 令牌，不认「谁」），所以绕过界面直接调 API 仍可写。真正的强制要等
+   * 服务端有身份模型；在此之前这一层的作用是「不给成员一个会导致全局变化的按钮」，
+   * 别把它当成权限系统。
+   */
+  const { isAdmin } = useRoleGuard();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +204,22 @@ export function PluginsSection(): JSX.Element {
    * 同一时刻只开一个：再点同一个齿轮即收起，点别的齿轮就换人。
    */
   const [openSettings, setOpenSettings] = useState<string | null>(null);
+
+  /**
+   * ── 打开设置时重读一次启用状态（G2）──
+   * 注册表只在**启动**读过 settings KV（`PluginRegistryProvider` 的 hydrate effect），
+   * 之后再不重读。于是另一个标签页 / 另一台设备改过的值，这边要刷新页面才看得到，
+   * 而「基于旧快照的盲写」还会覆盖别人的改动（G1 拦下了写入，但看到旧值本身就够糟）。
+   * 这里在**本区挂载时**（= 用户打开设置并切到「插件」）显式重读一次即可。
+   *
+   * 刻意**不**做轮询、不做全局订阅：插件开关是极低频设置，多读一次已经覆盖全部真实
+   * 场景，持续订阅只是新的噪音源。依赖只有 `reloadEnabled`（身份稳定：`useCallback([repos])`），
+   * 所以每个挂载周期只跑一次。
+   */
+  const reloadEnabled = reg.reloadEnabled;
+  useEffect(() => {
+    void reloadEnabled();
+  }, [reloadEnabled]);
 
   const rows = useMemo(
     () =>
@@ -150,10 +235,14 @@ export function PluginsSection(): JSX.Element {
     setError(null);
     setBusyId(pluginId);
     try {
-      // 写 settings KV 后再改内存 ⇒ 刷新/重启后状态保持
-      await reg.setPluginEnabled(pluginId, next);
-    } catch {
-      setError('保存失败，开关未生效——请重试（本地存储可能不可写）');
+      // 先落库后改内存（写前还会做一次冲突校验，见 setPluginEnabled）
+      const res: SetPluginEnabledResult = await reg.setPluginEnabled(pluginId, next);
+      if (res.ok) return;
+      setError(
+        res.reason === 'conflict'
+          ? '该设置已被其他设备修改，请刷新后重试（本次未写入，你看到的可能是别人的新值）'
+          : describeToggleFailure(res.error),
+      );
     } finally {
       setBusyId(null);
     }
@@ -203,7 +292,19 @@ export function PluginsSection(): JSX.Element {
         }
         writeAck(res.manifest.id);
         // 强制写 false：id 复用 = 新插件，不继承上一个插件的启用态（探路实测风险）
-        await reg.setPluginEnabled(res.manifest.id, false);
+        const disabled = await reg.setPluginEnabled(res.manifest.id, false);
+        if (!disabled.ok) {
+          // 文件已落盘、状态没写成 ⇒ **不许**报告成完全成功：否则用户重启后发现
+          // 新插件是启用着的，而界面说过「默认关闭」。
+          setError(
+            `「${res.manifest.name}」已安装，但「默认关闭」状态没写成：${
+              disabled.reason === 'conflict'
+                ? '该设置已被其他设备修改，请刷新后重试'
+                : describeToggleFailure(disabled.error)
+            }`,
+          );
+          return;
+        }
         setNotice(
           `已安装「${res.manifest.name}」v${res.manifest.version}（${res.fileCount} 个文件）——重启后生效，默认关闭`,
         );
@@ -231,7 +332,17 @@ export function PluginsSection(): JSX.Element {
     setBusyId(target.id);
     try {
       // 先停用（iframe 走完整 unmount 握手）再删目录——反序会让跑着的插件指向已删文件
-      await reg.setPluginEnabled(target.id, false);
+      const disabled = await reg.setPluginEnabled(target.id, false);
+      if (!disabled.ok) {
+        // 停用没成功 ⇒ **中止卸载**（删了目录但插件还处于启用态 = 跑着的 iframe 指向已删文件）。
+        // 这条中止语义与改造前一致：那时 setPluginEnabled 抛错，被下面的 catch 接住。
+        setError(
+          disabled.reason === 'conflict'
+            ? '卸载已中止：该设置已被其他设备修改，请刷新后重试'
+            : `卸载已中止——无法先停用这个插件：${describeToggleFailure(disabled.error)}`,
+        );
+        return;
+      }
       const res = await window.idplan?.pluginInstall?.uninstall(target.id);
       if (!res || !res.ok) {
         setError(`卸载失败：${res?.reason ?? '主进程未响应'}`);
@@ -259,11 +370,33 @@ export function PluginsSection(): JSX.Element {
       </div>
 
       <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5">
+        {/*
+          G4：这句原先写「停用后它的页面、侧栏入口**与设置区块**会立即消失」——**是假话**。
+          设置区块（本轮起是「插件卡片上的齿轮 + 该插件自己的设置」）与这张列表同生共死：
+          插件停用后卡片仍在列表里、齿轮也还在（置灰的判据只有「有没有声明 settingsSlot」），
+          只是齿轮点开后是那句「当前是停用状态」的说明。**消失的是页面与导航入口。**
+          假文案比没有文案更坏——它会让人以为「关掉插件后去设置里就找不到它了」。
+        */}
         <p className="mb-2 text-[11px] leading-relaxed text-mist">
-          插件是可**单独开关**的功能包。停用后它的页面、侧栏入口与设置区块会立即消失
-          （数据保留，重新启用即恢复）。开关状态存在本地/NAS 设置里，重启不丢。
+          插件是可**单独开关**的功能包。停用后它的页面与侧栏入口会立即隐藏
+          （数据保留，重新启用即恢复）；插件卡片仍在下面的列表里，点它的齿轮可以看到
+          它自己的设置。开关状态存在本地/NAS 设置里，重启不丢。
           第三方插件可从文件安装（重启生效、默认关闭、装前会把权限摊给你看）。
         </p>
+
+        {/*
+          G3：开关是**全局**设置（改它 = 改所有人的侧栏与路由），故仅管理员可拨。
+          ⚠️ 服务端 v1 无角色概念 ⇒ 这是 **UI 半门**（见组件顶部注释），不是完整防护。
+          文案放两处：这里一处可见说明（触屏也能看到）+ 每枚开关的 tooltip（鼠标可查）。
+        */}
+        {!isAdmin && (
+          <p
+            data-plugins-admin-notice=""
+            className="mb-2 rounded-md border border-amber/40 bg-amber-soft px-2 py-1 text-[11px] text-amber"
+          >
+            插件开关是本 NAS 的全局设置，仅管理员可改；成员只能查看当前状态与各插件自己的设置。
+          </p>
+        )}
 
         {isDesktop() && (
           <button
@@ -392,14 +525,19 @@ export function PluginsSection(): JSX.Element {
                     <Settings size={13} aria-hidden />
                   </button>
 
-                  {/* 开关：button + aria-pressed（键盘可达；不用裸 checkbox 以保证样式一致） */}
+                  {/*
+                    开关：button + aria-pressed（键盘可达；不用裸 checkbox 以保证样式一致）。
+                    G3：`disabled` 的第二半是 `!isAdmin` —— 这是**全局**设置，不是个人偏好；
+                    tooltip 说清原因（成员看得到状态，但拨不动）。
+                  */}
                   <button
                     type="button"
                     role="switch"
                     aria-checked={enabled}
                     aria-label={`${enabled ? '停用' : '启用'}插件 ${manifest.name}`}
-                    disabled={busy}
+                    disabled={busy || !isAdmin}
                     data-plugin-toggle={manifest.id}
+                    title={isAdmin ? undefined : '插件开关是本 NAS 的全局设置，仅管理员可改'}
                     onClick={() => void onToggle(manifest.id, !enabled)}
                     className={cn(
                       'relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors',

@@ -168,6 +168,33 @@ export interface UiState {
    */
   showContradictoryExecutions: boolean;
 
+  /**
+   * 「请把设置抽屉收起来」的**显式请求信号**（单调计数，v1.0 · 2026-10-14）。
+   *
+   * ── 为什么需要它（不要顺手删）──
+   * 设置抽屉的 `open` 是 **`Sidebar` / `MobileMoreMenu` 的组件内 state**
+   * （`Sidebar.tsx` 的 `settingsOpen`），而「打开 Agent 看板」那颗按钮住在
+   * `manifest.settingsSlot` 里 —— 插件组件由 `PluginSettingsSlot` 以 `<Slot />`
+   * **无 props** 渲染，拿不到宿主的 `onClose`。按钮要把抽屉收起来，就必须有一条
+   * **不经过组件 props 树**的显式通道；否则用户点了「打开 Agent 看板」之后，
+   * 640px 的抽屉会继续盖在刚导航过去的页面上。
+   *
+   * ── 为什么是「请求」而不是把 `open` 本身搬进 store ──
+   * 搬 `open` 要同时改两个挂载点的状态归属（`Sidebar` 与 `MobileMoreMenu`），
+   * 属于越界。这里只做一个**单向信号**：请求方 bump 计数，抽屉的订阅者收到变化后
+   * 调自己的 `onClose` —— 「关不关、怎么关」仍由抽屉自己决定，状态归属一动不动。
+   *
+   * ── 为什么用单调计数而不是布尔 ──
+   * 布尔表达不了「又请求了一次」（连续两次请求会被去重成一次），而「关」这个动作
+   * 要求**每一次请求都被看见一次**。
+   *
+   * 与浮层栈（`core/overlay/overlayStack`）的分工：那边管「谁在最上层 / 谁来吃 Esc」，
+   * 这里管「请把某一层收起来」，两者正交，不互相代替。
+   */
+  settingsCloseRequest: number;
+  /** 请求收起设置抽屉（幂等语义 = 每次调用都算一次请求，见上） */
+  requestSettingsClose(): void;
+
   openStageDrawer(stageId: string): void;
   setSearchQuery(query: string): void;
   setSelectedProjectId(projectId: string | null): void;
@@ -208,6 +235,9 @@ export const useUiStore = create<UiState>((set) => ({
   selectedProjectId: null,
   // 首屏即读回上次选择（异常默认可见：存储不可用 / 键缺失时回落 true）
   showContradictoryExecutions: readStoredShowContradictory(),
+  // 设置抽屉的关闭请求信号（从 0 起；只在会话内，不持久化——它是一次性动作，不是状态）
+  settingsCloseRequest: 0,
+  requestSettingsClose: () => set((st) => ({ settingsCloseRequest: st.settingsCloseRequest + 1 })),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setSelectedProjectId: (projectId) => set({ selectedProjectId: projectId }),
 

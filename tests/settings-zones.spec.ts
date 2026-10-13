@@ -719,6 +719,19 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
         expect(await memberAgentPanel.count(), '成员也要能展开 agent-board 自己的设置').toBe(1);
         expect(await memberAgentPanel.innerText()).toContain('Agent 与本地库');
 
+        // G3（管理员策略 · 用户 2026-10-14 拍板）：插件开关是本 NAS 的**全局**设置，
+        // 成员只能看、不能拨 —— 置灰 + 一条**可见**说明（触屏没有 tooltip）。
+        await page.locator('[data-plugin-settings="agent-board"]').click(); // 收起，回到列表
+        expect(
+          await page.locator('[data-plugin-toggle="agent-board"]').isDisabled(),
+          '成员身份下插件开关必须置灰',
+        ).toBe(true);
+        expect(
+          await page.locator('[data-plugins-admin-notice]').count(),
+          '置灰之外还要有可见说明（只靠 tooltip 触屏摸不到）',
+        ).toBe(1);
+        expect(await page.locator('[data-plugins-admin-notice]').innerText()).toContain('仅管理员可改');
+
         // 导航键集合 = 六区减去排程与行业与模板（顺序不变；无独立 Agent 一级分区）
         const keys = await page.evaluate(() =>
           Array.from(document.querySelectorAll('[data-settings-zone]')).map((b) =>
@@ -819,4 +832,49 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       }
     }
   }, 90000);
+
+  it('S-Z7 · 插件设置里点「打开 Agent 看板」：抽屉收起 + 真的落到 /agent（v1.0 关闭请求信号）', async () => {
+    /*
+     * 这条守的是**搬家后新长出来的一处机制**（`useUiStore.requestSettingsClose`）。
+     *
+     * 背景：那枚 `<Link to="/agent">` 原先挂在宿主抽屉里，带 `onClick={onClose}`
+     * （点它就收起抽屉）。搬进 `agent-board` 的 `manifest.settingsSlot` 之后，
+     * 插件组件由 `PluginSettingsSlot` 以 `<Slot />` **无 props** 渲染 ⇒ 拿不到宿主的
+     * `onClose`。若就此丢掉关闭行为，用户点完「打开 Agent 看板」会看到 640px 的抽屉
+     * **继续盖在刚打开的 /agent 页面上** —— 那是功能回退，不是「差强人意」。
+     *
+     * 判据全是离散的、且**不依赖任何会改动的文案**：
+     *   ① 点击后 URL 变成 /agent（`waitForURL` 会等；若这条路由不存在，应用会
+     *      落到 `'*'` 通配回首页 ⇒ URL 变 `/` ⇒ 这里直接超时变红）；
+     *   ② 设置抽屉**从 DOM 上消失**（不是「被遮住」）；
+     *   ③ 分区导航钩子一并消失（抽屉真的是卸载了，残留一个壳不算）。
+     *
+     * 为什么必须真机：① 是真导航（jsdom 里没有真 history/router 时序）；
+     *                    ② 要等退出动画播完（`usePresence` 说「关≠立即卸载」）。
+     */
+    const { ctx, page } = await open(1600, 900);
+    try {
+      await becomeAdmin(page);
+      await clickSidebarSettings(page);
+      await waitSettingsDrawer(page);
+
+      await page.locator('[data-settings-zone="plugins"]').click();
+      // 展开 agent-board（默认启用）自己的设置，那枚 Link 在里面
+      await page.locator('[data-plugin-settings="agent-board"]').click();
+      const panel = page.locator('[data-plugin-settings-panel="agent-board"]');
+      expect(await panel.count(), '前提：agent-board 的设置面板要真的展开（默认启用）').toBe(1);
+      const link = panel.locator('a[href="/agent"]');
+      expect(await link.count(), '前提：面板里要有那枚「打开 Agent 看板」的站内链接').toBe(1);
+
+      await link.click();
+
+      // ① 真的到了 /agent（不是被通配路由弹回首页）
+      await page.waitForURL(/\/agent$/, { timeout: 8000 });
+      // ②③ 抽屉卸载（等退出动画走完）
+      await page.waitForSelector('[data-settings-drawer]', { state: 'detached', timeout: 8000 });
+      expect(await page.locator('[data-settings-zone]').count()).toBe(0);
+    } finally {
+      await ctx.close();
+    }
+  }, HEAVY);
 });

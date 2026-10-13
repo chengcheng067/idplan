@@ -40,6 +40,7 @@ import {
   SIDEBAR_W_COLLAPSED,
   SIDEBAR_W_EXPANDED,
 } from '../../store/useLayoutStore';
+import { useUiStore } from '../../store/useUiStore';
 import { useXlViewport } from '../../hooks/useXlViewport';
 import { appEnv } from '../../config/env';
 import { useBackupIo } from './useBackupIo';
@@ -273,6 +274,28 @@ export function SettingsDialog({
    * effect 负责把 `zone` 状态本身也搬正（左导航高亮 / data-* 钩子随之一致）。
    */
   const activeZone: ZoneKey = visibleZones.some((z) => z.key === zone) ? zone : firstVisibleZone;
+  /**
+   * 「请把设置抽屉收起来」的**显式请求**（v1.0 · 2026-10-14）——插件设置面板里的
+   * 站内跳转要用它（最典型：`agent-board` 的「打开 Agent 看板」）。
+   *
+   * 为什么不是把 `onClose` 传下去：抽屉的 `open` 是 Sidebar / MobileMoreMenu 的
+   * **组件内 state**，而插件面板由 `PluginSettingsSlot` 以 `<Slot />` **无 props**
+   * 渲染 —— 传不下去。故请求方经 `useUiStore.requestSettingsClose()` 发一个单向信号，
+   * 抽屉在这里订阅并调自己的 `onClose`：**关不关仍由抽屉决定**，状态归属不动。
+   *
+   * 实现是「计数边沿检测」而不是「布尔订阅」：计数器每次请求 +1，本组件只在**值变了**
+   * 的那一次调 `onClose`（用 ref 记住上次看到的值）。这样连续两次请求不会被去重，
+   * 且 Effect 因 `onClose` 每次渲染换新引用而重跑时，也**不会**误触发关闭
+   * ——这是这个写法的关键，别改成 `if (req > 0) onClose()` 那种形态。
+   */
+  const settingsCloseRequest = useUiStore((s) => s.settingsCloseRequest);
+  const seenCloseRequest = useRef(settingsCloseRequest);
+  useEffect(() => {
+    if (settingsCloseRequest === seenCloseRequest.current) return;
+    seenCloseRequest.current = settingsCloseRequest;
+    if (open) onClose();
+  }, [settingsCloseRequest, open, onClose]);
+
   /**
    * 把 `zone` 状态与「抽屉开合 / 角色」对齐 —— 渲染期的 `activeZone` 已挡住泄漏，
    * 本条负责**状态本身**不残留（否则下次打开时左导航高亮与右栏会短暂不一致，

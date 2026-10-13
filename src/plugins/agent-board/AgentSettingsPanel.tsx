@@ -12,13 +12,13 @@
  * `settingsSlot` 挂载，宿主只认「插件声明的设置区块」这一条抽象。
  *
  * ── 内容零改动（只搬位置 + 换外壳）──
- * 三块的标记、文案键、数值口径与原来逐字一致，唯一的删减是那枚
- * `<Link to="/agent">` 的 `onClick={onClose}`：`onClose` 是宿主设置抽屉的
- * 关闭回调，插件组件拿不到（`PluginSettingsSlot` 以 `<Slot />` 无 props 渲染，
- * 见 `core/plugin/PluginRegistryProvider.tsx`），而给插件传宿主回调要改宿主
- * 装配层。**行为差量：从这里点「打开 Agent 看板」不再自动收起设置抽屉**
- * （抽屉是贴侧栏的 `left-rail`，导航后仍悬在新页面上，按 Esc 或点关闭可收）。
- * 已上报 team-lead 待定；改法见报告。
+ * 三块的标记、文案键、数值口径与原来逐字一致。唯一需要**换机制**的是那枚
+ * `<Link to="/agent">` 的 `onClick={onClose}`：`onClose` 是宿主设置抽屉的关闭回调，
+ * 插件组件拿不到（`PluginSettingsSlot` 以 `<Slot />` 无 props 渲染，见
+ * `core/plugin/PluginRegistryProvider.tsx`）。**行为照旧**——点它先收起抽屉再导航——
+ * 只是通道换成 `useUiStore.requestSettingsClose()`（显式单向信号，机制写在那个
+ * store 字段的注释里）。为什么不能直接不要它：640px 的抽屉会继续盖在刚打开的
+ * /agent 页面上，那是功能回退。
  *
  * ── 权限口径：全员可见（**不许顺手加管理员墙**）──
  * 搬家前这三块是全员可见的（原二级子导航与 `PLUGIN_SUBS` 都没有 `adminOnly`），
@@ -39,6 +39,7 @@ import { Bot, Database } from 'lucide-react';
 import { useLang } from '../../i18n';
 import { useRepos } from '../../hooks/useRepos';
 import { useMembersStore } from '../../store/useMembersStore';
+import { useUiStore } from '../../store/useUiStore';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
 import {
   estimateLocalDbUsage,
@@ -48,6 +49,8 @@ import {
 
 export function AgentSettingsPanel(): JSX.Element {
   const { t } = useLang();
+  /** 见下方 Link 处的注释：这是「请收起居中的设置抽屉」那条显式通道（无 props 可传） */
+  const requestSettingsClose = useUiStore((s) => s.requestSettingsClose);
 
   // —— v0.6 · T13：Agent 席位明示（B5：只展示不拦截）+ 本地库占用量 ——
   const members = useMembersStore((st) => st.members);
@@ -153,11 +156,16 @@ export function AgentSettingsPanel(): JSX.Element {
           这个 Link 只在 agent-board 启用时会被渲染（`PluginSettingsSlot` 判启用态，
           停用就整块返回 null）——所以它**不再是死链**：从前它挂在宿主抽屉里，
           插件关掉后 /agent 路由不存在，点过去落到 '*' 通配回首页且抽屉还开着。
-          ⚠️ 与搬家前的行为差量：少了 `onClick={onClose}`（拿不到宿主回调），
-             点它导航后设置抽屉不自动收。见文件头「内容零改动」段。
+
+          `onClick={requestSettingsClose}`：点它就**先把设置抽屉收起来**再导航。
+          拿不到宿主的 `onClose`（`PluginSettingsSlot` 以 `<Slot />` 无 props 渲染），
+          所以走 `useUiStore` 那条**显式请求信号**（机制与理由写在 `useUiStore` 的
+          `settingsCloseRequest` 注释里）。没有它 = 640px 抽屉会继续盖在刚打开的
+          /agent 页面上——那是功能回退，不是「行为差强人意」。
         */}
         <Link
           to="/agent"
+          onClick={requestSettingsClose}
           className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
         >
           <Bot size={15} className="text-mist" aria-hidden />

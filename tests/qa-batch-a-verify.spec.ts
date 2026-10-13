@@ -859,7 +859,16 @@ await page.click('[data-industry-select-option="indoor"]');
             direct.click();
             return;
           }
-          document.querySelector<HTMLButtonElement>('button[aria-label="打开导航菜单"]')?.click();
+          /*
+           * <xl 没有持久侧栏：先点顶栏汉堡开侧栏抽屉，再点其中的「设置」。
+           * 定位用 `data-nav-menu-trigger`（TopBar 汉堡上的钩子），**不用**
+           * `aria-label="打开导航菜单"` —— 那是**界面文案**，默认中文下与旧字面量
+           * 逐字节相同所以「现在能跑」，但一切到英文就找不到元素，而且失败会伪装成
+           * 「控件不存在」。钩子与文案解耦后，中英两版都稳。
+           * ⚠️ 别拿 `data-mobile-more-trigger` 顶替：那是 ⋮「更多操作」（<768 可见、
+           *    开的是更多菜单），本行要点的是汉堡（<1280 可见、开的是侧栏抽屉）。
+           */
+          document.querySelector<HTMLButtonElement>('[data-nav-menu-trigger]')?.click();
         });
         if (w < 1280) {
           await page.waitForTimeout(400);
