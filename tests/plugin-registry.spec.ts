@@ -15,6 +15,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
+// ⑩-b 的扫描器用 TypeScript AST。**必须是顶层 import 而非函数内 require**：
+// `ts.Node` 这类**类型位置**的用法要求 `ts` 在类型层可见，而
+// `const ts = require('typescript')` 只是**值**绑定 ⇒ tsc 报
+// 「Cannot find namespace 'ts'」（tsconfig.tests.json 下实测 2 条）。
+// 同仓既有写法：`tests/print-copy-no-agent.spec.ts:45` 也是顶层 `import ts from 'typescript'`。
+import ts from 'typescript';
 import type { RouteObject } from 'react-router-dom';
 
 import {
@@ -284,7 +290,6 @@ describe('插件注册表 · settings KV 往返', () => {
       gates: string[];
     }>;
   } => {
-    const ts = require('typescript') as typeof import('typescript');
     const collapse = (s: string): string => s.replace(/\s+/g, ' ').trim();
     return {
       scan: (files) => {
