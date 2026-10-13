@@ -23,6 +23,13 @@
  * ③ **有** Provider 且 KV 空：上述三个值与 ①② **逐个相同** —— 这就是「与生产语义
  *    对齐」的证据（真机未 hydrate 时 Provider 就在、KV 就是空的）。
  *
+ * ⚠️ **与 `tests/plugin-ui-gating.spec.tsx` 的 no-Provider 用例是两层，不是重复**（owner 不同，别误删其一）：
+ *    · **本文件 = 注册表层**：直接读 `usePluginRegistry()` 的 `stateOf` / `enabledManifests` /
+ *      `navItems`，断言「无 Provider」与「Provider 在、KV 空」**逐值相同**（同一派生链的证明）。
+ *    · **那一份 = 行为层**（`impl-plugin-gating` 持有）：真渲染 `MobileMoreMenu`，断言
+ *      ⋮ 菜单里 Agent 项**在不在**（用户能看到的结果），并带一条「身份是管理员」的前提断言。
+ *    两层缺一不可：注册表层能抓「派生漂移」，行为层能抓「派生对了但消费点没用它」。
+ *
  * ⚠️ 反向锁：把降级档改回硬编码 `enabled:false` / `manifests: []` ⇒ ①②③ 变红。
  *    （已实测：三方向均可通过，见提交信息。）
  */
