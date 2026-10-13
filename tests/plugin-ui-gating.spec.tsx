@@ -107,7 +107,8 @@ vi.mock('../src/hooks/useRepos', () => {
   return { useRepos: (): unknown => bundle };
 });
 
-import { PluginRegistryProvider, PluginSettingsSlot } from '../src/core/plugin/PluginRegistryProvider';
+import { PluginRegistryProvider, PluginSettingsSlot, usePluginRegistry } from '../src/core/plugin/PluginRegistryProvider';
+import { useRoleGuard } from '../src/hooks/useRoleGuard';
 import { MobileMoreMenu } from '../src/components/layout/MobileMoreMenu';
 import { Sidebar } from '../src/components/layout/Sidebar';
 import { ProjectDetailPage } from '../src/pages/ProjectDetailPage';
@@ -293,6 +294,24 @@ function mount(node: React.ReactElement): HTMLDivElement {
   root = createRoot(el);
   act(() => {
     root!.render(<PluginRegistryProvider>{node}</PluginRegistryProvider>);
+  });
+  return el;
+}
+
+/**
+ * 挂一棵**不包 Provider** 的树（只有 G 组用）。
+ *
+ * 为什么要单独一个：G 组要验的正是「**无 Provider** 时的回落语义」，
+ * 套上 Provider 就等于把被测的东西替换掉了（那会变成 F 组那种「Provider 在、KV 空」场景）。
+ */
+function mountWithoutProvider(node: React.ReactElement): HTMLDivElement {
+  unmountCurrent();
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  host = el;
+  root = createRoot(el);
+  act(() => {
+    root!.render(node);
   });
   return el;
 }
@@ -614,6 +633,91 @@ describe('F · PluginSettingsSlot：停用的插件不挂载自己的设置面�
     setPluginKv({ 'agent-board': false });
     const off = await renderSlot('agent-board');
     expect(slotChildCount(off), '停用后 agent-board 的设置面板不得挂载').toBe(1);
+  });
+});
+
+/* ====================================================================================
+ * G · 无 Provider 时的回落语义（**行为层**）—— 无 Provider ⇒ 视为「未 hydrate」⇒ 回落 `defaultEnabled`
+ *
+ * ── 裁定与出处 ──
+ *   team-lead 2026-10-14 裁定：无 `PluginRegistryProvider` ⇒ 视为**未 hydrate** ⇒ 回落
+ *   `manifest.defaultEnabled`（与生产「Provider 在、KV 空」逐字同源）；**不是**「视为全停用」。
+ *   与之配套：**显式 KV 记录永远优先** —— 这一半由 B / D 的 off 档继续守着（它们显式写
+ *   `plugin.enabled.<id> = false`），所以本组只补「无记录 + 无 Provider」这一档。
+ *
+ * ── 与 `tests/plugin-registry-fallback.spec.tsx` 的分工（**两层，不重复，都别删**）──
+ *   · **注册表层**（`plugin-registry-fallback.spec.tsx`，impl-settings-hierarchy 写）：
+ *     直接问 `stateOf` / `enabledManifests` / `navItems`，并钉住「与 Provider 在、KV 空逐值相同」；
+ *   · **行为层**（本组）：真渲染 `MobileMoreMenu`，看 ⋮ 菜单里那两项**在不在 DOM 里** ——
+ *     它能抓到「注册表说启用、但组件那条渲染路径没跟上」这种只在真渲染下暴露的错（反之，
+ *     注册表层能抓到本组覆盖不到的字段级自相矛盾）。两层互为对照，删任一层都会留一个盲区。
+ *
+ * ── 判别力的前提（本组两条前提断言，缺一条本组就是空过）──
+ *   ① ⋮ 面板必须真的打开（否则「项不在」只是因为菜单没开）；
+ *   ② 身份必须是**管理员**：「载入示例项目」那项的条件是「插件 ∧ `isAdmin`」，
+ *      身份非管理员时它缺席，就分不清是**插件挡的**还是 **isAdmin 挡的** ⇒ 判据失去判别力。
+ * ==================================================================================== */
+
+/** 管理员身份 + 空库（与 A–C 组同一套夹具，仅供本组用） */
+function seedAdminIdentity(): void {
+  act(() => {
+    useProjectsStore.getState().replaceAll({ projects: [], stages: [], tasks: [] });
+    useMembersStore.getState().setAll([ADMIN]);
+    useSettingsStore.setState({ currentMemberId: ADMIN_ID, hydrated: true });
+  });
+}
+
+describe('G · 无 Provider：回落 defaultEnabled（agent-board 开 / sample-projects 关）', () => {
+  it('★ 两个默认值方向都验：Agent 项在（默认开）、「载入示例项目」不在（默认关）', async () => {
+    seedAdminIdentity();
+
+    let agentBoard: unknown = null;
+    let sampleProjects: unknown = null;
+    let isAdmin = false;
+    function Probe(): null {
+      const reg = usePluginRegistry();
+      agentBoard = reg.stateOf('agent-board');
+      sampleProjects = reg.stateOf('sample-projects');
+      isAdmin = useRoleGuard().isAdmin;
+      return null;
+    }
+
+    const h = mountWithoutProvider(
+      <MemoryRouter initialEntries={['/']}>
+        <Probe />
+        <MobileMoreMenu />
+      </MemoryRouter>,
+    );
+
+    const btn = h.querySelector<HTMLButtonElement>('button[aria-label="更多操作"]');
+    expect(btn, '前提：⋮ 触发键必须在（否则下面的菜单项判据全是空过）').not.toBeNull();
+    await act(async () => {
+      btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const items = Array.from(document.querySelectorAll('[role="menuitem"]')).map((n) =>
+      (n.textContent ?? '').trim(),
+    );
+
+    // 前提：菜单真开了 + 身份真是管理员（见上方「判别力的前提」）
+    expect(items, '前提：⋮ 面板必须真的打开').toContain(t('settings.title'));
+    expect(isAdmin, '前提：本组必须是管理员身份（否则「载入示例项目」缺席分不清是插件挡的还是 isAdmin 挡的）').toBe(
+      true,
+    );
+
+    // ★ 抽象层：两个插件各自按自己的 defaultEnabled 回落
+    expect(agentBoard, 'agent-board 的 defaultEnabled=true ⇒ 无 Provider 时应视为启用').toEqual({
+      enabled: true,
+      explicit: false,
+    });
+    expect(sampleProjects, 'sample-projects 的 defaultEnabled=false ⇒ 无 Provider 时应视为停用').toEqual(
+      { enabled: false, explicit: false },
+    );
+
+    // ★ 行为层：默认开的入口必须真的渲染出来（只看 stateOf 不够）；默认关的必须不在
+    expect(items, 'agent-board 回落为启用 ⇒ ⋮ 里应有 Agent 项').toContain('Agent');
+    expect(items, 'sample-projects 回落为停用 ⇒ ⋮ 里不得有「载入示例项目」').not.toContain(
+      t('sidebar.loadDemo'),
+    );
   });
 });
 
