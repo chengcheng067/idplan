@@ -44,6 +44,8 @@ import {
   type ContradictionKind,
 } from '../core/execution/execution-recovery';
 import { isTerminal } from '../core/execution/execution-state';
+import { useLang } from '../i18n';
+import type { MessageKey } from '../i18n';
 
 /* ------------------------------------------------------------------ *
  * 语义分组：终态 / 进行中 / 需关注
@@ -92,14 +94,15 @@ function needsAttention(s: ExecutionStatus): boolean {
  *      覆盖不到边界：终态+终态 attempt 不算、非终态+queued 不算）；
  *   ③ 将来若服务端 / 备份校验也要识别它，import 路径不必反过来依赖 pages/。
  */
-const CONTRADICTION_LABEL: Record<ContradictionKind, string> = {
-  live: '数据矛盾：该执行单已结束，却有尝试仍显示「执行中」',
-  pending: '数据矛盾：该执行单已结束，却有尝试仍处于「排队中」',
+const CONTRADICTION_LABEL_KEYS: Record<ContradictionKind, MessageKey> = {
+  live: 'agentConsole.contradiction.live',
+  pending: 'agentConsole.contradiction.pending',
 };
 
-/** 列表顶部统计条用的固定文案（不随条目变化，故不走 label 映射） */
-const CONTRADICTION_HINT =
-  '这类记录是终态执行单上残留的未结束尝试（多为进程被杀或备份恢复绕过状态校验所致）。状态机没有合法转移可收口，故按原样保留、仅供识别。';
+/* 列表顶部统计条用的固定文案（不随条目变化，故不走 label 映射）：
+   2026-08-27 英文线起它是**消息表键**（原为模块级中文字符串常量）。
+   本文件里所有「模块级中文常量 ⇒ 键表」的理由同 `src/i18n/useLang.ts` 纪律②：
+   模块顶层调不了 useLang()，故一律「键表 + 渲染期 t()」。 */
 
 /**
  * 从 attempt 集合里挑出标记上要指名的那个号。
@@ -154,17 +157,17 @@ const EXEC_STATUS_RAIL_CLASS: Record<ExecutionStatus, string> = {
   [ExecutionStatus.Cancelled]: 'bg-line',
 };
 
-const EXEC_STATUS_LABEL: Record<ExecutionStatus, string> = {
-  [ExecutionStatus.Draft]: '草稿',
-  [ExecutionStatus.AwaitingConfirmation]: '待确认',
-  [ExecutionStatus.Queued]: '排队中',
-  [ExecutionStatus.Running]: '执行中',
-  [ExecutionStatus.Paused]: '已暂停',
-  [ExecutionStatus.NeedsAttention]: '需关注',
-  [ExecutionStatus.AwaitingReview]: '待复核',
-  [ExecutionStatus.Completed]: '已完成',
-  [ExecutionStatus.Failed]: '已失败',
-  [ExecutionStatus.Cancelled]: '已取消',
+const EXEC_STATUS_LABEL_KEYS: Record<ExecutionStatus, MessageKey> = {
+  [ExecutionStatus.Draft]: 'agentConsole.execStatus.draft',
+  [ExecutionStatus.AwaitingConfirmation]: 'agentConsole.execStatus.awaitingConfirmation',
+  [ExecutionStatus.Queued]: 'agentConsole.execStatus.queued',
+  [ExecutionStatus.Running]: 'agentConsole.execStatus.running',
+  [ExecutionStatus.Paused]: 'agentConsole.execStatus.paused',
+  [ExecutionStatus.NeedsAttention]: 'agentConsole.execStatus.needsAttention',
+  [ExecutionStatus.AwaitingReview]: 'agentConsole.execStatus.awaitingReview',
+  [ExecutionStatus.Completed]: 'agentConsole.execStatus.completed',
+  [ExecutionStatus.Failed]: 'agentConsole.execStatus.failed',
+  [ExecutionStatus.Cancelled]: 'agentConsole.execStatus.cancelled',
 };
 
 const ATTEMPT_STATUS_BADGE_CLASS: Record<AttemptStatus, string> = {
@@ -176,13 +179,13 @@ const ATTEMPT_STATUS_BADGE_CLASS: Record<AttemptStatus, string> = {
   [AttemptStatus.Interrupted]: 'border-amber bg-amber-soft text-amber-deep',
 };
 
-const ATTEMPT_STATUS_LABEL: Record<AttemptStatus, string> = {
-  [AttemptStatus.Queued]: '排队中',
-  [AttemptStatus.Running]: '执行中',
-  [AttemptStatus.Succeeded]: '成功',
-  [AttemptStatus.Failed]: '失败',
-  [AttemptStatus.Cancelled]: '已取消',
-  [AttemptStatus.Interrupted]: '被中断',
+const ATTEMPT_STATUS_LABEL_KEYS: Record<AttemptStatus, MessageKey> = {
+  [AttemptStatus.Queued]: 'agentConsole.attemptStatus.queued',
+  [AttemptStatus.Running]: 'agentConsole.attemptStatus.running',
+  [AttemptStatus.Succeeded]: 'agentConsole.attemptStatus.succeeded',
+  [AttemptStatus.Failed]: 'agentConsole.attemptStatus.failed',
+  [AttemptStatus.Cancelled]: 'agentConsole.attemptStatus.cancelled',
+  [AttemptStatus.Interrupted]: 'agentConsole.attemptStatus.interrupted',
 };
 
 const PROPOSAL_STATUS_BADGE_CLASS: Record<WritebackProposalStatus, string> = {
@@ -193,25 +196,28 @@ const PROPOSAL_STATUS_BADGE_CLASS: Record<WritebackProposalStatus, string> = {
   [WritebackProposalStatus.Conflict]: 'border-rose bg-rose-soft text-rose',
 };
 
-const PROPOSAL_STATUS_LABEL: Record<WritebackProposalStatus, string> = {
-  [WritebackProposalStatus.Draft]: '草稿',
-  [WritebackProposalStatus.Proposed]: '待应用',
-  [WritebackProposalStatus.Applied]: '已应用',
-  [WritebackProposalStatus.Rejected]: '已驳回',
-  [WritebackProposalStatus.Conflict]: '冲突',
+/* ⚠️ 与 `agent.writeback.*`（labels.ts 的 WRITEBACK_STATUS_KEYS）**不是同一份**：
+   那套的中文是「待审 / 已拒绝」，本页是「待应用 / 已驳回」 —— 措辞不同，故不能复用；
+   两套措辞并存是既有事实（本次只翻语言，不改中文措辞）。 */
+const PROPOSAL_STATUS_LABEL_KEYS: Record<WritebackProposalStatus, MessageKey> = {
+  [WritebackProposalStatus.Draft]: 'agentConsole.proposalStatus.draft',
+  [WritebackProposalStatus.Proposed]: 'agentConsole.proposalStatus.proposed',
+  [WritebackProposalStatus.Applied]: 'agentConsole.proposalStatus.applied',
+  [WritebackProposalStatus.Rejected]: 'agentConsole.proposalStatus.rejected',
+  [WritebackProposalStatus.Conflict]: 'agentConsole.proposalStatus.conflict',
 };
 
-const ACTOR_LABEL: Record<string, string> = {
-  user: '人',
-  agent: 'Agent',
-  system: '系统',
-  external: '外部',
+const ACTOR_LABEL_KEYS: Record<string, MessageKey> = {
+  user: 'agentConsole.actor.user',
+  agent: 'agentConsole.actor.agent',
+  system: 'agentConsole.actor.system',
+  external: 'agentConsole.actor.external',
 };
 
-const SOURCE_LABEL: Record<string, string> = {
-  'project-task': '项目任务',
-  'member-board': '成员看板',
-  manual: '手动',
+const SOURCE_LABEL_KEYS: Record<string, MessageKey> = {
+  'project-task': 'agentConsole.source.projectTask',
+  'member-board': 'agentConsole.source.memberBoard',
+  manual: 'agentConsole.source.manual',
 };
 
 /* ------------------------------------------------------------------ *
@@ -314,15 +320,18 @@ function ContradictionMark({
   kind: ContradictionKind;
   attemptNo: number | null;
 }) {
+  const { t } = useLang();
   return (
     <span
       data-exec-contradiction={kind}
       className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-clay px-2 py-0.5 text-xs font-medium text-white"
-      title={`${CONTRADICTION_LABEL[kind]}${attemptNo === null ? '' : `（尝试 #${attemptNo}）`}`}
+      title={`${t(CONTRADICTION_LABEL_KEYS[kind])}${
+        attemptNo === null ? '' : t('agentConsole.attemptNoSuffix', { n: attemptNo })
+      }`}
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/90" aria-hidden="true" />
-      {CONTRADICTION_LABEL[kind]}
-      {attemptNo === null ? null : `（尝试 #${attemptNo}）`}
+      {t(CONTRADICTION_LABEL_KEYS[kind])}
+      {attemptNo === null ? null : t('agentConsole.attemptNoSuffix', { n: attemptNo })}
     </span>
   );
 }
@@ -338,22 +347,25 @@ interface ExecutionDetail {
 }
 
 function AttemptRow({ a }: { a: ExecutionAttempt }) {
+  const { t } = useLang();
   const mins = durationMinutes(a.startedAt, a.finishedAt);
   return (
     <li className="flex flex-col gap-1 rounded-2xl bg-sunken px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-ink">尝试 #{a.attemptNo}</span>
+        <span className="text-sm font-medium text-ink">
+          {t('agentConsole.attemptNo', { n: a.attemptNo })}
+        </span>
         {/* 同一条规矩：脉动只给「执行中」这一种尝试状态（同页 Rail 处有完整理由） */}
         <Badge
           className={`${ATTEMPT_STATUS_BADGE_CLASS[a.status]}${
             a.status === AttemptStatus.Running ? ' status-pulse' : ''
           }`}
         >
-          {ATTEMPT_STATUS_LABEL[a.status]}
+          {t(ATTEMPT_STATUS_LABEL_KEYS[a.status])}
         </Badge>
         <span className="ml-auto text-xs text-mist">
           {fmtTime(a.startedAt)} → {fmtTime(a.finishedAt)}
-          {mins === null ? '' : ` · ${mins} 分钟`}
+          {mins === null ? '' : ` · ${t('agentConsole.minutes', { mins })}`}
         </span>
       </div>
       {a.errorCode || a.errorSummary ? (
@@ -363,17 +375,20 @@ function AttemptRow({ a }: { a: ExecutionAttempt }) {
         </p>
       ) : null}
       {a.terminalReason ? (
-        <p className="text-xs text-mist">结束原因：{a.terminalReason}</p>
+        <p className="text-xs text-mist">
+          {t('agentConsole.terminalReason', { reason: a.terminalReason })}
+        </p>
       ) : null}
     </li>
   );
 }
 
 function EventRow({ e }: { e: ExecutionEvent }) {
+  const { t } = useLang();
   const transition =
     e.fromStatus || e.toStatus
-      ? `${e.fromStatus ? EXEC_STATUS_LABEL[e.fromStatus] : '—'} → ${
-          e.toStatus ? EXEC_STATUS_LABEL[e.toStatus] : '—'
+      ? `${e.fromStatus ? t(EXEC_STATUS_LABEL_KEYS[e.fromStatus]) : '—'} → ${
+          e.toStatus ? t(EXEC_STATUS_LABEL_KEYS[e.toStatus]) : '—'
         }`
       : null;
   return (
@@ -385,25 +400,32 @@ function EventRow({ e }: { e: ExecutionEvent }) {
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-ink">{e.type}</span>
-          <span className="text-xs text-mist">{ACTOR_LABEL[e.actor] ?? e.actor}</span>
+          <span className="text-xs text-mist">
+            {ACTOR_LABEL_KEYS[e.actor] ? t(ACTOR_LABEL_KEYS[e.actor]) : e.actor}
+          </span>
           <span className="ml-auto text-xs text-mist">{fmtTime(e.createdAt)}</span>
         </div>
         {transition ? <p className="text-xs text-mist">{transition}</p> : null}
-        {e.reason ? <p className="text-xs text-mist">原因：{e.reason}</p> : null}
+        {e.reason ? (
+          <p className="text-xs text-mist">{t('agentConsole.reason', { reason: e.reason })}</p>
+        ) : null}
       </div>
     </li>
   );
 }
 
 function ProposalRow({ p }: { p: WritebackProposal }) {
+  const { t } = useLang();
   return (
     <li className="flex flex-col gap-2 rounded-2xl bg-sunken px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge className={PROPOSAL_STATUS_BADGE_CLASS[p.status]}>
-          {PROPOSAL_STATUS_LABEL[p.status]}
+          {t(PROPOSAL_STATUS_LABEL_KEYS[p.status])}
         </Badge>
         <span className="text-xs text-mist">
-          {p.decidedBy ? `裁决人 ${p.decidedBy}` : '尚无裁决'}
+          {p.decidedBy
+            ? t('agentConsole.decidedBy', { name: p.decidedBy })
+            : t('agentConsole.noDecision')}
           {p.decidedAt ? ` · ${fmtTime(p.decidedAt)}` : ''}
         </span>
         <span className="ml-auto text-xs text-mist">{fmtTime(p.createdAt)}</span>
@@ -433,11 +455,12 @@ function ExecutionDetailPanel({
   loading: boolean;
   error: string | null;
 }) {
+  const { t } = useLang();
   if (loading) {
     return (
       <div className="flex items-center gap-2 px-4 py-6 text-sm text-mist" role="status">
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        正在读取执行明细…
+        {t('agentConsole.loadingDetail')}
       </div>
     );
   }
@@ -483,9 +506,13 @@ function ExecutionDetailPanel({
 
       <div className="grid grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-3">
         <section className="flex flex-col gap-2">
-          <SectionTitle Icon={Activity} title="执行尝试" count={detail.attempts.length} />
+          <SectionTitle
+            Icon={Activity}
+            title={t('agentConsole.section.attempts')}
+            count={detail.attempts.length}
+          />
           {detail.attempts.length === 0 ? (
-            <EmptyLine text="尚无执行尝试。" />
+            <EmptyLine text={t('agentConsole.empty.attempts')} />
           ) : (
             <ul className="flex flex-col gap-2">
               {detail.attempts.map((a) => (
@@ -496,9 +523,13 @@ function ExecutionDetailPanel({
         </section>
 
         <section className="flex flex-col gap-2">
-          <SectionTitle Icon={ScrollText} title="事件流水" count={detail.events.length} />
+          <SectionTitle
+            Icon={ScrollText}
+            title={t('agentConsole.section.events')}
+            count={detail.events.length}
+          />
           {detail.events.length === 0 ? (
-            <EmptyLine text="尚无事件流水。" />
+            <EmptyLine text={t('agentConsole.empty.events')} />
           ) : (
             <ul className="flex flex-col divide-y divide-line">
               {detail.events.map((e) => (
@@ -509,9 +540,13 @@ function ExecutionDetailPanel({
         </section>
 
         <section className="flex flex-col gap-2">
-          <SectionTitle Icon={FileDiff} title="写回提案" count={detail.proposals.length} />
+          <SectionTitle
+            Icon={FileDiff}
+            title={t('agentConsole.section.proposals')}
+            count={detail.proposals.length}
+          />
           {detail.proposals.length === 0 ? (
-            <EmptyLine text="尚无写回提案。" />
+            <EmptyLine text={t('agentConsole.empty.proposals')} />
           ) : (
             <ul className="flex flex-col gap-2">
               {detail.proposals.map((p) => (
@@ -557,6 +592,7 @@ function ExecutionCard({
    */
   contradictionAttemptNo: number | null;
 }) {
+  const { t } = useLang();
   const mins = durationMinutes(execution.startedAt, execution.finishedAt);
   return (
     <li
@@ -584,13 +620,15 @@ function ExecutionCard({
         >
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={EXEC_STATUS_BADGE_CLASS[execution.status]}>
-              {EXEC_STATUS_LABEL[execution.status]}
+              {t(EXEC_STATUS_LABEL_KEYS[execution.status])}
             </Badge>
             {needsAttention(execution.status) ? (
               <AlertTriangle className="h-4 w-4 text-amber-deep" aria-hidden="true" />
             ) : null}
             <span className="text-xs text-mist">
-              {SOURCE_LABEL[execution.source] ?? execution.source}
+              {SOURCE_LABEL_KEYS[execution.source]
+                ? t(SOURCE_LABEL_KEYS[execution.source])
+                : execution.source}
             </span>
             {execution.channelKind ? (
               <span className="text-xs text-mist">· {execution.channelKind}</span>
@@ -610,20 +648,24 @@ function ExecutionCard({
           <p className="text-md font-medium text-ink">{execution.objective}</p>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Field label="创建" value={fmtTime(execution.createdAt)} />
-            <Field label="开始" value={fmtTime(execution.startedAt)} />
-            <Field label="结束" value={fmtTime(execution.finishedAt)} />
+            <Field label={t('agentConsole.field.created')} value={fmtTime(execution.createdAt)} />
+            <Field label={t('agentConsole.field.started')} value={fmtTime(execution.startedAt)} />
+            <Field label={t('agentConsole.field.finished')} value={fmtTime(execution.finishedAt)} />
             <Field
-              label="耗时"
-              value={mins === null ? '—' : `${mins} 分钟`}
+              label={t('agentConsole.field.duration')}
+              value={mins === null ? '—' : t('agentConsole.minutes', { mins })}
             />
           </div>
 
           {execution.blockedReason ? (
-            <p className="text-xs text-amber-deep">阻塞：{execution.blockedReason}</p>
+            <p className="text-xs text-amber-deep">
+              {t('agentConsole.blockedReason', { reason: execution.blockedReason })}
+            </p>
           ) : null}
           {execution.terminalReason && isTerminal(execution.status) ? (
-            <p className="text-xs text-mist">结束原因：{execution.terminalReason}</p>
+            <p className="text-xs text-mist">
+              {t('agentConsole.terminalReason', { reason: execution.terminalReason })}
+            </p>
           ) : null}
         </button>
       </div>
@@ -658,6 +700,7 @@ interface ProjectBucket {
 type LoadState = 'loading' | 'ready' | 'error';
 
 export function AgentExecutionConsolePage() {
+  const { t } = useLang();
   const repos = useRepos();
   // 逐字段订阅（zustand 默认整 store 订阅；只取需要的两个，避免无关 UI 状态变化触发重渲）
   const showContradictory = useUiStore((s) => s.showContradictoryExecutions);
@@ -740,7 +783,7 @@ export function AgentExecutionConsolePage() {
         setState('ready');
       } catch (err) {
         if (!alive) return;
-        setErrorText(message(err, '执行记录读取失败。'));
+        setErrorText(message(err, t('agentConsole.listLoadFailed')));
         setState('error');
       }
     })();
@@ -778,11 +821,11 @@ export function AgentExecutionConsolePage() {
         setDetail({ attempts, events, proposals });
         if (!execution) {
           setDetailMissing(true);
-          setDetailError('该执行单已不存在，可能已被删除。以下为仍保留的明细数据。');
+          setDetailError(t('agentConsole.detailGone'));
         }
       } catch (err) {
         if (!alive) return;
-        setDetailError(message(err, '执行明细读取失败。'));
+        setDetailError(message(err, t('agentConsole.detailLoadFailed')));
       } finally {
         if (alive) setDetailLoading(false);
       }
@@ -857,14 +900,14 @@ export function AgentExecutionConsolePage() {
             <Terminal className="h-5 w-5" aria-hidden="true" />
           </span>
           <div className="flex flex-col">
-            <h1 className="text-lg font-semibold text-ink">执行控制台</h1>
+            <h1 className="text-lg font-semibold text-ink">{t('agentConsole.title')}</h1>
             <p className="text-xs text-mist">
-              只读视图 · 共 {visibleCount} 条执行记录
+              {t('agentConsole.subtitle', { count: visibleCount })}
               {/* 隐藏了矛盾条目时**必须**说明被隐藏了几条：否则计数悄悄变小 = 藏数据 */}
               {!showContradictory && contradictionIds.size > 0
-                ? ` · 已隐藏 ${contradictionIds.size} 条矛盾数据`
+                ? t('agentConsole.hiddenCount', { count: contradictionIds.size })
                 : ''}
-              {attentionCount > 0 ? ` · ${attentionCount} 条需关注` : ''}
+              {attentionCount > 0 ? t('agentConsole.attentionCount', { count: attentionCount }) : ''}
             </p>
           </div>
 
@@ -876,7 +919,7 @@ export function AgentExecutionConsolePage() {
           */}
           <label
             className="ml-auto flex cursor-pointer select-none items-center gap-2 rounded-2xl px-2 py-1 text-xs text-mist hover:bg-sand"
-            title={CONTRADICTION_HINT}
+            title={t('agentConsole.contradictionHint')}
           >
             <input
               type="checkbox"
@@ -887,7 +930,7 @@ export function AgentExecutionConsolePage() {
               className="h-4 w-4 shrink-0 cursor-pointer accent-clay"
             />
             <span>
-              显示矛盾数据
+              {t('agentConsole.showContradictions')}
               {contradictionIds.size > 0 ? (
                 <span className="ml-1 rounded-full bg-clay-soft px-1.5 py-0.5 text-clay-deep">
                   {contradictionIds.size}
@@ -902,7 +945,7 @@ export function AgentExecutionConsolePage() {
             className="soft-btn-ghost soft-press soft-focus-halo flex items-center gap-2 rounded-2xl px-4 py-2 text-sm"
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            刷新
+            {t('agentConsole.refresh')}
           </button>
         </header>
 
@@ -913,7 +956,7 @@ export function AgentExecutionConsolePage() {
             role="status"
           >
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            正在读取执行记录…
+            {t('agentConsole.loadingList')}
           </div>
         ) : null}
 
@@ -923,14 +966,14 @@ export function AgentExecutionConsolePage() {
             <span className="soft-icon flex h-12 w-12 items-center justify-center rounded-2xl text-rose">
               <AlertTriangle className="h-6 w-6" aria-hidden="true" />
             </span>
-            <p className="text-md font-medium text-ink">执行记录读取失败</p>
+            <p className="text-md font-medium text-ink">{t('agentConsole.listFailedTitle')}</p>
             <p className="max-w-[420px] text-sm text-mist">{errorText}</p>
             <button
               type="button"
               onClick={() => setReloadToken((n) => n + 1)}
               className="soft-btn-primary soft-press soft-focus-halo rounded-2xl px-4 py-2 text-sm"
             >
-              重试
+              {t('agentConsole.retry')}
             </button>
           </div>
         ) : null}
@@ -949,18 +992,20 @@ export function AgentExecutionConsolePage() {
             */}
             {totalCount > 0 ? (
               <>
-                <p className="text-md font-medium text-ink">当前没有可正常显示的执行记录</p>
+                <p className="text-md font-medium text-ink">{t('agentConsole.emptyVisibleTitle')}</p>
                 <p className="max-w-[460px] text-sm text-mist">
-                  库中共有 {totalCount} 条执行记录，全部被判定为「矛盾数据」且已按你的设置隐藏。
-                  打开右上角的「显示矛盾数据」开关即可看到它们。
+                  {t('agentConsole.emptyAllHidden', { count: totalCount })}
+                  {' '}
+                  {t('agentConsole.emptyAllHiddenHint')}
                 </p>
               </>
             ) : (
               <>
-                <p className="text-md font-medium text-ink">还没有任何执行记录</p>
+                <p className="text-md font-medium text-ink">{t('agentConsole.emptyNoneTitle')}</p>
                 <p className="max-w-[460px] text-sm text-mist">
-                  当 Agent 或人工在项目、成员看板上发起一次执行时，执行单会出现在这里。
-                  你现在看到的是空视图，说明尚未有执行被创建。
+                  {t('agentConsole.emptyNoneBody1')}
+                  {' '}
+                  {t('agentConsole.emptyNoneBody2')}
                 </p>
               </>
             )}
@@ -974,7 +1019,9 @@ export function AgentExecutionConsolePage() {
               <section key={bucket.projectId} className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 px-1">
                   <h2 className="text-md font-semibold text-ink">{bucket.projectName}</h2>
-                  <span className="text-xs text-mist">{bucket.executions.length} 条</span>
+                  <span className="text-xs text-mist">
+                    {t('agentConsole.recordsCount', { count: bucket.executions.length })}
+                  </span>
                 </div>
                 <ul className="flex flex-col gap-2">
                   {bucket.executions.map((e) => (
