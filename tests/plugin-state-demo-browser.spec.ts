@@ -28,6 +28,12 @@
  * 得到的库内状态」**逐字节等价**（同一个 store、同一套行形状）。
  * 点「载入示例项目」的那一步**仍然走真 UI 真鼠标点击**，不许放宽。
  *
+ * ══════════════════ 本文件覆盖两件事 ══════════════════
+ *   ①「载入示例项目不动宿主策略」（三层判据，见上）；
+ *   ② 欢迎卡的「身份已完成」信号 —— `9dd3d77` 身份悬挂修复的**副作用**核实（见 ④a/④b）：
+ *     实测结论是**假说证伪**（`identityDone` 是 latch、且在清 LS 之前就读了 ⇒ 无可观测差异），
+ *     并把「空库 ⇒ 卡出现 / 非空库 ⇒ 卡不出现」钉成成对契约。
+ *
  * ══════════════════ 产物过期守卫 ══════════════════
  * `src/` 比 `build-dist` 新 ⇒ 整组 skip（拿旧界面下结论 = 假绿），与
  * `tests/overlay-stack-browser.spec.ts` 同款判据。
@@ -96,6 +102,44 @@ interface SettingRow {
   valueJson: string;
   updatedAt: string;
 }
+
+/** 一条最小项目行（只为把库做「非空」；欢迎卡的非空判据只看行数） */
+const ONE_PROJECT: Record<string, unknown> = {
+  id: 'p_one',
+  name: '占位项目',
+  address: '',
+  clientName: '',
+  contractAmount: null,
+  signedAt: null,
+  plannedStartAt: '2026-08-01',
+  plannedEndAt: '2026-10-01',
+  coverColor: null,
+  stagePresetKey: null,
+  stageTemplateVersion: 0,
+  scheduleBasis: 'calendar',
+  domain: null,
+  kind: 'human',
+  ownerMemberId: null,
+  status: 'active',
+  revision: 1,
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+/** 一个「不属于本机」的管理员成员（覆盖式导入后 members 会被换成这一类） */
+const STRANGER_ADMIN: Record<string, unknown> = {
+  id: 'stranger_admin_browser',
+  name: '陌生人管理员',
+  role: '负责人',
+  contact: null,
+  avatarColor: '#3D6B5B',
+  active: true,
+  roleKind: 'admin',
+  passwordHash: null,
+  actorKind: 'human',
+  agentKind: null,
+  revision: 1,
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
 
 const seeded: SettingRow[] = [
   { key: AGENT_BOARD, valueJson: 'false', updatedAt: '2026-01-01T00:00:00.000Z' },
@@ -222,8 +266,12 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
     }, text);
   }
 
-  /** 直写 IndexedDB 的 settings 表（DB 名/store/key 与产品同一处出处） */
-  async function seedSettings(page: Page, rows: SettingRow[]): Promise<void> {
+  /** 直写任意 IndexedDB 表（DB 名取 `DB_NAME` 单一出处；keyPath 由产品 schema 决定） */
+  async function seedStore(
+    page: Page,
+    store: 'settings' | 'members' | 'projects',
+    rows: Array<Record<string, unknown>>,
+  ): Promise<void> {
     await page.evaluate(
       async ({ dbName, store, rows }) => {
         const db = await new Promise<IDBDatabase>((res, rej) => {
@@ -239,9 +287,12 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
         });
         db.close();
       },
-      { dbName: DB_NAME, store: 'settings', rows },
+      { dbName: DB_NAME, store, rows },
     );
   }
+
+  const seedSettings = (page: Page, rows: SettingRow[]): Promise<void> =>
+    seedStore(page, 'settings', rows as unknown as Array<Record<string, unknown>>);
 
   /** 读回 settings 全景（key → valueJson），外加 demo 数据是否落库的行数证据 */
   async function readState(page: Page): Promise<{
@@ -250,6 +301,8 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
     localStorageId: string | null;
     enterIdentity: number;
     identityRowText: string | null;
+    members: number;
+    cardPanel: boolean;
   }> {
     return page.evaluate(
       async ({ dbName, lsKey }) => {
@@ -267,6 +320,7 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
           });
         const settings = await readAll('settings');
         const projects = (await readAll('projects')).length;
+        const members = (await readAll('members')).length;
         db.close();
         /*
          * 身份证据**成对**取（缺一条都会被「页面坏了」满足，见下方断言的注释）：
@@ -280,12 +334,19 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
         const identityBtn = Array.from(document.querySelectorAll('button')).find(
           (b) => (b.getAttribute('title') ?? '') === '当前身份（点击切换/退出）',
         );
+        /*
+         * 欢迎卡是否在渲染：判据取它自己打的面板标记（`data-first-run-panel`），
+         * 而不是"某段文案在不在" —— 文案会被 i18n 改，标记是留给测试的钩子。
+         */
+        const cardPanel = document.querySelector('[data-first-run-panel]') !== null;
         return {
           settings: Object.fromEntries(settings.map((r) => [r.key, r.valueJson])),
           projects,
           localStorageId: localStorage.getItem(lsKey),
           enterIdentity,
           identityRowText: identityBtn ? (identityBtn.textContent ?? '').trim() : null,
+          members,
+          cardPanel,
         };
       },
       { dbName: DB_NAME, lsKey: 'changxia.currentMemberId' },
@@ -422,6 +483,83 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
       expect(after.settings[SAMPLE_PROJECTS], '载入示例项目把 plugin.enabled.sample-projects 抹了/改了').toBe(
         'true',
       );
+    } finally {
+      await ctx.close();
+    }
+  }, HEAVY);
+  /**
+   * ④ 欢迎卡的「身份已完成」信号 —— `9dd3d77`（身份悬挂修复）的**副作用**，team-lead 指派的核实。
+   *
+   * ── 机制（读码，已核；本用例读的是**数值**不是推断）──
+   *   `FirstRunGuide` 的可见条件是 `projects.length === 0 && !dismissed && identityDone`，
+   *   而 `identityDone` 的**唯一信号**是 **localStorage 身份键非空**（外加 400ms 轮询）。
+   *   身份修复会**清掉**那个键（`setCurrentMember(null)`，且**不把 KV 兜底值写回**）
+   *   ⇒ 这条信号从「因悬挂 id 恒为真」变成「**可以是假**」。
+   *
+   * ── 造的状态 ──
+   *   「覆盖式导入之后」：members 被换成**陌生人集**（含管理员）、**库为空（0 项目）**、
+   *   本机 localStorage 里那份身份属于**上一个成员集** ⇒ 悬挂。
+   *   （该状态就是身份修复作用的那一点；欢迎卡的可见性只取决于上面那条谓词，
+   *     与"members 是怎么被换掉的"无关 —— 故直写 IDB 造状态是等价的。）
+   *
+   * ── team-lead 的假说是「卡从『不出现』变成『出现』」；下面 ④a/④b 把方向**读出来**。──
+   */
+  it('④a 悬挂身份 + 空库：欢迎卡与身份入口的读数', async () => {
+    const { ctx, page } = await open();
+    try {
+      await seedStore(page, 'members', [STRANGER_ADMIN]);
+      await page.evaluate((k) => localStorage.setItem(k, 'm_prev_gone'), 'changxia.currentMemberId');
+      await page.reload();
+      await page.waitForSelector('header', { timeout: 20000 });
+      await page.waitForTimeout(1200); // 让 400ms 轮询至少跑两轮
+      const st = await readState(page);
+      console.log('[card-gate] ④a 悬挂场景 =', JSON.stringify(st));
+
+      // 前提（三条，缺一条这条用例就测不到点上）
+      expect(st.projects, '前提：库必须为空').toBe(0);
+      expect(st.members, '前提：members 必须已换成陌生人集').toBe(1);
+      expect(st.localStorageId, '前提：本机那份悬挂身份应已被身份修复清掉').toBeNull();
+
+      /*
+       * ★ 实测结论（**与指派时的假说方向相反的那一半**）：卡**出现了**。
+       *   机制不是「信号变成假」，而是 `identityDone` 是个 **latch**：
+       *   它在**挂载时读一次** localStorage（`useState(initializer)`），之后那个 400ms
+       *   轮询**只可能把它从 false 变 true、永远不会变回 false**。
+       *   本场景在挂载那一刻 localStorage 里**还有**那份（即将被清掉的）旧 id
+       *   ⇒ latch 当场为 true ⇒ 卡出现；随后身份修复把 LS 清掉也**不会**把 latch 关回去。
+       *
+       * 成对判据（缺一条就是半截判据）：
+       *   肯定式 —— 卡**在**；
+       *   对照   —— 身份入口**在**（`点击进入`）⇒ 页面是活的、身份确实未被建立
+       *            （若页面坏了，"卡在"这条也会是假绿）。
+       */
+      expect(st.enterIdentity, '对照：身份未建立 ⇒ 身份入口应在（页面是活的）').toBeGreaterThan(0);
+      expect(st.identityRowText, '对照：未进入身份 ⇒ 身份行不该在').toBeNull();
+      expect(st.cardPanel, '空库 + 未看过 ⇒ 欢迎卡出现（实测行为）').toBe(true);
+    } finally {
+      await ctx.close();
+    }
+  }, HEAVY);
+
+  it('④b 对照：同样身份形态但**库非空** ⇒ 欢迎卡不出现', async () => {
+    const { ctx, page } = await open();
+    try {
+      // 与 ④a 完全相同的身份形态（悬挂 LS + 陌生人集），**只加一条项目行**改变唯一变量
+      await seedStore(page, 'members', [STRANGER_ADMIN]);
+      await seedStore(page, 'projects', [ONE_PROJECT]);
+      await page.evaluate((k) => localStorage.setItem(k, 'm_prev_gone'), 'changxia.currentMemberId');
+      await page.reload();
+      await page.waitForSelector('header', { timeout: 20000 });
+      await page.waitForTimeout(1200);
+      const st = await readState(page);
+      console.log('[card-gate] ④b 非空库对照 =', JSON.stringify(st));
+
+      expect(st.projects, '前提：库必须非空（与 ④a 的唯一变量）').toBe(1);
+      // 成对：④a 断「空库 ⇒ 卡在」，这里断「非空库 ⇒ 卡不在」。
+      // 两条一起才排除「卡恒定出现」与「页面坏了」两种假绿。
+      expect(st.cardPanel, '非空库 ⇒ 欢迎卡不出现').toBe(false);
+      // 对照仍要有：身份入口在 ⇒ 页面是活的（否则"卡不在"可能只是页面没渲染）
+      expect(st.enterIdentity, '对照：身份未建立 ⇒ 身份入口应在（页面是活的）').toBeGreaterThan(0);
     } finally {
       await ctx.close();
     }
