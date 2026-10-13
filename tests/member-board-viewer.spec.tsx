@@ -2,7 +2,7 @@
 /**
  * 0.8.6.0002 反馈 #5「搜索成员直达看板」· jsdom 层验收。
  *
- * 她的原话：「比如我搜索了'朴彩英'，那我肯定就想看这个成员的任务排表，
+ * 她的原话：「比如我搜了某个成员的名字，那我肯定就想看这个成员的任务排表，
  * 包括他近期完成了哪些任务、还有哪些任务。我希望作为管理员，一点击就能看到，
  * 那这就不仅仅是搜索框的问题，而是比如说我在成员面板点击了成员，那是否也会显示这个看板」。
  *
@@ -109,15 +109,15 @@ import type { Member, Project, Stage, Task } from '../src/core/types/entities';
  * ══════════════════════════════════════════════════════════════════════════════ */
 
 const ADMIN_ID = 'mem_admin';
-const PCY_ID = 'mem_pcy'; // 朴彩英（她搜索的人）
-const XU_ID = 'mem_xu'; // 许工（对照组：任务不得串台）
+const MEMBER_B_ID = 'mem_m2'; // 演示成员乙（她搜索的人）
+const MEMBER_C_ID = 'mem_m3'; // 演示成员丙（对照组：任务不得串台）
 const OFF_ID = 'mem_off'; // 停用成员（搜索不命中；深链直开仍可看——历史任务还在）
 
 const T_OVERDUE = '超期的图纸校对';
 const T_ONGOING = '进行中的软装清单';
 const T_DONE_RECENT = '已完成的量房';
 const T_DONE_OLD = '很久以前的提案'; // 超出 30 天窗口：不得进「近期完成」
-const T_XU = '许工自己的任务';
+const T_XU = '演示成员丙自己的任务';
 const T_AGENT = 'Agent 指派给彩英的任务'; // Agent 看板任务：人类侧一律不得出现
 
 /** 今天 ±N 天的本地时区 ISO 日（测试不写死日期，避免随时间腐化） */
@@ -226,12 +226,12 @@ function makeTask(id: string, title: string, over: Partial<Task> = {}): Task {
   };
 }
 
-/** 全量夹具：一个人类项目归朴彩英、一个归许工、一个 Agent 看板（任务也派给彩英——隔离断言用） */
+/** 全量夹具：一个人类项目归演示成员乙、一个归演示成员丙、一个 Agent 看板（任务也派给乙——隔离断言用） */
 function buildFixtures(): { members: Member[]; projects: Project[]; stages: Stage[]; tasks: Task[] } {
   const members: Member[] = [
     makeMember(ADMIN_ID, '齐活林', { role: '项目负责人', roleKind: MemberRoleKind.Admin }),
-    makeMember(PCY_ID, '朴彩英', { role: '设计' }),
-    makeMember(XU_ID, '许工'),
+    makeMember(MEMBER_B_ID, '演示成员乙', { role: '设计' }),
+    makeMember(MEMBER_C_ID, '演示成员丙'),
     makeMember(OFF_ID, '已停用', { active: false }),
   ];
   const projects: Project[] = [
@@ -240,56 +240,56 @@ function buildFixtures(): { members: Member[]; projects: Project[]; stages: Stag
     makeProject('proj_agent', 'Agent 演示板', { kind: 'agent' }),
   ];
   const stages: Stage[] = [
-    makeStage('stg_pcy', 'proj_pcy', 1, { ownerId: PCY_ID }),
-    makeStage('stg_xu', 'proj_xu', 1, { ownerId: XU_ID }),
-    makeStage('stg_agent', 'proj_agent', 1, { ownerId: PCY_ID }),
+    makeStage('stg_pcy', 'proj_pcy', 1, { ownerId: MEMBER_B_ID }),
+    makeStage('stg_xu', 'proj_xu', 1, { ownerId: MEMBER_C_ID }),
+    makeStage('stg_agent', 'proj_agent', 1, { ownerId: MEMBER_B_ID }),
   ];
   const tasks: Task[] = [
     makeTask('tsk_overdue', T_OVERDUE, {
       projectId: 'proj_pcy',
       stageId: 'stg_pcy',
-      assigneeId: PCY_ID,
-      assigneeIds: [PCY_ID],
+      assigneeId: MEMBER_B_ID,
+      assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(-3),
     }),
     makeTask('tsk_ongoing', T_ONGOING, {
       projectId: 'proj_pcy',
       stageId: 'stg_pcy',
-      assigneeId: PCY_ID,
-      assigneeIds: [PCY_ID],
+      assigneeId: MEMBER_B_ID,
+      assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(5),
       status: TaskStatus.InProgress,
     }),
     makeTask('tsk_done_recent', T_DONE_RECENT, {
       projectId: 'proj_pcy',
       stageId: 'stg_pcy',
-      assigneeId: PCY_ID,
-      assigneeIds: [PCY_ID],
+      assigneeId: MEMBER_B_ID,
+      assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(-2),
       status: TaskStatus.Done,
     }),
     makeTask('tsk_done_old', T_DONE_OLD, {
       projectId: 'proj_pcy',
       stageId: 'stg_pcy',
-      assigneeId: PCY_ID,
-      assigneeIds: [PCY_ID],
+      assigneeId: MEMBER_B_ID,
+      assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(-90),
       status: TaskStatus.Done,
     }),
     makeTask('tsk_xu', T_XU, {
       projectId: 'proj_xu',
       stageId: 'stg_xu',
-      assigneeId: XU_ID,
-      assigneeIds: [XU_ID],
+      assigneeId: MEMBER_C_ID,
+      assigneeIds: [MEMBER_C_ID],
       dueDate: isoDaysFromToday(1),
     }),
-    // ★ 隔离夹具：Agent 看板的任务也派给朴彩英。成员看板走 useHumanTasks() 漏斗，
+    // ★ 隔离夹具：Agent 看板的任务也派给演示成员乙。成员看板走 useHumanTasks() 漏斗，
     //   它一个字都不许出现（与 L4 真浏览器断言同口径，这里在 jsdom 先钉一道）。
     makeTask('tsk_agent', T_AGENT, {
       projectId: 'proj_agent',
       stageId: 'stg_agent',
-      assigneeId: PCY_ID,
-      assigneeIds: [PCY_ID],
+      assigneeId: MEMBER_B_ID,
+      assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(2),
     }),
   ];
@@ -418,17 +418,17 @@ afterEach(() => {
 describe('resolveMemberBoardSubject：看板「看谁」的四条语义', () => {
   const members = [
     makeMember(ADMIN_ID, '齐活林', { roleKind: MemberRoleKind.Admin }),
-    makeMember(PCY_ID, '朴彩英'),
+    makeMember(MEMBER_B_ID, '演示成员乙'),
   ];
 
   it('无参数 → self（观看对象 = 当前身份；今天的成员落地页正是这支，行为逐字不变）', () => {
     const s = resolveMemberBoardSubject({
       memberParam: null,
       isAdmin: false,
-      currentMemberId: PCY_ID,
+      currentMemberId: MEMBER_B_ID,
       members,
     });
-    expect(s).toEqual({ kind: 'self', memberId: PCY_ID });
+    expect(s).toEqual({ kind: 'self', memberId: MEMBER_B_ID });
   });
 
   it('空白参数视同无参数（"%20" 不是「看别人」的暗道）', () => {
@@ -443,13 +443,13 @@ describe('resolveMemberBoardSubject：看板「看谁」的四条语义', () => 
 
   it('管理员 + 命中 id → member（含停用成员：历史任务仍在库里，管理员要能回看）', () => {
     const s = resolveMemberBoardSubject({
-      memberParam: PCY_ID,
+      memberParam: MEMBER_B_ID,
       isAdmin: true,
       currentMemberId: ADMIN_ID,
       members: [...members, makeMember(OFF_ID, '已停用', { active: false })],
     });
     expect(s.kind).toBe('member');
-    if (s.kind === 'member') expect(s.member.name).toBe('朴彩英');
+    if (s.kind === 'member') expect(s.member.name).toBe('演示成员乙');
 
     const off = resolveMemberBoardSubject({
       memberParam: OFF_ID,
@@ -464,7 +464,7 @@ describe('resolveMemberBoardSubject：看板「看谁」的四条语义', () => 
     const s = resolveMemberBoardSubject({
       memberParam: ADMIN_ID,
       isAdmin: false,
-      currentMemberId: PCY_ID,
+      currentMemberId: MEMBER_B_ID,
       members,
     });
     expect(s).toEqual({ kind: 'denied' });
@@ -484,16 +484,16 @@ describe('resolveMemberBoardSubject：看板「看谁」的四条语义', () => 
 describe('searchMemberHits：成员搜索命中（反馈 #5）', () => {
   const members = [
     makeMember(ADMIN_ID, '齐活林', { roleKind: MemberRoleKind.Admin }),
-    makeMember(PCY_ID, '朴彩英', { role: '设计' }),
-    makeMember('mem_park', 'Park Chaeyoung'),
-    makeMember(OFF_ID, '朴彩英停用号', { active: false }),
+    makeMember(MEMBER_B_ID, '演示成员乙', { role: '设计' }),
+    makeMember('mem_latin', 'Demo Member'),
+    makeMember(OFF_ID, '演示成员乙停用号', { active: false }),
   ];
 
   it('姓名包含查询词即命中（大小写不敏感、可多命中）', () => {
-    expect(searchMemberHits(members, 'park').map((m) => m.id)).toEqual(['mem_park']);
-    expect(searchMemberHits(members, '  PARK  ').map((m) => m.id)).toEqual(['mem_park']);
-    expect(searchMemberHits(members, '朴彩英').map((m) => m.id)).toEqual([PCY_ID]);
-    expect(searchMemberHits(members, '朴').map((m) => m.id)).toEqual([PCY_ID]); // 停用号不掺和
+    expect(searchMemberHits(members, 'demo').map((m) => m.id)).toEqual(['mem_latin']);
+    expect(searchMemberHits(members, '  DEMO  ').map((m) => m.id)).toEqual(['mem_latin']);
+    expect(searchMemberHits(members, '演示成员乙').map((m) => m.id)).toEqual([MEMBER_B_ID]);
+    expect(searchMemberHits(members, '成员乙').map((m) => m.id)).toEqual([MEMBER_B_ID]); // 停用号不掺和
   });
 
   it('空查询 → 空（不在无输入时倾泻全部成员）', () => {
@@ -508,7 +508,7 @@ describe('searchMemberHits：成员搜索命中（反馈 #5）', () => {
 
 describe('memberBoardHref：深链唯一构造点', () => {
   it('普通 id 原样进 query；特殊字符经 encodeURIComponent', () => {
-    expect(memberBoardHref(PCY_ID)).toBe('/member-board?member=mem_pcy');
+    expect(memberBoardHref(MEMBER_B_ID)).toBe('/member-board?member=mem_m2');
     expect(memberBoardHref('a b&c')).toBe('/member-board?member=a%20b%26c');
   });
 });
@@ -518,13 +518,13 @@ describe('memberBoardHref：深链唯一构造点', () => {
  * ══════════════════════════════════════════════════════════════════════════════ */
 
 describe('成员看板：管理员看指定成员（反馈 #5 主链路）', () => {
-  it('★ ?member=朴彩英：标题是她的名字，三块任务只含她的（别人/Agent 的一律不出现）', () => {
+  it('★ ?member=演示成员乙：标题是她的名字，三块任务只含她的（别人/Agent 的一律不出现）', () => {
     seedStores({ currentMemberId: ADMIN_ID });
-    const { host } = renderAt(`/member-board?member=${PCY_ID}`);
+    const { host } = renderAt(`/member-board?member=${MEMBER_B_ID}`);
     const text = textOf(host);
 
     // 标题与视角说明（她的预期：「这个成员的任务排表」，不是一个通用页面）
-    expect(text).toContain('朴彩英 的项目看板');
+    expect(text).toContain('演示成员乙 的项目看板');
     expect(text).toContain('管理员视角');
 
     // 三块：已逾期 / 进行中 / 近期完成
@@ -540,8 +540,8 @@ describe('成员看板：管理员看指定成员（反馈 #5 主链路）', () 
 
     // 近期窗口外 / 别人的 / Agent 工作区的，一律不许出现
     expect(text, '超出 30 天窗口的完成任务不得进「近期完成」').not.toContain(T_DONE_OLD);
-    expect(text, '许工的任务不得串台到朴彩英的看板').not.toContain(T_XU);
-    expect(text, '许工的项目不得串台').not.toContain('海边民宿');
+    expect(text, '演示成员丙的任务不得串台到演示成员乙的看板').not.toContain(T_XU);
+    expect(text, '演示成员丙的项目不得串台').not.toContain('海边民宿');
     expect(text, 'Agent 看板任务不得混进人类侧成员看板（Pid 漏斗）').not.toContain(T_AGENT);
     expect(text, 'Agent 看板本身不得出现').not.toContain('Agent 演示板');
   });
@@ -552,7 +552,7 @@ describe('成员看板：管理员看指定成员（反馈 #5 主链路）', () 
     const text = textOf(host);
 
     expect(text).toContain('项目看板');
-    expect(text).not.toContain('朴彩英 的项目看板'); // 不是「看别人」的标题形态
+    expect(text).not.toContain('演示成员乙 的项目看板'); // 不是「看别人」的标题形态
     expect(text).toContain('仅显示与我相关的项目');
     // 管理员自己没有任何指派 → 三块空态（有兜底文案，不是空白架子）
     expect(text).toContain('没有逾期的任务');
@@ -578,17 +578,17 @@ describe('成员看板：管理员看指定成员（反馈 #5 主链路）', () 
 
 describe('成员身份：看不到别人的看板（隐私边界，不是功能缺失）', () => {
   it('★ 搜索框里搜别人 → 不出现成员条目（项目搜索照旧工作）', () => {
-    seedStores({ currentMemberId: PCY_ID, searchQuery: '朴彩英' });
+    seedStores({ currentMemberId: MEMBER_B_ID, searchQuery: '演示成员乙' });
     const { host } = renderAt('/');
     const text = textOf(host);
 
     expect(text, '成员身份不得渲染成员搜索结果区').not.toContain('搜索到的成员');
     // 项目侧搜索没被带坏：查询词照常过滤（本项目名不含查询词 → 落「没有匹配」空态）
-    expect(text).toContain('没有匹配「朴彩英」的项目');
+    expect(text).toContain('没有匹配「演示成员乙」的项目');
   });
 
   it('★ 带 ?member=别人的深链 → 剥回无参 /member-board（她自己），且不渲染别人任何数据', () => {
-    seedStores({ currentMemberId: PCY_ID });
+    seedStores({ currentMemberId: MEMBER_B_ID });
     const { host, location } = renderAt(`/member-board?member=${ADMIN_ID}`);
     const text = textOf(host);
 
@@ -616,7 +616,7 @@ describe('冷载深链 ?member= 必须等数据装载完成再判决（就绪门
     按 `bootstrapAllStores` 的真实次序（`setAll(members)` 先于 `hydrate()`）补齐。
   */
   it('★ 装载中（members 未读入）不判决：参数原样 + 占位；就绪后成员身份 ⇒ 仍 denied', () => {
-    seedStores({ currentMemberId: PCY_ID, hydrated: false });
+    seedStores({ currentMemberId: MEMBER_B_ID, hydrated: false });
     const f = buildFixtures();
     act(() => {
       useMembersStore.getState().setAll([]);
@@ -647,18 +647,18 @@ describe('冷载深链 ?member= 必须等数据装载完成再判决（就绪门
       useMembersStore.getState().setAll([]);
       useSettingsStore.setState({ hydrateError: null });
     });
-    const { host, location } = renderAt(`/member-board?member=${PCY_ID}`);
+    const { host, location } = renderAt(`/member-board?member=${MEMBER_B_ID}`);
 
     expect(location(), '装载中不得剥参数（修复前这里已被剥成无参 ⇒ 深链丢失）').toBe(
-      `/member-board?member=${PCY_ID}`,
+      `/member-board?member=${MEMBER_B_ID}`,
     );
 
     act(() => {
       useMembersStore.getState().setAll(f.members);
       useSettingsStore.setState({ hydrated: true });
     });
-    expect(location(), '就绪后参数仍在（深链不丢目标）').toBe(`/member-board?member=${PCY_ID}`);
-    expect(textOf(host)).toContain('朴彩英 的项目看板');
+    expect(location(), '就绪后参数仍在（深链不丢目标）').toBe(`/member-board?member=${MEMBER_B_ID}`);
+    expect(textOf(host)).toContain('演示成员乙 的项目看板');
   });
 });
 
@@ -667,29 +667,29 @@ describe('冷载深链 ?member= 必须等数据装载完成再判决（就绪门
  * ══════════════════════════════════════════════════════════════════════════════ */
 
 describe('首页搜索成员直达（管理员视角）', () => {
-  it('★ 搜「朴彩英」→ 出现成员条目 → 点击跳 /member-board?member=<id> 并清空搜索词', () => {
-    seedStores({ currentMemberId: ADMIN_ID, searchQuery: '朴彩英' });
+  it('★ 搜「演示成员乙」→ 出现成员条目 → 点击跳 /member-board?member=<id> 并清空搜索词', () => {
+    seedStores({ currentMemberId: ADMIN_ID, searchQuery: '演示成员乙' });
     const { host, location } = renderAt('/');
 
     expect(textOf(host)).toContain('搜索到的成员');
     const btn = Array.from(host.querySelectorAll('button')).find((b) =>
-      (b.textContent ?? '').includes('朴彩英'),
+      (b.textContent ?? '').includes('演示成员乙'),
     );
     expect(btn, '管理员必须看得到可点的成员条目').toBeTruthy();
 
     act(() => {
       btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(location()).toBe(memberBoardHref(PCY_ID));
+    expect(location()).toBe(memberBoardHref(MEMBER_B_ID));
     // 搜索词已清空：回退路径不被查询词挡着
     expect(useUiStore.getState().searchQuery).toBe('');
   });
 
   it('行内显示角色（头像 + 姓名 + 角色，说人话的搜索结果）', () => {
-    seedStores({ currentMemberId: ADMIN_ID, searchQuery: '朴彩英' });
+    seedStores({ currentMemberId: ADMIN_ID, searchQuery: '演示成员乙' });
     const { host } = renderAt('/');
     const btn = Array.from(host.querySelectorAll('button')).find((b) =>
-      (b.textContent ?? '').includes('朴彩英'),
+      (b.textContent ?? '').includes('演示成员乙'),
     );
     expect((btn?.textContent ?? '')).toContain('设计');
   });

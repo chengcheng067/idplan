@@ -109,7 +109,7 @@ export function MemberBoardPage(): JSX.Element {
     本页**今天**的行为逐字不变（成员登录后的落地页正是无参这一支）。解析收口在
     `useRoleGuard.resolveMemberBoardSubject`（权限判定一律经该 hook，不在此处自造）：
 
-     · 管理员 + ?member=朴彩英  → 看朴彩英的相关项目与任务（搜索框/成员面板点进来）；
+     · 管理员 + ?member=<某成员 id>  → 看该成员的相关项目与任务（搜索框/成员面板点进来）；
      · 成员身份 + ?member=别人  → denied ⇒ 下方 `<Navigate>` 剥掉参数回她自己（隐私边界）；
      · 管理员 + ?member=不存在  → missing ⇒ 显式空态（不静默回落成看自己）。
 
@@ -162,7 +162,7 @@ export function MemberBoardPage(): JSX.Element {
 
     病灶：这里原先写 `groupByColumn(active, …)`，而 `groupByColumn` 内部拿 `active` 派生列
     ⇒ **列集合 = 「该成员恰好参与了哪些项目」的函数**。于是同一块板上「看谁」就换列：
-    室内+软件两个项目的库里，管理员自看 = 9 列、看朴彩英 = 4 列（真机实测，见
+    室内+软件两个项目的库里，管理员自看 = 9 列、看某成员 = 4 列（真机实测，见
     tests/member-board-column-consistency.spec.ts）。用户侧的表现就是"排版不一样"。
 
     修法（口径）：**列是板的属性，不是可见项目子集的函数**——列集合取自「板级宇宙」
