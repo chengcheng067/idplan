@@ -118,7 +118,7 @@ export function staleInputs(): string[] {
 }
 
 /** 过期告警（每次进程只说一次；列出「哪些 src 文件比产物新」+ 复跑指引） */
-function warnStaleOnce(stale: readonly string[], distMs: number): void {
+export function warnStaleOnce(stale: readonly string[], distMs: number): void {
   const g = globalThis as unknown as { __staleWarned?: boolean };
   if (g.__staleWarned) return;
   g.__staleWarned = true;

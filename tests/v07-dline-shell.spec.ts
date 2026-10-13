@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { listenOnSafePort } from './helpers/safe-listen';
+import { warnStaleOnce } from './helpers/board-env';
 
 /**
  * v0.7 · T04 D 线（外壳与权限）· **真 Chromium 验收**（真实构建产物 + 真断点 + 真布局）。
@@ -269,7 +270,19 @@ function staleInputs(): string[] {
     .slice(0, 3);
 }
 
+/*
+ * ★ **有意不收敛到共享候选集**（2026-10-14，team-lead 裁定 (a)；原因引本文件上方那段长注释）：
+ *   全局口径 ['src','electron'] 会把「队友改了一个 src/core/** 数据层文件」也算成产物过期
+ *   ⇒ 本 spec **整组 skip**；而本 spec 的**验收口径是 skip 必须为 0**（首轮实测即栽在此处：8 用例 7 skip）。
+ *   它防的风险本来就低：src/core/** 改不动本 spec 断言的断点 CSS / 外壳 DOM，万一真改坏本 spec 会
+ *   **真红**（应用挂不上 = 断言失败）—— 失败模式从「假绿」变成「真红」。
+ *
+ *   ⇒ 但「**过期要出声**」与「候选集多大」是两件事：下面复用共享告警
+ *     （board-env.ts 的 warnStaleOnce，传**绝对路径**——它内部按 REPO_ROOT 切），
+ *     把本 spec 自己算出的过期清单交给它 ⇒ 收益（不再静默）拿到、候选集不变、src/core/** 仍不计入。
+ */
 const STALE_INPUTS = CAN_RUN ? staleInputs() : [];
+if (STALE_INPUTS.length > 0) warnStaleOnce(STALE_INPUTS.map((p) => resolve(__dirname, '..', p)), distLatestMs());
 const CAN_RUN_FRESH = CAN_RUN && STALE_INPUTS.length === 0;
 
 /** 单条用例的轻量超时（真浏览器 + 首屏加载） */
