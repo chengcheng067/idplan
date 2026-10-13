@@ -40,7 +40,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 // 新鲜度判定 / Chromium 解析 / 静态服务器**全部接共享助手**（不自建第二套）
@@ -59,8 +59,12 @@ const ROOT = resolve(__dirname, '..');
  * 改 `src/**` 会让共享产物过期 ⇒ 本组整组 skip；而重建共享 `build-dist` 又会把
  * **别人的**浏览器 spec 拖到「被我改坏的产物」上。故变异一律走独立产物：
  *
+ *     rm -rf qa-scratch/mut-dist                        # ★ 先删！否则可能复用上次遗留的产物
  *     npx vite build --outDir qa-scratch/mut-dist      # 单独构建（gitignore 内，不污染）
  *     DEMO_GATE_DIST=<abs>/qa-scratch/mut-dist npx vitest run tests/plugin-state-demo-browser.spec.ts
+ *   「先删」不只是习惯，**本文件会主动判定**：见下面 `VARIANT_STALE` —— 若 `DEMO_GATE_DIST`
+ *   指向的产物**早于本次进程启动**，直接**抛错**（而不是跳过），因为那意味着你正在用上次
+ *   遗留的产物做变异，读数会答非所问。
  *
  * ★ **纪律：变异必须用独立 outDir，绝不重建共享 `build-dist`。**
  *   改完必须还原 `src`（`git diff --exit-code` 为空）**并复位其 mtime** —— 碰过 `src/**`
@@ -157,6 +161,51 @@ const seeded: SettingRow[] = [
  *    （1 份共享 + 18 份内联复制）。**本文件不再增加第 19 份**。
  */
 const IS_VARIANT = Boolean(process.env.DEMO_GATE_DIST);
+
+/**
+ * 变异路径专用：产物必须**比当前 `src/**` 新**（否则是遗留产物）⇒ 返回比它新的文件样例。
+ *
+ * ── 为什么不是「断言产物晚于进程起点」──
+ * 我第一版就是那么写的，**当场被判错**：构建**必然早于**测试进程启动（先 build 再 run），
+ * 于是正常流程也被判成违规（实测产物 17:59:36 < 进程 17:59:39 —— 差的就是 npx+vitest 的启动开销）。
+ * 「本次运行构建的」在本进程内**不可知**，可核的等价形式是**与源码比**：
+ *   · 遗留产物（上一次的、或 src 已还原之后留下的）**必然比当前 src 旧** ⇒ 被抓；
+ *   · 若 src 自构建以来没动过，那份遗留产物与原产物**等价** ⇒ 放行是对的。
+ *
+ * ── 为什么这是本文件唯一保留的本地新鲜度实现 ──
+ * 共享助手（`helpers/board-env.ts`）的判据**锚死在 `<repo>/build-dist/index.html`**，
+ * 而这里锚的是 `DEMO_GATE_DIST` 的**独立产物**。要共用就得给共享件加一个「对任意产物判新鲜度」
+ * 的入口 —— 那 是改共享件，**已报 team-lead 待定**；在那之前这里是**有解释的窄例外**。
+ * 用 `readdirSync({recursive:true})` 一行拿到文件树，刻意**不复制**共享助手那套递归 walk。
+ */
+function variantStale(): string[] {
+  const fs = require('node:fs') as typeof import('node:fs');
+  const jn = (require('node:path') as typeof import('node:path')).join;
+  if (!existsSync(DIST_INDEX)) return [];
+  const distMs = statSync(DIST_INDEX).mtimeMs;
+  const roots = ['src', 'electron'].map((d) => resolve(ROOT, d));
+  const out: string[] = [];
+  for (const r of roots) {
+    if (!existsSync(r)) continue;
+    for (const e of fs.readdirSync(r, { recursive: true, withFileTypes: true })) {
+      if (!e.isFile()) continue;
+      const full = jn((e as unknown as { parentPath: string }).parentPath, e.name);
+      if (fs.statSync(full).mtimeMs > distMs) out.push(full.slice(ROOT.length + 1));
+    }
+  }
+  return out.slice(0, 3);
+}
+
+if (IS_VARIANT) {
+  const staleVariant = variantStale();
+  if (staleVariant.length > 0) {
+    // **抛错而不是 skip**：变异是人工动作，静默跳过只会白跑一轮（且很可能是"用了遗留产物"）
+    throw new Error(
+      'DEMO_GATE_DIST 指向的产物比当前 src 旧 —— 很可能是上一次遗留的独立产物（先删 outDir 再构建）。' +
+        `比产物新的文件样例：${staleVariant.join(', ')}`,
+    );
+  }
+}
 
 /*
  * 变异路径（`DEMO_GATE_DIST`，见文件头纪律区）：产物是**刚刚由 `vite build --outDir`
