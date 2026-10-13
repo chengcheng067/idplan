@@ -25,30 +25,6 @@ import {
 } from '../../src/core/lib/task-no';
 import type { Task } from '../../src/core/types/entities';
 
-// ★ 备份恢复必须**保留本机插件启用态**（`plugin.enabled.<id>` 一族）—— 理由见下方
-//   `PLUGIN_ENABLED_PREFIX` 的注释。前缀**不在这里手打**：单一出处是
-//   `src/core/plugin/types.ts` 的 `pluginEnabledKey()`（`registry.ts` 也照它认键）。
-//   以空 id 求值即得前缀本身（`'plugin.enabled.'`）；手打第二份字面量的危害是
-//   一旦 src 侧改了前缀拼法，本文件的保护会**静默失效**（漏保护 = 整族开关被抹），
-//   而「静默失效」正是本次要修的那类故障。该模块只 `import type`（react /
-//   react-router-dom），无运行期 IO，故服务端可安全引用（同 `task-no.ts` 的纪律）。
-import { pluginEnabledKey } from '../../src/core/plugin/types';
-
-/**
- * 插件启用态键前缀（`'plugin.enabled.'`）。
- *
- * 为什么备份导入要把它单独摘出来：`plugin.enabled.<id>` 是**能力域的启用态**，
- * 不是用户数据 —— 插件本体（含自装插件）装在设备侧（`userData/plugins/<id>/`，
- * 见 `electron/plugin-install.cjs`），**不在备份包里**。而备份包只含 DB 表；
- * 「载入示例数据」造的 demo 包 settings 固定只有 2 行、异机/旧版包也可能没有这些键
- * ⇒ 导入时整表 DELETE 会让整族开关**静默回落 `manifest.defaultEnabled`**，
- * 用户手动开过的插件（如「项目周报」）被关掉、侧栏入口消失，且**没有任何提示**。
- *
- * 选定语义：**包里有的以包为准，包里没有的保留本机**（只收窄 DELETE，不改 INSERT）。
- * 故同机「导出→导入→再导出」仍逐行全等（包内值 == 本机值），而缺键的包不再抹状态。
- */
-const PLUGIN_ENABLED_PREFIX = pluginEnabledKey('');
-
 interface StageLogRow {
   id: string;
   stage_id: string;
@@ -359,13 +335,7 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     if (!guardWrite(req, reply)) return;
     const { rows } = req.body as { rows: Array<{ key: string; valueJson: string; updatedAt: string }> };
     const tx = db.transaction(() => {
-      // ★ 与 POST /api/backup/import 同口径：`plugin.enabled.<id>` 一族**不参与**整表
-      //   替换（见 `PLUGIN_ENABLED_PREFIX` 注释）。本端点当前**无前端调用点**
-      //   （`ISettingsRepository.replaceAll` 的「仅备份导入使用」注释与实情不符——备份
-      //   恢复走 `admin.replaceAllImport`，不经这里），但它是已暴露的写端点：忠实往返
-      //   （GET /api/settings → 原样回灌）不受影响（负载自带插件键、插回同值），
-      //   而缺插件键的部分集负载不再抹掉本机开关。
-      db.prepare('DELETE FROM settings WHERE key NOT LIKE ?').run(`${PLUGIN_ENABLED_PREFIX}%`);
+      db.prepare('DELETE FROM settings').run();
       for (const r of rows) {
         db.prepare('INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)').run(
           r.key,
@@ -676,21 +646,7 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
       //   整库替换在团队形态下根本走不通。
       //   刻意用「map 声明序取反」而不是另写一份表名清单：后者一旦有人给 map 加表
       //   而忘了同步，就会变成**静默漏删**（比报错危险得多）。
-      //
-      //   ★ 唯一例外：`settings` 表**只删非插件行**（`plugin.enabled.<id>` 一族保留）。
-      //     该族是能力域启用态、插件本体在设备侧不在包里，包内缺这些键时整表清空会让
-      //     开关**静默**回落 `defaultEnabled`（详见 `PLUGIN_ENABLED_PREFIX` 注释）。
-      //     SQLite 的 LIKE 对 ASCII 大小写不敏感 ⇒ 保护面略宽于字面前缀，方向安全
-      //     （多留几行，绝不会把插件键删掉）。
-      for (const t of [...Object.values(map)].reverse()) {
-        if (t === 'settings') {
-          db.prepare('DELETE FROM settings WHERE key NOT LIKE ?').run(
-            `${PLUGIN_ENABLED_PREFIX}%`,
-          );
-          continue;
-        }
-        db.prepare(`DELETE FROM ${t}`).run();
-      }
+      for (const t of [...Object.values(map)].reverse()) db.prepare(`DELETE FROM ${t}`).run();
       for (const [key, tableName] of Object.entries(map)) {
         let rows = pkg.data?.[key] ?? [];
         // 用归一后的行集（撞号的后到者已被重编号）
