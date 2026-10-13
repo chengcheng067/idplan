@@ -141,3 +141,40 @@ describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
     ).toBeLessThanOrEqual(BASELINE);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 剥法边界（2026-10-13 复核者交叉核对两条实现后量化出来的）
+ *   它把注释**全抹空格**、我**保留起始标记 `/*` 与前两字符**，两者都保长保行号；
+ *   差异只在「注释被替换成什么」，却会改变**被锁串形如注释标记**那类锁的判定。
+ *   下面把这组边界**钉成夹具**（而不是只写在头注释里）—— 边界也必须有个会红的东西守着。
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('maskComments · 剥法边界（保标记、保长度、抹内容）', () => {
+  const src = ['const a = 1; /* 中文注释 */ const b = 2;', '// 行注释：中文', 'const c = 3;'].join('\n');
+  const masked = maskComments(src);
+
+  it('① 注释**内容**被抹掉', () => {
+    expect(masked).not.toContain('中文注释');
+    expect(masked).not.toContain('行注释：中文');
+  });
+
+  it('② **长度恒等**（这是它能保行号/列位的原因，也是「不能用长度自证」的原因）', () => {
+    expect(masked.length).toBe(src.length);
+  });
+
+  it('③ **换行保留**（行级回溯的前提）', () => {
+    expect(masked.split('\n').length).toBe(src.split('\n').length);
+  });
+
+  it('④ ⚠️ **起始标记保留** —— 故它不是「把注释删掉」的工具（本组夹具的存在理由）', () => {
+    // 若这条将来变红，说明剥法被改成了「删除式」⇒ 必须同步改头注释里的边界说明，
+    // 并回头检查 `tests/demo-data.spec.ts` 那条锁与复核者的判定器。
+    expect(masked, '块注释起始标记 `/*` 必须仍在').toContain('/*');
+    expect(masked, '且内容已抹白：只剩标记、没有正文').not.toContain('中文注释');
+  });
+
+  it('⑤ 活代码原样不动（剥的是注释，不是代码）', () => {
+    expect(masked).toContain('const a = 1;');
+    expect(masked).toContain('const b = 2;');
+    expect(masked).toContain('const c = 3;');
+  });
+});
