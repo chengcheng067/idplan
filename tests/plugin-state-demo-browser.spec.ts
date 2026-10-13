@@ -477,7 +477,23 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
       // ── 真 UI：点侧栏「载入示例项目」→ 确认弹窗 → 确认载入（定位不许放宽） ──
       const openedEntry = await clickText(page, '载入示例项目');
       expect(openedEntry, '侧栏应有「载入示例项目」入口（管理员 + 示例项目插件已启用）').toBe(true);
-      await page.waitForSelector('[role="dialog"][aria-label="载入示例项目"]', { timeout: 5000 });
+      /*
+       * 等那个确认弹窗出现。
+       *
+       * ⚠️ 为什么不能按 `aria-label="载入示例项目"` 定位：那是**把中文当定位契约**
+       *   ⇒ 被 `tests/cjk-locator-guard.spec.ts` 的棘轮咬（本仓已立为纪律：定位不许依赖语言）。
+       * ⚠️ 也不能偷懒放宽成裸 `[role="dialog"]`：多弹窗时 `waitForSelector` 只认**首个**
+       *   ⇒ 等错对象也照样绿，那是假绿。
+       * ⇒ 取**与语言解耦**的结构判据 `[role="dialog"][aria-modal="true"]`（Modal 底座提供，
+       *   见 `src/components/common/Modal.tsx` 的 `role` / `aria-modal`），
+       *   并**显式断言此刻恰好一个** —— 于是"多弹窗"变成**响亮失败**而不是等错对象。
+       *   （更彻底的解法是给 ConfirmDialog 加 `data-*` 钩子，但那要改共享组件 ⇒ 不为此牵动别人。）
+       */
+      await page.waitForSelector('[role="dialog"][aria-modal="true"]', { timeout: 5000 });
+      expect(
+        await page.locator('[role="dialog"][aria-modal="true"]').count(),
+        '此刻应恰好只有那一个确认弹窗（多于一个 ⇒ 我在等错对象）',
+      ).toBe(1);
       expect(await clickText(page, '确认载入'), '确认框应有「确认载入」').toBe(true);
 
       // 导入完成会 window.location.reload()：等它重载并重新 bootstrap
