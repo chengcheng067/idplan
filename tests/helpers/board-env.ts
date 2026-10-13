@@ -88,7 +88,21 @@ function collectFiles(dir: string): string[] {
   return out;
 }
 
-/** 比产物新的构建输入（非空 ⇒ 产物过期，spec 应 skip） */
+/**
+ * 比产物新的构建输入（非空 ⇒ 产物过期，spec 应 skip）。
+ *
+ * ★ 2026-10-13 语言切换批 2a · **让 skip 有声音**（team-lead 裁决 ③-b）：
+ *   本函数返回非空 ⇒ 所有 `skipIf(!CAN_RUN_FRESH)` 的浏览器族**整组 skip**。
+ *   而 `CAN_RUN_FRESH` 是**模块级常量**、判据又是**全仓全局**的（任何 `src/**` 的
+ *   mtime 比 `build-dist/index.html` 新即触发）—— 多写者并行时，**别人的在飞编辑
+ *   会静默跳过我的浏览器验收**，红灯不响（实测：我 build 完成 13 秒后另一条线改了
+ *   `SettingsDialog.tsx`，我那次跑的 `i18n-browser.spec.ts` 直接 skip）。
+ *
+ *   ⇒ 这里只加**声音**，**不动判定逻辑**：skip 仍然是 skip。
+ *     （拿旧产物跑出来的绿是**假绿**，skip 比假绿安全；问题只在「静默」二字。）
+ *   为什么用 globalThis 去重：每个 spec 文件各自 import 本模块、各自求值一次
+ *   `CAN_RUN_FRESH` ⇒ 不去重会刷满屏；去重后**每次跑批只说一次**，但一定说得清楚。
+ */
 export function staleInputs(): string[] {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require('node:fs') as typeof import('node:fs');
@@ -98,7 +112,33 @@ export function staleInputs(): string[] {
     ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(resolve(REPO_ROOT, d))),
     ...BUILD_INPUT_FILES.map((f) => resolve(REPO_ROOT, f)).filter((f) => existsSync(f)),
   ];
-  return candidates.filter((f) => fs.statSync(f).mtimeMs > distMs);
+  const stale = candidates.filter((f) => fs.statSync(f).mtimeMs > distMs);
+  if (stale.length > 0) warnStaleOnce(stale, distMs);
+  return stale;
+}
+
+/** 过期告警（每次进程只说一次；列出「哪些 src 文件比产物新」+ 复跑指引） */
+function warnStaleOnce(stale: readonly string[], distMs: number): void {
+  const g = globalThis as unknown as { __staleWarned?: boolean };
+  if (g.__staleWarned) return;
+  g.__staleWarned = true;
+  const rel = (p: string): string => p.slice(REPO_ROOT.length + 1).split('\\').join('/');
+  const shown = stale.slice(0, 8).map(rel);
+  const more = stale.length > shown.length ? ` …另有 ${stale.length - shown.length} 个` : '';
+  // eslint-disable-next-line no-console
+  console.warn(
+    [
+      '',
+      '⚠️  build-dist 已过期 ⇒ 浏览器族 spec 将**整组 skip**（skip ≠ 通过）。',
+      `   产物 build-dist/index.html 时间：${new Date(distMs).toISOString()}`,
+      `   比它新的构建输入共 ${stale.length} 个：`,
+      ...shown.map((f) => `     · ${f}`),
+      `     ${more}`,
+      '   ⇒ 复跑前先 `npm run build`（或删掉 build-dist 重建）；',
+      '   ⇒ 全量跑批时请全队冻结 src 编辑（见 docs/release-checklist.md §1）。',
+      '',
+    ].join('\n'),
+  );
 }
 
 /** 产物存在且未过期（spec 的 skipIf 判据） */

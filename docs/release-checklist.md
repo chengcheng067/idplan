@@ -4,6 +4,7 @@
 
 ## 1. 代码就绪
 - [ ] `npm run build` ✓（**先 build 再全量**——浏览器族依赖 `build-dist`，没构建整批 skip，skip ≠ 通过）
+- [ ] ✱ **全量跑批时全队冻结 `src` 编辑**；若做不到，**跑批前重跑一次 `npm run build`**。原因：`staleInputs()` 的过期判据是**全仓全局**的（任何 `src/**` 比 `build-dist/index.html` 新即触发），多写者并行时**别人的在飞编辑会静默跳过所有人的浏览器 spec**（实测：某人 build 完成 13 秒后另一条线改了 `SettingsDialog.tsx`，那轮 `i18n-browser.spec.ts` 整组 skip）。现已加过期告警（每次跑批打印一次「哪些 src 比产物新」），但**告警只让你看见，不会替你 build**。
 - [ ] `npx vitest run`：**0 failed 且 0 skipped**（1841 例基线）
 - [ ] `npm run typecheck:tests`：≤ 66（既有债基线；新增 spec 不许加债）
 - [ ] `npx tsc --noEmit -p tsconfig.json` 与 `-p server/tsconfig.json` 双 0
