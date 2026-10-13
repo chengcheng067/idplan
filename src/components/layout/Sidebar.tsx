@@ -266,7 +266,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         <div className="flex h-10 shrink-0 items-center gap-2.5 px-3">
           <Link
             to="/"
-            aria-label="ID Plan 首页"
+            aria-label={t('nav.homeAria')}
             className="flex min-w-0 items-center gap-2.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <img
@@ -311,7 +311,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             <div className="mt-3 px-3">
               <div className="flex h-7 items-center pb-1">
                 <Bot size={12} className="mr-1.5 shrink-0 text-pine" aria-hidden />
-                <span className="text-[11px] font-medium text-mist">Agent 看板</span>
+                <span className="text-[11px] font-medium text-mist">{t('sidebar.agentBoards')}</span>
               </div>
               <ul data-agent-board-sidebar="" className="flex flex-col gap-0.5">
                 {agentBoards.map((b) => {
@@ -358,7 +358,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           {!hasIdentity && (
             <div className="mx-3 mt-3 rounded-md border border-line bg-cream/60 px-2.5 py-2">
               <p className="text-[11px] leading-relaxed text-mist">
-                还未进入身份。点侧栏最下方的身份行选择成员后，这里会显示你能看到与改动的项目。
+                {t('sidebar.noIdentityHint')}
               </p>
             </div>
           )}
@@ -612,7 +612,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           <Link
             to="/"
             title="ID Plan v0.7 Beta"
-            aria-label="ID Plan 首页"
+            aria-label={t('nav.homeAria')}
             className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             {/*
@@ -755,7 +755,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               否则折叠侧栏后身份入口又没了。
               ⚠️ 这改掉了原「点头像回首页」的行为（有意，已在报告备案）：头像本就是身份控件。
                 「回首页」在收起态**没有失联**，另有**两处**承载（都不是那枚头像）：
-                  ① 本栏顶部 Logo（`<Link to="/" aria-label="ID Plan 首页">`，就在上面几行）；
+                  ① 本栏顶部 Logo（`<Link to="/" aria-label={t('nav.homeAria')}>`，就在上面几行）；
                   ② 导航首项（`SidebarNav.tsx`）：管理员 `to:'/'` / 成员 `to:'/member-board'`。
                 ⚠️ 别把 ① 认错：**展开/收起侧栏是紧邻 Logo 的另一枚 `SidebarCollapseToggle`**，
                   不是这个 Logo（这个误判真发生过一次）。
@@ -775,7 +775,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
       <aside
         id={SIDEBAR_ID}
         data-app-sidebar=""
-        aria-label="主导航侧边栏"
+        aria-label={t('nav.sidebarAria')}
         className={cn(
           'app-sidebar hidden shrink-0 xl:flex',
           'glass-strong print:hidden',
@@ -830,9 +830,11 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
 
 /** Beta 徽标（规格统一：高 18、圆角 8、横向 padding 6、文字 10/500、pine-soft 底 + pine 字） */
 function BetaBadge(): JSX.Element {
+  // 取词 + 订阅语言变化（tooltip 在渲染期取；本组件是模块级组件，自己订阅）
+  const { t } = useLang();
   return (
     <span
-      title="内测版本"
+      title={t('settings.betaTitle')}
       className="inline-flex h-[18px] shrink-0 items-center rounded-sm bg-pine-soft px-1.5 text-[10px] font-medium text-pine"
     >
       Beta

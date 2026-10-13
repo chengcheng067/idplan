@@ -1140,6 +1140,17 @@ describe('v0.7-D 收尾 · 打印页不得直读成员列表（角色派生只�
  * 做法：全文扫 `委托方`，回溯 400 字符窗口，要求窗口里出现 `role === 'admin'`。
  * （注释已由 `readCode` 剥掉，故注释里引用「委托方」不会误伤。）
  */
+/*
+ * ⚠️ 2026-10-13 语言切换批 2a 备案（**未改判据，只记风险**）：
+ *   本函数与下面那条 `toContain('委托方')` 前提，判据都是**中文字面量**。
+ *   「委托方」在 CalendarPrintPage 属**纸面**（.a4-page 公文头），按批 2a 的边界
+ *   **本批不翻**，故此刻两条都仍按原样成立。
+ *   ⇒ **纸面批次开工时必须同时做三件事**，否则这里会变成「空过」：
+ *     ① 把 `code.indexOf('委托方')` 换成扫新的取词点（如 `t('print.xxx')`）；
+ *     ② 把下面 `expect(code).toContain('委托方')` 升级为「锁键名 + 锁 zh 值」；
+ *     ③ 若漏做，`ungatedClientNameSpots` 会因「找不到字面量」返回 [] ⇒ 门控断言
+ *        变成恒过的假绿（这条是 2a 排查时发现的**唯一一处「简单升级会变弱」**的位置）。
+ */
 function ungatedClientNameSpots(code: string): string[] {
   const spots: string[] = [];
   let idx = code.indexOf('委托方');

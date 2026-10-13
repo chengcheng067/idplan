@@ -91,6 +91,11 @@ export const zhMessages = {
   'nav.agentAreaAria': 'Agent 工作区',
   'nav.agentWorkspace': '工作区',
   'nav.agentExecutions': '执行记录',
+  'nav.homeAria': 'ID Plan 首页',
+  'nav.sidebarAria': '主导航侧边栏',
+  'sidebar.agentBoards': 'Agent 看板',
+  'sidebar.noIdentityHint':
+    '还未进入身份。点侧栏最下方的身份行选择成员后，这里会显示你能看到与改动的项目。',
   'nav.pluginBadge': '插件',
 
   /* ─────────────── 侧栏底部区 / 手机档「更多」菜单（同一批文案，两处共用）─────────────── */
@@ -323,6 +328,7 @@ export const zhMessages = {
   'agent.activity.pendingProposals': '有待审提案——在「写回」标签页批量处理',
   /* ───────────────────── 首页（HomePage）───────────────────── */
   'home.subtitle': '{active} 个进行中 · {due} 个本周到期 · {overdue} 个逾期',
+  'home.column.todo': '待启动',
   'home.stat.active': '进行中项目',
   'home.stat.dueThisWeek': '本周到期任务',
   'home.stat.overdue': '逾期风险',
@@ -338,7 +344,7 @@ export const zhMessages = {
   'home.empty.body':
     '新建一个项目，把阶段排期跑起来；项目名称与竣工日为必填，其余可进入后随时补充。',
   'home.empty.privacy':
-    '你的数据自动保存在本机浏览器中，关闭浏览器不会丢失；如需换电脑或留档，点击顶栏「保存备份」导出文件，随时可再恢复。',
+    '你的数据自动保存在本机浏览器中，关闭浏览器不会丢失；如需换电脑或留档，点击侧栏底部的「保存备份」导出文件，随时可再恢复。',
   'home.openManual': '直接手动建档',
 } as const;
 

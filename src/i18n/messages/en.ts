@@ -77,6 +77,11 @@ export const enMessages: Record<MessageKey, string> = {
   'nav.agentAreaAria': 'Agent workspace',
   'nav.agentWorkspace': 'Workspace',
   'nav.agentExecutions': 'Execution records',
+  'nav.homeAria': 'ID Plan home',
+  'nav.sidebarAria': 'Main navigation sidebar',
+  'sidebar.agentBoards': 'Agent boards',
+  'sidebar.noIdentityHint':
+    'No identity yet. Pick a member from the identity row at the bottom of the sidebar and the projects you can see and change will show up here.',
   'nav.pluginBadge': 'Plugin',
 
   /* ─────────────── Sidebar footer / mobile “more” menu (shared copy) ─────────────── */
@@ -313,6 +318,7 @@ export const enMessages: Record<MessageKey, string> = {
   'agent.activity.pendingProposals': 'Proposals await review — handle them in bulk on the “Write-back” tab',
   /* ───────────────────── Home page ───────────────────── */
   'home.subtitle': '{active} in progress · {due} due this week · {overdue} overdue',
+  'home.column.todo': 'Not started',
   'home.stat.active': 'Active projects',
   'home.stat.dueThisWeek': 'Tasks due this week',
   'home.stat.overdue': 'Overdue risk',
@@ -328,6 +334,6 @@ export const enMessages: Record<MessageKey, string> = {
   'home.empty.body':
     'Create a project and get its stage schedule running. The name and completion date are required; everything else can be filled in later.',
   'home.empty.privacy':
-    'Your data is saved automatically in this browser and survives closing it. To move machines or keep an archive, use “Save backup” in the top bar — you can restore it any time.',
+    'Your data is saved automatically in this browser and survives closing it. To move machines or keep an archive, use “Save backup” at the bottom of the sidebar — you can restore it any time.',
   'home.openManual': 'Create a project manually',
 };

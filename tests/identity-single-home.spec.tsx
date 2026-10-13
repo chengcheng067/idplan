@@ -49,6 +49,7 @@ import { useMembersStore } from '../src/store/useMembersStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import type { Member } from '../src/core/types/entities';
 import { MemberActorKind, MemberRoleKind } from '../src/core/types/enums';
+import { catalogOf } from '../src/i18n';
 
 const ROOT = resolve(__dirname, '..');
 
@@ -354,7 +355,21 @@ describe('身份去重 · 唯一实现（不许把菜单逻辑复制到侧栏）
      * 真机实证见 `identity-rail-browser.spec.ts`：点收起态 Logo 与首枚导航 ⇒ 都落到 `/`。
      */
     const sidebar = code('src/components/layout/Sidebar.tsx');
-    expect(sidebar, '收起态 Logo 应仍是指向 / 的 Link（回首页承载①）').toContain('aria-label="ID Plan 首页"');
+    /*
+     * ★ 2026-10-13 判据形态升级（语言切换批 2a，team-lead 批准）：原来的判据是
+     *   「Sidebar 源码里出现字面量 aria-label="ID Plan 首页"」。文案搬进 i18n
+     *   消息表后源码里不再有中文字面量 ⇒ 改为**同时锁两件事**：
+     *     ① 接线存在：收起态 Logo 的 A11y 名确实经 t('nav.homeAria') 取；
+     *     ② 文案不变：zh 表里该键的值仍是「ID Plan 首页」。
+     *   原意（回首页承载① 可被读屏辨识，且名字是「ID Plan 首页」）**一个字没改**；
+     *   判据强度不降（多钉了一条「值」，少了一条「源码里的中文」）。
+     *   下面两行仍在，一起构成「它是指向 / 的 Link」这条原意。
+     */
+    expect(sidebar, '收起态 Logo 的 A11y 名必须经 i18n 取词').toContain("t('nav.homeAria')");
+    expect(
+      catalogOf('zh')['nav.homeAria'],
+      'A11y 名的中文值必须仍是「ID Plan 首页」',
+    ).toBe('ID Plan 首页');
     expect(sidebar, 'Logo 不得被改成「展开侧栏”的开关（那是另一枚 SidebarCollapseToggle）').toContain(
       'SidebarCollapseToggle',
     );
@@ -395,6 +410,17 @@ describe('身份去重 · 指向旧入口的文案已下线', () => {
   it('侧栏内那句提示也不写「左下角」（它同时出现在常驻侧栏与抽屉两种形态里）', () => {
     const sidebar = code('src/components/layout/Sidebar.tsx');
     expect(sidebar).not.toContain('点顶栏的身份标识');
-    expect(sidebar, '应指向侧栏最下方的身份行').toContain('点侧栏最下方的身份行');
+    /*
+     * ★ 2026-10-13 判据形态升级（同上）：这句提示的**位置描述**是判据的核心原意
+     *   （措辞必须两档都真，不许写「左下角」）。文案搬进消息表后改为：
+     *     ① 源码里确实用 t('sidebar.noIdentityHint') 渲染这句；
+     *     ② zh 值里确实含「点侧栏最下方的身份行」。
+     *   原意（提示指向侧栏最下方的身份行）与强度均不变。
+     */
+    expect(sidebar, '无身份提示必须经 i18n 取词').toContain("t('sidebar.noIdentityHint')");
+    expect(
+      catalogOf('zh')['sidebar.noIdentityHint'],
+      '提示的措辞必须仍指向「侧栏最下方的身份行」（位置描述是本条的原意）',
+    ).toContain('点侧栏最下方的身份行');
   });
 });
