@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
+import { usePluginEnabled } from '../../core/plugin/PluginRegistryProvider';
 import { useUiStore } from '../../store/useUiStore';
 import { SettingsDialog } from './SettingsDialog';
 import { useBackupIo } from './useBackupIo';
@@ -104,6 +105,12 @@ export function MobileMoreMenu(): JSX.Element {
   const { t } = useLang();
   const openManualForm = useUiStore((s) => s.openManualForm);
   const { save, pick, loadDemo, fileInput, confirmDialog } = useBackupIo();
+  /* 两个内置插件的启用态（设置 → 插件可切；关掉 ⇒ 对应菜单项消失）
+   *   · agent-board   → 下方「Agent」项（`/agent` 是插件路由）
+   *   · sample-projects → 下方「载入示例项目」（与 `Sidebar` 底部那颗是同一功能的两个入口，
+   *                      判据必须逐字一致：插件 `sampleProjectsOn` ∧ `isAdmin`） */
+  const agentBoardOn = usePluginEnabled('agent-board').enabled;
+  const sampleProjectsOn = usePluginEnabled('sample-projects').enabled;
   // 仅桌面端且主进程推送过「有新版本」时为 true。
   // 注：本菜单只在手机档渲染（根节点 md:hidden），而推送只发生在桌面端 ——
   // 故这一份红点在新版 Windows 桌面端**永远不会亮**；桌面/平板可见的落点是
@@ -260,16 +267,31 @@ export function MobileMoreMenu(): JSX.Element {
               {t('nav.myTasks')}
             </span>
           </Link>
-          {/* v0.6：Agent Board（所有角色可见，与桌面 TopBar 一致） */}
-          <Link to="/agent" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
-            <Bot
-              size={15}
-              className={cn(ITEM_ICON, location.pathname === '/agent' && 'text-pine')}
-            />
-            <span className={cn(location.pathname === '/agent' ? 'text-pine' : 'text-ink')}>
-              Agent
-            </span>
-          </Link>
+          {/*
+            v0.6：Agent Board（所有角色可见，与桌面 TopBar 一致）。
+
+            ★ v0.8.6 阶段 2：补**插件门控**（此前本项零门控，是一颗死链）。
+              `/agent` 由 agent-board 插件贡献（`plugins/agent-board/manifest.tsx`），
+              插件停用时该路由真的从路由表里消失（`registry.ts::resolveRoutes` 只取
+              启用中的）⇒ 深链落到 `main.tsx` 的 `Navigate to="/"`。于是这颗菜单项
+              表现为「点了回首页」（手机档下极易被当成菜单坏了）。
+              ⇒ 插件停用时**整项不渲染**（与路由存在性同源；不是置灰——置灰仍在
+                承诺一个不存在的去处）。
+              ⚠️ 与 `SidebarNav` 的 Agent 段/子项**不是**同一份门控：那些来自
+                `registry.navItems`，本就只含启用中的插件；本项是宿主硬编码的
+                文案与目标，必须自己问开关。
+          */}
+          {agentBoardOn && (
+            <Link to="/agent" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
+              <Bot
+                size={15}
+                className={cn(ITEM_ICON, location.pathname === '/agent' && 'text-pine')}
+              />
+              <span className={cn(location.pathname === '/agent' ? 'text-pine' : 'text-ink')}>
+                Agent
+              </span>
+            </Link>
+          )}
 
           {/* 视图切换（仅首页）——v0.7 T02 已位移到首页内容区顶部（`HomeViewTabs`）。
               此处**移除**，避免同一档位出现两个控件改同一个 `homeViewMode`
@@ -293,19 +315,32 @@ export function MobileMoreMenu(): JSX.Element {
                   {t('sidebar.newProject')}
                 </button>
               )}
-              {/* 载入示例项目（0.8.3）：陌生人第一小时入口，同 Sidebar 的 loadDemo 链路 */}
-              <button
-                type="button"
-                role="menuitem"
-                className={ITEM}
-                onClick={() => {
-                  setMenuOpen(false);
-                  void loadDemo();
-                }}
-              >
-                <Sparkles size={15} className={ITEM_ICON} />
-                {t('sidebar.loadDemo')}
-              </button>
+              {/*
+                载入示例项目（0.8.3）：陌生人第一小时入口，同 Sidebar 的 loadDemo 链路。
+
+                ★ v0.8.6 阶段 2：补**插件门控**（此前本项零门控）。它与
+                  `Sidebar.tsx` 底部那颗「载入示例项目」是**同一功能的第二个入口**，
+                  两个入口的判据必须逐字一致（否则「手机档能点、桌面档点不到」或反之）：
+                    插件 `sample-projects` 启用 ∧ `isAdmin`
+                  —— 本块外层已是 `isAdmin && (…)`，故此处只补插件那一半。
+                  `isAdmin` 这一半保留的理由（同 Sidebar 原注释）：loadDemo 是
+                  **覆盖式替换全库**，故保留管理员门槛。
+                  ⚠️ 本项**不**允许「插件关了也留着」：那是两条并行开关说两套话。
+              */}
+              {sampleProjectsOn && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={ITEM}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void loadDemo();
+                  }}
+                >
+                  <Sparkles size={15} className={ITEM_ICON} />
+                  {t('sidebar.loadDemo')}
+                </button>
+              )}
               <button
                 type="button"
                 role="menuitem"
