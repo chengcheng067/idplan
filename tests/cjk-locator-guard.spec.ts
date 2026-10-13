@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { scanCjkLocators, maskComments } from './helpers/cjk-locator-guard';
+import { scanCjkLocators, maskComments, scanRepo } from './helpers/cjk-locator-guard';
 
 /** 正的夹具：**必须**命中（拿中文当定位契约） */
 const MUST_HIT: Array<{ why: string; code: string }> = [
@@ -97,5 +97,47 @@ describe('中文定位守卫 · 判别力夹具（零容差）', () => {
     // 反向自证：把注释剥掉这个动作本身有效（否则上面那条会变成「全过」的假绿）
     expect(maskComments(src)).not.toContain('打开导航菜单');
     expect(maskComments(src), '剥的是注释、不是代码').toContain('[data-mobile-more-trigger]');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 守卫接通（批次⑥ 档 A₂，team-lead 裁决）
+ *   形态 = **零容忍区 + 棘轮**，两者都是硬红。
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/** 零容忍区：**唯一真正双语运行**的 spec ⇒ 命中即红（新增双语 spec 时同时把它加进来，加一个清一份） */
+const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
+
+/**
+ * 棘轮基线：**全仓（除零容忍区）中文定位处数的上限**。
+ * 首次接通（2026-10-13 档 A₂）实测 = **116**（接通前 128，档 A₁+A₂ 共转换 12 处）。
+ * ⚠️ 纪律（写在代码里，不靠记忆）：**基线只许变小** —— 每次转换了锚点，
+ *   同批把这个数字下调到新实测值。新增一处即红。
+ * 已知弱点（team-lead 明示）：它只能**防增量**、不能强制缩减；补偿机制是每批验收
+ *   时由他亲自看这个数字 —— 所以每次红灯都要把「当前 N / 基线 M」印出来。
+ */
+const BASELINE = 116;
+
+describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
+  const hits = scanRepo(process.cwd());
+  const inZone = hits.filter((h) => ZERO_TOLERANCE_ZONE.includes(h.file));
+  const outside = hits.filter((h) => !ZERO_TOLERANCE_ZONE.includes(h.file));
+
+  it('★ 零容忍区：双语运行的 spec 必须零中文定位', () => {
+    expect(
+      inZone.map((h) => `${h.file}:${h.line} ${h.hit.text}`),
+      '零容忍区内出现中文定位 —— 该 spec 会在英文模式下静默失效',
+    ).toEqual([]);
+  });
+
+  it(`★ 棘轮：全仓中文定位 ≤ 基线（当前 ${outside.length} / 基线 ${BASELINE}）`, () => {
+    const delta = outside.length - BASELINE;
+    expect(
+      outside.length,
+      `中文定位计数超出基线：当前 ${outside.length} / 基线 ${BASELINE}` +
+        (delta > 0
+          ? `（新增 ${delta} 处 —— 请改用 data-* 钩子定位）`
+          : `（可下调 ${-delta} 处 —— 转换了锚点就同批把基线改小）`),
+    ).toBeLessThanOrEqual(BASELINE);
   });
 });

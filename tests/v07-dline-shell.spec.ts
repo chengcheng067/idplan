@@ -650,7 +650,10 @@ describe.skipIf(!CAN_RUN_FRESH)(
         const { ctx, page } = await openShell(1024);
         try {
           await page.locator('[data-nav-menu-trigger]').click();
-          const drawer = page.locator('[role="dialog"][aria-label="导航菜单"]');
+          /* ★ 批次⑥ 档 A₂：与语言解耦 —— 原本是 [role="dialog"][aria-label="导航菜单"]，
+             「导航菜单」是界面文案（走 i18n），英文模式下会找不到元素。
+             改用 :has([data-app-sidebar]) —— 抽屉 body 的既有钩子，0 处 src 改动。 */
+          const drawer = page.locator('[role="dialog"]:has([data-app-sidebar])');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
           for (const label of ['看板', '我的任务', 'Agent', '设置']) {
@@ -681,7 +684,10 @@ describe.skipIf(!CAN_RUN_FRESH)(
           await page.goto(`${BASE}index.html`);
           await page.waitForSelector('header', { timeout: 20000 });
           await page.locator('[data-nav-menu-trigger]').click();
-          const drawer = page.locator('[role="dialog"][aria-label="导航菜单"]');
+          /* ★ 批次⑥ 档 A₂：与语言解耦 —— 原本是 [role="dialog"][aria-label="导航菜单"]，
+             「导航菜单」是界面文案（走 i18n），英文模式下会找不到元素。
+             改用 :has([data-app-sidebar]) —— 抽屉 body 的既有钩子，0 处 src 改动。 */
+          const drawer = page.locator('[role="dialog"]:has([data-app-sidebar])');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
           // v0.8（T04-B）：同 ①，`Agent` → `工作区`（设计 §4.1 ⑦ 导航文案）
