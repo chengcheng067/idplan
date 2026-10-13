@@ -1,6 +1,5 @@
 import dayjs from 'dayjs';
 
-import { formatMonthPart, formatMonthYear } from '../i18n';
 import utc from 'dayjs/plugin/utc';
 
 dayjs.extend(utc);
@@ -106,13 +105,29 @@ export function panRange(range: TimelineRange, deltaDays: number): TimelineRange
 
 /* ------------------------------- 月刻度生成 ------------------------------- *
  *
- * ★ 2026-08-27（⑤e）：标签不再写死中文，而是**注入一个标签格式化器**，
- *   缺省值 = `src/i18n/date.ts` 的**纸面出口**（恒中文）。
- *   为什么这么切：本函数被**屏幕**（TimelineView）与**纸面**
- *   （useSchedulePaperData / print-gantt）共用，而这两者对语言的要求**相反** ——
- *   屏幕要跟随界面语言、纸面必须恒中文（完整理由见 `src/i18n/date.ts` 文件头）。
- *   ⇒ 纸面调用点**什么都不用传**（默认就是它要的那支）；
- *     屏幕调用点必须显式传 `*Localized`（想忘也忘不了，因为它要 `lang`）。
+ * ★ 2026-08-27（⑤e）：标签不再写死中文，而是**注入一个标签格式化器**。
+ *   为什么是注入而不是在这里判断语言：本函数被**屏幕**（TimelineView）与
+ *   **纸面**（useSchedulePaperData / print-gantt）共用，而这两者对语言的要求**相反**
+ *   —— 屏幕要跟随界面语言、纸面必须恒中文（完整理由见 `src/i18n/date.ts` 文件头）。
+ *
+ * ★★ 2026-08-27（同日 · 回归修复）：`labelOf` 由「有缺省值」改为**必填**。★★
+ *   ⑤e 的那一版给 `labelOf` 缺省值 `formatMonthYear`（纸面出口），代价是**本文件
+ *   必须 `import … from '../i18n'`**。而本文件在 `server/tsconfig.json` 的 include
+ *   白名单里（共享内核：前后端同一份源码），该配置 `lib: ["ES2020"]`（**无 DOM**），
+ *   文件头的原话是「将来有人在 progress.ts 里加一句 `document.*`，本配置会当场报错」。
+ *   ⇒ i18n 链里的 `src/i18n/lang.ts` 引用 `document.documentElement`，被拉进服务端
+ *     程序即报错。**实测（修复前，原样输出）**：
+ *       $ npx tsc --noEmit -p server/tsconfig.json      # 退出码 2，共 2 条
+ *       src/i18n/lang.ts(79,3): error TS2584: Cannot find name 'document'. …
+ *       src/i18n/lang.ts(80,3): error TS2584: Cannot find name 'document'. …
+ *   ⇒ 那个缺省值不是「纸面调用点零改动」的便利，而是**共享内核里一个静默的中文兜底**
+ *     ——「默认值让错的那一支看起来是对的」，与本批查出的其余缺陷同族。
+ *
+ *   修法取**结构性**的那条（与 ⑤e 两条出口同源）：**副数（arity）即声明**——
+ *     纸面调用点必须自己传 `formatMonthYear`，屏幕调用点必须自己传 `*Localized`；
+ *     本文件零 i18n import，服务端程序恢复纯净。
+ *   守卫：`tests/i18n-date-exits.spec.ts`（本文件不许 import i18n；纸面调用点必须
+ *         在**同一次调用**里传纸面出口）＋ `npm run typecheck:server` 本身。
  */
 
 export interface MonthTick {
@@ -124,13 +139,13 @@ export interface MonthTick {
 
 /**
  * 生成覆盖 [from,to] 的月份刻度（供 MonthScaleHeader 使用）。
- * `labelOf` 缺省 = 纸面中文出口 `formatMonthYear`；屏幕请传
- * `(iso) => formatMonthYearLocalized(iso, lang)`。
+ * `labelOf` **必填**（回归修复，理由见上方区块）：纸面传 `formatMonthYear`，
+ * 屏幕传 `(iso) => formatMonthYearLocalized(iso, lang)`。
  */
 export function buildMonthTicks(
   from: string,
   to: string,
-  labelOf: (monthStartIso: string) => string = formatMonthYear,
+  labelOf: (monthStartIso: string) => string,
 ): MonthTick[] {
   const ticks: MonthTick[] = [];
   const fromD = dayjs(from);
@@ -161,13 +176,13 @@ export interface HalfMonthTick {
 
 /**
  * 双周粒度刻度（zoom='half-month' 时使用：每月上半/下半两档）。
- * `labelOf` 缺省 = 纸面中文出口 `formatMonthPart`（纸面不消费半月粒度，
- * 缺省值只为「纸面拿不到 lang」这条结构约束服务）。
+ * `labelOf` **必填**（回归修复，理由见上方区块）：目前只有屏幕消费
+ * （`TimelineView` 的半月档），故调用点只有一处。
  */
 export function buildHalfMonthTicks(
   from: string,
   to: string,
-  labelOf: (monthStartIso: string, part: 'first' | 'second') => string = formatMonthPart,
+  labelOf: (monthStartIso: string, part: 'first' | 'second') => string,
 ): HalfMonthTick[] {
   const ticks: HalfMonthTick[] = [];
   let cursor = dayjs(from).startOf('month');

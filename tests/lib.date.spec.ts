@@ -19,6 +19,10 @@ import {
   panRange,
   buildMonthTicks,
 } from '../src/lib/date';
+/* `labelOf` 是必填参数（回归修复：`src/lib/date.ts` 不许 import i18n，理由见该文件
+ * 「月刻度生成」区块）。本 spec 断言的是**几何**（start / daysSpan），标签取值不参与
+ * 断言 ⇒ 传**纸面出口**，与真实纸面调用点同形，避免用假 stub 掩盖调用形状。 */
+import { formatMonthYear } from '../src/i18n';
 
 describe('date.remainingDays：边界口径（当日=0）', () => {
   it('target 与 today 同日 → 0', () => {
@@ -105,7 +109,7 @@ describe('time-axis 坐标系：xOf / dateAtX 正逆映射', () => {
 
 describe('buildMonthTicks：月刻度生成', () => {
   it('覆盖完整月份时每月一档、首尾裁剪正确', () => {
-    const ticks = buildMonthTicks('2026-07-15', '2026-09-05');
+    const ticks = buildMonthTicks('2026-07-15', '2026-09-05', formatMonthYear);
     expect(ticks.map((t) => t.start)).toEqual(['2026-07-01', '2026-08-01', '2026-09-01']);
     // 7 月：从 15 日到 31 日
     expect(ticks[0]!.daysSpan).toBe(17);
@@ -116,7 +120,7 @@ describe('buildMonthTicks：月刻度生成', () => {
   });
 
   it('刻度 daysSpan 合计 == 区间总天数（无缝覆盖）', () => {
-    const ticks = buildMonthTicks('2026-11-20', '2027-02-10');
+    const ticks = buildMonthTicks('2026-11-20', '2027-02-10', formatMonthYear);
     const sum = ticks.reduce((a, t) => a + t.daysSpan, 0);
     expect(sum).toBe(totalDaysInclusive('2026-11-20', '2027-02-10'));
   });

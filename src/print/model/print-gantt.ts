@@ -19,7 +19,7 @@
  *     ⇒ `viewDays=NaN` ⇒ **整轴一起 NaN**——band-bounds spec 为此专门锁了一条）；
  *   · 条带几何 `left = offsetDays(start)/viewDays*100`、
  *     `width = max((hi-lo+1)/viewDays*100, 2.5)`（2.5% 最小可见宽，防 1 天阶段隐形）；
- *   · 月份刻度 = `buildMonthTicks(viewStart, viewEnd)` + 同坐标系 `leftPercent`
+ *   · 月份刻度 = `buildMonthTicks(viewStart, viewEnd, formatMonthYear)` + 同坐标系 `leftPercent`
  *     + `MIN_LABEL_GAP_PCT = 12` 去重叠（首刻度贴左缘时钳到 0）。
  * 常量 `GANTT_MIN_VISIBLE_WIDTH_PCT` / `GANTT_MIN_LABEL_GAP_PCT` 与经典同值，
  * 且 `tests/print-gantt-derive.spec.ts` 里有一条**与经典真机 DOM 逐值对账**的
@@ -28,6 +28,9 @@
 
 import type { StageStatus } from '../../core/types/enums';
 import { buildMonthTicks, totalDaysInclusive } from '../../lib/date';
+/* 纸面出口（恒中文，**不随界面语言**）：`labelOf` 是必填参数（回归修复，理由见
+ * `src/lib/date.ts` 的「月刻度生成」区块），此处显式声明「我是纸面」。 */
+import { formatMonthYear } from '../../i18n';
 
 /** 条带最小可见宽（%）：1 天阶段在长跨度项目里会缩成不可见，经典同值 */
 export const GANTT_MIN_VISIBLE_WIDTH_PCT = 2.5;
@@ -168,7 +171,7 @@ export function buildPrintGantt(
   });
 
   const kept: PrintGanttTick[] = [];
-  for (const t of buildMonthTicks(viewStart, viewEnd)) {
+  for (const t of buildMonthTicks(viewStart, viewEnd, formatMonthYear)) {
     const leftPercent = Math.max((offsetDays(t.start) / viewDays) * 100, 0);
     const prev = kept[kept.length - 1];
     if (prev && leftPercent - prev.leftPercent < GANTT_MIN_LABEL_GAP_PCT) continue;

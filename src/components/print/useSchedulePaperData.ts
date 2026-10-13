@@ -24,6 +24,12 @@ import {
   type ScheduleSection,
 } from '../../lib/schedule-print';
 import { buildMonthTicks, totalDaysInclusive } from '../../lib/date';
+/*
+ * 纸面出口（恒中文，**不随界面语言**）。`buildMonthTicks` 的 `labelOf` 是必填参数
+ * （回归修复：`src/lib/date.ts` 不许 import i18n，理由见该文件「月刻度生成」区块），
+ * 故这里必须显式声明「我是纸面」——传的是**没有 lang 入口**的那一支。
+ */
+import { formatMonthYear } from '../../i18n';
 
 export interface SchedulePaperData {
   project: ReturnType<typeof useProjectById>;
@@ -112,7 +118,7 @@ export function useSchedulePaperData(id: string, blocks?: SchedulePaperBlocks): 
   const monthTicks = useMemo<{ label: string; leftPercent: number }[]>(() => {
     if (!project || !Number.isFinite(viewDays) || viewDays <= 0) return [];
     const kept: { label: string; leftPercent: number }[] = [];
-    for (const t of buildMonthTicks(viewStart, viewEnd)) {
+    for (const t of buildMonthTicks(viewStart, viewEnd, formatMonthYear)) {
       const leftPercent = Math.max((offsetDays(t.start) / viewDays) * 100, 0);
       const prev = kept[kept.length - 1];
       if (prev && leftPercent - prev.leftPercent < MIN_LABEL_GAP_PCT) continue;

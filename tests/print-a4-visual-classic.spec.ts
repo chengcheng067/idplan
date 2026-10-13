@@ -43,6 +43,8 @@ import {
   type ScheduleSection,
 } from '../src/lib/schedule-print';
 import { buildMonthTicks, totalDaysInclusive } from '../src/lib/date';
+/* 纸面出口：本 spec 复刻的是**打印稿**的刻度标签（恒中文），同真实纸面调用点。 */
+import { formatMonthYear } from '../src/i18n';
 import {
   MemberActorKind,
   MemberRoleKind,
@@ -236,7 +238,7 @@ const bandGeom = (startAt: string, endAt: string): { left: number; width: number
 };
 const monthTicks: Array<{ label: string; leftPercent: number }> = (() => {
   const kept: Array<{ label: string; leftPercent: number }> = [];
-  for (const t of buildMonthTicks(viewStart, viewEnd)) {
+  for (const t of buildMonthTicks(viewStart, viewEnd, formatMonthYear)) {
     const leftPercent = Math.max((offsetDays(t.start) / viewDays) * 100, 0);
     const prev = kept[kept.length - 1];
     if (prev && leftPercent - prev.leftPercent < MIN_LABEL_GAP_PCT) continue;
