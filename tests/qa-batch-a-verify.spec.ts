@@ -943,7 +943,8 @@ await page.click('[data-industry-select-option="indoor"]');
 
         // ③ 设置项可见、可点（v0.8.6 · 反馈 #7：分区化后抽屉只渲染当前分区，
         //    内容可达性 = 左导航切换真路径，不再是"一列到底全在内"；
-        //    v0.8.6.0002 · 图 5 第 1 点：Agent 与自动化收进插件区作二级子段）
+        //    v0.8.6.0002 图 5 第 1 点曾把 Agent 收成插件区的二级子段；v1.0 起改为
+        //    「插件卡上的齿轮 → 该插件自己的设置」，见下方 agent-board 那段）
         const drawer = page.locator('[data-settings-drawer]');
         const headText = await drawer.innerText();
         expect(headText, '默认应落在「外观」区（主题三选）').toContain('主题');

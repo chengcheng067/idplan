@@ -339,7 +339,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     });
   }
 
-  it('S-Z1 · 分区导航：默认「外观」，点击切换后右侧内容确实跟着换、高亮跟着走（Agent 与自动化收在插件区内）', async () => {
+  it('S-Z1 · 分区导航：默认「外观」，点击切换后右侧内容确实跟着换、高亮跟着走（Agent 设置收在插件自己的卡里）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
       await becomeAdmin(page);
