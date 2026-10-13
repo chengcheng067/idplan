@@ -632,8 +632,18 @@ describe('接管/删除入口的宿主接线（源码级断言）', () => {
     const src = read('components/layout/Sidebar.tsx');
     // 数据经漏斗出口（不自己判 kind）
     expect(src).toContain('useAgentProjects()');
-    // 仅 Agent 路由渲染（人类路由上侧栏零 Agent 痕迹）
-    expect(src).toMatch(/onAgentRoute && agentBoards\.length > 0/);
+    /*
+     * 仅 Agent 路由渲染（人类路由上侧栏零 Agent 痕迹）。
+     *
+     * ★ v0.8.6 阶段 2 **收紧判据**（team-lead 2026-10-14 授权，只改这一条）：
+     *   旧写法是 `toMatch(/onAgentRoute && agentBoards\.length > 0/)` —— 那是**子串包含**，
+     *   而 Sidebar 现在在这两道门**之前**又加了首道门 `agentBoardOn`（agent-board 插件开关）：
+     *     `{agentBoardOn && onAgentRoute && agentBoards.length > 0 && (`
+     *   旧断言对新行**照绿** ⇒ 它不再表达「这段列表受哪几道门」，「首道门（插件开关）」
+     *   因此**无人守**（断言漂移变弱，不是恒过但同样危险）。
+     *   ⇒ 收紧为「必须含首道门」，谁删掉插件门控，本条即红。
+     */
+    expect(src).toMatch(/agentBoardOn && onAgentRoute && agentBoards\.length > 0/);
     expect(src).toMatch(/pathname === '\/agent' \|\| pathname\.startsWith\('\/agent\/'\)/);
     // 锚点 + 选中行为（setCurrentProject）
     expect(src).toContain('data-agent-board-sidebar');
