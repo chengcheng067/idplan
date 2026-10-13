@@ -388,6 +388,18 @@ export const enMessages: Record<MessageKey, string> = {
   'agent.stanceStrong': 'only carries schedules from external writers',
   'agent.stanceNl':
     '(local auto-import is available; NAS remote write is not enabled yet). This area is being redefined based on your feedback.',
+  /* ───────────── Calendar empty states (E1–E4) ───────────── */
+  'calendar.empty.body': 'Create a project and get its stage schedule running',
+  'calendar.empty.monthNoActive': '{month} — nothing in progress',
+  'calendar.empty.tryAdjacent': 'Try switching to an adjacent month',
+  'calendar.empty.stageNo': 'Stage {n}',
+  'calendar.empty.noFilterMatch': 'No project matches the current filters',
+  'calendar.empty.clearFilter': 'Clear filters',
+  'calendar.empty.stageTimeline': 'Stage timeline',
+  'calendar.empty.clientPrefix': 'Client: ',
+  'calendar.empty.period': '· Period',
+  'calendar.empty.noRelated': "None of this project's stages concern you",
+  'calendar.empty.noRelatedBody': 'You can view the project overview, or contact the project owner',
   /* ───────────────────── Members section ───────────────────── */
   'common.save': 'Save',
   'common.cancel': 'Cancel',

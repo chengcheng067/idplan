@@ -153,16 +153,16 @@ export function CalendarEmptyStates({
   onToggleStatus(status: CalendarFilterStatus): void;
   onToggleStage(orderIndex: number): void;
 }): JSX.Element {
-  // 订阅语言变化（E3 的筛选 chip 文案在渲染期取）
-  useLang();
+  // 取词 + 订阅语言变化（E1–E4 的文案在渲染期取）
+  const { t } = useLang();
   if (kind === 'E1') {
     return (
       <EmptyShell className="py-[40px]">
         <IconTile size={64} radius={20}>
           <Plus size={30} />
         </IconTile>
-        <p className="text-[16px] font-semibold text-ink">还没有进行中的项目</p>
-        <p className="text-[13px] text-mist">新建一个项目，把阶段排期跑起来</p>
+        <p className="text-[16px] font-semibold text-ink">{t('empty.noActiveProjects')}</p>
+        <p className="text-[13px] text-mist">{t('calendar.empty.body')}</p>
         {/*
           ★ v0.7 T04 · P0-18 修正（team-lead 复审发现的**死按钮**缺陷）：
             原写法 `<Button onClick={() => onManual?.()}>` 是**无条件渲染**的，
@@ -178,7 +178,7 @@ export function CalendarEmptyStates({
         {onManual && (
           <div className="mt-[4px]">
             <Button variant="primary" onClick={onManual}>
-              直接手动建档
+              {t('home.openManual')}
             </Button>
           </div>
         )}
@@ -191,8 +191,10 @@ export function CalendarEmptyStates({
       <EmptyShell className="gap-[16px] py-[24px]">
         <GhostGrid gridDays={gridDays} />
         <HintCard>
-          <p className="text-[14px] font-semibold text-ink">{monthLabel} 暂无在途项目</p>
-          <p className="text-[12px] text-mist">试试切换到相邻月份看看</p>
+          <p className="text-[14px] font-semibold text-ink">
+            {t('calendar.empty.monthNoActive', { month: monthLabel })}
+          </p>
+          <p className="text-[12px] text-mist">{t('calendar.empty.tryAdjacent')}</p>
         </HintCard>
       </EmptyShell>
     );
@@ -229,7 +231,7 @@ export function CalendarEmptyStates({
                 color: STAGE_BAND_INK_COLORS[i],
               }}
             >
-              阶段 {CIRCLED_NUMBERS[i - 1]}
+              {t('calendar.empty.stageNo', { n: CIRCLED_NUMBERS[i - 1] })}
             </button>
           ))}
         </div>
@@ -237,9 +239,9 @@ export function CalendarEmptyStates({
         <GhostGrid gridDays={gridDays} />
 
         <HintCard>
-          <p className="text-[14px] font-semibold text-ink">没有符合筛选条件的项目</p>
+          <p className="text-[14px] font-semibold text-ink">{t('calendar.empty.noFilterMatch')}</p>
           <Button variant="secondary" size="sm" onClick={onClear}>
-            清除筛选
+            {t('calendar.empty.clearFilter')}
           </Button>
         </HintCard>
       </EmptyShell>
@@ -251,11 +253,14 @@ export function CalendarEmptyStates({
     <EmptyShell className="gap-[16px] py-[24px]">
       <div className="flex flex-col items-center gap-[4px]">
         <p className="text-[15px] font-semibold text-ink">
-          {memberProject ? `${memberProject.name} · 阶段时间轴` : `${monthLabel} · 阶段时间轴`}
+          {memberProject
+              ? `${memberProject.name} · ${t('calendar.empty.stageTimeline')}`
+              : `${monthLabel} · ${t('calendar.empty.stageTimeline')}`}
         </p>
         {memberProject && (
           <p className="text-[12px] text-mist">
-            委托方：{memberProject.clientName || '—'} · 周期{' '}
+            {t('calendar.empty.clientPrefix')}
+            {memberProject.clientName || '—'} {t('calendar.empty.period')}{' '}
             {formatPeriod(memberProject.plannedStartAt, memberProject.plannedEndAt)}
           </p>
         )}
@@ -268,8 +273,8 @@ export function CalendarEmptyStates({
         <IconTile size={56} radius={18}>
           <EyeOff size={26} />
         </IconTile>
-        <p className="text-[16px] font-semibold text-ink">该项目的阶段与你无关</p>
-        <p className="text-[13px] text-mist">你可以查看项目概况，或联系项目负责人</p>
+        <p className="text-[16px] font-semibold text-ink">{t('calendar.empty.noRelated')}</p>
+        <p className="text-[13px] text-mist">{t('calendar.empty.noRelatedBody')}</p>
       </div>
     </EmptyShell>
   );

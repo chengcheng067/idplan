@@ -395,6 +395,18 @@ export const zhMessages = {
   'agent.stanceBefore': 'Agent 看板目前',
   'agent.stanceStrong': '只承接外部写入方的排期',
   'agent.stanceNl': '（本机自动导入可用，NAS 远程写入尚未启用），这一块正按反馈重新定义。',
+  /* ───────────── 月历空态四态（CalendarEmptyStates）───────────── */
+  'calendar.empty.body': '新建一个项目，把阶段排期跑起来',
+  'calendar.empty.monthNoActive': '{month} 暂无在途项目',
+  'calendar.empty.tryAdjacent': '试试切换到相邻月份看看',
+  'calendar.empty.stageNo': '阶段 {n}',
+  'calendar.empty.noFilterMatch': '没有符合筛选条件的项目',
+  'calendar.empty.clearFilter': '清除筛选',
+  'calendar.empty.stageTimeline': '阶段时间轴',
+  'calendar.empty.clientPrefix': '委托方：',
+  'calendar.empty.period': '· 周期',
+  'calendar.empty.noRelated': '该项目的阶段与你无关',
+  'calendar.empty.noRelatedBody': '你可以查看项目概况，或联系项目负责人',
   /* ───────────────────── 成员管理区（MembersPageSection）───────────────────── */
   'common.save': '保存',
   'common.cancel': '取消',
