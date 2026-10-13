@@ -316,6 +316,12 @@ export function TopBar(): JSX.Element {
             <button
               type="button"
               onClick={openSidebarDrawer}
+              /* ★ 语言无关定位钩子（批次⑥）：真机 spec 原本按 aria-label="打开导航菜单"
+                 定位 —— 该串走 i18n 后，一切到英文就找不到元素且会伪装成「控件不存在」。
+                 注意：这是 <xl 的**侧栏抽屉汉堡**，与 MobileMoreMenu 的 ⋮
+                 （data-mobile-more-trigger / aria-label 更多操作，md:hidden）**不是同一个控件**，
+                 两个钩子不可互用。 */
+              data-nav-menu-trigger=""
               aria-label="打开导航菜单"
               aria-controls="app-sidebar"
               className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink"
