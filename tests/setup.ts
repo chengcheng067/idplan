@@ -108,51 +108,57 @@ if (typeof afterEach === 'function') {
  *      的**模块级单例**）定成 remote ⇒ `RepoProvider` 里 `if (appEnv.dataSource === 'local')`
  *      不成立 ⇒ **整段本地版本闸门不执行** ⇒ `tests/db-version-ahead.spec.tsx` 的 3 条红。
  *
- * ── 为什么复位点选 `afterAll`（**不是** `afterEach`）──
- *   ① **挡跨文件**只需要「一个文件结束时复位」——跨文件泄漏的窗口就是文件边界；
- *   ② **不打断文件内的合法用法**：`__APP_ENV__` 的合法用法正是「模块加载前注入」
- *      （`vi.hoisted` 里写，读它的 `appEnv` 是单例）、`matchMedia` 也可能在文件级安装后被
- *      多处用例依赖。若挂在 `afterEach` 上，会把「同一文件内第二条用例」的依赖一起打断
- *      —— 那就不是治泄漏，是制造新红。
- *   ③ 依赖 `afterAll` 而不是「碰巧的顺序」：**不用任何顺序假设**。（顺序假设今天已被推翻多次：
- *      vitest 的文件排序规则我实测下来既不是字母序也不是体积序。）
+ * ── 复位点为什么是 `afterEach`（**不是** `afterAll`）—— 实测定的 ──
+ *   ① **挡跨文件**：跨文件泄漏的窗口就是「文件边界」，`afterEach` 覆盖它；
+ *   ② **`setupFiles` 里的 `afterAll` 实测不在文件之间跑**：我用配对
+ *      `[v07-dline-print-access, plugin-ui-gating]` 加打印验过 —— 下一个文件模块加载期
+ *      仍读到 `typeof matchMedia === 'function'`；换成 `afterEach` 后读到 `undefined`。
+ *      （⚠️ 别拿「setupFiles 先于测试文件 import」这类顺序假设下结论：顺序假设今天已被推翻多次，
+ *        我实测 vitest 的文件排序既不是字母序也不是体积序。）
+ *   ③ **不打断文件内的合法用法**：所有装桩点都在各文件自己的 `beforeEach` 里（逐文件核过：
+ *      `theme-tri-select:50` / `use-presence:98` / `motion-exits:93` / `stage-track-coloring:43` /
+ *      `holidays-cn:494` / `agenda-view-v3:261` / `member-board-viewer:406` /
+ *      `v07-dline-print-access:479` …）⇒ 每用例清一次、下一条用例自己重装，不制造新红。
+ *      （反例形态：`__APP_ENV__` 的合法用法是「**模块加载前**注入」（`vi.hoisted`），文件内只写一次
+ *        —— 那种泄漏由写入方在**测试文件自己的 `afterAll`** 里收（`plugin-toggle-feedback` 已这么做，
+ *        `98ea97f`）。**测试文件的 `afterAll` 会在该文件结束时跑，与 setupFiles 里的不是一回事。**）
+ *
+ * ⚠️ **为什么这里是「纯 `delete`」**：jsdom 本来就没有 `matchMedia` ⇒ **删回「不存在」才是真还原**
+ *    （塞一个假实现只是把泄漏换个形状）。**实测纯 `delete` 足够**（配对
+ *    `[v07-dline-print-access, plugin-ui-gating]` = 57 passed）。
+ *
+ * ⚠️ **更正一处我自己的错误归因（记账，别删）**：本修复的第一版把复位点写成 `afterAll`、同时写成
+ *    `delete` + `o.x = undefined`；看到配对仍红，我就得出「**`delete` 单独不够、必须赋值**」——
+ *    **那个结论是错的**。当时**两个变量同时改了**（`afterAll` → `afterEach`、`delete` → `delete + 赋值`），
+ *    功劳被记到了后来者身上。把这版单独换成「`afterEach` + 纯 `delete`」后**直接通过** ⇒
+ *    **真正的自变量是「钩子位置」，不是「delete 还是赋值」**。
+ *    （教训：一次只动一个自变量；两个一起动时，任何「XX 不够、必须 YY」的结论都要单独隔离重测。）
+ *    （此处曾留过一个空的 `afterAll` 壳以备回退 —— 已删：既是死代码，又因未显式 import `afterAll`
+ *      给 `tsc -p tsconfig.tests.json` 添了 2 条 `Cannot find name 'afterAll'`。）
  *
  * ⚠️ **未纳入本复位、但同族的候选（记账，不擅自加）**：`ResizeObserver` 同样被多份 spec
  *    安装后不还原。**不一起删**的理由：可能有文件当前正**依赖泄漏来的** `ResizeObserver`
  *    （自己没装、却要求组件不报错），一刀切删会制造新红。真要收，得先逐文件核一遍。
  */
-if (typeof afterAll === 'function') {
-  /*
-   * ⚠️ 实测（2026-10-14）：**setupFiles 里的 `afterAll` 不在「文件与文件之间」跑**
-   *   —— 我在配对 `[v07-dline-print-access, plugin-ui-gating]` 里加打印：下一个文件模块加载期
-   *   仍读到 `typeof matchMedia === 'function'`（`__APP_ENV__` 那条恰好被它自己的作者修掉，
-   *   才让配对 B 看起来像是这条钩子生效）。
-   *   ⇒ 改用下面的 `afterEach`：它对**每一条用例**都跑，且所有装桩点都在各文件的 `beforeEach`
-   *     里（已逐文件核过：`theme-tri-select:50` / `use-presence:98` / `motion-exits:93` /
-   *     `stage-track-coloring:43` / `holidays-cn:494` / `agenda-view-v3:261` /
-   *     `member-board-viewer:406` / `v07-dline-print-access:479` …），所以清掉不会打断任何
-   *     文件内的合法用法（下一条用例会自己重装）。
-   */
-  afterAll(() => {
-    /* 保留一个空壳：将来若确认某版本 vitest 的 afterAll 会按文件跑，可回退到这里。当前不依赖它。 */
-  });
-}
 
 if (typeof afterEach === 'function') {
   afterEach(() => {
+    /*
+     * 纯 `delete`（不塞假实现）：jsdom 本来就没有这两个全局 ⇒ 删回「不存在」才是真还原。
+     * `try/catch` 只为「万一某环境把它定义成不可配置」兜底 —— 那种情况下本钩子会静默跳过，
+     * 但**不会**抛异常把整条用例带崩（宁可漏收一次，也不要制造新红）。
+     */
     const clear = (o: Record<string, unknown>): void => {
       try {
         delete o.matchMedia;
       } catch {
-        /* 不可配置也无妨，下面用赋值兜底 */
+        /* 不可配置：跳过（见上） */
       }
       try {
         delete o.__APP_ENV__;
       } catch {
         /* 同上 */
       }
-      o.matchMedia = undefined;
-      o.__APP_ENV__ = undefined;
     };
     clear(globalThis as unknown as Record<string, unknown>);
     if (typeof window !== 'undefined') {
