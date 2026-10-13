@@ -29,6 +29,7 @@ import {
 } from '../core/template/stage-library';
 import type { Member, Project, Stage, Task } from '../core/types/entities';
 import { cn } from '../lib/cn';
+import { useLang } from '../i18n';
 
 /**
  * 首页（严格对齐规格 §2.5 首页各块 + 画板 02「亮色首页」/ 画板 12「暗色首页」）：
@@ -75,6 +76,8 @@ export function HomePage(): JSX.Element {
       · `tasks`    → **Pid**：同理（本页 tasks 只用于 `ProjectCard` 的完成度，同样必须收窄）。
   */
   const projects = useHumanProjects();
+  /** 取词 + 语言变化订阅点（页面文案在渲染期取） */
+  const { t } = useLang();
   const stages = useHumanStages();
   const tasks = useHumanTasks();
   const members = useMembersStore((s) => s.members);
@@ -184,11 +187,15 @@ export function HomePage(): JSX.Element {
       */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <h1 className="text-[24px] font-bold text-ink">我的项目</h1>
+          <h1 className="text-[24px] font-bold text-ink">{t('topbar.page.home')}</h1>
           {/* 计数只在「已装载」档出（否则 0 个进行中是假数字，见 readiness 注释） */}
           {readiness === 'ready' && (
             <p data-home-subtitle="" className="text-[13px] text-mist">
-              {active.length} 个进行中 · {dueThisWeek} 个本周到期 · {overdueCount} 个逾期
+              {t('home.subtitle', {
+                active: active.length,
+                due: dueThisWeek,
+                overdue: overdueCount,
+              })}
             </p>
           )}
         </div>
@@ -203,10 +210,10 @@ export function HomePage(): JSX.Element {
       <DataGate>
       {/* 2. 统计卡行（响应式：桌面 4 列 / 平板 2×2 / 手机单列） */}
       <section className="flex flex-wrap gap-5">
-        <StatCard tone="pine" value={active.length} label="进行中项目" trend={null} />
-        <StatCard tone="amber" value={dueThisWeek} label="本周到期任务" trend={null} />
-        <StatCard tone="clay" value={overdueCount} label="逾期风险" trend={null} />
-        <StatCard tone="sage" value={doneThisMonth} label="本月完工" trend={null} />
+        <StatCard tone="pine" value={active.length} label={t('home.stat.active')} trend={null} />
+        <StatCard tone="amber" value={dueThisWeek} label={t('home.stat.dueThisWeek')} trend={null} />
+        <StatCard tone="clay" value={overdueCount} label={t('home.stat.overdue')} trend={null} />
+        <StatCard tone="sage" value={doneThisMonth} label={t('home.stat.doneThisMonth')} trend={null} />
       </section>
 
       {/* 3. 视图切换行（画板 02 L143 · A4）
@@ -216,12 +223,12 @@ export function HomePage(): JSX.Element {
       <div className="flex items-center">
         <SegmentedControl<HomeViewMode>
           size="lg"
-          ariaLabel="首页视图切换"
+          ariaLabel={t('home.viewSwitchAria')}
           value={homeViewMode}
           onChange={setHomeViewMode}
           options={[
-            { value: 'kanban', label: '看板' },
-            { value: 'calendar', label: '月历' },
+            { value: 'kanban', label: t('nav.board') },
+            { value: 'calendar', label: t('topbar.breadcrumb.calendar') },
           ]}
         />
       </div>
@@ -267,9 +274,9 @@ export function HomePage(): JSX.Element {
             <EmptyState onManual={openManual} />
           ) : filtered.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line bg-paper p-8 text-center">
-              <p className="text-[15px] text-mist">没有匹配「{searchQuery}」的项目</p>
+              <p className="text-[15px] text-mist">{t('home.noSearchMatch', { query: searchQuery })}</p>
               <Button variant="secondary" className="mt-3" onClick={() => setSearchQuery('')}>
-                清除搜索
+                {t('home.clearSearch')}
               </Button>
             </div>
           ) : (
@@ -318,14 +325,16 @@ function MemberHitSection({
   hits: Member[];
   onOpen(member: Member): void;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   return (
     <section
-      aria-label="成员搜索结果"
+      aria-label={t('home.memberHitsAria')}
       className="rounded-2xl border border-line bg-paper p-4 shadow-soft dark:rounded-md"
     >
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
-        <h2 className="text-sm font-semibold text-ink">搜索到的成员</h2>
-        <span className="text-xs text-mist">点击查看该成员的任务看板</span>
+        <h2 className="text-sm font-semibold text-ink">{t('home.memberHitsTitle')}</h2>
+        <span className="text-xs text-mist">{t('home.memberHitsHint')}</span>
       </div>
       <ul className="flex flex-wrap gap-2">
         {hits.map((m) => (
@@ -361,6 +370,8 @@ function ArchivedSection({
   archived: Project[];
   onOpen(id: string): void;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   return (
     <section className="flex flex-col gap-2">
@@ -378,7 +389,7 @@ function ArchivedSection({
           aria-hidden
           className={cn('text-mist transition-transform', open && 'rotate-180')}
         />
-        <span>已归档（{archived.length}）</span>
+        <span>{t('home.archivedToggle', { count: archived.length })}</span>
       </button>
       {open && (
         <div className="overflow-hidden rounded-2xl border border-line bg-paper shadow-soft dark:rounded-md">
@@ -394,17 +405,19 @@ function ArchivedSection({
 /* ------------------------------ 空状态（无进行中项目） ------------------------------ */
 
 function EmptyState({ onManual }: { onManual(): void }): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line bg-paper p-10 text-center">
-      <p className="text-[15px] font-semibold text-ink">还没有进行中的项目</p>
+      <p className="text-[15px] font-semibold text-ink">{t('empty.noActiveProjects')}</p>
       <p className="max-w-md text-[13px] leading-6 text-mist">
-        新建一个项目，把阶段排期跑起来；项目名称与竣工日为必填，其余可进入后随时补充。
+        {t('home.empty.body')}
       </p>
       <p className="max-w-md rounded-2xl bg-cream px-4 py-3 text-[11px] leading-5 text-mist">
-        你的数据自动保存在本机浏览器中，关闭浏览器不会丢失；如需换电脑或留档，点击顶栏「保存备份」导出文件，随时可再恢复。
+        {t('home.empty.privacy')}
       </p>
       <Button onClick={onManual} className="mt-1">
-        直接手动建档
+        {t('home.openManual')}
       </Button>
     </div>
   );
