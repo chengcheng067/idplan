@@ -10,22 +10,23 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-0.8.4.0001-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-1825%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0007-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-2739%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
 
 <p align="center"><a href="./README.md">中文</a> · <strong>English</strong></p>
 
-> Covering **9 domains / 29 stage presets** (interior / landscape / architecture / software / marketing / film / weddings / consulting / travel). Turn budget, project type, stage milestones and members into one timeline — read it as a kanban, calendar or gantt, and export a schedule page you can hand straight to a client.
+> Covering **7 industry groups / 9 domains / 29 stage presets / 74 stage definitions** (software, marketing, film production, weddings, consulting delivery, travel, architecture & interiors). Turn budget, project type, stage milestones and members into one timeline — read it as a kanban, calendar or gantt, and export a schedule page you can hand straight to a client.
+> **Printing ships four templates, each with the same 5 content blocks** (header / timeline / project info / stage list / footer) rendered in that template's own typographic language — see [🖨️ Printing](#-printing-four-templates-one-set-of-content-four-readings).
 > **It also lets external AI writers (WorkBuddy / Codex, etc.) onboard by reading a single file and write tasks directly into your board** — see [🤖 Agent Access](#-agent-access).
 
 ---
 
 ## 💡 Why this exists
 
-I'm a designer myself. Every project used to cost me half a day just tracking milestones, scheduling, and keeping members aligned — so I built this: stages, tasks, members and schedules in one place, progress management inside the same operation, one-click export for clients. **Clear stages. Visible progress.**
+I built this to schedule my own projects first: several running at once, and the order of stages, the durations, who owns what lived in my head and in spreadsheets — syncing progress once cost me half a day. Then I realised **any work that breaks a project into stages is the same problem** — so it ships with 7 industry groups, and lets you generate a library for your own industry. **Clear stages. Visible progress.**
 
 It ships in three forms: **Windows desktop** (data on your machine), **UGREEN NAS** (team-shared), and **Browser / Docker**. All three share the same scheduling engine and stage library.
 
@@ -35,14 +36,16 @@ It ships in three forms: **Windows desktop** (data on your machine), **UGREEN NA
 
 ### 🧭 Project setup: pick the domain, get the stages
 - **Three-level cascading setup** — domain → sub-domain → stage preset. Nothing is pre-selected on first open; the presets and stages only appear after you pick a sub-domain.
-- **9 domains** — interior / landscape / architecture / software / marketing / film production / weddings / consulting delivery / travel.
-- **29 stage presets** — each domain has stages that fit its own workflow (not the interior nine stages renamed). Travel runs "Planning → Itinerary Design → Resource Booking → Pre-departure → Execution → Settlement → Review"; software runs "Planning → Design → Development → Testing → Release".
-- **Board columns follow the domain** — interior gets design / detailing / construction; film gets pre-production / shooting / post-production / delivery.
+- **7 industry groups / 9 domains / 29 stage presets** — software, marketing, film production, weddings, consulting delivery, travel, architecture & interiors. Each domain has stages and board columns that fit its own workflow, not the same nine stages renamed.
+- **29 stage presets** — travel runs "Planning → Itinerary Design → Resource Booking → Pre-departure → Execution → Settlement → Review"; software runs "Planning → Design → Development → Testing → Release".
+- **Board columns follow the domain** — software gets planning / design / development / testing / release; film gets pre-production / shooting / post-production / delivery.
+- **Bring your own industry** — if the built-in library doesn't fit, the app can copy a prompt for your Agent, take the generated library back, and validate it on import.
 
 ### 📐 Scheduling & delivery
 - **Configurable rest policy** — long/short weekends, single/double days off; scheduling skips rest days automatically, so completion dates hold up.
 - **Multiple views** — kanban, calendar, drag-to-reschedule gantt timeline.
-- **Print / export** — A4 print view for schedules, high-res PNG export.
+- **Print / export** — Four print templates (A · Swiss Schedule, D · Data Editorial, E · Editorial Index, H · Agent Poster), each carrying **the same 5 content blocks** — header, timeline, project info, stage list, footer — rendered in that template's own typographic language. Blocks toggle on and off 1:1 with the paper; a template's own identity elements (masthead, giant type, sheet tag) stay put. High-res PNG export too.
+- **Print customization** — 3 controlled color tokens per template plus preset variants, behind a **contrast gate**: a combination that fails the contrast thresholds cannot be saved. Upload your own logo (grayscale-normalized so it survives black-and-white printing).
 - **Travel day-by-day itinerary** — travel projects generate daily itinerary cards from the project dates, printable as a client-facing itinerary; hidden for non-travel projects.
 - **Three themes** — light / dark / follow system.
 
@@ -55,6 +58,25 @@ It ships in three forms: **Windows desktop** (data on your machine), **UGREEN NA
 ### 💾 Data
 - **Backup & restore** — one-click JSON export / import with full validation; backups from older versions import safely.
 - **Offline-first** — desktop data lives in local IndexedDB, no network required.
+
+---
+
+## 🖨️ Printing: four templates, one set of content, four readings
+
+Pick a template, toggle the content, tune the colors. **The four templates aren't four color swaps — they're four ways of reading the same report.** The timeline in particular grows a different shape in each:
+
+| Template | Reading mode | What its timeline looks like |
+|---|---|---|
+| **A · Swiss Schedule** | Transit timetable: vertical, three staggered columns, numbers first | **Full-width running chart** (horizontal — the only horizontal block on the page) |
+| **D · Data Editorial** | White/black/orange/red hard edges: matrices and numbering | **Date-cell matrix** (columns = time cells, rows = stages) |
+| **E · Editorial Index** | Warm paper index: giant numbering | **Chronological span index** (a hairline span bar inside each index row) |
+| **H · Agent Poster** | Grey/white/orange poster: skimming, two columns | **Two-column segmented-axis gantt** (per-column ruler + span bars) |
+
+- **Only 5 content blocks** — header (project / period) · timeline (gantt) · project info (scheduling basis) · stage list · footer (signature / page number). All four templates carry exactly these, each in its own typographic language.
+- **Blocks toggle 1:1 with the paper** — unchecking a block removes exactly one visible region and nothing else.
+- **A template's identity elements never enter the toggle list** (masthead, giant type, sheet tag, summary bands) — they're what makes it that template; the picker states why.
+- **All four gantts share one ruler** — the time window, bar positions and month ticks are value-for-value identical to the classic template's timeline, pinned by an equivalence assertion.
+- **The classic template stays** — the original "timeline + stage list" sheet is still there as the default.
 
 ---
 
@@ -165,7 +187,7 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 
 | Capability | Status |
 |------|------|
-| Multi-domain setup, scheduling, kanban / calendar / gantt, print & export | ✅ Ready |
+| Multi-domain setup, scheduling, kanban / calendar / gantt, 4 print templates & export | ✅ Ready |
 | Travel daily itinerary & client itinerary sheet | ✅ Ready |
 | Agent loopback auto-import, manual paste import | ✅ Ready |
 | Agent execution console UI | 🔴 Not connected (data layer ready) |
@@ -187,7 +209,7 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 
 Open-sourced under the **[MIT License](./LICENSE)** — you are free to use, copy, modify, merge, publish, distribute, sublicense and sell copies, including commercially. The only requirement is keeping the copyright and permission notices. **No separate commercial license needed, and no fee.**
 
-> The intent: let more designers, small teams and students dare to use it, change it and pass it on — that's how this tool stays alive.
+> The intent: let more small teams, solo builders and students dare to use it, change it and pass it on — that's how this tool stays alive.
 
 ---
 
