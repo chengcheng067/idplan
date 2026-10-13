@@ -424,6 +424,37 @@ export const zhMessages = {
   'agentPayload.promptSend': '把它连同你的需求一起发给外部 Agent，它会照 ID Plan 的导入格式产出 JSON；',
   'agentPayload.promptPaste':
     '你拿到 JSON 后粘贴到下面的输入区即可（粘贴即预览，不需额外点「校验」）。',
+  /* 说明盒三句（`:238-240`）：段间空格归英文取值，句间空格用 JSX 的 `{' '}` */
+  'agentPayload.hintPastePre': '现在可',
+  'agentPayload.hintPasteStrong': '手动粘贴或拖入',
+  'agentPayload.hintPastePost': '排期文件（下方输入区即用）。',
+  'agentPayload.hintDesktopPre': 'Windows 桌面版本还支持经“导入任务”配置的',
+  'agentPayload.hintDesktopStrong': '本机自动导入',
+  'agentPayload.hintDesktopPost': '；',
+  'agentPayload.hintNas': 'NAS 远程自动写入目前尚未启用，请勿将连通探测视为可导入状态。',
+  /* 复制按钮两态（`:279`） */
+  'agentPayload.copyPrompt': '复制提示词',
+  'agentPayload.copyPromptDone': '已复制提示词',
+  /* 令牌说明段（`:301-302`，两个 strong） */
+  'agentPayload.tokenPre': '提示词里',
+  'agentPayload.tokenStrongA': '不含访问令牌',
+  'agentPayload.tokenMid': '：令牌只用于「导入任务 → 接入配置」的',
+  'agentPayload.tokenStrongB': '自动写入',
+  'agentPayload.tokenTail': '通道（在那一栏里设置并复制），不要贴进给 Agent 的聊天窗口。',
+  /* 输入区（`:323` 占位符带 `{schema}` 插值；`:333/339/341` 是 flex 里的三项） */
+  'agentPayload.pastePlaceholder': '粘贴 payload JSON，或拖入 .json / .md 文件……\n（{schema}）',
+  'agentPayload.dropOr': '拖入文件或',
+  'agentPayload.chooseFile': '选择文件',
+  'agentPayload.afterPaste': '；粘贴完成后自动生成差异预览。',
+  /* 校验失败区（`:359` / `:367` 带 `{count}` 插值） */
+  'agentPayload.invalidTitle': 'payload 校验失败（未写入任何数据）',
+  'agentPayload.moreErrors': '……另有 {count} 条错误未展示。',
+  'agentPayload.parseFailed': '解析失败',
+  'agentPayload.dropUnsupported': '仅支持 .json / .md 纯文本文件（pdf/docx 请先由 Agent 转出 payload）。',
+  /* 态三两个按钮（`:425` / `:433`） */
+  'agentPayload.editAgain': '重新编辑',
+  'agentPayload.writing': '写入中…',
+  'agentPayload.confirmWrite': '确认写入',
   /* ───────────────────── 备份 / 恢复的 toast（useBackupIo）───────────────────── */
   'backup.toast.saved': '备份包已保存',
   'backup.toast.exportFailed': '备份导出失败。',

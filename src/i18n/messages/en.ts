@@ -16,8 +16,11 @@
  *      `{t('x')}<strong>{t('y')}</strong>{t('z')}` 这些**相邻表达式容器之间
  *      JSX 不产生任何空白**（只有同一 JSXText 内部的换行才被折成一个空格——
  *      实测见 `tests/i18n-jsx-space.spec.ts`）。中文不需要这种空格，所以只能写进
- *      英文取值里，惯例是**尾随空格**：
+ *      英文取值里，惯例是**段尾空格**：
  *        `'agent.stanceBefore': 'The Agent board currently '`
+ *      （例外：**左段是 JSX 里的硬编码字面量**时必须放右段的**前导空格** ——
+ *        因为字面量的尾空格改不动，例：`'ingress.explain.writers': ' file — …'`，
+ *        它接在 `<code>agent-ingress.json</code>` 之后，而中文态那里不能有空格。）
  *      句间空格则用 `{' '}` 显式写出来（中英都要，不能省）。
  *      守卫：`tests/i18n-jsx-space.spec.ts`。
  */
@@ -431,6 +434,40 @@ export const enMessages: Record<MessageKey, string> = {
     'Send it to the external agent together with your requirements — it will produce JSON in ID Plan’s import format; ',
   'agentPayload.promptPaste':
     'paste that JSON into the input area below (pasting previews it — no separate “validate” click).',
+  /* Hint box, three sentences (`:238-240`). 段尾空格是**载荷**，见文件头 ⑤ */
+  'agentPayload.hintPastePre': 'You can now ',
+  'agentPayload.hintPasteStrong': 'paste or drop in ',
+  'agentPayload.hintPastePost': 'a schedule file (the input area below is ready).',
+  'agentPayload.hintDesktopPre': 'On the Windows desktop build, ',
+  'agentPayload.hintDesktopStrong': 'local automatic import ',
+  'agentPayload.hintDesktopPost': 'can be configured under “Import tasks”;',
+  'agentPayload.hintNas':
+    'remote automatic write over NAS is not enabled yet — do not treat connectivity probing as an import-ready state.',
+  /* Copy button, two states (`:279`) */
+  'agentPayload.copyPrompt': 'Copy prompt',
+  'agentPayload.copyPromptDone': 'Prompt copied',
+  /* Token note (`:301-302`, two strongs). 段尾空格是**载荷**，见文件头 ⑤ */
+  'agentPayload.tokenPre': 'The prompt does ',
+  'agentPayload.tokenStrongA': 'not contain the access token',
+  'agentPayload.tokenMid': ': the token is used only by the ',
+  'agentPayload.tokenStrongB': 'automatic write ',
+  'agentPayload.tokenTail':
+    'channel (set and copy it there) — do not paste it into the agent chat window.',
+  /* Input area (`:323` placeholder with `{schema}`; `:333/339/341` are flex items) */
+  'agentPayload.pastePlaceholder': 'Paste payload JSON, or drop in a .json / .md file…\n({schema})',
+  'agentPayload.dropOr': 'Drop a file, or',
+  'agentPayload.chooseFile': 'choose a file',
+  'agentPayload.afterPaste': 'A diff preview appears automatically once you paste.',
+  /* Validation failure block (`:359` / `:367` with `{count}`) */
+  'agentPayload.invalidTitle': 'Payload validation failed (nothing was written)',
+  'agentPayload.moreErrors': '…and {count} more errors not shown.',
+  'agentPayload.parseFailed': 'Parse failed',
+  'agentPayload.dropUnsupported':
+    'Only plain-text .json / .md files are supported (have the agent convert pdf/docx to a payload first).',
+  /* State 3 buttons (`:425` / `:433`) */
+  'agentPayload.editAgain': 'Edit again',
+  'agentPayload.writing': 'Writing…',
+  'agentPayload.confirmWrite': 'Confirm write',
   /* ───────────────────── Backup / restore toasts (useBackupIo) ───────────────────── */
   'backup.toast.saved': 'Backup package saved',
   'backup.toast.exportFailed': 'Backup export failed.',

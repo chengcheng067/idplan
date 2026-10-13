@@ -167,11 +167,11 @@ export function ApplyPayloadPanel({
         // JSON.parse 失败等：红色区提示，不清空输入
         setState({
           phase: 'invalid',
-          issues: [{ path: '(root)', message: (err as Error)?.message ?? '解析失败' }],
+          issues: [{ path: '(root)', message: (err as Error)?.message ?? t('agentPayload.parseFailed') }],
         });
       }
     },
-    [previewPayload, projectId, repos],
+    [previewPayload, projectId, repos, t],
   );
 
   const readFile = useCallback(
@@ -194,12 +194,12 @@ export function ApplyPayloadPanel({
       const file = e.dataTransfer.files[0];
       if (!file) return;
       if (!/\.(json|md|markdown|txt)$/i.test(file.name)) {
-        pushToast('error', '仅支持 .json / .md 纯文本文件（pdf/docx 请先由 Agent 转出 payload）。');
+        pushToast('error', t('agentPayload.dropUnsupported'));
         return;
       }
       readFile(file);
     },
-    [pushToast, readFile],
+    [pushToast, readFile, t],
   );
 
   const commit = useCallback(async (): Promise<void> => {
@@ -234,10 +234,23 @@ export function ApplyPayloadPanel({
 
       <div className="mb-3 flex items-start gap-2 rounded-[12px] bg-sunken px-3.5 py-2.5 text-xs text-mist">
         <Info size={13} className="mt-0.5 shrink-0 text-pine" aria-hidden />
+        {/*
+          一句话拆成多段的接缝规则（详见 `src/i18n/messages/en.ts` 文件头 ⑤ 与守卫
+          `tests/i18n-jsx-space.spec.ts`）：
+            · **段间**空格中英都需要 ⇒ 只能写在英文取值里（惯例：段尾）；
+            · **句间**空格中英都需要 ⇒ 在这里用 `{' '}` 显式写出来。
+          改这三句时别把 `{' '}` 删了 —— 删了文案会变成「…即用）。Windows 桌面…」。
+        */}
         <span>
-          现在可<strong className="text-ink">手动粘贴或拖入</strong>排期文件（下方输入区即用）。
-          Windows 桌面版本还支持经“导入任务”配置的<strong className="text-ink">本机自动导入</strong>；
-          NAS 远程自动写入目前尚未启用，请勿将连通探测视为可导入状态。
+          {t('agentPayload.hintPastePre')}
+          <strong className="text-ink">{t('agentPayload.hintPasteStrong')}</strong>
+          {t('agentPayload.hintPastePost')}
+          {' '}
+          {t('agentPayload.hintDesktopPre')}
+          <strong className="text-ink">{t('agentPayload.hintDesktopStrong')}</strong>
+          {t('agentPayload.hintDesktopPost')}
+          {' '}
+          {t('agentPayload.hintNas')}
         </span>
       </div>
 
@@ -276,13 +289,20 @@ export function ApplyPayloadPanel({
           className="mt-2 inline-flex items-center gap-1.5 rounded-[10px] border border-line bg-paper px-3 py-1.5 text-xs text-ink transition-colors hover:bg-sunken"
         >
           {promptCopied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
-          {promptCopied ? '已复制提示词' : '复制提示词'}
+          {promptCopied ? (
+            t('agentPayload.copyPromptDone')
+          ) : (
+            t('agentPayload.copyPrompt')
+          )}
         </button>
 
         {/* 令牌是**另一个通道**的事：这里说清它不在提示词里，避免用户把令牌贴进聊天窗口 */}
         <p className="mt-2 leading-relaxed">
-          提示词里<strong className="text-ink">不含访问令牌</strong>：令牌只用于「导入任务 → 接入配置」的
-          <strong className="text-ink">自动写入</strong>通道（在那一栏里设置并复制），不要贴进给 Agent 的聊天窗口。
+          {t('agentPayload.tokenPre')}
+          <strong className="text-ink">{t('agentPayload.tokenStrongA')}</strong>
+          {t('agentPayload.tokenMid')}
+          <strong className="text-ink">{t('agentPayload.tokenStrongB')}</strong>
+          {t('agentPayload.tokenTail')}
         </p>
       </details>
 
@@ -303,22 +323,23 @@ export function ApplyPayloadPanel({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onBlur={() => void analyze(text)}
-          placeholder={`粘贴 payload JSON，或拖入 .json / .md 文件……\n（${AGENT_PAYLOAD_SCHEMA_ID}）`}
+          placeholder={t('agentPayload.pastePlaceholder', { schema: AGENT_PAYLOAD_SCHEMA_ID })}
           rows={8}
           spellCheck={false}
           className="w-full resize-y rounded-[10px] border border-line bg-paper p-3 font-mono text-xs leading-5 text-ink outline-none focus:border-pine"
         />
         <div className="mt-2 flex items-center gap-2 text-[11px] text-mist">
           <Upload size={12} aria-hidden />
-          拖入文件或
+          {/* 三件都是 **flex 项**（容器 `gap-2`）⇒ 视觉间距由 flex 给，文案里不带空格 */}
+          {t('agentPayload.dropOr')}
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             className="text-pine underline underline-offset-2"
           >
-            选择文件
+            {t('agentPayload.chooseFile')}
           </button>
-          ；粘贴完成后自动生成差异预览。
+          {t('agentPayload.afterPaste')}
           <input
             ref={fileRef}
             type="file"
@@ -336,7 +357,7 @@ export function ApplyPayloadPanel({
       {/* 态一：校验失败（红色区，逐条 path+message；不清空输入） */}
       {state.phase === 'invalid' && (
         <div role="alert" className="mt-3 rounded-[12px] border border-clay/50 bg-clay-soft p-3">
-          <p className="mb-1.5 text-xs font-semibold text-clay">payload 校验失败（未写入任何数据）</p>
+          <p className="mb-1.5 text-xs font-semibold text-clay">{t('agentPayload.invalidTitle')}</p>
           <ul className="flex flex-col gap-1">
             {state.issues.slice(0, 20).map((issue, i) => (
               <li key={`${issue.path}-${i}`} className="font-mono text-[11px] text-clay">
@@ -344,7 +365,9 @@ export function ApplyPayloadPanel({
               </li>
             ))}
             {state.issues.length > 20 && (
-              <li className="text-[11px] text-clay">……另有 {state.issues.length - 20} 条错误未展示。</li>
+              <li className="text-[11px] text-clay">
+                {t('agentPayload.moreErrors', { count: state.issues.length - 20 })}
+              </li>
             )}
           </ul>
           <p className="mt-1.5 text-[10px] text-mist">{lineHints(text).join(' ｜ ')}</p>
@@ -399,7 +422,7 @@ export function ApplyPayloadPanel({
               onClick={() => setState({ phase: 'input' })}
               className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
-              重新编辑
+              {t('agentPayload.editAgain')}
             </button>
             <button
               type="button"
@@ -407,7 +430,7 @@ export function ApplyPayloadPanel({
               disabled={busy || (state.result.created === 0 && state.result.updated === 0)}
               className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
             >
-              {busy ? '写入中…' : '确认写入'}
+              {busy ? t('agentPayload.writing') : t('agentPayload.confirmWrite')}
             </button>
           </div>
         </div>
