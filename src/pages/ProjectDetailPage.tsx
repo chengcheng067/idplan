@@ -39,6 +39,7 @@ import { CountdownNumber } from '../components/common/CountdownNumber';
 import { Badge } from '../components/common/Badge';
 import type { Stage } from '../core/types/entities';
 import { totalDaysInclusive } from '../lib/date';
+import { useLang } from '../i18n';
 
 /**
  * 项目详情主视图：顶条信息环 + 九阶段时间轴 + 阶段抽屉。
@@ -69,6 +70,8 @@ function useIsNarrowViewport(): boolean {
 export function ProjectDetailPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
   const repos = useRepos();
+  /** 取词 + 语言变化订阅点（页面文案在渲染期取） */
+  const { t } = useLang();
   /*
     ★ v0.8 T04-A · §7.3 #27「单项目直达」特判（**唯一允许穿越的通道**）。
 
@@ -156,9 +159,9 @@ export function ProjectDetailPage(): JSX.Element {
     return (
       // px-8 与正文根节点的 p-8 同口径（画板 04 内容区 pad=32），下同
       <div className="px-8 py-16 text-center text-mist">
-        <p className="mb-3">未找到该项目（可能已被归档或删除）。</p>
+        <p className="mb-3">{t('project.notFound')}</p>
         <Link to="/" className="text-pine underline underline-offset-2">
-          ← 返回项目列表
+          {t('project.backToList')}
         </Link>
       </div>
     );
@@ -175,13 +178,13 @@ export function ProjectDetailPage(): JSX.Element {
             ⚠️ 措辞**不写「左下角」**（team-lead 裁决 ①）：侧栏 ≥1280 才常驻，1024–1279
               收在抽屉里 ⇒「左侧导航最下方」才是两档都真的说法。
           */}
-          {currentMember ? '该项目的阶段与你无关。' : '请先到左侧导航最下方进入身份，再查看项目。'}
+          {currentMember ? t('project.noRelatedStages') : t('project.needIdentity')}
         </p>
         <Link
           to={currentMember ? '/my-tasks' : '/'}
           className="text-pine underline underline-offset-2"
         >
-          ← {currentMember ? '返回我的任务' : '返回首页'}
+          ← {currentMember ? t('project.backToMyTasks') : t('project.backToHome')}
         </Link>
       </div>
     );
@@ -261,9 +264,9 @@ export function ProjectDetailPage(): JSX.Element {
               type="button"
               onClick={() => setPrintPreviewId(project.id)}
               className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
-              title="打印预览（应用内面板）"
+              title={t('project.printPreviewTitle')}
             >
-              <CalendarRange size={14} /> 日程表
+              <CalendarRange size={14} /> {t('project.schedule')}
             </button>
           )}
           {!memberView && (
@@ -311,7 +314,7 @@ export function ProjectDetailPage(): JSX.Element {
                     window.location.assign('/agent');
                   }}
                   className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
-                  title="在该 Agent 工作区中打开"
+                  title={t('project.openInAgentTitle')}
                 >
                   <Bot size={14} /> Agent Board
                 </button>
@@ -339,9 +342,9 @@ export function ProjectDetailPage(): JSX.Element {
                   data-transfer-open=""
                   onClick={() => setTransferOpen(true)}
                   className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand"
-                  title="转为正式项目，或把任务搬进人类项目"
+                  title={t('project.takeoverTitle')}
                 >
-                  <ArrowRightLeft size={14} /> 接管
+                  <ArrowRightLeft size={14} /> {t('project.takeover')}
                 </button>
               )}
               {/* 归档是**写操作**，仍限管理员（v0.7-D 只放开打印，未放开任何写） */}
@@ -350,9 +353,9 @@ export function ProjectDetailPage(): JSX.Element {
                 disabled={project.status !== 'active'}
                 onClick={() => void actions.setArchived(project.id, true)}
                 className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist hover:bg-sand disabled:opacity-40"
-                title={project.status !== 'active' ? '已归档' : '归档后从首页列表隐藏'}
+                title={project.status !== 'active' ? t('project.archived') : t('project.archiveHint')}
               >
-                <Archive size={14} /> 归档
+                <Archive size={14} /> {t('project.archive')}
               </button>
             </>
           )}
@@ -393,10 +396,15 @@ export function ProjectDetailPage(): JSX.Element {
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-mist">
             <Badge tone="pine">{domainLabel(effectiveDomainOf(project))}</Badge>
-            {!memberView && project.clientName && <span>客户：{project.clientName}</span>}
+            {!memberView && project.clientName && <span>{t('project.client', { name: project.clientName })}</span>}
             {!memberView && project.address && <span>· {project.address}</span>}
             <span>
-              · 总工期 {totalDaysInclusive(project.plannedStartAt.slice(0, 10), project.plannedEndAt.slice(0, 10))} 天
+              {t('project.totalDays', {
+                days: totalDaysInclusive(
+                  project.plannedStartAt.slice(0, 10),
+                  project.plannedEndAt.slice(0, 10),
+                ),
+              })}
             </span>
           </p>
         </div>
@@ -409,7 +417,7 @@ export function ProjectDetailPage(): JSX.Element {
               {project.plannedStartAt.slice(0, 10)} — {project.plannedEndAt.slice(0, 10)}
             </p>
             <p>
-              当前：<b className="text-pine-deep">{activeStage ? `${activeStage.orderIndex}. ${activeStage.name}` : '—'}</b>
+              {t('project.currentStage')}<b className="text-pine-deep">{activeStage ? `${activeStage.orderIndex}. ${activeStage.name}` : '—'}</b>
             </p>
           </div>
         </div>
@@ -424,16 +432,16 @@ export function ProjectDetailPage(): JSX.Element {
           */}
           <div className="mb-3 flex items-center justify-between gap-3">
             <span className="text-xs text-mist">
-              客户行程单按天列出交通、住宿、安排与费用，可直接发给客户或打印。
+              {t('project.itineraryHint')}
             </span>
             <button
               type="button"
               data-itinerary-print-open=""
               onClick={() => window.open(`/project/${project.id}/itinerary-print`, '_blank')}
               className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist hover:bg-sand"
-              title="打开客户行程单（新窗口，只读导出）"
+              title={t('project.itineraryTitle')}
             >
-              <CalendarRange size={14} aria-hidden /> 客户行程单
+              <CalendarRange size={14} aria-hidden /> {t('project.itinerary')}
             </button>
           </div>
           <TravelItineraryPanel project={project} />

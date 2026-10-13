@@ -49,7 +49,7 @@ import { useMembersStore } from '../src/store/useMembersStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import type { Member } from '../src/core/types/entities';
 import { MemberActorKind, MemberRoleKind } from '../src/core/types/enums';
-import { catalogOf } from '../src/i18n';
+import { catalogOf, type MessageKey } from '../src/i18n';
 
 const ROOT = resolve(__dirname, '..');
 
@@ -394,16 +394,30 @@ describe('身份去重 · 唯一实现（不许把菜单逻辑复制到侧栏）
 
 describe('身份去重 · 指向旧入口的文案已下线', () => {
   it('我的任务页 / 项目详情页不再说「右上角「进入身份」」，且措辞两档都成立', () => {
-    for (const f of ['src/pages/MyTasksPage.tsx', 'src/pages/ProjectDetailPage.tsx']) {
+    /*
+     * ★ 2026-10-13 判据形态升级（语言切换批 2a，team-lead 批准）：
+     *   这一条原来断言「源码里出现中文字面量 左侧导航最下方」。文案搬进 i18n 消息表
+     *   后源码里不再有中文字面量 ⇒ 改为**同时锁两件事**：
+     *     ① 该页的引导语确实经 t('key') 取词（接线存在）；
+     *     ② zh 表里该键的值仍含「左侧导航最下方」（**位置描述才是本条原意**）。
+     *   原意：这两句引导语必须用两档都真的位置说法（侧栏 ≥1280 才常驻，1024–1279
+     *   收在抽屉里），「左下角」不成立 —— 负向那条（not.toContain('左下角')）
+     *   与「不得指向已删除的右上角入口」两条**原样未动**。
+     *   ⇒ 强度不降：多钉了「值」，减的只是「源码里的中文」这个载体。
+     */
+    const KEY_OF: Record<string, MessageKey> = {
+      'src/pages/MyTasksPage.tsx': 'myTasks.noIdentity',
+      'src/pages/ProjectDetailPage.tsx': 'project.needIdentity',
+    };
+    for (const f of Object.keys(KEY_OF)) {
       const src = code(f);
       expect(src, `${f} 仍指向已删除的右上角入口`).not.toContain('右上角「进入身份」');
-      /*
-       * ★ 措辞纪律（team-lead 裁决 ①）：侧栏 ≥1280 才常驻，1024–1279 收在左上角汉堡的
-       *   抽屉里 ⇒「左下角」在窄窗上**不成立**，不许出现在这两句引导语里。
-       *   必须用「左侧导航最下方」这种两档都真的说法。
-       */
       expect(src, `${f} 用了只在常驻侧栏成立的「左下角」说法`).not.toContain('左下角');
-      expect(src, `${f} 应改指左侧导航最下方`).toContain('左侧导航最下方');
+      expect(src, `${f} 的引导语必须经 i18n 取词`).toContain(`t('${KEY_OF[f]}')`);
+      expect(
+        catalogOf('zh')[KEY_OF[f] as MessageKey],
+        `${f} 的措辞必须仍指向「左侧导航最下方」（位置描述是本条的原意）`,
+      ).toContain('左侧导航最下方');
     }
   });
 

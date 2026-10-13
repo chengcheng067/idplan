@@ -6,6 +6,7 @@ import { Check } from 'lucide-react';
 
 import { createTaskActions } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
+import { useLang, type MessageKey } from '../i18n';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useRepos } from '../hooks/useRepos';
 import {
@@ -58,13 +59,15 @@ export function MyTasksPage(): JSX.Element {
   const stages = useHumanStages();
   const allTasks = useHumanTasks();
 
+  /** 取词 + 语言变化订阅点（页面文案在渲染期取） */
+  const { t } = useLang();
   const [filter, setFilter] = useState<FilterMode>('by-project');
   const [showDone, setShowDone] = useState(false);
 
   const me = members.find((m) => m.id === currentMemberId) ?? null;
   const todayIso = new Date().toISOString().slice(0, 10);
   const actions = createTaskActions(repos);
-  const operatorName = me?.name ?? '未知';
+  const operatorName = me?.name ?? t('common.unknown');
 
   // 参与人包含语义（taskAssigneeIds 回落旧数据 assigneeId）
   const allMyTasks = useMemo(
@@ -100,29 +103,41 @@ export function MyTasksPage(): JSX.Element {
     return { today, overdue, week, undone };
   }, [allMyTasks, todayIso]);
 
-  /** 按时间过滤：逾期 / 今天 / 7天内 / 更晚 */
+  /** 时间分组：**内部键与语言无关**（稳定），显示名与色点在渲染期由本表给出 */
+type TimeGroupKey = 'overdue' | 'today' | 'week' | 'later';
+const TIME_GROUPS: readonly { key: TimeGroupKey; labelKey: MessageKey; dot: string }[] = [
+  { key: 'overdue', labelKey: 'myTasks.group.overdue', dot: 'bg-clay' },
+  { key: 'today', labelKey: 'myTasks.group.today', dot: 'bg-pine' },
+  { key: 'week', labelKey: 'myTasks.group.week', dot: 'bg-mist' },
+  { key: 'later', labelKey: 'myTasks.group.later', dot: 'bg-mist' },
+];
+
+/** 按时间过滤：逾期 / 今天 / 7天内 / 更晚 */
   const groupedByTime = useMemo(() => {
-    const groups: Record<string, Task[]> = { 已逾期: [], 今天: [], '7 天内': [], 更晚: [] };
-    for (const t of myTasks) {
-      if (!t.dueDate) {
-        groups['更晚'].push(t);
+    const groups: Record<TimeGroupKey, Task[]> = { overdue: [], today: [], week: [], later: [] };
+    for (const task of myTasks) {
+      if (!task.dueDate) {
+        groups.later.push(task);
         continue;
       }
-      const d = remainingDays(t.dueDate.slice(0, 10), todayIso);
-      if (d < 0) groups['已逾期'].push(t);
-      else if (d === 0) groups['今天'].push(t);
-      else if (d <= 7) groups['7 天内'].push(t);
-      else groups['更晚'].push(t);
+      const d = remainingDays(task.dueDate.slice(0, 10), todayIso);
+      if (d < 0) groups.overdue.push(task);
+      else if (d === 0) groups.today.push(task);
+      else if (d <= 7) groups.week.push(task);
+      else groups.later.push(task);
     }
-    return Object.entries(groups).filter(([, rows]) => rows.length > 0);
+    // 顺序 = TIME_GROUPS 的声明顺序（与改造前 Object.entries 的插入序一致）
+    return TIME_GROUPS.map((g) => [g.key, groups[g.key]] as const).filter(
+      ([, rows]) => rows.length > 0,
+    );
   }, [myTasks, todayIso]);
 
   return (
     <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
       {/* 标题 + 副标题 */}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="font-display text-display-lg">我的任务</h1>
-        <span className="text-xs text-mist">只显示与我相关的内容</span>
+        <h1 className="font-display text-display-lg">{t('nav.myTasks')}</h1>
+        <span className="text-xs text-mist">{t('myTasks.subtitle')}</span>
       </div>
 
       {/*
@@ -138,13 +153,13 @@ export function MyTasksPage(): JSX.Element {
       <div className="-mt-2 flex flex-wrap items-center justify-between gap-3">
         <div
           role="tablist"
-          aria-label="任务分组方式"
+          aria-label={t('myTasks.groupAria')}
           className="flex items-center gap-1 rounded-[12px] border border-line bg-cream/60 p-1"
         >
           {(
             [
-              { key: 'by-project' as const, label: '按项目' },
-              { key: 'by-time' as const, label: '按时间' },
+              { key: 'by-project' as const, label: t('myTasks.byProject') },
+              { key: 'by-time' as const, label: t('myTasks.byTime') },
             ]
           ).map((o) => (
             <button
@@ -175,16 +190,16 @@ export function MyTasksPage(): JSX.Element {
               : 'border-line text-mist hover:bg-sand hover:text-ink',
           )}
         >
-          {showDone ? '已含已完成' : '显示已完成'}
+          {showDone ? t('myTasks.showDoneOn') : t('myTasks.showDoneOff')}
         </button>
       </div>
 
       {/* 统计概览（手机单列、平板双列、桌面四列，与首页统计行一致） */}
       <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard icon="▢" tone="pine" value={stats.today} label="今天到期" trend={null} />
-        <StatCard icon="▲" tone="clay" value={stats.overdue} label="已逾期" trend={null} />
-        <StatCard icon="▣" tone="amber" value={stats.week} label="7 天内" trend={null} />
-        <StatCard icon="✓" tone="sage" value={stats.undone} label="未完成总数" trend={null} />
+        <StatCard icon="▢" tone="pine" value={stats.today} label={t('myTasks.stat.today')} trend={null} />
+        <StatCard icon="▲" tone="clay" value={stats.overdue} label={t('myTasks.group.overdue')} trend={null} />
+        <StatCard icon="▣" tone="amber" value={stats.week} label={t('myTasks.group.week')} trend={null} />
+        <StatCard icon="✓" tone="sage" value={stats.undone} label={t('myTasks.stat.undone')} trend={null} />
       </section>
 
       {/* 未选身份引导 */}
@@ -200,9 +215,9 @@ export function MyTasksPage(): JSX.Element {
                 1024–1279 那一档它收在左上角汉堡的抽屉里 —— 「左下角」在窄窗上不成立。
                 改成指向「左侧导航最下方」：两档都真（窄窗先开导航，那个位置就在其底部）。
             */}
-            请到左侧导航最下方进入身份，输入你的姓名；
+            {t('myTasks.noIdentity')}
             <br />
-            若系统还没有管理员，请先让管理员完成首次设置后再进入。
+            {t('myTasks.noIdentityNoAdmin')}
           </p>
         </div>
       )}
@@ -211,7 +226,7 @@ export function MyTasksPage(): JSX.Element {
       {currentMemberId && myTasks.length === 0 && (
         <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
           <p className="font-display text-display-md text-mist">
-            {me ? `${me.name}，目前没有分配给你的待办 🎉` : '未找到该身份。'}
+            {me ? t('myTasks.empty.mine', { name: me.name }) : t('myTasks.empty.notFound')}
           </p>
         </div>
       )}
@@ -241,14 +256,14 @@ export function MyTasksPage(): JSX.Element {
                     {p.name}
                   </Link>
                 ) : (
-                  <span className="font-display text-display-md text-mist">（未知项目）</span>
+                  <span className="font-display text-display-md text-mist">{t('myTasks.unknownProject')}</span>
                 )}
                 <span className="rounded-[10px] bg-sand px-2.5 py-0.5 text-[12px] font-medium text-mist">
                   {rows.length}
                 </span>
                 {overdueCount > 0 && (
                   <span className="rounded-[10px] bg-clay-soft px-2.5 py-0.5 text-[12px] font-medium text-clay">
-                    逾期 {overdueCount}
+                    {t('myTasks.overdueCount', { count: overdueCount })}
                   </span>
                 )}
               </h2>
@@ -273,35 +288,32 @@ export function MyTasksPage(): JSX.Element {
       {/* 按时间 */}
       {currentMemberId &&
         filter === 'by-time' &&
-        groupedByTime.map(([groupLabel, rows]) => (
-          <section key={groupLabel} className="glass-light rounded-[16px] border border-line p-3.5">
+        groupedByTime.map(([groupKey, rows]) => {
+          const g = TIME_GROUPS.find((x) => x.key === groupKey)!;
+          return (
+          <section key={groupKey} className="glass-light rounded-[16px] border border-line p-3.5">
             <h2 className="mb-2 flex items-center gap-2">
-              <span
-                className={cn(
-                  'h-2 w-2 rounded-full',
-                  groupLabel === '已逾期' ? 'bg-clay' : groupLabel === '今天' ? 'bg-pine' : 'bg-mist',
-                )}
-                aria-hidden
-              />
-              <span className="font-display text-display-md">{groupLabel}</span>
+              <span className={cn('h-2 w-2 rounded-full', g.dot)} aria-hidden />
+              <span className="font-display text-display-md">{t(g.labelKey)}</span>
               <span className="rounded-[10px] bg-sand px-2.5 py-0.5 text-[12px] font-medium text-mist">
                 {rows.length}
               </span>
             </h2>
             <ul className="flex flex-col gap-1.5">
-              {rows.map((t) => (
+              {rows.map((task) => (
                 <TaskCard
-                  key={t.id}
-                  task={t}
-                  project={projectOf(t)}
-                  stage={stageOf(t)}
+                  key={task.id}
+                  task={task}
+                  project={projectOf(task)}
+                  stage={stageOf(task)}
                   todayIso={todayIso}
-                  onToggle={() => void actions.toggleDone(t, operatorName)}
+                  onToggle={() => void actions.toggleDone(task, operatorName)}
                 />
               ))}
             </ul>
           </section>
-        ))}
+          );
+        })}
       </DataGate>
     </div>
   );
@@ -321,6 +333,8 @@ function TaskCard({
   todayIso: string;
   onToggle(): void;
 }): JSX.Element {
+  /** 取词 + 订阅语言变化（本模块级组件自己订阅；页面组件的 t 不在其作用域内） */
+  const { t } = useLang();
   const days = task.dueDate ? remainingDays(task.dueDate.slice(0, 10), todayIso) : null;
   const overdue = days !== null && days < 0;
   /*
@@ -347,7 +361,7 @@ function TaskCard({
       <button
         type="button"
         onClick={onToggle}
-        aria-label={taskIsDone(task) ? '标记未完成' : '标记完成'}
+        aria-label={taskIsDone(task) ? t('myTasks.markNotDone') : t('myTasks.markDone')}
         className={cn(
           'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors',
           taskIsDone(task)
@@ -379,7 +393,11 @@ function TaskCard({
             overdue ? 'text-clay' : days <= 3 ? 'text-amber-deep' : 'text-mist',
           )}
         >
-          {overdue ? `逾期${Math.abs(days)}天` : days === 0 ? '今天到期' : `${days} 天`}
+          {overdue
+            ? t('myTasks.dueOverdue', { days: Math.abs(days) })
+            : days === 0
+              ? t('myTasks.stat.today')
+              : t('myTasks.dueInDays', { days })}
         </span>
       )}
     </li>
