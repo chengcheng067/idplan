@@ -26,10 +26,18 @@
  * 真正的 hook（`useAgentLoopbackReceiver`）只负责把 `window.idplan` 桥接进来。
  *
  * ── token 内存 / 持久化纪律（不变）──
- * token 持久化唯一出处仍是渲染进程 `localStorage['idplan.agentToken']`（见
- * `AgentBoardPage.AGENT_TOKEN_STORAGE_KEY`）；本 hook 启动即把已存的 token 经
+ * token 持久化唯一出处仍是渲染进程 `localStorage['idplan.agentToken']`（键的唯一出处见
+ * `constants/agentTerms.ts::AGENT_TOKEN_STORAGE_KEY`）；本 hook 启动即把已存的 token 经
  * `setAgentToken` 推给主进程（主进程只比对，绝不回传原文）。这样主进程重启 / 应用冷启动后
  * 立刻有 token，外部写入方不必等用户再进一次 Agent 看板页保存。
+ *
+ * ── ★ 为什么本文件**绝不允许** import `pages/**` 或 `components/agent/**`（v0.8.6 阶段 2）──
+ * 本 hook 常驻 `AppShell`（宿主壳层）。这两处目录归 agent-board 插件所有，宿主壳层
+ * 一旦 import 它们，插件**停用后模块代码仍被宿主 bundle 加载执行** —— 违反
+ * `core/plugin/types.ts` 的「停用 = 摘节点，不是条件渲染；插件代码不该仍被执行」。
+ * 历史上这里正好踩过一次：token 键曾定义在 `pages/AgentBoardPage.tsx`，
+ * 于是本 hook 反向依赖了插件页面。键已搬到 `constants/agentTerms.ts`（宿主中立），
+ * 本条纪律由 `tests/plugin-ui-gating.spec.tsx` 的源码守卫钉死。
  */
 
 import { useEffect } from 'react';
@@ -42,8 +50,9 @@ import { validateAgentPayload } from '../core/types/agent-payload';
 import { ChangxiaError, ChangxiaErrorCode, projectKindOf } from '../core/types/enums';
 import { createProjectActions } from '../store/useProjectsStore';
 import type { CreateAgentBoardCmd } from '../core/services/project.service';
-// token 存储键的**唯一出处**（与 AgentBoardPage 同源，避免再散一份字面量）
-import { AGENT_TOKEN_STORAGE_KEY } from '../pages/AgentBoardPage';
+// token 存储键的**唯一出处**（宿主中立常量：本 hook 常驻 AppShell，
+// 不许 import 归 agent-board 插件所有的 `pages/**` / `components/agent/**`）
+import { AGENT_TOKEN_STORAGE_KEY } from '../constants/agentTerms';
 import { useRepos } from './useRepos';
 
 /** 主进程经 IPC 转来的 ping（仅确认监听器活着，不携带业务数据） */

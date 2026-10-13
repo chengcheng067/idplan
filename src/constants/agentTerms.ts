@@ -140,3 +140,24 @@ export const AGENT_KIND_SUGGESTIONS: readonly string[] = [
 
 /** Agent 席位上限（PRD 附录 C B5：免费 3 席位；MVP 只展示不拦截，BIZ-01 校验 V1 落地） */
 export const AGENT_SEAT_LIMIT = 3;
+
+/* ---------------------------------------------------------------------------------------------
+ * Agent 接入令牌的**存储键**（v0.8.6 阶段 2 边界修复）
+ *
+ * ── 为什么它得住在这里，而不是原地留在 AgentBoardPage ──
+ * 该键的读方是**宿主常驻壳层**：`hooks/useAgentLoopbackReceiver`（挂在 `AppShell`，
+ * 应用生命周期全程监听回环写入）启动时要把已存的 token 推给主进程。
+ * 键原先定义在 `pages/AgentBoardPage.tsx` —— 而那个页面**归 agent-board 插件所有**
+ * （`plugins/agent-board/manifest.tsx` 的 routes 引用它）。于是宿主壳层**永久 import
+ * 插件页面模块**，插件停用后其模块代码仍被宿主 bundle 加载执行，违反
+ * `core/plugin/types.ts` 立的规矩：「停用是摘节点、不是条件渲染，插件代码不该仍被执行」。
+ *
+ * ⇒ 键的**唯一出处**搬到宿主中立位置（本文件），宿主 hook 与插件页面各自从这里取。
+ * 搬迁是**纯搬移**：字面量 `'idplan.agentToken'` 与已有数据零变化。
+ *
+ * ⚠️ 邻居 `AGENT_BASE_URL_STORAGE_KEY`（NAS 地址）**有意留在 AgentBoardPage**：
+ *    它的消费方只有该页自己（无宿主消费点）⇒ 搬进来只会多一处没有边界的散落。
+ * ------------------------------------------------------------------------------------------ */
+
+/** token 存储键（唯一出处；宿主 hook 与插件页共用同一份） */
+export const AGENT_TOKEN_STORAGE_KEY = 'idplan.agentToken';

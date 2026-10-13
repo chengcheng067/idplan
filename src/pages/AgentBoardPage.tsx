@@ -92,6 +92,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useLayoutStore } from '../store/useLayoutStore';
 import {
   AGENT_SEAT_LIMIT,
+  AGENT_TOKEN_STORAGE_KEY,
   termFor,
   type AgentTermMode,
 } from '../constants/agentTerms';
@@ -167,8 +168,14 @@ const MODE_TAB_ORDER: readonly AgentTermMode[] = ['human', 'tech'];
  * 功能搭上主功能，代价完全不对称。
  * ------------------------------------------------------------------------------------------ */
 
-/** token 存储键（单一出处） */
-export const AGENT_TOKEN_STORAGE_KEY = 'idplan.agentToken';
+/**
+ * token 存储键 —— **唯一出处已搬到宿主中立位置** `constants/agentTerms.ts`
+ * （v0.8.6 阶段 2 边界修复：宿主常驻 hook `useAgentLoopbackReceiver` 也要读它，
+ *  而它常驻在 `AppShell`，不能让宿主反向 import 插件页面模块）。
+ * 本页按既有消费点原样 re-export，调用方（含 `tests/v07-t03b-ingress-wired.spec.tsx`）
+ * 的 import 路径不变。NAS 地址键无宿主消费点，**有意留在本页**。
+ */
+export { AGENT_TOKEN_STORAGE_KEY };
 /** NAS 地址存储键（单一出处） */
 export const AGENT_BASE_URL_STORAGE_KEY = 'idplan.agentBaseUrl';
 
