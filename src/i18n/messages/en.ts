@@ -382,6 +382,12 @@ export const enMessages: Record<MessageKey, string> = {
     'The client itinerary lists transport, lodging, plans and costs day by day — send it to the client or print it directly.',
   'project.itineraryTitle': 'Open the client itinerary (new window, read-only export)',
   'project.itinerary': 'Client itinerary',
+
+  /* ───────────── Agent board · status note box (data-agent-stance) ───────────── */
+  'agent.stanceBefore': 'The Agent board currently',
+  'agent.stanceStrong': 'only carries schedules from external writers',
+  'agent.stanceNl':
+    '(local auto-import is available; NAS remote write is not enabled yet). This area is being redefined based on your feedback.',
   /* ───────────────────── Members section ───────────────────── */
   'common.save': 'Save',
   'common.cancel': 'Cancel',

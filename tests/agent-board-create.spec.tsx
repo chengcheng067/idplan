@@ -610,7 +610,12 @@ describe('§7.4 权限：建板路径上**没有**角色闸门', () => {
     expect(pageSrc).not.toContain('data-agent-create-open');
     // 换成一段把现状讲明白的说明（不能只是「删了按钮」了事）
     expect(pageSrc).toContain('data-agent-stance');
-    expect(pageSrc).toContain('本机自动导入');
+    /* ★ 2026-10-13 锁升级：这一条从「源码含中文」升级为 **DOM 形态**（取值再比串 + 容器内限定），
+     *   下一半（取值再比串 + 容器内限定）需要 AgentBoardPage 渲染夹具，夹具头已落在
+     *   tests/helpers/agent-board-page.render.tsx（本笔落盘），DOM 断言随后接上。
+     *   迁走理由：本 spec 的 43 例依赖**真实 repos**，若在此处加全局 `vi.mock(useRepos)` 会把它们一起改掉。
+     *   此处保留源码侧那一半：那句话必须**经 i18n 取词**（接线存在）。 */
+    expect(pageSrc).toContain("t('agent.stanceNl')");
     /*
      * 底层能力与对话框**没有被删**（收口的是入口，不是功能）。
      *

@@ -84,6 +84,7 @@ import {
  */
 import { useAgentProjects, visibleProjectsFor } from '../core/project/visibility';
 import { useRepos } from '../hooks/useRepos';
+import { useLang } from '../i18n';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { useAgentStore } from '../store/useAgentStore';
 import { useMembersStore } from '../store/useMembersStore';
@@ -311,6 +312,8 @@ function BoardModeTabs({
 }
 
 export function AgentBoardPage(): JSX.Element {
+  /** 取词 + 语言变化订阅点（stance 说明文案在渲染期取） */
+  const { t } = useLang();
   const repos = useRepos();
   /**
    * ★ 第 28 处漏斗旁路修复（设计 §7.5）—— 本页的 Agent 看板集合走**单一谓词出口**。
@@ -1018,8 +1021,9 @@ export function AgentBoardPage(): JSX.Element {
             >
               <Info size={12} className="shrink-0 text-pine" aria-hidden />
               <span>
-                Agent 看板目前<strong className="text-ink">只承接外部写入方的排期</strong>
-                （本机自动导入可用，NAS 远程写入尚未启用），这一块正按反馈重新定义。
+                {t('agent.stanceBefore')}
+                <strong className="text-ink">{t('agent.stanceStrong')}</strong>
+                {t('agent.stanceNl')}
               </span>
             </div>
             {/*

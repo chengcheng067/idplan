@@ -390,6 +390,11 @@ export const zhMessages = {
   'project.itineraryHint': '客户行程单按天列出交通、住宿、安排与费用，可直接发给客户或打印。',
   'project.itineraryTitle': '打开客户行程单（新窗口，只读导出）',
   'project.itinerary': '客户行程单',
+
+  /* ───────────── Agent 看板页 · 现状说明盒（data-agent-stance）───────────── */
+  'agent.stanceBefore': 'Agent 看板目前',
+  'agent.stanceStrong': '只承接外部写入方的排期',
+  'agent.stanceNl': '（本机自动导入可用，NAS 远程写入尚未启用），这一块正按反馈重新定义。',
   /* ───────────────────── 成员管理区（MembersPageSection）───────────────────── */
   'common.save': '保存',
   'common.cancel': '取消',
