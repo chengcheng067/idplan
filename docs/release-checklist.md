@@ -6,7 +6,7 @@
 - [ ] `npm run build` ✓（**先 build 再全量**——浏览器族依赖 `build-dist`，没构建整批 skip，skip ≠ 通过）
 - [ ] ✱ **全量跑批时全队冻结 `src` 编辑**；若做不到，**跑批前重跑一次 `npm run build`**。原因：`staleInputs()` 的过期判据是**全仓全局**的（任何 `src/**` 比 `build-dist/index.html` 新即触发），多写者并行时**别人的在飞编辑会静默跳过所有人的浏览器 spec**（实测：某人 build 完成 13 秒后另一条线改了 `SettingsDialog.tsx`，那轮 `i18n-browser.spec.ts` 整组 skip）。现已加过期告警（每次跑批打印一次「哪些 src 比产物新」），但**告警只让你看见，不会替你 build**。
 - [ ] `npx vitest run`：**0 failed 且 0 skipped**（1841 例基线）
-- [ ] `npm run typecheck:tests`：≤ 66（既有债基线；新增 spec 不许加债）
+- [ ] `node scripts/check-tests-typecheck-baseline.mjs`：必须 ✅（脚本自己打印「当前 N / 基线 96」，超过即非零退出）。✱ 既有债基线是 **96 条**（2026-10-14 实测；本条原先手写的 66 已过期 —— 手抄数字必漂，故改由脚本单一出处持有：**要改基线只改脚本里的 `BASELINE`，且只许往下调**）。脚本**不进** `npm test`（它自己跑一次 tsc 要 10–30 秒，属出包前检查，不是每次跑批的检查；理由写在脚本头注释里）。
 - [ ] `npx tsc --noEmit -p tsconfig.json` 与 `-p server/tsconfig.json` 双 0
 - [ ] ⚠️ **打印（纸面）批次开工前必读**：`// TODO(print-5blocks): 纸面批次开工时必须升级本 helper，否则退化为恒过假绿` —— 这条提醒同时写在 `tests/v07-dline-print-access.spec.tsx` 文件头。纸面文案一经搬进 i18n 消息表，`ungatedClientNameSpots()`（扫中文字面量 `委托方`）与它上面那条 `toContain('委托方')` 前提会**双双变成恒过**：前者找不到字面量返回 `[]`、后者若只改成「锁键名」就丢了「那句话必须渲染在受门控的位置」这层绑定。**两处必须同批升级为「取值再比串」（先断言 zh 值长度 > 2，再断言目标容器的 textContent 含该值）**，并把范围限定在目标容器内（不许放宽到整页匹配）。 **仅当本批涉及打印纸面时执行**（不涉及纸面的批次跳过本条）。
 
