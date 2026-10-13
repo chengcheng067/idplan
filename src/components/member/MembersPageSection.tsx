@@ -49,6 +49,22 @@ export function MembersPageSection(): JSX.Element | null {
     if (!name.trim()) return;
     await actions.create({
       name: name.trim(),
+      /*
+       * ⚠️ **这个 '协作' 有意不进 i18n**（2026-10-13 语言切换批次 ⑤a 核实后的结论）。
+       *
+       * 判据（team-lead 定）：**这个值会不会被写进库 / 备份 / 纸面？**
+       *   · 会 ⇒ 不翻（与「生成即固化的项目名不翻」同一条口径：落库的生成物不随语言变）；
+       *   · 不会、只是显示兜底 ⇒ 要翻。
+       *
+       * 核实结论：**会落库**，属前者 ⇒ 不翻。证据链：
+       *   ① 本行：它是 `actions.create({ … })` 实参对象里的 **role 字段值**（不是渲染文本）；
+       *   ② `src/store/useMembersStore.ts:48-50`：`create()` 把该 cmd 交给
+       *      `repos.members.insert(cmd)` ⇒ **写进仓库**；
+       *   ③ 成员行展示的 `m.role` 读的就是这个持久化值。
+       *
+       * 反证（若翻了会怎样）：英文用户不填角色建档 ⇒ 库里存进**英文默认值**，
+       * 它随后会被中文用户看到、进备份、上纸面 —— 那正是「数据随界面语言漂移」的坏味道。
+       */
       role: role.trim() || '协作',
       contact: contact.trim() || null,
       avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
