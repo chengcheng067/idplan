@@ -34,6 +34,7 @@ import { Bot, Plus } from 'lucide-react';
 
 import type { Project } from '../../core/types/entities';
 import { cn } from '../../lib/cn';
+import { useLang } from '../../i18n';
 
 export function AgentBoardList({
   boards,
@@ -49,17 +50,19 @@ export function AgentBoardList({
   /** 空态里的「新建 Agent 看板」入口。只读场景（如侧栏）不传 ⇒ 空态只有说明文字 */
   onCreate?(): void;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点（空态文案在渲染期取） */
+  const { t } = useLang();
   if (boards.length === 0) {
     return (
       <section
         data-agent-board-empty=""
-        aria-label="Agent 看板（暂无）"
+        aria-label={t('agentList.emptyAria')}
         className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-line bg-paper p-6"
       >
         <span className="flex h-10 w-10 items-center justify-center rounded-md bg-pine-soft text-pine">
           <Bot size={20} aria-hidden />
         </span>
-        <h2 className="text-base font-semibold text-ink">还没有 Agent 看板</h2>
+        <h2 className="text-base font-semibold text-ink">{t('agentList.emptyTitle')}</h2>
         {/*
           空态文案**只承诺界面上真有的事**：
             · 有 `onCreate` → 才说「可以自己新建一块看板」（按钮就在下面）；
@@ -68,13 +71,13 @@ export function AgentBoardList({
         */}
         {onCreate ? (
           <p className="max-w-[52ch] text-sm text-mist">
-            这里只放外部写入方（如 WorkBuddy）的排期看板，与「我的项目」互不混料。
-            可以自己新建一块看板，也可以把外部写入方接上后由它直接建板。
+            {t('agentList.scopeLine')}
+            {t('agentList.canCreate')}
           </p>
         ) : (
           <p className="max-w-[52ch] text-sm text-mist">
-            这里只放外部写入方（如 WorkBuddy）的排期看板，与「我的项目」互不混料。
-            把外部写入方接上后，它会直接在这里建板并写入任务。
+            {t('agentList.scopeLine')}
+            {t('agentList.writerOnly')}
           </p>
         )}
 
@@ -88,8 +91,8 @@ export function AgentBoardList({
           data-agent-board-stance=""
           className="max-w-[52ch] text-xs leading-relaxed text-mist"
         >
-          现状：本机自动导入（Windows 桌面版）可用，NAS 远程写入尚未启用。
-          这一块的定位正在按你的反馈重新讨论，可能还会有较大调整。
+          {t('agentList.statusLine')}
+          {t('agentList.redefineLine')}
         </p>
         {onCreate && (
           <button
@@ -98,7 +101,7 @@ export function AgentBoardList({
             className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl bg-pine px-4 text-sm font-medium text-white transition-colors hover:bg-pine-deep"
           >
             <Plus size={14} aria-hidden />
-            新建 Agent 看板
+            {t('agentList.createButton')}
           </button>
         )}
       </section>
@@ -106,7 +109,7 @@ export function AgentBoardList({
   }
 
   return (
-    <ul data-agent-board-list="" aria-label="Agent 看板列表" className="flex flex-col gap-2">
+    <ul data-agent-board-list="" aria-label={t('agentList.listAria')} className="flex flex-col gap-2">
       {boards.map((b) => {
         const active = b.id === currentId;
         return (

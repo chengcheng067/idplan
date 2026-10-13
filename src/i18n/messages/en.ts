@@ -400,6 +400,22 @@ export const enMessages: Record<MessageKey, string> = {
   'calendar.empty.period': '· Period',
   'calendar.empty.noRelated': "None of this project's stages concern you",
   'calendar.empty.noRelatedBody': 'You can view the project overview, or contact the project owner',
+
+  /* ───────────────────── Agent board list empty state ───────────────────── */
+  'agentList.emptyAria': 'Agent boards (none)',
+  'agentList.emptyTitle': 'No Agent boards yet',
+  'agentList.scopeLine':
+    'Only schedules from external writers (such as WorkBuddy) live here — never mixed with “My Projects”.',
+  'agentList.canCreate':
+    'You can create a board yourself, or connect an external writer and let it create one for you.',
+  'agentList.writerOnly':
+    'Once an external writer is connected, it creates boards and writes tasks here directly.',
+  'agentList.statusLine':
+    'Status: local auto-import (Windows desktop) works; NAS remote write is not enabled yet.',
+  'agentList.redefineLine':
+    'This area is being redefined based on your feedback and may change substantially.',
+  'agentList.createButton': 'New Agent board',
+  'agentList.listAria': 'Agent board list',
   /* ───────────────────── Backup / restore toasts (useBackupIo) ───────────────────── */
   'backup.toast.saved': 'Backup package saved',
   'backup.toast.exportFailed': 'Backup export failed.',

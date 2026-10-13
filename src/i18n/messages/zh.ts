@@ -407,6 +407,17 @@ export const zhMessages = {
   'calendar.empty.period': '· 周期',
   'calendar.empty.noRelated': '该项目的阶段与你无关',
   'calendar.empty.noRelatedBody': '你可以查看项目概况，或联系项目负责人',
+
+  /* ───────────────────── Agent 看板列表空态（AgentBoardList）───────────────────── */
+  'agentList.emptyAria': 'Agent 看板（暂无）',
+  'agentList.emptyTitle': '还没有 Agent 看板',
+  'agentList.scopeLine': '这里只放外部写入方（如 WorkBuddy）的排期看板，与「我的项目」互不混料。',
+  'agentList.canCreate': '可以自己新建一块看板，也可以把外部写入方接上后由它直接建板。',
+  'agentList.writerOnly': '把外部写入方接上后，它会直接在这里建板并写入任务。',
+  'agentList.statusLine': '现状：本机自动导入（Windows 桌面版）可用，NAS 远程写入尚未启用。',
+  'agentList.redefineLine': '这一块的定位正在按你的反馈重新讨论，可能还会有较大调整。',
+  'agentList.createButton': '新建 Agent 看板',
+  'agentList.listAria': 'Agent 看板列表',
   /* ───────────────────── 备份 / 恢复的 toast（useBackupIo）───────────────────── */
   'backup.toast.saved': '备份包已保存',
   'backup.toast.exportFailed': '备份导出失败。',
