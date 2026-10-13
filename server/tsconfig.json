@@ -70,6 +70,12 @@
     "../src/core/agent/**/*.ts",
     "../src/core/types/**/*.ts",
     "../src/core/lib/task-no.ts",
+    // 备份恢复保留本机插件启用态：`plugin.enabled.<id>` 键前缀的单一出处
+    // （`meta.routes.ts` 的 `PLUGIN_ENABLED_PREFIX` 由它求值，不手打第二份字面量）。
+    // 只列 `types.ts` 单文件、**不列** `../src/core/plugin/**`：目录里的
+    // `PluginRegistryProvider.tsx` 与 `builtin/**` 经 import 图带上 JSX 组件，
+    // 纳入会让本配置（无 `jsx` 选项）报错。`types.ts` 只 `import type`，零运行期 IO。
+    "../src/core/plugin/types.ts",
     "../src/core/repositories/interfaces.ts",
     "../src/core/services/task.service.ts",
     "../src/constants/agentTerms.ts",
