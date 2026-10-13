@@ -202,8 +202,8 @@ function makeTask(id: string, title: string, over: Partial<Task> = {}): Task {
   return {
     id,
     taskNo: null,
-    projectId: 'proj_pcy',
-    stageId: 'stg_pcy',
+    projectId: 'proj_m2',
+    stageId: 'stg_m2',
     title,
     done: status === TaskStatus.Done,
     assigneeId: null,
@@ -235,42 +235,42 @@ function buildFixtures(): { members: Member[]; projects: Project[]; stages: Stag
     makeMember(OFF_ID, '已停用', { active: false }),
   ];
   const projects: Project[] = [
-    makeProject('proj_pcy', '山茶小院'),
+    makeProject('proj_m2', '山茶小院'),
     makeProject('proj_xu', '海边民宿'),
     makeProject('proj_agent', 'Agent 演示板', { kind: 'agent' }),
   ];
   const stages: Stage[] = [
-    makeStage('stg_pcy', 'proj_pcy', 1, { ownerId: MEMBER_B_ID }),
+    makeStage('stg_m2', 'proj_m2', 1, { ownerId: MEMBER_B_ID }),
     makeStage('stg_xu', 'proj_xu', 1, { ownerId: MEMBER_C_ID }),
     makeStage('stg_agent', 'proj_agent', 1, { ownerId: MEMBER_B_ID }),
   ];
   const tasks: Task[] = [
     makeTask('tsk_overdue', T_OVERDUE, {
-      projectId: 'proj_pcy',
-      stageId: 'stg_pcy',
+      projectId: 'proj_m2',
+      stageId: 'stg_m2',
       assigneeId: MEMBER_B_ID,
       assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(-3),
     }),
     makeTask('tsk_ongoing', T_ONGOING, {
-      projectId: 'proj_pcy',
-      stageId: 'stg_pcy',
+      projectId: 'proj_m2',
+      stageId: 'stg_m2',
       assigneeId: MEMBER_B_ID,
       assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(5),
       status: TaskStatus.InProgress,
     }),
     makeTask('tsk_done_recent', T_DONE_RECENT, {
-      projectId: 'proj_pcy',
-      stageId: 'stg_pcy',
+      projectId: 'proj_m2',
+      stageId: 'stg_m2',
       assigneeId: MEMBER_B_ID,
       assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(-2),
       status: TaskStatus.Done,
     }),
     makeTask('tsk_done_old', T_DONE_OLD, {
-      projectId: 'proj_pcy',
-      stageId: 'stg_pcy',
+      projectId: 'proj_m2',
+      stageId: 'stg_m2',
       assigneeId: MEMBER_B_ID,
       assigneeIds: [MEMBER_B_ID],
       dueDate: isoDaysFromToday(-90),
