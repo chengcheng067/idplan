@@ -28,6 +28,7 @@ import { parseMarkdownTasks } from '../../core/agent/markdown-ingest';
 import { termFor } from '../../constants/agentTerms';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { cn } from '../../lib/cn';
+import { useLang } from '../../i18n';
 
 type PanelState =
   | { phase: 'input' }
@@ -112,6 +113,8 @@ export function ApplyPayloadPanel({
   /** 写入成功回调（关闭面板 + 刷新看板由父级负责） */
   onCommitted(result: ApplyResult): void;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点（面板文案在渲染期取） */
+  const { t } = useLang();
   const repos = useRepos();
   const previewPayload = useAgentStore((s) => s.previewPayload);
   const commitPayload = useAgentStore((s) => s.commitPayload);
@@ -222,7 +225,7 @@ export function ApplyPayloadPanel({
         <button
           type="button"
           onClick={onClose}
-          aria-label="关闭"
+          aria-label={t('common.close')}
           className="rounded-md p-1 text-mist hover:bg-sand"
         >
           <X size={16} />
