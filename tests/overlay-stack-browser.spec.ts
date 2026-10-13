@@ -31,6 +31,7 @@ import { createServer } from 'node:http';
 import { join, extname, resolve } from 'node:path';
 
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 const ROOT = resolve(__dirname, '..');
 const DIST_INDEX = join(ROOT, 'build-dist', 'index.html');
@@ -73,38 +74,14 @@ function resolveChromium(): string | null {
 const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
-const BUILD_INPUT_DIRS = ['src', 'electron'];
-const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
-
-function collectFiles(dir: string): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { join: jn } = require('node:path') as typeof import('node:path');
-  if (!fs.existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = jn(dir, e.name);
-    if (e.isDirectory()) out.push(...collectFiles(full));
-    else if (e.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/** 产物过期守卫：src / 构建配置比 build-dist 新 ⇒ 整组 skip（拿旧界面下结论 = 假绿） */
-function staleInputs(): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { resolve: res } = require('node:path') as typeof import('node:path');
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
-  const candidates = [
-    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(res(ROOT, d))),
-    ...BUILD_INPUT_FILES.map((f) => res(ROOT, f)).filter((f) => existsSync(f)),
-  ];
-  return candidates
-    .filter((f) => fs.statSync(f).mtimeMs > distMs)
-    .map((f) => f.replace(ROOT + '\\', '').replace(ROOT + '/', ''))
-    .slice(0, 3);
-}
-
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （它内部带 `warnStaleOnce`）。
+ *
+ * ⚠️ 本文件原先内联了一份语义相同、**但没有告警**的复制体 ⇒ 产物过期时它**静默 skip**。
+ *    2026-10-13 那次「让跳过出声」只覆盖了 import 共享助手的文件；内联复制的那批漏了。
+ *    ⇒ 改为 import。判据本身没变（候选集与 mtime 比法逐字核对过）。
+ */
 const STALE = CAN_RUN ? staleInputs() : [];
 const CAN_RUN_FRESH = CAN_RUN && STALE.length === 0;
 

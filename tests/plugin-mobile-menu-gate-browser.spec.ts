@@ -3,6 +3,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 /**
  * 手机档（<768）的 ⋮ 菜单里，**Agent 项真的受插件开关管吗** —— 真 Chromium + 真断点。
@@ -70,38 +71,14 @@ function resolveChromium(): string | null {
 const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
-const BUILD_INPUT_DIRS = ['src', 'electron'];
-const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
-
-function collectFiles(dir: string): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { join } = require('node:path') as typeof import('node:path');
-  if (!fs.existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, e.name);
-    if (e.isDirectory()) out.push(...collectFiles(full));
-    else if (e.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/** 产物过期守卫（与 settings-zones / qa-batch-a 同口径：过期就 skip，不拿旧界面报绿） */
-function staleInputs(): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { resolve: res } = require('node:path') as typeof import('node:path');
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
-  const candidates = [
-    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(res(__dirname, '..', d))),
-    ...BUILD_INPUT_FILES.map((f) => res(__dirname, '..', f)).filter((f) => existsSync(f)),
-  ];
-  return candidates
-    .filter((f) => fs.statSync(f).mtimeMs > distMs)
-    .map((f) => f.replace(res(__dirname, '..') + '\\', '').replace(res(__dirname, '..') + '/', ''))
-    .slice(0, 3);
-}
-
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （它内部带 `warnStaleOnce`）。
+ *
+ * ⚠️ 本文件原先内联了一份语义相同、**但没有告警**的复制体 ⇒ 产物过期时它**静默 skip**。
+ *    2026-10-13 那次「让跳过出声」只覆盖了 import 共享助手的文件；内联复制的那批漏了。
+ *    ⇒ 改为 import。判据本身没变（候选集与 mtime 比法逐字核对过）。
+ */
 const STALE = CAN_RUN ? staleInputs() : [];
 const CAN_RUN_FRESH = CAN_RUN && STALE.length === 0;
 

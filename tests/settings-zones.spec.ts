@@ -3,6 +3,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 /**
  * 设置抽屉 · 六区分区（v0.8.6 · 反馈 #7 → v0.8.6.0002 反馈 #2 七区 → 图 5
@@ -89,38 +90,20 @@ function resolveChromium(): string | null {
 const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
-const BUILD_INPUT_DIRS = ['src', 'electron'];
-const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
-
-function collectFiles(dir: string): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { join } = require('node:path') as typeof import('node:path');
-  if (!fs.existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, e.name);
-    if (e.isDirectory()) out.push(...collectFiles(full));
-    else if (e.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/** 产物是否早于任一构建输入 → 过期守卫（过期时 skip，避免拿上一版界面误报绿） */
-function staleInputs(): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { resolve: res } = require('node:path') as typeof import('node:path');
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
-  const candidates = [
-    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(res(__dirname, '..', d))),
-    ...BUILD_INPUT_FILES.map((f) => res(__dirname, '..', f)).filter((f) => existsSync(f)),
-  ];
-  return candidates
-    .filter((f) => fs.statSync(f).mtimeMs > distMs)
-    .map((f) => f.replace(res(__dirname, '..') + '\\', '').replace(res(__dirname, '..') + '/', ''))
-    .slice(0, 3);
-}
-
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （它内部还带 `warnStaleOnce`）。
+ *
+ * ⚠️ 本文件原先内联了一份 `staleInputs` 复制体。它与共享版**语义相同、但少了一件事**：
+ *    共享版在发现过期时会打印「哪些构建输入比产物新 + 先 npm run build」的告警，
+ *    而复制体没有 ⇒ **这一份过期时是静默 skip**（skip ≠ 通过）。
+ *    2026-10-13 那次「让跳过出声」只覆盖了 import 共享助手的文件，内联复制的那批漏了。
+ *    ⇒ 现在改为 import。
+ *
+ * 判据本身**没有变**（两份口径已逐字核对）：候选集 = `BUILD_INPUT_DIRS`（src/electron）
+ * + `BUILD_INPUT_FILES`（index.html / vite.config.ts / tailwind.config.ts / postcss.config.js），
+ * 逐条比 mtime，任一比 `build-dist/index.html` 新即视为过期。
+ */
 const STALE = CAN_RUN ? staleInputs() : [];
 const CAN_RUN_FRESH = CAN_RUN && STALE.length === 0;
 
