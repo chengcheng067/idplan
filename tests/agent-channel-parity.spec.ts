@@ -160,10 +160,21 @@ beforeAll(async () => {
   }
   db.prepare("UPDATE projects SET kind = 'agent' WHERE id = ?").run(AGENT_ID);
   // 渲染侧给 Agent 板一个可见批次（与 0009 实机建板后的常态一致）
+  /*
+   * ⚠️ 2026-08-27 修一个**假红**（不是本笔功能的问题，是本夹具的字段名写错了）：
+   *   原写法给的是 `plannedStartAt` / `plannedEndAt`，而 `Stage`（entities.ts:370-371）
+   *   要的是 `startAt` / `endAt` —— `as never` 把类型检查静默掉了。
+   *   于是 `bulkInsert`（local.stages.repo.ts:37）拿到的是两个 `undefined`：
+   *       `dayjs(undefined).isBefore(dayjs(undefined))`
+   *   两侧都是「此刻」，**只要两次 `Date.now()` 跨过一个毫秒边界就为真** ⇒ 抛
+   *   `「提案」起止日期倒置。`。实测复刻同一表达式：**500 次里命中 1 次（≈0.2%）**
+   *   —— 于是这个 spec 会**偶发**在整批全量里变红，而它跟被测功能毫无关系。
+   *   字段名写对后该判据恒为假（同一次实测：500 次 0 命中），校验也才有意义。
+   */
   await bundle.stages.bulkInsert([
     {
       id: 'stg_parity_1', projectId: AGENT_ID, name: '提案', orderIndex: 1,
-      plannedStartAt: '2026-10-01', plannedEndAt: '2026-10-05', status: 'not_started',
+      startAt: '2026-10-01', endAt: '2026-10-05', status: 'not_started',
       ownerId: null, visible: true, resourcePath: null, revision: 1,
       updatedAt: '2026-10-01T00:00:00.000Z',
     } as never,
