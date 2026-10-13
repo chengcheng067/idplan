@@ -1,6 +1,7 @@
 # 冻结的门内清单（过期态**应当**被跳过的文件与条数）
 # 事故后重建；门内 = 用例数 − 门外（门外由源码块跟踪现场算出，可复算）
 # 只列新鲜度门：CAN_RUN_FRESH，或把 STALE 并进 CAN_RUN 的写法（isolation-browser / stage-color-wiring）
+# ★ provenance: 事故前留档（待 r1 复核）—— 同基线的说明；退路：本清单是**期望不是判据**（见 skip-diff.mjs 判据①②）
 # 期望合计 = 29 文件 / 148 条
 calendar-anchor.spec.ts 1
 calendar-popover-geometry.spec.ts 8

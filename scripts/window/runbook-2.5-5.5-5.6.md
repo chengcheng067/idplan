@@ -44,7 +44,7 @@ bash scripts/window/step-precheck.sh 2.5     # 或 5 / 5.5 / 5.6
 ```bash
 R="<仓外读数目录>"
 npx vitest run --reporter=default --reporter=json \
-  --outputFile.json="$R/_skip-stale-step2.5.json" 2>&1 | tee "$R/_skip-stale-step2.5.txt"
+  --outputFile.json="$R/2.5-stale-<label>.json" 2>&1 | tee "$R/2.5-stale-<label>.stdout.txt"
 ```
 
 - 期望：`20 skipped` 文件 · `148 skipped` 用例（**期望，不是判据**）。
@@ -79,7 +79,7 @@ node scripts/window/frozen-run.mjs --label=r2 --baseline-wall=568 --baseline-sco
 ```bash
 R="<仓外读数目录>"
 npx vitest run --reporter=default --reporter=json \
-  --outputFile.json="$R/_skip-fresh-step5.5.json" 2>&1 | tee "$R/_skip-fresh-step5.5.txt"
+  --outputFile.json="$R/5.5-fresh-full.json" 2>&1 | tee "$R/5.5-fresh-full.stdout.txt"
 ```
 
 - **硬判据（唯一）＝ `skipped = 0`**。
@@ -92,8 +92,10 @@ npx vitest run --reporter=default --reporter=json \
 ```bash
 R="<仓外读数目录>"
 node scripts/window/skip-diff.mjs \
-  --stale="$R/_skip-stale-step2.5.json" --stale-stdout="$R/_skip-stale-step2.5.txt" \
-  --fresh="$R/_skip-fresh-step5.5.json" --fresh-stdout="$R/_skip-fresh-step5.5.txt"
+  --stale="$R/2.5-stale-<label>.json" --stale-stdout="$R/2.5-stale-<label>.stdout.txt" \
+  --fresh="$R/5.5-fresh-full.json" --fresh-stdout="$R/5.5-fresh-full.stdout.txt" \
+  | tee "$R/5.6-diff.txt"
+# ⚠️ 退出码要单独取：`out=$(node …); rc=$?` —— 接在 `| tee` 后面时 `$?` 是 **tee 的**（本族第 3 个出口）
 ```
 
 - **判据①**：`skipped(过期态) ⊆ passed(新鲜态)` —— 过期态跳过的每一条，新鲜态都真的跑了且通过。

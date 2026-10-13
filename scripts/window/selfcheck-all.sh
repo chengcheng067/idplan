@@ -10,7 +10,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)          # scripts/window
 REPO=$(cd "$HERE/../.." && pwd)              # 仓库根
 READINGS="$REPO/../deliverables/release-1.0.0.0009-窗口证据"
 cd "$REPO" || exit 1
-OUT="${1:-$READINGS/_selfcheck-$(date +%Y%m%d-%H%M).txt}"
+OUT="${1:-$READINGS/selfcheck-$(date +%Y%m%d-%H%M).txt}"
 D=$(mktemp -d)
 FAIL=0
 chk() { # chk <期望退出码> <实际退出码> <名称>

@@ -74,7 +74,16 @@ const RAW_FIXTURE = val('raw-fixture', '');
 const given = args.filter((a) => !a.startsWith('--'));
 
 const OUT_DIR = val('out-dir', resolve(ROOT, '..', 'deliverables', 'release-1.0.0.0009-窗口证据'));
-const OUT = join(OUT_DIR, `_frozen-run-${LABEL || 'nolabel'}.txt`);
+/** 读数命名走 team-lead 定的轮次规则：第 5 步 ⇒ `5-<label>.stdout.txt`（不许固定名）。 */
+const OUT = join(OUT_DIR, LABEL ? `5-${LABEL}.stdout.txt` : '5-nolabel.stdout.txt');
+/** 冻结件自带的 provenance 标签（存疑的东西要自带标签，不能靠读的人记得） */
+function baselineProvenance() {
+  if (!FAMILY_BASELINE) return null;
+  const line = readFileSync(FAMILY_BASELINE, 'utf8')
+    .split(/\r?\n/)
+    .find((l) => l.includes('provenance:'));
+  return line ? line.replace(/^#\s*/, '').trim() : null;
+}
 const FAMILY_BASELINE = findFrozen('browser-family-baseline-93dc987.txt');
 
 /* ── 集合：冻结 or 自动发现 ───────────────────────────────────────────── */
@@ -299,6 +308,14 @@ console.log('族规模 =', specs.length, '个文件', pinned && !given.length ? 
 if (pinned) {
   const rel = FAMILY_BASELINE.slice(ROOT.length + 1).split('\\').join('/');
   console.log('集合出处 =', rel, '｜基线期望 =', pinned.tests, '条用例');
+  // ★ 存疑的东西要**自带标签**，不能靠读的人记得（team-lead 2026-10-14 加）
+  const prov = baselineProvenance();
+  if (prov) {
+    console.log('基线 provenance =', prov);
+    if (prov.includes('待 r1 复核')) {
+      console.log('★ 本基线的用例数**尚未现场复核**（事故前留档）⇒ 下面会用本轮读数复核；r1 跑完请把标签改掉。');
+    }
+  }
   const disk = browserFamily();
   const pinSet = new Set(pinned.files);
   const added = disk.filter((f) => !pinSet.has(f));
@@ -404,6 +421,7 @@ if (pinned && p.perFile.length > 0) {
     for (const m of mism) console.log(`   - ${m.file}: 基线 ${pinned.counts.get(m.file)} 实得 ${m.tests}`);
   } else if (absent.length === 0 && missing.length === 0) {
     console.log('\n✔ 冻结基线 44 个文件全部出现在本轮结果里、且逐文件用例数相符 ⇒ 事故后重建的数字**已现场复核通过**。');
+    console.log('  ★ **基线账已结清**：请把冻结件里的 provenance 行改成「r1 已现场复核（<时刻/HEAD>）」，并在本轮读数里写一行「基线账已结清」。');
   } else {
     console.log(`\n★ 本轮结果不足以复核整份基线：缺 ${absent.length} 个基线文件、${missing.length} 个基线外文件。`);
     if (absent.length) console.log('   未出现的基线文件：', absent.slice(0, 8).join(', '), absent.length > 8 ? '…' : '');

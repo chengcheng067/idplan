@@ -6,10 +6,15 @@
 # 【期望计数】44 个文件 / 329 条用例
 # 【选择规则】被选中的 spec 文件内出现 playwright-core（= 真机族）
 #
+# ★ provenance: 事故前留档（待 r1 复核）
+#   那 44 个用例数只活在事故前同一会话的实测留档里（原 r2 原始读数已永久丢失 ⇒ 无法当场复算）。
+#   r1 跑完、读数器确认「44 个文件全部出现且逐个相符」后，把本行改成：
+#   ★ provenance: r1 已现场复核（<r1 的时刻/HEAD>）
+#
 # 生成：bash scripts/window/rebuild-frozen-baselines.sh（脚本内含①b 步：复导集合与磁盘发现必须一致，否则拒绝生成）
 # 事故说明：原基线随 2026-10-14 那次 qa-scratch 清空永久丢失；本份为重建版。
 # 用例数来源 = 事故前**同一会话内实测**（原 r2 原始读数已永久丢失，无法当场复算）
-#   ⇒ Step 5 的 r1 跑完后， 会拿它的逐文件读数复核下面 44 个数字；
+#   ⇒ Step 5 的 r1 跑完后，scripts/window/frozen-run.mjs 会拿它的逐文件读数复核下面 44 个数字；
 #     只有 44 个文件**全部出现且逐个相符**才会打印「已现场复核通过」。
 tests/calendar-anchor.spec.ts (1 tests)
 tests/calendar-popover-geometry.spec.ts (8 tests)
