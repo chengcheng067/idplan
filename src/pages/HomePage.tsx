@@ -29,7 +29,7 @@ import {
 } from '../core/template/stage-library';
 import type { Member, Project, Stage, Task } from '../core/types/entities';
 import { cn } from '../lib/cn';
-import { useLang } from '../i18n';
+import { t, useLang } from '../i18n';
 
 /**
  * 首页（严格对齐规格 §2.5 首页各块 + 画板 02「亮色首页」/ 画板 12「暗色首页」）：
@@ -496,6 +496,28 @@ function toneOf(tone: string): { dot: string; chip: string } {
  *    反过来的话，`custom` 项目的"落错列"会被提示条**掩盖**成"正在待确认"，
  *    其中一部分项目永远不会被修正。本文件的两次改动按此顺序落盘。
  */
+/**
+ * 看板列集合（首页 + 成员看板共用；`groupByColumn` 内部也调它）。
+ *
+ * ══════════════════ ★ 列名的**来源归属**（2026-10-13 语言切换批 2a 查明）══════════════════
+ * 本函数产出的列名有**两个来源**，归属不同、处理也不同，别再混着看：
+ *
+ *   ① `{ key: TODO_COLUMN, label: '待启动' }` —— **代码写死的状态派生词**，
+ *      属**文案层**。证据：它是本函数里**唯一**的字面量列名；key 由
+ *      `TODO_COLUMN = 'todo'`（第 431 行）给出，只有 `columnOf()` 里
+ *      `status === 'not_started'` 一条路径（见文件下方 `columnOf`）能命中它。
+ *      ⇒ 因此它走 i18n：`t('home.column.todo')`（英文 Not started）。
+ *
+ *   ② `for (const [domainKey] of getDomains()) { … columns.push({ key: c.key, label: c.label }) }`
+ *      —— 这些 label 来自**行业库内容层**（`templates/stage-library.json` 的
+ *      `domains[].columns[]`，经 `getDomainColumns()` 读出），说的是「这个行业的
+ *      看板怎么分列」（设计中 / 深化中 / 施工中…）。
+ *      ⇒ **属内容层，不翻**。理由与 `industry-neutral-copy.spec.ts` 文件头
+ *        登记的那条边界同源：行业库就该说行业的话，翻它等于把行业掏空；
+ *        而且它与「新建项目时选的行业」绑定，属于**数据**而不是界面文案。
+ *        ⚠️ 后果要说清：英文界面下这些**行业列名仍是中文**（与阶段名、套餐名同样
+ *        属内容层，等产品拍板「新建项目阶段名用哪国语言」那件事一起定）。
+ */
 export function deriveColumns(projects: Project[]): KanbanColumn[] {
   const used = new Set<string>();
   for (const p of projects) {
@@ -503,7 +525,8 @@ export function deriveColumns(projects: Project[]): KanbanColumn[] {
   }
   if (used.size === 0) used.add('indoor');
 
-  const columns: KanbanColumn[] = [{ key: TODO_COLUMN, label: '待启动', ...toneOf('mist') }];
+  // ① 文案层（唯一字面量列名）：走 i18n；② 行业库列名见下方 push（内容层，本批不动）
+  const columns: KanbanColumn[] = [{ key: TODO_COLUMN, label: t('home.column.todo'), ...toneOf('mist') }];
   const seen = new Set<string>([TODO_COLUMN]);
   for (const [domainKey] of getDomains()) {
     if (!used.has(domainKey)) continue;
@@ -570,6 +593,14 @@ function columnOf(
  *
  * @param projects     分桶用（可已被过滤：成员的「相关项目」、搜索命中等）
  * @param columnSource 列集合用（板级、**未过滤**的项目宇宙；须与 `projects` 同一板块口径）
+ *
+ * ⚠️ **语言依赖（2026-10-13 语言切换批 2a 新增，调用方必须遵守）**：
+ *   `deriveColumns` 里那个 `todo` 列名走的是 `t('home.column.todo')` ⇒ **本函数读语言**。
+ *   因此调用方组件**必须**订阅语言变化（`useLang()`），否则切语言后列名不跟着变——
+ *   而"列名变了但列集合没重算"这种半更新比"整块不动"更难查。当前调用方：
+ *   `HomePage`（已订阅）、`MemberBoardPage`（已订阅）。
+ *   注：这一条只约束 `todo` 这个**文案层**列名；行业库列名（`c.label`）来自内容层，
+ *   与语言无关，见 `deriveColumns` 上方「列名的来源归属」。
  */
 export function groupByColumn(
   projects: Project[],
