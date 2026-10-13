@@ -32,6 +32,11 @@ export type AgentTermMode = 'human' | 'tech';
 /** 模式默认值（唯一出处）：首次进入与人读优先，故 human */
 export const DEFAULT_AGENT_TERM_MODE: AgentTermMode = 'human';
 
+/*
+ * 下方注释里的取值是这套术语的实际**措辞**（中文侧示例）。⚠️ 取值**不在本文件**：
+ * 唯一出处是 `src/i18n/messages/{zh,en}.ts` 的 `agentTerm.<key>.<mode>` 26 键，
+ * 经 `src/i18n/labels.ts` 的 `AGENT_TERM_KEYS` 取词（理由见下方区块）。
+ */
 export type AgentTermKey =
   | 'stage' // human: 阶段        / tech: 批次（Batch）
   | 'stageShort' // human: 阶段        / tech: 批次（窄位省「（Batch）」）
@@ -48,51 +53,28 @@ export type AgentTermKey =
   | 'blockedBy'; // human: 被…阻塞    / tech: blocked by
 
 /**
- * 术语表：key → mode → 文案。新增词必须**两种 mode 同时给**
- * （类型 `Record<AgentTermMode, string>` 强制，缺一列编译失败——
- * 「缺词回落」不作为偷懒借口，回落仅用于未知 key 的开发期兜底）。
- */
-export const AGENT_TERMS: Readonly<Record<AgentTermKey, Record<AgentTermMode, string>>> = {
-  stage: { human: '阶段', tech: '批次（Batch）' },
-  stageShort: { human: '阶段', tech: '批次' },
-  applyPayload: { human: '导入任务', tech: 'Apply payload' },
-  ready: { human: '待办', tech: 'Ready' },
-  handoff: { human: '交接包', tech: 'handoff bundle' },
-  artifacts: { human: '产出物', tech: 'artifacts（产出物）' },
-  deps: { human: '依赖', tech: 'deps（依赖）' },
-  timeline: { human: '时间轴', tech: 'Timeline' },
-  client: { human: '委托方', tech: '客户 / 委托方' },
-  onsite: { human: '现场', tech: '现场' },
-  /*
-   * ★ v0.8 · TBD-7：`board.human` 由「项目看板」改为「Agent 看板」。
-   *
-   * 为什么改的是**这里**而不是在 `AgentBoardPage` 里硬编码标题：本表是文案的**唯一出处**
-   * （文件头第 5 行「文案唯一出处，组件不得自己硬编码」）。若把标题写死在页面里，
-   * 本词条就退化成「零组件消费」的孤儿——正是本项目连续在防的那类「两份真相 / 死词条」
-   * （参见下方 `READY_NOW_LABEL` 的删除说明）。
-   *
-   * 为什么 human 列也可以出现「Agent」字样：TBD-7 明确定「页面标题 ＝「Agent 看板」」，
-   * 与 V1-9（人话模式不显示**来源标签**）不冲突 —— V1-9 管的是任务卡上的来源角标，
-   * 而这里是**整个工作区的名字**。侧栏一级项也同步收口为「工作区」（`SidebarNav.tsx`），
-   * 于是「工作区（侧栏）→ 里面的 Agent 看板（页面标题）」成为两级语义。
-   * 两列取值仍然不同（`Agent 看板` vs `Agent Board`），`agent-ui-terms.spec.ts` 的
-   * 「双模式取值必须不同」断言依旧成立。
-   */
-  board: { human: 'Agent 看板', tech: 'Agent Board' },
-  claimedBy: { human: '负责人', tech: 'claimed by' },
-  blockedBy: { human: '被…阻塞', tech: 'blocked by' },
-};
-
-/**
- * 取词唯一入口：`termFor('stage', 'tech')` → 「批次（Batch）」。
+ * 术语表：**2026-08-27（#354）已搬出本文件**。
  *
- * `mode` **必填**（T04 根因修复核心）：无缺省值，漏传即编译失败。
- * 未知 key 回落 key 本身（开发期兜底：新术语未登记时不至于白屏，
- * 且渲染出的 key 名在界面上一眼可辨，便于发现遗漏）。
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么表不在 `constants/` 了（实测约束，不是整理癖）
+ * ══════════════════════════════════════════════════════════════════════
+ * 本文件在 `server/tsconfig.json` 的 include 白名单里（`:75`，共享内核），而服务端
+ * `routes/agent.routes.ts:54` 真的 import 它的 `AGENT_SEAT_LIMIT`；那份配置
+ * `lib: ["ES2020"]`（**无 DOM**）。⇒ 本文件只要出现一句 `import … from '../i18n'`，
+ * 就会把引用 `document.documentElement` 的 `src/i18n/lang.ts` 拖进服务端 program，
+ * `npm run typecheck:server` 当场 **2 条 TS2584**（2026-08-27 实测；同款缺陷在
+ * `src/lib/date.ts` 上真的发生过一次，见该文件「月刻度生成」区块的原文读数）。
+ * ⚠️ **重导出也不行**：`export { termFor } from '../i18n'` 同样是 import，后果一模一样。
+ *
+ * ⇒ 现状（27 → 19 处活代码调用点**一字未改**，只是 import 行换了出处）：
+ *   · 键表 `AGENT_TERM_KEYS` / 取词 `termFor(key, mode)` / 不变量登记表
+ *     `MODE_COLLAPSED_KEYS` ⇒ `src/i18n/labels.ts`（经单一出口 `src/i18n` 消费）；
+ *   · 取值 ⇒ `src/i18n/messages/{zh,en}.ts`（`en` 缺键 = **编译错**）；
+ *   · 本文件保留：类型（`AgentTermKey` / `AgentTermMode`）、默认模式常量、
+ *     以及席位/令牌/agentKind 建议值这些**与语言无关**的东西。
+ * 取词纪律也一并搬了：「它不是 hook、不订阅语言变化，渲染期用它的组件必须同时调
+ * `useLang()`」—— 守卫在 `tests/i18n-agent-terms.spec.tsx`。
  */
-export function termFor(key: AgentTermKey, mode: AgentTermMode): string {
-  return AGENT_TERMS[key]?.[mode] ?? key;
-}
 
 /*
  * ★ 已删除 `READY_NOW_LABEL = '可开工'`（v0.7 收口，team-lead 裁决）。

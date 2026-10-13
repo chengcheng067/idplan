@@ -42,12 +42,21 @@ export { useLang, type UseLangResult } from './useLang';
 
 export type { MessageKey } from './messages/zh';
 
+/*
+ * ★ #354：Agent 术语表（原 `constants/agentTerms.ts` 的 `AGENT_TERMS` / `termFor`）落在本层。
+ * 为什么不能留在 `constants/` —— 那份文件在 `server/tsconfig.json` 的 include 白名单里
+ * （`lib: ["ES2020"]`，无 DOM），一 import i18n 就把 `lang.ts`（引用 `document`）拖进服务端
+ * program，`typecheck:server` 连红两条 TS2584（实测）；**重导出同样不行**（重导出 = import）。
+ * 键表与取词函数的形状、以及「两模式取值必须不同」那条不变量的收窄，见 `./labels.ts`。
+ */
 export {
+  AGENT_TERM_KEYS,
   CALENDAR_STATUS_KEYS,
   calendarStatusLabel,
   INGRESS_MODE_KEYS,
   MEMBER_ACTOR_KIND_KEYS,
   MEMBER_ROLE_KEYS,
+  MODE_COLLAPSED_KEYS,
   memberActorKindLabel,
   memberRoleLabel,
   REST_POLICY_KEYS,
@@ -58,6 +67,7 @@ export {
   stageStatusLabel,
   TASK_STATUS_KEYS,
   taskStatusLabel,
+  termFor,
   WEEKDAY_FULL_KEYS,
   WEEKDAY_SHORT_KEYS,
   weekdayFullLabel,

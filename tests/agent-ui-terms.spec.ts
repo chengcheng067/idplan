@@ -14,6 +14,17 @@
  * `termFor` 的 mode 已改为**必填**，故本文件所有调用一律显式传参；此外新增
  * 「双模式取值互不相同」与「两列齐备」两组断言——即便将来有人给签名加回
  * 缺省值，只要 human/tech 任一列被证实从未被取到，这两组断言仍会失败。
+ *
+ * ── #354（2026-08-27）：表搬去 `src/i18n/labels.ts`，本文件**升口径**（不是放宽）──
+ *   ① 取词与键表改从单一出口 `../src/i18n` 取（原 `AGENT_TERMS` 已删；为什么不能在
+ *      `constants/` 里 import i18n：那份文件进服务端 tsconfig 的 include 白名单，
+ *      而该配置无 DOM ⇒ 实测 2×TS2584。详见 `src/i18n/labels.ts` 的区块）；
+ *   ② 下面第三条用例原本手写 9 个 key 的「两模式必须不同」清单 —— 那是**子集**，
+ *      对未列入的 4 个 key 一直是「宽」的。现改为**遍历全部 13 个 key**，
+ *      只跳过 `MODE_COLLAPSED_KEYS` 里**登记在案**的重合（中文侧只有 `onsite`：
+ *      它两列自 v0.7 起都是「现场」，是既成事实，取值一字未动）。
+ *      ⇒ 覆盖从 9 个 key 提到 12 个，且「要重合就得登记 + 写理由」。
+ *   ③ 「不许行业黑话」由只看 `AGENT_TERMS` 改为看**两份语言表**的 26 个取值。
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -21,11 +32,11 @@ import { join } from 'node:path';
 
 import {
   AGENT_SEAT_LIMIT,
-  AGENT_TERMS,
   AGENT_KIND_SUGGESTIONS,
   DEFAULT_AGENT_TERM_MODE,
-  termFor,
 } from '../src/constants/agentTerms';
+import { AGENT_TERM_KEYS, MODE_COLLAPSED_KEYS, catalogOf, termFor } from '../src/i18n';
+import type { AgentTermKey, AgentTermMode } from '../src/constants/agentTerms';
 import { TaskStatus } from '../src/core/types/enums';
 import {
   estimateLocalDbUsage,
@@ -49,23 +60,24 @@ describe('agentTerms · PRD §2A.3 术语映射', () => {
     expect(termFor('artifacts', 'human')).toBe('产出物');
   });
 
-  it('两种模式的取值确实不同（防「改了列名但没改值」的假双模式）', () => {
-    const differing: Array<[Parameters<typeof termFor>[0]]> = [
-      ['stage'],
-      ['applyPayload'],
-      ['ready'],
-      ['handoff'],
-      ['artifacts'],
-      ['timeline'],
-      ['board'],
-      ['claimedBy'],
-      ['blockedBy'],
-    ];
-    for (const [key] of differing) {
-      expect(termFor(key, 'human'), `${key} 两模式文案相同`).not.toBe(
+  it('两种模式的取值确实不同（防「改了列名但没改值」的假双模式）· 全 13 key 遍历', () => {
+    /*
+     * 覆盖 9 → 13（跳过 zh 侧登记在案的 1 个）：
+     * 旧版手写清单只列 9 个 key，`stageShort` / `client` / `onsite` / `deps` 四个
+     * 从未被检查过 —— 其中 `onsite` 中文两列本来就相同（见 `MODE_COLLAPSED_KEYS`）。
+     */
+    const registered = new Set<string>(MODE_COLLAPSED_KEYS.zh);
+    const keys = Object.keys(AGENT_TERM_KEYS) as AgentTermKey[];
+    expect(keys.length, '术语 key 少了？表被改空过就说明这条会假绿').toBe(13);
+    const checked: string[] = [];
+    for (const key of keys) {
+      if (registered.has(key)) continue;
+      expect(termFor(key, 'human'), `${key} 两模式文案相同（要重合必须在 MODE_COLLAPSED_KEYS 登记 + 写理由）`).not.toBe(
         termFor(key, 'tech'),
       );
+      checked.push(key);
     }
+    expect(checked.length, '跳过的登记项不该超过 1 个（zh 侧只有 onsite）').toBe(12);
   });
 
   it('默认模式常量 = human（首次进入人读优先，唯一出处）', () => {
@@ -104,10 +116,18 @@ describe('agentTerms · PRD §2A.3 术语映射', () => {
     expect(AGENT_SEAT_LIMIT).toBe(3);
   });
 
-  it('AGENT_TERMS 两种 mode 的值都不允许出现行业黑话（§0.5 常驻约束）', () => {
-    for (const modes of Object.values(AGENT_TERMS)) {
-      for (const v of Object.values(modes)) {
-        expect(v).not.toMatch(/甲方|工地|设计阶段/);
+  it('AGENT_TERM_KEYS 两份语言表的所有取值都不允许出现行业黑话（§0.5 常驻约束）', () => {
+    const modes: AgentTermMode[] = ['human', 'tech'];
+    const keys = Object.keys(AGENT_TERM_KEYS) as AgentTermKey[];
+    for (const lang of ['zh', 'en'] as const) {
+      const table = catalogOf(lang);
+      for (const key of keys) {
+        for (const mode of modes) {
+          const value = table[AGENT_TERM_KEYS[key][mode]];
+          expect(value, `agentTerm.${key}.${mode}（${lang}）出现行业黑话`).not.toMatch(
+            /甲方|工地|设计阶段|client site|construction site/,
+          );
+        }
       }
     }
   });

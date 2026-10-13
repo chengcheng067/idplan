@@ -25,10 +25,9 @@ import {
 } from '../../core/types/agent-payload';
 import type { AgentPayloadV1, ApplyResult } from '../../core/types/agent-payload';
 import { parseMarkdownTasks } from '../../core/agent/markdown-ingest';
-import { termFor } from '../../constants/agentTerms';
+import { termFor, useLang } from '../../i18n';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { cn } from '../../lib/cn';
-import { useLang } from '../../i18n';
 
 type PanelState =
   | { phase: 'input' }

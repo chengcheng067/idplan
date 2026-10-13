@@ -754,6 +754,44 @@ export const zhMessages = {
   'calendar.thisWeek': '本周（周一 ~ 周日）',
   'calendar.view': '查看',
   'calendar.lunarPlaceholder': '农历（占位）',
+
+  /* ───────── Agent 术语表（agentTerm.* · 13 key × 2 模式 = 26 键 · #354）─────────
+   * 取值是**搬家**：逐字来自原 `src/constants/agentTerms.ts` 的 `AGENT_TERMS`，一字未改
+   * （搬迁自证：`tests/i18n-agent-terms.spec.tsx` 逐键比对）。键表与取词函数现在住
+   * `src/i18n/labels.ts`（本仓「枚举 → 文案键 → 取词小函数」的屋子）。
+   * 为什么不留在 `constants/agentTerms.ts`：那份文件在 `server/tsconfig.json` 的
+   * include 白名单里，而该配置 `lib: ["ES2020"]`（**无 DOM**）—— 它一旦 import i18n，
+   * 就把引用 `document.documentElement` 的 `src/i18n/lang.ts` 拖进服务端 program，
+   * `npm run typecheck:server` 当场连红两条 TS2584（2026-08-27 实测）。
+   * ⚠️ human = 人话（设计师/项目经理读者）、tech = 技术（Agent/工程师读者）。
+   *    两列的取值**不保证在每种语言下都不同**；登记在案的重合见 `MODE_COLLAPSED_KEYS`。
+   * ─────────────────────────────────────────────────────────────────────────── */
+  'agentTerm.stage.human': '阶段',
+  'agentTerm.stage.tech': '批次（Batch）',
+  'agentTerm.stageShort.human': '阶段',
+  'agentTerm.stageShort.tech': '批次',
+  'agentTerm.applyPayload.human': '导入任务',
+  'agentTerm.applyPayload.tech': 'Apply payload',
+  'agentTerm.ready.human': '待办',
+  'agentTerm.ready.tech': 'Ready',
+  'agentTerm.handoff.human': '交接包',
+  'agentTerm.handoff.tech': 'handoff bundle',
+  'agentTerm.artifacts.human': '产出物',
+  'agentTerm.artifacts.tech': 'artifacts（产出物）',
+  'agentTerm.deps.human': '依赖',
+  'agentTerm.deps.tech': 'deps（依赖）',
+  'agentTerm.timeline.human': '时间轴',
+  'agentTerm.timeline.tech': 'Timeline',
+  'agentTerm.client.human': '委托方',
+  'agentTerm.client.tech': '客户 / 委托方',
+  'agentTerm.onsite.human': '现场',
+  'agentTerm.onsite.tech': '现场',
+  'agentTerm.board.human': 'Agent 看板',
+  'agentTerm.board.tech': 'Agent Board',
+  'agentTerm.claimedBy.human': '负责人',
+  'agentTerm.claimedBy.tech': 'claimed by',
+  'agentTerm.blockedBy.human': '被…阻塞',
+  'agentTerm.blockedBy.tech': 'blocked by',
 } as const;
 
 /**

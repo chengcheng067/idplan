@@ -37,9 +37,8 @@ import { Zap } from 'lucide-react';
 import type { Task } from '../../core/types/entities';
 import { computeReadyTasks } from '../../core/agent/dag';
 import { taskMetaText } from './taskMetaText';
-import { termFor } from '../../constants/agentTerms';
+import { termFor, useLang } from '../../i18n';
 import { useLayoutStore } from '../../store/useLayoutStore';
-import { useLang } from '../../i18n';
 
 export function ReadyQueue({
   tasks,

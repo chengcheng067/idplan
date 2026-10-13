@@ -29,7 +29,15 @@ import {
   TaskStatus,
 } from '../core/types/enums';
 import type { ProjectCalendarStatus } from '../core/types/enums';
+/*
+ * Agent 术语表的**类型**仍出自 `constants/agentTerms.ts`（那里是这套术语的规格出处）。
+ * ⚠️ 必须是 `import type`：类型导入会被擦除 ⇒ 运行期 i18n 不依赖 constants，
+ *    而 constants 侧**一个 i18n 字符都不出现**（它进服务端 tsconfig 的 include 白名单，
+ *    而那份配置无 DOM —— 理由见下方 Agent 术语表区块）。
+ */
+import type { AgentTermKey, AgentTermMode } from '../constants/agentTerms';
 import { t } from './translate';
+import type { Lang } from './lang';
 import type { MessageKey } from './messages/zh';
 
 /* ──────────────────────── 休息制度（REST_POLICY_LABELS） ──────────────────────── */
@@ -179,3 +187,105 @@ export function weekdayShortLabel(index: number): string {
 export function weekdayFullLabel(index: number): string {
   return t(WEEKDAY_FULL_KEYS[index] ?? WEEKDAY_FULL_KEYS[0]!);
 }
+
+/* ═══════════════════ Agent 术语表（AGENT_TERMS → 文案键 · #354）═══════════════════
+ *
+ * ── 形状：与上面六张表**逐条同形**（枚举 → 文案键 → 取词小函数）──
+ * `AGENT_TERM_KEYS[termKey][mode] → MessageKey`，`termFor(key, mode)` 内部 `t()`。
+ * 这不是新设计，是把 `constants/agentTerms.ts` 里那张手写多轴表**收进本仓已有做法**；
+ * `useLang.ts` 头注释的原话是「用法（全仓统一，**不许有第二种**）」。
+ *
+ * ── 为什么表必须搬来**这里**，不能留在 `src/constants/`（实测约束，不是偏好）──
+ * `src/constants/agentTerms.ts` 在 `server/tsconfig.json` 的 include 白名单里（:75），
+ * 服务端 `routes/agent.routes.ts:54` 真的 import 它的 `AGENT_SEAT_LIMIT`；那份配置
+ * `lib: ["ES2020"]`（**无 DOM**）。⇒ 该文件只要出现 `import … from '../i18n'`，
+ * 就会把引用 `document.documentElement` 的 `lang.ts` 拖进服务端 program，
+ * `npm run typecheck:server` 当场 2 条 TS2584（2026-08-27 实测：同款缺陷在
+ * `src/lib/date.ts` 上真的发生过一次，见该文件「月刻度生成」区块）。
+ * ⚠️ 因此 `agentTerms.ts` **也不能重导出 `termFor`** —— 重导出同样是 import，
+ *    后果一模一样。消费方一律从这里（经 `src/i18n`）取词。
+ *
+ * ── 收益（不是记账口径）──
+ * 取值进了 message 表 ⇒ `en.ts` 是 `Record<MessageKey, string>` ⇒ **漏翻是编译错**，
+ * 不是「不太会发生」。这是选「键表 + 文案表」而不是「4 列 mode × lang」的理由。
+ * 27 → **19 处活代码调用点**（另 11 处是注释）**一字未改**：签名与语义都不变。
+ * ----------------------------------------------------------------------------- */
+
+/** 术语 key × 模式 → 文案键（13 × 2 = 26 键；键名 `agentTerm.<key>.<mode>`） */
+export const AGENT_TERM_KEYS: Readonly<
+  Record<AgentTermKey, Readonly<Record<AgentTermMode, MessageKey>>>
+> = {
+  stage: { human: 'agentTerm.stage.human', tech: 'agentTerm.stage.tech' },
+  stageShort: { human: 'agentTerm.stageShort.human', tech: 'agentTerm.stageShort.tech' },
+  applyPayload: { human: 'agentTerm.applyPayload.human', tech: 'agentTerm.applyPayload.tech' },
+  ready: { human: 'agentTerm.ready.human', tech: 'agentTerm.ready.tech' },
+  handoff: { human: 'agentTerm.handoff.human', tech: 'agentTerm.handoff.tech' },
+  artifacts: { human: 'agentTerm.artifacts.human', tech: 'agentTerm.artifacts.tech' },
+  deps: { human: 'agentTerm.deps.human', tech: 'agentTerm.deps.tech' },
+  timeline: { human: 'agentTerm.timeline.human', tech: 'agentTerm.timeline.tech' },
+  client: { human: 'agentTerm.client.human', tech: 'agentTerm.client.tech' },
+  onsite: { human: 'agentTerm.onsite.human', tech: 'agentTerm.onsite.tech' },
+  /*
+   * `board.human` 的取值是「Agent 看板」（v0.8 · TBD-7 拍板：页面标题就叫「Agent 看板」，
+   * 与 V1-9「人话模式不显示**来源标签**」不冲突 —— V1-9 管任务卡上的来源角标，
+   * 这里管**整个工作区的名字**；侧栏一级项同步是「工作区」，于是「工作区（侧栏）→
+   * 里面的 Agent 看板（页面标题）」成为两级语义）。
+   * 表是文案的**唯一出处**，故标题走本词条，不在页面里硬编码（否则本词条退化成
+   * 「零组件消费」的孤儿 —— 正是本仓连续在防的那类「两份真相 / 死词条」）。
+   */
+  board: { human: 'agentTerm.board.human', tech: 'agentTerm.board.tech' },
+  claimedBy: { human: 'agentTerm.claimedBy.human', tech: 'agentTerm.claimedBy.tech' },
+  blockedBy: { human: 'agentTerm.blockedBy.human', tech: 'agentTerm.blockedBy.tech' },
+};
+
+/**
+ * 取词唯一入口：`termFor('stage', 'tech')` → 「批次（Batch）」。
+ *
+ * `mode` **必填**（v0.7 T04 根因修复核心）：无缺省值，漏传即编译失败 ——
+ * 旧版带缺省值 `= 'agent'` 时，全站调用点一律省略，于是 human 一列**从未生效过**，
+ * 术语表的一半是死代码。
+ * 未知 key 回落 key 本身（开发期兜底：新术语未登记时不至于白屏，且渲染出的 key 名
+ * 在界面上一眼可辨，便于发现遗漏）。
+ *
+ * ⚠️ **不是 React hook，不订阅语言变化**（同本文件其余取词函数，见文件头用法纪律）：
+ *    调用它的组件**必须同时调 `useLang()`**，否则切语言后该组件不重渲染。
+ *    守卫：`tests/i18n-agent-terms.spec.tsx`（凡出现 `termFor(` 的 `src/**` 文件
+ *    必须同时出现 `useLang(`；`src/constants/**` 与 `src/i18n/**` 自身豁免）。
+ */
+export function termFor(key: AgentTermKey, mode: AgentTermMode): string {
+  const keyOf = AGENT_TERM_KEYS[key]?.[mode];
+  return keyOf === undefined ? key : t(keyOf);
+}
+
+/**
+ * 「两类读者取值必须不同」这条不变量的**显式登记表**（按语言分列）。
+ *
+ * ── 不变量的**意图**，以及为什么它必须收窄 ──
+ * 原判据（`tests/agent-ui-terms.spec.ts`）是「human 与 tech 取值必须不同」，用来防
+ * 「改了列名但值一样」的假双模式。但它的意图是「**在这门语言下**，两类读者确实拿到
+ * **不同措辞**」—— 这是个**逐语言**成立的事实，不是全语言公理：
+ *   · 英文里 `timeline` 对两类读者就是同一个词 `Timeline`。硬要它们不同，只会逼出
+ *     **人为制造的差异**（tech 写成 `Timeline view`），那比重合更坏。
+ *   · 中文里 `onsite` 两列都是「现场」，**自 v0.7 起就是事实**（旧 spec 的双模式断言
+ *     刻意只列了 9 个 key，`onsite` 从来不在其中 —— 那条断言一直是「宽」的）。
+ *   ⇒ 正确做法不是「放宽」，是**把不变量收窄到它真正成立的语言上**，并给重合留一条
+ *     **显式登记**的出口（每次要登记都得写一行理由，不是默默放行）。
+ *
+ * ── 判据 ──
+ * 两份取值 `trim()` + 转小写后**完全相等**即算重合。只差大小写不算「不同措辞」
+ * （`Blocked by` / `blocked by` 是同一句话的两种排版，不是两类读者的两种说法）。
+ *
+ * ── 防「登记表腐化成万能豁免」──
+ * `tests/i18n-agent-terms.spec.tsx` 带一条**反例自证**：在登记表之外故意造一个重合，
+ * 扫描必须变红；且正常的 zh/en 两表必须零违规（「会报 + 不误报」两条都要过）。
+ */
+export const MODE_COLLAPSED_KEYS: Readonly<Record<Lang, readonly AgentTermKey[]>> = {
+  zh: ['onsite'],
+  en: [
+    'timeline', // 两类读者在英文里都叫 Timeline（tech 列写 `Timeline view` 是人为差异）
+    'client', // 英文「委托方」只有 Client 一个词；中文才有「委托方 / 客户」两种称法
+    'onsite', // 英文只有 On-site 一个词（中文侧同样重合，见上）
+    'board', // 工作区**专有名词**：两类读者看到的是同一个名字，不因读者改写
+    'blockedBy', // 人话列 `Blocked by`（界面标签式大写）／技术列 `blocked by`（字段名原样小写）
+  ],
+};

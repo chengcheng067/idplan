@@ -769,4 +769,38 @@ export const enMessages: Record<MessageKey, string> = {
   'calendar.thisWeek': 'this week (Mon ~ Sun)',
   'calendar.view': 'View',
   'calendar.lunarPlaceholder': 'Lunar calendar (placeholder)',
+
+  /* ───────── Agent terms（agentTerm.* · 13 keys × 2 modes · #354）─────────
+   * human = for designers / PMs（「Stage」「Import task」）;
+   * tech  = for Agents / engineers（「Batch」「Apply payload」）.
+   * ⚠️ 英文侧有几处两列**故意重合**（`timeline` / `client` / `onsite` / `board` /
+   *    `blockedBy`）—— 英文里这两类读者本来就该看到同一个词，硬造差异更坏。
+   *    逐键理由见 `src/i18n/labels.ts` 的 `MODE_COLLAPSED_KEYS`（登记 + 反例自证）。
+   * ─────────────────────────────────────────────────────────────────────── */
+  'agentTerm.stage.human': 'Stage',
+  'agentTerm.stage.tech': 'Batch',
+  'agentTerm.stageShort.human': 'Stage',
+  'agentTerm.stageShort.tech': 'Batch',
+  'agentTerm.applyPayload.human': 'Import task',
+  'agentTerm.applyPayload.tech': 'Apply payload',
+  'agentTerm.ready.human': 'To-do',
+  'agentTerm.ready.tech': 'Ready',
+  'agentTerm.handoff.human': 'Handoff pack',
+  'agentTerm.handoff.tech': 'handoff bundle',
+  'agentTerm.artifacts.human': 'Deliverables',
+  'agentTerm.artifacts.tech': 'artifacts (deliverables)',
+  'agentTerm.deps.human': 'Dependencies',
+  'agentTerm.deps.tech': 'deps (dependencies)',
+  'agentTerm.timeline.human': 'Timeline',
+  'agentTerm.timeline.tech': 'Timeline',
+  'agentTerm.client.human': 'Client',
+  'agentTerm.client.tech': 'Client',
+  'agentTerm.onsite.human': 'On-site',
+  'agentTerm.onsite.tech': 'On-site',
+  'agentTerm.board.human': 'Agent Board',
+  'agentTerm.board.tech': 'Agent Board',
+  'agentTerm.claimedBy.human': 'Owner',
+  'agentTerm.claimedBy.tech': 'claimed by',
+  'agentTerm.blockedBy.human': 'Blocked by',
+  'agentTerm.blockedBy.tech': 'blocked by',
 };

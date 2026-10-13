@@ -17,7 +17,7 @@ import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { buildHandoffBundle } from '../../core/agent/handoff';
 import { computeReadyTasks } from '../../core/agent/dag';
-import { termFor } from '../../constants/agentTerms';
+import { termFor } from '../../i18n';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { cn } from '../../lib/cn';
 

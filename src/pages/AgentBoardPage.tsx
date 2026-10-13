@@ -84,7 +84,7 @@ import {
  */
 import { useAgentProjects, visibleProjectsFor } from '../core/project/visibility';
 import { useRepos } from '../hooks/useRepos';
-import { useLang } from '../i18n';
+import { termFor, useLang } from '../i18n';
 import type { MessageKey } from '../i18n';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { useAgentStore } from '../store/useAgentStore';
@@ -95,7 +95,6 @@ import { useLayoutStore } from '../store/useLayoutStore';
 import {
   AGENT_SEAT_LIMIT,
   AGENT_TOKEN_STORAGE_KEY,
-  termFor,
   type AgentTermMode,
 } from '../constants/agentTerms';
 import { ApplyPayloadPanel } from '../components/agent/ApplyPayloadPanel';

@@ -36,7 +36,7 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
-import { termFor } from '../../constants/agentTerms';
+import { termFor } from '../../i18n';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { StatusBadge } from './AgentTaskCard';
 import { Modal } from '../common/Modal';
