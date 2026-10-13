@@ -416,6 +416,13 @@ export const enMessages: Record<MessageKey, string> = {
     'This area is being redefined based on your feedback and may change substantially.',
   'agentList.createButton': 'New Agent board',
   'agentList.listAria': 'Agent board list',
+
+  /* ───────────── Payload import panel · prompt guidance (ApplyPayloadPanel A2) ───────────── */
+  'agentPayload.promptAsk': "Not sure what to have WorkBuddy / Codex produce? Copy this prompt to it",
+  'agentPayload.promptSend':
+    'Send it to the external agent together with your requirements — it will produce JSON in ID Plan’s import format;',
+  'agentPayload.promptPaste':
+    'paste that JSON into the input area below (pasting previews it — no separate “validate” click).',
   /* ───────────────────── Backup / restore toasts (useBackupIo) ───────────────────── */
   'backup.toast.saved': 'Backup package saved',
   'backup.toast.exportFailed': 'Backup export failed.',

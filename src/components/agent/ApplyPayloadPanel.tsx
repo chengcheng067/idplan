@@ -248,12 +248,12 @@ export function ApplyPayloadPanel({
       >
         <summary className="cursor-pointer select-none text-ink">
           <Sparkles size={12} className="mr-1 inline align-[-1px] text-pine" aria-hidden />
-          不知道让 WorkBuddy / Codex 输出什么？复制这段提示词给它
+          {t('agentPayload.promptAsk')}
         </summary>
 
         <p className="mt-2 leading-relaxed">
-          把它连同你的需求一起发给外部 Agent，它会照 ID Plan 的导入格式产出 JSON；
-          你拿到 JSON 后粘贴到下面的输入区即可（粘贴即预览，不需额外点「校验」）。
+          {t('agentPayload.promptSend')}
+          {t('agentPayload.promptPaste')}
         </p>
 
         <pre

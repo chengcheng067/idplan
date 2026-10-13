@@ -418,6 +418,12 @@ export const zhMessages = {
   'agentList.redefineLine': '这一块的定位正在按你的反馈重新讨论，可能还会有较大调整。',
   'agentList.createButton': '新建 Agent 看板',
   'agentList.listAria': 'Agent 看板列表',
+
+  /* ───────────── 清单导入面板 · 提示词引导（ApplyPayloadPanel A2）───────────── */
+  'agentPayload.promptAsk': '不知道让 WorkBuddy / Codex 输出什么？复制这段提示词给它',
+  'agentPayload.promptSend': '把它连同你的需求一起发给外部 Agent，它会照 ID Plan 的导入格式产出 JSON；',
+  'agentPayload.promptPaste':
+    '你拿到 JSON 后粘贴到下面的输入区即可（粘贴即预览，不需额外点「校验」）。',
   /* ───────────────────── 备份 / 恢复的 toast（useBackupIo）───────────────────── */
   'backup.toast.saved': '备份包已保存',
   'backup.toast.exportFailed': '备份导出失败。',
