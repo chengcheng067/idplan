@@ -279,6 +279,10 @@ export async function reenterAdmin(page: Page): Promise<void> {
  *   ⇒ 本函数最后那步会**静默点空**。必须切成成员（实测切换后 `memberBoardLink: 1`）。
  *
  * 三步切换是实测验证过的（身份菜单用 `[data-identity-menu]` 钩子定位 —— 不拿中文 aria 当契约）。
+ *
+ * ⚠️ **这三步只在 ≥xl（1280+，侧栏是持久左栏）成立** —— 那条读数的来源只测了 1440×900。
+ *    <xl 还差两步（本函数已补，见下方 ②'）：`:visible` 过滤 + 先开侧栏抽屉。
+ *    下一个人照抄「三步」到窄窗用例里会踩同一个坑。
  */
 export async function enterMemberBoard(page: Page): Promise<void> {
   // ① 前置：身份已由示例包建立（旧假设的替代 —— 失败会直说「旧语义过期」而不是 15s 超时）
