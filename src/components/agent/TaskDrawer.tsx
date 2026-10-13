@@ -36,7 +36,7 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
-import { termFor } from '../../i18n';
+import { termFor, useLang } from '../../i18n';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { StatusBadge } from './AgentTaskCard';
 import { Modal } from '../common/Modal';
@@ -202,6 +202,13 @@ export function TaskDrawer({
   projectStages: Array<{ id: string; name: string }>;
   onClose(): void;
 }): JSX.Element | null {
+  /*
+   * 语言变化订阅点（**必须**）：下方 `termFor('stageShort'|'deps'|'artifacts', termMode)`
+   * 不是 hook、不订阅语言 —— `useLang()` 在这里的作用是「切语言时本组件重渲染」。
+   * 少了它，切到英文后这三处术语位**不刷新**（中文态完全看不出来）。
+   * 守卫：`tests/i18n-agent-terms.spec.tsx`（含没订阅的反例自证）。
+   */
+  useLang();
   const repos = useRepos();
   const members = useMembersStore((s) => s.members);
   const { currentMember } = useRoleGuard();

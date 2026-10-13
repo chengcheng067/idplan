@@ -17,7 +17,7 @@ import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { buildHandoffBundle } from '../../core/agent/handoff';
 import { computeReadyTasks } from '../../core/agent/dag';
-import { termFor } from '../../i18n';
+import { termFor, useLang } from '../../i18n';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { cn } from '../../lib/cn';
 
@@ -36,6 +36,12 @@ export function HandoffPanel({
   tasks: readonly Task[];
   onClose(): void;
 }): JSX.Element {
+  /*
+   * 语言变化订阅点（**必须**）：下方 5 处 `termFor('handoff'|'ready'|'stageShort', termMode)`
+   * 不是 hook、不订阅语言 —— 少了这一行，切到英文后这几处**不刷新**（中文态看不出来）。
+   * 守卫：`tests/i18n-agent-terms.spec.tsx`。
+   */
+  useLang();
   const members = useMembersStore((s) => s.members);
   const pushToast = useProjectsStore((s) => s.pushToast);
 
