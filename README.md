@@ -171,7 +171,7 @@ npm run electron:dev   # 桌面形态开发运行
 ```
 
 ```bash
-npm test               # 全量单测（2739 用例，vitest）
+npm test               # 全量单测（2742 用例，vitest）
 npm run typecheck      # 前端类型检查
 npm run build          # 类型检查 + 构建
 npm run electron:build # 构建 + 打 Windows NSIS 安装包

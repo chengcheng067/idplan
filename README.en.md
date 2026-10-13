@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
 
-<p align="center"><a href="./README.md">中文</a> · <strong>English</strong></p>
+> 🌐 English · [中文](./README.md)
 
 > Covers **7 industry groups / 9 domains / 29 stage presets / 74 stage definitions** (software development, marketing campaigns, film production, wedding planning, consulting delivery, travel, architecture & interiors …). It turns a project's budget, type, stage milestones and members into one timeline — read progress as a board (kanban), a calendar or a gantt, and export the schedule as a delivery page you can send straight to a client.
 > **Statutory holidays built in** (2025 / 2026, make-up workdays included): the calendar shows holiday names, a schedule can skip them in one click, and changing the rest policy reflows projects you already built — see [📅 Scheduling & delivery](#-scheduling--delivery).
