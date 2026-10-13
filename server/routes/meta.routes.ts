@@ -11,6 +11,11 @@ import type Database from 'better-sqlite3';
 //   会把对象元素全部滤掉、静默清空，必须换成 server/lib/json-columns.ts 的版本。
 import { parseJson, parseJsonArray } from '../lib/json-columns';
 import { requireToken, requireWriteToken, writeAuthMode, unauthorizedBody, WRITE_AUTH_OPEN_HEADER, WRITE_AUTH_OPEN_VALUE } from '../lib/agent-auth';
+// ★ #15：`projects.type` 是「v0.8 已下线、DDL 仍要求」的遗留列，客户端自 v0.8 起不再产出它。
+//   建档路由一直写着占位值（所以能用），导入路由**逐列原样插入、无补偿** ⇒ 任何客户端产出的包
+//   都在 INSERT 期抛 `SQLITE_CONSTRAINT_NOTNULL: projects.type`、整笔事务回滚（导入全废）。
+//   占位值**从同一处取**（不手打第二份字面量），与 `projects.routes.ts` 同源。
+import { LEGACY_PROJECT_TYPE_PLACEHOLDER } from '../lib/legacy-project-type';
 
 // ★ v0.7（T01-b）：备份导入的号段归一走**前后端共享的同一份纯函数** —— 与 local
 //   适配器的 `local.admin.repo.replaceAllImport` **逐字同义**（硬约束见 interfaces.ts）。
@@ -652,6 +657,20 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
         // 用归一后的行集（撞号的后到者已被重编号）
         if (key === 'tasks') rows = resolved.rows as unknown as Array<Record<string, unknown>>;
         if (key === 'settings') rows = settingsRows;
+        // ★ #15：`projects.type` 是「v0.8 下线、DDL 仍 NOT NULL 且无默认值」的遗留列，
+        //   而客户端自 v0.8 起**不再产出**它（`normalizeProjectRow` 返回对象不含 type）
+        //   ⇒ 逐列原样插入必然 `SQLITE_CONSTRAINT_NOTNULL`、整笔事务回滚。
+        //   处置口径（team-lead 拍板，不得偏离）：**不改 DDL**（会与建档路由写占位这个
+        //   既有决定冲突）、**不让客户端重新传 type**（会推翻「type 下线」）；只在导入侧
+        //   照抄建档路由的既有补偿，占位值从同一处取（`../lib/legacy-project-type`）。
+        //   `??` 而非无条件覆盖：**包内有该列时以包为准**（服务端自产包带的真实值原样落库），
+        //   只有缺列/显式 null 才落占位 ⇒ 不影响服务端「导出→导入→再导出」逐表全等。
+        if (key === 'projects') {
+          rows = rows.map((r) => ({
+            ...r,
+            type: (r as { type?: unknown }).type ?? LEGACY_PROJECT_TYPE_PLACEHOLDER,
+          }));
+        }
         for (const r of rows) insertRow(tableName, snake(r));
       }
     });

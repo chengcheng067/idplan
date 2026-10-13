@@ -10,6 +10,8 @@ import type Database from 'better-sqlite3';
 import type { ProjectKind } from '../../src/core/types/enums';
 import { dayjs, isIsoDate } from '../../src/lib/date';
 import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../../src/core/template/stage-fallback';
+// v0.8 已下线的 `projects.type` 遗留列占位值（**单一出处**，导入路由从这里取同一个值）
+import { LEGACY_PROJECT_TYPE_PLACEHOLDER } from '../lib/legacy-project-type';
 
 interface ProjectRow {
   id: string;
@@ -194,7 +196,8 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       name,
       // v0.8 类型字段（type）下线：客户端不再传 type，这里写常量占位以满足 DDL NOT NULL。
       // 该列已无业务语义（读写都在前端 Project 实体之外）。
-      String(body.type ?? 'dining'),
+      // 占位值取自 `../lib/legacy-project-type`（**单一出处**，与导入路由同源）。
+      String(body.type ?? LEGACY_PROJECT_TYPE_PLACEHOLDER),
       String(body.address ?? ''),
       String(body.clientName ?? ''),
       body.contractAmount == null ? null : Number(body.contractAmount),
