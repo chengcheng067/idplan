@@ -128,11 +128,17 @@ export function FirstRunGuide(): JSX.Element | null {
    * 信号 = `CURRENT_MEMBER_ID_KEY`（useSettingsStore 导出的身份键；useFirstRunGate 同键）：
    * IdentityDialog 选完管理员/成员即写入；探针环境由 spec 预置）。
    * 用 state + effect 而非纯 render 期读：写入发生在对话框关闭时，要能触发重渲染。
-   * ⚠️ 实际语义不是「身份已建立」，而是「**首帧那一刻 localStorage 里有没有东西**」：
-   *   它在下面被当 latch 用（首帧读一次，那个 400ms 轮询只升不降）⇒ 两个方向都会失真：
-   *     · 身份**未**建立而信号为真 ⇒ 卡照出现（现场证据与读数：tests/plugin-state-demo-browser.spec.ts 的 ④a）；
-   *     · 身份**已**建立而信号为假 ⇒ 卡被压掉（如「载入示例数据」后 LS 为空、身份来自 settings KV 兜底）。
-   *   今天两个方向都看不出来（被「库是否为空」这条独立条件遮住）。**改这里的信号前先读这段。**
+   * ⚠️ 真实语义**不是**「身份已建立」，而是「**首帧那一刻 localStorage 里有没有这个键**」：
+   *    惰性初始化只读一次，下面的轮询只升不降 ⇒ 两个方向都会失真 ——
+   *      · 身份**未**建立而信号为真 ⇒ 卡照出现（读数：tests/plugin-state-demo-browser.spec.ts ④a）；
+   *      · 身份**已**建立而信号为假 ⇒ 卡被压掉（如「载入示例数据」后 LS 为空、身份来自 KV 兜底）。
+   *    今天两个方向都由 `projects.length === 0` 那条**独立条件**遮住，看不出错。
+   * ★ **改这条信号之前先读这里。**
+   *   来源：team-lead 指派核实 + fix-settings-restore 提供成品（2026-10-14）—— A/B 两代产物读数一致 ⇒
+   *   结论为「假说证伪、无可观测影响」；team-lead 裁定当前不改行为，仅登记进「已知限制」清单。
+   *   ⚠️ **入库说明**：本段随 `dcee447` 入库，而**那个提交的信息未覆盖本段**（它讲的是
+   *   matchMedia / `__APP_ENV__` 复位）⇒ 想查「它是怎么来的」看这两行即可，**不要去 git log -p 里找**。
+   *   核心机制与读数（含 A/B 两代产物对照）：`tests/plugin-state-demo-browser.spec.ts` 的 ④a。
    */
   const [identityDone, setIdentityDone] = useState(
     () =>
