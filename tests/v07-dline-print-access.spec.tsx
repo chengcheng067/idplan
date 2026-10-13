@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// TODO(print-5blocks): 纸面批次开工时必须升级本 helper，否则退化为恒过假绿
 /**
  * v0.7 · D 线收尾 · 打印页「成员放开」验收（只读导出）—— jsdom 层验收。
  *
