@@ -22,13 +22,26 @@
  *   ④ 抽屉本来就关着时收到请求 ⇒ 不再回调（不制造无意义的关闭）。
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 
-/** jsdom 的 Element 没有 `scrollTo`（切分区时设置面板会调它回顶）——补一处即可 */
-if (typeof Element.prototype.scrollTo !== 'function') {
+/**
+ * jsdom 的 Element 没有 `scrollTo`（切分区时设置面板会调它回顶）——补一处即可。
+ *
+ * ★ **补丁也要对称还原**（见文件末的 `afterAll`）。理由不是「这个补丁有害」（它其实
+ *   只可能让别人更好过：补的是 jsdom 缺失的方法，且带 `typeof` 守卫），而是
+ *   **「谁负责还原」这个问题必须一致地回答** —— 本会话另一个 spec 已经为它写的
+ *   `window.__APP_ENV__` 答了这个问题（并在那里漏答一次、害别人的三条用例全红）。
+ *   一旦允许「有的补丁有人负责、有的没人负责」，下一次来的人补一个**有害**的补丁时
+ *   也不会有人问这句话。
+ *
+ * `HAD_SCROLL_TO` 记住「本来有没有」：有 ⇒ 不是我们加的，**不许删**（删掉会改坏
+ * 别人依赖的既有实现）；没有 ⇒ 我们加的，`afterAll` 里删掉。
+ */
+const HAD_SCROLL_TO = typeof Element.prototype.scrollTo === 'function';
+if (!HAD_SCROLL_TO) {
   Element.prototype.scrollTo = () => {};
 }
 
@@ -113,6 +126,21 @@ afterEach(() => {
   host.remove();
   useUiStore.setState({ settingsCloseRequest: 0 });
   useSettingsStore.setState({ currentMemberId: null, hydrated: false });
+});
+
+/**
+ * ★ 原型补丁的**对称还原**（与文件头的 `HAD_SCROLL_TO` 配对）。
+ *
+ * 只删「本文件加上去的」那一次：本来就有 ⇒ 原样留着（删它会改坏别人依赖的既有实现）。
+ * 为什么这件事必须做：**「谁负责还原」这个问题要一致地回答** —— 本会话另一个 spec
+ * （`plugin-toggle-feedback.spec.tsx`）曾经在 `vi.hoisted` 里写 `window.__APP_ENV__`
+ * 却没人还原，代价是别人的三条用例整段代码不执行、全红，藏了整整一轮才被二分挖出来。
+ * 补丁无害不等于可以不回答这个问题；允许「有无害的例外」，下一个有害的补丁就不会有人问。
+ */
+afterAll(() => {
+  if (!HAD_SCROLL_TO) {
+    delete (Element.prototype as unknown as { scrollTo?: unknown }).scrollTo;
+  }
 });
 
 describe('设置抽屉 · 关闭请求信号', () => {
