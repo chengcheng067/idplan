@@ -52,6 +52,12 @@
  *       **不能靠外部读回**（外部读回等于让验证者自己举证，而它正是刚才漏掉的那一环）。
  *     ⇒ 记法：**「构造不出来的变异」（第 0 段未通过）与「被证伪的假设」必须分开记**；
  *       前者**不作证据**，也不得以「施加了变异但仍然绿」的形式写进结论。
+ *     ★ **产物层（2026-10-14 增补）**：「源码改了」**不等于**「产物里有」—— 探针读的是**产物**。
+ *       故构建完成后本脚本**回读** `build-dist/assets/*.js` 并断言变异 token（`artifactMustContain`）
+ *       确实在里面；**读不到即判失败、且不跑探针**（读了错产物的红/绿都不是证据）。
+ *       这条补的是一个**既存的洞**：此前「探针确实读到带变异的那份产物」从未被验证、只是碰巧成立；
+ *       而一旦产物路径被隔离（env / outDir / worktree），漏跟随一条路径就会变成**假绿**。
+ *       （通用式：「**空间给了，还要证明『东西确实在那个空间里』**」。）
  *
  *   **会被覆盖的路径上的产物不是证据**
  *     实测教训（同一天两次）：`qa-scratch/v07-stageD/10~12-*.png` 被后续运行**静默覆盖**（事后核不到）；
@@ -134,6 +140,8 @@ const MUTATIONS = [
     file: 'src/components/agent/AgentTaskCard.tsx',
     find: "'flex w-full items-center gap-3 rounded-2xl border bg-paper p-3",
     replace: "'flex w-full items-center gap-3 rounded-2xl border glass-light p-3",
+    /** 第 0 段·产物层：只有变异体才会出现的片段（未变异时该处是 `border bg-paper p-3`） */
+    artifactMustContain: 'border glass-light p-3',
     /*
      * ★ 2026-10-14 **订正（原诊断作废，别照旧描述去「修」一个不存在的问题）**：
      *   原先这里记的是「本用例的红落在哪条断言上取决于 B-12 三条断言的**先后** ⇒ 顺序脆弱性」。
@@ -161,6 +169,8 @@ const MUTATIONS = [
     file: 'src/components/agent/AgentTaskCard.tsx',
     find: "'flex w-full items-center gap-3 rounded-2xl border bg-paper p-3",
     replace: "'hidden flex w-full items-center gap-3 rounded-2xl border bg-paper p-3",
+    /** 第 0 段·产物层：`hidden ` 前缀只有变异体才有 */
+    artifactMustContain: 'hidden flex w-full items-center gap-3',
     probe: {
       spec: 'tests/v07-board-acceptance.spec.ts',
       test: 'B-12',
@@ -175,6 +185,8 @@ const MUTATIONS = [
     file: 'src/components/ui/SegmentedControl.tsx',
     find: "'h-[28px] min-w-[84px] rounded-md px-0'",
     replace: "'h-[28px] min-w-[84px] rounded-xl px-0'",
+    /** 第 0 段·产物层：未变异时该处是 `rounded-md px-0`（组合片段才能区分，`rounded-xl` 单独出现处很多） */
+    artifactMustContain: 'min-w-[84px] rounded-xl px-0',
     probe: {
       spec: 'tests/ui-batch-a-geometry.spec.ts',
       test: 'A4-G1',
@@ -257,6 +269,37 @@ function decode(buf) {
 function containsMarker(buf, markers) {
   const hay = decode(buf);
   return markers.some((m) => hay.includes(m));
+}
+
+/* ============================================================================================
+ * 第 0 段·产物层：断言「变异确实在探针要读的那份产物里」
+ *
+ * ── 为什么需要它 ──
+ * 见 `runOne()` 里那段长注释：这一步补的是「构建与探针都指向同一个目录」**从未被验证**这个洞。
+ * 它现在**碰巧**成立；一旦产物路径被隔离（env / outDir / worktree），漏跟随一条路径就会
+ * 变成**假绿** —— 探针读了不含变异的那份产物，于是「变异后仍绿」被读成「断言没有判别力」。
+ *
+ * ── 判据 ──
+ * `token` 取**只有变异体才会出现**的片段（如 `border glass-light p-3`；未变异时该文件里是
+ * `border bg-paper p-3`）⇒ 在 `build-dist/assets/*.js` 里找它。找到 ⇒ 变异进了产物；
+ * 找不到 ⇒ **红**（调用方据此判失败并**跳过探针**）。
+ *
+ * ── 已知边界（写出来免得被当成强判据）──
+ *   · 它证明的是「**带有该 token** 的产物存在」，不是「探针**服务的**就是这份」（后者要靠隔离方案
+ *     自己的不变量，例如「探针服务的目录 == 我刚构建的目录」—— 那是 ② 阶段的事）；
+ *   · token 若在**未变异**的产物里本来也存在 ⇒ 会假通过。故 token 必须逐条挑选、且以
+ *     「变异前后不同」为准（本条清单里的三条都是）。
+ * ============================================================================================ */
+function mutationInArtifact(token) {
+  const dir = join(ROOT, 'build-dist', 'assets');
+  if (!existsSync(dir)) return { ok: false, why: `产物目录不存在：${dir}`, hits: [], files: [], scanned: 0 };
+  const files = readdirSync(dir).filter((f) => f.endsWith('.js'));
+  const hits = [];
+  for (const f of files) {
+    // Buffer.includes(string)：按 UTF-8 字节找 ASCII token ⇒ 不受代码页影响
+    if (readFileSync(join(dir, f)).includes(token)) hits.push(f);
+  }
+  return { ok: hits.length > 0, hits, files, scanned: files.length };
 }
 
 function porcelain() {
@@ -533,6 +576,35 @@ function runOne(mutation, index, total) {
       return result;
     }
     result.buildOk = true;
+
+    /*
+     * ★ 第 0 段·**产物层**（2026-10-14 新增，team-lead 裁决「提到现在就做」）：
+     *   上面 `${mutation.id}` 那条只保证「改动写进了源码」；**不保证它进了探针读的那份产物**。
+     *   这一步**回读产物**并断言变异 token 确实在里面；读不到就**红**（不是警告），
+     *   且**不跑探针**（读了错产物的探针，无论红绿都没有意义）。
+     *
+     *   为什么这是补一个**既存的洞**：此前「探针确实读到了带变异的那份产物」从未被验证过，
+     *   只是**碰巧**成立（构建与探针恰好都指向 `build-dist`）。⇒ 一旦有人把产物路径改出一层
+     *   （env / outDir / worktree 隔离），这个洞就会变成**假绿**：
+     *   探针读了旧目录 ⇒ 变异根本没进它读的产物 ⇒ 绿得毫无意义。
+     *   （team-lead 的通用式：「**空间给了，还要证明『东西确实在那个空间里』**」。）
+     */
+    const artifactToken = mutation.artifactMustContain;
+    if (artifactToken) {
+      const art = mutationInArtifact(artifactToken);
+      if (!art.ok) {
+        result.ok = false;
+        result.reason =
+          `★ **变异没进产物**（第 0 段·产物层未通过）：在 \`build-dist/assets/*.js\` 里找不到 ` +
+          `token ${JSON.stringify(artifactToken)}（扫了 ${art.scanned} 个 js：${art.files.join(', ') || '<无>'}）⇒ ` +
+          '探针读到的**不是变异版** ⇒ 本次读数无效。**未跑探针**（错产物的红/绿都不构成证据）。';
+        console.error(`!! [artifact] ${mutation.id}：${result.reason}`);
+        return result;
+      }
+      echo(
+        `[artifact] ✓ 变异已在产物中（token ${JSON.stringify(artifactToken)} 命中 ${art.hits.length}/${art.scanned} 个 js：${art.hits.join(', ')}）`,
+      );
+    }
 
     // 跑探测用例。期望 **失败**（非零退出）
     const r = run('npx', ['vitest', 'run', mutation.probe.spec, '-t', mutation.probe.test], {
