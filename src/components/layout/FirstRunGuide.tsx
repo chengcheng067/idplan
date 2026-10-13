@@ -14,10 +14,12 @@
  *
  * ── v0.8.5 B 深化（他反馈 #2「新手教程呈现太粗糙」+ 默认室内）──
  * 单卡两按钮 → **行业分流三卡**（设计规范 deliverables/research/
- * v0.8.5-选择器与引导与二级侧栏-视觉规范.md §B）：室内 / 软件 / 旅游
- * 代表三种看板列形态（3/5/4 列），卡底一排小色条 = 真实列形态微预览
+ * v0.8.5-选择器与引导与二级侧栏-视觉规范.md §B）：软件 / 旅游 / 室内
+ * 代表三种看板列形态（5/4/3 列），卡底一排小色条 = 真实列形态微预览
  * （零图片资源、离线优先）；卡片驱动数据是一张表（domain/图标/文案/
  * demoReady）——**全行业软件的第一屏不该只有室内**。
+ * （顺序口径 2026-10-13 改：旧序是「室内 / 软件 / 旅游」，首位建筑域；
+ *  现按 `demoDataFactory` 的项目顺序同位 —— 软件开发优先、建筑域排末位。）
  * 新增：点卡导入期间 aria-busy 防连点（loadDemo 是覆盖式，连点=两次
  * 全库覆盖）；「先四处看看」ghost 出口 = 旧「从空库开始」同语义。
  * 显示条件 / flag / 轮询 / isAdmin 门控**零改动**（两条既有铁律见 B.6：
@@ -41,6 +43,18 @@ const GUIDE_SEEN_KEY = 'idplan.firstRunGuideSeen';
  * `bars` = 列形态微预览的色条数与色（取该行业看板列的 tone token；
  * 宽度按列数分档：3 列 w-6 / 4 列 w-5 / 5 列 w-4）。`demoReady`：
  * 示例数据尚未制作的行业不上卡（点不动的事不摆出来——产品官 DX 纪律）。
+ *
+ * ── 2026-10-13 · 首位换成非建筑行业 + 文案去行业本位（公开仓库前的脱敏）──
+ * 旧版首位是室内卡，文案「画图纸、跑工地——从设计到施工，一图看清走到哪」。
+ * 两条问题：① 这是**用户可见面最显眼的一处建筑本位**（而这张卡就是
+ * 「载入示例项目」的入口，`data-first-run-card` 是它的抓手）；② 卡片在同一个
+ * 工具里只讲一个行业，读者看不出「换个行业会怎样」。
+ * 现在：**软件卡排首位**（与 `demoDataFactory` 的项目顺序同口径：软件开发优先、
+ * 建筑域排末位），每张卡的文案先说**机制**（选它就带出该行业的阶段与看板列）、
+ * 再说该行业的一句特征 —— 行业味道留着，行业本位话术（图纸 / 工地 / 施工）去掉。
+ * ⚠️ 只动了顺序与 `lines`；`domain` 取值（= `data-first-run-card`）与 `bars` 一律未动
+ * ⇒ 七处按属性值选卡的 spec 无需跟改。行业名与行业库（`DOMAIN_LABELS` /
+ * `templates/**`）同样未动。
  */
 const GUIDE_CARDS: ReadonlyArray<{
   domain: string;
@@ -51,22 +65,10 @@ const GUIDE_CARDS: ReadonlyArray<{
   demoReady: boolean;
 }> = [
   {
-    domain: 'indoor',
-    label: '室内',
-    Icon: Sofa,
-    lines: '画图纸、跑工地——从设计到施工，一图看清走到哪',
-    bars: [
-      { w: 'w-6', tone: 'bg-pine' },
-      { w: 'w-6', tone: 'bg-amber' },
-      { w: 'w-6', tone: 'bg-stage-s1' },
-    ],
-    demoReady: true,
-  },
-  {
     domain: 'software',
     label: '软件',
     Icon: Code2,
-    lines: '规划、设计、开发、验证、发布——五个阶段排在一张板上',
+    lines: '选它就带出该行业的阶段与看板列——规划到发布五个阶段排在一张板上',
     bars: [
       { w: 'w-4', tone: 'bg-stage-s1' },
       { w: 'w-4', tone: 'bg-stage-s2' },
@@ -80,12 +82,24 @@ const GUIDE_CARDS: ReadonlyArray<{
     domain: 'travel',
     label: '旅游',
     Icon: Plane,
-    lines: '线路策划到出行结算，节点再多也不丢',
+    lines: '选它就带出该行业的阶段与看板列，线路策划到出行结算节点再多也不丢',
     bars: [
       { w: 'w-5', tone: 'bg-stage-s1' },
       { w: 'w-5', tone: 'bg-stage-s2' },
       { w: 'w-5', tone: 'bg-stage-s3' },
       { w: 'w-5', tone: 'bg-stage-s4' },
+    ],
+    demoReady: true,
+  },
+  {
+    domain: 'indoor',
+    label: '室内',
+    Icon: Sofa,
+    lines: '选它就带出该行业的阶段与看板列，一图看清走到哪',
+    bars: [
+      { w: 'w-6', tone: 'bg-pine' },
+      { w: 'w-6', tone: 'bg-amber' },
+      { w: 'w-6', tone: 'bg-stage-s1' },
     ],
     demoReady: true,
   },
