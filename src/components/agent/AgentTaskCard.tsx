@@ -52,6 +52,8 @@ import type { HumanBoardGroup } from '../../core/agent/board';
 import { taskMetaText } from './taskMetaText';
 import { termFor } from '../../constants/agentTerms';
 import { useLayoutStore } from '../../store/useLayoutStore';
+import { useLang } from '../../i18n';
+import type { MessageKey } from '../../i18n';
 import { remainingDays } from '../../lib/date';
 import { cn } from '../../lib/cn';
 
@@ -139,31 +141,36 @@ export type HumanPrimaryIntent = 'claim' | 'unblock' | 'approve' | 'open';
 export function humanPrimaryOf(
   task: Task,
   group: HumanBoardGroup,
-): { label: string; intent: HumanPrimaryIntent } {
+): { labelKey: MessageKey; intent: HumanPrimaryIntent } {
   switch (group) {
     case 'ready':
-      return { label: '开始处理', intent: 'claim' };
+      return { labelKey: 'agentCard.actionClaim', intent: 'claim' };
     case 'confirm':
       return task.status === 'review'
-        ? { label: '验收', intent: 'approve' }
-        : { label: '解阻塞', intent: 'unblock' };
+        ? { labelKey: 'agentCard.actionApprove', intent: 'approve' }
+        : { labelKey: 'agentCard.actionUnblock', intent: 'unblock' };
     case 'doing':
-      return { label: '查看进度', intent: 'open' };
+      return { labelKey: 'agentCard.actionProgress', intent: 'open' };
     case 'done':
-      return { label: '查看/复用', intent: 'open' };
+      return { labelKey: 'agentCard.actionReuse', intent: 'open' };
     default:
-      return { label: '查看', intent: 'open' };
+      return { labelKey: 'agentCard.actionOpen', intent: 'open' };
   }
 }
 
-/** 剩余 / 逾期天数（tech 与人话模式共用的文案，避免两处算法漂移） */
-function dueText(task: Task): { text: string; overdue: boolean; days: number } | null {
+/**
+ * 剩余 / 逾期天数（tech 与人话模式共用的文案，避免两处算法漂移）。
+ * `t` 由调用方传入（本函数在模块层，拿不到 `useLang()`）。
+ */
+type TFn = (key: MessageKey, vars?: { days: number }) => string;
+function dueText(task: Task, t: TFn): { text: string; overdue: boolean; days: number } | null {
   if (!task.dueDate) return null;
   const days = remainingDays(task.dueDate.slice(0, 10));
-  if (taskIsDone(task)) return { text: `剩余 ${days} 天`, overdue: false, days };
+  if (taskIsDone(task))
+    return { text: t('agentBoard.dueRemaining', { days }), overdue: false, days };
   return days < 0
-    ? { text: `逾期 ${Math.abs(days)} 天`, overdue: true, days }
-    : { text: `剩余 ${days} 天`, overdue: false, days };
+    ? { text: t('agentBoard.dueOverdue', { days: Math.abs(days) }), overdue: true, days }
+    : { text: t('agentBoard.dueRemaining', { days }), overdue: false, days };
 }
 
 /**
@@ -196,14 +203,21 @@ export function humanMetaOf(
   task: Task,
   assigneeLabel: string | undefined,
   blockedByTitles: readonly string[],
+  t: TFn & ((key: MessageKey, vars?: Record<string, string>) => string),
 ): { text: string; tone: HumanMetaTone } {
-  const who = `负责人：${assigneeLabel ?? '待认领'}`;
+  const who = t('agentCard.metaOwner', { name: assigneeLabel ?? t('agentCard.unclaimed') });
 
   if (blockedByTitles.length > 0) {
-    return { text: `${who} · 受阻：${blockedByTitles.join('、')}`, tone: 'clay' };
+    return {
+      text: t('agentCard.metaBlocked', {
+        who,
+        titles: blockedByTitles.join(t('agentCard.titleSep')),
+      }),
+      tone: 'clay',
+    };
   }
 
-  const due = dueText(task);
+  const due = dueText(task, t);
   if (!due) return { text: who, tone: 'mist' };
 
   if (due.overdue) return { text: `${who} · ${due.text}`, tone: 'clay' };
@@ -236,6 +250,7 @@ export function AgentTaskCard({
   onPrimary?(task: Task, intent: HumanPrimaryIntent): void;
 }): JSX.Element {
   const termMode = useLayoutStore((s) => s.agentBoardMode);
+  const { t } = useLang();
   /** 人话模式 = 调用方给了 group（四组视图才传 group） */
   const human = group !== undefined;
 
@@ -243,7 +258,7 @@ export function AgentTaskCard({
   if (human) {
     const primary = humanPrimaryOf(task, group);
     const blocked = blockedByTitles.length > 0;
-    const meta = humanMetaOf(task, assigneeLabel, blockedByTitles);
+    const meta = humanMetaOf(task, assigneeLabel, blockedByTitles, t);
 
     return (
       <div
@@ -274,7 +289,7 @@ export function AgentTaskCard({
           onClick={() => (onPrimary ? onPrimary(task, primary.intent) : onOpen(task.id))}
           className="inline-flex h-[34px] shrink-0 items-center rounded-[12px] border border-pine px-3.5 text-sm text-pine transition-colors hover:bg-pine-soft"
         >
-          {primary.label}
+          {t(primary.labelKey)}
         </button>
       </div>
     );
@@ -329,22 +344,25 @@ export function AgentTaskCard({
             )}
             title={
               blockedByTitles.length > 0
-                ? `${termFor('blockedBy', termMode)}：${blockedByTitles.join('、')}`
+                ? t('agentCard.blockedTitle', {
+                    term: termFor('blockedBy', termMode),
+                    titles: blockedByTitles.join(t('agentCard.titleSep')),
+                  })
                 : termFor('deps', termMode)
             }
           >
             ⛓ {task.dependsOn.length}
-            {blockedByTitles.length > 0 && <span>（受阻）</span>}
+            {blockedByTitles.length > 0 && <span>{t('agentCard.blockedTag')}</span>}
           </span>
         )}
-        {dueText(task) && (
+        {dueText(task, t) && (
           <span
             className={cn(
               'ml-auto tabular-nums',
-              dueText(task)?.overdue ? 'text-clay' : 'text-mist',
+              dueText(task, t)?.overdue ? 'text-clay' : 'text-mist',
             )}
           >
-            {dueText(task)?.text}
+            {dueText(task, t)?.text}
           </span>
         )}
       </div>

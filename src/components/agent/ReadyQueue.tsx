@@ -39,6 +39,7 @@ import { computeReadyTasks } from '../../core/agent/dag';
 import { taskMetaText } from './taskMetaText';
 import { termFor } from '../../constants/agentTerms';
 import { useLayoutStore } from '../../store/useLayoutStore';
+import { useLang } from '../../i18n';
 
 export function ReadyQueue({
   tasks,
@@ -56,13 +57,14 @@ export function ReadyQueue({
 
   /** 术语模式（human 人话 / tech 技术）：T04 起必须显式传入，无缺省（§4.4） */
   const termMode = useLayoutStore((s) => s.agentBoardMode);
+  const { t } = useLang();
 
   return (
     <section className="flex flex-col gap-3 rounded-3xl border border-pine bg-paper p-5">
       <div className="flex items-center gap-2">
         <Zap size={14} className="text-pine" aria-hidden />
         <h2 className="text-sm font-semibold text-ink">
-          ⚡ {termFor('ready', termMode)} —— 下一步该做什么
+          {t('agentQueue.title', { term: termFor('ready', termMode) })}
         </h2>
         <span className="text-sm font-semibold tabular-nums text-mist">
           {ready.length}
@@ -75,27 +77,25 @@ export function ReadyQueue({
           role="alert"
           className="rounded-[10px] border border-amber/50 bg-amber-soft px-3 py-2 text-xs text-amber"
         >
-          检测到 {cyclicIds.size} 条任务存在依赖环（deps 相互引用），已从 Ready
-          队列排除。请在任务详情中修正 deps 后刷新。
+          {t('agentQueue.cyclicWarning', { count: cyclicIds.size })}
         </div>
       )}
 
       {ready.length === 0 && blocked.length === 0 ? (
         <p className="rounded-[10px] border border-dashed border-line px-3 py-4 text-center text-xs text-mist">
-          当前没有可执行的 Ready 任务。通过「{termFor('applyPayload', termMode)}」导入或把任务流转到
-          ready 即可出现在这里。
+          {t('agentQueue.empty', { term: termFor('applyPayload', termMode) })}
         </p>
       ) : (
         <ul className="flex flex-col gap-2.5">
-          {ready.map((t) => (
+          {ready.map((task) => (
             <li
-              key={t.id}
+              key={task.id}
               className="flex items-center gap-2.5 rounded-[12px] bg-sunken p-3"
             >
               {/* 技术 ID + 标题：整块可点开详情（认领是第二个动作，故不嵌套 button） */}
               <button
                 type="button"
-                onClick={() => onOpenTask(t.id)}
+                onClick={() => onOpenTask(task.id)}
                 className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
               >
                 {/*
@@ -105,18 +105,18 @@ export function ReadyQueue({
                   字号按画板 07 由 `text-xs` 收紧到 `text-[11px]`。
                 */}
                 <span className="truncate font-mono text-[11px] text-mist" data-task-no="">
-                  {taskMetaText(t)}
+                  {taskMetaText(task)}
                 </span>
                 <span className="truncate text-base font-semibold text-ink transition-colors hover:text-pine">
-                  {t.title}
+                  {task.title}
                 </span>
               </button>
               <button
                 type="button"
-                onClick={() => onClaim(t.id)}
+                onClick={() => onClaim(task.id)}
                 className="inline-flex h-[30px] shrink-0 items-center rounded-[10px] bg-pine px-3 text-xs font-medium text-white transition-colors hover:bg-pine-deep"
               >
-                认领
+                {t('agentQueue.claim')}
               </button>
             </li>
           ))}
@@ -127,7 +127,7 @@ export function ReadyQueue({
       {blocked.length > 0 && (
         <div>
           <h3 className="mb-1.5 text-xs font-medium text-mist">
-            暂时不要碰（被阻塞 {blocked.length}）
+            {t('agentQueue.blockedTitle', { count: blocked.length })}
           </h3>
           <ul className="flex flex-col gap-1">
             {blocked.map(({ task, blockedBy }) => (
@@ -143,7 +143,10 @@ export function ReadyQueue({
                   {task.title}
                 </button>
                 <span className="text-clay">
-                  ← {termFor('blockedBy', termMode)} {blockedBy.map((d) => `「${d.title}」`).join('、')}
+                  ← {termFor('blockedBy', termMode)}{' '}
+                  {blockedBy
+                    .map((d) => t('agentQueue.blockedByQuote', { title: d.title }))
+                    .join(t('agentQueue.blockedBySep'))}
                 </span>
               </li>
             ))}

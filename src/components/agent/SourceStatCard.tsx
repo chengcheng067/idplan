@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 
 import type { Task } from '../../core/types/entities';
 import { AGENT_SEAT_LIMIT } from '../../constants/agentTerms';
+import { useLang } from '../../i18n';
 
 export function SourceStatCard({
   tasks,
@@ -23,6 +24,7 @@ export function SourceStatCard({
   agentSeatUsed: number;
   agentSeatLimit?: number;
 }): JSX.Element {
+  const { t } = useLang();
   /** agentKind → 任务数（开放字符串直接作 key；空值归 'unknown'） */
   const byKind = useMemo(() => {
     const map = new Map<string, number>();
@@ -54,12 +56,14 @@ export function SourceStatCard({
         </span>
       ))}
       {byKind.length === 0 && (
-        <span className="text-mist/70">暂无 agent 来源任务（导入 payload 后此处按 agentKind 聚合）</span>
+        <span className="text-mist/70">{t('agentSource.empty')}</span>
       )}
       <span className="ml-auto text-mist">
-        Agent 席位 已用 <strong className="font-mono text-ink">{agentSeatUsed}</strong>/{agentSeatLimit}
+        {t('agentSource.seatsPre')}
+        <strong className="font-mono text-ink">{agentSeatUsed}</strong>
+        {t('agentSource.seatsPost', { limit: agentSeatLimit })}
         {agentSeatUsed > agentSeatLimit && (
-          <span className="ml-1 text-amber">（超出免费额度，仅提示）</span>
+          <span className="ml-1 text-amber">{t('agentSource.seatsOver')}</span>
         )}
       </span>
     </div>
