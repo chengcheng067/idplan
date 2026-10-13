@@ -24,7 +24,7 @@
  *    上面那条「前置自证」当场把它抓了出来）。
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
@@ -163,6 +163,29 @@ afterEach(() => {
   if (root) act(() => root.unmount());
   host?.remove();
   (root as unknown as null) = null;
+});
+
+/**
+ * ★ 必须**自己**还原 `window.__APP_ENV__`（本文件是全仓唯一写它的地方）。
+ *
+ * 为什么由本文件负责：注入点在 `vi.hoisted`（**必须在整张模块图求值之前**，否则
+ * `src/config/env.ts` 那个模块级单例已经被定型成 `local`，本 spec 的 401 分支根本
+ * 到不了）。既然只能「在模块加载前注入」，那**还原也只能由这里做** —— 没有任何
+ * 全局复位能替它。
+ *
+ * 为什么不能省：`window.__APP_ENV__` 是**进程级全局**。vitest 按文件重建模块图，
+ * 下一个 spec 文件重新求值 `src/config/env.ts` 时会读到这个残留 ⇒ `appEnv.dataSource`
+ * 恒为 `'remote'` ⇒ 所有依赖 `dataSource === 'local'` 的代码路径**根本不会执行**。
+ * 实测（最小复现，同一进程按顺序跑）：本文件 + `tests/db-version-ahead.spec.tsx`
+ * ⇒ 后者三条「本地版本闸门」全红（`expected '已进入应用' to contain '本地数据比当前应用更新'`、
+ * `创建仓储 … expected "spy" to be called +0 times, but got 1 times`），而**单跑它全绿**。
+ *
+ * ⇒ 记一条纪律：**「我自己的 spec 是绿的」不等于「我没有影响别人」。**
+ *    凡是在 spec 里给 `window` / `globalThis` 赋值，都要问一句「谁负责还原它」。
+ *    （这里踩的第三种代价：自己的绿是对的，代价是别人的红，而且藏了整整一轮才被二分挖出来。）
+ */
+afterAll(() => {
+  delete (window as unknown as { __APP_ENV__?: unknown }).__APP_ENV__;
 });
 
 describe('插件开关 · 失败反馈分类（#17 + G1）', () => {
