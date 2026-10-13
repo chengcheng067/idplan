@@ -258,4 +258,20 @@ describe('服务端导入：客户端产出的包（#15 projects.type）', () =>
     expect(res.statusCode).toBe(200);
     expect(projectTypes(), '包内有值时必须以包为准，不能被占位覆盖').toEqual(['verycustom']);
   });
+
+  it('⑤ 反方向跨形态：服务端自产包（带 type）⇒ 客户端 local 能导入，实体侧 type 被剥离', async () => {
+    const app = await buildServer();
+    db.prepare(
+      `INSERT INTO projects (id,name,type,address,client_name,planned_start_at,planned_end_at,status,revision,updated_at)
+       VALUES ('p_srv','服务端项目','verycustom','','','2026-08-01','2026-10-01','active',1,'2026-08-01T00:00:00.000Z')`,
+    ).run();
+    const exported = (await app.inject({ method: 'GET', url: '/api/backup', headers: H })).json();
+
+    // 服务端 → 客户端：zod 宽收 `type`、`normalizeProjectRow` 再把它剥掉 ⇒ 不因多出的列被拒
+    await expect(new BackupService(bundle).importAndReplace(exported)).resolves.not.toThrow();
+    const list = await bundle.projects.list({ status: 'all' });
+    expect(list.map((p) => p.id)).toEqual(['p_srv']);
+    // 确认「插件的 type」没有渗进客户端实体（v0.8 已下线，实体里不该出现）
+    expect('type' in (list[0] as unknown as Record<string, unknown>)).toBe(false);
+  });
 });
