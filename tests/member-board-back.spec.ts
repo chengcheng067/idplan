@@ -136,7 +136,7 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug C · 成员看板返回键（真 Chromium�
     const page: Page = await ctx.newPage();
     try {
       await bootstrapAdminWithDemo(page, server.url);
-      await reenterAdmin(page); // 演示成员甲 = admin
+      await reenterAdmin(page); // 负责人甲 = admin
       await page.waitForFunction(() => window.location.pathname === '/', null, { timeout: 10000 });
 
       await page.goto(`${server.url}member-board`);

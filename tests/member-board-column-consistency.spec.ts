@@ -20,7 +20,7 @@
  *   本仓现状：**冷载首帧** `isAdmin` 仍为 false（members/settings 都是 IndexedDB 异步装载），
  *   `resolveMemberBoardSubject` 于是判 `denied` ⇒ `MemberBoardPage` 渲染
  *   `<Navigate to="/member-board" replace/>` ⇒ **`?member=` 被静默吃掉**，落地成"看自己"。
- *   （真机实测：goto 后 400ms，href 已是 `/member-board`，h1 是「项目看板」而非「演示成员乙 的项目看板」。）
+ *   （真机实测：goto 后 400ms，href 已是 `/member-board`，h1 是「项目看板」而非「执行乙 的项目看板」。）
  *   这是独立缺陷（本 spec 不修、但用 A-00 断言钉住"参数确实生效"，避免本 spec 变成
  *   "同一页量两遍"的假绿）。用户实际路径（首页搜索点成员 → `navigate()`）是客户端路由，
  *   不受影响，故这里用同一条客户端路由路径复现。
@@ -190,7 +190,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
 
           // ① 参数确实生效——否则下面两条相等毫无意义（"同一页量两遍"是假绿）
           expect(b.href, '?member= 必须保留在 URL 上（无参时本用例不成立）').toContain('member=m-rose');
-          expect(b.h1, '标题必须是「演示成员乙 的项目看板」，否则说明看到的是自己的板').toContain('演示成员乙');
+          expect(b.h1, '标题必须是「执行乙 的项目看板」，否则说明看到的是自己的板').toContain('执行乙');
 
           // ② 列集合逐项相等（列数 + 按序 label）
           expect(b.columnCount).toBe(a.columnCount);
@@ -201,7 +201,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
           expect(b.perRow).toEqual(a.perRow);
           expect(b.boardWidth).toBe(a.boardWidth);
 
-          // ④ 反假绿：夹具下板必须是**多行业**（室内 + 软件），且软件侧列在"看演示成员乙"时也在
+          // ④ 反假绿：夹具下板必须是**多行业**（室内 + 软件），且软件侧列在"看执行乙"时也在
           expect(a.columnCount).toBeGreaterThanOrEqual(4);
           expect(a.labels).toEqual(
             expect.arrayContaining(['待启动', '设计中', '深化中', '施工中', '开发中', '已发布']),

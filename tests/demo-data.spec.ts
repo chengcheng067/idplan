@@ -111,18 +111,29 @@ describe('demo 运行时工厂（buildDemoBackup）', () => {
 
   /**
    * ⑥ 正向锁：光有黑名单不够——黑名单只管「旧名字回来了」，管不住
-   * 「换一个真实甲方名字写进来」。正向锁规定**形态**：名字必须以「演示」开头。
+   * 「换一个真实甲方名字写进来」。正向锁规定**形态**：名字必须是可识别的演示形态。
+   *
+   * 成员锁两条，第二条（首字两两不同）不是审美：
+   *   `AvatarStack` 取 `name[0]` 当头像文字 ⇒ 首字若相同（中间那版「演示成员甲…戊」
+   *   五个都取到「演」），五个头像字一模一样，只能靠颜色区分。
    */
-  it('⑥ 正向锁：项目名/客户名一律「演示…」开头，地址自述为演示地址', () => {
+  it('⑥ 正向锁：项目/客户/成员名的**形态**受约束，且成员首字两两不同', () => {
     expect(pkg.data.projects).toHaveLength(5);
     for (const p of pkg.data.projects) {
       expect(p.name, '项目名必须以「演示项目」开头').toMatch(/^演示项目/);
       expect(p.clientName, `「${p.name}」的客户名必须以「演示客户」开头`).toMatch(/^演示客户/);
       expect(p.address, `「${p.name}」的地址必须自述为演示地址`).toContain('演示');
     }
-    for (const m of pkg.data.members) {
-      expect(m.name, '成员名必须以「演示成员」开头').toMatch(/^演示成员/);
+    const names = pkg.data.members.map((m) => m.name);
+    for (const n of names) {
+      expect(n, '成员名必须是「中立角色词 + 天干」形态（如 负责人甲 / 执行乙）').toMatch(
+        /^(负责人|执行|协作|评审|统筹)[甲乙丙丁戊己庚辛壬癸]$/,
+      );
     }
+    // 头像文字可辨识：首字两两不同（AvatarStack 取 name[0]）
+    expect(new Set(names.map((n) => n[0])).size, '成员名首字必须两两不同（头像靠它区分）').toBe(
+      names.length,
+    );
   });
 
   it('⑤ 入口守门：useBackupIo.loadDemo 走工厂而非 fetch 静态 json（防回潮）', () => {

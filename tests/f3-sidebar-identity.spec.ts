@@ -221,11 +221,11 @@ describe.skipIf(!CAN_RUN || buildIsStale())('F3-BROWSER · 退出身份后侧栏
        * 重新进入身份：示例导入整库替换 members 后，此前手工建立的管理员
        * （m-xxx）已不在库里，localStorage 里的 currentMemberId 失效 ⇒ 应用
        * 停在「还未进入身份」态（这正是 2ec2d3c 修的空态本身）。用演示数据
-       * 里的真实成员「演示成员甲」走 name_input 流程进入。
+       * 里的真实成员「负责人甲」走 name_input 流程进入。
        */
       await page.locator('button', { hasText: '点击进入' }).first().click();
       await page.waitForTimeout(400);
-      await page.locator('input[placeholder="你的姓名"]').fill('演示成员甲');
+      await page.locator('input[placeholder="你的姓名"]').fill('负责人甲');
       await page.locator('button', { hasText: '下一步' }).first().click();
       await page.waitForTimeout(800);
 

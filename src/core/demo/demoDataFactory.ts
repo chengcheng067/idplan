@@ -28,12 +28,15 @@
  *   · 项目名 → 「演示项目1」～「演示项目5」；
  *   · 客户名 → 「演示客户公司甲/乙/丙/丁/戊」；
  *   · 地址   → 「（演示地址）」（不再出现任何真实街道 / 园区）；
- *   · 成员   → 「演示成员甲/乙/丙/丁/戊」+ 中立角色词（负责人 / 执行 / 协作 /
- *             评审 / 统筹）—— 旧的「陈工·方案设计」「郑工·现场管理」是建筑岗位味。
+ *   · 成员   → 「**角色 + 天干**」（负责人甲 / 执行乙 / 协作丙 / 评审丁 / 统筹戊）——
+ *             中立角色词、零岗位词（旧的「陈工·方案设计」「郑工·现场管理」是建筑
+ *             岗位味），且**五个名字的首字互不相同**：头像取 `name[0]`（AvatarStack），
+ *             中间那版命名「演示成员甲…戊」首字全是「演」⇒ 五个头像字一模一样。
  * **presetKey 一个未改**（5 个 preset 仍覆盖五种看板列形态，那是既有判据）；
  * 只把**顺序**调了，首位由 `indoor_full` 换成 `software_mobile_full`
  * （旧注释「室内放首位——主场不丢」作废：这是跨行业工具，且要弱化建筑味）。
- * 防回潮由 `tests/demo-data.spec.ts` 的禁词表 +「项目名必须以『演示项目』开头」锁住。
+ * 防回潮由 `tests/demo-data.spec.ts` 的禁词表 + 形态正向锁（项目/客户/成员名
+ * 各有规定形态）+「成员首字两两不同」锁住。
  */
 
 import { getPresets, getPresetItems } from '../template/stage-library';
@@ -51,16 +54,18 @@ export const DEMO_PRESETS: ReadonlyArray<{ presetKey: string; label: string }> =
 ];
 
 /**
- * 演示成员（脱敏：一律「演示成员 + 天干」+ **中立角色词**，demo.local 域）。
+ * 演示成员（脱敏：一律「**角色 + 天干**」形态 + demo.local 域）。
+ * 为什么不是「演示成员甲/乙/丙/丁/戊」：头像取 `name[0]`，那种命名五个头像全是
+ * 「演」，只能靠颜色区分；改成「负责人甲 / 执行乙 / …」后首字 负/执/协/评/统 各不相同。
  * 旧的「陈工 / 周工 / 吴工 / 郑工」+「方案设计 / 深化设计 / 现场管理」是
  * 真实姓名尾字 + 建筑岗位名，公开仓库不能留。
  */
 const DEMO_MEMBERS: ReadonlyArray<Pick<Member, 'id' | 'name' | 'role' | 'contact' | 'avatarColor' | 'roleKind'>> = [
-  { id: 'demo_admin', name: '演示成员甲', role: '负责人', contact: 'admin@demo.local', avatarColor: '#5B8C5A', roleKind: MemberRoleKind.Admin },
-  { id: 'demo_m1', name: '演示成员乙', role: '执行', contact: 'member-b@demo.local', avatarColor: '#B25C5C', roleKind: MemberRoleKind.Member },
-  { id: 'demo_m2', name: '演示成员丙', role: '协作', contact: 'member-c@demo.local', avatarColor: '#5C7A9E', roleKind: MemberRoleKind.Member },
-  { id: 'demo_m3', name: '演示成员丁', role: '评审', contact: 'member-d@demo.local', avatarColor: '#C98D5B', roleKind: MemberRoleKind.Member },
-  { id: 'demo_m4', name: '演示成员戊', role: '统筹', contact: 'member-e@demo.local', avatarColor: '#7A6BAC', roleKind: MemberRoleKind.Member },
+  { id: 'demo_admin', name: '负责人甲', role: '负责人', contact: 'admin@demo.local', avatarColor: '#5B8C5A', roleKind: MemberRoleKind.Admin },
+  { id: 'demo_m1', name: '执行乙', role: '执行', contact: 'member-b@demo.local', avatarColor: '#B25C5C', roleKind: MemberRoleKind.Member },
+  { id: 'demo_m2', name: '协作丙', role: '协作', contact: 'member-c@demo.local', avatarColor: '#5C7A9E', roleKind: MemberRoleKind.Member },
+  { id: 'demo_m3', name: '评审丁', role: '评审', contact: 'member-d@demo.local', avatarColor: '#C98D5B', roleKind: MemberRoleKind.Member },
+  { id: 'demo_m4', name: '统筹戊', role: '统筹', contact: 'member-e@demo.local', avatarColor: '#7A6BAC', roleKind: MemberRoleKind.Member },
 ];
 
 const NOW = (): string => new Date().toISOString();

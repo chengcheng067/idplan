@@ -642,7 +642,7 @@
     "members": [
       {
         "id": "m-admin",
-        "name": "演示成员甲",
+        "name": "负责人甲",
         "role": "负责人",
         "contact": "admin@fixture.local",
         "avatarColor": "#5B8C5A",
@@ -656,7 +656,7 @@
       },
       {
         "id": "m-rose",
-        "name": "演示成员乙",
+        "name": "执行乙",
         "role": "执行",
         "contact": "member-b@fixture.local",
         "avatarColor": "#B25C5C",
@@ -670,7 +670,7 @@
       },
       {
         "id": "m-zhou",
-        "name": "演示成员丙",
+        "name": "协作丙",
         "role": "协作",
         "contact": "member-c@fixture.local",
         "avatarColor": "#5C7A9E",

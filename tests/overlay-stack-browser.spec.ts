@@ -295,7 +295,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
      */
     expect(await clickText(page, '点击进入'), '未进入身份时应能在页面上点到「点击进入」（前置：身份已被示例包换掉）').toBe(true);
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('演示成员甲');
+    await page.locator('input[placeholder="你的姓名"]').fill('负责人甲');
     expect(await clickText(page, '下一步'), '姓名流程应有「下一步」').toBe(true);
     await page.waitForTimeout(1500);
     expect(
