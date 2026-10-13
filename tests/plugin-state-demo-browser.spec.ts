@@ -177,6 +177,10 @@ const IS_VARIANT = Boolean(process.env.DEMO_GATE_DIST);
  * 而这里锚的是 `DEMO_GATE_DIST` 的**独立产物**。要共用就得给共享件加一个「对任意产物判新鲜度」
  * 的入口 —— 那 是改共享件，**已报 team-lead 待定**；在那之前这里是**有解释的窄例外**。
  * 用 `readdirSync({recursive:true})` 一行拿到文件树，刻意**不复制**共享助手那套递归 walk。
+ *
+ * ★ **退役条件**（team-lead 要求写明）：**将来共享件若加了「对任意产物判新鲜度」的通用入口
+ *   （例如 `staleInputsAgainst(indexPath)`），就切过去、删掉下面这份** —— 它存在的唯一理由是
+ *   共享件目前只能锚主产物；锚点一旦可参数化，这份就该退役。
  */
 function variantStale(): string[] {
   const fs = require('node:fs') as typeof import('node:fs');
@@ -576,6 +580,19 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
        *   轮询**只可能把它从 false 变 true、永远不会变回 false**。
        *   本场景在挂载那一刻 localStorage 里**还有**那份（即将被清掉的）旧 id
        *   ⇒ latch 当场为 true ⇒ 卡出现；随后身份修复把 LS 清掉也**不会**把 latch 关回去。
+       *
+       * ── ⚠️ 已知脆弱机制（team-lead 已登记进「已知限制」清单，与 B / E 并列）──
+       *   **`identityDone` 的实际语义是「首帧那一刻 localStorage 里有没有东西」，
+       *     它不表示「身份已建立」。** 两个方向都会失真：
+       *     · **正向**（身份**未**建立、信号为真）⇒ 卡照出现 —— **本用例 ④a 就是现场证据**
+       *       （`enterIdentity=1` 而 `cardPanel=true`）；
+       *     · **反向**（身份**已**建立、信号为假）⇒ 卡被压掉 —— 例如「载入示例数据」之后
+       *       （`localStorageId=null` + KV `demo_admin` ⇒ 身份其实已进入，而 latch 为 false）。
+       *   为什么**今天看不出来**：两种情况都**被「库是否为空」这条独立条件遮住**
+       *     （空库时正向恰好等于期望；反向发生的时刻库必然非空、卡本来也不该出现）。
+       *   ⇒ **以后谁要改这张卡的信号，先读这条注释**：别以为「信号为真 = 身份已建立」。
+       *     （team-lead 裁定**当前不改产品代码**：无可观测错误、且这是 onboarding 门、
+       *       影响面大而收益是修一个当前测不出差异的语义。）
        *
        * 成对判据（缺一条就是半截判据）：
        *   肯定式 —— 卡**在**；
