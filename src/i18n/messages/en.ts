@@ -395,6 +395,73 @@ export const enMessages: Record<MessageKey, string> = {
   'member.triage.emptyOngoing': 'No tasks in progress',
   'member.triage.emptyRecentDone': 'Nothing completed recently',
   'member.triage.moreDone': '{count} more completed earlier',
+  /* ───── Agent board page (AgentBoardPage, ⑤b-②) ───── */
+  'agentBoard.group.confirm': 'Awaiting confirmation',
+  'agentBoard.group.ready': 'Ready to start',
+  'agentBoard.group.doing': 'In progress',
+  'agentBoard.group.done': 'Completed',
+  'agentBoard.group.hidden': 'Hidden',
+  'agentBoard.mode.human': 'Plain',
+  'agentBoard.mode.tech': 'Technical',
+  'agentBoard.modeTabsAria': 'Board mode switch',
+  'agentBoard.dueOverdue': '{days} d overdue',
+  'agentBoard.dueRemaining': '{days} d left',
+  /* Ingress-channel toasts (10) */
+  'agentBoard.tokenSaved': 'Access token saved on this machine.',
+  'agentBoard.tokenNotConfigured': 'No access token configured yet.',
+  'agentBoard.tokenCopied': 'Access token copied.',
+  'agentBoard.copyFailed': 'Copy failed. Please try again.',
+  'agentBoard.ingressEnvUnsupported':
+    'This environment cannot write the ingress file (Windows desktop builds only).',
+  'agentBoard.ingressWriteFailed': 'Failed to write the ingress file: {reason}',
+  'agentBoard.unknownReason': 'unknown reason',
+  'agentBoard.ingressGeneratedCopied': 'Ingress info generated; path copied: {path}',
+  'agentBoard.ingressGenerated': 'Ingress info generated: {path}',
+  'agentBoard.ingressNotGenerated':
+    'Ingress info not generated yet — click “Generate ingress info” first.',
+  'agentBoard.pathCopied': 'File path copied.',
+  'agentBoard.tokenNotGenerated': 'No access token yet — generate the ingress info first.',
+  'agentBoard.ingressFileAbsent':
+    '(No ingress file yet — click “Generate ingress info” in the panel first.)',
+  'agentBoard.ingressInstructionCopied': 'Ingress instruction copied — paste it to the writer.',
+  /* Writeback proposal toasts */
+  'agentBoard.proposalsApproved': '{count} proposals approved',
+  'agentBoard.proposalsRejected': '{count} proposals rejected',
+  'agentBoard.proposalsFailed':
+    '{count} proposals could not be decided (someone else may have handled them).',
+  /* Toolbar */
+  'agentBoard.backToProjects': '← Projects',
+  'agentBoard.boardSelectAria': 'Choose an Agent board',
+  'agentBoard.noBoards': '(No Agent boards yet)',
+  'agentBoard.deleteTitle': 'Permanently delete the current Agent board',
+  'agentBoard.deleteDisabledTitle': 'Select an Agent board first',
+  'agentBoard.deleteButton': 'Delete board',
+  /* “What to do now” pinned section */
+  'agentBoard.nowTitle': 'What to do now',
+  'agentBoard.startNow': 'Start working',
+  'agentBoard.claimHint': 'Claim it and you can start — all upstream dependencies are ready.',
+  'agentBoard.nowEmpty':
+    'Nothing ready to start right now. Import new tasks or unblock existing ones and they show up here.',
+  'agentBoard.cyclicWarning':
+    '{count} tasks form a dependency cycle and were moved out of the main list. Fix the dependencies and refresh.',
+  /* Footnote under the pinned section（数字是加粗 span ⇒ 拆键；段尾空格是载荷） */
+  'agentBoard.sameGroupPre': 'Same group as “{group}”: ',
+  'agentBoard.unitItems': ' in total',
+  'agentBoard.overdueInline': '· Overdue: ',
+  /* Hidden hint line（句子中间夹一个按钮 ⇒ 空格落在英文取值尾部） */
+  'agentBoard.hiddenHintPre': '{count} more are still being prepared upstream — ',
+  'agentBoard.hiddenHintSwitch': 'switch to “{mode}” ',
+  'agentBoard.hiddenHintPost': 'to see them all',
+  /* Planning wizard / ingress modal / delete confirmation */
+  'agentBoard.planningWizard': 'Plan a board with AI',
+  'agentBoard.ingressModalAria': 'Connect an external writer',
+  'agentBoard.deleteDialogTitle': 'Delete Agent board',
+  'agentBoard.deleteConfirmText': 'Delete permanently',
+  'agentBoard.deleteBodyPre':
+    'Delete “{name}”? Every stage and task on this board will be permanently deleted,',
+  'agentBoard.deleteBodyStrong': 'with no way back',
+  'agentBoard.deleteBodyPost':
+    ', and it will not go to “Archived”.  If you only want to keep it among your projects, use “Take over · convert to a regular project” on the detail page instead.',
   /* ───────────────────── Project details ───────────────────── */
   'project.notFound': 'Project not found (it may have been archived or deleted).',
   'project.backToList': '← Back to project list',

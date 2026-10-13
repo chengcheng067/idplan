@@ -398,6 +398,71 @@ export const zhMessages = {
   'member.triage.emptyOngoing': '没有进行中的任务',
   'member.triage.emptyRecentDone': '最近没有完成的任务',
   'member.triage.moreDone': '另有 {count} 条更早完成',
+  /* ───────────── Agent 看板页（AgentBoardPage，⑤b-②）─────────────
+     · 四组标题与「人话/技术」模式名在页面里是**模块级键表**（模块顶层不能调 useLang，
+       本仓既定形态是「键表 + 渲染期 t()」，见 src/i18n/useLang.ts 纪律②）。
+     · `agentBoard.dueOverdue` / `dueRemaining` 与 `myTasks.dueOverdue` / `dueInDays`
+       是**两套**：那边是「逾期3天」（无空格），这边原文是「逾期 3 天」（有空格），
+       为保中文逐字不变而分开登记（英文取值同口径，不制造第三份措辞）。 */
+  'agentBoard.group.confirm': '待我确认',
+  'agentBoard.group.ready': '可开工',
+  'agentBoard.group.doing': '进行中',
+  'agentBoard.group.done': '已完成',
+  'agentBoard.group.hidden': '隐藏',
+  'agentBoard.mode.human': '人话',
+  'agentBoard.mode.tech': '技术',
+  'agentBoard.modeTabsAria': '看板模式切换',
+  'agentBoard.dueOverdue': '逾期 {days} 天',
+  'agentBoard.dueRemaining': '剩余 {days} 天',
+  /* 接入通道的 toast（10 处） */
+  'agentBoard.tokenSaved': '访问令牌已保存到本机。',
+  'agentBoard.tokenNotConfigured': '尚未配置访问令牌。',
+  'agentBoard.tokenCopied': '访问令牌已复制。',
+  'agentBoard.copyFailed': '复制失败，请重试。',
+  'agentBoard.ingressEnvUnsupported': '当前运行环境不支持写入接入文件（仅 Windows 桌面版可用）。',
+  'agentBoard.ingressWriteFailed': '接入文件写入失败：{reason}',
+  'agentBoard.unknownReason': '未知原因',
+  'agentBoard.ingressGeneratedCopied': '接入信息已生成，路径已复制：{path}',
+  'agentBoard.ingressGenerated': '接入信息已生成：{path}',
+  'agentBoard.ingressNotGenerated': '尚未生成接入信息，请先点「生成接入信息」。',
+  'agentBoard.pathCopied': '文件路径已复制。',
+  'agentBoard.tokenNotGenerated': '尚未生成访问令牌，请先生成接入信息。',
+  'agentBoard.ingressFileAbsent': '（尚未生成接入文件，请先在面板点「生成接入信息」）',
+  'agentBoard.ingressInstructionCopied': '接入指令已复制，粘给写入方即可。',
+  /* 写回提案落定的 toast */
+  'agentBoard.proposalsApproved': '已通过 {count} 条提案',
+  'agentBoard.proposalsRejected': '已拒绝 {count} 条提案',
+  'agentBoard.proposalsFailed': '{count} 条提案落定失败（可能已被他人处理）',
+  /* 工具行 */
+  'agentBoard.backToProjects': '← 项目',
+  'agentBoard.boardSelectAria': '选择 Agent 看板',
+  'agentBoard.noBoards': '（暂无 Agent 看板）',
+  'agentBoard.deleteTitle': '永久删除当前 Agent 看板',
+  'agentBoard.deleteDisabledTitle': '先选中一块 Agent 看板',
+  'agentBoard.deleteButton': '删除看板',
+  /* 「现在该做什么」置顶条 */
+  'agentBoard.nowTitle': '现在该做什么',
+  'agentBoard.startNow': '开始处理',
+  'agentBoard.claimHint': '认领后即可开始处理，相关前置依赖都已就绪。',
+  'agentBoard.nowEmpty': '暂时没有可开工的任务。导入新任务或解除受阻后会出现在这里。',
+  'agentBoard.cyclicWarning': '检测到 {count} 条任务存在依赖环，已移出主列表。请修正依赖后刷新。',
+  /* 置顶条脚注（数字保持加粗 span ⇒ 拆键；`{' '}` 与 `<span>` 由 JSX 保留） */
+  'agentBoard.sameGroupPre': '同类{group} ',
+  'agentBoard.unitItems': '项',
+  'agentBoard.overdueInline': '· 已逾期 ',
+  /* 隐藏提示行（句子中间夹一个按钮 ⇒ 空格落在英文取值尾部） */
+  'agentBoard.hiddenHintPre': '另有 {count} 条在上游准备中，',
+  'agentBoard.hiddenHintSwitch': '切到「{mode}」',
+  'agentBoard.hiddenHintPost': '可查看全部',
+  /* 规划向导 / 接入面板 / 删除确认 */
+  'agentBoard.planningWizard': '用 AI 规划建板',
+  'agentBoard.ingressModalAria': '接入外部写入方',
+  'agentBoard.deleteDialogTitle': '删除 Agent 看板',
+  'agentBoard.deleteConfirmText': '永久删除',
+  'agentBoard.deleteBodyPre': '确认删除「{name}」？该看板下的所有阶段与任务将一并永久删除，',
+  'agentBoard.deleteBodyStrong': '不可恢复',
+  'agentBoard.deleteBodyPost':
+    '，且不会进入「已归档」。 若只是想把它留在项目里，请改用详情页的「接管 · 转为正式项目」。',
   /* ───────────────────── 项目详情（ProjectDetailPage）───────────────────── */
   'project.notFound': '未找到该项目（可能已被归档或删除）。',
   'project.backToList': '← 返回项目列表',

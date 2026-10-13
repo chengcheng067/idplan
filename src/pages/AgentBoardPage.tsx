@@ -85,6 +85,7 @@ import {
 import { useAgentProjects, visibleProjectsFor } from '../core/project/visibility';
 import { useRepos } from '../hooks/useRepos';
 import { useLang } from '../i18n';
+import type { MessageKey } from '../i18n';
 import { useRoleGuard } from '../hooks/useRoleGuard';
 import { useAgentStore } from '../store/useAgentStore';
 import { useMembersStore } from '../store/useMembersStore';
@@ -137,17 +138,24 @@ import {
  * （技术模式是 7 列 status 泳道，不是四组）。塞进术语表会逼出一个
  * 「tech 列填什么」的伪问题，还会把它误标成「可切换术语」。
  * 措辞全部行业中性，不含任何行业黑话（HF-05 守卫会扫本文件，注释也算）。
+ *
+ * ★ 2026-08-27 英文线：值从中文常量改成**文案键表** —— 本表在模块顶层，调不了
+ *   `useLang()`，而本仓既定形态是「键表 + 渲染期 `t()`」（见 `src/i18n/useLang.ts`
+ *   纪律②）。取用点：`t(HUMAN_GROUP_TITLE_KEYS[group])`。中文取值逐字未动。
  */
-const HUMAN_GROUP_TITLES: Record<HumanBoardGroup, string> = {
-  confirm: '待我确认',
-  ready: '可开工',
-  doing: '进行中',
-  done: '已完成',
-  hidden: '隐藏',
+const HUMAN_GROUP_TITLE_KEYS: Record<HumanBoardGroup, MessageKey> = {
+  confirm: 'agentBoard.group.confirm',
+  ready: 'agentBoard.group.ready',
+  doing: 'agentBoard.group.doing',
+  done: 'agentBoard.group.done',
+  hidden: 'agentBoard.group.hidden',
 };
 
 /** 模式展示名的**唯一出处**：切换 tab 与隐藏提示行里的「切到「技术」」共用同一份 */
-const MODE_LABELS: Record<AgentTermMode, string> = { human: '人话', tech: '技术' };
+const MODE_LABEL_KEYS: Record<AgentTermMode, MessageKey> = {
+  human: 'agentBoard.mode.human',
+  tech: 'agentBoard.mode.tech',
+};
 
 /** 模式切换 tab 的展示顺序（人话 / 技术，PRD §4.3 D2） */
 const MODE_TAB_ORDER: readonly AgentTermMode[] = ['human', 'tech'];
@@ -263,13 +271,20 @@ const LANE_HEAD_CLASS: Record<TaskStatus, string> = {
   [TaskStatus.Done]: 'text-moss',
 };
 
-/** 剩余 / 逾期文案（与卡片同口径；此处只用于「现在该做什么」条） */
-function topDueText(task: Task): { text: string; overdue: boolean } | null {
+/**
+ * 剩余 / 逾期文案（与卡片同口径；此处只用于「现在该做什么」条）。
+ * `t` 由调用方传入（本函数在模块层，拿不到 `useLang()`；传参比再引一个模块级
+ * `t` 更不容易与组件内的 `t` 混淆）。
+ */
+function topDueText(
+  task: Task,
+  t: (key: MessageKey, vars?: { days: number }) => string,
+): { text: string; overdue: boolean } | null {
   if (!task.dueDate) return null;
   const days = remainingDays(task.dueDate.slice(0, 10));
   return days < 0
-    ? { text: `逾期 ${Math.abs(days)} 天`, overdue: true }
-    : { text: `剩余 ${days} 天`, overdue: false };
+    ? { text: t('agentBoard.dueOverdue', { days: Math.abs(days) }), overdue: true }
+    : { text: t('agentBoard.dueRemaining', { days }), overdue: false };
 }
 
 /**
@@ -286,10 +301,12 @@ function BoardModeTabs({
   mode: AgentTermMode;
   onChange(next: AgentTermMode): void;
 }): JSX.Element {
+  /** 订阅语言变化（模式名走消息表） */
+  const { t } = useLang();
   return (
     <div
       role="tablist"
-      aria-label="看板模式切换"
+      aria-label={t('agentBoard.modeTabsAria')}
       className="flex w-fit items-center gap-1 rounded-2xl bg-sunken p-1"
     >
       {MODE_TAB_ORDER.map((key) => (
@@ -304,7 +321,7 @@ function BoardModeTabs({
             mode === key ? 'bg-paper text-pine shadow-soft' : 'text-mist hover:text-ink',
           )}
         >
-          {MODE_LABELS[key]}
+          {t(MODE_LABEL_KEYS[key])}
         </button>
       ))}
     </div>
@@ -507,9 +524,9 @@ export function AgentBoardPage(): JSX.Element {
       setTokenConfigured(true);
       // 把 token 告知主进程（主进程只比对，绝不回传原文）；非 Electron 端静默跳过
       if (window.idplan?.setAgentToken) window.idplan.setAgentToken(token);
-      pushToast('success', '访问令牌已保存到本机。');
+      pushToast('success', t('agentBoard.tokenSaved'));
     },
-    [pushToast],
+    [pushToast, t],
   );
 
   /**
@@ -519,13 +536,17 @@ export function AgentBoardPage(): JSX.Element {
   const onIngressCopyToken = useCallback((): void => {
     const token = readStoredAgentToken();
     if (!token) {
-      pushToast('error', '尚未配置访问令牌。');
+      pushToast('error', t('agentBoard.tokenNotConfigured'));
       return;
     }
     void copyText(token).then(
-      (ok) => pushToast(ok ? 'success' : 'error', ok ? '访问令牌已复制。' : '复制失败，请重试。'),
+      (ok) =>
+        pushToast(
+          ok ? 'success' : 'error',
+          ok ? t('agentBoard.tokenCopied') : t('agentBoard.copyFailed'),
+        ),
     );
-  }, [pushToast]);
+  }, [pushToast, t]);
 
   /* ------------------------------ 接入文件（2026-09-23 重设计 · 用户裁决） ------------------------------
    *
@@ -554,7 +575,7 @@ export function AgentBoardPage(): JSX.Element {
     async (rotate: boolean): Promise<void> => {
       const bridge = window.idplan;
       if (!bridge?.writeAgentIngressFile) {
-        pushToast('error', '当前运行环境不支持写入接入文件（仅 Windows 桌面版可用）。');
+        pushToast('error', t('agentBoard.ingressEnvUnsupported'));
         return;
       }
       let token = readStoredAgentToken().trim();
@@ -568,29 +589,37 @@ export function AgentBoardPage(): JSX.Element {
       const payload = buildIngressPayload({ origin: `http://${LOOPBACK_ORIGIN}`, token });
       const res = await bridge.writeAgentIngressFile(payload as unknown as Record<string, unknown>);
       if (!res.ok) {
-        pushToast('error', `接入文件写入失败：${res.reason ?? '未知原因'}`);
+        pushToast(
+          'error',
+          t('agentBoard.ingressWriteFailed', { reason: res.reason ?? t('agentBoard.unknownReason') }),
+        );
         return;
       }
       setIngressFile({ path: res.path });
       const ok = await copyText(res.path);
       pushToast(
         'success',
-        ok ? `接入信息已生成，路径已复制：${res.path}` : `接入信息已生成：${res.path}`,
+        ok
+          ? t('agentBoard.ingressGeneratedCopied', { path: res.path })
+          : t('agentBoard.ingressGenerated', { path: res.path }),
       );
     },
-    [pushToast],
+    [pushToast, t],
   );
 
   /** 复制接入文件路径（写入方的第一步就是读它） */
   const onCopyIngressPath = useCallback((): void => {
     if (!ingressFile) {
-      pushToast('error', '尚未生成接入信息，请先点「生成接入信息」。');
+      pushToast('error', t('agentBoard.ingressNotGenerated'));
       return;
     }
     void copyText(ingressFile.path).then((ok) =>
-      pushToast(ok ? 'success' : 'error', ok ? '文件路径已复制。' : '复制失败，请重试。'),
+      pushToast(
+        ok ? 'success' : 'error',
+        ok ? t('agentBoard.pathCopied') : t('agentBoard.copyFailed'),
+      ),
     );
-  }, [ingressFile, pushToast]);
+  }, [ingressFile, pushToast, t]);
 
   /**
    * 复制接入指令块（兜底通道）。
@@ -600,18 +629,21 @@ export function AgentBoardPage(): JSX.Element {
   const onCopyIngressInstruction = useCallback((): void => {
     const token = readStoredAgentToken().trim();
     if (!token) {
-      pushToast('error', '尚未生成访问令牌，请先生成接入信息。');
+      pushToast('error', t('agentBoard.tokenNotGenerated'));
       return;
     }
     const payload = buildIngressPayload({ origin: `http://${LOOPBACK_ORIGIN}`, token });
     const block = buildIngressInstructionBlock({
-      filePath: ingressFile?.path ?? '（尚未生成接入文件，请先在面板点「生成接入信息」）',
+      filePath: ingressFile?.path ?? t('agentBoard.ingressFileAbsent'),
       payload,
     });
     void copyText(block).then((ok) =>
-      pushToast(ok ? 'success' : 'error', ok ? '接入指令已复制，粘给写入方即可。' : '复制失败，请重试。'),
+      pushToast(
+        ok ? 'success' : 'error',
+        ok ? t('agentBoard.ingressInstructionCopied') : t('agentBoard.copyFailed'),
+      ),
     );
-  }, [ingressFile, pushToast]);
+  }, [ingressFile, pushToast, t]);
 
   /** 「手动粘贴」是**另一个入口**（离线兜底），不得与通道配置合并（主 PRD §4.1） */
   const onIngressOpenManual = useCallback((): void => {
@@ -825,6 +857,13 @@ export function AgentBoardPage(): JSX.Element {
     async (ids: readonly string[], status: 'applied' | 'rejected') => {
       if (ids.length === 0) return;
       setProposalBusy(true);
+      /*
+       * ⚠️ 「未署名」**有意保持中文、不走消息表**：它是 `decidedBy` 的**兜底值**，
+       * 会被写进提案记录（`updateProposal({ decidedBy })`）——即**持久化数据**。
+       * 若随界面语言翻译，同一款产品会按用户语言存出两种值（`未署名` / `Unnamed`），
+       * 同一条记录在两个语言的人眼里就不是同一条了。与 `agentName: 'Markdown 清单导入'`
+       * 同一性质（改动前先读那段注释）。
+       */
       const actor = members.find((m) => m.id === currentMemberId)?.name ?? '未署名';
       let ok = 0;
       const failed: string[] = [];
@@ -857,13 +896,18 @@ export function AgentBoardPage(): JSX.Element {
         setActivityGroups(groups);
       }
       if (ok > 0) {
-        pushToast('success', `${status === 'applied' ? '已通过' : '已拒绝'} ${ok} 条提案`);
+        pushToast(
+          'success',
+          t(status === 'applied' ? 'agentBoard.proposalsApproved' : 'agentBoard.proposalsRejected', {
+            count: ok,
+          }),
+        );
       }
       if (failed.length > 0) {
-        pushToast('error', `${failed.length} 条提案落定失败（可能已被他人处理）`);
+        pushToast('error', t('agentBoard.proposalsFailed', { count: failed.length }));
       }
     },
-    [repos, members, currentMemberId, currentProjectId, pushToast],
+    [repos, members, currentMemberId, currentProjectId, pushToast, t],
   );
 
 
@@ -889,7 +933,7 @@ export function AgentBoardPage(): JSX.Element {
   const readyComputation = useMemo(() => computeReadyTasks([...projectTasks]), [projectTasks]);
   const humanView = useMemo(() => groupTasksForHuman(projectTasks), [projectTasks]);
   const topReady = readyComputation.ready[0] ?? null;
-  const topDue = topReady ? topDueText(topReady) : null;
+  const topDue = topReady ? topDueText(topReady, t) : null;
 
   /** 置顶条脚注里的「已逾期 M 项」（口径与卡面一致：dueDate < 今天） */
   const readyOverdueCount = useMemo(
@@ -947,7 +991,7 @@ export function AgentBoardPage(): JSX.Element {
             to="/"
             className="rounded-[10px] px-2 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
           >
-            ← 项目
+            {t('agentBoard.backToProjects')}
           </Link>
           <h1 className="font-display text-base font-bold text-ink">
             {termFor('board', agentBoardMode)}
@@ -967,10 +1011,10 @@ export function AgentBoardPage(): JSX.Element {
             <select
               value={scopedProjectId ?? ''}
               onChange={(e) => setCurrentProject(e.target.value || null)}
-              aria-label="选择 Agent 看板"
+              aria-label={t('agentBoard.boardSelectAria')}
               className="h-[38px] min-w-0 max-w-[240px] rounded-2xl border border-line bg-paper px-3.5 text-sm text-ink outline-none focus:border-pine"
             >
-              {agentBoards.length === 0 && <option value="">（暂无 Agent 看板）</option>}
+              {agentBoards.length === 0 && <option value="">{t('agentBoard.noBoards')}</option>}
               {agentBoards.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -994,10 +1038,14 @@ export function AgentBoardPage(): JSX.Element {
                 onClick={() => setDeleteOpen(true)}
                 disabled={!scopedProjectId}
                 className="inline-flex h-[38px] items-center gap-1.5 rounded-2xl border border-clay/50 px-3.5 text-sm text-clay transition-colors hover:bg-clay-soft disabled:opacity-40"
-                title={scopedProjectId ? '永久删除当前 Agent 看板' : '先选中一块 Agent 看板'}
+                title={
+                  scopedProjectId
+                    ? t('agentBoard.deleteTitle')
+                    : t('agentBoard.deleteDisabledTitle')
+                }
               >
                 <Trash2 size={14} aria-hidden />
-                删除看板
+                {t('agentBoard.deleteButton')}
               </button>
             )}
             {/*
@@ -1141,11 +1189,13 @@ export function AgentBoardPage(): JSX.Element {
               属同类「两份真相」，已随本批收口删除——详见 agentTerms.ts 内的说明。）
             */}
             <section
-              aria-label="现在该做什么"
+              aria-label={t('agentBoard.nowTitle')}
               className="flex flex-col gap-3 rounded-3xl border border-pine bg-pine-soft p-6"
             >
               {/* 标签 11/SemiBold（画板 06）：这里的主角是**任务标题**，不是这个标签 */}
-              <h2 className="text-xs font-semibold text-pine dark:text-ink">现在该做什么</h2>
+              <h2 className="text-xs font-semibold text-pine dark:text-ink">
+                {t('agentBoard.nowTitle')}
+              </h2>
 
               {topReady ? (
                 <>
@@ -1175,34 +1225,32 @@ export function AgentBoardPage(): JSX.Element {
                       onClick={() => onPrimary(topReady, 'claim')}
                       className="inline-flex h-[34px] shrink-0 items-center rounded-[12px] bg-pine px-3.5 text-sm font-medium text-white transition-colors hover:bg-pine-deep"
                     >
-                      开始处理
+                      {t('agentBoard.startNow')}
                     </button>
                   </div>
-                  <p className="text-sm text-mist">
-                    认领后即可开始处理，相关前置依赖都已就绪。
-                  </p>
+                  <p className="text-sm text-mist">{t('agentBoard.claimHint')}</p>
                 </>
               ) : (
-                <p className="text-sm text-mist">
-                  暂时没有可开工的任务。导入新任务或解除受阻后会出现在这里。
-                </p>
+                <p className="text-sm text-mist">{t('agentBoard.nowEmpty')}</p>
               )}
 
-              {/* 脚注 13/Regular（画板 06）：同类 与 逾期 两个数都取自同一屏的同一批任务 */}
+              {/* 脚注 13/Regular（画板 06）：同类 与 逾期 两个数都取自同一屏的同一批任务
+                  数字保持加粗 span ⇒ 文案拆键，空格归各语言取值（见 en.ts 文件头 ⑤） */}
               {humanView.groups.ready.length > 0 && (
                 <p className="text-sm text-mist">
-                  同类{HUMAN_GROUP_TITLES.ready}{' '}
+                  {t('agentBoard.sameGroupPre', { group: t(HUMAN_GROUP_TITLE_KEYS.ready) })}
                   <span className="font-semibold tabular-nums">
                     {humanView.groups.ready.length}
                   </span>{' '}
-                  项
+                  {t('agentBoard.unitItems')}
                   {readyOverdueCount > 0 && (
                     <>
-                      {' · 已逾期 '}
+                      {' '}
+                      {t('agentBoard.overdueInline')}
                       <span className="font-semibold tabular-nums text-clay">
                         {readyOverdueCount}
                       </span>{' '}
-                      项
+                      {t('agentBoard.unitItems')}
                     </>
                   )}
                 </p>
@@ -1216,7 +1264,7 @@ export function AgentBoardPage(): JSX.Element {
                 className="flex items-center gap-2.5 rounded-2xl border border-amber/40 bg-amber-soft px-4 py-3 text-sm text-amber"
               >
                 <AlertTriangle size={16} className="shrink-0" aria-hidden />
-                <span>检测到 {readyComputation.cyclicIds.size} 条任务存在依赖环，已移出主列表。请修正依赖后刷新。</span>
+                <span>{t('agentBoard.cyclicWarning', { count: readyComputation.cyclicIds.size })}</span>
               </div>
             )}
 
@@ -1232,12 +1280,12 @@ export function AgentBoardPage(): JSX.Element {
                 return (
                   <section
                     key={group}
-                    aria-label={HUMAN_GROUP_TITLES[group]}
+                    aria-label={t(HUMAN_GROUP_TITLE_KEYS[group])}
                     className="flex min-w-0 flex-col gap-2.5"
                   >
                     <div className="flex items-center gap-2">
                       <h2 className="text-md font-semibold text-ink">
-                        {HUMAN_GROUP_TITLES[group]}
+                        {t(HUMAN_GROUP_TITLE_KEYS[group])}
                       </h2>
                       <span className="text-sm font-semibold tabular-nums text-mist">
                         {list.length}
@@ -1294,15 +1342,15 @@ export function AgentBoardPage(): JSX.Element {
                 data-board-hidden-hint=""
                 className="flex items-center gap-2 rounded-[12px] bg-sunken px-3.5 py-2.5 text-sm text-mist"
               >
-                另有 {humanView.hiddenCount} 条在上游准备中，
+                {t('agentBoard.hiddenHintPre', { count: humanView.hiddenCount })}
                 <button
                   type="button"
                   onClick={() => changeMode('tech')}
                   className="text-pine underline-offset-2 transition-colors hover:underline"
                 >
-                  切到「{MODE_LABELS.tech}」
+                  {t('agentBoard.hiddenHintSwitch', { mode: t(MODE_LABEL_KEYS.tech) })}
                 </button>
-                可查看全部
+                {t('agentBoard.hiddenHintPost')}
               </p>
             )}
           </>
@@ -1393,7 +1441,7 @@ export function AgentBoardPage(): JSX.Element {
           data-planning-wizard-open=""
           className="mb-1 flex items-center gap-1.5 rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-[12px] text-ink transition-colors hover:bg-cream"
         >
-          用 AI 规划建板
+          {t('agentBoard.planningWizard')}
         </button>
       </div>
 
@@ -1422,7 +1470,7 @@ export function AgentBoardPage(): JSX.Element {
           （`?.()` 只保证回调不执行，不保证不渲染，本项目踩过「回调可选 → 死按钮」）。
       */}
       {isAdmin && ingressOpen && (
-        <Modal open onClose={() => setIngressOpen(false)} ariaLabel="接入外部写入方">
+        <Modal open onClose={() => setIngressOpen(false)} ariaLabel={t('agentBoard.ingressModalAria')}>
           <AgentIngressPanel
             mode={ingressMode}
             onModeChange={onIngressModeChange}
@@ -1525,8 +1573,8 @@ export function AgentBoardPage(): JSX.Element {
       {deleteOpen && scopedProjectId && (
         <ConfirmDialog
           open
-          title="删除 Agent 看板"
-          confirmText="永久删除"
+          title={t('agentBoard.deleteDialogTitle')}
+          confirmText={t('agentBoard.deleteConfirmText')}
           danger
           onConfirm={() => {
             void createProjectActions(repos).removeProject(scopedProjectId, project?.name);
@@ -1534,9 +1582,9 @@ export function AgentBoardPage(): JSX.Element {
           }}
           onCancel={() => setDeleteOpen(false)}
         >
-          确认删除「{project?.name}」？该看板下的所有阶段与任务将一并永久删除，{' '}
-          <span className="font-medium text-clay">不可恢复</span>，且不会进入「已归档」。
-          若只是想把它留在项目里，请改用详情页的「接管 · 转为正式项目」。
+          {t('agentBoard.deleteBodyPre', { name: project?.name ?? '' })}{' '}
+          <span className="font-medium text-clay">{t('agentBoard.deleteBodyStrong')}</span>
+          {t('agentBoard.deleteBodyPost')}
         </ConfirmDialog>
       )}
 
@@ -1563,6 +1611,8 @@ function assertEdge(from: TaskStatus, to: TaskStatus): void {
     const allowed = TASK_STATUS_TRANSITIONS[from] ?? [];
     if (!allowed.includes(to)) {
       // eslint-disable-next-line no-console
+      // ⚠️ 开发者日志面：**有意保持中文、不进消息表** —— 读者是改这份状态机的人（dev 期），
+      //    不是终端用户；与 `useBackupIo` 的日志面同一条口径（那里有完整理由）。
       console.warn(`[board] 非法流转 ${from} → ${to}：状态机白名单已不含该边，按钮需同步调整`);
     }
   }

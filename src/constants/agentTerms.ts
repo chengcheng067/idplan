@@ -99,8 +99,8 @@ export function termFor(key: AgentTermKey, mode: AgentTermMode): string {
  *
  * 它曾用于满足文档 §4.3 注：`ready` 的 human 文案「待办」偏泛，不足以表达「依赖已
  * 满足、现在就能动手」，且该措辞需全行业中性。这个诉求本身没变，但**它的正确落点
- * 变了**——「可开工」现在是 BOARD 组件里 `HUMAN_GROUP_TITLES.ready`（四组之一的组
- * 标题），小字计数也复用它。于是本常量退化为同一字符串的**第二处出处**，且**零组件
+ * 变了**——「可开工」现在是 BOARD 组件里 `HUMAN_GROUP_TITLE_KEYS.ready`（四组之一的
+ * 组标题，2026-08-27 英文线起值是**文案键**、渲染期经 `t()` 取值），小字计数也复用它。于是本常量退化为同一字符串的**第二处出处**，且**零组件
  * 消费**（只剩单测断言它等于字面量）——正是本项目连续在防的那类「两份真相」。
  *
  * 删除不丢信息，两条被它锁住的事实仍在别处锁着：
@@ -110,7 +110,7 @@ export function termFor(key: AgentTermKey, mode: AgentTermMode): string {
  *     `agent-ui-terms.spec.ts` 已断言 human 列含「待办」，且两模式取值必须不同。
  *
  * 若将来某个**非 BOARD** 的界面也需要「可开工」措辞，正确做法是把
- * `HUMAN_GROUP_TITLES` 提升为共享常量（单一出处），**而不是**在这里复活一个字面量。
+ * `HUMAN_GROUP_TITLE_KEYS` 提升为共享常量（单一出处），**而不是**在这里复活一个字面量。
  */
 
 /**
