@@ -28,7 +28,17 @@ import { withCnHolidays } from '../core/holidays/policy';
  * （防死循环：若不置位，闸门条件仍满足会立刻重新弹出 admin_prompt）。
  */
 
-const LS_KEY = 'changxia.currentMemberId';
+/**
+ * 「我的身份」在 localStorage 里的键 —— **本常量是它的唯一出处**。
+ *
+ * 为什么要导出：宿主层要读同一枚键才能实现身份候选阶梯
+ * （`useRepos.bootstrapAllStores` 的 `localStorage ?? settings`，见其注释）。
+ * 历史上 `useRepos.ts` 与 `FirstRunGuide.tsx` 各自**手打**过一份同样的字面量 ⇒
+ * 键名一旦改动就会静默各说各话（一边写、另一边读不到），而这类失效**不报错**。
+ *
+ * ⚠️ 调用方请**引用本常量**，不要手打字面量。
+ */
+export const CURRENT_MEMBER_ID_KEY = 'changxia.currentMemberId';
 
 export type IdentityFlowState = 'closed' | 'admin_prompt' | 'name_input' | 'mismatch' | 'password_input';
 
@@ -92,7 +102,7 @@ export interface SettingsState {
 
 function readLocalStorageId(): string | null {
   try {
-    return localStorage.getItem(LS_KEY);
+    return localStorage.getItem(CURRENT_MEMBER_ID_KEY);
   } catch {
     return null;
   }
@@ -137,8 +147,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   setCurrentMember: (memberId) => {
     try {
-      if (memberId === null) localStorage.removeItem(LS_KEY);
-      else localStorage.setItem(LS_KEY, memberId);
+      if (memberId === null) localStorage.removeItem(CURRENT_MEMBER_ID_KEY);
+      else localStorage.setItem(CURRENT_MEMBER_ID_KEY, memberId);
     } catch {
       /* 隐私模式下静默降级为内存态 */
     }

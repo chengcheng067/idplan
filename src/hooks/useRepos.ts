@@ -8,7 +8,7 @@ import { normalizeRestPolicy } from '../core/holidays/policy';
 import { useRepoContext } from '../di/repository.provider';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
-import { useSettingsStore } from '../store/useSettingsStore';
+import { CURRENT_MEMBER_ID_KEY, useSettingsStore } from '../store/useSettingsStore';
 import { normalizeLegacyMemberRoles } from './useRoleGuard';
 
 /**
@@ -82,7 +82,7 @@ export async function bootstrapAllStores(repos: IRepositoryBundle): Promise<void
    * 下游 `useSettingsStore.hydrate()` 是 `currentMemberId ?? readLocalStorageId()`
    * ⇒ 只传 null 会让它把那份悬挂的 localStorage **再读回来**，修复等于没做。
    * 清空走 store 自己的 action（`setCurrentMember(null)`），**不在本文件手写那个键名**
-   * —— 键名的唯一出处是 `useSettingsStore.ts` 的 `LS_KEY`。
+   * —— 键名的唯一出处是 `useSettingsStore.ts` 导出的 `CURRENT_MEMBER_ID_KEY`（下面读它也是同一处）。
    *
    * ── 刻意**不**做的两件事 ──
    * · **不**把兜底值写回 localStorage：那会把「共享 KV 只兜底一次」悄悄升级成
@@ -94,7 +94,8 @@ export async function bootstrapAllStores(repos: IRepositoryBundle): Promise<void
   const pickValidId = (...candidates: Array<string | null>): string | null =>
     candidates.find((id): id is string => id !== null && memberIds.has(id)) ?? null;
   // 候选阶梯与 v0.8.6 口径逐字一致（个人选择优先、共享 KV 兜底），只是每一档要**命中**当前成员
-  const lsCandidate = localStorage.getItem('changxia.currentMemberId');
+  // 键名引用单一出处，不手打字面量（历史上本文件与 FirstRunGuide 各手写过一份）。
+  const lsCandidate = localStorage.getItem(CURRENT_MEMBER_ID_KEY);
   const currentMemberId = pickValidId(lsCandidate, readCurrentMemberFromSettings(settings));
   if (currentMemberId === null || currentMemberId !== lsCandidate) {
     /*

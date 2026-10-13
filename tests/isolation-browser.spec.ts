@@ -784,7 +784,10 @@ describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真�
    * `addInitScript` 里预置「已进入身份」是**合适**的：首启闸门（`useFirstRunGate`）的触发
    * 条件是 `currentMemberId === null ∧ 无管理员 ∧ …`，空库首开会弹 admin_prompt 引导框。
    * 该框不阻断 `setInputFiles`（赋 value 而非点击），但会让"页面是否正常进入"的判定变浑浊。
-   * 键名 `changxia.currentMemberId` 的唯一出处是 `useSettingsStore.ts`。
+   * 键名单一出处：`useSettingsStore.ts` 导出的 `CURRENT_MEMBER_ID_KEY`
+   * （此前 `useRepos.ts` 也手写过同一字面量，已收口为引用该导出）。
+   * ⚠️ 但本文件 `addInitScript` 里**仍必须手写**这个串 —— 那段回调在**页面上下文**里执行，
+   *    取不到 Node 侧的 import。⇒ 改键值时这里要同步改（已知的、刻意保留的第二处）。
    */
   async function createEnv(fixturePath: string): Promise<L4Env> {
     const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 } });
