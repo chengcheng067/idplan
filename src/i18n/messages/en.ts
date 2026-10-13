@@ -20,6 +20,7 @@ export const enMessages: Record<MessageKey, string> = {
   'common.unknown': 'Unknown',
   'common.untitledProject': 'Project',
   'common.loading': 'Loading…',
+  'common.updateAvailableAria': 'Update available',
   'common.plugins': 'Plugins',
 
   /* ─────────────────────── Settings drawer shell ─────────────────────── */
@@ -32,7 +33,7 @@ export const enMessages: Record<MessageKey, string> = {
 
   /* ────────────────────── Settings · six top-level zones ────────────────────── */
   'settings.zone.appearance': 'Appearance',
-  'settings.zone.schedule': 'Schedule',
+  'settings.zone.schedule': 'Scheduling',
   'settings.zone.data': 'Data & Backup',
   'settings.zone.plugins': 'Plugins',
   'settings.zone.industry': 'Industry & Templates',
@@ -44,8 +45,8 @@ export const enMessages: Record<MessageKey, string> = {
 
   /* ─────────────────────── Settings · section titles ─────────────────────── */
   'settings.section.theme': 'Theme',
-  'settings.section.restPolicy': 'Work week',
-  'settings.section.scheduleBasis': 'Schedule basis',
+  'settings.section.restPolicy': 'Rest policy',
+  'settings.section.scheduleBasis': 'Scheduling basis',
   'settings.section.dataLocation': 'Where data lives',
   'settings.section.backup': 'Backup',
   'settings.section.frontendLog': 'Frontend log',
@@ -75,8 +76,49 @@ export const enMessages: Record<MessageKey, string> = {
   'nav.agent': 'Agent',
   'nav.agentAreaAria': 'Agent workspace',
   'nav.agentWorkspace': 'Workspace',
-  'nav.agentExecutions': 'Executions',
+  'nav.agentExecutions': 'Execution records',
   'nav.pluginBadge': 'Plugin',
+
+  /* ─────────────── Sidebar footer / mobile “more” menu (shared copy) ─────────────── */
+  'sidebar.settingsTitle': 'Settings (export / clear log)',
+  'sidebar.loadDemo': 'Load sample projects',
+  'sidebar.loadDemoTitle':
+    'Load 5 demo projects (replaces all current data) — the fastest way to see what the product does',
+  'sidebar.saveBackup': 'Save backup',
+  'sidebar.saveBackupTitle': 'Save backup (exports a local JSON file)',
+  'sidebar.loadBackup': 'Load backup',
+  'sidebar.loadBackupTitle':
+    'Load backup (restores from a local JSON file; replaces all current data)',
+  'sidebar.newProject': 'New Project',
+  'sidebar.viewAllProjectsTitle': 'View all projects',
+  'sidebar.viewAll': 'View all',
+  'sidebar.expandAllProjects': 'Show all {count} projects',
+  'sidebar.remainingProjects': '{count} more project(s)…',
+  /* Mobile “more” menu (<md: the only navigation entry) */
+  'mobile.moreAria': 'More actions',
+
+  /* ─────────────────────── First-run guide card ─────────────────────── */
+  'guide.aria': 'First-run guide',
+  'guide.title': 'Welcome to ID Plan',
+  'guide.dismissAria': 'Look around',
+  'guide.lead.before': 'It turns a project contract into a',
+  'guide.lead.strong': 'stage timeline you can actually read',
+  'guide.lead.after': ' — board, calendar, gantt and print: four readings of one dataset.',
+  'guide.privacy': 'Your data stays on your own machine, works offline, and is never uploaded.',
+  'guide.pickDomain': 'Which industry would you like to see first?',
+  'guide.card.software': 'Software',
+  'guide.line.software':
+    "Picking it brings that industry's stages and board columns — five phases from planning to release on one board",
+  'guide.card.travel': 'Travel',
+  'guide.line.travel':
+    "It brings that industry's stages and board columns — from itinerary planning to final billing, nothing gets lost",
+  'guide.card.indoor': 'Interiors',
+  'guide.line.indoor':
+    "It brings that industry's stages and board columns — one chart shows where you are",
+  'guide.demoNotReady': 'Demo in progress',
+  'guide.adminOnlyTitle': 'Only an admin can load the sample projects',
+  'guide.lookAround': 'Look around (skip the sample)',
+  'guide.canReturn': 'You can reopen it any time from “Load sample projects” in the sidebar',
 
   /* ─────────────────────────────── Top bar ─────────────────────────────── */
   'topbar.page.home': 'My Projects',
@@ -201,4 +243,91 @@ export const enMessages: Record<MessageKey, string> = {
   'toast.agentStatusTransitionFailed': 'Status transition failed.',
   'toast.payloadInvalid': 'Payload validation failed: {path} {message}',
   'toast.payloadMoreIssues': '…{count} more structural issue(s) not shown.',
+
+  'common.close': 'Close',
+
+  /* ────────────────── Agent ingress panel ────────────────── */
+  'ingress.title': 'Connect an external writer',
+  'ingress.explain.before': 'On Windows desktop, in ',
+  'ingress.explain.localMode': 'local mode',
+  'ingress.explain.afterA': ', click “Generate ingress info” below:',
+  'ingress.explain.afterB':
+    ' the access token is created automatically and everything a writer needs (address / token / endpoints / payload schema) is written to a fixed-path ',
+  'ingress.explain.writers': ' file — WorkBuddy and other writers',
+  'ingress.explain.readFile': 'just read that file and they are connected',
+  'ingress.explain.nasNote':
+    'NAS mode currently supports connectivity probing only; remote automatic write is not enabled yet.',
+  'ingress.addressTitle': 'Service address',
+  'ingress.modeTablistAria': 'Channel mode',
+  'ingress.addressAria': 'Service address',
+  'ingress.localAddressHint':
+    'Local mode listens on 127.0.0.1 only and is not exposed; once you generate the ingress info it can receive automatic imports.',
+  'ingress.nasAddressHint':
+    'NAS mode currently supports connectivity probing of the address and token only; remote automatic write is not enabled yet.',
+  'ingress.fileTitle': 'Ingress info',
+  'ingress.tokenGenerated': 'Token generated',
+  'ingress.tokenNotGenerated': 'Not generated',
+  'ingress.generate': 'Generate ingress info',
+  'ingress.regenerate': 'Regenerate',
+  'ingress.regenerateTitle': 'Generate a new token and rewrite the ingress file (the old token dies immediately)',
+  'ingress.copyPath': 'Copy file path',
+  'ingress.copyInstruction': 'Copy setup instruction',
+  'ingress.copyInstructionTitle': 'Copy the full setup instruction (a fallback for writers that cannot read files)',
+  'ingress.fileNotReady':
+    'Not generated yet. After you click “Generate ingress info”, give the file path to your writer (or let it read that fixed path directly).',
+  'ingress.tokenAutoNote':
+    'The token is generated on this machine — no manual setup. After a rotation, the newest version of the ingress file is authoritative.',
+  'ingress.tokenTitle': 'Access token',
+  'ingress.tokenConfigured': 'Configured',
+  'ingress.tokenUnconfigured': 'Not configured',
+  'ingress.tokenAria': 'Access token',
+  'ingress.tokenReplacePlaceholder': 'Type a new token to replace the current one',
+  'ingress.tokenPastePlaceholder': 'Paste the access token configured on the NAS server',
+  'ingress.save': 'Save',
+  'ingress.copyTokenAria': 'Copy token',
+  'ingress.copy': 'Copy',
+  'ingress.nasTokenNote':
+    'On NAS the token comes from the server environment (keep it in sync with the NAS setting); after saving it is never echoed back.',
+  'ingress.statusTitle': 'Service status',
+  'ingress.probe': 'Probe now',
+  'ingress.probeOk': 'Reachable',
+  'ingress.probeFail': 'Unreachable',
+  'ingress.dataLayerReady': 'Data layer ready',
+  'ingress.dataLayerUnavailable': 'Data layer unavailable',
+  'ingress.appNotRunning':
+    'ID Plan is not running (or its data layer is not ready) — open the app and try again.',
+  'ingress.projectCount': '{count} project(s)',
+  'ingress.seatUsage': 'Seats {used} / {limit}',
+  'ingress.probeEmpty': 'Not probed yet. Click “Probe now” to check whether the service is reachable.',
+  'ingress.syncTitle': 'Recent syncs',
+  'ingress.syncAt': 'Last sync',
+  'ingress.syncResult': 'Result',
+  'ingress.syncEmptyLocal': 'No automatic write from this machine yet.',
+  'ingress.syncEmptyNas': 'Remote automatic write is not enabled on NAS, so there are no syncs.',
+  'ingress.openManual': 'Switch to pasting a schedule file manually',
+
+  /* ──────────────── Agent activity stream ──────────────── */
+  'agent.activity.aria': 'Agent activity stream',
+  'agent.activity.title': 'Agent activity',
+  'agent.activity.changes': '{count} change(s)',
+  'agent.activity.pendingProposals': 'Proposals await review — handle them in bulk on the “Write-back” tab',
+  /* ───────────────────── Home page ───────────────────── */
+  'home.subtitle': '{active} in progress · {due} due this week · {overdue} overdue',
+  'home.stat.active': 'Active projects',
+  'home.stat.dueThisWeek': 'Tasks due this week',
+  'home.stat.overdue': 'Overdue risk',
+  'home.stat.doneThisMonth': 'Completed this month',
+  'home.viewSwitchAria': 'Home view switch',
+  'home.noSearchMatch': 'No project matches “{query}”',
+  'home.clearSearch': 'Clear search',
+  'home.memberHitsAria': 'Member search results',
+  'home.memberHitsTitle': 'Members found',
+  'home.memberHitsHint': "Click to open that member's task board",
+  'home.archivedToggle': 'Archived ({count})',
+  'empty.noActiveProjects': 'No project in progress yet',
+  'home.empty.body':
+    'Create a project and get its stage schedule running. The name and completion date are required; everything else can be filled in later.',
+  'home.empty.privacy':
+    'Your data is saved automatically in this browser and survives closing it. To move machines or keep an archive, use “Save backup” in the top bar — you can restore it any time.',
+  'home.openManual': 'Create a project manually',
 };

@@ -19,6 +19,7 @@ import { SettingsDialog } from './SettingsDialog';
 import { useBackupIo } from './useBackupIo';
 import { useUpdateCheck } from '../../hooks/useUpdateCheck';
 import { cn } from '../../lib/cn';
+import { useLang } from '../../i18n';
 import { resolveAnchoredPosition } from '../../lib/anchoredPosition';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { CHROME_OVERLAY_Z_CLASS } from '../common/Modal';
@@ -99,6 +100,8 @@ function Divider(): JSX.Element {
 export function MobileMoreMenu(): JSX.Element {
   const location = useLocation();
   const { isAdmin } = useRoleGuard();
+  /** 取词 + 语言变化订阅点（菜单项与 aria 在渲染期取） */
+  const { t } = useLang();
   const openManualForm = useUiStore((s) => s.openManualForm);
   const { save, pick, loadDemo, fileInput, confirmDialog } = useBackupIo();
   // 仅桌面端且主进程推送过「有新版本」时为 true。
@@ -203,7 +206,8 @@ export function MobileMoreMenu(): JSX.Element {
         ref={buttonRef}
         type="button"
         onClick={toggleMenu}
-        aria-label="更多操作"
+        aria-label={t('mobile.moreAria')}
+        data-mobile-more-trigger=""
         aria-expanded={menuOpen}
         aria-haspopup="menu"
         className={cn(
@@ -220,7 +224,7 @@ export function MobileMoreMenu(): JSX.Element {
           <div
             ref={panelRef}
             role="menu"
-            aria-label="更多操作"
+            aria-label={t('mobile.moreAria')}
             /* ★ F2：portal 到 body + fixed + chrome 档（类名来自 Modal 的静态映射表） */
             className={`glass-medium menuFadeIn print:hidden fixed max-h-[calc(100vh-6rem)] w-56 overflow-y-auto rounded-xl border border-line py-1 shadow-soft ${CHROME_OVERLAY_Z_CLASS}`}
             style={{ top: menuPos.top, left: menuPos.left }}
@@ -229,7 +233,7 @@ export function MobileMoreMenu(): JSX.Element {
           {isAdmin ? (
             <Link to="/" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
               <LayoutGrid size={15} className={cn(ITEM_ICON, location.pathname === '/' && 'text-pine')} />
-              <span className={cn(location.pathname === '/' ? 'text-pine' : 'text-ink')}>项目</span>
+              <span className={cn(location.pathname === '/' ? 'text-pine' : 'text-ink')}>{t('nav.projects')}</span>
             </Link>
           ) : (
             <Link
@@ -243,7 +247,7 @@ export function MobileMoreMenu(): JSX.Element {
                 className={cn(ITEM_ICON, location.pathname === '/member-board' && 'text-pine')}
               />
               <span className={cn(location.pathname === '/member-board' ? 'text-pine' : 'text-ink')}>
-                看板
+                {t('nav.board')}
               </span>
             </Link>
           )}
@@ -253,7 +257,7 @@ export function MobileMoreMenu(): JSX.Element {
               className={cn(ITEM_ICON, location.pathname === '/my-tasks' && 'text-pine')}
             />
             <span className={cn(location.pathname === '/my-tasks' ? 'text-pine' : 'text-ink')}>
-              我的任务
+              {t('nav.myTasks')}
             </span>
           </Link>
           {/* v0.6：Agent Board（所有角色可见，与桌面 TopBar 一致） */}
@@ -286,7 +290,7 @@ export function MobileMoreMenu(): JSX.Element {
                   }}
                 >
                   <PenLine size={15} className={ITEM_ICON} />
-                  新建项目
+                  {t('sidebar.newProject')}
                 </button>
               )}
               {/* 载入示例项目（0.8.3）：陌生人第一小时入口，同 Sidebar 的 loadDemo 链路 */}
@@ -300,7 +304,7 @@ export function MobileMoreMenu(): JSX.Element {
                 }}
               >
                 <Sparkles size={15} className={ITEM_ICON} />
-                载入示例项目
+                {t('sidebar.loadDemo')}
               </button>
               <button
                 type="button"
@@ -312,7 +316,7 @@ export function MobileMoreMenu(): JSX.Element {
                 }}
               >
                 <Save size={15} className={ITEM_ICON} />
-                保存备份
+                {t('sidebar.saveBackup')}
               </button>
               <button
                 type="button"
@@ -324,7 +328,7 @@ export function MobileMoreMenu(): JSX.Element {
                 }}
               >
                 <Upload size={15} className={ITEM_ICON} />
-                加载备份
+                {t('sidebar.loadBackup')}
               </button>
             </>
           )}
@@ -343,9 +347,9 @@ export function MobileMoreMenu(): JSX.Element {
           >
             <Settings size={15} className={ITEM_ICON} />
             <span className="flex items-center gap-1.5">
-              设置
+              {t('settings.title')}
               {hasUpdate && (
-                <span className="h-2 w-2 rounded-full bg-clay" aria-label="有新版本可用" />
+                <span className="h-2 w-2 rounded-full bg-clay" aria-label={t('common.updateAvailableAria')} />
               )}
             </span>
           </button>
