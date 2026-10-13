@@ -86,6 +86,16 @@ const MUTATIONS = [
     file: 'src/components/agent/AgentTaskCard.tsx',
     find: "'flex w-full items-center gap-3 rounded-2xl border bg-paper p-3",
     replace: "'flex w-full items-center gap-3 rounded-2xl border glass-light p-3",
+    /*
+     * ⚠️ 记账（未修，等干净窗口）：本用例的「红落在哪条断言上」取决于 B-12 里三条断言的**先后** ——
+     *    `notPaper`（当前第 1 条）/ `looksSunken`（bg === sunken）/ `glassCards`（cls 含 glass-light）
+     *    都会被这个变异打中，而 vitest 在**第一条失败处抛** ⇒ 现在稳定红在 `notPaper`，与
+     *    `expectAssertion` 一致。若有人调换顺序，红会落到别条 ⇒ 本脚本会报「红在了错误断言上」
+     *    （**响的，但归因错**）。⇒ 动 B-12 的断言顺序之前先看这一段。
+     *    备选修法：把 expectMarkers 放宽成「三条中任一」（三条都是同一变异的后果，不损失特异性，
+     *    但去掉顺序依赖）。它属**变异清单本体**，只能在**干净工作树**上验证 ⇒ 与「完整变异跑一次」
+     *    合并到出包冻结窗口做，别在脏树上顺手改。
+     */
     probe: {
       spec: 'tests/v07-board-acceptance.spec.ts',
       test: 'B-12',
@@ -295,6 +305,44 @@ function staleInputs() {
 }
 
 /* ============================================================================================
+ * 前置校验 ②：探针测试名**还能命中至少一个用例**吗
+ *
+ * ── 为什么必须有这一层（真实失败模式，不是假想）──
+ * 一条变异要真的被验证，除锚点之外还依赖**探针命令** `vitest run <spec> -t <testName>`。
+ * 若哪天测试名被改名/被删（本仓这轮就有一批重命名与拆组），探针会**跑 0 个用例**，
+ * 而 vitest 在「没有任何用例匹配」时**退出码是 0** ⇒ 本脚本读成「没有变红」⇒
+ * 报「**断言失效**」。⇒ **响是响的，但归因完全错**：人会去查断言，而真因在锚点名单里的
+ * `probe.test`。这与「锚点漂移被误报成断言失效」（本文件 :74-76 已写过）是同一类错误，
+ * 故必须与锚点校验**同层、同一次**报出来。
+ *
+ * ── 判据口径（与 vitest 实际行为对齐）──
+ * vitest 的 `-t/--testNamePattern` 拿**测试全名**（describe 链 + it 标题拼接）做**正则**
+ * 匹配。故「能命中」⟺ 该 token 出现在某个 `describe(...)` 标题里，或某个
+ * `it(...)/test(...)` 标题里。本函数按此口径**扫源码**（不跑 vitest，毫秒级）。
+ *   ⚠️ 已知简化（写出来免得被当成强判据）：不重建 describe 的**层级归属**，token 出现在
+ *      任一句 describe 里即算命中 ⇒ 它只能证明「**至少有一个用例会被选中**」，
+ *      不能证明「恰好是那一个」。对「跑 0 个用例」这个失败模式足够，也正是它存在的唯一目的。
+ * ============================================================================================ */
+function probeTestResolves(probe) {
+  const abs = resolve(ROOT, probe.spec);
+  if (!existsSync(abs)) return { ok: false, why: `探测 spec 不存在：${probe.spec}` };
+  const src = readFileSync(abs, 'utf8');
+  const titles = [];
+  const re = /\b(?:describe|it|test)(?:\.\w+)?\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1/g;
+  let m;
+  while ((m = re.exec(src)) !== null) titles.push(m[2]);
+  const hits = titles.filter((t) => t.includes(probe.test));
+  if (hits.length > 0) return { ok: true, hits: hits.length, total: titles.length };
+  return {
+    ok: false,
+    why:
+      `测试名 ${JSON.stringify(probe.test)} 在 ${probe.spec} 的 describe/it/test 标题里都找不到` +
+      `（该文件共 ${titles.length} 个标题）⇒ 探针会跑 0 个用例、vitest 退出码 0 ⇒ ` +
+      '本脚本会把它误读成「没变红 / 断言失效」。请更新该用例的 probe.test（真因在锚点名单，不在断言）。',
+  };
+}
+
+/* ============================================================================================
  * 锚点校验：`find` 必须在目标文件里恰好出现一次
  * ============================================================================================ */
 function checkAnchors() {
@@ -322,12 +370,36 @@ function checkAnchors() {
       bad += 1;
       continue;
     }
-    if (!existsSync(resolve(ROOT, m.probe.spec))) {
-      console.error(`  ✗ [${m.id}] 探测 spec 不存在：${m.probe.spec}`);
+    const probeOk = probeTestResolves(m.probe);
+    if (!probeOk.ok) {
+      console.error(`  ✗ [${m.id}] ${probeOk.why}`);
       bad += 1;
       continue;
     }
-    echo(`  ✓ [${m.id}] 锚点唯一；探测 ${m.probe.spec} -t ${m.probe.test}（期望红在 ${m.probe.expectAssertion}）`);
+    echo(
+      `  ✓ [${m.id}] 锚点唯一；探测 ${m.probe.spec} -t ${m.probe.test} 可命中` +
+        `（${probeOk.hits}/${probeOk.total} 个标题）；期望红在 ${m.probe.expectAssertion}`,
+    );
+  }
+
+  /*
+   * ── 自证：本前置校验**自己**必须能被证明会 ✗ ──
+   * 「只写一条永远绿的检查不算做完」：合成一个**必然不存在**的测试名（同一个真实 spec），
+   * 它必须被拒。若它反而报「可命中」，说明这条检查恒真 = 假闸门 ⇒ 当场报错。
+   * 每次跑 --check-anchors 都会打印这一行，让「检查是活的」这件事**每次都被看见**，
+   * 而不是只在某次人工变异里被证明过一次。
+   */
+  const synthetic = { spec: MUTATIONS[0].probe.spec, test: `__不存在的测试名__${process.pid}__` };
+  const syntheticR = probeTestResolves(synthetic);
+  if (syntheticR.ok) {
+    console.error(
+      `  ✗ [自证] 前置校验恒真：给一个必然不存在的测试名却报「可命中」（${JSON.stringify(synthetic.test)}）`,
+    );
+    bad += 1;
+  } else {
+    echo(
+      `  ✓ [自证] 前置校验有判别力：不存在的测试名被拒（${JSON.stringify(synthetic.test)} → ✗）`,
+    );
   }
   return bad === 0;
 }
@@ -451,7 +523,7 @@ function printHelp() {
   echo('用法：node scripts/verify-test-discriminative.mjs [选项]');
   echo('');
   echo('  --list            只列出变异清单');
-  echo('  --check-anchors   只校验锚点是否仍然唯一（不改文件，可在脏树上跑）');
+  echo('  --check-anchors   校验锚点是否仍然唯一 + 探针测试名是否仍能命中（不改文件，可在脏树上跑）');
   echo('  --only=<id>       只跑指定 id');
   echo('  --root=<dir>      被检项目根（默认本脚本所在仓库；可指向隔离工作树）');
   echo('  --dry-run         打印将要做什么，不动文件');
