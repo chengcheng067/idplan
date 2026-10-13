@@ -45,9 +45,17 @@ import { DB_NAME } from '../src/core/schema/current';
 
 const ROOT = resolve(__dirname, '..');
 /**
- * 产物目录可被 `DEMO_GATE_DIST` 覆盖 —— **只为做「真机变异自证」**：
- * 把实现改坏后用 `vite build --outDir <临时目录>` 单独构建一份（**不碰共享的
- * `build-dist`**，否则别人的浏览器 spec 会短暂跑在被我改坏的产物上），再指过来跑。
+ * 产物目录可被 `DEMO_GATE_DIST` 覆盖 —— **只为做「真机变异自证」**，不是测试后门：
+ * 改 `src/**` 会让共享产物过期 ⇒ 本组整组 skip；而重建共享 `build-dist` 又会把
+ * **别人的**浏览器 spec 拖到「被我改坏的产物」上。故变异一律走独立产物：
+ *
+ *     npx vite build --outDir qa-scratch/mut-dist      # 单独构建（gitignore 内，不污染）
+ *     DEMO_GATE_DIST=<abs>/qa-scratch/mut-dist npx vitest run tests/plugin-state-demo-browser.spec.ts
+ *
+ * ★ **纪律：变异必须用独立 outDir，绝不重建共享 `build-dist`。**
+ *   改完必须还原 `src`（`git diff --exit-code` 为空）**并复位其 mtime** —— 碰过 `src/**`
+ *   的文件即使内容没变，mtime 被顶新也会让产物对**所有人**判过期（那段时间别人的
+ *   浏览器 spec 会莫名其妙 skip）。收尾要报「过期输入计数 = 0」。
  * 平时不设该变量 ⇒ 与原行为逐字一致。
  */
 const DIST_DIR = process.env.DEMO_GATE_DIST ?? join(ROOT, 'build-dist');
@@ -135,6 +143,15 @@ function staleInputs(): string[] {
 
 const STALE = CAN_RUN ? staleInputs() : [];
 const CAN_RUN_FRESH = CAN_RUN && STALE.length === 0;
+
+// 本组依赖真实构建产物：不新鲜就必须**有声音地**跳过（静默 skip 会被误读成「通过」）
+if (!CAN_RUN_FRESH) {
+  console.warn(
+    `[plugin-state-demo-browser] 跳过：${!CAN_RUN ? '缺少 build-dist 产物或 Chromium' : `产物比源码旧（样例：${STALE.join(', ')}）`}。` +
+      // eslint-disable-next-line
+      ' —— 这不代表「通过」；请重建产物后重跑。',
+  );
+}
 
 async function startStaticServer(rootDir: string): Promise<{ url: string; close(): Promise<void> }> {
   const fs = require('node:fs') as typeof import('node:fs');
@@ -258,7 +275,19 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
     }
   }
 
-  /** 直写 IndexedDB 的 settings 表（DB 名/store/kg 键与产品同一处出处） */
+  /** 页面内是否存在文案精确相等的**可见**按钮（只判存在，不点击） */
+  async function hasButton(page: Page, text: string): Promise<boolean> {
+    return page.evaluate((t) => {
+      const b = Array.from(document.querySelectorAll('button')).find(
+        (x) => (x.textContent ?? '').trim() === t,
+      );
+      if (!b) return false;
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }, text);
+  }
+
+  /** 直写 IndexedDB 的 settings 表（DB 名/store/key 与产品同一处出处） */
   async function seedSettings(page: Page, rows: SettingRow[]): Promise<void> {
     await page.evaluate(
       async ({ dbName, store, rows }) => {
@@ -335,6 +364,37 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
         SEEDED_REST_POLICY,
       );
 
+      /*
+       * ③' 形态等价断言 —— 把「与用户手动开过插件得到的库内状态**逐字节等价**」从描述
+       *    变成断言。可核的部分是**序列化形态**（产品写的是 `JSON.stringify(值)` 存进
+       *    `valueJson`，不是裸值；键名前缀来自单一出处）：
+       *      · 三个插件键都必须由 `pluginEnabledKey(...)` 产出（不手打前缀）；
+       *      · `valueJson` 必须是**字符串**且能 `JSON.parse` 回布尔 —— 产品读侧
+       *        `readEnabledFromSettings` 正是这么认的，写成裸值它就会**静默跳过**该行；
+       *      · 行形状必须恰好是 `{key, valueJson, updatedAt}`，`updatedAt` 为 ISO 串
+       *        （与 `Setting` / Dexie store 键路径一致）。
+       */
+      const pluginSeed = seeded.filter((r) => r.key.startsWith(pluginEnabledKey('')));
+      // 注意：message 只能挂在 `expect(...)` 上 —— `toEqual(expected, message)` 不是合法签名
+      // （本仓 tsc 会报 TS2554，我第一版就踩了）。
+      expect(
+        pluginSeed.map((r) => r.key).sort(),
+        '插件键必须由 pluginEnabledKey(...) 产出（前缀单一出处），不得手打',
+      ).toEqual([AGENT_BOARD, SAMPLE_PROJECTS, WEEKLY_REPORT].sort());
+      for (const r of seeded) {
+        expect(typeof r.valueJson, `${r.key} 的 valueJson 必须是字符串（产品写的是 JSON 串）`).toBe('string');
+        expect(Object.keys(r).sort(), `${r.key} 的行形状必须恰好是 key/valueJson/updatedAt`).toEqual([
+          'key',
+          'updatedAt',
+          'valueJson',
+        ]);
+        expect(Number.isNaN(Date.parse(r.updatedAt)), `${r.key} 的 updatedAt 必须是可解析的 ISO 串`).toBe(false);
+      }
+      for (const r of pluginSeed) {
+        expect(typeof JSON.parse(r.valueJson), `${r.key} 必须是 JSON 布尔（裸值会被读侧静默跳过）`).toBe('boolean');
+      }
+      expect(typeof JSON.parse(seeded.find((r) => r.key === 'restPolicy')!.valueJson)).toBe('object');
+
       await seedSettings(page, seeded);
       await page.reload();
       await page.waitForSelector('header', { timeout: 20000 });
@@ -344,6 +404,16 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
       expect(before.settings[WEEKLY_REPORT], '播种未落库（前提失败）').toBe('true');
       expect(before.settings[SAMPLE_PROJECTS], '播种未落库（前提失败）').toBe('true');
       console.log('[demo-gate] 播种后 =', JSON.stringify(before.settings));
+
+      /*
+       * ③' 读侧接受（形态等价的**行为**判据）：侧栏那个入口由 `plugin.enabled.sample-projects`
+       *    门控，而它使用的是产品自己的读侧（`readEnabledFromSettings`）。⇒ 入口出现了，
+       *    就证明我直写的行与「产品写入的行」在读侧看来**形态一致**（不是我以为一致）。
+       */
+      expect(
+        await hasButton(page, '载入示例项目'),
+        '播种行未被产品读侧接受（形态与产品写入的不等价）：该入口由 plugin.enabled.sample-projects 门控',
+      ).toBe(true);
 
       // ── 真 UI：点侧栏「载入示例项目」→ 确认弹窗 → 确认载入（定位不许放宽） ──
       const openedEntry = await clickText(page, '载入示例项目');
