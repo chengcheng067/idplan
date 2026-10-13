@@ -400,6 +400,12 @@ export const enMessages: Record<MessageKey, string> = {
   'calendar.empty.period': '· Period',
   'calendar.empty.noRelated': "None of this project's stages concern you",
   'calendar.empty.noRelatedBody': 'You can view the project overview, or contact the project owner',
+  /* ───────────────────── Backup / restore toasts (useBackupIo) ───────────────────── */
+  'backup.toast.saved': 'Backup package saved',
+  'backup.toast.exportFailed': 'Backup export failed.',
+  'backup.toast.demoFailed': 'Failed to load the sample data — nothing was changed.',
+  'backup.toast.verifyFailed': 'Backup file failed validation — nothing was changed.',
+  'backup.toast.restoreFailed': 'Restore failed — your local data is unaffected.',
   /* ───────────────────── Members section ───────────────────── */
   'common.save': 'Save',
   'common.cancel': 'Cancel',

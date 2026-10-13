@@ -407,6 +407,12 @@ export const zhMessages = {
   'calendar.empty.period': '· 周期',
   'calendar.empty.noRelated': '该项目的阶段与你无关',
   'calendar.empty.noRelatedBody': '你可以查看项目概况，或联系项目负责人',
+  /* ───────────────────── 备份 / 恢复的 toast（useBackupIo）───────────────────── */
+  'backup.toast.saved': '备份包已保存',
+  'backup.toast.exportFailed': '备份导出失败。',
+  'backup.toast.demoFailed': '示例数据加载失败，未做任何改动。',
+  'backup.toast.verifyFailed': '备份文件校验失败，未做任何改动。',
+  'backup.toast.restoreFailed': '备份恢复失败，本地数据未受影响。',
   /* ───────────────────── 成员管理区（MembersPageSection）───────────────────── */
   'common.save': '保存',
   'common.cancel': '取消',

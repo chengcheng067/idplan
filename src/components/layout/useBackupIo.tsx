@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 
 import { useRepos } from '../../hooks/useRepos';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { useLang } from '../../i18n';
 import {
   BackupService,
   downloadBackup,
@@ -87,6 +88,16 @@ export function useBackupIo(): BackupIo {
   const [pendingSource, setPendingSource] = useState<'file' | 'demo'>('file');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /** 取词 + 语言变化订阅点（toast 文案在调用期取） */
+  const { t } = useLang();
+  /*
+   * ⚠️ **判断边界（本文件的翻译范围）**：
+   *   · **翻**：`toast(...)` 与 ConfirmDialog 的文案 —— 它们出现在**屏幕上**，
+   *     而出错时用户唯一看到的就是这几句（备份/恢复是本轮风险最集中处，必须是母语）；
+   *   · **不翻**：logUser / logError 的**日志文案**（含那个分类名「备份」）——
+   *     它们进的是**前端日志文件**（`导出前端日志` 才看得到），属「屏幕外」，按 team-lead 的口径不翻；
+   *     翻它会让日志与既有导出的日志对不上、且对排查无收益。
+   */
   const toast = (kind: 'success' | 'error' | 'info', message: string): void => {
     useProjectsStore.getState().pushToast(kind, message);
   };
@@ -95,9 +106,9 @@ export function useBackupIo(): BackupIo {
   const save = async (): Promise<void> => {
     const ok = await exportBackupToFile(repos);
     if (ok) {
-      toast('success', '备份包已保存');
+      toast('success', t('backup.toast.saved'));
     } else {
-      toast('error', '备份导出失败。');
+      toast('error', t('backup.toast.exportFailed'));
     }
   };
 
@@ -125,7 +136,7 @@ export function useBackupIo(): BackupIo {
       setPendingSource('demo');
       setConfirmOpen(true);
     } catch (err) {
-      toast('error', '示例数据加载失败，未做任何改动。');
+      toast('error', t('backup.toast.demoFailed'));
       logError('备份', '示例数据加载失败', err);
     }
   };
@@ -139,7 +150,7 @@ export function useBackupIo(): BackupIo {
       setPendingSource('file');
       setConfirmOpen(true);
     } catch (err) {
-      toast('error', '备份文件校验失败，未做任何改动。');
+      toast('error', t('backup.toast.verifyFailed'));
       logError('备份', '备份文件校验失败', err);
     }
   };
@@ -154,7 +165,7 @@ export function useBackupIo(): BackupIo {
     } catch (err) {
       toast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : '备份恢复失败，本地数据未受影响。',
+        err instanceof ChangxiaError ? err.userMessage : t('backup.toast.restoreFailed'),
       );
       logError('备份', '从备份恢复失败', err);
     }
