@@ -413,6 +413,21 @@ export const zhMessages = {
   'backup.toast.demoFailed': '示例数据加载失败，未做任何改动。',
   'backup.toast.verifyFailed': '备份文件校验失败，未做任何改动。',
   'backup.toast.restoreFailed': '备份恢复失败，本地数据未受影响。',
+  /* ───────────── 备份/恢复确认弹窗（useBackupIo · ConfirmDialog）───────────── */
+  'backup.dialog.loadDemoTitle': '载入示例项目',
+  'backup.dialog.restoreTitle': '从备份恢复',
+  'backup.dialog.confirmLoad': '确认载入',
+  'backup.dialog.confirmRestore': '确认恢复',
+  'backup.dialog.demo1': '将载入',
+  'backup.dialog.demoStrong': '5 个演示项目',
+  'backup.dialog.demo2': '（覆盖式），',
+  'backup.dialog.replaceStrong': '整体替换当前全部数据且不可撤销',
+  'backup.dialog.demo3': '。没有真实数据的库可以放心载入；有真实数据建议先「保存备份」留档。',
+  'backup.dialog.restore1': '恢复将',
+  'backup.dialog.restore2': '。建议先「保存备份」留档，再确认恢复。',
+  'backup.dialog.filePrefix': '文件：',
+  'backup.dialog.noPasswordHash':
+    '⚠ 此备份不含密码哈希（{count} 个成员设有密码）——导入后这些成员需重设密码。',
   /* ───────────────────── 成员管理区（MembersPageSection）───────────────────── */
   'common.save': '保存',
   'common.cancel': '取消',

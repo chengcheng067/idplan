@@ -406,6 +406,23 @@ export const enMessages: Record<MessageKey, string> = {
   'backup.toast.demoFailed': 'Failed to load the sample data — nothing was changed.',
   'backup.toast.verifyFailed': 'Backup file failed validation — nothing was changed.',
   'backup.toast.restoreFailed': 'Restore failed — your local data is unaffected.',
+  /* ───────────── Backup / restore confirm dialog ───────────── */
+  'backup.dialog.loadDemoTitle': 'Load the sample projects',
+  'backup.dialog.restoreTitle': 'Restore from backup',
+  'backup.dialog.confirmLoad': 'Confirm load',
+  'backup.dialog.confirmRestore': 'Confirm restore',
+  'backup.dialog.demo1': 'This will load',
+  'backup.dialog.demoStrong': '5 demo projects',
+  'backup.dialog.demo2': ' (replacing everything),',
+  'backup.dialog.replaceStrong': 'replacing all current data with no undo',
+  'backup.dialog.demo3':
+    '. A library with no real data is safe to load; if you have real data, save a backup first.',
+  'backup.dialog.restore1': 'Restoring will',
+  'backup.dialog.restore2':
+    '. Save a backup first, then confirm the restore.',
+  'backup.dialog.filePrefix': 'File: ',
+  'backup.dialog.noPasswordHash':
+    '⚠ This backup contains no password hashes ({count} members have a password) — they will need to reset it after import.',
   /* ───────────────────── Members section ───────────────────── */
   'common.save': 'Save',
   'common.cancel': 'Cancel',

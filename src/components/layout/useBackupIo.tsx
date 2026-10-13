@@ -96,7 +96,11 @@ export function useBackupIo(): BackupIo {
    *     而出错时用户唯一看到的就是这几句（备份/恢复是本轮风险最集中处，必须是母语）；
    *   · **不翻**：logUser / logError 的**日志文案**（含那个分类名「备份」）——
    *     它们进的是**前端日志文件**（`导出前端日志` 才看得到），属「屏幕外」，按 team-lead 的口径不翻；
-   *     翻它会让日志与既有导出的日志对不上、且对排查无收益。
+   *     更硬的理由（team-lead 补）：`logUser(source, message)` 的 **`source` 是跨模块共用的自由文本、
+   *     不是显示标签**（全仓 20+ 处：规划向导 / 打印标识 / NAS 服务 / 行业库 / 首启引导 / 身份 …），
+   *     而**日志查看器按 `source` 分组** ⇒ 它实质上是**分组键**。翻它的后果不是「对不上」，
+   *     而是**同一类日志在英文模式下被拆成两组**（历史组中文键 + 新组英文键）。
+   *     ⇒ 这类区分（**数据键 vs 显示文本**）是本轮反复训练的东西，遇到新串先问它属于哪一类。
    */
   const toast = (kind: 'success' | 'error' | 'info', message: string): void => {
     useProjectsStore.getState().pushToast(kind, message);
@@ -192,27 +196,32 @@ export function useBackupIo(): BackupIo {
     confirmDialog: (
       <ConfirmDialog
         open={confirmOpen}
-        title={pendingSource === 'demo' ? '载入示例项目' : '从备份恢复'}
+        title={pendingSource === 'demo' ? t('backup.dialog.loadDemoTitle') : t('backup.dialog.restoreTitle')}
         danger
-        confirmText={pendingSource === 'demo' ? '确认载入' : '确认恢复'}
+        confirmText={pendingSource === 'demo' ? t('backup.dialog.confirmLoad') : t('backup.dialog.confirmRestore')}
         onConfirm={() => void onConfirmRestore()}
         onCancel={() => setConfirmOpen(false)}
       >
         <p>
           {pendingSource === 'demo' ? (
             <>
-              将载入<strong>5 个演示项目</strong>（覆盖式），
-              <strong>整体替换当前全部数据且不可撤销</strong>。没有真实数据的库可以放心载入；
-              有真实数据建议先「保存备份」留档。
+              {t('backup.dialog.demo1')}
+              <strong>{t('backup.dialog.demoStrong')}</strong>
+              {t('backup.dialog.demo2')}
+              <strong>{t('backup.dialog.replaceStrong')}</strong>
+              {t('backup.dialog.demo3')}
             </>
           ) : (
             <>
-              恢复将<strong>整体替换当前全部数据且不可撤销</strong>。建议先「保存备份」留档，再确认恢复。
+              {t('backup.dialog.restore1')}
+              <strong>{t('backup.dialog.replaceStrong')}</strong>
+              {t('backup.dialog.restore2')}
             </>
           )}
         </p>
         <p className="mt-2 text-xs text-mist">
-          文件：{pendingPkg ? `${(pendingPkg.meta as { exportedAt?: string }).exportedAt ?? ''}` : ''}
+          {t('backup.dialog.filePrefix')}
+          {pendingPkg ? `${(pendingPkg.meta as { exportedAt?: string }).exportedAt ?? ''}` : ''}
         </p>
         {pendingPkg &&
           (() => {
@@ -224,7 +233,7 @@ export function useBackupIo(): BackupIo {
             const sanitized = members.filter((m) => m.hasPassword === true && !m.passwordHash);
             return sanitized.length > 0 ? (
               <p className="mt-2 rounded-[8px] border border-amber/40 bg-amber-soft px-2.5 py-1.5 text-xs text-amber">
-                ⚠ 此备份不含密码哈希（{sanitized.length} 个成员设有密码）——导入后这些成员需重设密码。
+                {t('backup.dialog.noPasswordHash', { count: sanitized.length })}
               </p>
             ) : null;
           })()}
