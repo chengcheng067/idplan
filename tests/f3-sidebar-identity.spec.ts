@@ -163,20 +163,35 @@ describe.skipIf(!CAN_RUN_FRESH)('F3-BROWSER · 退出身份后侧栏不显示项
     const page = await ctx.newPage();
     await page.goto(server!.url);
     await page.waitForSelector('header', { timeout: 20000 });
-    await page.evaluate(() => {
+    // ⚠️ 静默前置扫雷批（2026-10-14）：这两下必须**断言存在再点**。
+    //    旧写法 `b?.click()` 点空时，本函数紧接着就 `return { ctx, page }`（**后续没有任何校验**）
+    //    ⇒ 身份没建立也不会红，用例会带着"未进入身份"的页面继续跑 —— 那是**假绿**。
+    const clickedAdminEntry = await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find(
         (x) => (x.textContent ?? '').trim() === '我是管理员',
       );
-      b?.click();
+      if (!b) return false;
+      b.click();
+      return true;
     });
+    expect(
+      clickedAdminEntry,
+      '身份流程里找不到「我是管理员」按钮（旧写法静默点空 ⇒ 本函数随后直接 return，用例会在"未进入身份"下继续跑）',
+    ).toBe(true);
     await page.waitForTimeout(400);
     await page.locator('input[placeholder="你的姓名"]').fill('探针甲');
-    await page.evaluate(() => {
+    const clickedAdminConfirm = await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),
       );
-      b?.click();
+      if (!b) return false;
+      b.click();
+      return true;
     });
+    expect(
+      clickedAdminConfirm,
+      '身份流程里找不到「确认为管理员」按钮（旧写法静默点空 ⇒ 身份未建立而本函数直接 return，用例假绿）',
+    ).toBe(true);
     await page.waitForTimeout(1000);
     return { ctx, page };
   }
