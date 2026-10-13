@@ -153,7 +153,7 @@ export function shotDir(name: string): string {
 /* ---------------------------------- 进入流程 ---------------------------------- */
 
 /**
- * 首启建管理员 → 载入 indoor 示例（陈工是 indoor 种子里的 stage owner，其名下必有
+ * 首启建管理员 → 载入 indoor 示例（演示成员乙是 indoor 种子里的 stage owner，其名下必有
  * 相关项目）。与 member-board-layout.spec.ts 的 enterMemberBoard 前半段同口径。
  */
 export async function bootstrapAdminWithDemo(page: Page, serverUrl: string): Promise<void> {
@@ -177,13 +177,13 @@ export async function bootstrapAdminWithDemo(page: Page, serverUrl: string): Pro
   await card.first().click();
   await page.waitForTimeout(400);
   await page.locator('button', { hasText: '确认载入' }).first().click();
-  await page.waitForFunction((name) => document.body.innerText.includes(name), '云栖', { timeout: 20000 });
+  await page.waitForFunction((name) => document.body.innerText.includes(name), '演示项目1', { timeout: 20000 });
   await page.waitForTimeout(1500);
 }
 
 /**
  * 整库导入（loadDemo）会替换 members，原管理员身份失效（member-board-layout.spec.ts
- * 注释同款坑）。库里有管理员（演示负责人）⇒ 点「点击进入」直达 name_input（成员意图），
+ * 注释同款坑）。库里有管理员（演示成员甲）⇒ 点「点击进入」直达 name_input（成员意图），
  * 填演示成员名进入 ⇒ isAdmin 复活 + 成员区（演示成员）可点。
  */
 export async function reenterAdmin(page: Page): Promise<void> {
@@ -203,7 +203,7 @@ export async function reenterAdmin(page: Page): Promise<void> {
     });
     await page.waitForTimeout(300);
   }
-  await page.locator('input[placeholder="你的姓名"]').fill('演示负责人');
+  await page.locator('input[placeholder="你的姓名"]').fill('演示成员甲');
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find(
       (x) => (x.textContent ?? '').includes('确认为管理员') || (x.textContent ?? '').trim() === '下一步',
@@ -214,14 +214,14 @@ export async function reenterAdmin(page: Page): Promise<void> {
   await page.waitForTimeout(800);
 }
 
-/** 退出身份 → 以「陈工」进入 → 点侧栏「成员看板」（与 member-board-layout 同口径） */
+/** 退出身份 → 以「演示成员乙」进入 → 点侧栏「成员看板」（与 member-board-layout 同口径） */
 export async function enterMemberBoard(page: Page): Promise<void> {
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '点击进入');
     b?.click();
   });
   await page.waitForSelector('input[placeholder="你的姓名"]', { timeout: 15000 });
-  await page.locator('input[placeholder="你的姓名"]').fill('陈工');
+  await page.locator('input[placeholder="你的姓名"]').fill('演示成员乙');
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '下一步');
     b?.click();

@@ -27,20 +27,20 @@ import type { Project } from '../src/core/types/entities';
 
 describe('项目外观 · 简称回落（shortLabel ?? 项目名首字）', () => {
   it('未设简称（null / undefined / 空串 / 全空格）→ 项目名首字', () => {
-    expect(resolveProjectShortLabel('云栖酒店改造', null)).toBe('云');
-    expect(resolveProjectShortLabel('云栖酒店改造', undefined)).toBe('云');
-    expect(resolveProjectShortLabel('云栖酒店改造', '')).toBe('云');
-    expect(resolveProjectShortLabel('云栖酒店改造', '   ')).toBe('云');
+    expect(resolveProjectShortLabel('演示项目一号', null)).toBe('演');
+    expect(resolveProjectShortLabel('演示项目一号', undefined)).toBe('演');
+    expect(resolveProjectShortLabel('演示项目一号', '')).toBe('演');
+    expect(resolveProjectShortLabel('演示项目一号', '   ')).toBe('演');
   });
 
   it('设了简称 → 用简称（两侧空白先 trim）', () => {
-    expect(resolveProjectShortLabel('云栖酒店改造', '云栖')).toBe('云栖');
-    expect(resolveProjectShortLabel('云栖酒店改造', '  云栖  ')).toBe('云栖');
+    expect(resolveProjectShortLabel('演示项目一号', '演示')).toBe('演示');
+    expect(resolveProjectShortLabel('演示项目一号', '  演示  ')).toBe('演示');
   });
 
   it('超长按**码点**截断到 2 字，不劈开代理对（否则渲染出半个字符）', () => {
     expect(PROJECT_SHORT_LABEL_MAX_LENGTH).toBe(2);
-    expect(resolveProjectShortLabel('x', '云栖酒店')).toBe('云栖');
+    expect(resolveProjectShortLabel('x', '演示项目')).toBe('演示');
     // emoji 是代理对：slice(0,2) 会切出半个 → 这里必须仍是 2 个完整码点
     expect(Array.from(resolveProjectShortLabel('x', '🌿🌿🌿'))).toHaveLength(2);
   });
@@ -55,8 +55,8 @@ describe('项目外观 · 简称回落（shortLabel ?? 项目名首字）', () =
     expect(normalizeProjectShortLabel('   ')).toBeNull();
     expect(normalizeProjectShortLabel(null)).toBeNull();
     expect(normalizeProjectShortLabel(undefined)).toBeNull();
-    expect(normalizeProjectShortLabel(' 云栖 ')).toBe('云栖');
-    expect(normalizeProjectShortLabel('云栖酒店')).toBe('云栖');
+    expect(normalizeProjectShortLabel(' 演示 ')).toBe('演示');
+    expect(normalizeProjectShortLabel('演示项目')).toBe('演示');
   });
 });
 
@@ -107,10 +107,10 @@ describe('项目行归一 · shortLabel 的键位（四处同步铁律 · 第二
   /** 老备份（v1/v2/v3）形态：完全没有 shortLabel 键 */
   const legacyInput = {
     id: 'proj_1',
-    name: '云栖酒店改造',
+    name: '演示项目一号',
     type: 'dining',
-    address: '杭州市西湖区',
-    clientName: '云栖',
+    address: '（演示地址）',
+    clientName: '演示',
     contractAmount: null,
     signedAt: null,
     plannedStartAt: '2026-01-01',
@@ -155,7 +155,7 @@ describe('项目行归一 · shortLabel 的键位（四处同步铁律 · 第二
   });
 
   it('备份里带 shortLabel → 原样保留（显式 null 也保留为 null）', () => {
-    expect(normalizeProjectRow({ ...legacyInput, shortLabel: '云栖' }).shortLabel).toBe('云栖');
+    expect(normalizeProjectRow({ ...legacyInput, shortLabel: '演示' }).shortLabel).toBe('演示');
     expect(normalizeProjectRow({ ...legacyInput, shortLabel: null }).shortLabel).toBeNull();
   });
 });

@@ -17,9 +17,23 @@
  * ——roundtrip spec 钉死的那条路，零新增数据面代码。
  *
  * ── 行业中立（本文件的存在理由） ──
- * 5 个演示项目覆盖**五种看板列形态**（室内三段 / 软件五列 / 旅游 / 市场
- * 六列 / 影视四列），陌生用户不论做哪行都能看到「自己那行」长什么样。
- * 成员一律脱敏（demo.local 域），不含任何真实姓名/邮箱。
+ * 5 个演示项目覆盖**五种看板列形态**（软件五列 / 市场六列 / 影视四列 /
+ * 旅游四列 / 室内三段），陌生用户不论做哪行都能看到「自己那行」长什么样。
+ *
+ * ── 2026-10-13 · 全部中性化（公开仓库前的脱敏）──
+ * 旧版本的项目名/客户名是**带行业味的品牌名 + 疑似真实甲方**
+ * （云栖·湖畔茶室 / 云栖餐饮管理有限公司 / 山旬食品 / 等风来旅行俱乐部 …），
+ * 地址也是真实街道（天府三街 / 红星路三段 / 渭滨公园）。本文件要进公开仓库，
+ * 这些名字必须清零：
+ *   · 项目名 → 「演示项目1」～「演示项目5」；
+ *   · 客户名 → 「演示客户公司甲/乙/丙/丁/戊」；
+ *   · 地址   → 「（演示地址）」（不再出现任何真实街道 / 园区）；
+ *   · 成员   → 「演示成员甲/乙/丙/丁/戊」+ 中立角色词（负责人 / 执行 / 协作 /
+ *             评审 / 统筹）—— 旧的「陈工·方案设计」「郑工·现场管理」是建筑岗位味。
+ * **presetKey 一个未改**（5 个 preset 仍覆盖五种看板列形态，那是既有判据）；
+ * 只把**顺序**调了，首位由 `indoor_full` 换成 `software_mobile_full`
+ * （旧注释「室内放首位——主场不丢」作废：这是跨行业工具，且要弱化建筑味）。
+ * 防回潮由 `tests/demo-data.spec.ts` 的禁词表 +「项目名必须以『演示项目』开头」锁住。
  */
 
 import { getPresets, getPresetItems } from '../template/stage-library';
@@ -27,22 +41,26 @@ import type { StagePreset, StageTemplateItem, BackupPackage } from '../types/dto
 import { StageStatus, ScheduleBasis, MemberRoleKind } from '../types/enums';
 import type { Project, Stage, Task, Member } from '../types/entities';
 
-/** 演示项目选用的五个 preset（覆盖五种 columns 形态；室内放首位——主场不丢） */
+/** 演示项目选用的五个 preset（覆盖五种 columns 形态；首位 = 软件开发，建筑域排末位） */
 export const DEMO_PRESETS: ReadonlyArray<{ presetKey: string; label: string }> = [
-  { presetKey: 'indoor_full', label: '室内设计' },
   { presetKey: 'software_mobile_full', label: '软件开发' },
   { presetKey: 'marketing_launch_full', label: '市场活动' },
   { presetKey: 'film_promo_full', label: '影视制作' },
   { presetKey: 'travel_fit', label: '旅游出行' },
+  { presetKey: 'indoor_full', label: '室内设计' },
 ];
 
-/** 演示成员（脱敏：中性姓氏+工种、demo.local 域；admin=「设计师本人」） */
+/**
+ * 演示成员（脱敏：一律「演示成员 + 天干」+ **中立角色词**，demo.local 域）。
+ * 旧的「陈工 / 周工 / 吴工 / 郑工」+「方案设计 / 深化设计 / 现场管理」是
+ * 真实姓名尾字 + 建筑岗位名，公开仓库不能留。
+ */
 const DEMO_MEMBERS: ReadonlyArray<Pick<Member, 'id' | 'name' | 'role' | 'contact' | 'avatarColor' | 'roleKind'>> = [
-  { id: 'demo_admin', name: '演示负责人', role: '主案负责人', contact: 'admin@demo.local', avatarColor: '#5B8C5A', roleKind: MemberRoleKind.Admin },
-  { id: 'demo_m1', name: '陈工', role: '方案设计', contact: 'chen@demo.local', avatarColor: '#B25C5C', roleKind: MemberRoleKind.Member },
-  { id: 'demo_m2', name: '周工', role: '深化设计', contact: 'zhou@demo.local', avatarColor: '#5C7A9E', roleKind: MemberRoleKind.Member },
-  { id: 'demo_m3', name: '吴工', role: '执行统筹', contact: 'wu@demo.local', avatarColor: '#C98D5B', roleKind: MemberRoleKind.Member },
-  { id: 'demo_m4', name: '郑工', role: '现场管理', contact: 'zheng@demo.local', avatarColor: '#7A6BAC', roleKind: MemberRoleKind.Member },
+  { id: 'demo_admin', name: '演示成员甲', role: '负责人', contact: 'admin@demo.local', avatarColor: '#5B8C5A', roleKind: MemberRoleKind.Admin },
+  { id: 'demo_m1', name: '演示成员乙', role: '执行', contact: 'member-b@demo.local', avatarColor: '#B25C5C', roleKind: MemberRoleKind.Member },
+  { id: 'demo_m2', name: '演示成员丙', role: '协作', contact: 'member-c@demo.local', avatarColor: '#5C7A9E', roleKind: MemberRoleKind.Member },
+  { id: 'demo_m3', name: '演示成员丁', role: '评审', contact: 'member-d@demo.local', avatarColor: '#C98D5B', roleKind: MemberRoleKind.Member },
+  { id: 'demo_m4', name: '演示成员戊', role: '统筹', contact: 'member-e@demo.local', avatarColor: '#7A6BAC', roleKind: MemberRoleKind.Member },
 ];
 
 const NOW = (): string => new Date().toISOString();
@@ -96,14 +114,30 @@ interface DemoProjectSpec {
   contractAmount: number | null;
   startOffset: number;
   spanDays: number;
+  /**
+   * 首页卡片排序键（1-based，越小越靠前）。
+   *
+   * 为什么需要它：首页项目列表按 `updatedAt` **降序**排（`local.projects.repo.list`），
+   * 而工厂原先给 5 个项目写的是**同一个** `updatedAt` ⇒ 相等时顺序退化成
+   * 「Dexie 主键序」（id 里的 presetKey 字母序），与 DEMO_SPECS 的声明顺序无关。
+   * 本次把首位从 `indoor_full` 换成 `software_mobile_full`，若不钉住顺序，
+   * 「软件开发优先」在界面上并不成立。故按 order 错峰 1 分钟写入 updatedAt。
+   */
+  order: number;
 }
 
+/**
+ * 五个演示项目的元数据（顺序 = 首页卡片顺序 = `order` 升序，见下方 updatedAt 错峰）。
+ * 名称 / 客户 / 地址全部中性：项目「演示项目N」、客户「演示客户公司<天干>」、
+ * 地址一律「（演示地址）」——**不再出现任何真实公司名 / 街道 / 园区 / 景区**。
+ * `startOffset` / `spanDays` / `contractAmount` 沿用改造前各 preset 的取值（按 preset 归属搬过来）。
+ */
 const DEMO_SPECS: ReadonlyArray<DemoProjectSpec> = [
-  { presetKey: 'indoor_full', name: '云栖·湖畔茶室', clientName: '云栖餐饮管理有限公司', address: '成都市高新区天府三街 88 号', contractAmount: 420000, startOffset: -56, spanDays: 168 },
-  { presetKey: 'software_mobile_full', name: '植屋·品牌小程序', clientName: '植屋植物工作室', address: '（线上交付）', contractAmount: 150000, startOffset: -42, spanDays: 126 },
-  { presetKey: 'marketing_launch_full', name: '山旬·秋季新品发布会', clientName: '山旬食品', address: '成都市锦江区红星路三段 1 号', contractAmount: 280000, startOffset: -21, spanDays: 98 },
-  { presetKey: 'film_promo_full', name: '渭水茶炉·品牌宣传片', clientName: '渭水茶炉（咸阳）', address: '咸阳市渭城区渭滨公园', contractAmount: 96000, startOffset: -35, spanDays: 112 },
-  { presetKey: 'travel_fit', name: '川西·深秋摄影线路', clientName: '等风来旅行俱乐部', address: '甘孜州（线上行程）', contractAmount: 0, startOffset: 14, spanDays: 84 },
+  { presetKey: 'software_mobile_full', name: '演示项目1', clientName: '演示客户公司甲', address: '（演示地址）', contractAmount: 150000, startOffset: -42, spanDays: 126, order: 1 },
+  { presetKey: 'marketing_launch_full', name: '演示项目2', clientName: '演示客户公司乙', address: '（演示地址）', contractAmount: 280000, startOffset: -21, spanDays: 98, order: 2 },
+  { presetKey: 'film_promo_full', name: '演示项目3', clientName: '演示客户公司丙', address: '（演示地址）', contractAmount: 96000, startOffset: -35, spanDays: 112, order: 3 },
+  { presetKey: 'travel_fit', name: '演示项目4', clientName: '演示客户公司丁', address: '（演示地址）', contractAmount: 0, startOffset: 14, spanDays: 84, order: 4 },
+  { presetKey: 'indoor_full', name: '演示项目5', clientName: '演示客户公司戊', address: '（演示地址）', contractAmount: 420000, startOffset: -56, spanDays: 168, order: 5 },
 ];
 
 /** id 前缀保持与真库一致的形态直觉（proj_/stg_/task_），前缀 demo_ 防与真数据撞 */
@@ -126,6 +160,8 @@ export function buildDemoBackup(): BackupPackage {
     const projectId = P(spec.presetKey, pi);
     const startAt = plans[0]?.startAt ?? todayIso();
     const endAt = plans[plans.length - 1]?.endAt ?? shiftIso(spec.spanDays);
+    // order 越小 → updatedAt 越新 → 首页列表（按 updatedAt 降序）越靠前
+    const projectUpdatedAt = new Date(Date.parse(now) - (spec.order - 1) * 60_000).toISOString();
 
     projects.push({
       id: projectId,
@@ -142,7 +178,7 @@ export function buildDemoBackup(): BackupPackage {
       scheduleBasis: ScheduleBasis.Calendar,
       status: 'active',
       revision: 1,
-      updatedAt: now,
+      updatedAt: projectUpdatedAt,
     } as Project);
 
     plans.forEach((plan, si) => {

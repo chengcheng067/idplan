@@ -283,7 +283,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
     await page.waitForTimeout(3000);
     // 首页应出现演示项目卡（前置：数据确实落库了，否则后续断言空转成假绿）
     const hasProject = await page.evaluate(() =>
-      (document.body.textContent ?? '').includes('云栖·湖畔茶室'),
+      (document.body.textContent ?? '').includes('演示项目1'),
     );
     expect(hasProject, '示例数据应已落库并出现在首页').toBe(true);
 
@@ -295,7 +295,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
      */
     expect(await clickText(page, '点击进入'), '未进入身份时应能在页面上点到「点击进入」（前置：身份已被示例包换掉）').toBe(true);
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('演示负责人');
+    await page.locator('input[placeholder="你的姓名"]').fill('演示成员甲');
     expect(await clickText(page, '下一步'), '姓名流程应有「下一步」').toBe(true);
     await page.waitForTimeout(1500);
     expect(
@@ -495,7 +495,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
     try {
       await becomeAdmin(page);
       await loadDemo(page);
-      await openProjectByName(page, '云栖·湖畔茶室');
+      await openProjectByName(page, '演示项目1');
       await openStageDrawer(page, 0);
       expect(await page.locator(STAGE_DRAWER).count(), '阶段抽屉应打开').toBe(1);
 
@@ -550,7 +550,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
     try {
       await becomeAdmin(page);
       await loadDemo(page);
-      await openProjectByName(page, '云栖·湖畔茶室');
+      await openProjectByName(page, '演示项目1');
       const first = await pathname(page);
       expect(first, '应进到第一个项目的详情页').toMatch(/^\/project\//);
       await openStageDrawer(page, 0);
@@ -571,7 +571,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
       expect(await pathname(page), '面包屑应回到首页').toBe('/');
 
       // 进**另一个**项目的详情页
-      await openProjectByName(page, '植屋·品牌小程序');
+      await openProjectByName(page, '演示项目2');
       const other = await pathname(page);
       expect(other, '应进到另一个项目的详情页').toMatch(/^\/project\//);
       expect(other, '必须确实换到了另一个项目（否则这条什么也没测）').not.toBe(first);

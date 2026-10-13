@@ -72,7 +72,7 @@ function shell(controlsMarkup: string, css: string): string {
     '</style></head><body style="margin:0"><div class="bg-cream" style="padding:24px">' +
     '<div data-zoom-shot="" class="no-print flex items-center gap-3 border border-line bg-paper px-4" style="height:56px">' +
     '<h2 class="font-display text-base font-semibold text-ink">打印预览</h2>' +
-    '<span class="text-xs text-mist">云栖·湖畔茶室 · 预计 4 页 · A4</span>' +
+    '<span class="text-xs text-mist">演示项目1 · 预计 4 页 · A4</span>' +
     '<span class="ml-auto"></span>' +
     controlsMarkup +
     '</div></div></body></html>'

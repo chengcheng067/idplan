@@ -8,7 +8,7 @@
     "projects": [
       {
         "id": "proj_indoor",
-        "name": "云栖·湖畔茶室",
+        "name": "演示项目1",
         "address": "（夹具地址）",
         "clientName": "夹具客户",
         "contractAmount": 100000,
@@ -29,7 +29,7 @@
       },
       {
         "id": "proj_software",
-        "name": "植屋·品牌小程序",
+        "name": "演示项目2",
         "address": "（夹具地址）",
         "clientName": "夹具客户",
         "contractAmount": 100000,
@@ -642,8 +642,8 @@
     "members": [
       {
         "id": "m-admin",
-        "name": "奚工",
-        "role": "主案负责人",
+        "name": "演示成员甲",
+        "role": "负责人",
         "contact": "admin@fixture.local",
         "avatarColor": "#5B8C5A",
         "active": true,
@@ -656,9 +656,9 @@
       },
       {
         "id": "m-rose",
-        "name": "朴彩英",
-        "role": "方案设计",
-        "contact": "rose@fixture.local",
+        "name": "演示成员乙",
+        "role": "执行",
+        "contact": "member-b@fixture.local",
         "avatarColor": "#B25C5C",
         "active": true,
         "roleKind": "member",
@@ -670,9 +670,9 @@
       },
       {
         "id": "m-zhou",
-        "name": "周工",
-        "role": "深化设计",
-        "contact": "zhou@fixture.local",
+        "name": "演示成员丙",
+        "role": "协作",
+        "contact": "member-c@fixture.local",
         "avatarColor": "#5C7A9E",
         "active": true,
         "roleKind": "member",

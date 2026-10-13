@@ -36,7 +36,7 @@ class ResizeObserverStub {
 vi.mock('../src/components/print/useSchedulePaperData', () => ({
   useSchedulePaperData: (projectId: string) => ({
     hydrated: true,
-    project: { id: projectId || 'p1', name: '云栖·湖畔茶室' },
+    project: { id: projectId || 'p1', name: '演示项目1' },
     pages: [{}, {}],
     sections: [],
     bandGeom: null,

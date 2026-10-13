@@ -174,7 +174,7 @@ const PROJECT: Project = {
  * 名字刻意与 PROJECT 不同，好让「页面主体切过去了没有」可判。
  */
 const PROJECT_B_ID = 'proj_dl2_b';
-const PROJECT_B: Project = { ...PROJECT, id: PROJECT_B_ID, name: '另一处·湖畔茶室' };
+const PROJECT_B: Project = { ...PROJECT, id: PROJECT_B_ID, name: '另一个演示项目' };
 
 /** 阶段负责人 = 成员本人 → 成员在详情页有「相关阶段」（否则会先撞受限空态，看不到操作栏） */
 const STAGE: Stage = {

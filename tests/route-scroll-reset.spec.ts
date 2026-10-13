@@ -55,7 +55,7 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug D · 路由切换回顶（真 Chromium）',
     await server?.close();
   });
 
-  /** 管理员（演示负责人）+ indoor 示例 ⇒ 首页含成员区，1440×700 保证可滚 */
+  /** 管理员（演示成员甲）+ indoor 示例 ⇒ 首页含成员区，1440×700 保证可滚 */
   async function adminHome(page: Page): Promise<void> {
     await bootstrapAdminWithDemo(page, server.url);
     await reenterAdmin(page);

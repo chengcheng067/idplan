@@ -168,7 +168,7 @@ function buildSeedFixture(): string {
 }
 
 /**
- * 进应用 → 备份导入种子 → reload → 身份即演示负责人（种子里 settings.currentMemberId）
+ * 进应用 → 备份导入种子 → reload → 身份即演示成员甲（种子里 settings.currentMemberId）
  * → 切「月历」档。整条只走真实 UI（隐藏 file input / 二次确认 / importAndReplace）。
  */
 async function seedAndEnterCalendar(page: Page, base: string, fixture: string): Promise<void> {

@@ -50,7 +50,7 @@ const PROJECT_ID = 'proj_swiss';
 
 const PROJECT: Project = {
   id: PROJECT_ID,
-  name: '云栖·湖畔茶室',
+  name: '演示项目1',
   address: '城区某路 1 号',
   clientName: '客户甲',
   contractAmount: null,

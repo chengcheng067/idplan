@@ -139,7 +139,7 @@ const BLOCK_KEYS = ['header', 'timeline', 'projectInfo', 'stageTable', 'footer']
 
 const PROJECT: Project = {
   id: PROJECT_ID,
-  name: '云栖·湖畔茶室',
+  name: '演示项目1',
   address: '城区某路 1 号',
   clientName: '客户甲',
   contractAmount: 880000,
@@ -635,7 +635,7 @@ describe('打印内容自定义 + 模板选择 · L1 行为（真实纸面）', 
       ),
       'E 的巨题 = 内容类型词（阶段 / 目录），项目名在刊头 meta 行',
     ).toEqual(['阶段', '目录']);
-    expect(eText, 'E 刊头带项目名（B1 归位）').toContain('云栖·湖畔茶室');
+    expect(eText, 'E 刊头带项目名（B1 归位）').toContain('演示项目1');
     expect(document.querySelector('.ei-span'), 'B2 编年跨度目录在纸面上').not.toBeNull();
     expect(document.querySelector('.ei-span__bar'), 'B2 有跨度条').not.toBeNull();
     expect(document.querySelector('.ei-span__track'), 'B2 有时间标尺').not.toBeNull();

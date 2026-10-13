@@ -366,7 +366,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await reloaded;
       await page.waitForSelector('main', { timeout: 20000 });
       await page.waitForFunction(
-        () => document.body.innerText.includes('云栖·湖畔茶室'),
+        () => document.body.innerText.includes('演示项目1'),
         null,
         { timeout: 20000 },
       );
@@ -737,8 +737,8 @@ describe.skipIf(!CAN_RUN_FRESH)(
       const { ctx, page } = await seededPage({ width: VP_REAL_WINDOW, height: 900 }, derived.file);
       try {
         await spaGo(page, '/member-board');
-        const m = await page.evaluate(measureCard, { index: 0, clones: 0, title: '云栖·湖畔茶室' });
-        expect(m, '派生夹具下应找到「云栖·湖畔茶室」的卡').not.toBeNull();
+        const m = await page.evaluate(measureCard, { index: 0, clones: 0, title: '演示项目1' });
+        expect(m, '派生夹具下应找到「演示项目1」的卡').not.toBeNull();
 
         // 3 个头像 + 1 个 `+N` = 4 span（`max = 3` 的效果；`max=4` 时这里会是 5）
         expect(m!.avatarSpans, '5 个成员应渲染成 3 个头像 + 1 个 `+N` = 4 span（max=3）').toBe(4);

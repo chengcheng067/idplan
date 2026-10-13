@@ -97,7 +97,7 @@ function buildVm(): PrintViewModel {
   return {
     project: {
       id: 'proj_hdr',
-      name: '云栖·湖畔茶室综合改造项目',
+      name: '演示项目1·多阶段协作演示',
       address: '城区某路 1 号',
       clientName: '客户甲',
       plannedStartAt: '2026-01-01',
@@ -290,7 +290,7 @@ function renderClassic(vm: PrintViewModel): string {
  * （从源码读出），源码锁钉住这些类名不漂移——结构漂移 ⇒ 源码锁先红。
  * 两页自身的 DOM 渲染由 itinerary-print.spec.tsx 等既有 jsdom spec 覆盖。
  */
-const CALENDAR_SKELETON = `<div class="print-root mx-auto w-full max-w-[900px] px-6 py-8"><div class="a4-page mx-auto mb-6 flex flex-col" style="width:794px;min-height:1123px;padding:40"><header class="flex items-start justify-between border-b border-line pb-2"><div><h1 class="text-[26px] font-bold leading-tight text-ink">云栖·湖畔茶室综合改造项目</h1><p class="mt-0.5 text-[13px] text-mist">委托方：客户甲</p><p class="text-[13px] text-mist">周期：2026-01-01 – 2026-03-01</p></div><span class="shrink-0 text-[13px] text-mist">ID Plan 月历</span></header></div></div>`;
+const CALENDAR_SKELETON = `<div class="print-root mx-auto w-full max-w-[900px] px-6 py-8"><div class="a4-page mx-auto mb-6 flex flex-col" style="width:794px;min-height:1123px;padding:40"><header class="flex items-start justify-between border-b border-line pb-2"><div><h1 class="text-[26px] font-bold leading-tight text-ink">演示项目1·多阶段协作演示</h1><p class="mt-0.5 text-[13px] text-mist">委托方：客户甲</p><p class="text-[13px] text-mist">周期：2026-01-01 – 2026-03-01</p></div><span class="shrink-0 text-[13px] text-mist">ID Plan 月历</span></header></div></div>`;
 
 const ITINERARY_SKELETON = `<div class="print-root mx-auto max-w-4xl bg-paper p-8"><header class="mb-5 border-b border-line pb-4"><h1 class="font-display text-2xl font-semibold text-ink">云南七日·亲子团</h1><p class="mt-1.5 text-sm text-mist">行程周期：2026-10-01 — 2026-10-03<span class="ml-3">共 3 天</span></p></header><table class="w-full border-collapse text-sm"><tbody><tr><td class="py-2.5 pr-3 text-ink">第 1 天</td></tr></tbody></table></div>`;
 
@@ -463,7 +463,7 @@ describe.skipIf(!CAN_RUN)('纸面页头 print 媒体豁免（真 Chromium + 真�
         };
       });
       expect(bits.h1H, '项目名应有高度').toBeGreaterThan(0);
-      expect(bits.h1Text, '项目名文本').toContain('云栖·湖畔茶室综合改造项目');
+      expect(bits.h1Text, '项目名文本').toContain('演示项目1·多阶段协作演示');
       const client = bits.ps.find((p) => p.text.includes('委托方：'));
       expect(client, '委托方行应在').toBeDefined();
       expect(client!.h, '委托方行应有高度').toBeGreaterThan(0);
@@ -500,7 +500,7 @@ describe.skipIf(!CAN_RUN)('纸面页头 print 媒体豁免（真 Chromium + 真�
       const box = await page.$eval(headSel, (el) => el.getBoundingClientRect().height);
       expect(box, 'print 态公文头应有布局盒').toBeGreaterThan(0);
       const text = (await page.textContent('body')) ?? '';
-      expect(text, '项目名上纸').toContain('云栖·湖畔茶室综合改造项目');
+      expect(text, '项目名上纸').toContain('演示项目1·多阶段协作演示');
       expect(text, '周期上纸').toContain('周期：2026-01-01 – 2026-03-01');
     } finally {
       await page.close();

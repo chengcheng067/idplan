@@ -95,7 +95,7 @@ function buildVm(stageCount = 6, taskCount = 8): PrintViewModel {
   return {
     project: {
       id: 'proj_fid',
-      name: '云栖·湖畔茶室综合改造项目',
+      name: '演示项目1·多阶段协作演示',
       address: '城区某路 1 号',
       clientName: '客户甲',
       plannedStartAt: '2026-01-01',

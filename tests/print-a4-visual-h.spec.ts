@@ -106,7 +106,7 @@ const PROJECT_ID = 'proj_h4';
 
 const PROJECT: Project = {
   id: PROJECT_ID,
-  name: '云栖·湖畔茶室综合改造项目',
+  name: '演示项目1·多阶段协作演示',
   address: '城区某路 1 号',
   clientName: '客户甲',
   contractAmount: 880000,
@@ -630,7 +630,7 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
       // ── ② meta 行（项目名从页眉移到巨字下方；参考稿 y≈242 那位）──
       const p1 = (await page.$('[data-print-page="stage-overview"]'))!;
       const p1Text = (await p1.textContent()) ?? '';
-      expect(p1Text, 'meta 行 = 项目名 + 阶段计数').toContain('云栖·湖畔茶室综合改造项目');
+      expect(p1Text, 'meta 行 = 项目名 + 阶段计数').toContain('演示项目1·多阶段协作演示');
       expect(p1Text).toContain('阶段 3  已完成 0  延期 1');
 
       // ── ③ 分组名（状态表达归双栏栏头，规格 §1.4 表格末行）──
@@ -958,20 +958,20 @@ describe.skipIf(!CAN_RUN)('H 版 A4 视觉验收 · 人类化后（真 Chromium 
       expect(await p2.$('.ap-footword__word'), '页底品牌装置三页同构').not.toBeNull();
 
       // ── ② 自定义品牌词：页顶跟着变，页底**不跟着变**（§1.4 规则 5）──
-      await open('h-hum-giant-custom.html', markupOf(vm, '云栖茶室'));
+      await open('h-hum-giant-custom.html', markupOf(vm, '演示品牌'));
       const p1b = (await page.$('[data-print-page="stage-overview"]'))!;
       const m2 = await p1b.evaluate(measure);
-      expect(m2.word!.text, '页顶巨字 = 自定义品牌词').toBe('云栖茶室');
+      expect(m2.word!.text, '页顶巨字 = 自定义品牌词').toBe('演示品牌');
       expect(m2.word!.top, '换词后仍出血').toBeLessThan(0);
       expect(m2.word!.right, '4 个汉字仍须在纸宽内').toBeLessThanOrEqual(794);
       expect(m2.footWord!.text, '页底 IDPLAN 不随自定义变（§1.4 规则 5）').toBe('IDPLAN');
       await p1b.screenshot({ path: join(dir, 'h-hum-p1-custom.png') });
 
       // ── ③ 超上限长词：渲染口再截断一次 + 降档后仍不撑破纸面（规则 3/6）──
-      await open('h-hum-giant-long.html', markupOf(vm, '云栖·湖畔茶室综合改造项目A'));
+      await open('h-hum-giant-long.html', markupOf(vm, '演示项目1·多阶段协作演示A'));
       const p1c = (await page.$('[data-print-page="stage-overview"]'))!;
       const m3 = await p1c.evaluate(measure);
-      expect(m3.word!.text, '超上限词在渲染口被截断到 12 字符').toBe('云栖·湖畔茶室综合改造项');
+      expect(m3.word!.text, '超上限词在渲染口被截断到 12 字符').toBe('演示项目1·多阶段协作演');
       expect(m3.word!.tier, '长词降到地板档 sm').toBe('sm');
       expect(m3.word!.right, '地板档仍须在纸宽内').toBeLessThanOrEqual(794);
       await p1c.screenshot({ path: join(dir, 'h-hum-p1-long.png') });

@@ -282,8 +282,8 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
    * 全走 UI、不预制 IndexedDB（与 f3-sidebar-identity 同口径）：
    *   ① 先确立管理员（前几步同 becomeAdmin，但**不**跳过首启引导卡）；
    *   ② 点引导卡「室内」⇒ 覆盖导入示例数据（buildDemoBackup 含 demo 成员：
-   *      陈工/周工/吴工/郑工 均为 member）+ reload；
-   *   ③ reload 后身份为空（示例数据整库替换了 members）⇒ 姓名输入「陈工」
+   *      演示成员乙/丙/丁/戊 均为 member）+ reload；
+   *   ③ reload 后身份为空（示例数据整库替换了 members）⇒ 姓名输入「演示成员乙」
    *      进入成员身份。
    */
   async function becomeMember(page: Page): Promise<void> {
@@ -309,18 +309,18 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     await card.first().click();
     await page.waitForTimeout(400);
     await page.locator('button', { hasText: '确认载入' }).first().click();
-    await page.waitForFunction(() => document.body.innerText.includes('云栖·湖畔茶室'), undefined, {
+    await page.waitForFunction(() => document.body.innerText.includes('演示项目1'), undefined, {
       timeout: 20000,
     });
     await page.waitForTimeout(800);
     // ③ 以成员姓名进入（hasAdmin ⇒ 直接姓名输入流，adminIntent=false）
     await page.locator('button', { hasText: '点击进入' }).first().click();
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('陈工');
+    await page.locator('input[placeholder="你的姓名"]').fill('演示成员乙');
     await page.locator('button', { hasText: '下一步' }).first().click();
     await page.waitForTimeout(1200);
     // 自检：顶栏出现的是成员姓名（不是「点击进入」），否则后续断言 vacuous
-    await page.waitForFunction(() => document.body.innerText.includes('陈工'), undefined, {
+    await page.waitForFunction(() => document.body.innerText.includes('演示成员乙'), undefined, {
       timeout: 8000,
     });
   }

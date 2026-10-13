@@ -94,7 +94,7 @@ function buildVm(over: Partial<PrintViewModel> = {}): PrintViewModel {
   return {
     project: {
       id: PROJECT_ID,
-      name: '云栖·湖畔茶室综合改造项目',
+      name: '演示项目1·多阶段协作演示',
       address: '城区某路 1 号',
       clientName: '客户甲',
       plannedStartAt: '2026-01-01',
@@ -182,7 +182,7 @@ describe('期三 · G1 十二组合映射（M1/M2/M4 × A/D/E/H）', () => {
         );
       }
       // 项目名上纸（每页可独立解释）
-      expect(pages[0]!.textContent).toContain('云栖·湖畔茶室综合改造项目');
+      expect(pages[0]!.textContent).toContain('演示项目1·多阶段协作演示');
       // 模板类（外表）就位
       const root = d.querySelector('.print-root');
       expect(root!.className).toContain(`print-template-${c.template}`);

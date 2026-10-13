@@ -29,7 +29,7 @@ import { CAN_RUN_FRESH, CHROMIUM_PATH, startServer, shotDir } from './helpers/bo
 const FIXTURE = resolve(__dirname, 'fixtures', 'member-board-columns.json');
 const SHOT_DIR = shotDir('member-board-deeplink');
 
-/** 夹具成员：m-admin 奚工（管理员）/ m-rose 朴彩英（成员）/ m-zhou 周工（成员） */
+/** 夹具成员：m-admin 演示成员甲（管理员）/ m-rose 演示成员乙（成员）/ m-zhou 演示成员丙（成员） */
 const ADMIN = 'm-admin';
 const ROSE = 'm-rose';
 const GHOST = 'mem_ghost_deleted';
@@ -75,7 +75,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await confirm.click({ force: true });
       await reloaded;
       await page.waitForSelector('main', { timeout: 20000 });
-      await page.waitForFunction(() => document.body.innerText.includes('云栖·湖畔茶室'), null, {
+      await page.waitForFunction(() => document.body.innerText.includes('演示项目1'), null, {
         timeout: 20000,
       });
       return { ctx, page };
@@ -88,13 +88,13 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await page.goto(`${server.url}member-board?member=${ROSE}`, { waitUntil: 'load' });
         await page.waitForSelector('main', { timeout: 20000 });
         await page.waitForFunction(
-          () => (document.querySelector('h1')?.textContent ?? '').includes('朴彩英'),
+          () => (document.querySelector('h1')?.textContent ?? '').includes('演示成员乙'),
           null,
           { timeout: 20000 },
         );
 
         expect(page.url(), '深链参数必须保留（未被 <Navigate> 剥掉）').toContain(`member=${ROSE}`);
-        expect(await page.locator('h1').first().innerText()).toContain('朴彩英');
+        expect(await page.locator('h1').first().innerText()).toContain('演示成员乙');
         expect(await page.locator('body').innerText(), '就绪后不得停在装载占位').not.toContain(
           '正在装载本地数据',
         );
@@ -102,7 +102,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         // 刷新：深链的第二个入口（也是她实际会用的：收藏/分享后按 F5）
         await page.reload({ waitUntil: 'load' });
         await page.waitForFunction(
-          () => (document.querySelector('h1')?.textContent ?? '').includes('朴彩英'),
+          () => (document.querySelector('h1')?.textContent ?? '').includes('演示成员乙'),
           null,
           { timeout: 20000 },
         );
@@ -145,7 +145,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       try {
         await page.goto(`${server.url}member-board?member=${ADMIN}`, { waitUntil: 'load' });
         await page.waitForSelector('main', { timeout: 20000 });
-        // 等「判决已下」的稳定态：标题是普通看板标题（不是「奚工 的项目看板」）
+        // 等「判决已下」的稳定态：标题是普通看板标题（不是「演示成员甲 的项目看板」）
         await page.waitForFunction(
           () => (document.querySelector('h1')?.textContent ?? '').trim() === '项目看板',
           null,
@@ -157,7 +157,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         expect(await page.locator('h1').first().innerText(), '标题是看自己的板').toBe('项目看板');
 
         const text = await page.locator('body').innerText();
-        expect(text, '不展示别人看板的标题').not.toContain('奚工 的项目看板');
+        expect(text, '不展示别人看板的标题').not.toContain('演示成员甲 的项目看板');
         expect(text).not.toContain('正在装载本地数据');
 
         await page.screenshot({ path: resolve(SHOT_DIR, 'D-03-member-denied.png') });

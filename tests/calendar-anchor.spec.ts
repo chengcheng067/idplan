@@ -138,9 +138,9 @@ async function startStaticServer(rootDir: string): Promise<{ url: string; close(
 const SHOT_DIR = resolve(__dirname, '..', 'qa-scratch', 'calendar-anchor');
 
 /**
- * 进入「成员 陈工 的成员看板」：首启建管理员 → 载入 indoor 示例 → 退出后以
- * 演示成员「陈工」进入 → SPA 导航到成员看板。
- * （陈工是 indoor 种子里的 stage owner，其名下必有相关项目；整库导入会替换
+ * 进入「成员 演示成员乙 的成员看板」：首启建管理员 → 载入 indoor 示例 → 退出后以
+ * 演示成员「演示成员乙」进入 → SPA 导航到成员看板。
+ * （演示成员乙是 indoor 种子里的 stage owner，其名下必有相关项目；整库导入会替换
  * members，管理员身份随之失效，故导入后重新进入身份。）
  */
 async function enterMemberBoard(page: Page, serverUrl: string): Promise<void> {
@@ -164,7 +164,7 @@ async function enterMemberBoard(page: Page, serverUrl: string): Promise<void> {
   await card.first().click();
   await page.waitForTimeout(400);
   await page.locator('button', { hasText: '确认载入' }).first().click();
-  await page.waitForFunction((name) => document.body.innerText.includes(name), '云栖', { timeout: 20000 });
+  await page.waitForFunction((name) => document.body.innerText.includes(name), '演示项目1', { timeout: 20000 });
   await page.waitForTimeout(1500);
 
   await page.evaluate(() => {
@@ -172,7 +172,7 @@ async function enterMemberBoard(page: Page, serverUrl: string): Promise<void> {
     b?.click();
   });
   await page.waitForSelector('input[placeholder="你的姓名"]', { timeout: 15000 });
-  await page.locator('input[placeholder="你的姓名"]').fill('陈工');
+  await page.locator('input[placeholder="你的姓名"]').fill('演示成员乙');
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '下一步');
     b?.click();

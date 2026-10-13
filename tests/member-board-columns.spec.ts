@@ -75,13 +75,13 @@ function makeStage(projectId: string, id: string, templateKey: string, ownerId: 
 */
 const INDOOR = makeProject({
   id: 'proj_indoor',
-  name: '云栖·湖畔茶室',
+  name: '演示项目1',
   stagePresetKey: 'indoor_full',
   domain: 'indoor',
 });
 const SOFTWARE = makeProject({
   id: 'proj_software',
-  name: '植屋·品牌小程序',
+  name: '演示项目2',
   stagePresetKey: 'software_mobile_full',
   domain: 'software',
 });
