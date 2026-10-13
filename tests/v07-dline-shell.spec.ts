@@ -650,9 +650,22 @@ describe.skipIf(!CAN_RUN_FRESH)(
         const { ctx, page } = await openShell(1024);
         try {
           await page.locator('[data-nav-menu-trigger]').click();
-          /* ★ 批次⑥ 档 A₂：与语言解耦 —— 原本是 [role="dialog"][aria-label="导航菜单"]，
-             「导航菜单」是界面文案（走 i18n），英文模式下会找不到元素。
-             改用 :has([data-app-sidebar]) —— 抽屉 body 的既有钩子，0 处 src 改动。 */
+          /*
+           * ★ 批次⑥ 档 A₂：抽屉定位与语言解耦。
+           *   原本：[role="dialog"][aria-label="导航菜单"] —— 「导航菜单」是**界面文案**（走 i18n），
+           *         英文模式下会找不到元素，且失败会伪装成「控件不存在」。
+           *   现在：[role="dialog"]:has([data-app-sidebar])。
+           *
+           * ⚠️ 两条约束（team-lead 裁决，防将来被「顺手优化」掉）：
+           *   ① **为什么用 :has() 而不给 Modal 开钩子**：那个 ariaLabel 是 Modal 的 **prop 形态**
+           *      （grep 'aria-label="…"' 盘不到它），而 Modal 是 **20+ 个弹窗共用**的中心组件 ——
+           *      为一条定位在它身上开透传 API，代价与收益不成比例。而 :has([data-app-sidebar])
+           *      **靠的仍是 data-* 契约**（抽屉 body 既有钩子），解耦效果等价。**别「顺手补一个 Modal 钩子」**
+           *      —— 那会变成两套定位方式并存。
+           *   ② **若将来抽屉结构变化导致这条失效：只能改成显式 data 钩子，绝不许放宽成裸 [role="dialog"]**
+           *      —— 裸 role=dialog 会同时命中 20+ 个弹窗，那是典型的**假绿**（点到别的弹窗还以为点对了）。
+           *      已验：真 Chromium 下 :has() 确实命中（本 spec 的 ①-b 与 ② 都走这条选择器）。
+           */
           const drawer = page.locator('[role="dialog"]:has([data-app-sidebar])');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
@@ -684,9 +697,22 @@ describe.skipIf(!CAN_RUN_FRESH)(
           await page.goto(`${BASE}index.html`);
           await page.waitForSelector('header', { timeout: 20000 });
           await page.locator('[data-nav-menu-trigger]').click();
-          /* ★ 批次⑥ 档 A₂：与语言解耦 —— 原本是 [role="dialog"][aria-label="导航菜单"]，
-             「导航菜单」是界面文案（走 i18n），英文模式下会找不到元素。
-             改用 :has([data-app-sidebar]) —— 抽屉 body 的既有钩子，0 处 src 改动。 */
+          /*
+           * ★ 批次⑥ 档 A₂：抽屉定位与语言解耦。
+           *   原本：[role="dialog"][aria-label="导航菜单"] —— 「导航菜单」是**界面文案**（走 i18n），
+           *         英文模式下会找不到元素，且失败会伪装成「控件不存在」。
+           *   现在：[role="dialog"]:has([data-app-sidebar])。
+           *
+           * ⚠️ 两条约束（team-lead 裁决，防将来被「顺手优化」掉）：
+           *   ① **为什么用 :has() 而不给 Modal 开钩子**：那个 ariaLabel 是 Modal 的 **prop 形态**
+           *      （grep 'aria-label="…"' 盘不到它），而 Modal 是 **20+ 个弹窗共用**的中心组件 ——
+           *      为一条定位在它身上开透传 API，代价与收益不成比例。而 :has([data-app-sidebar])
+           *      **靠的仍是 data-* 契约**（抽屉 body 既有钩子），解耦效果等价。**别「顺手补一个 Modal 钩子」**
+           *      —— 那会变成两套定位方式并存。
+           *   ② **若将来抽屉结构变化导致这条失效：只能改成显式 data 钩子，绝不许放宽成裸 [role="dialog"]**
+           *      —— 裸 role=dialog 会同时命中 20+ 个弹窗，那是典型的**假绿**（点到别的弹窗还以为点对了）。
+           *      已验：真 Chromium 下 :has() 确实命中（本 spec 的 ①-b 与 ② 都走这条选择器）。
+           */
           const drawer = page.locator('[role="dialog"]:has([data-app-sidebar])');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
