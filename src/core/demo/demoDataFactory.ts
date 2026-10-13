@@ -45,7 +45,10 @@
 import { getPresets, getPresetItems } from '../template/stage-library';
 import type { StagePreset, StageTemplateItem, BackupPackage } from '../types/dto';
 import { StageStatus, ScheduleBasis, MemberRoleKind } from '../types/enums';
-import type { Project, Stage, Task, Member } from '../types/entities';
+import type { Project, Stage, Task, Member, Setting } from '../types/entities';
+// 宿主策略键前缀的**单一出处**（`pluginEnabledKey('')` 即前缀本身）。
+// 手打第二份字面量一旦与 plugin/types 漂移，下面的过滤会**静默漏掉**整族键 —— 正是本函数要修的那类故障。
+import { pluginEnabledKey } from '../plugin/types';
 
 /** 演示项目选用的五个 preset（覆盖五种 columns 形态；首位 = 软件开发，建筑域排末位） */
 export const DEMO_PRESETS: ReadonlyArray<{ presetKey: string; label: string }> = [
@@ -245,6 +248,52 @@ export function buildDemoBackup(): BackupPackage {
       ],
     },
   } as unknown as BackupPackage;
+}
+
+/**
+ * 把**本机现有的宿主策略键**并进 demo 包 —— 让「载入示例项目」不动插件开关。
+ *
+ * ── 为什么需要 ──
+ * 载入示例数据走的是**覆盖式整库替换**（`BackupService.importAndReplace` →
+ * `admin.replaceAllImport`：先清表再只插包内行）。而 demo 包的 `settings` 段只有
+ * 2 行（`currentMemberId` / `restPolicy`）⇒ 导入后 `plugin.enabled.*` 整族消失、
+ * 三个开关**静默**回落 `manifest.defaultEnabled`：用户手动开过的插件被关掉、
+ * 侧栏入口消失，且**没有任何提示**。最阴的是「示例项目」本来就回落成 false，
+ * 看起来「正好符合他想关掉的预期」，所以没人会发现 explicit 记录已经丢了。
+ *
+ * ── 产品口径：分界线是「同意弹窗覆盖的是**数据**，宿主策略不是数据」──
+ * 示例数据自定 `restPolicy` 与身份兜底是**对的**（demo 项目要匹配的休息制度才长得对），
+ * 但 `plugin.enabled.*` 是「这台安装的功能开关」，不在用户确认的「替换数据」范围内。
+ * 故只并**该前缀**的行，不是整张 settings。
+ *
+ * ── 形态约束（**不要**改成给 `buildDemoBackup` 加参数）──
+ * `tests/demo-data.spec.ts` 有一条**源码字面**守门：
+ * `expect(useBackupIo.tsx 源码).toContain('buildDemoBackup()')`。
+ * 把调用点改成 `buildDemoBackup(x)` 会让那串字面不再匹配、既有 spec 变红。
+ * 故取「外面套一层」，调用点仍写作 `withHostPolicySettings(buildDemoBackup(), …)`。
+ *
+ * ── 为什么不是「让导入变得宽容」──
+ * 在导入侧保留本机插件键，会给 settings 表开一个**不参与替换**的例外，破坏
+ * 「全量备份 = 完整快照、恢复即还原」（缺键的包导入后会出现「库 ≠ 包内容」）。
+ * 让示例数据包**自己把配置带上**才是本来的错配。此路一次同时覆盖 NAS 与桌面两形态。
+ */
+export function withHostPolicySettings(
+  pkg: BackupPackage,
+  current: ReadonlyArray<Setting>,
+): BackupPackage {
+  const prefix = pluginEnabledKey('');
+  const kept = current.filter((s) => s.key.startsWith(prefix));
+  // 本机没有该族 ⇒ 原包**原样**返回（不留一个空数组引起的无意义 diff）
+  if (kept.length === 0) return pkg;
+  const existing = new Set(pkg.data.settings.map((s) => s.key));
+  return {
+    ...pkg,
+    data: {
+      ...pkg.data,
+      // 包内已有的同名键以**包**为准（demo 包今天不带该族，这里是防御性去重）
+      settings: [...pkg.data.settings, ...kept.filter((s) => !existing.has(s.key))],
+    },
+  };
 }
 
 /** stage-library 里每个 demo preset 的可见性（设计师 D5：demoReady 门控——没数据的行业不上卡） */

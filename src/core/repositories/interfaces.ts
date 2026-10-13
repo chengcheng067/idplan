@@ -192,7 +192,17 @@ export interface ISettingsRepository {
   get<T>(key: string): Promise<T | null>;
   set(key: string, valueJson: unknown): Promise<void>;
   all(): Promise<Setting[]>;
-  /** 仅备份导入使用：整表替换 */
+  /**
+   * 整表替换（清表 + 批量写入）。
+   *
+   * ★ 订正：此处原写「仅备份导入使用」，**与实情不符** —— 备份恢复走的是
+   *   `IAdminRepository.replaceAllImport`（`backup.service.ts` 的 `importAndReplace`），
+   *   不经本方法。**当前前端零调用点**；它在两档适配器里仍有实现
+   *   （local `local.settings.repo.ts` 的 clear+bulkPut、remote 的
+   *   `POST /api/settings/replace-all`），属已暴露的写端点。
+   *   语义就是「整表替换」：调用方若交来**部分集**，未含的行会被清掉
+   *   （`plugin.enabled.*` 不是例外 —— 那是刻意的「全量快照」语义）。
+   */
   replaceAll(rows: Setting[]): Promise<void>;
 }
 

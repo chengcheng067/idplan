@@ -11,7 +11,7 @@ import { logError, logUser } from '../../core/services/log.service';
 import { ChangxiaError } from '../../core/types/enums';
 import type { BackupPackage } from '../../core/types/dto';
 import type { IRepositoryBundle } from '../../core/repositories/interfaces';
-import { buildDemoBackup } from '../../core/demo/demoDataFactory';
+import { buildDemoBackup, withHostPolicySettings } from '../../core/demo/demoDataFactory';
 import { DB_NAME } from '../../core/schema/current';
 import { dumpLegacyTables } from '../../core/repositories/local/dexie.database';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -117,7 +117,9 @@ export function useBackupIo(): BackupIo {
    */
   const loadDemo = async (): Promise<void> => {
     try {
-      const json: unknown = buildDemoBackup();
+      // 并进本机现有 plugin.enabled.*：示例数据是「示例内容」，不该动宿主策略。
+      // 必须保持 `buildDemoBackup()` 这串字面完整（tests/demo-data.spec.ts 有源码守门）。
+      const json: unknown = withHostPolicySettings(buildDemoBackup(), await repos.settings.all());
       validateBackupJson(json);
       setPendingPkg(json as BackupPackage);
       setPendingSource('demo');

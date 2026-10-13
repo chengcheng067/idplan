@@ -20,13 +20,15 @@
  * 若断言写成「还原成默认值」会恒过 —— 这里断言的是**行本身在不在**与**逐字节等值**。
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { installFakeIndexedDB } from './setup';
 import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService } from '../src/core/services/backup.service';
 import { pluginEnabledKey } from '../src/core/plugin/types';
-import { buildDemoBackup } from '../src/core/demo/demoDataFactory';
+import { buildDemoBackup, withHostPolicySettings } from '../src/core/demo/demoDataFactory';
 import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
@@ -129,5 +131,67 @@ describe('备份往返：settings 表的宿主策略键保真', () => {
     const hit = pkg.data.members.find((m) => m.id === id);
     expect(hit, `demo 包的 currentMemberId=${id} 在包内 members 里查无此人`).toBeTruthy();
     expect(hit!.active, 'currentMemberId 指向的成员必须是 active').toBe(true);
+  });
+
+  /**
+   * **载入示例数据**这条具体路径（team-lead 清单第 4 条的服务级一半）。
+   *
+   * 真实链路：`useBackupIo.loadDemo` → `withHostPolicySettings(buildDemoBackup(), await repos.settings.all())`
+   * → `validateBackupJson` → 二次确认 → `BackupService.importAndReplace` → 覆盖式整库替换。
+   * 本用例从 `withHostPolicySettings` 起跑，覆盖「拼接对不对」+「导入后插件键在不在」；
+   * 「应用真的走到这行拼接」由下面第 ⑥ 条的入口源码守门兜住。
+   */
+  it('⑤ 载入示例数据后：本机 plugin.enabled.* 仍在，且 demo 自己的 settings 行确实落库', async () => {
+    // 本机现状（刻意与 demo 包取值**不同**，让「替换」可观测）：
+    await bundle.settings.set(AGENT_BOARD, false);
+    await bundle.settings.set(WEEKLY_REPORT, true);
+    await bundle.settings.set(REST_POLICY, { kind: 'single_off', anchorWeek: 7 });
+
+    const demo = withHostPolicySettings(buildDemoBackup(), await bundle.settings.all());
+    // 前提断言：拼接确实把本机两个插件键都带进包了（否则下面两条会因夹具问题假绿）
+    expect(demo.data.settings.filter((s) => s.key.startsWith(pluginEnabledKey(''))).map((s) => s.key).sort())
+      .toEqual([AGENT_BOARD, WEEKLY_REPORT]);
+
+    await svc().importAndReplace(demo);
+
+    // 核心断言：整族开关仍在，且值逐字节未变（false 与 defaultEnabled 回落表现相同 ⇒ 看「行 + 值」）
+    expect(await bundle.settings.get(AGENT_BOARD), '载入示例数据把插件键抹了').toBe(false);
+    expect(await bundle.settings.get(WEEKLY_REPORT), '载入示例数据把插件键抹了').toBe(true);
+
+    // 反向对照：demo 包自己的 settings 行确实覆盖了本机值 ⇒ 证明这次导入真做了整表替换，
+    // 上面两条不是「导入没生效」换来的
+    expect(await bundle.settings.get(REST_POLICY), 'demo 包的 settings 行没落库').toEqual({
+      kind: 'double_off',
+      anchorWeek: null,
+    });
+  });
+
+  /**
+   * 入口源码守门（第 4 条的「链路真的走到」一半，服务级）
+   *
+   * 为什么用源码断言而不是渲染组件：三条 demo 入口（Sidebar / MobileMoreMenu /
+   * FirstRunGuide，加上新增的 SampleProjectsSettings）**全部收敛到同一个 `loadDemo` 函数体**，
+   * 所以只需要钉住这一处；渲染四个入口的重型浏览器用例留给出厂前的真机闸。
+   */
+  it('⑥ 入口守门：loadDemo 必须用 withHostPolicySettings 包住工厂，且只包一次', () => {
+    const src = readFileSync(
+      resolve(__dirname, '..', 'src/components/layout/useBackupIo.tsx'),
+      'utf8',
+    );
+    expect(src, '载入示例数据没走宿主策略合并').toContain('withHostPolicySettings(buildDemoBackup()');
+    expect(src, '没读本机 settings，合并拿不到现有 plugin.enabled.*').toContain('repos.settings.all()');
+
+    // 只扫**代码行**（注释里会出现 `buildDemoBackup()` 这个字面，按全文件计数会误判）。
+    const codeLines = src
+      .split('\n')
+      .filter((l) => {
+        const t = l.trim();
+        return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+      });
+    const wrapped = codeLines.filter((l) => l.includes('withHostPolicySettings(buildDemoBackup()'));
+    const bare = codeLines.filter((l) => /=\s*buildDemoBackup\(\)/.test(l));
+    expect(wrapped.length, 'loadDemo 里的合并调用不见了').toBe(1);
+    // 防回潮：再冒出一处绕过合并的裸调用，这条会红
+    expect(bare.length, '出现了绕过 withHostPolicySettings 的裸 buildDemoBackup() 赋值').toBe(0);
   });
 });
