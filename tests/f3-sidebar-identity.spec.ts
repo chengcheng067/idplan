@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, extname } from 'node:path';
 
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 /**
  * ⚠️ Electron 把 `ELECTRON_RUN_AS_NODE=1` 注入到环境里。
@@ -79,40 +80,32 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /**
- * 构建产物新鲜度门控（R12 假绿教训）：真浏览器 spec 测的是 `build-dist/`，
- * 而 `npm test` 不重建。src 比产物新 ⇒ 本 spec 断言的是**旧代码**——
- * 改坏了也能全绿。这里取 src 树（+ 关键配置）的最新 mtime 与
- * build-dist/index.html 比，落后即 skip（与 qa-batch-a-verify 的
- * staleInputs 同思路；真跑前请先 `npm run build`）。
+ * 产物新鲜度门控（R12 假绿教训）：真浏览器 spec 测的是 `build-dist/`，
+ * 而 `npm test` 不重建。src 比产物新 ⇒ 本 spec 断言的是**旧代码**——改坏了也能全绿。
+ *
+ * ── ★ 口径订正（2026-10-14）：这里**有意扩大**了监视面，不是修一个笔误 ──
+ * 本文件原先自带一份 `buildIsStale()`，它的判据比同族**窄**：
+ *   · 只看 `src/**` 的 5 种扩展名（`.ts/.tsx/.css/.html/.json`）+ `tailwind.config.ts` + `index.html`；
+ *   · **不看** `vite.config.ts`、**不看** `postcss.config.js`、**不看** `electron/**`，
+ *     且对 `src/**` 里其它后缀（`.svg`/`.md` 等）也**不看**。
+ * ⇒ 后果是**真的、且是静默的**：只改 `vite.config.ts`（构建行为本身，例如 alias / 插件 / 目标）
+ *   再跑本 spec，它会**在旧产物上「真跑」**并给出结论 —— 那是「拿上一版界面下结论」，
+ *   可能假红也可能假绿。同族其余 spec 用的是下面的共享口径，它们会正确 skip。
+ *
+ * 现在改为**全族唯一出处** `tests/helpers/board-env.ts` 的 `staleInputs()`：
+ *   · **新增监视**：`vite.config.ts`、`postcss.config.js`、`electron/**`；
+ *   · `src/**` 不再按扩展名过滤（与共享实现一致，任何文件都算输入）。
+ * 扩大监视面的**代价**是多 skip 几次；而它**不再等于静默**——共享实现带
+ * `warnStaleOnce`，过期时会打印「哪些输入比产物新 + 先 npm run build」。
+ * （窄判据的失效方式是「在可能过期的产物上真跑」，那是**静默的错误结果**；这个方向的取舍
+ *   已由 team-lead 2026-10-14 拍板接受。）
  */
-function latestMtime(dir: string, exts: Set<string>): number {
-  let newest = 0;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      newest = Math.max(newest, latestMtime(p, exts));
-    } else if (exts.has(extname(entry.name))) {
-      newest = Math.max(newest, statSync(p).mtimeMs);
-    }
-  }
-  return newest;
-}
-
-function buildIsStale(): boolean {
-  if (!existsSync(DIST_INDEX)) return true;
-  const EXT = new Set(['.ts', '.tsx', '.css', '.html', '.json']);
-  const srcNewest = Math.max(
-    latestMtime(resolve(ROOT, 'src'), EXT),
-    statSync(resolve(ROOT, 'tailwind.config.ts')).mtimeMs,
-    statSync(resolve(ROOT, 'index.html')).mtimeMs,
-  );
-  return srcNewest > statSync(DIST_INDEX).mtimeMs;
-}
+const CAN_RUN_FRESH = CAN_RUN && staleInputs().length === 0;
 
 /** 演示数据里的一个项目名（demoDataFactory.ts 的 preset 名，用于等待导入生效） */
 const DEMO_PROJECT = '演示项目1';
 
-describe.skipIf(!CAN_RUN || buildIsStale())('F3-BROWSER · 退出身份后侧栏不显示项目（真 Chromium）', () => {
+describe.skipIf(!CAN_RUN_FRESH)('F3-BROWSER · 退出身份后侧栏不显示项目（真 Chromium）', () => {
   let browser: Browser;
   let server: { url: string; close(): Promise<void> } | null = null;
 
