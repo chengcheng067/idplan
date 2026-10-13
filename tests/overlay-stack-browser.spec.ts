@@ -288,16 +288,38 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
     expect(hasProject, '示例数据应已落库并出现在首页').toBe(true);
 
     /*
-     * ④ 重新进入身份。
-     * 示例包是**覆盖式**导入 —— 它把 members 也整表换掉了，刚才那个「严过关」管理员
-     * 随之不存在；不重新进入的话详情页只会显示「请先到左侧导航最下方进入身份」，
-     * 后面所有步骤都会在一片空页面上"通过"，那是标准的假绿。
+     * ④ 确认身份已重新建立。
+     *
+     * 这一步的**意图没变**：示例包是覆盖式导入，它把 members 整表换掉，刚才那个
+     * 「严过关」管理员随之不存在；必须确认身份已回到「示例包里的管理员」，
+     * 否则详情页只会显示「请先到左侧导航最下方进入身份」，后面所有步骤都会在
+     * 一片空页面上"通过"——那是标准的假绿。
+     *
+     * ⚠️ 订正（2026-10-14）：**机制变了**，原来的写法（点「点击进入」→ 输姓名
+     *    「负责人甲」→ 下一步）建立在「覆盖导入后身份为空」这个前提上，
+     *    而那个前提已经**有意地**被移除了：
+     *      · demo 包自带 `settings.currentMemberId = 'demo_admin'`，而 `demo_admin`
+     *        就是本包 members 里的「负责人甲」（`demoDataFactory.ts` 登记为
+     *        「demo 成员表的身份兜底」，属数据集自身语义）；
+     *      · `useRepos.bootstrapAllStores` 的身份候选阶梯（`9dd3d77` 引入，每一档
+     *        必须**命中当前 members**）让这条兜底**真的生效** ⇒ 覆盖式导入后
+     *        **不再静默掉身份**，而是自动进入「负责人甲」。
+     *    ⇒ 导入后页面上**根本没有**「点击进入」（旧写法在这里 30s 超时，实测可复现）。
+     *    归因已用 A/B 切片确认：把身份阶梯变异回 `9dd3d77` 之前 ⇒ 导入后身份不再
+     *    兜底成负责人甲（详见 tests/settings-zones.spec.ts 的 becomeMember 订正说明，
+     *    同一根因、同一取证）。**这是前置的假设过期，不是产品回归。**
+     *
+     * 现在这一步反而**更强**：不再只是「有头像就算进去了」（AVATAR 计数只看"有身份"），
+     * 而是先钉住**进去的是谁**——必须正是示例包的管理员「负责人甲」。名字与被替换掉的
+     * 那段 `fill('负责人甲')` 逐字相同 ⇒ 目标身份没有变，只是不再需要人工输入。
      */
-    expect(await clickText(page, '点击进入'), '未进入身份时应能在页面上点到「点击进入」（前置：身份已被示例包换掉）').toBe(true);
-    await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('负责人甲');
-    expect(await clickText(page, '下一步'), '姓名流程应有「下一步」').toBe(true);
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => document.body.innerText.includes('负责人甲'), undefined, {
+      timeout: 8000,
+    });
+    expect(
+      await page.evaluate(() => (document.body.textContent ?? '').includes('负责人甲')),
+      '导入后身份应自动回到示例包的管理员「负责人甲」（不再是「点击进入」空态）',
+    ).toBe(true);
     expect(
       await page.locator(AVATAR).count(),
       '应以示例包里的管理员身份进入（否则后续全在空页面上跑）',
