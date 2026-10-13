@@ -510,7 +510,80 @@ describe.skipIf(!CAN_RUN_FRESH)(
     }
 
     /**
+     * ★ 在**干净上下文**里建立**有效身份** —— team-lead 2026-10-14 定的前提口径。
+     *
+     * ── 为什么必须走真实建档，而不是「写一个 currentMemberId」──
+     * 旧写法只做两件事：`localStorage['changxia.currentMemberId']='m-probe'` + 压 FirstRunGuide 的
+     * seen flag。但 `m-probe` 在**空库**里查无此人 ⇒ 应用判定「身份未确立」⇒ `IdentityDialog`
+     * 以 `admin_prompt` 档弹出（`ariaLabel='首次使用引导'`、`z-[70]` **全屏遮罩**）⇒ 之后
+     * **任何点击都会被 `subtree intercepts pointer events` 拦到 30s 超时**。
+     * 本 spec 的 ①-b（抽屉入口可达性）与 ③（成员看板视图切换）就是这么长期稳定红的。
+     *
+     * ── 两张首启卡的抑制方式**不同**，别以为压一个 flag 就够（这条旧注释曾是假的）──
+     *   · `FirstRunGuide` —— 有 seen 键（`idplan.firstRunGuideSeen`）⇒ 压 flag 有效（下面照旧压）；
+     *   · `IdentityDialog` —— **没有 seen 键**，显示与否是「身份状态」的纯函数
+     *     （`identityFlow`，见 `IdentityDialog.tsx:37`）⇒ **只能靠真的进入身份**让它消失。
+     *
+     * ── 定位为什么这样写（语言无关优先）──
+     *   · 身份卡内**第一个**按钮 = 「我是管理员」；姓名流程内**最后一个**按钮 = 提交
+     *     （取消 / 确认为管理员｜下一步）⇒ 用「第几个按钮」而不是中文文案；
+     *   · 姓名输入框用 `[role="dialog"] input`（该流程内只有一个 input，`ImeInput` 渲染）。
+     *   ⚠️ 若将来身份卡文案/结构大改（例如迁进 i18n 消息表并换掉按钮顺序），这里要跟着改；
+     *      但**不要**为此退回「用中文文案当定位」——那会让英文模式下失败伪装成「控件不存在」。
+     *
+     * ── 收尾有一条**前置自证**──
+     *   建完身份后断言「页面上不再有任何 `aria-modal` 弹窗」：若不成立，**当场红在这里**，
+     *   而不是把问题留给后面某一次点击、以「30s 遮挡超时」的形态暴露（那种红不指向真因）。
+     */
+    async function ensureValidIdentity(page: Page): Promise<void> {
+      /*
+       * ⚠️ 为什么按**文案**找按钮、而不是「对话框内的第一个按钮」：
+       *   第一版我写的就是 `dlg.querySelector('button')` —— 实测它抓到的是 Modal 自己的
+       *   （更早渲染的）控件，点了一下等于把身份卡关掉 ⇒ 后面的 `.fill()` 找不到输入框，
+       *   5 条用例全挂在 `locator.fill: Timeout 30000ms`（比原来的 2 条红还多）。
+       *   ⇒ 按文案匹配最稳，且与仓里既有 `becomeAdmin`（`qa-batch-a-verify.spec.ts:192`）同款。
+       *   （这类「按文案定位」**不被中文定位棘轮计**：棘轮只锁 `aria-label=` 出现在 locator 调用里
+       *     与 `getByRole/getByLabel/getByPlaceholder/getByTitle`；`evaluate` + `textContent` 不在其列。）
+       */
+      const clickedPrompt = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const btn = btns.find((b) => (b.textContent ?? '').trim() === '我是管理员');
+        if (!btn) return false;
+        (btn as HTMLButtonElement).click();
+        return true;
+      });
+      if (!clickedPrompt) {
+        throw new Error(
+          '前置失败：空库上下文里没有出现身份卡（admin_prompt）。' +
+            '若产品把「首启建身份」改成别的入口，请更新 ensureValidIdentity —— ' +
+            '不要退回「只压 flag」的老写法（那会让身份卡全屏遮罩拦住后面所有点击）。',
+        );
+      }
+      await page.waitForTimeout(400);
+      await page.locator('[role="dialog"] input').first().fill('严过关');
+      await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const submit = btns.find((b) => {
+          const t = (b.textContent ?? '').trim();
+          return t === '确认为管理员' || t === '下一步';
+        });
+        (submit as HTMLButtonElement | undefined)?.click();
+      });
+      await page.waitForTimeout(1000);
+      await page.waitForFunction(
+        () => document.querySelectorAll('[role="dialog"][aria-modal="true"]').length === 0,
+        undefined,
+        { timeout: 10000 },
+      );
+    }
+
+    /**
      * 开一个干净的「外壳」页（无数据），用于断点 / 红点 / 视图切换三类验收。
+     *
+     * **前提口径（team-lead 2026-10-14 定）：干净上下文 + 有效身份。**
+     *   ①-b 与 ③ 要验的是「抽屉入口可达性 / 成员看板」，**不是身份流程** ⇒ 它们需要一个
+     *   「已有身份的干净壳」，而不是「空库 + 未进身份」（后者会让身份卡全屏遮罩拦住点击）。
+     *
      * @param width   视口宽（真断点必须逐档实测，不能只测一档）
      * @param opts.stubDesktopBridge true = 注入最小假 bridge（点亮「有新版本」红点）
      */
@@ -521,9 +594,8 @@ describe.skipIf(!CAN_RUN_FRESH)(
       const ctx = await browser.newContext({ viewport: { width, height: opts.height ?? 900 } });
       await ctx.addInitScript(() => {
         try {
-          localStorage.setItem('changxia.currentMemberId', 'm-probe');
-          // 0.8.3：同步压首启欢迎卡 flag（FirstRunGuide 与 IdentityDialog 同属首启两卡，
-          // 空库+未见过就弹遮罩会挡住全部点击——探针环境两卡都抑制）
+          // `FirstRunGuide` 的 seen 键：空库 + 已进身份时它会再弹一张欢迎卡，
+          // 而这张卡**有** seen 键 ⇒ 压 flag 有效（身份卡没有，见 ensureValidIdentity）。
           localStorage.setItem('idplan.firstRunGuideSeen', '1');
         } catch {
           /* ignore */
@@ -561,6 +633,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       const page = await ctx.newPage();
       await page.goto(`${BASE}index.html`);
       await page.waitForSelector('header', { timeout: 20000 });
+      await ensureValidIdentity(page); // ★ 建立有效身份（见该 helper 的长注释）
       await page.waitForTimeout(300); // 等 CSS 应用完（避免读到过渡中的中间值）
       return { ctx, page };
     }
@@ -660,8 +733,30 @@ describe.skipIf(!CAN_RUN_FRESH)(
        *   覆盖强度不变：入口是否可达仍被逐项 `toContain` 钉死。
        */
       {
-        const { ctx, page } = await openShell(1024);
+        /*
+         * ★ 前提（team-lead 2026-10-14 定）：本段要验的是「**成员**身份下 ⋮ 的等价入口仍在抽屉里」
+         *   ⇒ 必须是**真成员身份**，不是「空库 + 假身份」。
+         *
+         * ⚠️ 为什么这里不能再用 `openShell()`（它的默认身份是新建的管理员）：
+         *   `SidebarNav` 的一级项**按角色分叉**（`SidebarNav.tsx:137-151`）：
+         *     · `isAdmin`     ⇒ 文案「**项目**」（`nav.projects`，to '/'）
+         *     · 非 admin      ⇒ 文案「**看板**」（`nav.board`，to '/member-board'）
+         *   本段断言的第一项就是「看板」⇒ 前提必须是**成员**。
+         *
+         * ⚠️ 旧写法（`openShell` 里塞 `currentMemberId='m-probe'`）为什么看起来「能过」：
+         *   `m-probe` 在空库里查无此人 ⇒ 身份解析不出来 ⇒ `isAdmin=false` ⇒ 文案**碰巧**是「看板」
+         *   （断言因此长期为绿），**同时**身份卡以 `admin_prompt` 全屏遮罩弹着 ⇒ 后面的点击
+         *   一律 30s 遮挡超时（这就是 ①-b 长期红的原因）。⇒ 断言「过」与用例「红」是**两个**
+         *   互不相关的缺陷叠在一起。
+         *
+         * ⇒ 用本文件**已有**的 `memberEnv`（真数据 + 真成员身份）—— 与下方 admin 段对称：
+         *   自己开 page、只关 page、**不关** 共享 ctx。
+         */
+        const page = await memberEnv.ctx.newPage();
         try {
+          await page.setViewportSize({ width: 1024, height: 900 });
+          await page.goto(`${BASE}index.html`);
+          await page.waitForSelector('header', { timeout: 20000 });
           await page.locator('[data-nav-menu-trigger]').click();
           /*
            * ★ 批次⑥ 档 A₂：抽屉定位与语言解耦。
@@ -698,7 +793,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
           expect((await readMore(page)).visible).toBe(false);
           await shot(page, '04-tablet-drawer-member.png');
         } finally {
-          await ctx.close();
+          await page.close();
         }
       }
 
