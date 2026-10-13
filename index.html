@@ -31,6 +31,36 @@
       })();
     </script>
     <!--
+      首屏防闪（界面语言 · 2026-10-13 中英切换）：与主题脚本同款做法，在样式与脚本
+      执行前同步写好 <html lang> 与 <html data-lang>。
+
+      与主题的差别（别照着主题的样子理解这一段）：主题防的是「先画错肤色」；
+      语言其实**不存在首帧闪中文**——src/i18n/lang.ts 的语言状态是模块级同步求值，
+      React 第一次渲染时就已经是持久化的语言。本脚本的真实职责有两条：
+        ① `<html lang>` 影响无障碍朗读与浏览器翻译提示，越早写越好；
+        ② `<html data-lang>` 是 CSS 侧的唯一钩子（`[data-lang="en"]` 下的行长/断词
+           规则），必须早于样式生效，否则英文会长一帧中文的排版。
+
+      口径（必须与 src/i18n/lang.ts 严格一致）：
+        · localStorage key = 'idplan-lang'，合法值只有 'zh' / 'en'；
+        · `data-lang` 写内部值（zh/en），`lang` 写 HTML 语义值（zh-CN / en）；
+        · 读不到 / 脏值 / 抛异常 → 一律回落 'zh'（**出厂默认恒为中文**，
+          不跟随浏览器 Accept-Language，理由见 lang.ts 文件头）。
+    -->
+    <script>
+      (function () {
+        var lang = 'zh';
+        try {
+          var v = localStorage.getItem('idplan-lang');
+          if (v === 'en' || v === 'zh') lang = v;
+        } catch (e) {
+          /* 存储不可用：保持出厂默认 'zh' */
+        }
+        document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+        document.documentElement.dataset.lang = lang;
+      })();
+    </script>
+    <!--
       首屏防闪（侧栏折叠态 · v0.7 R13）：与主题脚本同款做法，在样式生效前同步写好
       <html data-sidebar-collapsed>，使侧栏宽度**首帧即正确**——否则会出现
       「先按默认宽度画一帧，React 水合后再跳到持久值」的宽度跳变（布局抖动）。

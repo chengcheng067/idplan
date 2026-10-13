@@ -1,0 +1,67 @@
+/**
+ * `src/i18n` 的**唯一公开出口**。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * ★ 全仓纪律：只准从这里 import
+ * ══════════════════════════════════════════════════════════════════════
+ *   ✅ `import { useLang } from '../../i18n'`
+ *   ✅ `import { t, weekdayShortLabel } from '../../i18n'`
+ *   ✅ `import type { Lang } from '../../i18n'`
+ *   ❌ `import { zhMessages } from '../../i18n/messages/zh'`   ← 违规
+ *   ❌ `import { t } from '../../i18n/translate'`              ← 违规
+ *   ❌ `import { getLang } from '../../i18n/lang'`             ← 违规
+ *
+ * 为什么这条纪律是硬线：它是「**可替换性**」的全部实现。产品若最终决定引
+ * 第三方 i18n 库（本批已按现状排除，理由见 `lang.ts` 文件头），改的只有
+ * `src/i18n/` 这一层——消费方一行不动。若消费方四散直接 import 内部模块，
+ * 换库就变成全仓改，那才是真正的技术债。
+ * 守卫：`tests/i18n.spec.ts` 的「单一出口」源码扫描（扫 `src/**`，`src/i18n/**`
+ * 自身豁免）。
+ *
+ * 文件布局：
+ *   `lang.ts`       语言状态源（模块级 store + 持久化 + `<html lang>` 落 DOM）
+ *   `translate.ts`  `t()` 查表与 `{name}` 插值
+ *   `useLang.ts`    `useLang()`（订阅 + 切语言 + 取词）
+ *   `labels.ts`     枚举值 → 文案键的键表与取词小函数
+ *   `messages/zh.ts` 中文文案（键名的唯一出处）
+ *   `messages/en.ts` 英文文案（`Record<MessageKey, string>` ⇒ 缺键编译错）
+ */
+
+export {
+  ALL_LANGS,
+  DEFAULT_LANG,
+  getLang,
+  initLang,
+  setLang,
+  type Lang,
+} from './lang';
+
+export { t, isMessageKey, MESSAGE_KEYS, catalogOf, type InterpolationVars } from './translate';
+
+export { useLang, type UseLangResult } from './useLang';
+
+export type { MessageKey } from './messages/zh';
+
+export {
+  CALENDAR_STATUS_KEYS,
+  calendarStatusLabel,
+  INGRESS_MODE_KEYS,
+  MEMBER_ACTOR_KIND_KEYS,
+  MEMBER_ROLE_KEYS,
+  memberActorKindLabel,
+  memberRoleLabel,
+  REST_POLICY_KEYS,
+  restPolicyLabel,
+  SCHEDULE_BASIS_KEYS,
+  STAGE_STATUS_KEYS,
+  scheduleBasisLabel,
+  stageStatusLabel,
+  TASK_STATUS_KEYS,
+  taskStatusLabel,
+  WEEKDAY_FULL_KEYS,
+  WEEKDAY_SHORT_KEYS,
+  weekdayFullLabel,
+  weekdayShortLabel,
+  WRITEBACK_STATUS_KEYS,
+  writebackStatusLabel,
+} from './labels';

@@ -14,6 +14,7 @@ import { PluginRegistryProvider, usePluginRegistry } from './core/plugin/PluginR
 //   外部写入」会走不到 loopback 通道。
 import './di/agent-loopback';
 import { initTheme } from './hooks/useTheme';
+import { initLang, t } from './i18n';
 import { initSidebarCollapsed } from './store/useLayoutStore';
 import { installGlobalLogCatchers, logInfo } from './core/services/log.service';
 import './styles/global.css';
@@ -100,7 +101,7 @@ function AppRouter(): JSX.Element {
     // （首屏白一下比「跳错页再跳回」好——后者会被用户当成 bug 截图）。
     return (
       <div className="flex h-screen items-center justify-center bg-cream">
-        <span className="text-[13px] text-mist">正在加载…</span>
+        <span className="text-[13px] text-mist">{t('common.loading')}</span>
       </div>
     );
   }
@@ -118,6 +119,19 @@ function AppRouter(): JSX.Element {
 // index.html 里的同步内联脚本已经防过一次首屏闪白，这里再跑一次是为了接管系统偏好监听；
 // 两者读同一份 localStorage，结果一致，不会打架。
 initTheme();
+
+/**
+ * 语言同样必须在首帧渲染前落到 `<html lang>` / `<html data-lang>`（2026-10-13 中英切换）。
+ *
+ * ★ 与主题的差别（值得记住的一条）：主题的「首屏不闪」必须靠 index.html 的
+ *   同步内联脚本——因为 `useTheme` 的状态源在 React 里被读到，DOM 属性没先写好
+ *   就会先画一帧错的肤色。而**语言不存在这个问题**：`src/i18n/lang.ts` 的
+ *   `let lang = readStoredLang() ?? 'zh'` 是**模块级同步求值**，import 那一刻就已经
+ *   是持久化的语言，所以 React 第一次渲染出的就是正确语言的文案，中文从不抢先出现。
+ *   这里再跑一次 `initLang()` 是**对齐纠正**（与 `initSidebarCollapsed()` 同款语义）：
+ *   内联脚本被剥离 / 存储内容损坏时，保证 DOM 属性与内存状态严格一致。
+ */
+initLang();
 
 // 侧栏折叠态同样必须在首帧前落到 <html data-sidebar-collapsed>（v0.7 R13）：
 // index.html 的同步内联脚本已先写过一次（保证 CSS 生效前就位），这里再跑一次是为了
