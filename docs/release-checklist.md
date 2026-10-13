@@ -135,6 +135,22 @@
 - ⚠️ **`跳过 = 0` 是这批读数里信息量最大的一个数字**：它直接反驳了最怕的失效模式（产物不在 ⇒ 浏览器族**整组静默 skip**，而 skip ≠ 通过、恰好把真相藏掉）。⇒ 报告这批读数时，**「跳过」必须单独报，不许并进「通过」**。
 - ⚠️ 本轮**不做真机安装验证**（无 NAS/目标机），产物级认证到此为止，交付说明须如实写「未做真机安装」。
 
+### 1.2 ✱ 隔离树（`git worktree`）使用纪律（2026-10-14 定）
+
+> 用途：把「会污染共享产物的跑批」挪到自己的一棵树里 —— 例如**变异自证**（它**必须**把变异烤进产物，与共享 `build-dist` **结构上不兼容**，见 §1.1 第 3 步）。
+> 为什么选它而不是「加环境变量改 outDir」：**worktree 的隔离是结构性的**（spec 按 `__dirname` 读**树内**产物 ⇒ 34 份本地 `DIST_INDEX`、`staleInputs`、`vite.config.ts` 的 `outDir` **全都不用改**）；env 方案是**约定性的**（漏设一个变量就串味 ⇒ 那时才需要「探针确实读到变异目录」的不变量）。**结构性的约束不需要长期纪律来维持，约定性的需要。**
+
+1. **建树**：`git worktree add --detach ../disc-probe-<线名> HEAD`
+   - ✱ **绝不能建在别人的目录里**：建前 `test -e`；**唯一命名（带线名）**。
+   - ✱ **`node_modules` junction 也算「写入别人的目录」**。实测踩过：有人把 junction 建进了别人的 `../disc-probe`。
+2. **接依赖**：`fs.symlinkSync(<主仓>/node_modules, <树>/node_modules, 'junction')`（实测 npm/vite/playwright 全透明；Windows 建 junction 权限实测可建）。
+3. **拆树**：`git worktree remove --force <dir>` → **再删残留的 `node_modules` junction** → `git worktree list` 复核只剩主仓。
+   - ⚠️⚠️ **删 junction 不许用 `rm -rf`**：它是 Windows 目录**重解析点**，在 Git Bash / MSYS 下 `rm -rf` **可能递归进目标** ⇒ 会把**主仓的 `node_modules` 内容真删掉**（不是只删链接）。
+   - ✅ **正确删法**：`cmd //c rmdir "<junction 路径>"`（`rmdir` 对 junction **只移除重解析点**，不递归）。
+   - ✅ **删完必须两条自证**：① 目标仍完好（`ls -d <主仓>/node_modules` 有内容）；② 链接已消失。
+   - ✱ 现场证据（**两次同型，其中一次不是本会话的**）：`disc-probe-gating`（今天）与 `changxia-verify`（更早）都只剩一个 junction —— 说明 `worktree remove --force` 不清 junction 是**稳定行为**，不是偶发。
+4. **worktree 的 gitdir 是绝对路径 ⇒ 位置敏感、用完必须删**。现场证据：`disc-probe` 因**仓库从 C: 盘搬到 E: 盘**（C 盘旧目录已无 `.git`）而**注册悬空** —— 留下一棵 5.1M 的无主树 + 一份一个月前的旧产物。
+
 ## 2. 版本号（✱ 走查 D5 纪律：数字类事实同源同批更新）
 - [ ] `version.json` 四段号推进（如 0.8.3.0001）
 - [ ] README / README.en.md 徽章 version + tests 数与**本轮实跑一致**
