@@ -190,6 +190,264 @@ describe('插件注册表 · settings KV 往返', () => {
     }
   });
 
+  /* ══════════════════════════════════════════════════════════════════════════════════
+   * ⑩-b · **入口点级**门控闸门（复核者 #2b：⑩ 抓不到「漏了几处」）
+   *
+   * ── 为什么 ⑩ 不够（这是本条存在的全部理由）──
+   *   ⑩ 的判据是 `byHook || byContribution`，即「该插件**至少**有一处消费」。
+   *   实测：`sample-projects` 的 `byContribution` 为 false（manifest 没有 nav/routes
+   *   这三键时它恒 false），于是 ⑩ 的绿灯**完全靠 `Sidebar.tsx` 那一处 hook 撑着**。
+   *   ⇒ 同一插件有 N 个入口、只门控了 1 个，⑩ 永远看不见。「入口数 ≠ 门控数」这类
+   *     漏法（实测发生过：`MobileMoreMenu` 的 ⋮ 菜单入口当时零门控）活到今天的原因就在这。
+   *
+   * ── 本条的三条性质（缺一条就是半假闸门）──
+   *   ① **调用点集合被逐点钉死**：`src/**` 里 `loadDemo(` 的调用点集合必须与下面
+   *      `LOAD_DEMO_SITES` 登记清单**严格一一对应**（文件集合 + 每文件个数 + 行内锚点）
+   *      ⇒ 任何人**在别处新加一处 `loadDemo()`**（含"某文件里已有 hook 再塞第二处"）
+   *      都会红，逼他显式决定「门控它，还是登记豁免并写清理由」。
+   *   ② **未豁免的调用点必须受门控，且是**调用点自身作用域**内受门控**：
+   *      从该调用点向上、最多穿过一层回调（handler）后，必须能取到一个含
+   *      `usePluginEnabled('sample-projects')` 消费变量的条件表达式。
+   *      ⚠️ 「文件里出现了 hook」不够 —— 那正是复核者要撞的半假形态。
+   *   ③ **豁免点必须带得出可读理由**：理由正文逐字出现在调用点上方的注释里，
+   *      删掉理由即红（豁免不许裸奔）。
+   *
+   * ── 判据实现用 TypeScript AST，不用 grep ──
+   *   `loadDemo(` 的文本匹配会命中三类**不是调用点**的东西（实测都在仓里）：
+   *   `useBackupIo.tsx` 的接口签名 `loadDemo(): Promise<void>;`、注释里的
+   *   `` `useBackupIo().loadDemo` ``、以及 `x.loadDemo()` 这类成员调用。
+   *   AST 天然只看「标识符 `loadDemo` 的 CallExpression」⇒ 零误报。
+   *
+   * ── 变异实测（本条落地时逐条撞过，记录在此供复核复现）──
+   *   M1 新建一个含 `loadDemo()` 的 src 文件            ⇒ ① 红（文件集合不符）
+   *   M2 在已门控文件里再塞一处未门控 `loadDemo()`      ⇒ ① 红（该文件个数 2≠1）+ ② 红
+   *   M3 把某处 `sampleProjectsOn &&` 删掉              ⇒ ② 红
+   *   M4 删掉首启卡那段豁免理由注释                     ⇒ ③ 红
+   * ══════════════════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * `loadDemo()` 的**全部登记调用点**（4 处 = 门控 3 + 有意豁免 1）。
+   *
+   * `anchor` 是**该调用点所在行**的稳定片段（不是行号：行会漂移，文本会跟着改才对）。
+   * 新增/删除/移动入口 ⇒ 本表必须同步改 ⇒ 改的人必须回答「门控它，还是豁免它」。
+   */
+  const LOAD_DEMO_SITES = [
+    {
+      file: 'src/components/layout/Sidebar.tsx',
+      anchor: 'onClick={() => void loadDemo()}',
+      mode: 'hook',
+      // 双重门控逐字要求写在**调用点作用域**里（不是「文件里出现过」）：
+      // 插件开关那一半 + isAdmin 那一半。少任何一半 ⇒ 红。
+      gateTokens: ['sampleProjectsOn', 'isAdmin'],
+    },
+    {
+      file: 'src/components/layout/MobileMoreMenu.tsx',
+      anchor: 'void loadDemo();',
+      mode: 'hook',
+      gateTokens: ['sampleProjectsOn', 'isAdmin'],
+    },
+    {
+      file: 'src/components/settings/SampleProjectsSettings.tsx',
+      anchor: 'void loadDemo().finally(() => setBusy(false));',
+      // 机制型门控：该按钮住在 `manifest.settingsSlot` 里，插件停用 ⇒
+      // `PluginSettingsSlot` 返回 null ⇒ 组件根本不挂载 ⇒ 按钮不可达（见 ② 的机制断言）。
+      mode: 'slot-mechanism',
+    },
+    {
+      file: 'src/components/layout/FirstRunGuide.tsx',
+      anchor: 'void loadDemo().finally(() => setImporting(false));',
+      // ★ 已与产品确认的**决定**（不是待办）：本处有意豁免。理由必须逐字写在调用点上方。
+      // 片段取自 FirstRunGuide 那段注释的**原文**（含正文措辞，不是自造的摘要）——
+      // 谁把这段理由删了/改空了，本条即红。
+      mode: 'exempt',
+      reasons: [
+        '有意不受插件开关约束',
+        '已与产品确认的决定，不是待办',
+        '本卡只在**空库**时渲染',
+        'defaultEnabled',
+        '一起决定',
+      ],
+    },
+  ] as const;
+
+  /** 调用点自证与扫描共用的实现（抽出来才能在 ⑩-b-自证 里对合成源码断言） */
+  const buildLoadDemoScanner = (): {
+    scan: (files: Array<{ file: string; text: string }>) => Array<{
+      file: string;
+      line: number;
+      lineText: string;
+      gates: string[];
+    }>;
+  } => {
+    const ts = require('typescript') as typeof import('typescript');
+    const collapse = (s: string): string => s.replace(/\s+/g, ' ').trim();
+    return {
+      scan: (files) => {
+        const out: Array<{ file: string; line: number; lineText: string; gates: string[] }> = [];
+        for (const { file, text } of files) {
+          const sf = ts.createSourceFile(
+            file,
+            text,
+            ts.ScriptTarget.ESNext,
+            true,
+            file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+          );
+          const visit = (node: ts.Node): void => {
+            if (
+              ts.isCallExpression(node) &&
+              ts.isIdentifier(node.expression) &&
+              node.expression.text === 'loadDemo'
+            ) {
+              const pos = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+              // 从调用点向上收集条件表达式，**最多穿过一层回调**（见 ② 的说明）。
+              const gates: string[] = [];
+              let crossedFunctions = 0;
+              let cur: ts.Node | undefined = node;
+              while (cur) {
+                if (
+                  ts.isFunctionDeclaration(cur) ||
+                  ts.isFunctionExpression(cur) ||
+                  ts.isArrowFunction(cur) ||
+                  ts.isMethodDeclaration(cur)
+                ) {
+                  crossedFunctions += 1;
+                  if (crossedFunctions > 1) break;
+                }
+                if (
+                  ts.isBinaryExpression(cur) &&
+                  cur.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+                ) {
+                  gates.push(collapse(cur.left.getText(sf)));
+                } else if (ts.isConditionalExpression(cur)) {
+                  gates.push(collapse(cur.condition.getText(sf)));
+                } else if (ts.isIfStatement(cur)) {
+                  gates.push(collapse(cur.expression.getText(sf)));
+                }
+                cur = cur.parent;
+              }
+              out.push({ file, line: pos.line + 1, lineText: collapse(text.split('\n')[pos.line] ?? ''), gates });
+            }
+            ts.forEachChild(node, visit);
+          };
+          visit(sf);
+        }
+        return out;
+      },
+    };
+  };
+
+  it('⑩-b 自证：扫描器只认「标识符 loadDemo 的调用表达式」，且能分辨门控与未门控', () => {
+    const { scan } = buildLoadDemoScanner();
+    const synthetic = [
+      '// 注释里的 loadDemo() 不算',
+      "import { useBackupIo } from './useBackupIo';",
+      'export interface Io { loadDemo(): Promise<void>; }',
+      'declare const backup: { loadDemo(): void };',
+      'void backup.loadDemo();',
+      'export function A({ on, h }: { on: boolean; h: () => void }): null {',
+      '  const loadDemo = h;',
+      '  return on ? (void loadDemo(), null) : null;',
+      '}',
+      'export function B({ h }: { h: () => void }): null {',
+      '  const loadDemo = h;',
+      '  return <button onClick={() => void loadDemo()} />;',
+      '}',
+    ].join('\n');
+    const sites = scan([{ file: 'synthetic.tsx', text: synthetic }]);
+    // 只有 A 的三元 / B 的裸调用两处是真调用点：
+    //   注释 ✗、interface 签名 ✗、成员调用 backup.loadDemo() ✗
+    expect(sites.length, '只应识别两处真调用点').toBe(2);
+    expect(sites[0]!.gates.join('|'), '三元条件必须被当成门控上下文').toContain('on');
+    expect(sites[1]!.gates, 'B 处没有任何门控 ⇒ gates 必须为空（否则判据会假绿）').toEqual([]);
+  });
+
+  it('⑩-b 动作型插件的每个 loadDemo 调用点都必须受门控，或带理由登记为豁免', () => {
+    const { readFileSync, readdirSync, statSync } = require('node:fs') as typeof import('node:fs');
+    const { join, relative, resolve, sep, posix } = require('node:path') as typeof import('node:path');
+    const root = resolve(__dirname, '..');
+    const absFiles: string[] = [];
+    const walk = (dir: string): void => {
+      for (const e of readdirSync(dir)) {
+        const f = join(dir, e);
+        if (statSync(f).isDirectory()) walk(f);
+        else if (e.endsWith('.ts') || e.endsWith('.tsx')) absFiles.push(f);
+      }
+    };
+    walk(join(root, 'src'));
+    const read = (rel: string): string => readFileSync(resolve(root, rel), 'utf8');
+
+    const { scan } = buildLoadDemoScanner();
+    const sites = scan(
+      absFiles.map((abs) => ({
+        file: relative(root, abs).split(sep).join(posix.sep),
+        text: readFileSync(abs, 'utf8'),
+      })),
+    );
+    const byFile = new Map<string, number>();
+    for (const s of sites) byFile.set(s.file, (byFile.get(s.file) ?? 0) + 1);
+
+    /* ① 调用点集合 = 登记清单（逐点一一对应；新增一处就红） */
+    expect(
+      [...byFile.keys()].sort(),
+      'src/ 里出现 loadDemo 调用点的**文件集合**与登记清单不一致：\n' +
+        '新增入口必须显式决定「门控它，还是登记豁免并写清理由」，改 tests/plugin-registry.spec.ts 的 LOAD_DEMO_SITES。',
+    ).toEqual([...LOAD_DEMO_SITES.map((s) => s.file)].sort());
+    for (const site of LOAD_DEMO_SITES) {
+      expect(
+        byFile.get(site.file) ?? 0,
+        `${site.file} 的 loadDemo 调用点个数应为 1（多于 1 = 该文件里又多了未登记的入口）`,
+      ).toBe(1);
+    }
+
+    for (const site of LOAD_DEMO_SITES) {
+      const at = sites.find((s) => s.file === site.file)!;
+      expect(at.lineText, `${site.file}:${at.line} 的行内锚点与登记不符（锚点=稳定片段，不用行号）`).toContain(
+        site.anchor,
+      );
+
+      if (site.mode === 'hook') {
+        // ② 调用点**自身作用域**里的门控（不是「文件里有 hook」就算数）
+        const scope = at.gates.join(' | ');
+        for (const token of site.gateTokens) {
+          expect(
+            scope,
+            `${site.file}:${at.line} 的调用点作用域里没有门控项「${token}」：` +
+              '「文件里有 hook」不算数 —— 这一处调用点必须自己站在门里',
+          ).toContain(token);
+        }
+        expect(
+          read(site.file),
+          `${site.file} 缺少插件开关的读取点（usePluginEnabled('sample-projects')）`,
+        ).toContain("usePluginEnabled('sample-projects')");
+      }
+
+      if (site.mode === 'slot-mechanism') {
+        // 机制型门控不靠调用点作用域，靠「插件停用 ⇒ slot 不挂载」。两条**实现处**的锚点：
+        //   ① 壳层只在启用分支渲染 slot（停用分支渲染状态说明）；
+        //   ② `PluginSettingsSlot` 自判启用态后返回 null。
+        // 行为面另由 tests/plugin-ui-gating.spec.tsx 的真渲染用例钉住（node 环境渲染不了）。
+        expect(read('src/components/settings/PluginsSection.tsx')).toMatch(
+          /enabled \? \(\s*<PluginSettingsSlot pluginId=\{manifest\.id\} \/>/,
+        );
+        expect(read('src/core/plugin/PluginRegistryProvider.tsx')).toContain(
+          'if (!Slot || !isPluginEnabled(',
+        );
+      }
+
+      if (site.mode === 'exempt') {
+        // ③ 豁免必须带可读理由，且理由写在**调用点上方**（删理由即红）
+        const lines = read(site.file).split('\n');
+        const above = lines.slice(Math.max(0, at.line - 31), at.line - 1).join('\n');
+        for (const reason of site.reasons) {
+          expect(
+            above,
+            `${site.file}:${at.line} 上方 30 行内缺少豁免理由片段「${reason}」——豁免不许裸奔`,
+          ).toContain(reason);
+        }
+      }
+    }
+  });
+
   it('⑨ 键名单一出处（key 形如 plugin.enabled.<id>）', () => {
     expect(pluginEnabledKey('agent-board')).toBe('plugin.enabled.agent-board');
   });
