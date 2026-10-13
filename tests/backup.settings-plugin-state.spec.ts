@@ -26,6 +26,7 @@ import { createRepositories } from '../src/core/repositories';
 import type { IRepositoryBundle } from '../src/core/repositories/interfaces';
 import { BackupService } from '../src/core/services/backup.service';
 import { pluginEnabledKey } from '../src/core/plugin/types';
+import { buildDemoBackup } from '../src/core/demo/demoDataFactory';
 import { emptyPackage } from './helpers/backup-fixture';
 
 let bundle: IRepositoryBundle;
@@ -106,5 +107,27 @@ describe('备份往返：settings 表的宿主策略键保真', () => {
 
     expect(await bundle.settings.get(WEEKLY_REPORT), '包内缺席的键应当被清掉').toBeNull();
     expect(await bundle.settings.get(AGENT_BOARD), '在场的那行不该被连带弄丢').toBe(false);
+  });
+
+  /**
+   * demo 包的身份键漂移锁。
+   *
+   * 为什么值得单钉：demo 包是**覆盖式整库替换**，它会连 members 一起换成 demo 自己的
+   * 成员集；包里的 `settings.currentMemberId` 必须命中**这张新成员表**里的 active 成员，
+   * 否则「本浏览器从未选过身份」的那一档（`useRepos.ts` 的 `localStorage ?? settings`
+   * 兜底）会落到一个查无此人的 id 上 —— 而 `useFirstRunGate` 只在
+   * `currentMemberId === null` 时才弹引导，悬挂 id 既进不去身份、也不会有人提示重选。
+   * 今天实测自洽（`demo_admin` 在包里且是 admin），这条锁的是**将来改成员 id 或改这行
+   * KV 值时的漂移**。
+   */
+  it('④ demo 包自洽：currentMemberId 必须命中包内 members 里的 active 成员', () => {
+    const pkg = buildDemoBackup();
+    const row = pkg.data.settings.find((s) => s.key === 'currentMemberId');
+    expect(row, 'demo 包必须带 currentMemberId（否则首启身份没有兜底）').toBeTruthy();
+    const id = JSON.parse(row!.valueJson) as string;
+    expect(id, 'currentMemberId 必须是非空字符串').toBeTruthy();
+    const hit = pkg.data.members.find((m) => m.id === id);
+    expect(hit, `demo 包的 currentMemberId=${id} 在包内 members 里查无此人`).toBeTruthy();
+    expect(hit!.active, 'currentMemberId 指向的成员必须是 active').toBe(true);
   });
 });
