@@ -490,9 +490,26 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
        *   （更彻底的解法是给 ConfirmDialog 加 `data-*` 钩子，但那要改共享组件 ⇒ 不为此牵动别人。）
        */
       await page.waitForSelector('[role="dialog"][aria-modal="true"]', { timeout: 5000 });
+      /*
+       * 唯一性断言：**红要能自解释**。
+       * 「是哪个弹窗」这件事交给「恰好一个」来辨别 ⇒ 多弹窗时确实会红（正确的红），
+       * 但一条**不说清是谁**的红会消耗别人的时间（棘轮那次学到的）。故把匹配到的
+       * 各弹窗的可见标题一并打进失败信息 —— 看消息就知道多出来的是谁。
+       * ⚠️ 这里只是**诊断字符串**：读 `aria-label` 是运行期取值，不是"拿中文当定位契约"
+       *   （`cjk-locator-guard` 咬的是**选择器/查询里的中文字面量**，不是失败消息）。
+       */
+      const dialogTitles = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).map(
+          (d) =>
+            `${d.getAttribute('aria-label') ?? '(无 aria-label)'}｜${(d.textContent ?? '')
+              .trim()
+              .replace(/\s+/g, ' ')
+              .slice(0, 40)}`,
+        ),
+      );
       expect(
-        await page.locator('[role="dialog"][aria-modal="true"]').count(),
-        '此刻应恰好只有那一个确认弹窗（多于一个 ⇒ 我在等错对象）',
+        dialogTitles.length,
+        `此刻应恰好只有那一个确认弹窗（多于一个 ⇒ 我在等错对象）。实际匹配到 ${dialogTitles.length} 个：${JSON.stringify(dialogTitles)}`,
       ).toBe(1);
       expect(await clickText(page, '确认载入'), '确认框应有「确认载入」').toBe(true);
 
