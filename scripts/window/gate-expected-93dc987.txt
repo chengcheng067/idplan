@@ -1,0 +1,33 @@
+# 冻结的门内清单（过期态**应当**被跳过的文件与条数）
+# 事故后重建；门内 = 用例数 − 门外（门外由源码块跟踪现场算出，可复算）
+# 只列新鲜度门：CAN_RUN_FRESH，或把 STALE 并进 CAN_RUN 的写法（isolation-browser / stage-color-wiring）
+# 期望合计 = 29 文件 / 148 条
+calendar-anchor.spec.ts 1
+calendar-popover-geometry.spec.ts 8
+f3-sidebar-identity.spec.ts 1
+i18n-browser.spec.ts 1
+identity-rail-browser.spec.ts 7
+isolation-browser.spec.ts 20
+layout-walkthrough.spec.ts 10
+member-board-back.spec.ts 4
+member-board-column-cap.spec.ts 3
+member-board-column-consistency.spec.ts 2
+member-board-deeplink.spec.ts 3
+member-board-layout.spec.ts 2
+member-board-narrow-card.spec.ts 6
+member-board-stat-labels.spec.ts 2
+motion-exits-browser.spec.ts 3
+motion-tokens-preview.spec.ts 2
+overlay-stack-browser.spec.ts 4
+plugin-mobile-menu-gate-browser.spec.ts 1
+plugin-state-demo-browser.spec.ts 3
+qa-batch-a-verify.spec.ts 15
+route-scroll-reset.spec.ts 4
+settings-drawer-flicker.spec.ts 6
+settings-zones.spec.ts 7
+stage-color-wiring.spec.tsx 5
+stage-select-rows-geometry.spec.ts 3
+ui-batch-a-geometry.spec.ts 2
+v07-board-acceptance.spec.ts 12
+v07-dline-shell.spec.ts 7
+v07-t03b-ingress-geometry.spec.ts 4

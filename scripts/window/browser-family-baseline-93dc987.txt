@@ -1,0 +1,57 @@
+# 真机族冻结集合（可比性维度之二：**集合**）
+#
+# 【机械复导命令】任何人不靠本文件也能复导出同一份集合：
+#   git grep -l "playwright-core" 93dc987 -- 'tests/*.spec.ts' 'tests/*.spec.tsx' \
+#     | sed -E 's/^[0-9a-f]{7}://' | sort
+# 【期望计数】44 个文件 / 329 条用例
+# 【选择规则】被选中的 spec 文件内出现 playwright-core（= 真机族）
+#
+# 生成：bash scripts/window/rebuild-frozen-baselines.sh（脚本内含①b 步：复导集合与磁盘发现必须一致，否则拒绝生成）
+# 事故说明：原基线随 2026-10-14 那次 qa-scratch 清空永久丢失；本份为重建版。
+# 用例数来源 = 事故前**同一会话内实测**（原 r2 原始读数已永久丢失，无法当场复算）
+#   ⇒ Step 5 的 r1 跑完后， 会拿它的逐文件读数复核下面 44 个数字；
+#     只有 44 个文件**全部出现且逐个相符**才会打印「已现场复核通过」。
+tests/calendar-anchor.spec.ts (1 tests)
+tests/calendar-popover-geometry.spec.ts (8 tests)
+tests/f3-sidebar-identity.spec.ts (1 tests)
+tests/i18n-browser.spec.ts (1 tests)
+tests/identity-rail-browser.spec.ts (7 tests)
+tests/isolation-browser.spec.ts (20 tests)
+tests/layout-walkthrough.spec.ts (12 tests)
+tests/member-board-back.spec.ts (4 tests)
+tests/member-board-column-cap.spec.ts (3 tests)
+tests/member-board-column-consistency.spec.ts (2 tests)
+tests/member-board-deeplink.spec.ts (3 tests)
+tests/member-board-layout.spec.ts (2 tests)
+tests/member-board-narrow-card.spec.ts (6 tests)
+tests/member-board-stat-labels.spec.ts (2 tests)
+tests/motion-exits-browser.spec.ts (3 tests)
+tests/motion-tokens-preview.spec.ts (14 tests)
+tests/overlay-stack-browser.spec.ts (4 tests)
+tests/plugin-mobile-menu-gate-browser.spec.ts (1 tests)
+tests/plugin-state-demo-browser.spec.ts (3 tests)
+tests/print-a4-visual-classic.spec.ts (2 tests)
+tests/print-a4-visual-d.spec.ts (18 tests)
+tests/print-a4-visual-e.spec.ts (15 tests)
+tests/print-a4-visual-h.spec.ts (18 tests)
+tests/print-a4-visual.spec.ts (9 tests)
+tests/print-final-verify.spec.ts (6 tests)
+tests/print-generic-fidelity-a4.spec.ts (4 tests)
+tests/print-generic-fidelity2-a4.spec.ts (5 tests)
+tests/print-generic-modules-a4.spec.ts (5 tests)
+tests/print-headers-print-media.spec.ts (7 tests)
+tests/print-light-lock.spec.ts (4 tests)
+tests/print-logo.spec.ts (20 tests)
+tests/print-selector-modal-shots.spec.ts (5 tests)
+tests/print-selector-shots.spec.ts (1 tests)
+tests/print-zoom-slider-shots.spec.ts (1 tests)
+tests/qa-batch-a-verify.spec.ts (16 tests)
+tests/route-scroll-reset.spec.ts (4 tests)
+tests/settings-drawer-flicker.spec.ts (6 tests)
+tests/settings-zones.spec.ts (7 tests)
+tests/stage-color-wiring.spec.tsx (46 tests)
+tests/stage-select-rows-geometry.spec.ts (4 tests)
+tests/ui-batch-a-geometry.spec.ts (3 tests)
+tests/v07-board-acceptance.spec.ts (13 tests)
+tests/v07-dline-shell.spec.ts (8 tests)
+tests/v07-t03b-ingress-geometry.spec.ts (5 tests)

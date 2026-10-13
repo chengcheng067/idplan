@@ -1,0 +1,138 @@
+# 出包冻结窗口 · 第 2.5 / 5.5 / 5.6 步 运行手册（impl-settings-hierarchy）
+
+⚠️ **本文件是事故后重建版**（2026-10-14）。第 1 版随 `qa-scratch/` 被清空而永久丢失。
+判据文本以 `docs/release-checklist.md`（含 `a41c799` / `975de2a` / `e078523` 三批修订）为准，本文件只是执行脚本。
+
+## 0 · 落点（本次事故最重要的处置）
+
+| 物件 | 落点 | 理由 |
+|---|---|---|
+| 本 runbook + 4 个脚本 + 2 份冻结件 | **仓内 `scripts/window/`** | git 就是耐久路径 |
+| **每轮的原始读数**（JSON / stdout / 自证输出） | **仓外 `<repo>/../deliverables/release-1.0.0.0009-窗口证据/`** | ① 不在任何清理器的射程内；② 不在仓内 ⇒ **不脏工作树 ⇒ 不破第 2 步判据** |
+
+> 口径升级（team-lead 立）：**append-only 不够，还要看那个路径在不在「别人会清理的射程」内。
+> 判据：凡在 `.gitignore` 内的目录，一律在射程内 —— 只能当工作副本，不能当唯一证据。**
+
+脚本里的默认落点已经是仓外（`frozen-run.mjs --out-dir`、`selfcheck-all.sh` 默认参数）；
+`step-precheck.sh`、`npx vitest` 那两条需要自己 `| tee "<仓外读数目录>/…"`。
+
+## 0.1 · 事故记录
+
+- **2026-10-14 05:18 / 05:22**：另一条线把共享仓库里的 `qa-scratch/` 当成自己的临时目录，
+  两次 `rm -rf qa-scratch`（`rm -rf qa-scratch && npm test` 与探针收尾各一次）。责任已由其自认，见 `3e7c94f`。
+- **永久丢失、不可重建**：`_frozen-run-r1.txt` / `_frozen-run-r2.txt`（表征窗口原始输出）。
+  ⇒ 但**结论没丢**：表征窗口的结账已提交进 `docs/release-checklist.md`；且这批读数本来就会被本窗口的 r1/r2 取代。
+- **`_skip-inventory-static-2026-10-14.txt` 不再算可核件**：它的输入（r2）已失 ⇒ 无法复算。
+  其结论（20/148）**由本窗口的 2.5 + 5.6 现场重建**。
+- **已重建**：本 runbook、4 个脚本、2 份冻结件、统一自证脚本。
+
+## 1 · 起跑前置（每次跑批前都做，输出落仓外）
+
+```bash
+bash scripts/window/step-precheck.sh 2.5     # 或 5 / 5.5 / 5.6
+# 建议： | tee "<仓外读数目录>/precheck-2.5-<时刻>.txt"
+```
+
+四项 + 一句前提判定：①工作树 ②产物与过期输入 ③争用（真 0 / 未知可区分）④代码代。
+
+★ **第 2.5 步前提 = 树干净 + 过期输入 > 0**。不成立 ⇒ **先报 team-lead**，不要自行用 `touch` 造陈旧态
+（用之前要点头；且**绝不许用「删产物」造陈旧** —— 那会把 `CAN_RUN` 也翻成 false，测的是**另一个状态**：
+整门会变成 31 文件 / 209 例，第 5.6 步的 diff 当场作废）。
+
+## 2 · 第 2.5 步：过期态复现（≈75s）
+
+```bash
+R="<仓外读数目录>"
+npx vitest run --reporter=default --reporter=json \
+  --outputFile.json="$R/_skip-stale-step2.5.json" 2>&1 | tee "$R/_skip-stale-step2.5.txt"
+```
+
+- 期望：`20 skipped` 文件 · `148 skipped` 用例（**期望，不是判据**）。
+- **预声明**：本步跑在**故意陈旧**的产物上 ⇒ 本步任何红都属「环境破坏类」，该轮作废、**不进任何清单**；
+  事后**不许拿它当证据、也不许拿它当缺陷**。
+- 本步唯一目的：给新鲜度守卫补上它缺的那一条 —— **「会报」的自证**。
+
+## 3 · 第 3 步：清产物 → 重建（分钟级）
+
+先确认无并跑（`step-precheck.sh 5` 第③项 = **数字 0**，不是「未知」）⇒ **串行重建**；重建前确认无未提交 `src`。
+
+## 4 · 第 5 步：真机族两轮（r1 + r2，≈19 分钟）
+
+```bash
+node scripts/window/frozen-run.mjs --label=r1 --baseline-wall=568 --baseline-scope="44files/329tests"
+node scripts/window/frozen-run.mjs --label=r2 --baseline-wall=568 --baseline-scope="44files/329tests"
+```
+
+- **集合已冻结**：`scripts/window/browser-family-baseline-93dc987.txt`（44 文件 / 329 用例），
+  其文件头写明**机械复导命令**（`git grep -l "playwright-core" 93dc987 -- 'tests/*.spec.ts' 'tests/*.spec.tsx'`）
+  与期望计数。**缺该文件 ⇒ 拒绝跑**（宁可不跑，也不许静默换成自动发现集合）。
+- 磁盘族与冻结集合不一致时**只报告、不并入**。
+- ⚠️ 基线里那 **44 个用例数**是事故前同一会话的实测留档 ⇒ 读数器跑完会**用本轮逐文件读数复核**；
+  只有 44 个文件**全部出现且逐个相符**才打印「已现场复核通过」。**r1 一跑完，基线的账就结清。**
+- ⚠️ 读数器是**事故后重建版**（原件 331 行不可复原 ⇒ 旧自证一条不继承，全部重跑）：
+  测量主体是 vitest 本身（单线程 + 冻结集合），本器只做包裹与记录 ⇒ 时间读数**仍与 `93dc987` 基线可比**。
+  **这句话必须写进读数**，不默认。
+- 读数默认落**仓外**（`--out-dir` 可改）。
+
+## 5 · 第 5.5 步：新鲜态全量（≈10–11 分钟，估计）
+
+```bash
+R="<仓外读数目录>"
+npx vitest run --reporter=default --reporter=json \
+  --outputFile.json="$R/_skip-fresh-step5.5.json" 2>&1 | tee "$R/_skip-fresh-step5.5.txt"
+```
+
+- **硬判据（唯一）＝ `skipped = 0`**。
+- **不许硬编码 `2887`**：它来自另一个 HEAD ⇒ 期望不是判据。差额**登记归因，用用例名单 diff 解释**
+  （新增 N / 删除 M / 改名 K），**不用数字差解释**。
+- `skipped ≠ 0` 或有红 ⇒ **停窗报 team-lead，不许自行归类**。
+
+## 6 · 第 5.6 步：逐用例 diff（钉死）
+
+```bash
+R="<仓外读数目录>"
+node scripts/window/skip-diff.mjs \
+  --stale="$R/_skip-stale-step2.5.json" --stale-stdout="$R/_skip-stale-step2.5.txt" \
+  --fresh="$R/_skip-fresh-step5.5.json" --fresh-stdout="$R/_skip-fresh-step5.5.txt"
+```
+
+- **判据①**：`skipped(过期态) ⊆ passed(新鲜态)` —— 过期态跳过的每一条，新鲜态都真的跑了且通过。
+- **判据②**：`skipped(过期态)` = **该轮** `CAN_RUN_FRESH` 门内的用例集合 ——
+  用**本次两份 JSON 现场算出**，**不引用任何历史清单**（`e078523` 的口径）。
+- ⚠️ **不许硬编码 `148`**：它来自另一个 HEAD 且推导输入已随 r2 丢失 ⇒ 期望不是判据；
+  实测 ≠ 148 **先归因再判**（英文线在加用例是正常的），差额**用名单 diff 归因**。
+- 退出码：0 = 钉死；1 = 判据失败；2 = 读数不可信 ⇒ 后两者都**停窗上报**。
+  （脚本仍接受可选的 `--expect=<清单>` 做**逐文件计数**对账；不给就只跑判据①②。）
+
+## 7 · 事故后自查：同族第三面口径（「0」与「未知」必须可区分）
+
+team-lead 要求：**凡「计数 / 判空 / `grep -c` / 退出码当结论」的地方都自查一遍**。逐件结论（都修了，都留自证）：
+
+| 件 | 查到的洞 | 处置 |
+|---|---|---|
+| `skip-diff.mjs` | ★ **真假绿**：门内清单为空 **且** 过期态 0 跳过 ⇒ 两条检查**双双空转通过**，「什么都没量到」合成一个「✔ 钉死」 | 加「过期态 0 跳过 ⇒ 判红」+「空清单判红」；并用**同一次跑的 stdout 汇总**做第二条独立读数，与 JSON 对不上就判「不可信」（防 json reporter 不吐被跳过用例） |
+| `step-precheck.sh` | ①`git status \| wc -l` 失败 = **假「树干净」**；②`find -newer` 在**产物不存在**时报错 → 0 行 = **假「不陈旧」**；③`stat` 求和全失败打 0；④争用值抠不出数字时把整行当结论 | 全部改「失败 ⇒ **未知**」，并让前提判定按「未知 ≠ 成立」处理 |
+| `proc-probe.mjs` | 承 `tasklist /FI` 那个**假 0**（MSYS 把 `/FI` 当路径 ⇒ 报无效参数 ⇒ `grep -c` 得 0；同一刻 `//FI` 数出 17 个 node.exe） | 走 `Get-CimInstance`；**node.exe 空输出 = 未知**（本探针自身就是一个 node.exe ⇒ 空输出物理上不可能）；chrome.exe 空输出才是真 0；含未知 ⇒ 退出码 2 |
+| `frozen-run.mjs` | ①`mtimeSumUnder` 目录不可读时 0 与 0 相等 = **假「未变」**；②产物代两侧都是「(未知)」时字符串相等 = **假「未改变」** | 量不到 ⇒ 未知 / 判不了，不许出「未变」结论 |
+| `selfcheck-all.sh`（我自己的自证脚本） | `node ... \| tail` 的 `$?` 是 **tail 的**；`{ ...; } \| tee` 把整块丢进**子壳** ⇒ 块内改的 FAIL 不回传、脚本退出码恒 0 ⇒ 三个**本该红**的案子被印成「✔ 符合期望」 | 改用命令替换取退出码 + 去掉管道；现在脚本退出码与「总判」一致 |
+| `rebuild-frozen-baselines.sh` | `echo` 里用反引号 ⇒ 被当命令替换执行（`frozen-run.mjs: command not found`） | 改引号；另加 ①b 步：机械复导集合与磁盘发现必须一致，否则**拒绝生成** |
+
+**主流程等不了的错也记一条（我的操作坑，不是件里的洞）**：两次用「空 heredoc 喂解释器」
+（`python - <<'PY'` 且体为空）⇒ 解释器在等 stdin ⇒ 命令挂死到超时。**禁用该构造。**
+
+**统一自证**（一条命令，输出落仓外）：
+
+```bash
+bash scripts/window/selfcheck-all.sh      # 默认输出到 <repo>/../deliverables/release-1.0.0.0009-窗口证据/
+```
+
+覆盖：`proc-probe` 静息真 0 ↔ 标记进程 1 ↔ 撤回 0；`step-precheck` 判「前提不成立」并给原因；
+`skip-diff` 正例 exit 0 / 变异 exit 1 / 假绿洞 exit 1 / 读数不可信 exit 2；
+`frozen-run --dry` 三夹具（全绿 44/329、**过期态精准复现 200 passed|20 skipped / 2739 passed|148 skipped**、垃圾夹具全打 `?`）；
+两份冻结件 44/329 与 29/148。
+
+## 8 · 三条不许忘
+
+1. 读数一律 **append-only 的轮次命名路径**，且落**仓外**（`--label=r1/r2`、`_skip-stale-step2.5`、`_skip-fresh-step5.5`）；
+2. **集合一经冻结不许中途换**（阈值只用同规模可比读数）；
+3. **判据文本冻结**（自开窗起），要改先报 team-lead。
