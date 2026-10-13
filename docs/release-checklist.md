@@ -7,7 +7,7 @@
 - [ ] `npx vitest run`：**0 failed 且 0 skipped**（1841 例基线）
 - [ ] `npm run typecheck:tests`：≤ 66（既有债基线；新增 spec 不许加债）
 - [ ] `npx tsc --noEmit -p tsconfig.json` 与 `-p server/tsconfig.json` 双 0
-- [ ] ⚠️ **打印（纸面）批次开工前必读**：`// TODO(print-5blocks): 纸面批次开工时必须升级本 helper，否则退化为恒过假绿` —— 这条提醒同时写在 `tests/v07-dline-print-access.spec.tsx` 文件头。纸面文案一经搬进 i18n 消息表，`ungatedClientNameSpots()`（扫中文字面量 `委托方`）与它上面那条 `toContain('委托方')` 前提会**双双变成恒过**：前者找不到字面量返回 `[]`、后者若只改成「锁键名」就丢了「那句话必须渲染在受门控的位置」这层绑定。**两处必须同批升级为「取值再比串」（先断言 zh 值长度 > 2，再断言目标容器的 textContent 含该值）**，并把范围限定在目标容器内（不许放宽到整页匹配）。
+- [ ] ⚠️ **打印（纸面）批次开工前必读**：`// TODO(print-5blocks): 纸面批次开工时必须升级本 helper，否则退化为恒过假绿` —— 这条提醒同时写在 `tests/v07-dline-print-access.spec.tsx` 文件头。纸面文案一经搬进 i18n 消息表，`ungatedClientNameSpots()`（扫中文字面量 `委托方`）与它上面那条 `toContain('委托方')` 前提会**双双变成恒过**：前者找不到字面量返回 `[]`、后者若只改成「锁键名」就丢了「那句话必须渲染在受门控的位置」这层绑定。**两处必须同批升级为「取值再比串」（先断言 zh 值长度 > 2，再断言目标容器的 textContent 含该值）**，并把范围限定在目标容器内（不许放宽到整页匹配）。 **仅当本批涉及打印纸面时执行**（不涉及纸面的批次跳过本条）。
 
 ## 2. 版本号（✱ 走查 D5 纪律：数字类事实同源同批更新）
 - [ ] `version.json` 四段号推进（如 0.8.3.0001）
