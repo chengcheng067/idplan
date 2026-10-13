@@ -136,16 +136,31 @@ async function enterMemberBoard(page: Page, serverUrl: string): Promise<void> {
   await page.goto(serverUrl);
   await page.waitForSelector('header', { timeout: 20000 });
 
-  await page.evaluate(() => {
+  // ⚠️ 静默前置扫雷批（2026-10-14）：这两下必须**断言存在再点**。
+  //    旧写法 `b?.click()` 点空时不会立刻红，失败会推到下面 `card.first().waitFor(…, 10000)`
+  //    —— 那条消息是「首启卡没出现」，会把排查引向「卡片/首启逻辑」而不是「身份流程没走完」。
+  const clickedAdminEntry = await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '我是管理员');
-    b?.click();
+    if (!b) return false;
+    b.click();
+    return true;
   });
+  expect(
+    clickedAdminEntry,
+    '身份流程里找不到「我是管理员」按钮（旧写法静默点空 ⇒ 失败推到后面等首启卡，方向指错）',
+  ).toBe(true);
   await page.waitForTimeout(400);
   await page.locator('input[placeholder="你的姓名"]').fill('探针甲');
-  await page.evaluate(() => {
+  const clickedAdminConfirm = await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').includes('确认为管理员'));
-    b?.click();
+    if (!b) return false;
+    b.click();
+    return true;
   });
+  expect(
+    clickedAdminConfirm,
+    '身份流程里找不到「确认为管理员」按钮（旧写法静默点空 ⇒ 管理员未建立，后面等首启卡会超时并把方向指错）',
+  ).toBe(true);
   await page.waitForTimeout(1200);
 
   const card = page.locator('[data-first-run-card="indoor"]');
