@@ -218,6 +218,22 @@ export function FirstRunGuide(): JSX.Element | null {
                   title={isAdmin ? undefined : t('guide.adminOnlyTitle')}
                   onClick={() => {
                     if (!isAdmin || !demoReady) return; // 双保险（disabled 已拦，防键盘/读屏误触）
+                    /*
+                     * ★★ 本入口**有意不受插件开关约束（已与产品确认的决定，不是待办）** ★★
+                     *
+                     * 别顺手给它补 `usePluginEnabled('sample-projects')` —— 那会让**全新安装
+                     * 的用户点行业卡什么都不发生**：`sample-projects` 的 `defaultEnabled = false`
+                     * （大部分用户不需要示例数据），而「空库 + 插件默认关」恰好就是新装的默认态。
+                     *
+                     * 可达性事实（别把它当成用户机器上的现患）：本卡只在**空库**时渲染
+                     * （见本文件 `:157` 那条前置 return 的三个条件之一），一旦库里有了任何项目
+                     * （含用户自建）这张卡就永久不再出现。⇒ 用户本人的机器上因为库非空而**不可达**，
+                     * 但**每个新装用户首次打开都会遇到它**。
+                     *
+                     * ⇒ 要收口必须**连同 `defaultEnabled` 一起决定**（把插件默认改开，或给首启卡
+                     *    换成一条与 `loadDemo()` 无关的动作），不能只在本行加门控。
+                     * 登记在 `tests/plugin-registry.spec.ts` ⑩-b 的豁免清单里（三个理由片段逐字对齐）。
+                     */
                     // 看过 flag 立即落（确认弹窗无论确认与否都不再重弹首启卡）
                     try {
                       localStorage.setItem(GUIDE_SEEN_KEY, '1');
