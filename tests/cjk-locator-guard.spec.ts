@@ -132,11 +132,21 @@ describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
 
   it(`★ 棘轮：全仓中文定位 ≤ 基线（当前 ${outside.length} / 基线 ${BASELINE}）`, () => {
     const delta = outside.length - BASELINE;
+    /*
+     * ★ 2026-10-13 失败文案补「按文件明细」：棘轮第一次真实咬人时（117 > 116，来自另一条新
+     *   提交的 spec）我先做了一轮人工排查才发现是哪一处 —— 那不该由人来做。
+     *   ⇒ 只要超基线，就把**每个文件各几处**直接印出来（不逐行列全部，避免刷屏；
+     *     需要精确到行时跑 `scanRepo(process.cwd())`）。
+     */
+    const perFile = [...outside.reduce((m, h) => m.set(h.file, (m.get(h.file) ?? 0) + 1), new Map<string, number>())]
+      .sort((a, b) => b[1] - a[1])
+      .map(([f, n]) => `     ${String(n).padStart(3)}  ${f}`)
+      .join('\n');
     expect(
       outside.length,
       `中文定位计数超出基线：当前 ${outside.length} / 基线 ${BASELINE}` +
         (delta > 0
-          ? `（新增 ${delta} 处 —— 请改用 data-* 钩子定位）`
+          ? `（新增 ${delta} 处 —— 请改用 data-* 钩子定位）\n   按文件分布（全仓，含旧账）：\n${perFile}`
           : `（可下调 ${-delta} 处 —— 转换了锚点就同批把基线改小）`),
     ).toBeLessThanOrEqual(BASELINE);
   });
