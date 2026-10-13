@@ -141,14 +141,20 @@ bash scripts/window/selfcheck-all.sh      # 默认输出到 <repo>/../deliverabl
 | 7 | 「判据要有第二个出处」 | JSON 与 stdout 汇总一致 | stdout 说 148、JSON 只 2 ⇒ **exit 2** |
 | 8 | 「解析出 0 行 ≠ 没有失败」 | 全绿夹具 44/329、自洽 ✔；过期态夹具**精准复现** `200 passed|20 skipped (220)` / `2739 passed|148 skipped (2887)` | 垃圾夹具 ⇒ 三维全打 `?` 且报「解析出 0 行」，**不冒充 0** |
 | 9 | 冻结件可核 | 基线 44/329、门内 29/148、机械复导 44 | 复导 ≠ 磁盘 ⇒ 生成器**拒绝生成**（`rebuild-frozen-baselines.sh` ①b 步） |
+| 10 | **JSON reporter 组合真的会吐文件** | `--reporter=default --reporter=json --outputFile.json=…` 实跑：JSON 落盘（5925 字节）、stdout 汇总同时出现（`Test Files 1 passed (1)` / `Tests 18 passed (18)`） | 证据 `cover4-json.json` / `cover4-json.stdout.txt`（仓外） |
+| 11 | **`--archive-dir` 真的落仓外** | 实跑 ⇒ `5-cover-archive2.stdout.txt` + `.stdout.archived.txt` + `.summary.txt`（含产物代与 `artifact_changed`）全在仓外目录 | 证据同上目录 |
+| 12 | **两个「跑批期间变动」检测器真的会报** | `--touch-src-during` ⇒ `src 最新 mtime ★ 变了` + `过期输入计数 ★ 变了`（且 `tests 合计 未变`）；`--touch-tests-during` ⇒ `tests mtime 合计 ★ 变了`（且 `src 未变`）；干净跑 ⇒ 两者都「未变」 | 两个被 touch 的文件 `git status/diff` 均为空 ⇒ **只动 mtime、未动内容** |
 
-### 7.2 它**没有**证明什么（如实声明 —— 别把「7/7 通过」读成「全都验过了」）
+### 7.2 它**没有**证明什么（如实声明 —— 别把「全绿」读成「全都验过了」）
 
-1. **真实 vitest 报告形状**：上面第 7、8 条用的是**合成夹具**；真 JSON 的字段形状要到 2.5 / 5.5 第一次真跑才见。
-2. `--touch-src-during` / `--touch-tests-during` 两个「自检会不会报」开关：**本次一个都没验**（要真跑批才能验）。
-3. `--archive-dir` 归档路径：只有代码路径，**未实跑过**。
-4. `npx vitest run --reporter=default --reporter=json --outputFile.json=…` 这条组合：**只用 `npx vitest --help` 自证过参数存在**，没实跑过。
-5. `mtimeSumUnder` / `artifactId` 的「量不到 ⇒ 未知」两条：代码级修正 + dry 夹具间接覆盖，**没有专门反例**（真要做，得构造目录不可读/产物缺失的现场）。
+> 分类规则（team-lead 立）：**未覆盖项要分「本次窗口会用到」与「用不到」；会用到而没覆盖的，不许留到窗口里。**
+
+**窗口会用到、且已在开窗前补掉的**：#2 两个变动检测器、#3 `--archive-dir` 落点、#4 JSON reporter 组合 —— 见 7.1 的 10/11/12 行（都用**纯单元 spec 合成跑**验的，未碰真机族、未重建产物）。
+
+**仍然未覆盖**：
+
+1. **真实报告里的 `status: "skipped"` 取值**：形状假设（`testResults[]` / `assertionResults[]` / `name` / `status` / `ancestorTitles` / `fullName`）已用**真实 JSON** 逐条核过（`cover4-json.json`），且 `skip-diff.mjs` 能解析它并跑通检查④a/④b。**但「被跳过的用例长什么样」还没在真实报告里见过** ⇒ 要等窗口 2.5 第一次产出。
+2. `mtimeSumUnder` / `artifactId` 的「量不到 ⇒ 未知」两条：代码级修正 + dry 夹具间接覆盖，**没有专门反例**（真要做，得构造目录不可读/产物缺失的现场）。
 
 ## 8 · 三条不许忘
 

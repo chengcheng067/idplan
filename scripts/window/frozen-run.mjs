@@ -463,11 +463,14 @@ if (!DRY) console.log('\n原始读数已落盘（按轮次命名，不覆盖）�
 if (ARCHIVE_DIR) {
   try {
     mkdirSync(ARCHIVE_DIR, { recursive: true });
-    const dst = join(ARCHIVE_DIR, `_frozen-run-${LABEL || 'nolabel'}.txt`);
+    const label = LABEL || 'nolabel';
+    // ★ 归档也走**轮次命名**（team-lead 定：不许固定名）。若归档目录 == 读数目录，
+    //   主读数已在同一路径，这里只写副本与摘要，并明说「同目录 ⇒ 是冗余副本」。
+    const dst = join(ARCHIVE_DIR, `5-${label}.stdout.archived.txt`);
     copyFileSync(OUT, dst);
     const sum = [
-      `label=${LABEL}`,
-      `reader=事故后重建版`,
+      `label=${label}`,
+      `reader=事故后重建版（2026-10-14）`,
       `head=${headBefore}`,
       `files=${JSON.stringify(p.files)}`,
       `tests=${JSON.stringify(p.tests)}`,
@@ -475,9 +478,10 @@ if (ARCHIVE_DIR) {
       `artifact_before=${artifactBefore}`,
       `artifact_after=${artifactAfter}`,
       `artifact_changed=${artifactAfter !== artifactBefore}`,
+      `primary=${OUT.replace(/\\/g, '/')}`,
     ].join('\n');
-    writeFileSync(join(ARCHIVE_DIR, `_frozen-run-${LABEL || 'nolabel'}.summary.txt`), sum, 'utf8');
-    console.log('已归档到耐久落点：', ARCHIVE_DIR);
+    writeFileSync(join(ARCHIVE_DIR, `5-${label}.summary.txt`), sum, 'utf8');
+    console.log('已归档到耐久落点：', ARCHIVE_DIR, resolve(ARCHIVE_DIR) === resolve(OUT_DIR) ? '（与读数目录同一处 ⇒ 副本是冗余的，摘要仍有用）' : '');
   } catch (e) {
     console.log('★ 归档失败（不改结论，但要报）：', String(e.message).slice(0, 120));
   }
