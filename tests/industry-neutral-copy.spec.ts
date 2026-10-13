@@ -13,6 +13,34 @@
  *   ③ 默认值锁：defaultPresetKeyForDomain 展陈不得回落 indoor（已是 null）
  *   ④ 示例数据锁：demo 覆盖 ≥3 个不同 domain（不退回全室内）
  *   ⑤ 元数据锁：index.html / package.json 描述不含行业词
+ *
+ * ══════════════════════════════════════════════════════════════════════════
+ * ★★ 扫描面的**有意边界**（2026-10-13 明确登记，别再当「洞」去修）★★
+ * ══════════════════════════════════════════════════════════════════════════
+ * ① 锁的扫描面 = `src/components/**` + `src/pages/**` 的 tsx / `index.html` /
+ *    `package.json` / `README{,.en}.md` / `docs/install/*.md`。
+ *    **`templates/**`、`src/core/template/**`、`src/core/demo/**` 的行业内容
+ *    故意不在扫描面内**。
+ *
+ * ② 判据（这条是给下一个人的，不是给机器的）：本锁扫的是**用户可见的通用话术**
+ *    （「我搜索了某个成员名」这类与行业无关的界面文案），**不是行业内容**。
+ *    区别看两个例子：
+ *      · `templates/stage-library.json` 里室内套餐的 `defaultResponsibility`
+ *        「功能分区与桌椅排布（**餐饮坪效校核**）」—— 这是**室内行业的内容**
+ *        （行业库就该说行业的话，删了反而是把行业掏空）；
+ *      · 而 `src/components/**` 的 placeholder 写「XX 餐饮 · 室内设计」—— 那是
+ *        把某个行业当成**默认读者**，这才是「行业本位话术」，必须拦。
+ *    ⇒ 「餐饮坪效」出现在 BANNED 里，但只有它出现在**用户可见通用面**时才违规。
+ *      行业库里的同行文字不受管辖，**不要**为此扩扫描面（扩了会把合法的行业
+ *      内容全扫成红，最后只能靠加白名单绕回来 —— 那等于把这条锁作废）。
+ *
+ * ③ 同理不在扫描面内、且**已判定为合法**的三处（2026-10-13 复核）：
+ *    `custom-library.prompt.ts` 的示例名「我的茶空间流程」、
+ *    `custom-library.schema.ts` 的同款注释、`CustomStageDialog` /
+ *    `StageSelectPanel` 的自定义阶段示例「消防报审」——
+ *    它们都是**让用户看懂「这一步填什么」的行业示例**，不是默认读者假设。
+ *
+ * ④ 本锁**只能加严**（加禁词、加文件）—— 放松任何一条都要先过产品官。
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
