@@ -3,6 +3,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 /**
  * v0.7 批次 A · A4「首页视图切换（lg 档）」**真几何**验收（真构建产物 + 真 Chromium）。
@@ -88,44 +89,17 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 参与「产物是否过期」判定的构建输入（与 layout-walkthrough 同口径） */
-const BUILD_INPUT_DIRS = ['src', 'electron'];
-const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
-
-function collectFiles(dir: string): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { join } = require('node:path') as typeof import('node:path');
-  if (!fs.existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, e.name);
-    if (e.isDirectory()) out.push(...collectFiles(full));
-    else if (e.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/**
- * 产物是否早于任一构建输入（过期样例最多 3 个）。
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （它内部带 `warnStaleOnce`：过期时会打印「哪些构建输入比产物新 + 先 npm run build」）。
  *
- * 为什么必须挡：本 spec 读的是**产物里已编译好的 CSS**。改完 `SegmentedControl.tsx`
- * 忘了 `npm run build` 时，读到的仍是上一版圆角 —— 而这次我们要证明的恰恰是
- * 「源码里的键名 → 产物 CSS 的像素」这条链，跳过 build 等于测了个寂寞。
+ * ⚠️ 本文件原先内联了一份**语义相同、但没有告警**的复制体 ⇒ 产物过期时它**静默 skip**
+ *    （skip ≠ 通过）。2026-10-13 那次「让跳过出声」只覆盖了 import 共享助手的文件，
+ *    内联复制的那批漏了；本次收敛补上。
+ *    判据本身**没有变**：候选集 = `BUILD_INPUT_DIRS`（src/electron）+ `BUILD_INPUT_FILES`
+ *    （index.html / vite.config.ts / tailwind.config.ts / postcss.config.js），任一 mtime 比
+ *    `build-dist/index.html` 新即视为过期（两份口径已逐字核对）。
  */
-function staleInputs(): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const { resolve: res } = require('node:path') as typeof import('node:path');
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
-  const candidates = [
-    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(res(__dirname, '..', d))),
-    ...BUILD_INPUT_FILES.map((f) => res(__dirname, '..', f)).filter((f) => existsSync(f)),
-  ];
-  return candidates
-    .filter((f) => fs.statSync(f).mtimeMs > distMs)
-    .map((f) => f.replace(res(__dirname, '..') + '\\', '').replace(res(__dirname, '..') + '/', ''))
-    .slice(0, 3);
-}
-
 const STALE_INPUTS = CAN_RUN ? staleInputs() : [];
 const CAN_RUN_FRESH = CAN_RUN && STALE_INPUTS.length === 0;
 

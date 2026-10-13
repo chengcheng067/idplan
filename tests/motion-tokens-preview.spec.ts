@@ -35,6 +35,7 @@ import { chromium, type Browser, type Page } from 'playwright-core';
 
 import { builtCss } from './helpers/built-css';
 import { listenOnSafePort } from './helpers/safe-listen';
+import { staleInputs } from './helpers/board-env';
 
 const ROOT = resolve(__dirname, '..');
 const DIST_INDEX = join(ROOT, 'build-dist', 'index.html');
@@ -79,33 +80,17 @@ function resolveChromium(): string | null {
 const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null && existsSync(PREVIEW_FILE);
 
-const BUILD_INPUT_DIRS = ['src', 'electron'];
-const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
-
-function collectFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, e.name);
-    if (e.isDirectory()) out.push(...collectFiles(full));
-    else if (e.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/** 构建输入里有没有比 build-dist/index.html 更新的（= 产物过期） */
-function staleInputs(): string[] {
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = statSync(DIST_INDEX).mtimeMs;
-  return [
-    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(join(ROOT, d))),
-    ...BUILD_INPUT_FILES.map((f) => join(ROOT, f)).filter((f) => existsSync(f)),
-  ]
-    .filter((f) => statSync(f).mtimeMs > distMs)
-    .map((f) => f.slice(ROOT.length + 1))
-    .slice(0, 3);
-}
-
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （它内部带 `warnStaleOnce`：过期时会打印「哪些构建输入比产物新 + 先 npm run build」）。
+ *
+ * ⚠️ 本文件原先内联了一份**语义相同、但没有告警**的复制体 ⇒ 产物过期时它**静默 skip**
+ *    （skip ≠ 通过）。2026-10-13 那次「让跳过出声」只覆盖了 import 共享助手的文件，
+ *    内联复制的那批漏了；本次收敛补上。
+ *    判据本身**没有变**：候选集 = `BUILD_INPUT_DIRS`（src/electron）+ `BUILD_INPUT_FILES`
+ *    （index.html / vite.config.ts / tailwind.config.ts / postcss.config.js），任一 mtime 比
+ *    `build-dist/index.html` 新即视为过期（两份口径已逐字核对）。
+ */
 const STALE = CAN_RUN ? staleInputs() : ['(未构建或无 chromium)'];
 const CAN_RUN_FRESH = CAN_RUN && STALE.length === 0;
 

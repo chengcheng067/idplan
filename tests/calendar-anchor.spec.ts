@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { staleInputs } from './helpers/board-env';
 
 
 /**
@@ -61,36 +62,17 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /** 参与「产物是否过期」判定的构建输入（与 v07-board-acceptance 同口径） */
-const BUILD_INPUT_DIRS = ['src', 'electron'];
-const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
-
-function collectFiles(dir: string): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require('node:fs') as typeof import('node:fs');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { join } = require('node:path') as typeof import('node:path');
-  if (!fs.existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectFiles(full));
-    else if (entry.isFile()) out.push(full);
-  }
-  return out;
-}
-
-function staleInputs(): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require('node:fs') as typeof import('node:fs');
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
-  const candidates = [
-    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(resolve(__dirname, '..', d))),
-    ...BUILD_INPUT_FILES.map((f) => resolve(__dirname, '..', f)).filter((f) => existsSync(f)),
-  ];
-  return candidates.filter((f) => fs.statSync(f).mtimeMs > distMs);
-}
-
+/*
+ * 产物过期判定：**唯一出处** = `tests/helpers/board-env.ts` 的 `staleInputs()`
+ * （它内部带 `warnStaleOnce`：过期时会打印「哪些构建输入比产物新 + 先 npm run build」）。
+ *
+ * ⚠️ 本文件原先内联了一份**语义相同、但没有告警**的复制体 ⇒ 产物过期时它**静默 skip**
+ *    （skip ≠ 通过）。2026-10-13 那次「让跳过出声」只覆盖了 import 共享助手的文件，
+ *    内联复制的那批漏了；本次收敛补上。
+ *    判据本身**没有变**：候选集 = `BUILD_INPUT_DIRS`（src/electron）+ `BUILD_INPUT_FILES`
+ *    （index.html / vite.config.ts / tailwind.config.ts / postcss.config.js），任一 mtime 比
+ *    `build-dist/index.html` 新即视为过期（两份口径已逐字核对）。
+ */
 const CAN_RUN_FRESH = CAN_RUN && staleInputs().length === 0;
 
 /** SPA 必须走 HTTP 服务（vite base:'/'，file:// 下资源全 404） */
