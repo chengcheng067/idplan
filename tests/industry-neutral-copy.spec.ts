@@ -46,6 +46,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
+import { catalogOf } from '../src/i18n';
+
 const ROOT = resolve(__dirname, '..');
 
 /** 剥注释（教训×3：源码级扫描不剥注释 = 迟早抓到注释里的字样假红） */
@@ -77,6 +79,10 @@ describe('行业中立化源码锁（v0.8.5 C4）', () => {
     const files = [
       ...tsxFiles(resolve(ROOT, 'src/components')),
       ...tsxFiles(resolve(ROOT, 'src/pages')),
+      // ★ 2026-10-13 中英切换批 1：用户可见文案整批搬进 i18n 消息表 ⇒
+      //   扫描面**同步扩到消息表**（本锁「只能加严」，搬走文案不能顺带搬出扫描面）。
+      resolve(ROOT, 'src/i18n/messages/zh.ts'),
+      resolve(ROOT, 'src/i18n/messages/en.ts'),
       resolve(ROOT, 'index.html'),
       resolve(ROOT, 'package.json'),
       resolve(ROOT, 'README.md'),
@@ -96,10 +102,37 @@ describe('行业中立化源码锁（v0.8.5 C4）', () => {
     expect(hits, '行业本位话术回潮（她 feedback「全行业软件」的防线）').toEqual([]);
   });
 
-  it('② 正向锚点：ManualFallbackForm 项目名称 placeholder 是中性示例', () => {
+  it('② 正向锚点：项目名称 placeholder 是中性示例（2026-10-13 换载体，原意不变）', () => {
+    /*
+     * ══════════ 为什么换载体（中英切换批 1，2026-10-13）══════════
+     * 改造前本条断言 ManualFallbackForm.tsx 的**源码里**出现
+     * /某某项目|某某・第一阶段/。该 placeholder 现住 i18n 消息表
+     * （键 `project.namePlaceholder`，中/英两列），组件源码里只剩
+     * `t('project.namePlaceholder')` ⇒ 原断言会在「文案正常搬家」这件事上误报红。
+     *
+     * **原意一个字没改**：项目名称 placeholder 必须是**跨行业中性示例**，
+     * 不许变成「XX餐饮 · 室内设计」这类行业本位话术（debug 报告 §3.3 ②）。
+     * 换的只是断言载体：从「组件源码」换成「文案现在真正住的地方」。
+     *
+     * ⚠️ 载体换了，判别力**只增不减**——这里同时锁三件事：
+     *   ① 组件仍在用这个键（防「把文案删了顺带把锁绕过去」）；
+     *   ② 中文表的该键值仍是中性示例（「某某项目」这类）；
+     *   ③ 中英两列都**不含**行业词（英文列本来没人盯，最容易漏）。
+     */
     const src = stripComments(read('src/components/contract-wizard/ManualFallbackForm.tsx'));
-    // 必须含中性示例之一
-    expect(src).toMatch(/某某项目|某某・第一阶段/);
+    expect(src, '组件必须经 i18n 取词（文案不许再写回源码）').toContain(
+      "t('project.namePlaceholder')",
+    );
+
+    const sample = catalogOf('zh')['project.namePlaceholder'];
+    expect(sample, '项目名 placeholder 必须是跨行业中性示例').toMatch(/某某项目|某某・第一阶段/);
+
+    const industry = ['餐饮', '茶空间', '民宿', '书店', '室内设计', '景观设计', '建筑设计', '展陈'];
+    for (const lang of ['zh', 'en'] as const) {
+      const v = catalogOf(lang)['project.namePlaceholder'];
+      const hit = industry.filter((w) => v.includes(w));
+      expect(hit, `${lang} 列的 placeholder 出现了行业本位话术：${hit.join(', ')}`).toEqual([]);
+    }
   });
 
   it('③ 默认值锁：defaultPresetKeyForDomain 展陈不回落室内（debug #9）', () => {

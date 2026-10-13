@@ -47,6 +47,7 @@ import {
 import type { CustomStageDraft } from './CustomStageDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
+import { useLang } from '../../i18n';
 
 /**
  * 纯手动兜底建档（与向导并列可达，任何情况下都能建好档）。
@@ -66,6 +67,8 @@ export function ManualFallbackForm({
 }): JSX.Element | null {
   const repos = useRepos();
   const navigate = useNavigate();
+  /** 取词 + 语言变化订阅点（占位文案在渲染期取） */
+  const { t } = useLang();
   // 生效口径：按工作日顺延竣工日时要跳过法定节假日（skipHolidays 开时已合并）
   const restPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
   const [name, setName] = useState('');
@@ -309,7 +312,7 @@ export function ManualFallbackForm({
             <ImeInput
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如「某某项目・第一阶段」"
+              placeholder={t('project.namePlaceholder')}
               className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             />
           </label>
