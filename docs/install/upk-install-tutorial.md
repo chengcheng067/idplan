@@ -26,7 +26,7 @@
 
 ### 第 1 步：下载 .upk 包
 
-到 GitHub Releases 页下载 `amd64_com.chengcheng.idplan_0.7.0.0001.upk`：
+到 GitHub Releases 页下载 `amd64_com.chengcheng.idplan_1.0.0.0008.upk`：
 👉 [https://github.com/chengcheng067/idplan/releases](https://github.com/chengcheng067/idplan/releases)
 
 下载后放在一个好找的地方（比如桌面）。
@@ -52,7 +52,7 @@
 3. 若弹出「应用配置」表单：
    - **数据源**：填 `remote`（团队共享数据库，推荐）
    - **后端 API 地址**：填 `/api`（保持默认，nginx 会自动转发，**不用**改成带前缀的地址）
-4. 等待安装完成（约 2-3 分钟，包体 186MB）。
+4. 等待安装完成（约 2-3 分钟，包体 187MB）。
 
 > 💡 没弹配置表单也没关系——装完后在「应用中心 → ID Plan → 应用配置」里可随时改。
 
@@ -130,6 +130,6 @@ arm64 机型用户两条路：
 
 | 文件 | 用途 |
 |---|---|
-| `amd64_com.chengcheng.idplan_0.7.0.0001.upk` | UGOS Pro 应用安装包（应用中心手动安装） |
+| `amd64_com.chengcheng.idplan_1.0.0.0008.upk` | UGOS Pro 应用安装包（应用中心手动安装） |
 | [idplan-nas-compose.yml](idplan-nas-compose.yml) | Docker compose 方式（如偏好手动配容器） |
 | [nas-deploy-tutorial.md](nas-deploy-tutorial.md) | Docker compose 版详细教程 |

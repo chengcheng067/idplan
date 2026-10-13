@@ -3,7 +3,9 @@
 > 你只需要一台**绿联 NAS**（UGOS Pro 系统）+ 一个浏览器，**不需要**电脑上装任何 Docker 或编程工具。
 > 本教程从零开始，每一步都点哪个按钮都写清楚了。
 
-> 📌 **镜像版本怎么定**：Docker 镜像由 [docker-build.yml](../../.github/workflows/docker-build.yml) **手动触发**构建，镜像标签就是触发时填写的版本号（形如 `idplan:0.8.0`）。所以下面的版本号请替换成 Releases 里 **最新的 `docker-<版本>` 标签**，本文示例统一写作 `<版本>`。若你手上有 `.tar` 离线包，直接导入即可，不必拉取镜像。
+> 📌 **镜像版本怎么定**：Docker 镜像由 [docker-build.yml](../../.github/workflows/docker-build.yml) 构建，**镜像标签就是构建时填写的版本号**。**当前实际已发布的只有 `0.3.0`**（另有 `latest` 同指）：ghcr 上 `chengcheng067/idplan` 与 `chengcheng067/idplan-backend` 都只有 `0.3.0` / `latest` 两个标签，Releases 里对应的镜像包也只有 `docker-0.3.0` 一条（含 amd64/arm64 四个 `.tar`）。所以下面的示例统一用 `0.3.0`；**别照抄历史示例里的 `0.8.0`——那个标签从未发布过，会拉取失败**。若你手上有 `.tar` 离线包，直接导入即可，不必拉取镜像。
+>
+> ⚠️ 注意区分两种「绿联 NAS 装法」：本教程是 **Docker compose 形态**（镜像从 ghcr 拉或离线导入 `.tar`）。如果你想装成**应用中心里的一个应用**，用 `.upk` 应用包，见 [upk-install-tutorial.md](upk-install-tutorial.md)（当前交付 `amd64_com.chengcheng.idplan_1.0.0.0008.upk`）。
 
 ---
 
@@ -116,4 +118,4 @@
 | `idplan-nas-compose-amd64.yml` | 离线导入版（.tar 为 amd64） |
 | `idplan-nas-compose-arm64.yml` | 离线导入版（.tar 为 arm64） |
 
-**升级方法**：改 compose 里的镜像版本号（如从 `0.8.0` 改成更新的版本），再重新「部署」一次即可，数据不丢。版本号必须对应一个已发布的 `docker-<版本>` 镜像。
+**升级方法**：改 compose 里的镜像版本号，再重新「部署」一次即可，数据不丢。但**版本号必须对应一个已发布的镜像**——当前只有 `0.3.0`（滚动刷新，每次 master 推送重建），所以现在其实没有「按版本号升级」这条路；等 docker-build.yml 发了新版本号再改。
