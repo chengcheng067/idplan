@@ -702,8 +702,9 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
    *   全新空库首次打开会弹 admin_prompt 引导框（identityFlow 状态机）。
    *   该框本身不阻断 `setInputFiles`（走 DOM 赋值而非点击），但会让「页面是不是正常
    *   进入」的判定变浑浊。故在**任何页面脚本之前**写入 localStorage 的
-   *   `changxia.currentMemberId`（键名唯一出处 `useSettingsStore.ts:24`）指向种子里的
-   *   管理员；导入完成后该成员真实存在，身份即成立。用 `addInitScript` 在这里是合适的：
+   *   `CURRENT_MEMBER_ID_KEY`（键名唯一出处：`src/store/useSettingsStore.ts` 的导出；
+   *   值即 `changxia.currentMemberId` —— 本回调在页面上下文里跑，只能手写这个值）
+   *   指向种子里的管理员；导入完成后该成员真实存在，身份即成立。用 `addInitScript` 在这里是合适的：
    *   它是「每次加载都要成立的前置状态」，与导航次数无关（不会像清偏好那样自我抵消）。
    */
   async function createSeededEnv(fixture: string): Promise<BoardEnv> {

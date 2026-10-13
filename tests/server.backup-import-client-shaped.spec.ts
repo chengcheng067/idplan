@@ -10,7 +10,7 @@
  *      projects.type` → **整笔事务回滚**（导入全废；settings 一行没动）。
  *
  * ── 为什么既有的服务端导入 spec 看不见它（本文件存在的理由）──
- *  `tests/server.backup-import-taskno.spec.ts:187-197` 的夹具注释自己写着「现导出一份
+ *  `tests/server.backup-import-taskno.spec.ts` 的 `basePackage` 夹具注释自己写着「现导出一份
  *  **真实备份**作为底包（projects/stages 形状**由导出端保证**）」⇒ 服务端导入面的夹具
  *  是**被测系统自己产的包**，**结构性不可能**覆盖「客户端产出的包」这一向；
  *  而本地往返 spec（`tests/backup.roundtrip.spec.ts`）走 Dexie、不查 NOT NULL。
