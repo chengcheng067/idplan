@@ -213,6 +213,10 @@ export function DayItemsPopover({
       <span className="text-[14px] font-semibold text-ink">{headLabel}</span>
       <button
         type="button"
+        /* ★ 语言无关定位钩子（批次⑥）：真机 spec 原本按 aria-label="关闭当日清单" 定位 ——
+           该串走 i18n 后，一切到英文就找不到元素且会伪装成「控件不存在」。
+           aria 的无障碍契约仍在（下面那行），只是不再当选择器。 */
+        data-day-popover-close=""
         aria-label="关闭当日清单"
         onClick={onClose}
         className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full text-mist transition-colors hover:bg-sand hover:text-ink"

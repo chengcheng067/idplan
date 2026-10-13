@@ -560,7 +560,8 @@ describe.skipIf(!CAN_RUN_FRESH)(
       // ── 路 2：右上 ✕ ──
       await moreBtn.click();
       await page.waitForSelector('[data-day-popover="panel"]', { timeout: 8000 });
-      await page.locator('[data-day-popover="panel"] button[aria-label="关闭当日清单"]').click();
+      // ★ 批次⑥：定位改用 data 钩子（不与语言耦合）。原本是 button[aria-label="关闭当日清单"]。
+      await page.locator('[data-day-popover="panel"] [data-day-popover-close]').click();
       await page.waitForFunction(() => !document.querySelector('[data-day-popover]'), undefined, { timeout: 5000 });
       expect((await activeElt(page)).aria, '✕ 关闭后焦点应还给「+N」按钮').toBe(triggerLabel);
 
