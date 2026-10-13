@@ -176,6 +176,17 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   const agentBoards = useAgentProjects();
   const agentCurrentId = useAgentStore((s) => s.currentProjectId);
   const onAgentRoute = pathname === '/agent' || pathname.startsWith('/agent/');
+  /*
+   * ★ v0.8.6 阶段 2：agent-board 插件的启用态（**显式**门控）。
+   *
+   * 修前这段列表是**零插件门控**的 —— 它今天「关掉插件后不出现」纯属**连带效应**：
+   * 停用后 `/agent` 路由不存在 ⇒ `onAgentRoute` 恒 false ⇒ 列表被路由条件顺带关掉。
+   * 那是**巧合**，不是约束：它依赖「列表只在 /agent 渲染」这条**另一件事**的规则活着，
+   * 哪天有人把列表改成常驻（或加一个非路由的进入方式），门就没了、而没人会发现。
+   *
+   * ⇒ 让本段**自己**受插件开关管（与路由存在性同一个 enabled），不再借别人的力。
+   */
+  const agentBoardOn = usePluginEnabled('agent-board').enabled;
 
   const { save, pick, loadDemo, fileInput, confirmDialog } = useBackupIo();
   const { status } = useUpdateCheck();
@@ -306,8 +317,10 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
             Bot 图标 ＋ 浅靂底（pine-soft）chip；当前看板 pine 描边 + pine-soft 底
             （人类列表的激活态是 sunken 凹陷底，两套.active 形态不混用）。
             条目是 Link 到 /agent 的按钮形态：看板不是路由，选中态在 store。
+
+            ★ v0.8.6 阶段 2：首道门补 `agentBoardOn`（插件开关，显式而非连带）。
           */}
-          {onAgentRoute && agentBoards.length > 0 && (
+          {agentBoardOn && onAgentRoute && agentBoards.length > 0 && (
             <div className="mt-3 px-3">
               <div className="flex h-7 items-center pb-1">
                 <Bot size={12} className="mr-1.5 shrink-0 text-pine" aria-hidden />
