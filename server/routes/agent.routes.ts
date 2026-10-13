@@ -951,6 +951,11 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           // type 是**商业标签**维度（PRD A7：显示层叫「标签」）。Agent 建板不声明它 ⇒
           // 落 'other'（枚举里的「其他」）；绝不冒充 'dining' —— 那是人工室内项目的默认标签，
           // 给一个 AI 看板贴上错误的商业维度，比留空更难发现。
+          //
+          // ⚠️ 交叉引用：`'dining'` 这个字面量只在本注释里出现，**不是**一处取值来源。
+          //    这里指的是「Agent 任务类型标签」这个商业维度；与
+          //    `server/lib/legacy-project-type.ts` 的遗留列占位（那条 `type` 列已无读写语义、
+          //    仅用来满足 DDL NOT NULL）**语义无关**，两者不要合并表述。
           type: 'other',
           plannedStartAt,
           plannedEndAt,

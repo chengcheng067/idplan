@@ -25,5 +25,18 @@
  * —— 那是人工室内项目的默认标签」，故**任何需要判读项目类型的逻辑都不得读这一列**
  * （`projects.routes.ts` 的 PATCH 注释亦已声明：列保留、已无读写语义）。
  * 项目类型/板块请走 `domain` / `stagePresetKey`（见 `resolveProjectDomain`）。
+ *
+ * ── 已知的**有界不对称**（本修法的固有代价，**不是回归**，别当 bug 查）──
+ * 客户端→服务端导入时，服务端会为缺列的行补上本占位值 ⇒ **服务端再导出**的包里
+ * 就带上了 `type`。于是同一条项目行在「客户端包」与「服务端包」里**不再逐字节相同**
+ * （差这一个已下线的列）。
+ * 三件事使它无害，且已被 `tests/server.backup-import-client-shaped.spec.ts` 锁住：
+ *   ① 客户端收下带 `type` 的包没问题（`backup.service.ts` 的 zod 宽收 +
+ *      `normalizeProjectRow` 剥离 ⇒ 实体里不会出现 `type`，见该 spec 的 ⑤）；
+ *   ② 两端**实体表现一致**（该列无读写语义）；
+ *   ③ **per-DB** 的「导出→导入→再导出逐表全等」在客户端与服务端**各自都仍成立**
+ *      （服务端自产包带真实值 ⇒ `??` 不覆盖 ⇒ 往返等值，见该 spec 的 ④）。
+ * 「修掉」这个不对称的唯一办法是让服务端**不补** `type` —— 那就直接撞回 NOT NULL
+ * （即把 #15 改回来）。故**刻意保留**。
  */
 export const LEGACY_PROJECT_TYPE_PLACEHOLDER = 'dining';

@@ -172,6 +172,13 @@ describe('备份往返：settings 表的宿主策略键保真', () => {
    * 为什么用源码断言而不是渲染组件：三条 demo 入口（Sidebar / MobileMoreMenu /
    * FirstRunGuide，加上新增的 SampleProjectsSettings）**全部收敛到同一个 `loadDemo` 函数体**，
    * 所以只需要钉住这一处；渲染四个入口的重型浏览器用例留给出厂前的真机闸。
+   *
+   * ★ 本条的判据**只扫代码行**（下方 codeLines 过滤掉了 `//` / `*` / `/*` 开头的行）。
+   *   这一点很关键，别当成冗余：`tests/demo-data.spec.ts:146` 那条源码守门读的是
+   *   **原始源码**（不剥注释），而 `useBackupIo.tsx` 的注释里本来就会出现
+   *   `buildDemoBackup()` 这个字面 ⇒ **即使代码行被改坏，那条守门仍可能绿**。
+   *   两条**叠加**（一条防「工厂被换掉」，一条防「合并被绕过」且不受注释干扰）才是真闸门；
+   *   「守门不得读注释」已由 i18n 线抽成公共件 `maskComments` 并在全仓扫同类。
    */
   it('⑥ 入口守门：loadDemo 必须用 withHostPolicySettings 包住工厂，且只包一次', () => {
     const src = readFileSync(
@@ -193,5 +200,32 @@ describe('备份往返：settings 表的宿主策略键保真', () => {
     expect(wrapped.length, 'loadDemo 里的合并调用不见了').toBe(1);
     // 防回潮：再冒出一处绕过合并的裸调用，这条会红
     expect(bare.length, '出现了绕过 withHostPolicySettings 的裸 buildDemoBackup() 赋值').toBe(0);
+  });
+
+  /**
+   * `withHostPolicySettings` 的「**包内已有同名键 ⇒ 以包为准**」分支。
+   *
+   * 为什么它不是 YAGNI 的猜测（team-lead 2026-10-14 裁决「加一条单测，别删」）：
+   * 这一句就是**语义定义的一部分**（「包里有的以包为准」）。今天 demo 包不带该族
+   * ⇒ 该分支在真实路径上走不到；但它定义了「若将来 demo 包自带插件开关、或任何部分集
+   * 包复用本函数时谁赢」。语义分支没有测试 ⇒ 将来有人改去重逻辑不会红。故补上，
+   * 并同时锁「不产生重复键」（重复键在导入侧会让 `INSERT OR REPLACE` 语义变得依赖顺序）。
+   */
+  it('⑦ 合并语义：包内已有同名键以包为准（连 updatedAt 一起），且不产生重复键', () => {
+    const pkg = buildDemoBackup();
+    const demoOwn = { key: AGENT_BOARD, valueJson: 'true', updatedAt: '2026-03-03T00:00:00.000Z' };
+    pkg.data.settings = [...pkg.data.settings, demoOwn];
+
+    const merged = withHostPolicySettings(pkg, [
+      { key: AGENT_BOARD, valueJson: 'false', updatedAt: '2026-04-04T00:00:00.000Z' },
+      { key: WEEKLY_REPORT, valueJson: 'true', updatedAt: '2026-04-04T00:00:00.000Z' },
+    ]);
+
+    const same = merged.data.settings.filter((s) => s.key === AGENT_BOARD);
+    expect(same.length, '同名键必须只有一行（不产生重复键）').toBe(1);
+    expect(same[0]!.valueJson, '包内已有同名键时应以包为准').toBe('true');
+    expect(same[0]!.updatedAt, '以包为准要连 updatedAt 一起，不能拼成本机那行').toBe(demoOwn.updatedAt);
+    // 本机独有的键仍应被并进来（别把整族都丢了）
+    expect(merged.data.settings.filter((s) => s.key === WEEKLY_REPORT).length).toBe(1);
   });
 });

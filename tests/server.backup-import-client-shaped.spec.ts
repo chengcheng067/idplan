@@ -24,11 +24,14 @@
  *  （`SQLITE_CONSTRAINT_NOTNULL` / 项目行数为 0），④ 仍绿（它锁的是「包内有值时不覆盖」）。
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import Fastify from 'fastify';
 import Database from 'better-sqlite3';
 
 import { createDb } from '../server/db';
 import { registerMetaRoutes } from '../server/routes/meta.routes';
+import { registerProjectRoutes } from '../server/routes/projects.routes';
 import { AGENT_TOKEN_ENV } from '../server/lib/agent-auth';
 import { LEGACY_PROJECT_TYPE_PLACEHOLDER } from '../server/lib/legacy-project-type';
 import { installFakeIndexedDB } from './setup';
@@ -63,6 +66,8 @@ async function buildServer(): Promise<App> {
     });
   });
   registerMetaRoutes(app, db);
+  // ⑥ 要打真建档端点（证明两条路落的是同一个常量），故一并注册 projects 路由
+  registerProjectRoutes(app, db);
   await app.ready();
   return app;
 }
@@ -273,5 +278,50 @@ describe('服务端导入：客户端产出的包（#15 projects.type）', () =>
     expect(list.map((p) => p.id)).toEqual(['p_srv']);
     // 确认「插件的 type」没有渗进客户端实体（v0.8 已下线，实体里不该出现）
     expect('type' in (list[0] as unknown as Record<string, unknown>)).toBe(false);
+  });
+
+  /**
+   * ⑥ 单一出处：建档路由与导入路由落的必须是**同一个常量**
+   *
+   * 为什么光断言「落库值 == 常量」不够（team-lead 追加）：把任意一处改回字面量
+   * `'dining'`，值仍然相等 ⇒ 那条断言不会红，「单一出处」就退化成了「两份各自漂移的字面量」。
+   * 故本用例两段都做：
+   *   · **运行时**：走真建档端点，落库的 `type` 必须等于那个常量（证明两条路**值同源**）；
+   *   · **源码级**：两个 route 文件里都必须**引用**该常量、且**不再出现它的字面量**
+   *     （证明两条路**写法同源**）。只扫代码行，注释里的引用不算。
+   */
+  it('⑥ 单一出处：建档路由与导入路由用同一个常量（运行时值同源 + 源码不再手打字面量）', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: H,
+      payload: {
+        name: '建档项目',
+        address: '',
+        clientName: '',
+        plannedStartAt: '2026-08-01',
+        plannedEndAt: '2026-10-01',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(projectTypes(), '建档路落的 type 必须就是那个常量').toEqual([
+      LEGACY_PROJECT_TYPE_PLACEHOLDER,
+    ]);
+
+    const codeOf = (rel: string): string =>
+      readFileSync(resolve(__dirname, '..', rel), 'utf8')
+        .split('\n')
+        .filter((l) => {
+          const t = l.trim();
+          return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+        })
+        .join('\n');
+    const literal = `'${LEGACY_PROJECT_TYPE_PLACEHOLDER}'`;
+    for (const rel of ['server/routes/projects.routes.ts', 'server/routes/meta.routes.ts']) {
+      const code = codeOf(rel);
+      expect(code, `${rel} 应引用单一出处常量`).toContain('LEGACY_PROJECT_TYPE_PLACEHOLDER');
+      expect(code, `${rel} 不该再手打占位字面量（单一出处被绕过）`).not.toContain(literal);
+    }
   });
 });
