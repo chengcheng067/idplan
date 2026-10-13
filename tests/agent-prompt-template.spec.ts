@@ -14,7 +14,11 @@
  *     ② 骨架必须覆盖 tasks[] 的全部字段（用户拿到的是能直接用的例子，不是片段）。
  *     ③ 提示词里**不得出现令牌/token** 字样或值：它是要贴进聊天窗口的公开文本，
  *        混进访问令牌等于主动泄漏（令牌属于「接入配置」那条通道）。
- *     ④ 提醒用户「令牌不在提示词里」的说明文案必须真的在组件里（否则用户还是会去贴）。
+ *     ④ 提醒用户「令牌不在提示词里」的说明文案必须真的**能渲染出来**（否则用户还是会去贴）。
+ *        ⚠️ 2026-08-27 英文线**升级过这条锁**（不是放宽）：那句话原先作为中文字面量写在
+ *        `ApplyPayloadPanel.tsx` 里，本 spec 直接 `toContain` 源码；翻英文后它搬进了
+ *        消息表（`agentPayload.tokenStrongA` / `tokenTail`）。⇒ 判据改成「表里有这句内容
+ *        **且** 面板确实消费了这两个键」——保证的东西一字未少：**用户仍会看到这句提醒**。
  */
 
 import { readFileSync } from 'node:fs';
@@ -23,6 +27,7 @@ import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 import { PROMPT_TEMPLATE } from '../src/components/agent/ApplyPayloadPanel';
+import { catalogOf } from '../src/i18n';
 import {
   AGENT_PAYLOAD_SCHEMA_ID,
   validateAgentPayload,
@@ -94,13 +99,19 @@ describe('内置提示词 · 与契约同源', () => {
     expect(PROMPT_TEMPLATE).not.toMatch(/token/i);
     expect(PROMPT_TEMPLATE).not.toContain('令牌');
 
-    // ② 组件层面：必须有一句「提示词里不含访问令牌」的说明（否则用户还是会去贴）
+    // ② 面板层面：必须有一句「提示词里不含访问令牌」的说明（否则用户还是会去贴）
     const panelSrc = readFileSync(
       resolve(__dirname, '..', 'src/components/agent/ApplyPayloadPanel.tsx'),
       'utf8',
     );
-    expect(panelSrc).toContain('不含访问令牌');
-    expect(panelSrc).toContain('不要贴进给 Agent 的聊天窗口');
+    const zh = catalogOf('zh');
+    expect(zh['agentPayload.tokenStrongA'], '这句话的内容仍在（换了出处：消息表）').toContain(
+      '不含访问令牌',
+    );
+    expect(zh['agentPayload.tokenTail']).toContain('不要贴进给 Agent 的聊天窗口');
+    // 而且面板确实消费了它们 —— 「文案在表里但界面上没有」也是一种失效
+    expect(panelSrc).toContain("t('agentPayload.tokenStrongA')");
+    expect(panelSrc).toContain("t('agentPayload.tokenTail')");
   });
 
   it('提示词给全了 Agent 必须知道的取值口径（schema id / 状态枚举 / 日期格式）', () => {

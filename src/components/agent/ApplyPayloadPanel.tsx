@@ -48,6 +48,19 @@ type PanelState =
  *   本提示词是「让 Agent 生成排期内容」，与写入通道的访问令牌无关；
  *   令牌是给**自动导入通道**用的（在「导入任务 → 接入配置」里设置与复制）。
  *   把令牌写进要贴到聊天窗口的提示词里 = 主动泄漏，故这里刻意只留说明、不留值。
+ *
+ * ── 为什么**不随界面语言翻译**（2026-08-27 · 英文线，有意保留中文）──
+ *   **读者不是用户，是外部 Agent**：这段文本是**指令契约**，字段名（schema /
+ *   producedBy / externalId …）与 `idplan-agent-payload/v1` 的校验口径一一对应。
+ *   翻译它 = 把**同一份契约拆成两种文本**：中英两个 Agent 会被要求产出不同的东西，
+ *   而校验器只有一套 —— 英文用户拿到的提示词只会更难对上校验错误信息。
+ *   ⇒ 整段保持中文，并在 `<pre>` 上标 `lang="zh-CN"`（告诉浏览器与读屏器「这段是
+ *     中文」，别按界面语言处理）。
+ *   ⇒ 内容侧已有锁：`tests/agent-prompt-template.spec.ts`（断言模板里含
+ *     `只输出 JSON 本体` / schema id / 七种 status / `YYYY-MM-DD`，且**不含**
+ *     `token` 与「令牌」）—— 它就是「这段是中文字面量」这件事的机器凭证。
+ *   ⇒ 若将来真要服务英文 Agent，正确做法是**两份契约文本 + 同步的校验口径**，
+ *     不是就地翻译这一份。
  */
 export const PROMPT_TEMPLATE = `你是一名排期助手。请把我的需求整理成「ID Plan」可以直接导入的 JSON，**只输出 JSON 本体**（不要解释文字、不要 Markdown 代码围栏）。
 
@@ -269,8 +282,10 @@ export function ApplyPayloadPanel({
           {t('agentPayload.promptPaste')}
         </p>
 
+        {/* 模板整段**有意保持中文**（指令契约，见本文件头；`lang` 标出来免得被按界面语言处理） */}
         <pre
           data-apply-prompt-body=""
+          lang="zh-CN"
           className="mt-2 max-h-64 overflow-auto rounded-[10px] border border-line bg-paper p-2.5 font-mono text-[11px] leading-5 text-ink"
         >
           {PROMPT_TEMPLATE}
