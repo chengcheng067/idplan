@@ -325,9 +325,17 @@ function assertTreeClean(stageLabel) {
       return false;
     }
     if (!quiet) {
-      // 基线通过但 `git diff --quiet` 失败：说明差异**起跑前就有**（本脚本正常情况下会被约束 ① 拦住）
-      console.error(`!! [clean] ${stageLabel}：git diff --quiet 失败，但相对基线无新增改动 —— 差异来自起跑前。`);
-      return false;
+      /*
+       * 相对基线**无新增改动**，但 `git diff --quiet` 说树不干净 ⇒ 差异来自**起跑前**。
+       * 这有两种正当来源：① `--allow-dirty-others` 显式放行的他人未落点改动（已记入基线快照）；
+       * ② 极少数「起跑后被别人弄脏但与本轮无关」的情形 —— 两种都由**基线差集**负责判定，
+       * 所以这里**记录、不判失败**（否则 `--allow-dirty-others` 永远拿不到退出码 0，
+       * 那个开关就形同废纸 —— 这条是隔离树里实测出来的）。
+       */
+      console.log(
+        `[clean] ${stageLabel}：相对基线**无新增改动**；\`git diff --quiet\` 的差异来自**起跑前**（已记入基线快照，不判失败）。`,
+      );
+      return true;
     }
     console.log(`[clean] ${stageLabel}：还原基线复核通过（git diff --quiet 亦通过）。`);
     return true;
