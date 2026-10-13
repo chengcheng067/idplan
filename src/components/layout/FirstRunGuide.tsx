@@ -128,6 +128,11 @@ export function FirstRunGuide(): JSX.Element | null {
    * 信号 = `CURRENT_MEMBER_ID_KEY`（useSettingsStore 导出的身份键；useFirstRunGate 同键）：
    * IdentityDialog 选完管理员/成员即写入；探针环境由 spec 预置）。
    * 用 state + effect 而非纯 render 期读：写入发生在对话框关闭时，要能触发重渲染。
+   * ⚠️ 实际语义不是「身份已建立」，而是「**首帧那一刻 localStorage 里有没有东西**」：
+   *   它在下面被当 latch 用（首帧读一次，那个 400ms 轮询只升不降）⇒ 两个方向都会失真：
+   *     · 身份**未**建立而信号为真 ⇒ 卡照出现（现场证据与读数：tests/plugin-state-demo-browser.spec.ts 的 ④a）；
+   *     · 身份**已**建立而信号为假 ⇒ 卡被压掉（如「载入示例数据」后 LS 为空、身份来自 settings KV 兜底）。
+   *   今天两个方向都看不出来（被「库是否为空」这条独立条件遮住）。**改这里的信号前先读这段。**
    */
   const [identityDone, setIdentityDone] = useState(
     () =>

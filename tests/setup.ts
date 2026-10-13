@@ -90,6 +90,78 @@ if (typeof afterEach === 'function') {
   });
 }
 
+/**
+ * ★ 2026-10-14：**跨文件**全局泄漏的收口复位（治「单跑绿 / 全量红」的第三个根）。
+ *
+ * ── 病灶（实测，不是推断）──
+ * `pool: 'threads' + singleThread: true` ⇒ 全部 spec 共用一个进程，而 `window` 上的属性
+ * 赋值**会活到下一个文件**（我用一对探针实测过：X 文件装 `window.matchMedia`、Y 文件仍读得到）。
+ * 两个泄漏源已经在真机上造成**假红**：
+ *   ① `window.matchMedia`：多份 spec 在 `beforeEach` 里装「不看查询、恒 `matches:false`」的桩
+ *      且**不还原**（`member-board-viewer` / `v07-dline-print-access` / `stage-color-wiring` …）。
+ *      后果不是「它的下一个文件」那么简单：**下一个文件在模块加载期**调
+ *      `useLayoutStore` 的 `defaultExpanded()` → 读到 false ⇒ `sidebarExpanded:false` ⇒
+ *      壳层渲染成**收起态**。受害者的 `beforeEach` 桩**救不了**：store 的状态在 `import` 期
+ *      就定死了（`tests/plugin-ui-gating.spec.tsx` 的 D 组就是这么在全量里稳定红、单跑全绿的）。
+ *   ② `window.__APP_ENV__`：`plugin-toggle-feedback.spec.tsx` 在 `vi.hoisted` 里注入
+ *      `{VITE_DATA_SOURCE:'remote'}` 且从不删除 ⇒ 下一个文件的 `appEnv`（`src/config/env.ts`
+ *      的**模块级单例**）定成 remote ⇒ `RepoProvider` 里 `if (appEnv.dataSource === 'local')`
+ *      不成立 ⇒ **整段本地版本闸门不执行** ⇒ `tests/db-version-ahead.spec.tsx` 的 3 条红。
+ *
+ * ── 为什么复位点选 `afterAll`（**不是** `afterEach`）──
+ *   ① **挡跨文件**只需要「一个文件结束时复位」——跨文件泄漏的窗口就是文件边界；
+ *   ② **不打断文件内的合法用法**：`__APP_ENV__` 的合法用法正是「模块加载前注入」
+ *      （`vi.hoisted` 里写，读它的 `appEnv` 是单例）、`matchMedia` 也可能在文件级安装后被
+ *      多处用例依赖。若挂在 `afterEach` 上，会把「同一文件内第二条用例」的依赖一起打断
+ *      —— 那就不是治泄漏，是制造新红。
+ *   ③ 依赖 `afterAll` 而不是「碰巧的顺序」：**不用任何顺序假设**。（顺序假设今天已被推翻多次：
+ *      vitest 的文件排序规则我实测下来既不是字母序也不是体积序。）
+ *
+ * ⚠️ **未纳入本复位、但同族的候选（记账，不擅自加）**：`ResizeObserver` 同样被多份 spec
+ *    安装后不还原。**不一起删**的理由：可能有文件当前正**依赖泄漏来的** `ResizeObserver`
+ *    （自己没装、却要求组件不报错），一刀切删会制造新红。真要收，得先逐文件核一遍。
+ */
+if (typeof afterAll === 'function') {
+  /*
+   * ⚠️ 实测（2026-10-14）：**setupFiles 里的 `afterAll` 不在「文件与文件之间」跑**
+   *   —— 我在配对 `[v07-dline-print-access, plugin-ui-gating]` 里加打印：下一个文件模块加载期
+   *   仍读到 `typeof matchMedia === 'function'`（`__APP_ENV__` 那条恰好被它自己的作者修掉，
+   *   才让配对 B 看起来像是这条钩子生效）。
+   *   ⇒ 改用下面的 `afterEach`：它对**每一条用例**都跑，且所有装桩点都在各文件的 `beforeEach`
+   *     里（已逐文件核过：`theme-tri-select:50` / `use-presence:98` / `motion-exits:93` /
+   *     `stage-track-coloring:43` / `holidays-cn:494` / `agenda-view-v3:261` /
+   *     `member-board-viewer:406` / `v07-dline-print-access:479` …），所以清掉不会打断任何
+   *     文件内的合法用法（下一条用例会自己重装）。
+   */
+  afterAll(() => {
+    /* 保留一个空壳：将来若确认某版本 vitest 的 afterAll 会按文件跑，可回退到这里。当前不依赖它。 */
+  });
+}
+
+if (typeof afterEach === 'function') {
+  afterEach(() => {
+    const clear = (o: Record<string, unknown>): void => {
+      try {
+        delete o.matchMedia;
+      } catch {
+        /* 不可配置也无妨，下面用赋值兜底 */
+      }
+      try {
+        delete o.__APP_ENV__;
+      } catch {
+        /* 同上 */
+      }
+      o.matchMedia = undefined;
+      o.__APP_ENV__ = undefined;
+    };
+    clear(globalThis as unknown as Record<string, unknown>);
+    if (typeof window !== 'undefined') {
+      const w = window as unknown as Record<string, unknown>;
+      if (w !== (globalThis as unknown as Record<string, unknown>)) clear(w);
+    }
+  });
+}
+
 /** 兼容保留：补丁已在模块加载时生效，此函数仅作幂等确认。 */
 export async function installFakeIndexedDB(): Promise<void> {
   const gNow = globalThis as unknown as Record<string, unknown>;
