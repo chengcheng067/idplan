@@ -768,4 +768,5 @@ export const enMessages: Record<MessageKey, string> = {
   'calendar.densityAria': 'Calendar density',
   'calendar.thisWeek': 'this week (Mon ~ Sun)',
   'calendar.view': 'View',
+  'calendar.lunarPlaceholder': 'Lunar calendar (placeholder)',
 };

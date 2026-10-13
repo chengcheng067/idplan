@@ -65,3 +65,18 @@ export {
   WRITEBACK_STATUS_KEYS,
   writebackStatusLabel,
 } from './labels';
+
+/*
+ * 日期格式化的两条出口（⑤e）。⚠️ 必须**从这里**转出：`tests/i18n.spec.tsx` 的
+ * 「单一取词出口」守卫要求 `src/**` 里任何 import i18n 的路径都落在 `src/i18n` 上 ——
+ * 本批第一版直接 `import ... from '../i18n/date'`，**正是被那条守卫当场拦下的**
+ * （它就该这样）。故消费方一律 `import { … } from '../i18n'`。
+ * 纸面/屏幕两条出口的结构性理由见 `./date.ts` 文件头。
+ */
+export {
+  formatMonthPart,
+  formatMonthPartLocalized,
+  formatMonthYear,
+  formatMonthYearLocalized,
+  formatSelectedDateLocalized,
+} from './date';

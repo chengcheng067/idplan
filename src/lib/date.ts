@@ -1,4 +1,6 @@
 import dayjs from 'dayjs';
+
+import { formatMonthPart, formatMonthYear } from '../i18n';
 import utc from 'dayjs/plugin/utc';
 
 dayjs.extend(utc);
@@ -102,7 +104,16 @@ export function panRange(range: TimelineRange, deltaDays: number): TimelineRange
   };
 }
 
-/* ------------------------------- 月刻度生成 ------------------------------- */
+/* ------------------------------- 月刻度生成 ------------------------------- *
+ *
+ * ★ 2026-08-27（⑤e）：标签不再写死中文，而是**注入一个标签格式化器**，
+ *   缺省值 = `src/i18n/date.ts` 的**纸面出口**（恒中文）。
+ *   为什么这么切：本函数被**屏幕**（TimelineView）与**纸面**
+ *   （useSchedulePaperData / print-gantt）共用，而这两者对语言的要求**相反** ——
+ *   屏幕要跟随界面语言、纸面必须恒中文（完整理由见 `src/i18n/date.ts` 文件头）。
+ *   ⇒ 纸面调用点**什么都不用传**（默认就是它要的那支）；
+ *     屏幕调用点必须显式传 `*Localized`（想忘也忘不了，因为它要 `lang`）。
+ */
 
 export interface MonthTick {
   /** 月首日 'YYYY-MM-01'（与 HalfMonthTick.start 命名对齐，供 ScaleTick 直接消费） */
@@ -111,8 +122,16 @@ export interface MonthTick {
   daysSpan: number;
 }
 
-/** 生成覆盖 [from,to] 的月份刻度（供 MonthScaleHeader 使用） */
-export function buildMonthTicks(from: string, to: string): MonthTick[] {
+/**
+ * 生成覆盖 [from,to] 的月份刻度（供 MonthScaleHeader 使用）。
+ * `labelOf` 缺省 = 纸面中文出口 `formatMonthYear`；屏幕请传
+ * `(iso) => formatMonthYearLocalized(iso, lang)`。
+ */
+export function buildMonthTicks(
+  from: string,
+  to: string,
+  labelOf: (monthStartIso: string) => string = formatMonthYear,
+): MonthTick[] {
   const ticks: MonthTick[] = [];
   const fromD = dayjs(from);
   const end = dayjs(to);
@@ -125,7 +144,7 @@ export function buildMonthTicks(from: string, to: string): MonthTick[] {
     const spanStart = first && fromD.isAfter(cursor) ? fromD : cursor;
     ticks.push({
       start: cursor.format('YYYY-MM-01'),
-      label: cursor.format('YYYY年M月'),
+      label: labelOf(cursor.format('YYYY-MM-01')),
       daysSpan: spanEnd.diff(spanStart, 'day') + 1,
     });
     first = false;
@@ -140,8 +159,16 @@ export interface HalfMonthTick {
   daysSpan: number;
 }
 
-/** 双周粒度刻度（zoom='half-month' 时使用：每月上半/下半两档） */
-export function buildHalfMonthTicks(from: string, to: string): HalfMonthTick[] {
+/**
+ * 双周粒度刻度（zoom='half-month' 时使用：每月上半/下半两档）。
+ * `labelOf` 缺省 = 纸面中文出口 `formatMonthPart`（纸面不消费半月粒度，
+ * 缺省值只为「纸面拿不到 lang」这条结构约束服务）。
+ */
+export function buildHalfMonthTicks(
+  from: string,
+  to: string,
+  labelOf: (monthStartIso: string, part: 'first' | 'second') => string = formatMonthPart,
+): HalfMonthTick[] {
   const ticks: HalfMonthTick[] = [];
   let cursor = dayjs(from).startOf('month');
   const end = dayjs(to);
@@ -157,7 +184,7 @@ export function buildHalfMonthTicks(from: string, to: string): HalfMonthTick[] {
       if (!upperEnd.isBefore(cursor)) {
         ticks.push({
           start: cursor.format('YYYY-MM-01'),
-          label: cursor.format('M月·上'),
+          label: labelOf(cursor.format('YYYY-MM-01'), 'first'),
           daysSpan: upperEnd.diff(cursor, 'day') + 1,
         });
       }
@@ -167,7 +194,7 @@ export function buildHalfMonthTicks(from: string, to: string): HalfMonthTick[] {
       if (!lowerEnd.isBefore(lowerStart)) {
         ticks.push({
           start: lowerStart.format('YYYY-MM-DD'),
-          label: `${cursor.format('M月')}·下`,
+          label: labelOf(cursor.format('YYYY-MM-01'), 'second'),
           daysSpan: lowerEnd.diff(lowerStart, 'day') + 1,
         });
       }
@@ -175,7 +202,7 @@ export function buildHalfMonthTicks(from: string, to: string): HalfMonthTick[] {
       const last = monthEnd.isAfter(end) ? end : monthEnd;
       ticks.push({
         start: cursor.format('YYYY-MM-01'),
-        label: cursor.format('M月·上'),
+        label: labelOf(cursor.format('YYYY-MM-01'), 'first'),
         daysSpan: last.diff(cursor, 'day') + 1,
       });
     }

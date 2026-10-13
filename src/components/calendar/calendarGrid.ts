@@ -108,21 +108,15 @@ export function gridDaysOf(dates: string[], selectedDate: string, todayIso: stri
   }));
 }
 
-/** 格式化选中日期："8月28日，星期五"（画板 19 的日期详情行） */
-export function formatSelectedDate(iso: string): string {
-  const d = dayjs(iso);
-  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-  return `${d.month() + 1}月${d.date()}日，${weekdays[d.day()]}`;
-}
-
-/**
- * 农历占位（画板 19 的副行）。
- * 不手写农历换算：错误率与维护成本都不可接受，且会随闰月出错；
- * 未来接入 lunar-javascript 时只替换本函数实现，调用点不动。
+/*
+ * 2026-08-27（⑤e）：原来的 `formatSelectedDate`（"8月28日，星期五"）与
+ * `lunarLabel`（'农历（占位）'）**已删除** —— 它们把中文写死在纯函数里，
+ * 是「屏幕日期文案不随语言」的直接来源。现在：
+ *   · 选中日期行走 `src/i18n/date.ts` 的 `formatSelectedDateLocalized(iso, lang)`；
+ *   · 农历占位那行是**语句**（不是日期格式），走消息表键 `calendar.lunarPlaceholder`。
+ * 未来接入 lunar-javascript 时：只替换 `formatSelectedDateLocalized` 相邻的占位实现，
+ * 调用点不动（这条纪律没变）。
  */
-export function lunarLabel(): string {
-  return '农历（占位）';
-}
 
 /** "2026.08.10 – 08.23" 形态的周期文案（画板 16 空状态 E4 的「周期」段） */
 export function formatPeriod(startIso: string, endIso: string): string {

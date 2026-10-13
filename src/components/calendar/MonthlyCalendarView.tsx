@@ -31,9 +31,7 @@ import {
 import {
   WEEKDAY_INDEXES,
   buildCalendarGrid,
-  formatSelectedDate,
   gridDaysOf,
-  lunarLabel,
   weekOf,
   type GridDay,
 } from './calendarGrid';
@@ -44,7 +42,12 @@ import { CalendarEmptyStates, type EmptyKind } from './CalendarEmptyStates';
 import { MonthDayCell, stageLabelOf } from './MonthDayCell';
 import { EntryDot } from './EntryDot';
 import { DayItemsPopover, type PopoverAnchorRect } from './DayItemsPopover';
-import { useLang, weekdayShortLabel, type MessageKey } from '../../i18n';
+import {
+  formatSelectedDateLocalized,
+  useLang,
+  weekdayShortLabel,
+  type MessageKey,
+} from '../../i18n';
 
 /**
  * 月历看板（v0.7 画板 14 亮色 / 15 暗色 / 16-17 空状态四态 / 18 拥挤方案 A / 19 移动端）。
@@ -127,8 +130,8 @@ function MonthArrow({
 export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.Element {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  // 取词 + 订阅语言变化（星期表头 / 工具行文案在渲染期取词）
-  const { t } = useLang();
+  // 取词 + 订阅语言变化（星期表头 / 工具行文案在渲染期取词；`lang` 供日期格式化）
+  const { t, lang } = useLang();
   const densityOptions = DENSITY_VALUES.map((v) => ({ value: v, label: t(DENSITY_LABEL_KEYS[v]) }));
   const { theme } = useTheme();
   const calendarMonth = useUiStore((s) => s.calendarMonth);
@@ -453,8 +456,10 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
 
       {/* 移动端日期详情行（画板 19 第 3 项：桌面画板 14 无此行，日期由选中格高亮表达） */}
       <div className="flex flex-col gap-[2px] md:hidden">
-        <span className="text-[13px] font-medium text-ink">{formatSelectedDate(selectedDate)}</span>
-        <span className="text-[11px] text-mist">{lunarLabel()}</span>
+        <span className="text-[13px] font-medium text-ink">
+          {formatSelectedDateLocalized(selectedDate, lang)}
+        </span>
+        <span className="text-[11px] text-mist">{t('calendar.lunarPlaceholder')}</span>
       </div>
 
       {/* ② 图例行（节日名小字在场时补一条文字说明） */}

@@ -18,7 +18,11 @@ import { useKeyboardPan } from '../../hooks/useKeyboardPan';
 import { useDragReschedule } from '../../hooks/useDragReschedule';
 import { addWorkdaysSigned, countWorkdays, snapShiftDate } from '../../lib/workdays';
 import { MonthScaleHeader } from './MonthScaleHeader';
-import { useLang } from '../../i18n';
+import {
+  formatMonthPartLocalized,
+  formatMonthYearLocalized,
+  useLang,
+} from '../../i18n';
 import { StageRowsColumn } from './StageRowsColumn';
 import { StageBar, StageBarDefs } from './StageBar';
 import { TodayLine } from './TodayLine';
@@ -85,7 +89,7 @@ export function TimelineView({
   memberView?: boolean;
 }): JSX.Element {
   /** 取词 + 语言变化订阅点（工具行文案在渲染期取） */
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const zoom = useUiStore((s) => s.timelineZoom);
   const setZoom = useUiStore((s) => s.setTimelineZoom);
   const openDrawer = useUiStore((s) => s.openStageDrawer);
@@ -271,8 +275,12 @@ export function TimelineView({
             <MonthScaleHeader
               ticks={
                 zoom === 'month'
-                  ? buildMonthTicks(range.from, range.to).map((t) => ({ ...t }))
-                  : buildHalfMonthTicks(range.from, range.to).map((t) => ({ ...t }))
+                  ? buildMonthTicks(range.from, range.to, (iso) =>
+                      formatMonthYearLocalized(iso, lang),
+                    ).map((t) => ({ ...t }))
+                  : buildHalfMonthTicks(range.from, range.to, (iso, part) =>
+                      formatMonthPartLocalized(iso, part, lang),
+                    ).map((t) => ({ ...t }))
               }
               pxPerDay={pxPerDay}
               width={contentW}

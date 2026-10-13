@@ -753,6 +753,7 @@ export const zhMessages = {
   'calendar.densityAria': '月历视图密度',
   'calendar.thisWeek': '本周（周一 ~ 周日）',
   'calendar.view': '查看',
+  'calendar.lunarPlaceholder': '农历（占位）',
 } as const;
 
 /**
