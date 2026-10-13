@@ -297,8 +297,21 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
    *   ① 先确立管理员（前几步同 becomeAdmin，但**不**跳过首启引导卡）；
    *   ② 点引导卡「室内」⇒ 覆盖导入示例数据（buildDemoBackup 含 demo 成员：
    *      执行乙/丙/丁/戊 均为 member）+ reload；
-   *   ③ reload 后身份为空（示例数据整库替换了 members）⇒ 姓名输入「执行乙」
-   *      进入成员身份。
+   *   ③ **导入后应用会自动进入 demo 管理员「负责人甲」**（见下面那条订正），
+   *      所以要走**真实 UI 的「切换身份」**才能落到成员身份。
+   *
+   * ⚠️ 订正（2026-10-14）：本函数第 ③ 步原先是「点『点击进入』+ 输姓名」，
+   *    隐含假设是「覆盖导入后身份为空」。**这个假设已经死了**，两条都是有意为之的行为：
+   *      · demo 包自带的 `settings` 里有 `currentMemberId: 'demo_admin'`，而 `demo_admin`
+   *        就是本包 members 里的负责人甲（`demoDataFactory.ts` 明确登记为「demo 成员表的
+   *        身份兜底」，是数据集自身语义，不是 bug）；
+   *      · `useRepos.bootstrapAllStores` 的身份候选阶梯（`9dd3d77` 引入）每一档都要求
+   *        **命中当前 members**，于是「本机 localStorage 里的旧身份失效 → 落到 KV 兜底」
+   *        这条链现在真的生效了 —— 覆盖式导入后**不再静默掉身份**，
+   *        这正是 `tests/identity-dangling-after-import.spec.ts` 锁死的行为。
+   *    ⇒ 导入后页面上**根本没有**「点击进入」（实测：body 里已是「负责人甲 / 管理员」），
+   *      旧写法会在这里 30s 超时。**这是 spec 的假设过期，不是产品回归**；
+   *      也不是本次设置层级改动的产物（改动前它靠的是「身份为空」这个偶然态）。
    */
   async function becomeMember(page: Page): Promise<void> {
     await page.evaluate(() => {
@@ -327,13 +340,29 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       timeout: 20000,
     });
     await page.waitForTimeout(800);
-    // ③ 以成员姓名进入（hasAdmin ⇒ 直接姓名输入流，adminIntent=false）
-    await page.locator('button', { hasText: '点击进入' }).first().click();
+
+    // ③ 自检：导入后身份应是 demo 管理员「负责人甲」（前置，否则下面切换身份那步会走向别的分支）
+    await page.waitForFunction(() => document.body.innerText.includes('负责人甲'), undefined, {
+      timeout: 8000,
+    });
+
+    // ④ 真实 UI 的「切换身份」：左下角身份触发器 → 菜单「切换身份」→ 姓名「执行乙」
+    //    触发器用 title 锚（展开态那枚**刻意没有 aria-label**，见 MemberIdentityPicker
+    //    的注释）；菜单用 role+aria-label（与 identity-rail-browser.spec.ts 同口径）。
+    await page
+      .locator('[data-app-sidebar] button[title="当前身份（点击切换/退出）"]')
+      .first()
+      .click();
+    await page.waitForTimeout(400);
+    await page
+      .locator('[role="menu"][aria-label="身份操作"] [role="menuitem"]')
+      .first()
+      .click();
     await page.waitForTimeout(400);
     await page.locator('input[placeholder="你的姓名"]').fill('执行乙');
     await page.locator('button', { hasText: '下一步' }).first().click();
     await page.waitForTimeout(1200);
-    // 自检：顶栏出现的是成员姓名（不是「点击进入」），否则后续断言 vacuous
+    // 自检：屏幕上出现的是成员姓名，否则后续断言 vacuous
     await page.waitForFunction(() => document.body.innerText.includes('执行乙'), undefined, {
       timeout: 8000,
     });
@@ -661,7 +690,8 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
      * 分区均**仅管理员可见**——成员身份下整分区从左导航**消失**（不是禁用
      * 占位）；插件**保留给成员**（她明确「插件给成员保留」），Agent 三块作为
      * agent-board 插件自己的设置（v1.0 齿轮展开）同样对成员可达。对照组全走真 UI
-     * （becomeMember 走示例数据 + 姓名进入），管理员/成员各起一个 context。
+     * （becomeMember 走示例数据 + 真实 UI 的「切换身份」，见该函数的订正说明），
+     * 管理员/成员各起一个 context。
      */
     // ① 管理员：排程与行业与模板都在导航里，内容可点开（管理员导航键全集）
     {
