@@ -284,6 +284,7 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
     settings: Record<string, string>;
     projects: number;
     localStorageId: string | null;
+    enterIdentity: number;
   }> {
     return page.evaluate(
       async ({ dbName, lsKey }) => {
@@ -302,10 +303,15 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
         const settings = await readAll('settings');
         const projects = (await readAll('projects')).length;
         db.close();
+        // 身份是否已进入：未进入时身份控件会渲染一枚文案恰为「点击进入」的按钮
+        const enterIdentity = Array.from(document.querySelectorAll('button')).filter(
+          (b) => (b.textContent ?? '').trim() === '点击进入',
+        ).length;
         return {
           settings: Object.fromEntries(settings.map((r) => [r.key, r.valueJson])),
           projects,
           localStorageId: localStorage.getItem(lsKey),
+          enterIdentity,
         };
       },
       { dbName: DB_NAME, lsKey: 'changxia.currentMemberId' },
@@ -355,6 +361,8 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
         after.projects,
         '；localStorage 身份 =',
         after.localStorageId,
+        '；「点击进入」按钮数 =',
+        after.enterIdentity,
       );
 
       // ── ① 层：导入真的生效了（没有这一层，下面「插件键仍在」会空转成假绿） ──
