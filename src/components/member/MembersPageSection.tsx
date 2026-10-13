@@ -14,6 +14,7 @@ import { memberBoardHref, useRoleGuard, countActiveAdmins } from '../../hooks/us
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
+import { useLang } from '../../i18n';
 
 /**
  * 成员管理区（首页内嵌）：列表 / 新增 / 重命名 / 停用 / 设管理员 / 取消管理员。
@@ -24,6 +25,8 @@ import { ImeInput } from '../common/ImeInput';
  *   本区整体 `!isAdmin` 早退，按钮因此天然只在管理员视角出现。
  */
 export function MembersPageSection(): JSX.Element | null {
+  /** 取词 + 语言变化订阅点（本区文案在渲染期取） */
+  const { t } = useLang();
   const repos = useRepos();
   const navigate = useNavigate();
   const members = useMembersStore((s) => s.members);
@@ -65,7 +68,7 @@ export function MembersPageSection(): JSX.Element | null {
        * 反证（若翻了会怎样）：英文用户不填角色建档 ⇒ 库里存进**英文默认值**，
        * 它随后会被中文用户看到、进备份、上纸面 —— 那正是「数据随界面语言漂移」的坏味道。
        */
-      role: role.trim() || '协作',
+      role: role.trim() || '协作', // 有意不翻：落库值（见上方判据注释）
       contact: contact.trim() || null,
       avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
       actorKind: actorKind === 'agent' ? MemberActorKind.Agent : undefined,
@@ -104,17 +107,17 @@ export function MembersPageSection(): JSX.Element | null {
       countActiveAdmins(fresh) === 1 &&
       fresh.some((x) => x.id === m.id && x.active && x.roleKind === MemberRoleKind.Admin)
     ) {
-      useProjectsStore.getState().pushToast('error', '系统至少需要一名管理员，无法降级');
+      useProjectsStore.getState().pushToast('error', t('member.toastLastAdmin'));
       return;
     }
     try {
       const updated = await repos.members.update(m.id, { roleKind: MemberRoleKind.Member });
       useMembersStore.getState().upsert(updated);
-      useProjectsStore.getState().pushToast('success', '已取消管理员身份');
+      useProjectsStore.getState().pushToast('success', t('member.toastDemoted'));
     } catch (err) {
       useProjectsStore
         .getState()
-        .pushToast('error', err instanceof ChangxiaError ? err.userMessage : '降级失败，请重试。');
+        .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('member.toastDemoteFailed'));
     }
   };
 
@@ -124,7 +127,7 @@ export function MembersPageSection(): JSX.Element | null {
   return (
     <section className="glass-light rounded-lg border border-line bg-paper p-5 shadow-soft">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-display-md">成员</h2>
+        <h2 className="font-display text-display-md">{t('member.sectionTitle')}</h2>
         <div className="flex items-center gap-2">
           {agentSeatUsed > 0 && (
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-mist">
@@ -134,7 +137,7 @@ export function MembersPageSection(): JSX.Element | null {
                 onChange={(e) => setShowAgents(e.target.checked)}
                 className="h-3.5 w-3.5 accent-pine"
               />
-              显示 Agent（{agentSeatUsed}/3）
+              {t('member.showAgents', { count: agentSeatUsed })}
             </label>
           )}
           {!adding && (
@@ -143,7 +146,7 @@ export function MembersPageSection(): JSX.Element | null {
               onClick={() => setAdding(true)}
               className="inline-flex items-center gap-1 rounded-md border border-line px-3 py-1.5 text-xs text-mist hover:bg-sand hover:text-pine"
             >
-              <Plus size={13} /> 添加成员
+              <Plus size={13} /> {t('member.addMember')}
             </button>
           )}
         </div>
@@ -153,7 +156,7 @@ export function MembersPageSection(): JSX.Element | null {
         <div className="mb-4 grid grid-cols-1 gap-2 rounded-lg border border-pine/40 bg-cream p-3 md:grid-cols-[1fr_120px_160px_auto]">
           {/* 类型切换（v0.6 · T13 要点 6）：人 / Agent */}
           <div className="flex items-center gap-1.5 md:col-span-4">
-            <span className="text-xs text-mist">类型</span>
+            <span className="text-xs text-mist">{t('member.typeLabel')}</span>
             {(['human', 'agent'] as const).map((k) => (
               <button
                 key={k}
@@ -167,12 +170,12 @@ export function MembersPageSection(): JSX.Element | null {
                     : 'border-line text-mist hover:bg-sand hover:text-ink')
                 }
               >
-                {k === 'human' ? '👤 人' : '🤖 Agent'}
+                {k === 'human' ? t('member.typeHuman') : '🤖 Agent'}
               </button>
             ))}
             {actorKind === 'agent' && (
               <span className="ml-2 text-[11px] text-amber">
-                Agent 席位 已用 {agentSeatUsed}/3（超额仅提示，不拦截）
+                {t('member.seatHint', { count: agentSeatUsed })}
               </span>
             )}
           </div>
@@ -180,19 +183,19 @@ export function MembersPageSection(): JSX.Element | null {
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="姓名 *"
+            placeholder={t('member.namePlaceholder')}
             className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
           <ImeInput
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            placeholder="角色（角色（如负责人））"
+            placeholder={t('member.rolePlaceholder')}
             className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
           <ImeInput
             value={contact}
             onChange={(e) => setContact(e.target.value)}
-            placeholder="联系方式"
+            placeholder={t('member.contactPlaceholder')}
             className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
           {actorKind === 'agent' && (
@@ -201,7 +204,7 @@ export function MembersPageSection(): JSX.Element | null {
                 value={agentKind}
                 onChange={(e) => setAgentKind(e.target.value)}
                 list="agent-kind-suggestions"
-                placeholder="agentKind（如 workbuddy / codex）"
+                placeholder={t('member.agentKindPlaceholder')}
                 className="rounded-md border border-line bg-paper px-2 py-1.5 font-mono text-sm outline-none focus:border-pine"
               />
               {/* 建议值仅供参考选择，输入框始终允许任意字符串（开放字符串铁律） */}
@@ -217,14 +220,14 @@ export function MembersPageSection(): JSX.Element | null {
             onClick={() => void submit()}
             className="rounded-md bg-pine px-4 py-1.5 text-sm text-white hover:bg-pine-deep"
           >
-            添加
+            {t('member.add')}
           </button>
         </div>
       )}
 
       {visibleMembers.length === 0 ? (
         <p className="text-sm leading-6 text-mist">
-          还没有成员。添加后可在阶段清单中指派任务，并在左侧导航最下方进入身份后查看「我的任务」。
+          {t('member.empty')}
         </p>
       ) : (
         <ul className="divide-y divide-sand/60">
@@ -248,15 +251,16 @@ export function MembersPageSection(): JSX.Element | null {
 
       <ConfirmDialog
         open={demoteTarget !== null}
-        title="取消管理员"
+        title={t('member.demoteTitle')}
         danger
-        confirmText="确认降级"
+        confirmText={t('member.demoteConfirm')}
         onConfirm={() => void (demoteTarget && onDemote(demoteTarget))}
         onCancel={() => setDemoteTarget(null)}
       >
         <p>
-          将 <b>{demoteTarget?.name ?? ''}</b> 降级为普通成员：该成员将立即失去管理员权限，
-          只能看到分派给自己的内容。
+          {t('member.demoteBodyBefore')}
+          <b>{demoteTarget?.name ?? ''}</b>
+          {t('member.demoteBodyAfter')}
         </p>
       </ConfirmDialog>
 
@@ -279,6 +283,8 @@ function PasswordDialog({
   member: Member;
   onClose(): void;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   const repos = useRepos();
   const actions = createMemberActions(repos);
   const [value, setValue] = useState('');
@@ -292,13 +298,13 @@ function PasswordDialog({
     const trimmed = value.trim();
     // 保留原密码：未输入新密码则不改动（点「清除密码」才清除）
     if (!trimmed) {
-      useProjectsStore.getState().pushToast('error', '请先输入新密码，或用「清除密码」移除。');
+      useProjectsStore.getState().pushToast('error', t('member.toastPwEmpty'));
       return;
     }
     setBusy(true);
     try {
       await actions.setPassword(member.id, trimmed);
-      useProjectsStore.getState().pushToast('success', `已设置「${member.name}」的登录密码`);
+      useProjectsStore.getState().pushToast('success', t('member.toastPwSet', { name: member.name }));
       onClose();
     } finally {
       setBusy(false);
@@ -310,7 +316,7 @@ function PasswordDialog({
     setBusy(true);
     try {
       await actions.setPassword(member.id, '');
-      useProjectsStore.getState().pushToast('success', '已清除该成员密码');
+      useProjectsStore.getState().pushToast('success', t('member.toastPwCleared'));
       onClose();
     } finally {
       setBusy(false);
@@ -318,16 +324,18 @@ function PasswordDialog({
   };
 
   return (
-    <Modal open onClose={onClose} ariaLabel="设置密码">
+    <Modal open onClose={onClose} ariaLabel={t('member.pwTitle')}>
       <div className="glass-strong iridescent-border dialog-pop w-full max-w-md rounded-2xl p-5 shadow-soft outline-none">
         <div className="mb-3 flex items-start justify-between gap-4">
           <h2 className="font-display text-display-md">
-            {hasPassword ? `修改「${member.name}」的密码` : `设置「${member.name}」的密码`}
+            {hasPassword
+              ? t('member.pwChangeTitle', { name: member.name })
+              : t('member.pwSetTitle', { name: member.name })}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t('common.close')}
             className="rounded-md p-1 text-mist hover:bg-sand"
           >
             <X size={16} />
@@ -335,8 +343,8 @@ function PasswordDialog({
         </div>
         <p className="text-xs leading-5 text-mist">
           {hasPassword
-            ? '输入新密码可重置；不做任何输入并点「清除密码」则该成员无需密码即可进入。'
-            : '设置密码后，该成员需在「输入姓名」后凭密码登录。留空并点「清除密码」则无需密码。'}
+            ? t('member.pwHintChange')
+            : t('member.pwHintSet')}
         </p>
         <ImeInput
           autoFocus
@@ -349,7 +357,7 @@ function PasswordDialog({
               void save();
             }
           }}
-          placeholder="输入新密码（留空则不修改）"
+          placeholder={t('member.pwPlaceholder')}
           disabled={busy}
           autoComplete="new-password"
           className="mt-4 w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
@@ -361,7 +369,7 @@ function PasswordDialog({
             disabled={busy || !hasPassword}
             className="rounded-md border border-line px-3 py-1.5 text-sm text-clay transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-40"
           >
-            清除密码
+            {t('member.pwClear')}
           </button>
           <div className="flex gap-2">
             <button
@@ -369,7 +377,7 @@ function PasswordDialog({
               onClick={onClose}
               className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -377,7 +385,7 @@ function PasswordDialog({
               disabled={busy}
               className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
             >
-              {hasPassword ? '保存新密码' : '设置密码'}
+              {hasPassword ? t('member.pwSaveNew') : t('member.pwTitle')}
             </button>
           </div>
         </div>
@@ -406,6 +414,8 @@ function MemberRow({
   /** 反馈 #5：查看该成员的看板（管理员视角，落点 /member-board?member=<id>） */
   onOpenBoard(): void;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点（本模块级组件自己订阅） */
+  const { t } = useLang();
   const isAdminMember = member.roleKind === MemberRoleKind.Admin;
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(member.name);
@@ -447,24 +457,24 @@ function MemberRow({
               if (e.key === 'Enter') save();
               if (e.key === 'Escape') cancel();
             }}
-            placeholder="姓名"
+            placeholder={t('member.rowNamePlaceholder')}
             className="min-w-0 flex-1 rounded-md border border-pine/50 bg-paper px-2 py-1 text-sm text-ink outline-none focus:border-pine"
           />
           <button
             type="button"
             onClick={save}
-            title="保存"
+            title={t('common.save')}
             className="inline-flex items-center gap-1 rounded-md border border-pine bg-pine-soft px-2 py-1 text-xs text-pine-deep hover:bg-pine/20"
           >
-            <Check size={12} /> 保存
+            <Check size={12} /> {t('common.save')}
           </button>
           <button
             type="button"
             onClick={cancel}
-            title="取消"
+            title={t('common.cancel')}
             className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-mist hover:bg-sand"
           >
-            <X size={12} /> 取消
+            <X size={12} /> {t('common.cancel')}
           </button>
         </>
       ) : (
@@ -479,16 +489,16 @@ function MemberRow({
           <span className="text-xs text-mist">{member.role}</span>
           {memberHasPassword(member) ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-sand px-1.5 py-0.5 text-[10px] font-medium text-mist">
-              <KeyRound size={10} /> 有密码
+              <KeyRound size={10} /> {t('member.hasPassword')}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-sand/60 px-1.5 py-0.5 text-[10px] text-mist">
-              <KeyRound size={10} /> 无密码
+              <KeyRound size={10} /> {t('member.noPassword')}
             </span>
           )}
           {isAdminMember && (
             <span className="inline-flex items-center gap-1 rounded-full bg-pine-soft px-1.5 py-0.5 text-[10px] font-medium text-pine-deep">
-              <Crown size={10} /> 管理员
+              <Crown size={10} /> {t('member.adminBadge')}
             </span>
           )}
           {member.contact && <span className="hidden text-xs text-mist sm:inline">{member.contact}</span>}
@@ -502,19 +512,19 @@ function MemberRow({
           <button
             type="button"
             onClick={onOpenBoard}
-            title="查看该成员的看板"
+            title={t('member.openBoardTitle')}
             className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
           >
-            <LayoutGrid size={12} /> <span className="hidden sm:inline">看板</span>
+            <LayoutGrid size={12} /> <span className="hidden sm:inline">{t('nav.board')}</span>
           </button>
           {!isAdminMember && member.active && (
             <button
               type="button"
               onClick={onPromote}
-              title="设为管理员"
+              title={t('member.promote')}
               className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
             >
-              <Crown size={12} /> <span className="hidden sm:inline">设为管理员</span>
+              <Crown size={12} /> <span className="hidden sm:inline">{t('member.promote')}</span>
             </button>
           )}
           {isAdminMember && member.active && (
@@ -522,43 +532,43 @@ function MemberRow({
               type="button"
               onClick={onDemote}
               disabled={isLastAdmin}
-              title={isLastAdmin ? '系统至少需要一名管理员' : '取消管理员'}
+              title={isLastAdmin ? t('member.lastAdminTitle') : t('member.demote')}
               className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-clay disabled:cursor-not-allowed disabled:opacity-40 sm:px-2"
             >
-              <XCircle size={12} /> <span className="hidden sm:inline">取消管理员</span>
+              <XCircle size={12} /> <span className="hidden sm:inline">{t('member.demote')}</span>
             </button>
           )}
           <button
             type="button"
             onClick={onPassword}
-            title={memberHasPassword(member) ? '修改/清除密码' : '设置密码'}
+            title={memberHasPassword(member) ? t('member.pwActionTitleChange') : t('member.pwTitle')}
             className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
           >
-            <KeyRound size={12} /> <span className="hidden sm:inline">密码</span>
+            <KeyRound size={12} /> <span className="hidden sm:inline">{t('member.password')}</span>
           </button>
           <button
             type="button"
             onClick={() => setEditing(true)}
-            title="重命名"
+            title={t('member.rename')}
             className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
           >
-            <Pencil size={12} /> <span className="hidden sm:inline">重命名</span>
+            <Pencil size={12} /> <span className="hidden sm:inline">{t('member.rename')}</span>
           </button>
           <button
             type="button"
             onClick={onToggle}
-            title={member.active ? '停用成员' : '重新启用'}
+            title={member.active ? t('member.deactivateTitle') : t('member.reactivateTitle')}
             className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs sm:px-2 ${
               member.active ? 'border-line text-mist hover:bg-sand' : 'border-line text-pine hover:bg-sand'
             }`}
           >
             {member.active ? (
               <>
-                <UserX size={12} /> <span className="hidden sm:inline">停用</span>
+                <UserX size={12} /> <span className="hidden sm:inline">{t('member.deactivate')}</span>
               </>
             ) : (
               <>
-                <UserRound size={12} /> <span className="hidden sm:inline">启用</span>
+                <UserRound size={12} /> <span className="hidden sm:inline">{t('member.reactivate')}</span>
               </>
             )}
           </button>
