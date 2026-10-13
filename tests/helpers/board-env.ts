@@ -222,51 +222,115 @@ export async function bootstrapAdminWithDemo(page: Page, serverUrl: string): Pro
 }
 
 /**
- * 整库导入（loadDemo）会替换 members，原管理员身份失效（member-board-layout.spec.ts
- * 注释同款坑）。库里有管理员（负责人甲）⇒ 点「点击进入」直达 name_input（成员意图），
- * 填演示成员名进入 ⇒ isAdmin 复活 + 成员区（演示成员）可点。
+ * 确认身份已建立为示例包里的管理员「负责人甲」。
+ *
+ * ── ★ 语义订正（2026-10-14）：本文件两个 helper 的旧前置都建立在一条**已死**的假设上 ──
+ * 旧写法是「点『点击进入』→ 走姓名流重新进入身份」，前提是**覆盖式导入后身份为空**。
+ * 现状不然，且是**有意为之**的两条：
+ *   · demo 包自带 `settings.currentMemberId = 'demo_admin'`（`demoDataFactory.ts`，登记为
+ *     「demo 成员表的身份兜底」）；
+ *   · `useRepos.bootstrapAllStores` 的身份候选阶梯（`9dd3d77`「每一档必须命中当前 members」）
+ *     让这条兜底**真的生效**（并清掉悬挂的旧 id）⇒ **导入后身份已被自动建立为「负责人甲」**。
+ * ⇒ 页面上**没有**「点击进入」可点。旧实现的 `b?.click()` 是**静默点空**，失败要等到下一步
+ *   的 15s 超时，而那句超时话术是「等 `你的姓名` 输入框」——**看起来像成员看板坏了**，
+ *   把排查指向完全错误的方向。
+ *
+ * ⇒ 本函数把那种静默失败换成**前置断言**：等不到就当场抛，并直说是**旧语义过期**。
  */
-export async function reenterAdmin(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '点击进入');
-    b?.click();
-  });
-  await page.waitForSelector('input[placeholder="你的姓名"]', { timeout: 15000 });
-  // 若落在 admin_prompt（库里无管理员时）先走「我是管理员」；name_input 直填即可
-  const hasAdminPrompt = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('button')).some((x) => (x.textContent ?? '').trim() === '我是管理员'),
-  );
-  if (hasAdminPrompt) {
-    await page.evaluate(() => {
-      const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '我是管理员');
-      b?.click();
-    });
-    await page.waitForTimeout(300);
-  }
-  await page.locator('input[placeholder="你的姓名"]').fill('负责人甲');
-  await page.evaluate(() => {
-    const b = Array.from(document.querySelectorAll('button')).find(
-      (x) => (x.textContent ?? '').includes('确认为管理员') || (x.textContent ?? '').trim() === '下一步',
+async function assertAdminIdentity(page: Page): Promise<void> {
+  try {
+    await page.waitForFunction(
+      () => (document.body.textContent ?? '').includes('负责人甲'),
+      undefined,
+      { timeout: 15000 },
     );
-    b?.click();
-  });
-  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'), null, { timeout: 15000 });
-  await page.waitForTimeout(800);
+  } catch {
+    throw new Error(
+      '前置失败：身份未被示例包自动建立为「负责人甲」。' +
+        '最可能的成因是「**覆盖式导入后身份为空**」这条旧假设又回来了（本文件两个 helper 的旧语义正是它）：' +
+        '请先确认 (a) src/core/demo/demoDataFactory.ts 的 settings 段是否仍带 ' +
+        "currentMemberId='demo_admin'，(b) src/hooks/useRepos.ts 的身份候选阶梯是否仍在生效。" +
+        '若这两条都在，那就是本 helper 需要跟着改，而不是产品坏了。',
+    );
+  }
 }
 
-/** 退出身份 → 以「执行乙」进入 → 点侧栏「成员看板」（与 member-board-layout 同口径） */
+/**
+ * 整库导入（loadDemo）会替换 members；**现在**（`9dd3d77` 之后）新身份会由 demo 包自带的
+ * `currentMemberId` 自动建立为管理员「负责人甲」 —— 本函数因此退化为**断言这一点成立**。
+ *
+ * （旧语义：点「点击进入」→ 填「负责人甲」→ 认管理员。那条路的前提「导入后身份为空」已死。）
+ */
+export async function reenterAdmin(page: Page): Promise<void> {
+  await assertAdminIdentity(page);
+  await page.waitForTimeout(400);
+}
+
+/**
+ * 「以成员（执行乙）身份打开成员看板」。
+ *
+ * ── ★ 语义订正（2026-10-14）：旧版点「点击进入」+ 填姓名，前提已死（见 assertAdminIdentity）──
+ * 导入示例数据后身份**已经**是管理员「负责人甲」，页面上没有「点击进入」；
+ * 而 5 份 spec 要的是**成员视角**，所以必须**真的切成成员**：
+ *
+ * ⚠️ 「只自检身份、不切身份」这条**捷径走不通**（`fix-settings-restore` 用探针实测过）：
+ *   `SidebarNav` 的侧栏首项按角色分流（管理员 `to:'/'`、成员 `to:'/member-board'`），
+ *   管理员身份下**没有** `a[href="/member-board"]`（实测 `memberBoardLink: 0`）
+ *   ⇒ 本函数最后那步会**静默点空**。必须切成成员（实测切换后 `memberBoardLink: 1`）。
+ *
+ * 三步切换是实测验证过的（`[role="menu"][aria-label="身份操作"]` 第一项 =「切换身份」）。
+ */
 export async function enterMemberBoard(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '点击进入');
-    b?.click();
-  });
-  await page.waitForSelector('input[placeholder="你的姓名"]', { timeout: 15000 });
+  // ① 前置：身份已由示例包建立（旧假设的替代 —— 失败会直说「旧语义过期」而不是 15s 超时）
+  await assertAdminIdentity(page);
+
+  /*
+   * ⚠️ 两个坑都在这里（1152 档实测，探针见 qa-scratch/probe-identity-1152.mjs）：
+   *  ① **两个变体同时在 DOM 里**：收起态 `title="负责人甲 · 管理员（点击切换/退出）"`（宽 0、隐藏）
+   *     与展开态 `title="当前身份（点击切换/退出）"`（宽 206、可见）**同时存在**
+   *     ⇒ 只写 `title$=` + `.first()` 会**选中隐藏的那个**，`isVisible()` 永远 false。
+   *     ⇒ 必须加 `:visible` 过滤。
+   *  ② **<xl（1280 以下）侧栏自身是抽屉**：身份行在 DOM 里但整体不可见 ⇒ 先用顶栏汉堡
+   *     `[data-nav-menu-trigger]` 把侧栏打开（≥xl 是持久左栏，不需要这一步）。
+   */
+  const identityTrigger = page.locator('[data-app-sidebar] button[title$="（点击切换/退出）"]:visible');
+  if ((await identityTrigger.count()) === 0) {
+    const burger = page.locator('[data-nav-menu-trigger]');
+    if ((await burger.count()) > 0) {
+      await burger.first().click();
+      await page.waitForTimeout(800);
+    }
+  }
+  if ((await identityTrigger.count()) === 0) {
+    throw new Error(
+      '前置失败：找不到**可见的**身份触发器（`[data-app-sidebar] button[title$="（点击切换/退出）"]:visible`）。' +
+        '可能成因：(a) 身份控件又被搬回了顶栏/别处；(b) 侧栏档位变了（<xl 是抽屉，需要先开侧栏）；' +
+        '(c) 本次导入后身份压根没建立（那应当由 assertAdminIdentity 先报）。',
+    );
+  }
+  await identityTrigger.first().click();
+  await page.waitForTimeout(400);
+  await page.locator('[role="menu"][aria-label="身份操作"] [role="menuitem"]').first().click();
+  await page.waitForTimeout(400);
   await page.locator('input[placeholder="你的姓名"]').fill('执行乙');
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '下一步');
     b?.click();
   });
   await page.waitForTimeout(1200);
+
+  // ③ 前置断言：确实成了成员。判据用「/member-board 入口出现」——这是角色分流的直接后果，
+  //    也正是旧写法会静默点空的那一步；点不到就在这里响亮地失败，而不是等到 20s 后超时。
+  const memberBoardLink = await page.evaluate(
+    () => document.querySelectorAll('a[href="/member-board"]').length,
+  );
+  if (memberBoardLink === 0) {
+    throw new Error(
+      '前置失败：切身份后仍看不到 /member-board 入口 ⇒ 身份没切成成员「执行乙」' +
+        '（或 SidebarNav 的角色分流改了）。旧写法在这里是 `?.click()` 静默点空、' +
+        '然后在 20s 后抛「等 [role=button].group 超时」——那句话会把人指向「成员看板坏了」。',
+    );
+  }
 
   // 点侧栏「成员看板」入口。按 href 而非文案：成员的侧栏首项叫「看板」、
   // 管理员的叫「项目」（SidebarNav 按角色分流），文案会漂移，href 不会。
