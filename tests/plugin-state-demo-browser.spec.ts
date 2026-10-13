@@ -35,10 +35,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { existsSync } from 'node:fs';
-import { createServer } from 'node:http';
-import { extname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
-import { listenOnSafePort } from './helpers/safe-listen';
+// 新鲜度判定 / Chromium 解析 / 静态服务器**全部接共享助手**（不自建第二套）
+import {
+  CAN_RUN_FRESH as SHARED_CAN_RUN_FRESH,
+  CHROMIUM_PATH,
+  startStaticServer,
+} from './helpers/board-env';
 import { buildDemoBackup } from '../src/core/demo/demoDataFactory';
 import { pluginEnabledKey } from '../src/core/plugin/types';
 import { DB_NAME } from '../src/core/schema/current';
@@ -57,6 +61,24 @@ const ROOT = resolve(__dirname, '..');
  *   的文件即使内容没变，mtime 被顶新也会让产物对**所有人**判过期（那段时间别人的
  *   浏览器 spec 会莫名其妙 skip）。收尾要报「过期输入计数 = 0」。
  * 平时不设该变量 ⇒ 与原行为逐字一致。
+ *
+ * ── ★★ 事故原文（2026-10-14，作者本人犯的；写下来是因为它比抽象规矩更拦得住人）──
+ *   我当时要在一条命令里「只数一下 tsc 的报错条数」，**却多写了一个 `npm run build`**，
+ *   它真的跑了 —— `build-dist` 被我一个人重建，而我在上一条信里刚承诺「不重建共享产物」。
+ *   为什么后果可能很重：**若当时正好有人的 `src/**` 停在半成品**，我这一下会让**全队的
+ *   浏览器 spec 集体变红**，而那些人手里没有任何信息能判断「红是因为我」。
+ *   （那次侥幸没事：构建成功、我没改 `src`、同一分钟内别人也刷过两次 ⇒ 边际影响小。
+ *     但「侥幸没事」不是「做法对」。）
+ *   ⇒ 规矩：**重建共享 `build-dist` 是一次影响全队的动作** —— 要么事先报备，要么走独立
+ *     outDir；**不需要新鲜产物时，不要顺手跑 `npm run build`**。
+ *
+ * ── ★★ 另一条同类现场：静默 skip 被当成通过（作者本人踩过两次）──
+ *   产物过期时本组输出 `↓ … skipped` 而**没有任何说明**，我两次读到「Tests 1 passed /
+ *   没有红」就差点当成通过。⇒ 新鲜度判据**必须接入共享助手**
+ *   （`tests/helpers/board-env.ts` 的 `CAN_RUN_FRESH`，它自带 `warnStaleOnce` 的
+ *   「每次进程只喊一次」告警），**不要自建第二套**。
+ *   变异路径是唯一例外：共享判据锚在 `<repo>/build-dist/index.html`，而变异跑的是独立
+ *   产物 ⇒ 只能用该产物自己的新鲜度，见下面 `variantFresh()`。
  */
 const DIST_DIR = process.env.DEMO_GATE_DIST ?? join(ROOT, 'build-dist');
 const DIST_INDEX = join(DIST_DIR, 'index.html');
@@ -82,112 +104,25 @@ const seeded: SettingRow[] = [
   { key: 'restPolicy', valueJson: SEEDED_REST_POLICY, updatedAt: '2026-01-01T00:00:00.000Z' },
 ];
 
-function resolveChromium(): string | null {
-  const { readdirSync } = require('node:fs') as typeof import('node:fs');
-  const { join: jn } = require('node:path') as typeof import('node:path');
-  const roots = [
-    process.env.PLAYWRIGHT_BROWSERS_PATH,
-    process.env.LOCALAPPDATA ? jn(process.env.LOCALAPPDATA, 'ms-playwright') : null,
-  ].filter((p): p is string => typeof p === 'string' && p.length > 0);
-  for (const root of roots) {
-    if (!existsSync(root)) continue;
-    let dirs: string[] = [];
-    try {
-      dirs = readdirSync(root).filter((n) => n.startsWith('chromium-'));
-    } catch {
-      continue;
-    }
-    for (const d of dirs) {
-      for (const rel of [['chrome-win64', 'chrome.exe'], ['chrome-linux', 'chrome']]) {
-        const exe = jn(root, d, ...rel);
-        if (existsSync(exe)) return exe;
-      }
-    }
-  }
-  return null;
-}
+/*
+ * 新鲜度、Chromium 路径、静态服务器**全部接共享助手** `tests/helpers/board-env.ts`：
+ *   · `CAN_RUN_FRESH` —— 它自带「产物过期就出声」的告警（`warnStaleOnce`，每进程只喊一次），
+ *     所以本文件**不再自己 `console.warn`**（自建第二套必然与它分叉）；
+ *   · `CHROMIUM_PATH` / `startStaticServer` —— 同源，免掉本文件两份重复实现。
+ * ⚠️ 仓里现状（已单独报给 team-lead）：`staleInputs` 被 **19 个文件**各自定义或导出
+ *    （1 份共享 + 18 份内联复制）。**本文件不再增加第 19 份**。
+ */
+const IS_VARIANT = Boolean(process.env.DEMO_GATE_DIST);
 
-const CHROMIUM_PATH = resolveChromium();
-const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
-
-const BUILD_INPUT_DIRS = ['src', 'electron'];
-const BUILD_INPUT_FILES = ['index.html', 'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
-
-function collectFiles(dir: string): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const jn = (require('node:path') as typeof import('node:path')).join;
-  if (!fs.existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = jn(dir, e.name);
-    if (e.isDirectory()) out.push(...collectFiles(full));
-    else if (e.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/** 产物过期守卫：src / 构建配置比 build-dist 新 ⇒ 整组 skip（拿旧界面下结论 = 假绿） */
-function staleInputs(): string[] {
-  const fs = require('node:fs') as typeof import('node:fs');
-  if (!existsSync(DIST_INDEX)) return [];
-  const distMs = fs.statSync(DIST_INDEX).mtimeMs;
-  const candidates = [
-    ...BUILD_INPUT_DIRS.flatMap((d) => collectFiles(resolve(ROOT, d))),
-    ...BUILD_INPUT_FILES.map((f) => resolve(ROOT, f)).filter((f) => existsSync(f)),
-  ];
-  return candidates
-    .filter((f) => fs.statSync(f).mtimeMs > distMs)
-    .map((f) => f.replace(ROOT + '\\', '').replace(ROOT + '/', ''))
-    .slice(0, 3);
-}
-
-const STALE = CAN_RUN ? staleInputs() : [];
-const CAN_RUN_FRESH = CAN_RUN && STALE.length === 0;
-
-// 本组依赖真实构建产物：不新鲜就必须**有声音地**跳过（静默 skip 会被误读成「通过」）
-if (!CAN_RUN_FRESH) {
-  console.warn(
-    `[plugin-state-demo-browser] 跳过：${!CAN_RUN ? '缺少 build-dist 产物或 Chromium' : `产物比源码旧（样例：${STALE.join(', ')}）`}。` +
-      // eslint-disable-next-line
-      ' —— 这不代表「通过」；请重建产物后重跑。',
-  );
-}
-
-async function startStaticServer(rootDir: string): Promise<{ url: string; close(): Promise<void> }> {
-  const fs = require('node:fs') as typeof import('node:fs');
-  const MIME: Record<string, string> = {
-    '.html': 'text/html; charset=utf-8',
-    '.js': 'text/javascript; charset=utf-8',
-    '.mjs': 'text/javascript; charset=utf-8',
-    '.css': 'text/css; charset=utf-8',
-    '.json': 'application/json; charset=utf-8',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.svg': 'image/svg+xml; charset=utf-8',
-    '.ico': 'image/x-icon',
-    '.woff': 'font/woff',
-    '.woff2': 'font/woff2',
-  };
-  const server = createServer((req, res) => {
-    const raw = decodeURIComponent((req.url ?? '/').split('?')[0]);
-    let filePath = join(rootDir, raw);
-    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-      if (/\.(js|mjs|css|json|png|jpg|svg|ico|woff2?)$/.test(raw)) {
-        res.writeHead(404).end('not found');
-        return;
-      }
-      filePath = join(rootDir, 'index.html');
-    }
-    try {
-      const body = fs.readFileSync(filePath);
-      res.writeHead(200, { 'Content-Type': MIME[extname(filePath)] ?? 'application/octet-stream' });
-      res.end(body);
-    } catch {
-      res.writeHead(404).end('not found');
-    }
-  });
-  return listenOnSafePort(server);
-}
+/*
+ * 变异路径（`DEMO_GATE_DIST`，见文件头纪律区）：产物是**刚刚由 `vite build --outDir`
+ * 构出来的**，新鲜度**由构造保证**（build → 立刻 run）⇒ 只判"产物在不在"，**不做 mtime
+ * 比对**。这样既够用，也**不会与共享助手形成第二套过期判定**。
+ * 正常路径则**完全**走共享助手那份。
+ */
+const CAN_RUN_FRESH = IS_VARIANT
+  ? existsSync(DIST_INDEX) && CHROMIUM_PATH !== null
+  : SHARED_CAN_RUN_FRESH;
 
 /** 桌面端 stub（自绘三键 + 更新探测），与既有浏览器 spec 同口径 */
 const IDPLAN_STUB = `
@@ -314,6 +249,7 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
     projects: number;
     localStorageId: string | null;
     enterIdentity: number;
+    identityRowText: string | null;
   }> {
     return page.evaluate(
       async ({ dbName, lsKey }) => {
@@ -332,15 +268,24 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
         const settings = await readAll('settings');
         const projects = (await readAll('projects')).length;
         db.close();
-        // 身份是否已进入：未进入时身份控件会渲染一枚文案恰为「点击进入」的按钮
+        /*
+         * 身份证据**成对**取（缺一条都会被「页面坏了」满足，见下方断言的注释）：
+         *   · 否定式 `enterIdentity`：未进入身份时身份控件渲染「点击进入」⇒ 计数应为 0；
+         *   · 肯定式 `identityRowText`：**进入后才会渲染**的那枚身份行（`title` 固定为
+         *     `当前身份（点击切换/退出）`）的文本 —— 它同时告诉我们是**以谁的身份**进去的。
+         */
         const enterIdentity = Array.from(document.querySelectorAll('button')).filter(
           (b) => (b.textContent ?? '').trim() === '点击进入',
         ).length;
+        const identityBtn = Array.from(document.querySelectorAll('button')).find(
+          (b) => (b.getAttribute('title') ?? '') === '当前身份（点击切换/退出）',
+        );
         return {
           settings: Object.fromEntries(settings.map((r) => [r.key, r.valueJson])),
           projects,
           localStorageId: localStorage.getItem(lsKey),
           enterIdentity,
+          identityRowText: identityBtn ? (identityBtn.textContent ?? '').trim() : null,
         };
       },
       { dbName: DB_NAME, lsKey: 'changxia.currentMemberId' },
@@ -433,7 +378,32 @@ describe.skipIf(!CAN_RUN_FRESH)('载入示例项目不动宿主策略 · 真 Chr
         after.localStorageId,
         '；「点击进入」按钮数 =',
         after.enterIdentity,
+        '；身份行文本 =',
+        JSON.stringify(after.identityRowText),
       );
+
+      /*
+       * 身份证据**成对**（缺一条就是半截判据）：
+       *   · 只看**否定式**「『点击进入』计数 = 0」是不够的 —— **页面整个坏掉、身份组件
+       *     没渲染、视图不对**，它**也会是 0**（恒过）。
+       *     这条批评来自 `impl-settings-hierarchy`（他们自己踩过同形坑）。
+       *   · 故必须配一条**肯定式**：断言"屏幕上以**谁**的身份在" —— 那枚身份行
+       *     （`title` 固定）**只在进入身份后才渲染**，它的文本里必须出现示例包的
+       *     管理员「负责人甲」（`demoDataFactory` 的 `DEMO_MEMBERS[0].name`）。
+       *   两条同时成立才算「身份已进入」被证明。
+       */
+      expect(
+        after.identityRowText,
+        '身份行为空 ⇒ 未进入身份（或视图没渲染出来）：肯定式判据失败',
+      ).not.toBeNull();
+      expect(
+        after.identityRowText,
+        '进入的不是示例包的管理员「负责人甲」',
+      ).toContain('负责人甲');
+      expect(
+        after.enterIdentity,
+        '未进入身份时该按钮应为 0（与上面肯定式成对；单独看它是恒过的）',
+      ).toBe(0);
 
       // ── ① 层：导入真的生效了（没有这一层，下面「插件键仍在」会空转成假绿） ──
       expect(after.projects, 'demo 数据没落库 ⇒ 本次运行对第③层无效（不得记为通过）').toBe(5);
