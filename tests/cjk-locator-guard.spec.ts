@@ -116,7 +116,10 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  * 已知弱点（team-lead 明示）：它只能**防增量**、不能强制缩减；补偿机制是每批验收
  *   时由他亲自看这个数字 —— 所以每次红灯都要把「当前 N / 基线 M」印出来。
  */
-const BASELINE = 116;
+/* 2026-10-14：116 → 115 —— 本批把「身份菜单」的三处中文 aria 定位换成 `data-identity-menu` 钩子
+ * （`board-env.ts` 1 处是上一笔引入的、`identity-rail-browser` 2 处是同源旧写法），实测 115。
+ * 棘轮**只许降**：绿了不下调 = 凭空多出一格余量，那一格正好够下一条新错溜过去。 */
+const BASELINE = 115;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

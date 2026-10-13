@@ -278,7 +278,7 @@ export async function reenterAdmin(page: Page): Promise<void> {
  *   管理员身份下**没有** `a[href="/member-board"]`（实测 `memberBoardLink: 0`）
  *   ⇒ 本函数最后那步会**静默点空**。必须切成成员（实测切换后 `memberBoardLink: 1`）。
  *
- * 三步切换是实测验证过的（`[role="menu"][aria-label="身份操作"]` 第一项 =「切换身份」）。
+ * 三步切换是实测验证过的（身份菜单用 `[data-identity-menu]` 钩子定位 —— 不拿中文 aria 当契约）。
  */
 export async function enterMemberBoard(page: Page): Promise<void> {
   // ① 前置：身份已由示例包建立（旧假设的替代 —— 失败会直说「旧语义过期」而不是 15s 超时）
@@ -310,7 +310,7 @@ export async function enterMemberBoard(page: Page): Promise<void> {
   }
   await identityTrigger.first().click();
   await page.waitForTimeout(400);
-  await page.locator('[role="menu"][aria-label="身份操作"] [role="menuitem"]').first().click();
+  await page.locator('[data-identity-menu] [role="menuitem"]').first().click();
   await page.waitForTimeout(400);
   await page.locator('input[placeholder="你的姓名"]').fill('执行乙');
   await page.evaluate(() => {

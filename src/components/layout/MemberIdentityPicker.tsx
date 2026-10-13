@@ -407,6 +407,14 @@ export function MemberIdentityPicker({
             role="menu"
             aria-label="身份操作"
             /*
+             * ★ 定位钩子（2026-10-14，i18n 纪律）：`aria-label="身份操作"` 是**中文可访问名**，
+             *   拿它当定位契约会在英文版下失效（而且 i18n 的中文定位棘轮**不许新增**）。
+             *   同款旧写法散在 `identity-rail-browser` / `overlay-stack-browser` / 两份 jsdom
+             *   用例里（属基线内的旧账，逐处收敛）；**新写的用例一律用本钩子**。
+             *   `aria-label` 保留不动 —— 它是读屏要的，不是给测试用的。
+             */
+            data-identity-menu=""
+            /*
              * ★ F2：portal 到 body + fixed 定位 + chrome 档（79）。
              *   详见文件头「裁决 A / B」。层级类名来自 `Modal.tsx` 的静态映射表
              *   （`CHROME_OVERLAY_Z_CLASS` 是 OVERLAY_Z_CLASS[79] 的查表结果），

@@ -146,7 +146,7 @@ window.idplan = {
 
 const HEAVY = 60000;
 
-const IDENTITY_MENU = '[role="menu"][aria-label="身份操作"]';
+const IDENTITY_MENU = '[data-identity-menu]';
 const SETTINGS_DRAWER = '[data-settings-drawer]';
 const RAIL_TITLE = '当前身份（点击切换/退出）';
 
@@ -682,7 +682,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
         if (!h) return { triggers: -1, menus: -1, byName: -1 };
         return {
           triggers: h.querySelectorAll(`button[title="${title}"]`).length,
-          menus: h.querySelectorAll('[role="menu"][aria-label="身份操作"]').length,
+          menus: h.querySelectorAll('[data-identity-menu]').length,
           // 按当前身份名找：顶栏里也不该再出现身份胶囊那一份可见姓名
           byName: Array.from(h.querySelectorAll('button')).filter((b) =>
             (b.textContent ?? '').includes('严过关'),
