@@ -99,7 +99,7 @@ function headBlob(path, root) {
  *   · paths：本轮**将要被改**的文件（逐文件记 blob 哈希；不传则只做「脏条目差集」判据）
  * @returns {{ label: string, root: string, statePath: string, dirty: string[], files: Record<string, {head: string|null, worktree: string|null}>, startedAt: string }}
  */
-export function beginRestoreGuard({ label, paths = [], root = REPO_ROOT, stateDir = STATE_DIR }) {
+export function beginRestoreGuard({ label, paths = [], root = REPO_ROOT, stateDir = STATE_DIR, contamination = null }) {
   const dirty = dirtySnapshot(root);
   if (dirty === null) {
     throw new Error(`[restore-guard] 不是 git 工作树，无法记基线：${root}`);
@@ -112,7 +112,7 @@ export function beginRestoreGuard({ label, paths = [], root = REPO_ROOT, stateDi
   const stamp = startedAt.replace(/[:.]/g, '-').slice(0, 19);
   mkdirSync(stateDir, { recursive: true });
   const statePath = join(stateDir, `${label}-${stamp}.json`);
-  const state = { label, root, statePath, dirty, files, startedAt, paths };
+  const state = { label, root, statePath, dirty, files, startedAt, paths, contamination };
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
   return state;
 }
@@ -167,6 +167,11 @@ export function endRestoreGuard(state) {
   } else {
     console.log(`[restore-guard] ✅ 收尾复核通过（${state.label}）：工作树相对基线无新增改动。`);
     console.log(`[restore-guard] 基线快照（留档、轮次命名）：${state.statePath}`);
+  }
+  // 污染标记：**证据自带**，不靠人记（team-lead 2026-10-14：不要禁止，也不要隐瞒）
+  if (state.contamination) {
+    console.warn(`\u001b[33m${state.contamination.note}\u001b[0m`);
+    for (const l of state.contamination.othersDirty ?? []) console.warn(`\u001b[33m   · ${l}\u001b[0m`);
   }
   return { ok, addedDirty, hashMismatch, missing, statePath: state.statePath };
 }

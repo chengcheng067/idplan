@@ -72,7 +72,17 @@
  *   node scripts/verify-test-discriminative.mjs --only=a4-radius # 只跑其中一条
  *   node scripts/verify-test-discriminative.mjs --dry-run        # 打印将要做什么，不动文件
  *   node scripts/verify-test-discriminative.mjs --keep-going     # 一条不符预期也继续跑其余
+ *   node scripts/verify-test-discriminative.mjs --allow-dirty-others # 显式放行「别人有未落点改动」的树（见下）
  *   node scripts/verify-test-discriminative.mjs --root=<dir>     # 对另一棵树（隔离工作树/干净克隆）做
+ *
+ * ── ⚠️ 日志编码：**GBK**（判据的匹配串必须与编码无关）──
+ *   本脚本把子进程输出原样落盘（`qa-scratch/discriminative/<id>.log` 等），而这些文件在 Windows 上是
+ *   **GBK** 编码。⇒ **用中文做 grep/轮询会静默不匹配** —— 那不是「那行不存在」，是**编码不同**。
+ *   实测代价：我曾用中文模式轮询一个中文哨兵，空转了 90 秒并据此误判了一次（以为脚本没跑到那一步）。
+ *   ⇒ **探针只用 ASCII 哨兵**：`[guard]` / `[build]` / `[restore]` / `[clean]` / `[restore-guard]`
+ *     （保持现有风格，别再往日志里塞中文探针）。
+ *   （team-lead 已把它升为 §1.1 的一条通用纪律：**判据的匹配串必须与编码无关** —— 本地化串做探针时，
+ *    「不匹配」会伪装成「不存在」，从而把「判据没生效」误读成「事情没发生」。）
  *
  * ── 推荐姿势：在**隔离工作树**里做，别在队友共用的树上做 ──
  * 本仓库是多人共享一棵工作树（agent 团队并行改同一目录）。在这种树上做变异，
@@ -125,14 +135,17 @@ const MUTATIONS = [
     find: "'flex w-full items-center gap-3 rounded-2xl border bg-paper p-3",
     replace: "'flex w-full items-center gap-3 rounded-2xl border glass-light p-3",
     /*
-     * ⚠️ 记账（未修，等干净窗口）：本用例的「红落在哪条断言上」取决于 B-12 里三条断言的**先后** ——
-     *    `notPaper`（当前第 1 条）/ `looksSunken`（bg === sunken）/ `glassCards`（cls 含 glass-light）
-     *    都会被这个变异打中，而 vitest 在**第一条失败处抛** ⇒ 现在稳定红在 `notPaper`，与
-     *    `expectAssertion` 一致。若有人调换顺序，红会落到别条 ⇒ 本脚本会报「红在了错误断言上」
-     *    （**响的，但归因错**）。⇒ 动 B-12 的断言顺序之前先看这一段。
-     *    备选修法：把 expectMarkers 放宽成「三条中任一」（三条都是同一变异的后果，不损失特异性，
-     *    但去掉顺序依赖）。它属**变异清单本体**，只能在**干净工作树**上验证 ⇒ 与「完整变异跑一次」
-     *    合并到出包冻结窗口做，别在脏树上顺手改。
+     * ★ 2026-10-14 **订正（原诊断作废，别照旧描述去「修」一个不存在的问题）**：
+     *   原先这里记的是「本用例的红落在哪条断言上取决于 B-12 三条断言的**先后** ⇒ 顺序脆弱性」。
+     *   **那条是误诊。** 实况：曾观测到一次 ✗，真因是**产物处于「无 CSS」状态** ——
+     *   B-12 自己的**前置自证**先炸了：
+     *       `expected 'rgba(0, 0, 0, 0)' not to be 'rgba(0, 0, 0, 0)'`（`tests/v07-board-acceptance.spec.ts:1332`）
+     *   即 `paper` 与 `sunken` 两个探针**都读到透明**（token 全空 = 页面没加载到样式表），
+     *   **与「红落在 notPaper 还是 looksSunken」无关，也与断言顺序无关**。
+     *   对照（同一变异、干净产物）：**通过 ✓ —— 红在 `notPaper`**，期望标记命中。
+     *   ⇒ 结论：**不做「放宽期望」的修法**（team-lead 2026-10-14 裁决）。真正该盯的是
+     *     「产物/加载态退化」这一类环境问题，而它已被 spec 的前置自证**正确抓住**（该自证是有效的）。
+     *   （误诊留痕比结论本身重要：不留痕，将来有人会照旧描述去改断言顺序，而真因继续潜伏。）
      */
     probe: {
       spec: 'tests/v07-board-acceptance.spec.ts',
@@ -183,6 +196,18 @@ const ONLY = onlyArg ? onlyArg.slice('--only='.length) : null;
 const MODE_LIST = hasFlag('--list');
 const MODE_CHECK_ANCHORS = hasFlag('--check-anchors');
 const MODE_DRY_RUN = hasFlag('--dry-run');
+/**
+ * 显式 opt-in：允许在「**别人**有未落点改动」的工作树上跑。
+ *
+ * ── 为什么默认**不允许**，而这个开关又必须存在 ──
+ * 本脚本的产物是**从工作树编译出来的** ⇒ 若工作树里有别人未落点的 `src` 改动，
+ * 那些改动会**进产物**，于是变异的红/绿只对「变异 + 这些改动」的**合成树**成立。
+ * 这个污染**不能被消除，只能被记录** ⇒ 所以：默认拒绝（约束 ① 不变），
+ * 显式加 `--allow-dirty-others` 才放行，且放行时**醒目打印他人脏清单**、
+ * 并把清单写进守卫的基线快照（轮次命名文件）里，让**证据自带污染标记**。
+ * （team-lead 2026-10-14 裁决：不要禁止，也不要隐瞒。）
+ */
+const ALLOW_DIRTY_OTHERS = hasFlag('--allow-dirty-others');
 const KEEP_GOING = hasFlag('--keep-going');
 const MODE_HELP = hasFlag('--help') || hasFlag('-h');
 
@@ -591,6 +616,8 @@ function printHelp() {
   echo('  --root=<dir>      被检项目根（默认本脚本所在仓库；可指向隔离工作树）');
   echo('  --dry-run         打印将要做什么，不动文件');
   echo('  --keep-going      一条不符预期也继续跑其余');
+  echo('  --allow-dirty-others  显式放行「**别人**有未落点改动」的树（默认拒绝）。放行时醒目打印他人');
+  echo('                    脏清单，并把清单写进基线快照 —— 结论只对「变异 + 这些改动」的合成树成立');
   echo('  -h, --help        显示本帮助');
   echo('');
   echo('退出码：0 全通过 / 1 有不符合预期 / 2 前置拒绝（树脏、锚点失效、用法错误）');
@@ -654,27 +681,48 @@ function main() {
 
   // 约束 ①：脏树拒绝运行
   const dirty = porcelain();
+  let othersDirty = [];
   if (dirty.length > 0 && WILL_MUTATE) {
-    console.error('\n!! 前置拒绝：工作树不干净，本脚本拒绝运行。');
-    console.error(`   本脚本会**改源码**。脏树上的变异，还原后无法区分「我的还原」与「别人的在途改动」，`);
-    console.error('   而且变异窗口会坑到同时跑全量的队友（2026-09-11 17:04 的事故就是这么来的）。');
-    console.error('');
-    for (const line of dirty) console.error(`     ${line}`);
-    console.error('');
-    console.error('   请先提交或暂存以上改动（不要 stash 别人的在途工作），再重试。');
-    console.error('   只校验锚点、不动文件的话，可以跑：--check-anchors');
-    return 2;
+    if (!ALLOW_DIRTY_OTHERS) {
+      console.error('\n!! 前置拒绝：工作树不干净，本脚本拒绝运行。');
+      console.error(`   本脚本会**改源码**。脏树上的变异，还原后无法区分「我的还原」与「别人的在途改动」，`);
+      console.error('   而且变异窗口会坑到同时跑全量的队友（2026-09-11 17:04 的事故就是这么来的）。');
+      console.error('');
+      for (const line of dirty) console.error(`     ${line}`);
+      console.error('');
+      console.error('   请先提交或暂存以上改动（不要 stash 别人的在途工作），再重试。');
+      console.error('   只校验锚点、不动文件的话，可以跑：--check-anchors');
+      console.error('   确知这些改动**不会**影响本次结论、且愿意让证据带上污染标记时，可加：--allow-dirty-others');
+      return 2;
+    }
+    // 显式放行：**醒目**打印，并把清单写进基线快照（污染标记进了证据，而不是被抹掉）
+    othersDirty = dirty;
+    console.warn(
+      '\u001b[33m⚠️  本轮含**他人未落点改动**（清单如下）⇒ 结论只对「变异 + 这些改动」的**合成树**成立：\u001b[0m',
+    );
+    for (const line of othersDirty) console.warn(`\u001b[33m     ${line}\u001b[0m`);
+    console.warn(
+      '\u001b[33m   （来源：`--allow-dirty-others`。默认行为仍是拒绝运行；此标记会写进 qa-scratch/restore-guard/ 的基线快照。）\u001b[0m',
+    );
   }
 
   // ★ 起跑：记「还原基线」（目标文件 blob 哈希 + 起跑时的脏条目快照）。
   //   收尾由 assertTreeClean() 复核（含中断路径）；差异会**指名文件**并以非零退出码结束。
   //   状态文件落 `qa-scratch/restore-guard/<label>-<时间戳>.json`（轮次命名；不落固定名）。
   if (WILL_MUTATE) {
+    const contaminated = othersDirty.length > 0;
     restoreGuardState = beginRestoreGuard({
-      label: 'discriminative',
+      // 污染标记**进文件名**（轮次命名 + 是否含他人改动），并进快照内容
+      label: contaminated ? 'discriminative-dirty-others' : 'discriminative',
       paths: selected.map((m) => m.file),
       root: ROOT,
       stateDir: join(ROOT, 'qa-scratch', 'restore-guard'),
+      contamination: contaminated
+        ? {
+            note: '⚠️ 本轮含他人未落点改动（清单如下）⇒ 结论只对「变异 + 这些改动」的合成树成立',
+            othersDirty,
+          }
+        : null,
     });
     echo(`[guard] 已记还原基线（${selected.length} 个目标文件）：${restoreGuardState.statePath}`);
   }
