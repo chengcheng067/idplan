@@ -803,4 +803,60 @@ export const enMessages: Record<MessageKey, string> = {
   'agentTerm.claimedBy.tech': 'claimed by',
   'agentTerm.blockedBy.human': 'Blocked by',
   'agentTerm.blockedBy.tech': 'blocked by',
+
+  /* ───────── Takeover confirm dialog (TransferDialog) ─────────
+   * 段间空格落在取值里（JSX 相邻表达式容器之间没有空白）。
+   * ⚠️ 两个 `*Hint` 取值**以空格开头**：它们在 JSX 里的左邻居是硬编码的 ` *` 必填标记
+   *    （`<span> *{t('…Hint')}</span>`），左段不是取值 ⇒ 空格只能落在右段开头
+   *    （zh.ts 文件头规则 ⑤ 的那条例外）。
+   * zh 侧保留了两处既有小瑕疵（`**` 明文星号、`，` 后的多余空格），英文侧**同形保留**：
+   * 那是同一次界面行为，要不要修是另一笔的裁决，不在「翻译」里夹带。 */
+  'agentTransfer.aria': 'Take over an Agent board',
+  'agentTransfer.title': 'Take over “{name}”',
+  'agentTransfer.cancelAria': 'Cancel takeover',
+  'agentTransfer.warning':
+    'Takeover moves this board’s data **into the human workspace**, after which it is managed on the “My projects” side. Only admins can do this.',
+  'agentTransfer.modeLegend': 'Takeover method',
+  'agentTransfer.mode.convert.label': 'Convert to a full project',
+  'agentTransfer.mode.convert.hint':
+    'The whole board becomes a project in the human workspace (name and stages kept).',
+  'agentTransfer.mode.move.label': 'Move tasks',
+  'agentTransfer.mode.move.hint':
+    'Move the selected tasks into an existing human project (a landing stage is required).',
+  'agentTransfer.target': 'Target project',
+  'agentTransfer.targetHint': ' (human-workspace projects only)',
+  'agentTransfer.noTarget':
+    'There are no projects in the human workspace yet. Create one first, or switch to “Convert to a full project”.',
+  'agentTransfer.targetPlaceholder': '(choose a target project)',
+  'agentTransfer.stage': 'Landing stage',
+  'agentTransfer.stageHint': ' (no stage is created automatically)',
+  'agentTransfer.pickTargetFirst': 'Choose a target project first.',
+  'agentTransfer.noStage':
+    'The target project has no stages yet; add stages on its detail page first.',
+  'agentTransfer.stagePlaceholder': '(choose a landing stage)',
+  'agentTransfer.tasks': 'Tasks to move',
+  'agentTransfer.selectedCount': '{selected} of {total} selected',
+  'agentTransfer.noTask': 'This board has no tasks yet — nothing to move.',
+  'agentTransfer.preview.convert':
+    'Preview: turn board “{board}” into a full project in the human workspace ({count} tasks move with it).',
+  'agentTransfer.preview.movePre': 'Preview: move the ',
+  'agentTransfer.preview.moveMid': ' selected tasks from “{board}” into ',
+  'agentTransfer.preview.moveCreate': ', creating ',
+  'agentTransfer.preview.moveUpdate': ' and updating ',
+  'agentTransfer.preview.moveTail':
+    ' (the target project already has tasks with the same external ids).',
+  'agentTransfer.noTargetSelected': '(no target project selected)',
+  'agentTransfer.dropped.head':
+    'Dropping {count} dangling dependencies (their predecessors are not moved with this batch; keeping them would make those tasks look ready to start):',
+  'agentTransfer.dropped.row': '· “{task}” no longer depends on “{dep}”',
+  'agentTransfer.sourceSide':
+    'The source board also has {dropped} dependencies pointing at the moved tasks; they will be stripped as well (affecting {rewired} remaining tasks).',
+  'agentTransfer.pickAtLeastOne': 'Select at least one task.',
+  'agentTransfer.preview.plainPre': 'Preview: move the ',
+  'agentTransfer.preview.plainMid': ' selected tasks from “{board}” into ',
+  'agentTransfer.preview.plainTail':
+    '. Once you pick a target project and a landing stage, this area lists what will be created, updated, and dropped.',
+  'agentTransfer.submitting': 'Working…',
+  'agentTransfer.confirm': 'Confirm takeover',
+  'agentTransfer.failed': 'Takeover failed, please try again.',
 };

@@ -792,6 +792,62 @@ export const zhMessages = {
   'agentTerm.claimedBy.tech': 'claimed by',
   'agentTerm.blockedBy.human': '被…阻塞',
   'agentTerm.blockedBy.tech': 'blocked by',
+
+  /* ───────── 「接管」确认弹窗（TransferDialog · v0.8 英文线收口）─────────
+   * ⚠️ 本组取值是**逐字搬迁**：就是改造前屏幕上渲染出来的那串（含 JSX 折行产生的空格）。
+   *    两处**保留原样**的既有小瑕疵（不在本次修，另报）：
+   *      · `warning` 里的 `**…**` 是明文显示的星号（那一段不是 Markdown 上下文）；
+   *      · 几处 `，` 后有**一个多余空格**（来自源码折行折叠）—— 保留是为了让本笔
+   *        对屏幕**零行为差异**（改文案措辞/空格属于另一类改动，不夹带在翻译里）。
+   * ───────────────────────────────────────────────────────────────────────── */
+  'agentTransfer.aria': '接管 Agent 看板',
+  'agentTransfer.title': '接管「{name}」',
+  'agentTransfer.cancelAria': '取消接管',
+  'agentTransfer.warning':
+    '接管会把这块看板里的数据**移入人类工作区**，此后它归「我的项目」一侧管理。 该操作仅管理员可用。',
+  'agentTransfer.modeLegend': '接管方式',
+  'agentTransfer.mode.convert.label': '转为正式项目',
+  'agentTransfer.mode.convert.hint': '整块看板变成人类工作区里的一个项目（名称与阶段一并保留）。',
+  'agentTransfer.mode.move.label': '搬运任务',
+  'agentTransfer.mode.move.hint': '把选中的任务搬进一个已有的人类项目（需选落点阶段）。',
+  'agentTransfer.target': '目标项目',
+  'agentTransfer.targetHint': '（仅列人类工作区的项目）',
+  'agentTransfer.noTarget': '人类工作区里还没有项目。请先建一个项目，或改选「转为正式项目」。',
+  'agentTransfer.targetPlaceholder': '（请选择目标项目）',
+  'agentTransfer.stage': '落点阶段',
+  'agentTransfer.stageHint': '（不自动新建阶段）',
+  'agentTransfer.pickTargetFirst': '请先选择目标项目。',
+  'agentTransfer.noStage': '目标项目还没有阶段，请先在其详情页添加阶段后再搬运。',
+  'agentTransfer.stagePlaceholder': '（请选择落点阶段）',
+  'agentTransfer.tasks': '搬运任务',
+  'agentTransfer.selectedCount': '已选 {selected} / {total}',
+  'agentTransfer.noTask': '这块看板下还没有任务，没有可搬运的内容。',
+  'agentTransfer.preview.convert':
+    '预览：把看板「{board}」整体转为人类工作区的正式项目 （其中 {count} 条任务一并转入）。',
+  /*
+   * 搬运预览（未算完计划时的那一版）。`movePre` 末尾的空格与 `moveMid` 开头的空格
+   * 不是手滑：JSX 相邻的表达式容器之间**不会**产生空白（本仓实测过的粘连缺陷），
+   * 故段间空格一律落在取值里（中文侧尾随空格，见 zh.ts 文件头的规则 ⑤）。
+   */
+  'agentTransfer.preview.movePre': '预览：把选中的 ',
+  'agentTransfer.preview.moveMid': ' 条任务从「{board}」搬入 ',
+  'agentTransfer.preview.moveCreate': '，其中新建 ',
+  'agentTransfer.preview.moveUpdate': ' 条、 更新既有 ',
+  'agentTransfer.preview.moveTail': ' 条 （目标项目已有同外部编号的任务）。',
+  'agentTransfer.noTargetSelected': '（未选择目标项目）',
+  'agentTransfer.dropped.head':
+    '将剔除 {count} 条悬空依赖（前驱未随本批搬走， 留着会让任务被误判为可开工）：',
+  'agentTransfer.dropped.row': '· 「{task}」不再依赖「{dep}」',
+  'agentTransfer.sourceSide':
+    '源看板中另有 {dropped} 条依赖指向被搬走的任务， 将一并剥除（涉及 {rewired} 条留下的任务）。',
+  'agentTransfer.pickAtLeastOne': '请至少勾选一条任务。',
+  'agentTransfer.preview.plainPre': '预览：把选中的 ',
+  'agentTransfer.preview.plainMid': ' 条任务 从「{board}」搬入 ',
+  'agentTransfer.preview.plainTail':
+    '。选好目标项目与落点阶段后，这里会列出将新建 / 将更新 / 将剔除的悬空依赖。',
+  'agentTransfer.submitting': '处理中…',
+  'agentTransfer.confirm': '确认接管',
+  'agentTransfer.failed': '接管失败，请重试。',
 } as const;
 
 /**

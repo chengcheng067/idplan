@@ -46,6 +46,14 @@
  * 过滤，因为"喂错数据"这件事必须在**调用点**一眼可见（同 `AgentBoardList` 的纪律）。
  * 把人类项目搬进……不，把 Agent 任务搬进 **Agent** 看板是**无意义**的搬运，
  * 那种"目标其实是另一块 Agent 看板"的错误只能由调用点的漏斗挡住。
+ *
+ * ══════════════════════════ 英文线（2026-08-27 · 本版收口）══════════════════════════
+ * 本弹窗是本版**最后一个**从已翻面一步可达的中文面（`ProjectDetailPage` 的「接管」入口）。
+ * 全部文案改走 `agentTransfer.*` 键（语言变化订阅点 `useLang()` 在 hooks 区，早于两处 `return null`）。
+ * 两处**故意保留**的既有小瑕疵（不在翻译里夹带修）：`warning` 里的 `**` 是明文星号、
+ * 三处长句在 `，` 后有一个多余空格 —— 保留使本笔对屏幕**零行为差异**；已单独报给 team-lead。
+ * ⚠️ 另有一处**已知的瞬时行为**：`error` 存进 state 的是**当时的译文**，切语言不会重译
+ *   （弹窗下一次打开即恢复正确）—— 与全仓「存键不存译文」的做法相比这是个缺口，另报。
  */
 
 import { useMemo, useState } from 'react';
@@ -56,6 +64,7 @@ import type { Project, Stage, Task } from '../../core/types/entities';
 import { ChangxiaError } from '../../core/types/enums';
 import { planTaskMove, previewMove } from '../../core/services/agent-takeover.service';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
+import { useLang } from '../../i18n';
 import { Modal } from '../common/Modal';
 import { cn } from '../../lib/cn';
 
@@ -129,6 +138,8 @@ export function TransferDialog({
   /* ★ 双层门的上层：非 admin ⇒ 整块不进渲染树（不是 disabled）。
    *   注意 hook 必须在任何 return 之前调用（本项目曾因 hook 顺序栽过白屏）。 */
   const { isAdmin } = useRoleGuard();
+  /** 取词 + 语言变化订阅点（弹窗内全部文案在渲染期取） */
+  const { t } = useLang();
 
   const [mode, setMode] = useState<TransferMode>('convert');
   const [targetId, setTargetId] = useState<string>('');
@@ -222,7 +233,7 @@ export function TransferDialog({
     } catch (err) {
       // 就地展示服务端/领域的真实原因（member 被服务端拒绝时，用户看到的应当是
       // "只有管理员可以接管"这类具体文案，而不是笼统的"操作失败"）
-      setError(err instanceof ChangxiaError ? err.userMessage : '接管失败，请重试。');
+      setError(err instanceof ChangxiaError ? err.userMessage : t('agentTransfer.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -233,7 +244,7 @@ export function TransferDialog({
   if (!open) return null;
 
   return (
-    <Modal open onClose={onClose} ariaLabel="接管 Agent 看板">
+    <Modal open onClose={onClose} ariaLabel={t('agentTransfer.aria')}>
       <div
         data-transfer-dialog=""
         className="glass-strong w-full max-w-lg rounded-2xl p-5 shadow-soft"
@@ -241,12 +252,12 @@ export function TransferDialog({
         <div className="mb-3 flex items-start justify-between gap-3">
           <h3 className="flex items-center gap-2 font-display text-base font-semibold text-ink">
             <ArrowRight size={18} className="text-pine" aria-hidden />
-            接管「{sourceBoard.name}」
+            {t('agentTransfer.title', { name: sourceBoard.name })}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="取消接管"
+            aria-label={t('agentTransfer.cancelAria')}
             className="rounded-md p-1 text-mist transition-colors hover:bg-sand hover:text-ink"
           >
             <X size={16} aria-hidden />
@@ -260,27 +271,26 @@ export function TransferDialog({
         */}
         <p className="mb-3 flex items-start gap-2 rounded-md border border-amber/40 bg-amber-soft px-3 py-2 text-xs leading-5 text-amber">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
-          <span>
-            接管会把这块看板里的数据**移入人类工作区**，此后它归「我的项目」一侧管理。
-            该操作仅管理员可用。
-          </span>
+          <span>{t('agentTransfer.warning')}</span>
         </p>
 
         {/* 方式选择（两条路径） */}
         <fieldset className="mb-3">
-          <legend className="mb-1.5 text-sm font-medium text-ink">接管方式</legend>
+          <legend className="mb-1.5 text-sm font-medium text-ink">
+            {t('agentTransfer.modeLegend')}
+          </legend>
           <div className="flex flex-col gap-2">
             {(
               [
                 {
                   key: 'convert' as const,
-                  label: '转为正式项目',
-                  hint: '整块看板变成人类工作区里的一个项目（名称与阶段一并保留）。',
+                  label: t('agentTransfer.mode.convert.label'),
+                  hint: t('agentTransfer.mode.convert.hint'),
                 },
                 {
                   key: 'move' as const,
-                  label: '搬运任务',
-                  hint: '把选中的任务搬进一个已有的人类项目（需选落点阶段）。',
+                  label: t('agentTransfer.mode.move.label'),
+                  hint: t('agentTransfer.mode.move.hint'),
                 },
               ] satisfies Array<{ key: TransferMode; label: string; hint: string }>
             ).map((opt) => (
@@ -315,15 +325,15 @@ export function TransferDialog({
           <>
             <label className="mb-3 block text-sm">
               <span className="mb-1 block font-medium text-ink">
-                目标项目
-                <span className="text-clay"> *（仅列人类工作区的项目）</span>
+                {t('agentTransfer.target')}
+                <span className="text-clay"> *{t('agentTransfer.targetHint')}</span>
               </span>
               {candidates.length === 0 ? (
                 <p
                   data-transfer-no-target=""
                   className="rounded-md border border-dashed border-line px-3 py-2 text-xs text-mist"
                 >
-                  人类工作区里还没有项目。请先建一个项目，或改选「转为正式项目」。
+                  {t('agentTransfer.noTarget')}
                 </p>
               ) : (
                 <select
@@ -332,7 +342,7 @@ export function TransferDialog({
                   onChange={(e) => onTargetChange(e.target.value)}
                   className="h-[38px] w-full rounded-md border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-pine"
                 >
-                  <option value="">（请选择目标项目）</option>
+                  <option value="">{t('agentTransfer.targetPlaceholder')}</option>
                   {candidates.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -349,19 +359,19 @@ export function TransferDialog({
             */}
             <label className="mb-3 block text-sm">
               <span className="mb-1 block font-medium text-ink">
-                落点阶段
-                <span className="text-clay"> *（不自动新建阶段）</span>
+                {t('agentTransfer.stage')}
+                <span className="text-clay"> *{t('agentTransfer.stageHint')}</span>
               </span>
               {targetId === '' ? (
                 <p className="rounded-md border border-dashed border-line px-3 py-2 text-xs text-mist">
-                  请先选择目标项目。
+                  {t('agentTransfer.pickTargetFirst')}
                 </p>
               ) : stageOptions.length === 0 ? (
                 <p
                   data-transfer-no-stage=""
                   className="rounded-md border border-dashed border-line px-3 py-2 text-xs text-mist"
                 >
-                  目标项目还没有阶段，请先在其详情页添加阶段后再搬运。
+                  {t('agentTransfer.noStage')}
                 </p>
               ) : (
                 <select
@@ -370,7 +380,7 @@ export function TransferDialog({
                   onChange={(e) => setStageId(e.target.value)}
                   className="h-[38px] w-full rounded-md border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-pine"
                 >
-                  <option value="">（请选择落点阶段）</option>
+                  <option value="">{t('agentTransfer.stagePlaceholder')}</option>
                   {stageOptions.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.orderIndex}. {s.name}
@@ -383,10 +393,14 @@ export function TransferDialog({
             <div className="mb-3">
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-sm font-medium text-ink">
-                  搬运任务<span className="text-clay"> *</span>
+                  {t('agentTransfer.tasks')}
+                  <span className="text-clay"> *</span>
                 </span>
                 <span className="text-xs tabular-nums text-mist">
-                  已选 {selectedCount} / {tasks.length}
+                  {t('agentTransfer.selectedCount', {
+                    selected: selectedCount,
+                    total: tasks.length,
+                  })}
                 </span>
               </div>
               {tasks.length === 0 ? (
@@ -394,7 +408,7 @@ export function TransferDialog({
                   data-transfer-no-task=""
                   className="rounded-md border border-dashed border-line px-3 py-2 text-xs text-mist"
                 >
-                  这块看板下还没有任务，没有可搬运的内容。
+                  {t('agentTransfer.noTask')}
                 </p>
               ) : (
                 <div className="max-h-40 overflow-y-auto rounded-md border border-line bg-cream/50 p-2">
@@ -428,48 +442,61 @@ export function TransferDialog({
         >
           {mode === 'convert' ? (
             <>
-              预览：把看板「{sourceBoard.name}」整体转为人类工作区的正式项目
-              （其中 {tasks.length} 条任务一并转入）。
+              {t('agentTransfer.preview.convert', {
+                board: sourceBoard.name,
+                count: tasks.length,
+              })}
             </>
           ) : movePreview ? (
             <div className="flex flex-col gap-1.5">
               <p>
-                预览：把选中的 <strong className="text-ink">{selectedCount}</strong> 条任务从「
-                {sourceBoard.name}」搬入{' '}
+                {t('agentTransfer.preview.movePre')}
+                <strong className="text-ink">{selectedCount}</strong>
+                {t('agentTransfer.preview.moveMid', { board: sourceBoard.name })}
                 <strong className="text-ink">
-                  {candidates.find((p) => p.id === targetId)?.name ?? '（未选择目标项目）'}
+                  {candidates.find((p) => p.id === targetId)?.name ??
+                    t('agentTransfer.noTargetSelected')}
                 </strong>
-                ，其中新建 <strong className="text-ink">{movePreview.createCount}</strong> 条、
-                更新既有 <strong className="text-ink">{movePreview.updateCount}</strong> 条
-                （目标项目已有同外部编号的任务）。
+                {t('agentTransfer.preview.moveCreate')}
+                <strong className="text-ink">{movePreview.createCount}</strong>
+                {t('agentTransfer.preview.moveUpdate')}
+                <strong className="text-ink">{movePreview.updateCount}</strong>
+                {t('agentTransfer.preview.moveTail')}
               </p>
               {movePreview.droppedDependencyCount > 0 && (
                 <p data-transfer-preview-dropped="" className="text-clay">
-                  将剔除 {movePreview.droppedDependencyCount} 条悬空依赖（前驱未随本批搬走，
-                  留着会让任务被误判为可开工）：
+                  {t('agentTransfer.dropped.head', {
+                    count: movePreview.droppedDependencyCount,
+                  })}
                   {droppedDepRows.map((r, i) => (
                     <span key={`${r.taskTitle}-${r.depTitle}-${i}`} className="block pl-2">
-                      · 「{r.taskTitle}」不再依赖「{r.depTitle}」
+                      {t('agentTransfer.dropped.row', { task: r.taskTitle, dep: r.depTitle })}
                     </span>
                   ))}
                 </p>
               )}
               {movePreview.sourceDroppedDependencyCount > 0 && (
                 <p className="text-amber">
-                  源看板中另有 {movePreview.sourceDroppedDependencyCount} 条依赖指向被搬走的任务，
-                  将一并剥除（涉及 {movePreview.sourceRewires.length} 条留下的任务）。
+                  {t('agentTransfer.sourceSide', {
+                    dropped: movePreview.sourceDroppedDependencyCount,
+                    rewired: movePreview.sourceRewires.length,
+                  })}
                 </p>
               )}
-              {selectedCount === 0 && <p className="text-clay">请至少勾选一条任务。</p>}
+              {selectedCount === 0 && (
+                <p className="text-clay">{t('agentTransfer.pickAtLeastOne')}</p>
+              )}
             </div>
           ) : (
             <>
-              预览：把选中的 <strong className="text-ink">{selectedCount}</strong> 条任务
-              从「{sourceBoard.name}」搬入{' '}
+              {t('agentTransfer.preview.plainPre')}
+              <strong className="text-ink">{selectedCount}</strong>
+              {t('agentTransfer.preview.plainMid', { board: sourceBoard.name })}
               <strong className="text-ink">
-                {candidates.find((p) => p.id === targetId)?.name ?? '（未选择目标项目）'}
+                {candidates.find((p) => p.id === targetId)?.name ??
+                  t('agentTransfer.noTargetSelected')}
               </strong>
-              。选好目标项目与落点阶段后，这里会列出将新建 / 将更新 / 将剔除的悬空依赖。
+              {t('agentTransfer.preview.plainTail')}
             </>
           )}
         </div>
@@ -486,7 +513,7 @@ export function TransferDialog({
             onClick={onClose}
             className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -495,7 +522,7 @@ export function TransferDialog({
             onClick={() => void submit()}
             className="rounded-md bg-pine px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {submitting ? '处理中…' : '确认接管'}
+            {submitting ? t('agentTransfer.submitting') : t('agentTransfer.confirm')}
           </button>
         </div>
       </div>
