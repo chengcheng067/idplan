@@ -43,6 +43,7 @@ import {
 import {
   findStaleRegistrations,
   findUnregisteredCollapses,
+  normTerm,
   scanTermReactivity,
   type Catalog,
   type KeyTable,
@@ -189,6 +190,35 @@ describe('#354 术语不变量 · 重合必须登记，登记必须真重合', (
     expect([...MODE_COLLAPSED_KEYS.zh]).toEqual(['onsite']);
     expect(catalogOf('zh')[AGENT_TERM_KEYS.onsite.human]).toBe('现场');
     expect(catalogOf('zh')[AGENT_TERM_KEYS.onsite.tech]).toBe('现场');
+  });
+
+  /**
+   * ★ 覆盖面自证（team-lead 2026-08-27 点名的第四条）——**分母不许手写**。
+   *
+   * 为什么必须有这一条：旧 `agent-ui-terms.spec.ts:52` 的双模式断言是**手写 9 个 key 的清单**，
+   * 而术语 key 有 13 个 ⇒ 它从第一天起就只覆盖 9/13，**新增的 key 自动豁免**，
+   * 且**永远不会红**（这正是「登记表腐化」的同一个洞，只是它一开始就是宽的）。
+   * 本 spec 的判据改成**遍历 `AGENT_TERM_KEYS` 全集**（分母来自表本身），
+   * 于是「第 14 个 key」不可能静默溜过；再加下面这条把「覆盖」本身断言出来：
+   * 每个 key 至少要在**某一种语言下**属于「两列取值不同」或「登记在案」二者之一 ——
+   * 若某 key 在 zh 与 en 下都重合、又没登记，它就是**第三类**（既不在不变量里、也不在登记表里）。
+   */
+  it('★ 覆盖面：13 个 key 每一个都落在「取值不同 or 登记在案」里，没有第三类', () => {
+    const keys = Object.keys(AGENT_TERM_KEYS) as Array<keyof typeof AGENT_TERM_KEYS>;
+    const uncovered = keys.filter((key) => {
+      const pair = AGENT_TERM_KEYS[key];
+      return !(['zh', 'en'] as const).some((lang) => {
+        const table = catalogOf(lang);
+        const differs = normTerm(table[pair.human]) !== normTerm(table[pair.tech]);
+        const registered = (MODE_COLLAPSED_KEYS[lang] as readonly string[]).includes(key);
+        return differs || registered;
+      });
+    });
+    expect(
+      uncovered,
+      '这些 key 既没被不变量盖到、也没登记 ⇒ 新增 key 会静默豁免（本仓踩过一次的洞）',
+    ).toEqual([]);
+    expect(keys.length, '术语 key 数变了 ⇒ 本条与 agent-ui-terms 的 13 必须同批复核').toBe(13);
   });
 });
 
