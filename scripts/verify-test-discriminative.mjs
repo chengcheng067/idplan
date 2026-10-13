@@ -27,6 +27,19 @@
  *   ② `try/finally` + 信号处理：任何退出路径（正常 / 断言不符 / 抛异常 / Ctrl-C / SIGTERM）
  *      都必须还原源码。还原走**内存快照回写**，不依赖 git 状态，故即使 git 中途被改动也能还原。
  *   ③ 收尾断言 `git diff --quiet`：还原失败就**大声报错**并以非零码退出，绝不静默收场。
+ *      （2026-10-14 起：这一条**改为调用共用工具** `scripts/lib/restore-guard.mjs` —— 它比裸
+ *       `git diff --quiet` 多两件事：能区分「我造成的改动」与「起跑前就有的脏条目」，且**指名文件**。
+ *       两处退出路径（正常收尾 / 信号中断）都受它管。手工变异会话可直接用它的 CLI。）
+ *
+ * ⚠️ **本脚本会重建 `build-dist`（共享资源，会影响其他线的浏览器跑批）**
+ *   每一次变异都会「改源码 → 重建产物 → 跑探测用例 → 还原」，收尾还会再重建一次，
+ *   目的是不留下一棵「产物比源码新」的 stale 树（那种树会让后续真浏览器 spec **静默 skip**，
+ *   而 skip ≠ 通过）。⇒ 跑之前请知道：**别的线正在跑的真浏览器批会被这棵产物影响**；
+ *   请挑没有并发跑批的窗口，或接受「你重建后别人的读数要重取」。
+ *   （这条提示是 team-lead 2026-10-14 要求的「共享资源副作用要**可见**、不要**消失**」的具体落点；
+ *    对应地，我提过的 `--no-build` 开关**未获批** —— 那会让 stale 树的坑回来。）
+ *   跑完自查：`find src electron -type f \( -name '*.ts' -o -name '*.tsx' \) -newer build-dist/index.html | wc -l`
+ *   应为 0。
  *
  * ── ★ 变异纪律的两条硬约束（2026-10-14 增补；本文件是这两条的**唯一出处**，别处不要再抄）──
  *
@@ -604,6 +617,13 @@ function main() {
     return 2;
   }
   echo(`被检根：${ROOT}${rootArg ? '（--root 指定，隔离树）' : '（本仓库）'}`);
+  if (WILL_MUTATE) {
+    // ★ 共享资源副作用「可见」而不是「消失」（team-lead 2026-10-14；`--no-build` 未获批的替代）
+    console.warn(
+      '\u001b[33m⚠️  本脚本会**重建 build-dist**（共享资源，会影响其他线的真浏览器跑批）——请挑无并发跑批的窗口；' +
+        '跑完请自查 `find src electron -name "*.ts*" -newer build-dist/index.html | wc -l` == 0。\u001b[0m',
+    );
+  }
 
   const selected = ONLY ? MUTATIONS.filter((m) => m.id === ONLY) : MUTATIONS;
   if (ONLY && selected.length === 0) {
