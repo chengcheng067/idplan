@@ -156,6 +156,9 @@
 
 ## 2. 版本号（✱ 走查 D5 纪律：数字类事实同源同批更新）
 - [ ] `version.json` 四段号推进（如 0.8.3.0001）
+  - ✱ **本版（2026-10-14 出包）待定的那一个数**：当前 `version.json` = **`1.0.0.0008`**，而 0008 **已出货**（NAS UPK 已产出）⇒ 本版必须往前进一段。**建议 `1.0.0.0009`**（待用户确认；他不另说则按 0009 出）。
+    ⇒ **它同时决定 NAS UPK 的 `--build`**：`<n>` 必须等于同批桌面版四段号的第 4 段 ⇒ 0009 ⇒ **`--build 9`**（见 §4 `:123` 与 §6，**别照抄 `1`**）。
+  - ✱ 两个号的分工记牢：`version.json` 四段 = **单一真相源**（决定 `BUILD_VERSION`、对外交付名、GitHub tag）；`package.json` 三段 `1.0.0` = **安装器/Windows 元数据**用（见 §3 那条「复制为四段号」与 §5 notes 的「两套版本号」）。
 - [ ] README / README.en.md 徽章 version + tests 数与**本轮实跑一致**
 - [ ] `docs/install/windows-install.md` 文件名同步
 - [ ] 套餐数 / phase 数等库数字（stage-library version、presets 数）同批更（api-contract / README）
