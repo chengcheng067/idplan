@@ -27,6 +27,7 @@ import {
   previewAgentPayload,
 } from '../core/agent/payload.apply';
 import { computeReadyTasks } from '../core/agent/dag';
+import { t } from '../i18n';
 import { buildHandoffBundle } from '../core/agent/handoff';
 import { getAgentImportChannel } from '../core/agent/transport.contract';
 import type { AgentChannelKind } from '../core/agent/transport.contract';
@@ -96,7 +97,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : 'payload 预览失败。',
+        err instanceof ChangxiaError ? err.userMessage : t('toast.payloadPreviewFailed'),
       );
       return null;
     }
@@ -124,14 +125,19 @@ export const useAgentStore = create<AgentState>((set) => ({
       }
       projectsStore.pushToast(
         'success',
-        `写入完成：新增 ${result.created} / 更新 ${result.updated}` +
-          (result.rejected.length > 0 ? ` / 拒绝 ${result.rejected.length}` : ''),
+        result.rejected.length > 0
+          ? t('toast.payloadWriteDoneRejected', {
+              created: result.created,
+              updated: result.updated,
+              rejected: result.rejected.length,
+            })
+          : t('toast.payloadWriteDone', { created: result.created, updated: result.updated }),
       );
       return result;
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : 'payload 写入失败。',
+        err instanceof ChangxiaError ? err.userMessage : t('toast.payloadWriteFailed'),
       );
       return null;
     }
@@ -170,7 +176,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : '交接包生成失败。',
+        err instanceof ChangxiaError ? err.userMessage : t('toast.handoffFailed'),
       );
       return '';
     }
@@ -181,11 +187,11 @@ export const useAgentStore = create<AgentState>((set) => ({
     try {
       const updated = await new TaskService(repos.tasks).claim(taskId, memberId);
       projectsStore.putTask(updated);
-      projectsStore.pushToast('success', '已认领，开始执行');
+      projectsStore.pushToast('success', t('toast.claimed'));
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : '认领失败。',
+        err instanceof ChangxiaError ? err.userMessage : t('toast.claimFailed'),
       );
     }
   },
@@ -195,11 +201,11 @@ export const useAgentStore = create<AgentState>((set) => ({
     try {
       const updated = await new TaskService(repos.tasks).transitionStatus(taskId, to);
       projectsStore.putTask(updated);
-      projectsStore.pushToast('success', '状态已更新');
+      projectsStore.pushToast('success', t('toast.statusUpdated'));
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : '状态流转失败。',
+        err instanceof ChangxiaError ? err.userMessage : t('toast.agentStatusTransitionFailed'),
       );
     }
   },
@@ -257,10 +263,10 @@ function validateOrToast(
   if (res.ok) return res.payload;
   const first = res.issues.slice(0, 3);
   for (const issue of first) {
-    pushToast('error', `payload 校验失败：${issue.path} ${issue.message}`);
+    pushToast('error', t('toast.payloadInvalid', { path: issue.path, message: issue.message }));
   }
   if (res.issues.length > first.length) {
-    pushToast('error', `……另有 ${res.issues.length - first.length} 条结构错误未展示。`);
+    pushToast('error', t('toast.payloadMoreIssues', { count: res.issues.length - first.length }));
   }
   return null;
 }

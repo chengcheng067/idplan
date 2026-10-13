@@ -16,8 +16,17 @@
 import { dayjs } from '../../lib/date';
 import type { CalendarMonthMeta } from './calendarMath';
 
-/** 星期表头（周一为起点，与系统日历一致） */
-export const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
+/**
+ * 星期表头序号（周一为起点，与系统日历一致）。
+ *
+ * ★ 2026-10-13 中英切换：这里原本是 `export const WEEKDAYS = ['一','二',…,'日']`
+ * ——**文案表**。文案已整批搬进 `src/i18n/messages/{zh,en}.ts`
+ * （键 `weekday.short.mon…sun`），本文件只留**序号**，消费方在渲染期用
+ * `weekdayShortLabel(i)` 取词（i 即下标，0 = 周一）。
+ * 为什么不留一个「默认中文表」兜底：两处文案必然漂移，而本文件是纯工具层
+ * （文件头写明「零 DOM 依赖、零 store 依赖」），不该再持有会随语言变的东西。
+ */
+export const WEEKDAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const;
 
 /** 网格行数：6 行 42 格，恒定行高节奏（月历不因月长跳高） */
 export const GRID_ROWS = 6;

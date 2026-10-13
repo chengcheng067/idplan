@@ -5,7 +5,7 @@ import { ChevronsUpDown, LogIn } from 'lucide-react';
 
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
-import { MEMBER_ROLE_LABELS } from '../../core/types/enums';
+import { memberRoleLabel, useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
 import { resolveAnchoredPosition } from '../../lib/anchoredPosition';
 import { titleBarHeight } from '../../lib/topbarMetrics';
@@ -101,6 +101,8 @@ export function MemberIdentityPicker({
   variant = 'topbar',
 }: MemberIdentityPickerProps = {}): JSX.Element {
   const { currentMember, isAdmin, isEntered, hasAdmin } = useRoleGuard();
+  /** 取词 + 语言变化订阅点（角色徽标在渲染期取） */
+  const { t } = useLang();
   const openIdentityFlow = useSettingsStore((s) => s.openIdentityFlow);
   const setCurrentMember = useSettingsStore((s) => s.setCurrentMember);
 
@@ -230,7 +232,7 @@ export function MemberIdentityPicker({
     setMenuOpen(true);
   };
 
-  const roleLabel = currentMember ? MEMBER_ROLE_LABELS[currentMember.roleKind] : '';
+  const roleLabel = currentMember ? memberRoleLabel(currentMember.roleKind) : '';
 
   /** 未进入身份时的动作（三处共用一个口径）：无管理员 → 引导确立；有 → 直接姓名输入 */
   const onEnterIdentity = (): void => {
@@ -388,7 +390,7 @@ export function MemberIdentityPicker({
           <span className="hidden max-w-[96px] truncate sm:inline">{currentMember?.name ?? '未知'}</span>
           {isAdmin && (
             <span className="hidden rounded-full bg-pine-soft px-1.5 py-0.5 text-[10px] font-medium text-pine-deep xl:inline-block">
-              {MEMBER_ROLE_LABELS.admin}
+              {t('memberRole.admin')}
             </span>
           )}
           <ChevronsUpDown size={14} className="text-mist" />

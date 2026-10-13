@@ -26,7 +26,12 @@ import { Chip } from '../ui/Chip';
 import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS } from '../timeline/stageColors';
 import { cn } from '../../lib/cn';
 import { CIRCLED_NUMBERS, STAGE_ORDERS } from './calendarColors';
-import { CalendarFilterStatus, STATUS_LABELS, type CalendarFilters as Filters } from './calendarMath';
+import {
+  CALENDAR_FILTER_STATUSES,
+  type CalendarFilterStatus,
+  type CalendarFilters as Filters,
+} from './calendarMath';
+import { calendarStatusLabel, useLang } from '../../i18n';
 
 /**
  * chip 骨架类（规格 §3.7）：高 30 / 横向 padding 14 / 圆角 9999 / 文字 12/500。
@@ -90,14 +95,16 @@ export function CalendarFilters({
   onToggleStage(orderIndex: number): void;
   onClear(): void;
 }): JSX.Element {
+  // 订阅语言变化：状态 chip 的文案由 calendarStatusLabel() 在渲染期取，
+  // 少了这个订阅，切语言时 chip 会停在旧语言。
+  useLang();
   const hasAny = filters.status.size > 0 || filters.stage.size > 0;
-
   return (
     <div className="flex flex-wrap items-center gap-[8px]">
       {/* 状态组 */}
-      {(Object.keys(STATUS_LABELS) as CalendarFilterStatus[]).map((s) => (
+      {CALENDAR_FILTER_STATUSES.map((s) => (
         <Chip key={s} active={filters.status.has(s)} onClick={() => onToggleStatus(s)}>
-          {STATUS_LABELS[s]}
+          {calendarStatusLabel(s)}
         </Chip>
       ))}
 

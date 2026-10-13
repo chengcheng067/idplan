@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CalendarDays, X } from 'lucide-react';
 
-import { ALL_REST_POLICIES, ChangxiaError, REST_POLICY_LABELS, RestPolicyKind, ScheduleBasis } from '../../core/types/enums';
+import { ALL_REST_POLICIES, ChangxiaError, RestPolicyKind, ScheduleBasis } from '../../core/types/enums';
 import type { RestPolicyConfig } from '../../core/types/entities';
 import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
@@ -13,13 +13,25 @@ import { withCnHolidays } from '../../core/holidays/policy';
 import { cnHolidayYears } from '../../core/holidays';
 import { dayjs } from '../../lib/date';
 import { cn } from '../../lib/cn';
+import {
+  restPolicyLabel,
+  useLang,
+  weekdayFullLabel,
+  weekdayShortLabel,
+  WEEKDAY_FULL_KEYS,
+} from '../../i18n';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { Modal } from '../common/Modal';
 import { RestPolicyRecalcDialog } from './RestPolicyRecalcDialog';
 
-/** ISO 周行首为周一 */
-const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'] as const;
+/*
+ * ★ 2026-10-13 中英切换：这里原本有一张本地 `WEEKDAY_LABELS`（一~日）与
+ * 对 `REST_POLICY_LABELS` 的直接引用。两张表的文案都已搬进
+ * src/i18n/messages/{zh,en}.ts，本文件在渲染期用 weekdayFullLabel(idx) /
+ * weekdayShortLabel(idx) / restPolicyLabel(kind) 取词（序号 0..6 = 周一..周日）。
+ * ⇒ 本文件不再持有任何文案表，也不再直接 import core/types 的标签表。
+ */
 
 /** 大小休预览周数（设置弹窗「未来 4 周」） */
 const PREVIEW_WEEKS = 4;
@@ -57,7 +69,7 @@ export function RestPolicySettingsButton(): JSX.Element | null {
  *   - 独立弹窗 RestPolicyDialog（顶栏/移动端菜单 → 完整 Modal）
  *   - 设置面板 SettingsDialog 内联「休息制度」区（embedded，不套独立 Modal）
  *
- * - 三档单选：文案与遍历顺序全部取自 REST_POLICY_LABELS / ALL_REST_POLICIES（唯一文案源，铁律 7）；
+ * - 三档单选：文案取自 i18n（restPolicyLabel），遍历顺序取自 ALL_REST_POLICIES（铁律 7）；
  * - 单休自定义休息周几（v3 §4.3，需求方拍板「单休之后允许用户自定义单休是周几」）：
  *   单休档下出现「休息日 = 周X」七选一（0=周一…6=周日，默认 6=周日，缺省回落周日
  *   ⇒ 旧数据无迁移）；双休/大小休档隐藏。判定侧见 lib/workdays.ts isRestDay。
@@ -87,6 +99,9 @@ export function RestPolicyEditor({
   embedded?: boolean;
 }): JSX.Element {
   const repos = useRepos();
+  // 订阅语言变化：档位与星期文案由 restPolicyLabel() / weekdayFullLabel() 在渲染期取，
+  // 少了这个订阅，切语言时本编辑器会停在旧语言。
+  useLang();
   const saved = useSettingsStore((s) => s.restPolicy);
   const savedEffective = useSettingsStore((s) => s.effectiveRestPolicy);
   const applyToStore = useSettingsStore((s) => s.setRestPolicy);
@@ -265,7 +280,7 @@ export function RestPolicyEditor({
         决定全系统哪些天是工作日（月历底纹、时间轴休息条带、改期吸附与工期口径）。
       </p>
 
-      {/* 三档单选：遍历 ALL_REST_POLICIES，文案取 REST_POLICY_LABELS */}
+      {/* 三档单选：遍历 ALL_REST_POLICIES，文案走 i18n（restPolicyLabel） */}
       <div className="space-y-2">
         {ALL_REST_POLICIES.map((kind) => {
           const active = draft.kind === kind;
@@ -287,7 +302,7 @@ export function RestPolicyEditor({
                 onChange={() => onPickKind(kind)}
                 className="accent-pine"
               />
-              <span className="font-medium">{REST_POLICY_LABELS[kind]}</span>
+              <span className="font-medium">{restPolicyLabel(kind)}</span>
             </label>
           );
         })}
@@ -320,7 +335,7 @@ export function RestPolicyEditor({
 
       {/*
         单休：自定义休息日 = 周X 七选一（v3 §4.3，需求方拍板「选择单休之后允许
-        用户自定义单休是周几」）。索引 0..6 = 周一..周日（与 WEEKDAY_LABELS 同序），
+        用户自定义单休是周几」）。索引 0..6 = 周一..周日（与 WEEKDAY_FULL_KEYS 同序），
         默认 6=周日（缺省回落，旧数据无迁移）。双休/大小休档隐藏。
         判定侧见 lib/workdays.ts isRestDay 的 SingleOff 分支。
       */}
@@ -331,7 +346,7 @@ export function RestPolicyEditor({
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs text-mist">
-              单休休息日 = <span className="text-ink">周{WEEKDAY_LABELS[restWeekday]}</span>
+              单休休息日 = <span className="text-ink">{weekdayFullLabel(restWeekday)}</span>
               （每周只休这一天）
             </span>
             {restWeekday !== 6 && (
@@ -347,9 +362,9 @@ export function RestPolicyEditor({
           </div>
 
           <div className="grid grid-cols-7 gap-1">
-            {WEEKDAY_LABELS.map((w, idx) => (
+            {WEEKDAY_FULL_KEYS.map((k, idx) => (
               <button
-                key={w}
+                key={k}
                 type="button"
                 data-testid={`rest-weekday-${idx}`}
                 aria-pressed={restWeekday === idx}
@@ -361,7 +376,7 @@ export function RestPolicyEditor({
                     : 'border-line text-mist hover:bg-sand hover:text-ink',
                 )}
               >
-                周{w}
+                {weekdayFullLabel(idx)}
               </button>
             ))}
           </div>
@@ -375,7 +390,7 @@ export function RestPolicyEditor({
       {/*
         双休：自定义两个休息日 = 周A + 周B 多选（v3 §4.6，需求方拍板「双休在
         周内的连续两天，还是分开的（比如休星期六和星期一）」）。索引 0..6 =
-        周一..周日（与 WEEKDAY_LABELS 同序），缺省 = [5,6] 周六+周日（旧数据
+        周一..周日（与 WEEKDAY_FULL_KEYS 同序），缺省 = [5,6] 周六+周日（旧数据
         无迁移）。交互：点未选=加入（满两天忽略）；点已选=取消（至少留一天）。
         判定侧见 lib/workdays.ts isRestDay 的 DoubleOff 分支。
       */}
@@ -388,7 +403,7 @@ export function RestPolicyEditor({
             <span className="text-xs text-mist">
               双休休息日 ={' '}
               <span className="text-ink">
-                {doubleDays.map((d) => `周${WEEKDAY_LABELS[d]}`).join(' + ')}
+                {doubleDays.map((d) => weekdayFullLabel(d)).join(' + ')}
               </span>
               （每周休这{doubleComplete ? '两天' : '一天，再选一天'}）
             </span>
@@ -406,9 +421,9 @@ export function RestPolicyEditor({
           </div>
 
           <div className="grid grid-cols-7 gap-1">
-            {WEEKDAY_LABELS.map((w, idx) => (
+            {WEEKDAY_FULL_KEYS.map((k, idx) => (
               <button
-                key={w}
+                key={k}
                 type="button"
                 data-testid={`double-rest-day-${idx}`}
                 aria-pressed={doubleDays.includes(idx)}
@@ -420,7 +435,7 @@ export function RestPolicyEditor({
                     : 'border-line text-mist hover:bg-sand hover:text-ink',
                 )}
               >
-                周{w}
+                {weekdayFullLabel(idx)}
               </button>
             ))}
           </div>
@@ -458,9 +473,9 @@ export function RestPolicyEditor({
           <div className="space-y-1">
             <div className="grid grid-cols-[44px_repeat(7,1fr)] gap-1">
               <span />
-              {WEEKDAY_LABELS.map((w) => (
-                <span key={w} className="text-center text-[10px] text-mist">
-                  {w}
+              {WEEKDAY_FULL_KEYS.map((k, i) => (
+                <span key={k} className="text-center text-[10px] text-mist">
+                  {weekdayShortLabel(i)}
                 </span>
               ))}
             </div>

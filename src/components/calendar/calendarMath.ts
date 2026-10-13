@@ -61,13 +61,20 @@ export interface CalendarEntry {
 /** 空筛选条件（瞬态初值） */
 export const EMPTY_FILTERS: CalendarFilters = { status: new Set(), stage: new Set() };
 
-/** 状态筛选中文标签（图例 / 筛选 chip 共用） */
-export const STATUS_LABELS: Record<CalendarFilterStatus, string> = {
-  in_progress: '进行中',
-  completed: '已完成',
-  overdue: '逾期',
-  not_started: '未开始',
-};
+/**
+ * 月历筛选状态全集（顺序即筛选 chip 顺序）。
+ *
+ * ★ 2026-10-13 中英切换：这里原本是 `STATUS_LABELS: Record<…, string>`
+ * ——**文案表**。文案已搬进 `src/i18n/messages/{zh,en}.ts`
+ * （键 `calendarStatus.*`），消费方在渲染期用 `calendarStatusLabel(s)` 取词。
+ * 本文件是「月历甘特纯计算层（零 DOM 依赖）」⇒ 不持有文案、不读语言状态。
+ */
+export const CALENDAR_FILTER_STATUSES: readonly CalendarFilterStatus[] = [
+  'in_progress',
+  'completed',
+  'overdue',
+  'not_started',
+];
 
 /** 由 'YYYY-MM' 构建当月元信息（todayIso 可注入，测试幂等） */
 export function buildMonthMeta(calendarMonth: string, todayIso?: string): CalendarMonthMeta {

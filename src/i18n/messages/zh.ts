@@ -217,6 +217,9 @@ export const zhMessages = {
   'toast.handoffFailed': '交接包生成失败。',
   'toast.claimed': '已认领，开始执行',
   'toast.claimFailed': '认领失败。',
+  /* Agent store 的状态流转失败文案带句号，与项目 store 的同名提示**不同字面**
+   * （改造前就如此）。逐字节保真是本批的硬前提，故单立一键，不擅自统一标点。 */
+  'toast.agentStatusTransitionFailed': '状态流转失败。',
   'toast.payloadInvalid': 'payload 校验失败：{path} {message}',
   'toast.payloadMoreIssues': '……另有 {count} 条结构错误未展示。',
 } as const;

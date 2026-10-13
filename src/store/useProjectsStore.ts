@@ -34,6 +34,7 @@ import {
   type CreateAgentBoardCmd,
 } from '../core/services/project.service';
 import { AgentTakeoverService, type MoveOutcome } from '../core/services/agent-takeover.service';
+import { t } from '../i18n';
 import { StageService } from '../core/services/stage.service';
 import type { UnlockHintSignal } from '../core/services/stage.service';
 import { appEnv } from '../config/env';
@@ -179,7 +180,7 @@ function assertTakeoverAllowed(): void {
   if (appEnv.dataSource !== 'local') {
     throw new ChangxiaError(
       ChangxiaErrorCode.Validation,
-      '接管操作仅支持本机数据档：NAS 档的服务端尚未提供跨项目搬移端点。',
+      t('toast.takeoverNotSupportedOnNas'),
     );
   }
 }
@@ -206,11 +207,11 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         useProjectsStore.setState((st) => ({
           tasks: [...st.tasks.filter((t) => t.projectId !== project.id), ...freshTasks],
         }));
-        store.pushToast('success', `「${project.name}」建档完成`);
+        store.pushToast('success', t('toast.projectCreated', { name: project.name }));
         return project;
       } catch (err) {
         // 向上抛真实原因（含 userMessage），由调用方表单展示，避免笼统的「请检查日期」误导文案
-        const msg = err instanceof ChangxiaError ? err.userMessage : '建档失败，请重试。';
+        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.projectCreateFailed');
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -227,11 +228,11 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         useProjectsStore.setState((st) => ({
           tasks: [...st.tasks.filter((t) => t.projectId !== project.id), ...freshTasks],
         }));
-        store.pushToast('success', `「${project.name}」手动建档完成`);
+        store.pushToast('success', t('toast.projectCreatedManual', { name: project.name }));
         return project;
       } catch (err) {
         // 向上抛真实原因（含 userMessage），由调用方表单展示，避免笼统的「请检查日期」误导文案
-        const msg = err instanceof ChangxiaError ? err.userMessage : '建档失败，请重试。';
+        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.projectCreateFailed');
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -251,7 +252,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
           );
         }
         store.putProject(updated);
-        store.pushToast('success', '项目信息已更新');
+        store.pushToast('success', t('toast.projectUpdated'));
       } catch (err) {
         store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '更新失败');
       }
@@ -277,12 +278,12 @@ export function createProjectActions(repos: import('../core/repositories/interfa
       try {
         const updated = await services.projects.confirmProjectDomain(id, domain);
         store.putProject(updated);
-        store.pushToast('success', '项目板块已确认');
+        store.pushToast('success', t('toast.projectDomainConfirmed'));
         return true;
       } catch (err) {
         store.pushToast(
           'error',
-          err instanceof ChangxiaError ? err.userMessage : '板块确认失败，请重试。',
+          err instanceof ChangxiaError ? err.userMessage : t('toast.projectDomainConfirmFailed'),
         );
         return false;
       }
@@ -329,17 +330,17 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         if (!project) {
           throw new ChangxiaError(
             ChangxiaErrorCode.Storage,
-            '看板已创建，但读取新看板失败。请刷新后查看。',
+            t('toast.boardReadBackFailed'),
           );
         }
         store.putProject(project);
         const freshStages = await repos.stages.listByProject(project.id);
         store.setStages(project.id, freshStages);
-        store.pushToast('success', `「${project.name}」看板已创建`);
+        store.pushToast('success', t('toast.boardCreated', { name: project.name }));
         return project;
       } catch (err) {
         // 向上抛真实原因（含 userMessage），由调用方表单展示，避免笼统的「创建失败」误导文案
-        const msg = err instanceof ChangxiaError ? err.userMessage : '创建看板失败，请重试。';
+        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.boardCreateFailed');
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -351,14 +352,14 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         await repos.projects.archive(id, archived);
         if (archived) {
           store.removeProjectLocal(id);
-          store.pushToast('success', archived ? '已归档' : '已恢复');
+          store.pushToast('success', archived ? t('toast.archived') : t('toast.restored'));
         } else {
           const fresh = await repos.projects.get(id);
           if (fresh) store.putProject(fresh);
-          store.pushToast('success', '已恢复为进行中');
+          store.pushToast('success', t('toast.restoredToActive'));
         }
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '操作失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.actionFailed'));
       }
     },
 
@@ -372,9 +373,9 @@ export function createProjectActions(repos: import('../core/repositories/interfa
           stages: st.stages.filter((s) => s.projectId !== id),
           tasks: st.tasks.filter((t) => t.projectId !== id),
         }));
-        store.pushToast('success', `「${projectName ?? '项目'}」已删除`);
+        store.pushToast('success', t('toast.projectDeleted', { name: projectName ?? t('common.untitledProject') }));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '删除失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.deleteFailed'));
       }
     },
 
@@ -393,10 +394,10 @@ export function createProjectActions(repos: import('../core/repositories/interfa
       try {
         const updated = await services.takeover.convertBoardToHuman(boardId);
         store.putProject(updated);
-        store.pushToast('success', `「${updated.name}」已转为正式项目，归「我的项目」管理`);
+        store.pushToast('success', t('toast.projectPromoted', { name: updated.name }));
         return updated;
       } catch (err) {
-        const msg = err instanceof ChangxiaError ? err.userMessage : '接管失败，请重试。';
+        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.takeoverFailed');
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -435,12 +436,16 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         const dropped = outcome.droppedDependencies + outcome.sourceDroppedDependencies;
         store.pushToast(
           'success',
-          `已搬运 ${outcome.created + outcome.updated} 条任务` +
-            (dropped > 0 ? `（剥离 ${dropped} 条悬空依赖）` : ''),
+          dropped > 0
+            ? t('toast.tasksMovedDropped', {
+                count: outcome.created + outcome.updated,
+                dropped,
+              })
+            : t('toast.tasksMoved', { count: outcome.created + outcome.updated }),
         );
         return outcome;
       } catch (err) {
-        const msg = err instanceof ChangxiaError ? err.userMessage : '搬运失败，请重试。';
+        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.tasksMoveFailed');
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -453,10 +458,10 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.putStage(updated);
         const logs = await repos.logs.listStageLogsByStage(stageId);
         store.setStageLogs(stageId, logs);
-        store.pushToast('success', '已改期并留痕');
+        store.pushToast('success', t('toast.rescheduled'));
         return true;
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '改期失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.rescheduleFailed'));
         return false;
       }
     },
@@ -472,10 +477,10 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.putStage(stage);
         const logs = await repos.logs.listStageLogsByStage(stageId);
         store.setStageLogs(stageId, logs);
-        store.pushToast('success', '状态已更新');
+        store.pushToast('success', t('toast.statusUpdated'));
         return unlockHint;
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '状态流转失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.statusTransitionFailed'));
         return null;
       }
     },
@@ -486,7 +491,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         const updated = await repos.stages.update(stageId, cmd);
         store.putStage(updated);
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '保存失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.saveFailed'));
       }
     },
 
@@ -524,7 +529,7 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
         store.putTask(task); // 回滚
         store.pushToast(
           'error',
-          err instanceof ChangxiaError ? err.userMessage : '任务状态保存失败，已回滚。',
+          err instanceof ChangxiaError ? err.userMessage : t('toast.taskStatusSaveFailedRolledBack'),
         );
       }
     },
@@ -558,9 +563,9 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
           });
         }
         store.putTask(updated);
-        store.pushToast('success', '任务已保存');
+        store.pushToast('success', t('toast.taskSaved'));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '任务保存失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.taskSaveFailed'));
       }
     },
 
@@ -583,9 +588,9 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
           });
         }
         store.addTaskLocal(created);
-        store.pushToast('success', '条目已添加');
+        store.pushToast('success', t('toast.entryAdded'));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '添加失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.entryAddFailed'));
       }
     },
 
@@ -594,12 +599,12 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
       store.removeTaskLocal(id); // 乐观删除
       try {
         await repos.tasks.remove(id);
-        store.pushToast('success', '条目已删除');
+        store.pushToast('success', t('toast.entryDeleted'));
       } catch (err) {
         if (snapshot) store.addTaskLocal(snapshot);
         store.pushToast(
           'error',
-          err instanceof ChangxiaError ? err.userMessage : '删除失败，已还原。',
+          err instanceof ChangxiaError ? err.userMessage : t('toast.entryDeleteFailedReverted'),
         );
       }
     },

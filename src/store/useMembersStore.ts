@@ -4,6 +4,7 @@ import type { Member } from '../core/types/entities';
 import type { CreateMemberCmd, UpdateMemberCmd } from '../core/types/dto';
 import { ChangxiaError } from '../core/types/enums';
 import { useProjectsStore, setMemberCacheForNames } from './useProjectsStore';
+import { t } from '../i18n';
 
 /** 成员镜像：列表 + CRUD action（异步持久化经 repo，失败 toast 回滚） */
 export interface MembersState {
@@ -48,12 +49,12 @@ export function createMemberActions(repos: import('../core/repositories/interfac
       try {
         const created = await repos.members.insert(cmd);
         store.upsert(created);
-        useProjectsStore.getState().pushToast('success', `成员「${created.name}」已添加`);
+        useProjectsStore.getState().pushToast('success', t('toast.memberAdded', { name: created.name }));
         return true;
       } catch (err) {
         useProjectsStore
           .getState()
-          .pushToast('error', err instanceof ChangxiaError ? err.userMessage : '添加成员失败');
+          .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.memberAddFailed'));
         return false;
       }
     },
@@ -62,11 +63,11 @@ export function createMemberActions(repos: import('../core/repositories/interfac
       try {
         const updated = await repos.members.update(id, cmd);
         store.upsert(updated);
-        useProjectsStore.getState().pushToast('success', '成员信息已更新');
+        useProjectsStore.getState().pushToast('success', t('toast.memberUpdated'));
       } catch (err) {
         useProjectsStore
           .getState()
-          .pushToast('error', err instanceof ChangxiaError ? err.userMessage : '更新失败');
+          .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.updateFailed'));
       }
     },
 

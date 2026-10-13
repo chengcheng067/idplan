@@ -16,6 +16,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { usePluginRegistry } from '../../core/plugin/PluginRegistryProvider';
 import { cn } from '../../lib/cn';
+import { useLang, type MessageKey } from '../../i18n';
 
 /**
  * 侧栏主导航项列表（v0.7 · N02/T20 起；v0.8.5 按雯丞设想重构 Agent 区）。
@@ -70,9 +71,10 @@ function fileNavIcon(name: string): LucideIcon {
 }
 
 /** Agent 二级子项（工作区 / 执行记录） */
-const AGENT_CHILDREN: ReadonlyArray<{ to: string; label: string; Icon: LucideIcon }> = [
-  { to: '/agent', label: '工作区', Icon: LayoutGrid },
-  { to: '/agent/executions', label: '执行记录', Icon: History },
+/** Agent 二级子项（工作区 / 执行记录）。文案走 i18n，这里只留键 */
+const AGENT_CHILDREN: ReadonlyArray<{ to: string; labelKey: MessageKey; Icon: LucideIcon }> = [
+  { to: '/agent', labelKey: 'nav.agentWorkspace', Icon: LayoutGrid },
+  { to: '/agent/executions', labelKey: 'nav.agentExecutions', Icon: History },
 ];
 
 /** 是否处于 Agent 区（自动展开/收起的路由判据） */
@@ -87,6 +89,8 @@ export function SidebarNav({
   drawer?: boolean;
 }): JSX.Element {
   const { isAdmin } = useRoleGuard();
+  /** 取词 + **语言变化订阅点**（少了它，切语言时侧栏不会重渲染） */
+  const { t } = useLang();
   const { pathname } = useLocation();
   // 展开态：组件内 state，不持久化；挂载时按路由判据定初值（进 Agent 区即展开）。
   // 切页若整栏重渲染，此 state 重置——按同一路由判据重算，行为一致（规范 C.5）。
@@ -125,26 +129,26 @@ export function SidebarNav({
     Icon: fileNavIcon(n.icon),
     match: (p: string) => p === n.to,
     // 第三方入口显式标注来源（设计师规范：来源只用形态不用徽章 ⇒ 用小字后缀）
-    badge: '插件',
+    badge: t('nav.pluginBadge'),
   }));
 
   const entries: Array<NavEntry | { group: 'agent' }> = [
     isAdmin
       ? {
           to: '/',
-          label: '项目',
+          label: t('nav.projects'),
           Icon: LayoutGrid,
           match: (p) => p === '/',
         }
       : {
           to: '/member-board',
-          label: '看板',
+          label: t('nav.board'),
           Icon: LayoutGrid,
           match: (p) => p === '/member-board',
         },
     {
       to: '/my-tasks',
-      label: '我的任务',
+      label: t('nav.myTasks'),
       Icon: CalendarRange,
       match: (p) => p === '/my-tasks',
     },
@@ -155,7 +159,7 @@ export function SidebarNav({
   ];
 
   return (
-    <nav aria-label="主导航" className="flex flex-col gap-1 px-2">
+    <nav aria-label={t('nav.mainAria')} className="flex flex-col gap-1 px-2">
       {entries.map((entry) =>
         'group' in entry ? (
           <div key="agent" data-sidebar-nav-sub="">
@@ -163,9 +167,9 @@ export function SidebarNav({
             {collapsed ? (
               <Link
                 to="/agent"
-                aria-label="Agent 工作区"
+                aria-label={t('nav.agentAreaAria')}
                 aria-current={agentActive ? 'page' : undefined}
-                title="Agent 工作区"
+                title={t('nav.agentAreaAria')}
                 className={cn(navItemClass(agentActive, collapsed, drawer))}
               >
                 <Bot size={18} className="shrink-0" aria-hidden />
@@ -208,7 +212,7 @@ export function SidebarNav({
                         className={cn(navItemClass(childActive, false, drawer, 'sm'))}
                       >
                         <child.Icon size={16} className="shrink-0" aria-hidden />
-                        <span className="truncate">{child.label}</span>
+                        <span className="truncate">{t(child.labelKey)}</span>
                       </Link>
                     );
                   })}

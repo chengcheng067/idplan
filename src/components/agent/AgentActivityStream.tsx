@@ -23,6 +23,7 @@
 import { Bot, ChevronDown, CircleDot, FileDiff } from 'lucide-react';
 
 import { cn } from '../../lib/cn';
+import { useLang, writebackStatusLabel } from '../../i18n';
 import type {
   Execution,
   ExecutionEvent,
@@ -40,15 +41,12 @@ export interface ActivityExecutionGroup {
  * 状态标签（键 = WritebackProposalStatus 真实枚举：Draft/Proposed/Applied/
  * Rejected/Conflict——**没有 approved**，v0.8.6 首版 spec 曾按臆测的
  * 'approved' 断言、属性直接不渲染；枚举以 agent-execution.ts 为准）。
+ *
+ * ★ 2026-10-13 中英切换：这里原本是一张 `Record<string, string>` 中文表
+ * （草稿/待审/已应用/已拒绝/冲突），已整批搬进 `src/i18n/messages/{zh,en}.ts`
+ * （键 `agent.writeback.*`）；本组件在渲染期用 `writebackStatusLabel(status)` 取词，
+ * 未知状态仍按改造前的口径**原样回显**（不吞成空白）。
  */
-const STATUS_LABEL: Record<string, string> = {
-  draft: '草稿',
-  proposed: '待审',
-  applied: '已应用',
-  rejected: '已拒绝',
-  conflict: '冲突',
-};
-
 function statusChipClass(status: string): string {
   if (status === 'applied') return 'border-pine/40 bg-pine-soft/50 text-pine';
   if (status === 'rejected' || status === 'conflict') return 'border-clay/40 bg-clay/10 text-clay';
@@ -67,6 +65,8 @@ export function AgentActivityStream({
 }: {
   groups: readonly ActivityExecutionGroup[];
 }): JSX.Element | null {
+  // 订阅语言变化（状态 chip 文案在渲染期取）
+  useLang();
   if (groups.length === 0) return null;
   return (
     <section data-agent-activity="" aria-label="Agent 活动流" className="space-y-3">
@@ -133,7 +133,7 @@ export function AgentActivityStream({
                         statusChipClass(p.status),
                       )}
                     >
-                      {STATUS_LABEL[p.status] ?? p.status}
+                      {writebackStatusLabel(p.status)}
                     </span>
                   </li>
                 ))}

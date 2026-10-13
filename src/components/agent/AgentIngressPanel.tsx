@@ -53,6 +53,7 @@ import { Copy, Info, Plug, RefreshCw, X } from 'lucide-react';
 
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { cn } from '../../lib/cn';
+import { INGRESS_MODE_KEYS, useLang } from '../../i18n';
 
 /**
  * 本机 loopback 地址（§3.4：Electron 严格绑 `127.0.0.1:17788`，**不绑** `0.0.0.0`）。
@@ -138,11 +139,13 @@ export interface AgentIngressPanelProps {
   onClose(): void;
 }
 
-/** 档位展示名（唯一出处，不在 JSX 里散写） */
-const MODE_LABELS: Readonly<Record<IngressChannelMode, string>> = {
-  local: '本机',
-  nas: 'NAS',
-};
+/*
+ * 档位展示名（唯一出处，不在 JSX 里散写）。
+ * ★ 2026-10-13 中英切换：原来的 `MODE_LABELS`（local:'本机' / nas:'NAS'）
+ * 已整批搬进 `src/i18n/messages/{zh,en}.ts`（键 `agent.ingress.*`）；
+ * 映射表直接用 i18n 侧同一份 `INGRESS_MODE_KEYS`，不再本地抄一遍
+ * （本地抄一份 = 两处真相）。渲染期取词：`t(INGRESS_MODE_KEYS[m])`。
+ */
 
 const MODE_ORDER: readonly IngressChannelMode[] = ['local', 'nas'];
 
@@ -176,6 +179,8 @@ export function AgentIngressPanel({
    * ★ 权限唯一出口 + **必须早于任何条件 return**（React hook 顺序铁律，见文件头）。
    */
   const { isAdmin } = useRoleGuard();
+  /** 取词 + 语言变化订阅点（档位切换控件文案在渲染期取） */
+  const { t } = useLang();
 
   /** token **草稿**（仅用于输入框；保存后立即清空，原文不留存） */
   const [tokenDraft, setTokenDraft] = useState('');
@@ -256,7 +261,7 @@ export function AgentIngressPanel({
                   mode === m ? 'bg-paper text-ink' : 'text-mist hover:text-ink',
                 )}
               >
-                {MODE_LABELS[m]}
+                {t(INGRESS_MODE_KEYS[m])}
               </button>
             ))}
           </div>

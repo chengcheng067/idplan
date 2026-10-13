@@ -198,6 +198,7 @@ export const enMessages: Record<MessageKey, string> = {
   'toast.handoffFailed': 'Could not generate the handoff bundle.',
   'toast.claimed': 'Claimed — starting now',
   'toast.claimFailed': 'Could not claim the task.',
+  'toast.agentStatusTransitionFailed': 'Status transition failed.',
   'toast.payloadInvalid': 'Payload validation failed: {path} {message}',
   'toast.payloadMoreIssues': '…{count} more structural issue(s) not shown.',
 };

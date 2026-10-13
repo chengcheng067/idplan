@@ -38,11 +38,12 @@ import { isRestDay } from '../../lib/workdays';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { Project } from '../../core/types/entities';
 import { cn } from '../../lib/cn';
-import { WEEKDAYS, formatPeriod, type GridDay } from './calendarGrid';
+import { WEEKDAY_INDEXES, formatPeriod, type GridDay } from './calendarGrid';
 import { CIRCLED_NUMBERS } from './calendarColors';
 import { STAGE_BAND_COLORS, STAGE_BAND_INK_COLORS } from '../timeline/stageColors';
 import { CHIP_BASE } from './CalendarFilters';
-import { STATUS_LABELS, type CalendarFilters } from './calendarMath';
+import { type CalendarFilterStatus, type CalendarFilters } from './calendarMath';
+import { calendarStatusLabel, useLang, weekdayShortLabel } from '../../i18n';
 
 export type EmptyKind = 'E1' | 'E2' | 'E3' | 'E4' | null;
 
@@ -66,14 +67,16 @@ function EmptyShell({ children, className }: { children: ReactNode; className?: 
  * 休息日仍走 isRestDay（与真实网格同一口径，不硬编码周六周日）。
  */
 function GhostGrid({ gridDays }: { gridDays: GridDay[] }): JSX.Element {
+  // 订阅语言变化（表头文案在渲染期取，见 i18n 的 useLang 纪律）
+  useLang();
   // 生效口径：与真实网格同一来源（skipHolidays 开时已合并内置节假日表）
   const restPolicy = useSettingsStore((s) => s.effectiveRestPolicy);
   return (
     <div className="w-full">
       <div className="grid grid-cols-7">
-        {WEEKDAYS.map((w) => (
-          <div key={w} className="pb-[6px] text-center text-[12px] text-mist">
-            {w}
+        {WEEKDAY_INDEXES.map((i) => (
+          <div key={i} className="pb-[6px] text-center text-[12px] text-mist">
+            {weekdayShortLabel(i)}
           </div>
         ))}
       </div>
@@ -147,9 +150,11 @@ export function CalendarEmptyStates({
   memberProject: Project | null;
   onClear(): void;
   onManual?(): void;
-  onToggleStatus(status: keyof typeof STATUS_LABELS): void;
+  onToggleStatus(status: CalendarFilterStatus): void;
   onToggleStage(orderIndex: number): void;
 }): JSX.Element {
+  // 订阅语言变化（E3 的筛选 chip 文案在渲染期取）
+  useLang();
   if (kind === 'E1') {
     return (
       <EmptyShell className="py-[40px]">
@@ -208,7 +213,7 @@ export function CalendarEmptyStates({
               onClick={() => onToggleStatus(s)}
               className={cn(CHIP_BASE, 'bg-pine-soft text-pine transition-colors')}
             >
-              {STATUS_LABELS[s]}
+              {calendarStatusLabel(s)}
             </button>
           ))}
           {stages.map((i) => (

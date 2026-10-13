@@ -9,6 +9,7 @@ import { useUiStore } from '../../store/useUiStore';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { useHumanProjects } from '../../core/project/visibility';
 import { isDesktop } from '../../lib/desktopBridge';
+import { useLang, type MessageKey } from '../../i18n';
 import { cn } from '../../lib/cn';
 
 /**
@@ -81,12 +82,12 @@ function usesSelfDrawnWindowControls(): boolean {
   return isDesktop() && window.idplan?.platform === 'win32';
 }
 
-/** 单页面包屑文本映射（非项目路由） */
-const STATIC_CRUMB: Record<string, string> = {
-  '/': '我的项目',
-  '/member-board': '成员看板',
-  '/my-tasks': '我的任务',
-  '/agent': 'Agent 看板',
+/** 单页面包屑文本映射（非项目路由）。文案走 i18n，这里只留键 */
+const STATIC_CRUMB_KEY: Record<string, MessageKey> = {
+  '/': 'topbar.page.home',
+  '/member-board': 'topbar.page.memberBoard',
+  '/my-tasks': 'topbar.page.myTasks',
+  '/agent': 'topbar.page.agent',
 };
 
 /** 搜索输入区（桌面常驻 / 平板展开 / 手机整行 三处复用，避免 ref 互相覆盖）。 */
@@ -102,6 +103,8 @@ function SearchField({
 }): JSX.Element {
   const searchQuery = useUiStore((s) => s.searchQuery);
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
 
   return (
     <div
@@ -117,15 +120,15 @@ function SearchField({
         ref={inputRef}
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="搜索项目、任务或客户…"
-        aria-label="搜索项目、任务或客户"
+        placeholder={t('topbar.searchPlaceholder')}
+        aria-label={t('topbar.searchAria')}
         className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-mist"
       />
       {onClose && (
         <button
           type="button"
           onClick={onClose}
-          aria-label="清空并关闭搜索"
+          aria-label={t('topbar.searchClearAria')}
           className="shrink-0 text-mist transition-colors hover:text-ink"
         >
           <X size={15} />
@@ -161,6 +164,8 @@ function Breadcrumbs(): JSX.Element | null {
      而"这是一块 AI 工作区"由正文顶部的 `ProjectSourceBadge` 显式告知。
   */
   const projects = useHumanProjects();
+  /** 取词 + 语言变化订阅点（面包屑常驻渲染，切语言必须跟着变） */
+  const { t } = useLang();
 
   // 项目详情 / 打印页：/project/:id 或 /project/:id/(schedule|calendar)-print
   const projMatch = /^\/project\/([^/]+)(?:\/(schedule|calendar)-print)?$/.exec(pathname);
@@ -169,19 +174,19 @@ function Breadcrumbs(): JSX.Element | null {
     const id = projMatch[1];
     const printKind = projMatch[2]; // 'schedule' | 'calendar' | undefined
     const project = projects.find((p) => p.id === id);
-    const projectName = project?.name ?? '项目详情';
+    const projectName = project?.name ?? t('topbar.breadcrumb.projectDetail');
 
     return (
       <div className="flex min-w-0 items-center gap-2.5 text-[13px] font-medium">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          aria-label="返回上一页"
+          aria-label={t('topbar.backAria')}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand hover:text-ink focus-visible:ring-2 focus-visible:ring-pine/40"
         >
           <ArrowLeft size={18} aria-hidden />
         </button>
-        <span className="shrink-0 text-mist">项目</span>
+        <span className="shrink-0 text-mist">{t('topbar.breadcrumb.project')}</span>
         <span className="shrink-0 text-mist" aria-hidden>
           /
         </span>
@@ -190,7 +195,7 @@ function Breadcrumbs(): JSX.Element | null {
           onClick={() => navigate('/')}
           className="shrink-0 text-ink outline-none transition-colors hover:text-pine focus-visible:ring-2 focus-visible:ring-pine/40"
         >
-          我的项目
+          {t('topbar.breadcrumb.myProjects')}
         </button>
         <span className="shrink-0 text-mist" aria-hidden>
           /
@@ -204,7 +209,7 @@ function Breadcrumbs(): JSX.Element | null {
               /
             </span>
             <span className="shrink-0 text-ink">
-              {printKind === 'schedule' ? '日程表' : '月历'}
+              {printKind === 'schedule' ? t('topbar.breadcrumb.schedule') : t('topbar.breadcrumb.calendar')}
             </span>
           </>
         ) : (
@@ -216,7 +221,8 @@ function Breadcrumbs(): JSX.Element | null {
     );
   }
 
-  const label = STATIC_CRUMB[pathname];
+  const labelKey = STATIC_CRUMB_KEY[pathname];
+  const label = labelKey === undefined ? null : t(labelKey);
   if (!label) return null;
   return (
     <div className="flex min-w-0 items-center text-[13px] font-medium text-ink" title={label}>

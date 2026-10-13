@@ -29,7 +29,7 @@ import {
   type CalendarFilters,
 } from './calendarMath';
 import {
-  WEEKDAYS,
+  WEEKDAY_INDEXES,
   buildCalendarGrid,
   formatSelectedDate,
   gridDaysOf,
@@ -44,6 +44,7 @@ import { CalendarEmptyStates, type EmptyKind } from './CalendarEmptyStates';
 import { MonthDayCell, stageLabelOf } from './MonthDayCell';
 import { EntryDot } from './EntryDot';
 import { DayItemsPopover, type PopoverAnchorRect } from './DayItemsPopover';
+import { useLang, weekdayShortLabel } from '../../i18n';
 
 /**
  * 月历看板（v0.7 画板 14 亮色 / 15 暗色 / 16-17 空状态四态 / 18 拥挤方案 A / 19 移动端）。
@@ -122,6 +123,8 @@ function MonthArrow({
 export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.Element {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  // 订阅语言变化（星期表头在渲染期取词）
+  useLang();
   const { theme } = useTheme();
   const calendarMonth = useUiStore((s) => s.calendarMonth);
   const setCalendarMonth = useUiStore((s) => s.setCalendarMonth);
@@ -330,13 +333,13 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   /** 星期表头（画板 14：11；六/日 着色；移动端同尺寸 11） */
   const weekdayHeader = (
     <div className="grid grid-cols-7">
-      {WEEKDAYS.map((w, i) => (
+      {WEEKDAY_INDEXES.map((i) => (
         <div
-          key={w}
+          key={i}
           className={cn('pb-[6px] text-center text-[11px]', i >= 5 ? 'font-medium' : 'text-mist')}
           style={i >= 5 ? { color: weekendColor } : undefined}
         >
-          {w}
+          {weekdayShortLabel(i)}
         </div>
       ))}
     </div>

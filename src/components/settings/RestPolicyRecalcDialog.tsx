@@ -28,15 +28,11 @@ import { useMemo, useState } from 'react';
 
 import { AlertTriangle, ChevronDown, ChevronRight, Save, X } from 'lucide-react';
 
-import {
-  REST_POLICY_LABELS,
-  RestPolicyKind,
-  ScheduleBasis,
-  StageStatus,
-} from '../../core/types/enums';
+import { RestPolicyKind, ScheduleBasis, StageStatus } from '../../core/types/enums';
 import type { Project, RestPolicyConfig, Stage, Task } from '../../core/types/entities';
 import { StageService } from '../../core/services/stage.service';
 import { useHumanProjects } from '../../core/project/visibility';
+import { restPolicyLabel, stageStatusLabel, useLang, weekdayFullLabel } from '../../i18n';
 import { withCnHolidays } from '../../core/holidays/policy';
 import {
   planRestPolicyRecalc,
@@ -194,14 +190,13 @@ export async function applyRestPolicyRecalc(
 
 /* ------------------------------ 弹窗 ------------------------------ */
 
-const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'] as const;
-
-const STATUS_LABELS: Record<StageStatus, string> = {
-  [StageStatus.NotStarted]: '未开始',
-  [StageStatus.InProgress]: '进行中',
-  [StageStatus.Completed]: '已完成',
-  [StageStatus.Delayed]: '延期',
-};
+/*
+ * ★ 2026-10-13 中英切换：这里原本有两张本地表——`WEEKDAY_LABELS`（一~日）与
+ * `STATUS_LABELS`（阶段四态）。两者都已搬进 `src/i18n/messages/{zh,en}.ts`
+ * （键 `weekday.full.*` / `stageStatus.*`），本文件在渲染期用
+ * `weekdayFullLabel(idx)` / `stageStatusLabel(status)` 取词。
+ * ⇒ 顺序号 0..6 = 周一..周日（与全仓口径一致），标签表不再有第二份。
+ */
 
 export interface RestPolicyRecalcDialogProps {
   /** 新制度草稿（用户已选、尚未落库） */
@@ -225,6 +220,8 @@ export function RestPolicyRecalcDialog({
   onConfirmed,
 }: RestPolicyRecalcDialogProps): JSX.Element {
   const repos = useRepos();
+  // 订阅语言变化：制度名与阶段态文案在渲染期取（见 i18n 的 useLang 纪律）
+  useLang();
   /**
    * ★ 旧制度快照（审计 F1-④）：**挂载时取一次**，此后不再跟随 store 变化。
    *
@@ -430,10 +427,10 @@ export function RestPolicyRecalcDialog({
             <div>
               <h2 className="font-display text-display-md text-ink">切换休息制度后重算</h2>
               <p className="mt-1 text-xs text-mist">
-                {REST_POLICY_LABELS[oldPolicyAtOpen.kind]} →{' '}
-                <span className="text-ink">{REST_POLICY_LABELS[draft.kind]}</span>
+                {restPolicyLabel(oldPolicyAtOpen.kind)} →{' '}
+                <span className="text-ink">{restPolicyLabel(draft.kind)}</span>
                 {draft.kind === RestPolicyKind.SingleOff &&
-                  `（单休休息日 = 周${WEEKDAY_LABELS[draft.singleRestWeekday ?? 6]}）`}
+                  `（单休休息日 = ${weekdayFullLabel(draft.singleRestWeekday ?? 6)}）`}
               </p>
             </div>
             <button
@@ -542,7 +539,7 @@ export function RestPolicyRecalcDialog({
                                     sp.freeze === 'full' ? 'text-clay' : 'text-mist',
                                   )}
                                 >
-                                  {STATUS_LABELS[sp.status]}
+                                  {stageStatusLabel(sp.status)}
                                   {sp.freeze === 'full' && ' · 冻结'}
                                   {sp.freeze === 'start' && ' · 冻起点'}
                                 </span>

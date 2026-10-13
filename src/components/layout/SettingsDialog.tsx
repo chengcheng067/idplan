@@ -9,6 +9,7 @@ import {
   FileJson,
   Heart,
   Info,
+  Languages,
   MessageSquare,
   Monitor,
   Moon,
@@ -26,6 +27,7 @@ import { createLogExportIo } from './useLogExport';
 import { clearLogs, dump, logUser } from '../../core/services/log.service';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useTheme } from '../../hooks/useTheme';
+import { useLang, type Lang, type MessageKey } from '../../i18n';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useRepos } from '../../hooks/useRepos';
 import { BUILD_VERSION, FRONTEND_STACK, REPO_URL } from '../../constants/version';
@@ -154,16 +156,20 @@ import {
  */
 type ZoneKey = 'appearance' | 'schedule' | 'data' | 'plugins' | 'industry' | 'about';
 
-const ZONES: ReadonlyArray<{ key: ZoneKey; label: string; Icon: LucideIcon; adminOnly?: boolean }> = [
-  { key: 'appearance', label: '外观', Icon: Sun },
+/**
+ * 分区导航标签走 i18n（2026-10-13 中英切换 · 批 1）：这里只留**键**，
+ * 值住在 `src/i18n/messages/{zh,en}.ts`。理由见 `src/i18n/labels.ts` 文件头。
+ */
+const ZONES: ReadonlyArray<{ key: ZoneKey; labelKey: MessageKey; Icon: LucideIcon; adminOnly?: boolean }> = [
+  { key: 'appearance', labelKey: 'settings.zone.appearance', Icon: Sun },
   // 排程区（图 5 第 3 点）：「成员的设置界面是看不到排程这个按钮的」——
   // 与「行业与模板」同款口径，成员身份下整分区从左导航消失
-  { key: 'schedule', label: '排程', Icon: CalendarDays, adminOnly: true },
-  { key: 'data', label: '数据与备份', Icon: Database },
-  { key: 'plugins', label: '插件', Icon: Puzzle },
+  { key: 'schedule', labelKey: 'settings.zone.schedule', Icon: CalendarDays, adminOnly: true },
+  { key: 'data', labelKey: 'settings.zone.data', Icon: Database },
+  { key: 'plugins', labelKey: 'settings.zone.plugins', Icon: Puzzle },
   // 行业库是管理职能（反馈 #11）：成员身份下整分区从左导航消失
-  { key: 'industry', label: '行业与模板', Icon: FileJson, adminOnly: true },
-  { key: 'about', label: '关于', Icon: Info },
+  { key: 'industry', labelKey: 'settings.zone.industry', Icon: FileJson, adminOnly: true },
+  { key: 'about', labelKey: 'settings.zone.about', Icon: Info },
 ];
 
 /**
@@ -173,9 +179,9 @@ const ZONES: ReadonlyArray<{ key: ZoneKey; label: string; Icon: LucideIcon; admi
  */
 type PluginSubKey = 'plugins' | 'agent';
 
-const PLUGIN_SUBS: ReadonlyArray<{ key: PluginSubKey; label: string; Icon: LucideIcon }> = [
-  { key: 'plugins', label: '插件', Icon: Puzzle },
-  { key: 'agent', label: 'Agent 与自动化', Icon: Bot },
+const PLUGIN_SUBS: ReadonlyArray<{ key: PluginSubKey; labelKey: MessageKey; Icon: LucideIcon }> = [
+  { key: 'plugins', labelKey: 'settings.pluginsSub.plugins', Icon: Puzzle },
+  { key: 'agent', labelKey: 'settings.pluginsSub.agent', Icon: Bot },
 ];
 
 /**
@@ -230,6 +236,11 @@ export function SettingsDialog({
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const toast = useProjectsStore((s) => s.pushToast);
   const { mode, setMode } = useTheme();
+  /**
+   * 界面语言（2026-10-13 批 1）：本 hook 同时是**语言变化的订阅点**——
+   * 少了它，切语言时本抽屉不会重渲染（文案停在旧语言）。
+   */
+  const { t, lang, setLang } = useLang();
   // 角色闭环：休息制度仅在管理员设置界面出现（普通成员界面取消该区块）。
   // 顶栏独立入口 RestPolicySettingsButton 已是 admin-only，这里保持一致，权限规则不再散落。
   const { isAdmin } = useRoleGuard();
@@ -340,11 +351,30 @@ export function SettingsDialog({
   // 打包日期（构建时静态快照，便于排查版本）
   const buildDate = new Date().toISOString().slice(0, 10);
 
-  // 主题三选控件
+  // 主题三选控件（文案走 i18n；键与英文值见 src/i18n/messages/）
   const themeOptions = [
-    { key: 'light' as const, label: '浅色', icon: <Sun size={15} aria-hidden /> },
-    { key: 'dark' as const, label: '深色', icon: <Moon size={15} aria-hidden /> },
-    { key: 'system' as const, label: '跟随系统', icon: <Monitor size={15} aria-hidden /> },
+    { key: 'light' as const, label: t('appearance.theme.light'), icon: <Sun size={15} aria-hidden /> },
+    { key: 'dark' as const, label: t('appearance.theme.dark'), icon: <Moon size={15} aria-hidden /> },
+    {
+      key: 'system' as const,
+      label: t('appearance.theme.system'),
+      icon: <Monitor size={15} aria-hidden />,
+    },
+  ];
+
+  /**
+   * 语言两选（2026-10-13 批 1）。形态照抄上面的主题三选（同排、同高、同选中样式），
+   * 差别只有两处，都是有原因的：
+   *   · 两选而非三选——语言没有第三档「跟随系统」的合理语义（跟随浏览器语言
+   *     是我们**明确排除**的：英文系统的用户一打开就变英文，属无人要求的行为变更）；
+   *   · `data-lang-option` 钩子——本仓一律用 `data-*` 定位元素（全仓 0 处 `getByText`），
+   *     真机验收按钩子点，不按文案点（文案会随语言变，钩子不会）。
+   * 切换**即时生效**：setLang() 同步改模块级 store，订阅方（useLang）在同一次
+   * React 更新里拿到新语言，不需要刷新、不需要重开设置。
+   */
+  const langOptions: ReadonlyArray<{ key: Lang; labelKey: MessageKey }> = [
+    { key: 'zh', labelKey: 'appearance.lang.zh' },
+    { key: 'en', labelKey: 'appearance.lang.en' },
   ];
 
   const onExport = (): void => {
@@ -397,10 +427,10 @@ export function SettingsDialog({
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div className="flex items-center gap-2">
               <Settings size={16} className="text-pine" aria-hidden />
-              <h2 className="font-display text-base font-semibold text-ink">设置</h2>
+              <h2 className="font-display text-base font-semibold text-ink">{t('settings.title')}</h2>
               {/* Beta 标记（v0.7）：与侧栏品牌同款徽标，提示内测版本 */}
               <span
-                title="内测版本"
+                title={t('settings.betaTitle')}
                 className="inline-flex h-[18px] shrink-0 items-center rounded-sm bg-pine-soft px-1.5 text-[10px] font-medium text-pine"
               >
                 Beta
@@ -409,7 +439,7 @@ export function SettingsDialog({
             <button
               type="button"
               onClick={onClose}
-              aria-label="关闭设置"
+              aria-label={t('settings.closeAria')}
               className="rounded-[8px] p-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
             >
               <X size={16} />
@@ -424,7 +454,7 @@ export function SettingsDialog({
           */}
           <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
             <nav
-              aria-label="设置分区"
+              aria-label={t('settings.navAria')}
               className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-2 xl:w-[168px] xl:flex-col xl:overflow-y-auto xl:border-b-0 xl:border-r xl:px-3 xl:py-4"
             >
               {visibleZones.map((z) => {
@@ -446,7 +476,7 @@ export function SettingsDialog({
                     )}
                   >
                     <z.Icon size={15} aria-hidden />
-                    <span className="whitespace-nowrap">{z.label}</span>
+                    <span className="whitespace-nowrap">{t(z.labelKey)}</span>
                   </button>
                 );
               })}
@@ -466,7 +496,7 @@ export function SettingsDialog({
                     <div className="mb-2 flex items-center gap-1.5">
                       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <Sun size={14} className="text-mist" aria-hidden />
-                        主题
+                        {t('settings.section.theme')}
                       </h3>
                     </div>
                     <div className="flex gap-2">
@@ -491,9 +521,48 @@ export function SettingsDialog({
                         );
                       })}
                     </div>
-                    <p className="mt-1.5 text-xs text-mist">
-                      选「跟随系统」后，应用随系统深色 / 浅色设置实时变化。
-                    </p>
+                    <p className="mt-1.5 text-xs text-mist">{t('appearance.themeHint')}</p>
+                  </section>
+
+                  {/*
+                    语言两选（2026-10-13 · 批 1）。紧贴「主题」之后、同属「外观」，
+                    两条理由：① 它是所有角色都看得见的第一分区（ZONES 的
+                    appearance 没有 adminOnly，成员也进得来）；② 与主题同性质
+                    ——都是「这台机器上的界面偏好」，不是业务配置。
+                    ⚠️ 这条**绝对不许**新增第七个一级分区：tests/settings-zones.spec.ts
+                    对 data-settings-zone 的 ZONE_KEYS 是**全等断言**（:401/:614/:661），
+                    加一级分区当场红；加**行内控件**不撞。
+                  */}
+                  <section>
+                    <div className="mb-2 flex items-center gap-1.5">
+                      <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                        <Languages size={14} className="text-mist" aria-hidden />
+                        {t('appearance.lang')}
+                      </h3>
+                    </div>
+                    <div className="flex gap-2">
+                      {langOptions.map((o) => {
+                        const active = lang === o.key;
+                        return (
+                          <button
+                            key={o.key}
+                            type="button"
+                            data-lang-option={o.key}
+                            onClick={() => setLang(o.key)}
+                            aria-pressed={active}
+                            className={
+                              'flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border px-3 py-2 text-sm font-medium transition-colors ' +
+                              (active
+                                ? 'border-pine bg-pine text-cream shadow-accent'
+                                : 'border-line text-mist hover:bg-sand hover:text-ink')
+                            }
+                          >
+                            {t(o.labelKey)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-1.5 text-xs text-mist">{t('appearance.langHint')}</p>
                   </section>
                   {/*
                     v0.8.6.0002 · 反馈 #4 后半：「侧栏 展开/折叠」两选已**整块拿掉**。
@@ -519,7 +588,7 @@ export function SettingsDialog({
                       <div className="mb-2 flex items-center gap-1.5">
                         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                           <Settings size={14} className="text-mist" aria-hidden />
-                          休息制度
+                          {t('settings.section.restPolicy')}
                         </h3>
                       </div>
                       <div className="rounded-[12px] border border-line bg-cream/40 p-3">
@@ -541,7 +610,7 @@ export function SettingsDialog({
                     <div className="mb-2 flex items-center gap-1.5">
                       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <CalendarDays size={14} className="text-mist" aria-hidden />
-                        排期基准
+                        {t('settings.section.scheduleBasis')}
                       </h3>
                     </div>
                     <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
@@ -570,7 +639,7 @@ export function SettingsDialog({
                     <div className="mb-2 flex items-center gap-1.5">
                       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <Database size={14} className="text-mist" aria-hidden />
-                        数据存在哪
+                        {t('settings.section.dataLocation')}
                       </h3>
                     </div>
                     <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
@@ -594,7 +663,7 @@ export function SettingsDialog({
                     <div className="mb-2 flex items-center gap-1.5">
                       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <FileJson size={14} className="text-mist" aria-hidden />
-                        备份
+                        {t('settings.section.backup')}
                       </h3>
                     </div>
                     <div className="flex gap-2">
@@ -624,7 +693,7 @@ export function SettingsDialog({
                     <div className="mb-2 flex items-center justify-between">
                       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <Database size={14} className="text-mist" aria-hidden />
-                        前端日志
+                        {t('settings.section.frontendLog')}
                       </h3>
                       <span className="rounded-md bg-cream px-2 py-0.5 text-xs text-mist">
                         {count} 条
@@ -675,7 +744,7 @@ export function SettingsDialog({
                       <div className="mb-2 flex items-center gap-1.5">
                         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                           <Info size={14} className="text-mist" aria-hidden />
-                          更新
+                          {t('settings.section.update')}
                         </h3>
                       </div>
                       <div className="space-y-2">
@@ -750,7 +819,7 @@ export function SettingsDialog({
                           )}
                         >
                           <s.Icon size={13} aria-hidden />
-                          <span className="whitespace-nowrap">{s.label}</span>
+                          <span className="whitespace-nowrap">{t(s.labelKey)}</span>
                         </button>
                       );
                     })}
@@ -771,7 +840,7 @@ export function SettingsDialog({
                         <div className="mb-2 flex items-center gap-1.5">
                           <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                             <Database size={14} className="text-mist" aria-hidden />
-                            Agent 与本地库
+                            {t('settings.section.agentSeats')}
                           </h3>
                         </div>
                         <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5 text-xs leading-6">
@@ -809,7 +878,7 @@ export function SettingsDialog({
                         <div className="mb-2 flex items-center gap-1.5">
                           <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                             <Bot size={14} className="text-mist" aria-hidden />
-                            自然语言通道
+                            {t('settings.section.naturalLanguage')}
                           </h3>
                         </div>
                         <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
@@ -824,7 +893,7 @@ export function SettingsDialog({
                         <div className="mb-2 flex items-center gap-1.5">
                           <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                             <Bot size={14} className="text-mist" aria-hidden />
-                            Agent 看板
+                            {t('settings.section.agentBoard')}
                           </h3>
                         </div>
                         <p className="mb-2 rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
@@ -854,7 +923,7 @@ export function SettingsDialog({
                     <div className="mb-2 flex items-center gap-1.5">
                       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <Database size={14} className="text-mist" aria-hidden />
-                        关于
+                        {t('settings.section.about')}
                       </h3>
                     </div>
                     <dl className="space-y-1.5 rounded-[12px] border border-line bg-cream/40 px-3.5 py-3 text-xs">
@@ -902,7 +971,7 @@ export function SettingsDialog({
                     <div className="mb-2 flex items-center gap-1.5">
                       <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <Heart size={14} className="text-mist" aria-hidden />
-                        赞赏与反馈
+                        {t('settings.section.support')}
                       </h3>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
