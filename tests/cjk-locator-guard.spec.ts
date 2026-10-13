@@ -119,7 +119,12 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
 /* 2026-10-14：116 → 115 —— 本批把「身份菜单」的三处中文 aria 定位换成 `data-identity-menu` 钩子
  * （`board-env.ts` 1 处是上一笔引入的、`identity-rail-browser` 2 处是同源旧写法），实测 115。
  * 棘轮**只许降**：绿了不下调 = 凭空多出一格余量，那一格正好够下一条新错溜过去。 */
-const BASELINE = 115;
+/* 2026-08-27：115 → **110** —— ⑤b 翻成员看板页时，标题行返回钮的 aria 走了消息表
+ * （`topbar.backAria`），于是 `tests/member-board-back.spec.ts` 里 5 处
+ * `button[aria-label="返回上一页"]` **必须**换成 `button[data-member-board-back]`
+ * （页面同笔加了该钩子）：中文 aria 当选择器在英文模式下会**静默失配**（找不到元素），
+ * 正是守卫要防的那类哑雷。实测 110（member-board-back 贡献由 5 → 0）。 */
+const BASELINE = 110;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

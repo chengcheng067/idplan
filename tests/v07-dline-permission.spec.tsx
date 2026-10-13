@@ -35,6 +35,8 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 
+import { catalogOf } from '../src/i18n';
+
 /* act 环境开关由 `tests/setup.ts` 统一置位（本文件不再自行置位）——
  * 原来在此置 true 且不还原，会把告警转嫁给同进程的下游 spec，理由详见 setup.ts。 */
 
@@ -469,7 +471,16 @@ describe('v0.7 D 线 · MemberBoardPage → MonthlyCalendarView 的调用契约�
     expect(call).not.toContain('openManual');
 
     // ④ 视图切换控件：ariaLabel 与绑定 key 是本任务的验收锚点
-    expect(src).toContain('ariaLabel="成员看板视图切换"');
+    /*
+     * ⚠️ 2026-08-27 英文线**升级过这条锁**（不是放宽）：原判据是源码里含
+     * `ariaLabel="成员看板视图切换"`；翻英文后该 aria 走消息表
+     * （`member.board.viewSwitchAria`），源码里只剩 `ariaLabel={t('…')}`。
+     * 升级后保证的东西一字未少：**该控件仍是那个有名字的切换控件**
+     *   —— 表里有这个 aria 名（且 zh 值逐字仍是「成员看板视图切换」）
+     *      + 源码确实把它绑给了 ariaLabel。
+     */
+    expect(src).toContain("ariaLabel={t('member.board.viewSwitchAria')}");
+    expect(catalogOf('zh')['member.board.viewSwitchAria']).toBe('成员看板视图切换');
     expect(src).toContain('value={memberBoardView}');
     expect(src).toContain('onChange={setMemberBoardView}');
   });

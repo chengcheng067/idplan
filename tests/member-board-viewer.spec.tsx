@@ -25,6 +25,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
+import { catalogOf } from '../src/i18n';
+
 /* ProjectCard / MembersPageSection 经 useRepos() 读 Context（本文件没有 Provider 树），
  * 故在模块边界顶掉它 —— 与 tests/stage-color-wiring.spec.tsx:128 同一手法。 */
 vi.mock('../src/hooks/useRepos', () => {
@@ -713,7 +715,16 @@ describe('源码锚点：反馈 #5 的接线', () => {
     expect(src).toContain('<Navigate to="/member-board" replace />');
     // 三块任务区是本任务的交付面
     expect(src).toContain('MemberTaskTriage');
-    expect(src).toContain('近期完成');
+    /*
+     * ⚠️ 2026-08-27 英文线**升级过这条锁**（不是放宽）：原判据是
+     * `expect(src).toContain('近期完成')` —— 翻英文后这三个分组标题搬进了消息表，
+     * 源码里只剩 `t('member.triage.recentDone')`。升级后保证的东西一字未少：
+     *   ① 表里这句内容仍在（`member.triage.recentDone` === '近期完成'）；
+     *   ② 页面**确实消费**这个键（「文案在表里、界面上却没有」也是一种失效）。
+     */
+    expect(src).toContain("t('member.triage.recentDone')");
+    expect(catalogOf('zh')['member.triage.recentDone']).toBe('近期完成');
+    expect(catalogOf('en')['member.triage.recentDone']).toBe('Recently completed');
   });
 
   it('HomePage：成员搜索受 isAdmin 门控，落点经 memberBoardHref', async () => {

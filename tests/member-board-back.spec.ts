@@ -32,9 +32,17 @@ import {
  *   C-03 深链·管理员：整页重载 /member-board（idx=0）→ 返回 ⇒ /。
  */
 
-/** 点标题行返回钮（aria-label 与 TopBar 项目详情返回箭一致） */
+/**
+ * 点标题行返回钮。
+ *
+ * ⚠️ 2026-08-27 英文线：定位改用 `data-member-board-back` 钩子（原为
+ * `button[aria-label="返回上一页"]`）。理由不是"顺手改"——翻英文后该 aria 走
+ * 消息表（`topbar.backAria`），中文 aria 当选择器就是**英文模式下静默失配**的哑雷
+ * （批次⑥ 的口径）。aria 本身照旧保留（a11y 要有名字），只是不再拿它当定位契约。
+ * 视觉/语义未变：仍与 TopBar 项目详情返回箭同款（h-7 w-7 + 同口径 goBack）。
+ */
 async function clickBack(page: Page): Promise<void> {
-  await page.locator('button[aria-label="返回上一页"]').first().click();
+  await page.locator('button[data-member-board-back]').first().click();
   await page.waitForTimeout(600);
 }
 
@@ -60,10 +68,10 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug C · 成员看板返回键（真 Chromium�
       await bootstrapAdminWithDemo(page, server.url);
       await enterMemberBoard(page);
 
-      const btn = page.locator('button[aria-label="返回上一页"]').first();
+      const btn = page.locator('button[data-member-board-back]').first();
       await btn.waitFor({ state: 'visible', timeout: 10000 });
       const geom = await page.evaluate(() => {
-        const b = document.querySelector('button[aria-label="返回上一页"]');
+        const b = document.querySelector('button[data-member-board-back]');
         const h1 = document.querySelector('h1');
         if (!b || !h1) return null;
         const br = b.getBoundingClientRect();
@@ -121,7 +129,7 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug C · 成员看板返回键（真 Chromium�
       // 整页重载到 /member-board：新文档 ⇒ 会话历史归零（idx=0），身份仍在
       await page.goto(`${server.url}member-board`);
       await page.waitForFunction(() => window.location.pathname === '/member-board', null, { timeout: 20000 });
-      await page.locator('button[aria-label="返回上一页"]').first().waitFor({ state: 'visible', timeout: 15000 });
+      await page.locator('button[data-member-board-back]').first().waitFor({ state: 'visible', timeout: 15000 });
 
       await clickBack(page);
       await page.waitForFunction(() => window.location.pathname !== '/member-board', null, { timeout: 10000 });
@@ -141,7 +149,7 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug C · 成员看板返回键（真 Chromium�
 
       await page.goto(`${server.url}member-board`);
       await page.waitForFunction(() => window.location.pathname === '/member-board', null, { timeout: 20000 });
-      await page.locator('button[aria-label="返回上一页"]').first().waitFor({ state: 'visible', timeout: 15000 });
+      await page.locator('button[data-member-board-back]').first().waitFor({ state: 'visible', timeout: 15000 });
 
       await clickBack(page);
       await page.waitForFunction(() => window.location.pathname === '/', null, { timeout: 10000 });

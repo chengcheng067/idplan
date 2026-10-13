@@ -369,6 +369,35 @@ export const zhMessages = {
   'myTasks.markNotDone': '标记未完成',
   'myTasks.dueOverdue': '逾期{days}天',
   'myTasks.dueInDays': '{days} 天',
+  /* ───────────── 成员看板页（MemberBoardPage，⑤b · 含任务三块）─────────────
+     复用（不另立第二份真相）：
+       · `topbar.backAria`（返回上一页）—— 本页返回键与 TopBar 面包屑返回箭**同一口径**
+         （`goBack` 注释明写「同一个行为，不是第二套」）；
+       · `nav.board` / `topbar.breadcrumb.calendar` —— 视图切换与首页**同一个控件、同一档位**；
+       · `home.stat.*` 四个统计卡标签 —— 本页统计行与首页**逐字同款**（并有真机 spec 锁）；
+       · `myTasks.group.overdue`（已逾期）—— 任务三块的「已逾期」与「我的任务」页同源口径。 */
+  'member.board.title': '项目看板',
+  'member.board.titleOf': '{name} 的项目看板',
+  'member.board.scopeAdmin': '管理员视角 · 仅显示与「{name}」相关的项目与任务',
+  'member.board.scopeSelf': '仅显示与我相关的项目',
+  'member.board.viewSwitchAria': '成员看板视图切换',
+  'member.board.missingTitle': '找不到该成员',
+  'member.board.missingBody':
+    '这个看板链接指向的成员已不存在（可能被删除）。可以返回成员看板查看自己的项目。',
+  'member.board.missingBack': '返回成员看板',
+  'member.board.emptyTitle': '还没有与你相关的项目',
+  'member.board.emptyBody':
+    '当管理员把阶段负责人或参与任务分派给你后，相关项目会出现在这里。',
+  'member.board.columnEmpty': '暂无项目',
+  'member.board.unknownProject': '未知项目',
+  'member.board.openProjectTitle': '打开项目：{name}',
+  /* 任务三块（已逾期那块的标签复用 myTasks.group.overdue） */
+  'member.triage.ongoing': '进行中',
+  'member.triage.recentDone': '近期完成',
+  'member.triage.emptyOverdue': '没有逾期的任务',
+  'member.triage.emptyOngoing': '没有进行中的任务',
+  'member.triage.emptyRecentDone': '最近没有完成的任务',
+  'member.triage.moreDone': '另有 {count} 条更早完成',
   /* ───────────────────── 项目详情（ProjectDetailPage）───────────────────── */
   'project.notFound': '未找到该项目（可能已被归档或删除）。',
   'project.backToList': '← 返回项目列表',

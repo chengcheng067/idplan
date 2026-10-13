@@ -24,6 +24,7 @@ import {
   useHumanTasks,
 } from '../core/project/visibility';
 import { computeProjectStatus } from '../lib/progress';
+import { useLang } from '../i18n';
 import { groupByColumn } from './HomePage';
 import type { ColumnKey } from './HomePage';
 import type { Member, Project, Stage, Task } from '../core/types/entities';
@@ -120,6 +121,8 @@ export function MemberBoardPage(): JSX.Element {
     刷新/返回键行为自然，且瞬态 store 一刷新就错——那是把导航目标当成 UI 状态。
   */
   const [searchParams] = useSearchParams();
+  /** 取词 + 语言变化订阅点（本页文案一律在渲染期取，故 hook 放在所有早返回之前） */
+  const { t } = useLang();
   const subject = useMemo(
     () =>
       resolveMemberBoardSubject({
@@ -283,12 +286,12 @@ export function MemberBoardPage(): JSX.Element {
     return (
       <div className="flex flex-col gap-4 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
         <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
-          <p className="font-display text-display-md text-mist">找不到该成员</p>
+          <p className="font-display text-display-md text-mist">{t('member.board.missingTitle')}</p>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
-            这个看板链接指向的成员已不存在（可能被删除）。可以返回成员看板查看自己的项目。
+            {t('member.board.missingBody')}
           </p>
           <Button variant="secondary" className="mt-3" onClick={() => navigate('/member-board')}>
-            返回成员看板
+            {t('member.board.missingBack')}
           </Button>
         </div>
       </div>
@@ -311,31 +314,35 @@ export function MemberBoardPage(): JSX.Element {
           <button
             type="button"
             onClick={goBack}
-            aria-label="返回上一页"
+            aria-label={t('topbar.backAria')}
+            /* ★ 语言无关定位钩子：真机 spec 一律用 data-* 定位，不拿中文 aria 当选择器 */
+            data-member-board-back=""
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand hover:text-ink focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <ArrowLeft size={18} aria-hidden />
           </button>
           <h1 className="font-display text-display-lg">
-            {viewedMember ? `${viewedMember.name} 的项目看板` : '项目看板'}
+            {viewedMember
+              ? t('member.board.titleOf', { name: viewedMember.name })
+              : t('member.board.title')}
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-mist">
             {viewedMember
-              ? `管理员视角 · 仅显示与「${viewedMember.name}」相关的项目与任务`
-              : '仅显示与我相关的项目'}
+              ? t('member.board.scopeAdmin', { name: viewedMember.name })
+              : t('member.board.scopeSelf')}
           </span>
           <SegmentedControl<MemberBoardView>
             size="lg"
             /* ★ 语言无关定位钩子：真机 spec 一律用 data-* 定位，不拿中文 aria 当选择器 */
             dataAttrs={{ 'data-member-view-switch': '' }}
-            ariaLabel="成员看板视图切换"
+            ariaLabel={t('member.board.viewSwitchAria')}
             value={memberBoardView}
             onChange={setMemberBoardView}
             options={[
-              { value: 'kanban', label: '看板' },
-              { value: 'calendar', label: '月历' },
+              { value: 'kanban', label: t('nav.board') },
+              { value: 'calendar', label: t('topbar.breadcrumb.calendar') },
             ]}
           />
         </div>
@@ -355,10 +362,28 @@ export function MemberBoardPage(): JSX.Element {
           数字和标签被挤瘪。StatCard 的设计口径就是「flex-wrap + flex 1 1 基准宽」，
           按它本来姿势用即修复，且与首页统计行严格一致。 */}
       <section className="flex flex-wrap gap-5">
-        <StatCard icon="▣" tone="pine" value={active.length} label="进行中项目" trend={null} />
-        <StatCard icon="▢" tone="amber" value={dueThisWeek} label="本周到期任务" trend={null} />
-        <StatCard icon="▲" tone="clay" value={overdueCount} label="逾期风险" trend={null} />
-        <StatCard icon="✓" tone="sage" value={doneThisMonth} label="本月完工" trend={null} />
+        <StatCard icon="▣" tone="pine" value={active.length} label={t('home.stat.active')} trend={null} />
+        <StatCard
+          icon="▢"
+          tone="amber"
+          value={dueThisWeek}
+          label={t('home.stat.dueThisWeek')}
+          trend={null}
+        />
+        <StatCard
+          icon="▲"
+          tone="clay"
+          value={overdueCount}
+          label={t('home.stat.overdue')}
+          trend={null}
+        />
+        <StatCard
+          icon="✓"
+          tone="sage"
+          value={doneThisMonth}
+          label={t('home.stat.doneThisMonth')}
+          trend={null}
+        />
       </section>
 
       {/*
@@ -402,9 +427,9 @@ export function MemberBoardPage(): JSX.Element {
         <MonthlyCalendarView onManual={undefined} />
       ) : active.length === 0 ? (
         <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
-          <p className="font-display text-display-md text-mist">还没有与你相关的项目</p>
+          <p className="font-display text-display-md text-mist">{t('member.board.emptyTitle')}</p>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
-            当管理员把阶段负责人或参与任务分派给你后，相关项目会出现在这里。
+            {t('member.board.emptyBody')}
           </p>
         </div>
       ) : (
@@ -482,7 +507,7 @@ export function MemberBoardPage(): JSX.Element {
                     />
                   ))}
                   {items.length === 0 && (
-                    <p className="px-1 py-2 text-xs text-mist">暂无项目</p>
+                    <p className="px-1 py-2 text-xs text-mist">{t('member.board.columnEmpty')}</p>
                   )}
                 </div>
               </div>
@@ -696,21 +721,22 @@ function MemberTaskTriage({
   todayIso: string;
   onOpenProject(projectId: string): void;
 }): JSX.Element | null {
+  const { t } = useLang();
   const buckets = useMemo(() => {
     const overdue: Task[] = [];
     const ongoing: Task[] = [];
     const done: Task[] = [];
     if (!memberId) return { overdue, ongoing, done };
-    const mine = tasks.filter((t) => taskAssigneeIds(t).includes(memberId));
+    const mine = tasks.filter((task) => taskAssigneeIds(task).includes(memberId));
     const cutoff = isoShiftDays(todayIso, -RECENT_DONE_DAYS);
-    for (const t of mine) {
-      const due = dueOf(t);
-      if (taskIsDone(t)) {
-        if (!due || due >= cutoff) done.push(t);
+    for (const task of mine) {
+      const due = dueOf(task);
+      if (taskIsDone(task)) {
+        if (!due || due >= cutoff) done.push(task);
         continue;
       }
-      if (due && due < todayIso) overdue.push(t);
-      else ongoing.push(t);
+      if (due && due < todayIso) overdue.push(task);
+      else ongoing.push(task);
     }
     const byDueAsc = (a: Task, b: Task): number => {
       const da = dueOf(a);
@@ -730,8 +756,8 @@ function MemberTaskTriage({
   // 未进入身份（无观看对象）时整块不渲染：不画一个三个「暂无」的空架子
   if (!memberId) return null;
 
-  const projectOf = (t: Task): Project | undefined => projects.find((p) => p.id === t.projectId);
-  const stageOf = (t: Task): Stage | undefined => stages.find((s) => s.id === t.stageId);
+  const projectOf = (task: Task): Project | undefined => projects.find((p) => p.id === task.projectId);
+  const stageOf = (task: Task): Stage | undefined => stages.find((s) => s.id === task.stageId);
   const doneHidden = Math.max(0, buckets.done.length - DONE_PREVIEW_LIMIT);
 
   return (
@@ -760,32 +786,32 @@ function MemberTaskTriage({
       style={{ gridTemplateColumns: TRIAGE_COLUMN_TEMPLATE }}
     >
       <TaskGroup
-        label="已逾期"
+        label={t('myTasks.group.overdue')}
         tone={GROUP_TONE.clay}
         rows={buckets.overdue}
         todayIso={todayIso}
-        emptyText="没有逾期的任务"
+        emptyText={t('member.triage.emptyOverdue')}
         onOpenProject={onOpenProject}
         projectOf={projectOf}
         stageOf={stageOf}
       />
       <TaskGroup
-        label="进行中"
+        label={t('member.triage.ongoing')}
         tone={GROUP_TONE.pine}
         rows={buckets.ongoing}
         todayIso={todayIso}
-        emptyText="没有进行中的任务"
+        emptyText={t('member.triage.emptyOngoing')}
         onOpenProject={onOpenProject}
         projectOf={projectOf}
         stageOf={stageOf}
       />
       <TaskGroup
-        label="近期完成"
+        label={t('member.triage.recentDone')}
         tone={GROUP_TONE.sage}
         rows={buckets.done.slice(0, DONE_PREVIEW_LIMIT)}
         todayIso={todayIso}
-        emptyText="最近没有完成的任务"
-        footer={doneHidden > 0 ? `另有 ${doneHidden} 条更早完成` : null}
+        emptyText={t('member.triage.emptyRecentDone')}
+        footer={doneHidden > 0 ? t('member.triage.moreDone', { count: doneHidden }) : null}
         onOpenProject={onOpenProject}
         projectOf={projectOf}
         stageOf={stageOf}
@@ -813,9 +839,11 @@ function TaskGroup({
   emptyText: string;
   footer?: string | null;
   onOpenProject(projectId: string): void;
-  projectOf(t: Task): Project | undefined;
-  stageOf(t: Task): Stage | undefined;
+  projectOf(task: Task): Project | undefined;
+  stageOf(task: Task): Stage | undefined;
 }): JSX.Element {
+  /** 本组件自己也要取词（行内徽标 / 回退项目名），故同样订阅语言变化 */
+  const { t } = useLang();
   return (
     <div className="glass-light flex flex-col gap-2 rounded-2xl border border-line bg-paper p-4">
       <div className="flex items-center justify-between">
@@ -831,22 +859,24 @@ function TaskGroup({
         <p className="px-1 py-2 text-xs text-mist">{emptyText}</p>
       ) : (
         <ul className="flex flex-col">
-          {rows.map((t) => {
-            const due = dueOf(t);
-            const isOverdue = !taskIsDone(t) && due !== null && due < todayIso;
-            const project = projectOf(t);
-            const stage = stageOf(t);
+          {rows.map((task) => {
+            const due = dueOf(task);
+            const isOverdue = !taskIsDone(task) && due !== null && due < todayIso;
+            const project = projectOf(task);
+            const stage = stageOf(task);
             return (
-              <li key={t.id}>
+              <li key={task.id}>
                 <button
                   type="button"
-                  onClick={() => onOpenProject(t.projectId)}
-                  title={`打开项目：${project?.name ?? t.projectId}`}
+                  onClick={() => onOpenProject(task.projectId)}
+                  title={t('member.board.openProjectTitle', { name: project?.name ?? task.projectId })}
                   className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sand"
                 >
-                  <span className="truncate text-[13px] text-ink">{t.title}</span>
+                  <span className="truncate text-[13px] text-ink">{task.title}</span>
                   <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-mist">
-                    <span className="truncate">{project?.name ?? '未知项目'}</span>
+                    <span className="truncate">
+                      {project?.name ?? t('member.board.unknownProject')}
+                    </span>
                     {stage && (
                       <>
                         <span aria-hidden>·</span>
@@ -860,7 +890,9 @@ function TaskGroup({
                       </>
                     )}
                     {isOverdue && (
-                      <span className="rounded-full bg-clay-soft px-1.5 text-clay">已逾期</span>
+                      <span className="rounded-full bg-clay-soft px-1.5 text-clay">
+                        {t('myTasks.group.overdue')}
+                      </span>
                     )}
                   </span>
                 </button>

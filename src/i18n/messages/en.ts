@@ -371,6 +371,30 @@ export const enMessages: Record<MessageKey, string> = {
   'myTasks.markNotDone': 'Mark as not done',
   'myTasks.dueOverdue': '{days}d overdue',
   'myTasks.dueInDays': '{days} d',
+  /* ───── Member board page (MemberBoardPage, ⑤b) · reuses topbar.backAria /
+     nav.board / topbar.breadcrumb.calendar / home.stat.* / myTasks.group.overdue ───── */
+  'member.board.title': 'Project board',
+  'member.board.titleOf': '{name}’s project board',
+  'member.board.scopeAdmin': 'Admin view · only projects and tasks related to “{name}”',
+  'member.board.scopeSelf': 'Only projects related to me',
+  'member.board.viewSwitchAria': 'Member board view switch',
+  'member.board.missingTitle': 'Member not found',
+  'member.board.missingBody':
+    'The member this board link points to no longer exists (they may have been deleted). Go back to the member board to see your own projects.',
+  'member.board.missingBack': 'Back to member board',
+  'member.board.emptyTitle': 'No projects related to you yet',
+  'member.board.emptyBody':
+    'Once an admin assigns you as a stage owner or adds you to a task, the related projects show up here.',
+  'member.board.columnEmpty': 'No projects',
+  'member.board.unknownProject': 'Unknown project',
+  'member.board.openProjectTitle': 'Open project: {name}',
+  /* Task triage blocks (the overdue label reuses myTasks.group.overdue) */
+  'member.triage.ongoing': 'In progress',
+  'member.triage.recentDone': 'Recently completed',
+  'member.triage.emptyOverdue': 'No overdue tasks',
+  'member.triage.emptyOngoing': 'No tasks in progress',
+  'member.triage.emptyRecentDone': 'Nothing completed recently',
+  'member.triage.moreDone': '{count} more completed earlier',
   /* ───────────────────── Project details ───────────────────── */
   'project.notFound': 'Project not found (it may have been archived or deleted).',
   'project.backToList': '← Back to project list',
