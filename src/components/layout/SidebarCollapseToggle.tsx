@@ -32,6 +32,12 @@ export function SidebarCollapseToggle({
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
+      /* ★ 语言无关定位钩子（批次⑥ 档 A₁）：真机 spec 原本按 aria-label
+         「收起侧边栏 / 展开侧边栏」定位 —— 那两串是**界面文案**，走 i18n 后
+         一切到英文就找不到元素（且失败会伪装成「控件不存在」）。
+         一个钩子覆盖收起/展开两态（它是同一个开关，动作名随状态变）。
+         aria-label / title 原样保留：无障碍契约不变，只是不再当选择器。 */
+      data-sidebar-collapse-toggle=""
       aria-label={label}
       aria-controls={controlsId}
       title={label}

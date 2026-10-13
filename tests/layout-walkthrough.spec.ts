@@ -362,7 +362,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 A · L-01~L-08 布局验收（真�
       const { ctx, page } = await openAt(1024, 900);
       const m = await measure(page);
       expect(m.sidebarPresent).toBe(false);
-      expect(await page.locator('header [aria-label="打开导航菜单"]').count()).toBe(1);
+      expect(await page.locator('header [data-nav-menu-trigger]').count()).toBe(1);
       await ctx.close();
     }
     // 1280（xl 临界）：持久左栏存在，默认展开 240
@@ -378,7 +378,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 A · L-01~L-08 布局验收（真�
       const { ctx, page } = await openAt(390, 844);
       const m = await measure(page);
       expect(m.sidebarPresent).toBe(false);
-      expect(await page.locator('header [aria-label="打开导航菜单"]').count()).toBe(1);
+      expect(await page.locator('header [data-nav-menu-trigger]').count()).toBe(1);
       await ctx.close();
     }
   });
@@ -442,7 +442,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 A · L-01~L-08 布局验收（真�
     // <xl（1024）：顶栏渲染汉堡 + 品牌名「ID Plan」
     {
       const { ctx, page } = await openAt(1024, 900);
-      expect(await page.locator('header [aria-label="打开导航菜单"]').count()).toBe(1);
+      expect(await page.locator('header [data-nav-menu-trigger]').count()).toBe(1);
 
       const brandVisible = await page.evaluate(() =>
         Array.from(document.querySelectorAll('header *')).some((el) => {

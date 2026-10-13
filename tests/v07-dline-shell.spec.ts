@@ -649,7 +649,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       {
         const { ctx, page } = await openShell(1024);
         try {
-          await page.locator('button[aria-label="打开导航菜单"]').click();
+          await page.locator('[data-nav-menu-trigger]').click();
           const drawer = page.locator('[role="dialog"][aria-label="导航菜单"]');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
@@ -680,7 +680,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
           await page.setViewportSize({ width: 1024, height: 900 });
           await page.goto(`${BASE}index.html`);
           await page.waitForSelector('header', { timeout: 20000 });
-          await page.locator('button[aria-label="打开导航菜单"]').click();
+          await page.locator('[data-nav-menu-trigger]').click();
           const drawer = page.locator('[role="dialog"][aria-label="导航菜单"]');
           await drawer.waitFor({ state: 'visible', timeout: 10000 });
           const text = (await drawer.innerText()).replace(/\s+/g, '');
@@ -772,7 +772,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await shot(page, '06-dot-expanded.png');
 
         // 折叠侧栏 → 收起态那枚必须出现（否则用户一折侧栏，提示就凭空消失）
-        await page.locator('button[aria-label="收起侧边栏"]').click();
+        await page.locator('[data-sidebar-collapse-toggle]').click();
         await page.waitForSelector('[data-update-dot="collapsed"]', { timeout: 10000 });
         expect(await page.locator('[data-update-dot="collapsed"]').isVisible()).toBe(true);
         expect(await page.locator('[data-update-dot="expanded"]').count()).toBe(0);

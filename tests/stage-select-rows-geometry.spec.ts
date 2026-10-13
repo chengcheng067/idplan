@@ -251,7 +251,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.8 · 已选顺序行内控件真几何（真
     //   <xl：侧栏收成 Modal 抽屉，先点（可见的）汉堡「打开导航菜单」展开抽屉，再点抽屉里的「新建项目」
     //   ⚠️ 必须用 isVisible 判定：≥xl 时汉堡仍是 DOM 节点（count=1）但 display:none，
     //      若按 count 走会去 click 一个不可见元素 → Playwright 等到 30s 超时。
-    const hamburger = page.locator('button[aria-label="打开导航菜单"]');
+    const hamburger = page.locator('[data-nav-menu-trigger]');
     const hbVisible = await hamburger.first().isVisible().catch(() => false);
     if (hbVisible) {
       await hamburger.first().click();

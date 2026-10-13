@@ -442,7 +442,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
       await becomeAdmin(page);
 
       // 收起侧栏
-      const collapse = page.locator('button[aria-label="收起侧边栏"]');
+      const collapse = page.locator('[data-sidebar-collapse-toggle]');
       expect(await collapse.count(), '侧栏应有收起键').toBeGreaterThan(0);
       await collapse.first().click();
       await page.waitForTimeout(600);
@@ -604,7 +604,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
       }),
     );
     if (visible) return;
-    const burger = page.locator('button[aria-label="打开导航菜单"]');
+    const burger = page.locator('[data-nav-menu-trigger]');
     expect(await burger.count(), '侧栏收在抽屉里时应能靠汉堡打开').toBeGreaterThan(0);
     await burger.first().click();
     await page.waitForTimeout(700);
@@ -614,7 +614,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
     const { ctx, page } = await open(1440, 900);
     try {
       await becomeAdmin(page);
-      const collapse = page.locator('button[aria-label="收起侧边栏"]');
+      const collapse = page.locator('[data-sidebar-collapse-toggle]');
       expect(await collapse.count(), '侧栏应有收起键').toBeGreaterThan(0);
       await collapse.first().click();
       await page.waitForTimeout(600);
