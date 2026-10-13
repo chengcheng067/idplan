@@ -435,7 +435,17 @@ describe('A · ProjectDetailPage「Agent Board」按钮受 agent-board 开关门
  * B / C · MobileMoreMenu（手机档 ⋮）
  * ==================================================================================== */
 
-const MORE_BTN = 'button[aria-label="更多操作"]';
+/*
+ * ⋮ 触发键的选择器 —— **语言无关钩子**，不用中文 aria 文案定位。
+ *
+ * ⚠️ 原文拿中文 aria 文案当选择器（`aria-label` 值 = 「更多操作」；i18n 批次⑥ 的棘轮咬到的正是这一行）：
+ *    「更多操作」是走 i18n 的**界面文案**，默认中文下能跑，一旦切英文就找不到元素，
+ *    而失败会伪装成「控件不存在」—— 排查方向被带偏。
+ *    钩子 `data-mobile-more-trigger` 由 `MobileMoreMenu` 提供（与 `v07-dline-shell` /
+ *    `i18n-browser` 两条 spec 用的是同一个），与语言无关。棘轮要求「新增一处即红、
+ *    基线只许降」，故此处必须用钩子而不是去调基线。
+ */
+const MORE_BTN = '[data-mobile-more-trigger]';
 
 /** 打开 ⋮ 菜单并返回菜单项文案（已 trim）。**返回空数组 = 菜单没开**，调用方须先断言非空。 */
 async function openMoreMenu(): Promise<HTMLDivElement> {
@@ -689,7 +699,7 @@ describe('G · 无 Provider：回落 defaultEnabled（agent-board 开 / sample-p
       </MemoryRouter>,
     );
 
-    const btn = h.querySelector<HTMLButtonElement>('button[aria-label="更多操作"]');
+    const btn = h.querySelector<HTMLButtonElement>(MORE_BTN);
     expect(btn, '前提：⋮ 触发键必须在（否则下面的菜单项判据全是空过）').not.toBeNull();
     await act(async () => {
       btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
