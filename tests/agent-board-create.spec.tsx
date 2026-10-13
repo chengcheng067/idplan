@@ -46,6 +46,7 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { readFileSync } from 'node:fs';
+import { maskComments } from './helpers/cjk-locator-guard';
 import { resolve } from 'node:path';
 
 import { installFakeIndexedDB } from './setup';
@@ -593,7 +594,8 @@ describe('§7.4 权限：建板路径上**没有**角色闸门', () => {
   });
 
   it('★ 页面接线（§6.1 第 1 步）：`AgentBoardPage` 把 onCreate 接到列表 ＋ 渲染对话框', () => {
-    const pageSrc = readSrc('src/pages/AgentBoardPage.tsx');
+    // ★ 受体先**剥注释**（2026-10-13 复核）：原判据读的是原文 ⇒ 任何注释都能满足它。
+    const pageSrc = maskComments(readSrc('src/pages/AgentBoardPage.tsx'));
     // ① 空态里仍有入口（0 块看板时必须留活路，否则页面是死胡同）
     expect(pageSrc).toContain('onCreate={() => setCreateOpen(true)}');
     // ② 对话框被渲染，且成功后选中新看板（用页面已有的选中机制，无新路由态）
@@ -602,14 +604,22 @@ describe('§7.4 权限：建板路径上**没有**角色闸门', () => {
   });
 
   it('★ 反馈 #8 收口：工具条**不再**常驻「新建 Agent 看板」按钮，改为现状说明', () => {
-    const pageSrc = readSrc('src/pages/AgentBoardPage.tsx');
+    // ★ 受体先**剥注释**（2026-10-13 复核）：原判据读的是原文 ⇒ 任何注释都能满足它。
+    const pageSrc = maskComments(readSrc('src/pages/AgentBoardPage.tsx'));
     // 常驻入口撤掉（能力还没准备好，留着就是误导）
     expect(pageSrc).not.toContain('data-agent-create-open');
     // 换成一段把现状讲明白的说明（不能只是「删了按钮」了事）
     expect(pageSrc).toContain('data-agent-stance');
     expect(pageSrc).toContain('本机自动导入');
-    // 底层能力与对话框**没有被删**（收口的是入口，不是功能）
-    expect(pageSrc).toContain('createAgentBoard');
+    /*
+     * 底层能力与对话框**没有被删**（收口的是入口，不是功能）。
+     *
+     * ⚠️ 2026-10-13 复核发现：原判据 `toContain('createAgentBoard')` 是**空锁** ——
+     *   该标识符在本页**只出现在 JSDoc 里**（:397 / :1012 / :1082 三处全是注释），
+     *   剥注释后根本不含它 ⇒ **真把代码删掉、只留讲解它的注释，它照样绿**。
+     *   改用本页**真实代码**里的锚点：对话框的 import（与下一条的 JSX 用法合起来才完整）。
+     */
+    expect(pageSrc).toContain("from '../components/agent/CreateAgentBoardDialog'");
     expect(pageSrc).toContain('<CreateAgentBoardDialog');
   });
 });
