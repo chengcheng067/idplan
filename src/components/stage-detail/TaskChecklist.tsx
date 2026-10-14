@@ -14,6 +14,7 @@ import {
   taskAssigneeIds,
 } from '../../hooks/useRoleGuard';
 import { ImeInput } from '../common/ImeInput';
+import { useLang } from '../../i18n';
 
 /**
  * checkbox 清单：增删改 / 多选指派（多人参与）/ 截止日 / 勾选完成（勾选写指派流水留痕）。
@@ -46,6 +47,8 @@ export function TaskChecklist({
   tasks: Task[];
   members: Member[];
 }): JSX.Element {
+  /* 取词 + 订阅语言变化（清单内全部文案随语言变） */
+  const { t } = useLang();
   const repos = useRepos();
   const { isAdmin, role, currentMember } = useRoleGuard();
   /**
@@ -77,27 +80,27 @@ export function TaskChecklist({
   const memberOf = (id: string): Member | undefined => members.find((x) => x.id === id);
 
   /** admin 视角参与人摘要（多值姓名，未指派 → 空串） */
-  const assigneeSummary = (t: Task): string =>
-    taskAssigneeIds(t)
-      .map((id) => memberOf(id)?.name ?? '未知')
+  const assigneeSummary = (task: Task): string =>
+    taskAssigneeIds(task)
+      .map((id) => memberOf(id)?.name ?? t('common.unknown'))
       .join('、');
 
   /** 成员视角参与人标签（多值，脱敏：用角色标签代替姓名） */
-  const assigneeLabelMulti = (t: Task): string => {
-    const ids = taskAssigneeIds(t);
-    if (ids.length === 0) return '未指派';
+  const assigneeLabelMulti = (task: Task): string => {
+    const ids = taskAssigneeIds(task);
+    if (ids.length === 0) return t('taskChecklist.unassigned');
     return ids
       .map((id) => {
         const m = memberOf(id);
-        if (!m) return '未知';
+        if (!m) return t('common.unknown');
         return isRestricted ? m.role || '负责人' : m.name;
       })
       .join('、');
   };
 
-  const openAssign = (t: Task, trigger: HTMLElement): void => {
-    setDraftIds(taskAssigneeIds(t));
-    setAssignOpenId(t.id);
+  const openAssign = (task: Task, trigger: HTMLElement): void => {
+    setDraftIds(taskAssigneeIds(task));
+    setAssignOpenId(task.id);
     const rect = trigger.getBoundingClientRect();
     // fixed 定位：top=按钮底边+8px，right 对齐按钮右缘（弹层浮在视口最顶层，不被任务行穿透）
     setAssignAnchor({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
@@ -134,9 +137,9 @@ export function TaskChecklist({
   };
 
   /** 确定保存：assigneeIds=选中集合，assigneeId=第一参与人 ?? null */
-  const saveAssign = (t: Task): void => {
+  const saveAssign = (task: Task): void => {
     void actions.updateTask(
-      t.id,
+      task.id,
       { assigneeIds: draftIds, assigneeId: draftIds[0] ?? null },
       operatorName,
     );
@@ -146,20 +149,20 @@ export function TaskChecklist({
   return (
     <div>
       <ul className="space-y-1.5">
-        {tasks.map((t) => {
-          const canToggle = isAdmin || canMemberToggleTask(meId, t);
+        {tasks.map((task) => {
+          const canToggle = isAdmin || canMemberToggleTask(meId, task);
           return (
             <li
-              key={t.id}
+              key={task.id}
               className="glass-light group flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-2 transition-colors hover:bg-sand/40"
             >
               <button
                 type="button"
-                aria-label={taskIsDone(t) ? '标记未完成' : '标记完成'}
+                aria-label={taskIsDone(task) ? t('taskChecklist.markUndone') : t('taskChecklist.markDone')}
                 disabled={!canToggle}
-                onClick={() => void actions.toggleDone(t, operatorName)}
+                onClick={() => void actions.toggleDone(task, operatorName)}
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                  taskIsDone(t)
+                  taskIsDone(task)
                     ? 'border-pine bg-pine text-white'
                     : 'border-mist/50 text-transparent hover:border-pine'
                 } ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
@@ -168,48 +171,56 @@ export function TaskChecklist({
               </button>
 
               <ImeInput
-                value={t.title}
+                value={task.title}
                 readOnly={isRestricted}
-                onChange={(e) => void actions.updateTask(t.id, { title: e.target.value })}
+                onChange={(e) => void actions.updateTask(task.id, { title: e.target.value })}
                 className={`min-w-0 flex-1 bg-transparent text-sm outline-none ${
-                  taskIsDone(t) ? 'text-mist line-through' : 'text-ink'
+                  taskIsDone(task) ? 'text-mist line-through' : 'text-ink'
                 } ${isRestricted ? 'cursor-default' : ''}`}
               />
 
               {isRestricted ? (
                 <span
                   className="shrink-0 rounded-md bg-sand/60 px-2 py-0.5 text-xs text-mist"
-                  title={t.assigneeId ? `主负责人：${memberOf(t.assigneeId)?.name ?? '未知'}` : undefined}
+                  title={
+                    task.assigneeId
+                      ? t('taskChecklist.primaryOwner', {
+                          name: memberOf(task.assigneeId)?.name ?? t('common.unknown'),
+                        })
+                      : undefined
+                  }
                 >
-                  {assigneeLabelMulti(t)}
+                  {assigneeLabelMulti(task)}
                 </span>
               ) : (
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={(e) => openAssign(t, e.currentTarget)}
+                    onClick={(e) => openAssign(task, e.currentTarget)}
                     className={`inline-flex max-w-[180px] items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-xs transition-colors ${
-                      taskAssigneeIds(t).length > 0
+                      taskAssigneeIds(task).length > 0
                         ? 'border-pine/40 text-pine hover:border-pine hover:bg-pine-soft'
                         : 'border-line text-mist hover:border-pine hover:text-pine'
                     }`}
-                    title="指派参与人（多选）"
+                    title={t('taskChecklist.assignAria')}
                   >
                     <Users size={12} className="shrink-0" />
-                    <span className="truncate">{assigneeSummary(t) || '未指派'}</span>
+                    <span className="truncate">{assigneeSummary(task) || t('taskChecklist.unassigned')}</span>
                   </button>
 
-                  {assignOpenId === t.id &&
+                  {assignOpenId === task.id &&
                     createPortal(
                       <div
                         data-assign-popover
                         className="bg-paper menuFadeIn fixed z-[65] w-64 rounded-lg border border-line p-2 shadow-soft"
                         style={{ top: assignAnchor?.top ?? 0, right: assignAnchor?.right ?? 0 }}
                       >
-                        <p className="mb-1.5 px-1 text-xs font-medium text-ink">指派参与人（可多选）</p>
+                        <p className="mb-1.5 px-1 text-xs font-medium text-ink">
+                          {t('taskChecklist.assignTitle')}
+                        </p>
                       <div className="max-h-48 space-y-0.5 overflow-y-auto">
                         {activeMembers.length === 0 && (
-                          <p className="px-1 py-2 text-xs text-mist">还没有成员，请先在首页添加成员。</p>
+                          <p className="px-1 py-2 text-xs text-mist">{t('taskChecklist.noMembers')}</p>
                         )}
                         {activeMembers.map((m) => {
                           const checked = draftIds.includes(m.id);
@@ -245,7 +256,7 @@ export function TaskChecklist({
                                 <button
                                   type="button"
                                   onClick={() => toggleDraft(id)}
-                                  aria-label={`移除 ${m.name}`}
+                                  aria-label={t('taskChecklist.removeAria', { name: m.name })}
                                   className="rounded-full p-0.5 hover:bg-pine/20"
                                 >
                                   <X size={10} />
@@ -262,14 +273,14 @@ export function TaskChecklist({
                           onClick={() => closeAssign()}
                           className="rounded-md border border-line px-2 py-1 text-xs text-mist transition-colors hover:bg-sand"
                         >
-                          取消
+                          {t('common.cancel')}
                         </button>
                         <button
                           type="button"
-                          onClick={() => saveAssign(t)}
+                          onClick={() => saveAssign(task)}
                           className="rounded-md bg-pine px-2.5 py-1 text-xs text-white transition-colors hover:bg-pine-deep"
                         >
-                          确定
+                          {t('common.confirm')}
                         </button>
                       </div>
                       </div>,
@@ -293,14 +304,14 @@ export function TaskChecklist({
                   data-task-due-readonly=""
                   className="w-[120px] shrink-0 px-1 py-0.5 text-xs tabular-nums text-mist"
                 >
-                  {t.dueDate?.slice(0, 10) ?? '—'}
+                  {task.dueDate?.slice(0, 10) ?? '—'}
                 </span>
               ) : (
                 <input
                   type="date"
                   data-task-due-input=""
-                  value={t.dueDate?.slice(0, 10) ?? ''}
-                  onChange={(e) => void actions.updateTask(t.id, { dueDate: e.target.value || null })}
+                  value={task.dueDate?.slice(0, 10) ?? ''}
+                  onChange={(e) => void actions.updateTask(task.id, { dueDate: e.target.value || null })}
                   className="w-[120px] shrink-0 rounded-md border border-transparent px-1 py-0.5 text-xs tabular-nums text-mist hover:border-line focus:border-pine focus:bg-paper focus:outline-none"
                 />
               )}
@@ -308,8 +319,9 @@ export function TaskChecklist({
               {isAdmin && (
                 <button
                   type="button"
-                  onClick={() => void actions.removeTask(t.id)}
-                  aria-label="删除条目"
+                  onClick={() => void actions.removeTask(task.id)}
+                  data-task-remove=""
+                  aria-label={t('taskChecklist.removeEntryAria')}
                   className="shrink-0 rounded-md p-1 text-mist opacity-0 transition-opacity hover:text-clay group-hover:opacity-100"
                 >
                   <Trash2 size={13} />
@@ -336,7 +348,7 @@ export function TaskChecklist({
                 }
                 if (e.key === 'Escape') setAdding(false);
               }}
-              placeholder="条目标题，回车确认"
+              placeholder={t('taskChecklist.newEntryPlaceholder')}
               className="flex-1 rounded-md border border-pine bg-paper px-3 py-1.5 text-sm outline-none"
             />
           </div>
@@ -346,7 +358,7 @@ export function TaskChecklist({
             onClick={() => setAdding(true)}
             className="mt-2 inline-flex items-center gap-1 rounded-md border border-dashed border-mist/40 px-3 py-1.5 text-xs text-mist hover:border-pine hover:text-pine"
           >
-            <Plus size={12} /> 添加条目
+            <Plus size={12} /> {t('taskChecklist.addEntry')}
           </button>
         ))}
     </div>

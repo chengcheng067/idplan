@@ -1347,6 +1347,49 @@ export const zhMessages = {
   'reschedule.saveMany': '保存 {n} 个阶段并留痕',
   'reschedule.saveOne': '保存并留痕',
   'reschedule.saveFailed': '保存被拒绝：{n} 个阶段改期失败，请检查延期原因后重试。',
+
+  /* ══════════ 笔 3-D：阶段抽屉族（抽屉壳 / 任务清单 / 资料路径 / 延期档案） ══════════ */
+  /* ★「开始 / 截止」这两个词**只有**下面两个裸键是出处：
+     `StageBar` 的拖拽气泡（`timeline.dragBubble.start/end`）是「裸词 + 日期」的**短语**，
+     有 spec 断言它 == 裸键 + ` {date}` ⇒ 两处不可能漂。 */
+  'timeline.dateEdge.start': '开始',
+  'timeline.dateEdge.end': '截止',
+  'stageDrawer.ariaWithName': '阶段详情：{name}',
+  'stageDrawer.subtitle': '{project} · 第 {n} 阶段',
+  'stageDrawer.closeAria': '关闭抽屉',
+  'stageDrawer.tasksTitle': '本阶段该做',
+  'stageDrawer.resourcesTitle': '备注与资料',
+  'stageDrawer.delayArchiveTitle': '延期档案（只增不改）',
+  'stageDrawer.nextStageToast': '可提醒下一阶段「{name}」的成员开工',
+  'stageDrawer.switchTo': '切换为 {status}',
+  'stageDrawer.postponePrompt': '截止日后移需要填写延期原因（将完整留痕）：',
+  'stageDrawer.postponeCancelled': '未填写延期原因，已取消保存。',
+  'delayHistory.empty':
+    '暂无改期记录。拖拽彩条边缘或修改日期并确认后，将在此追加一条不可篡改的档案。',
+  'delayHistory.operator': ' · 操作人 {name}',
+  'delayHistory.shifted': ' · 平移/提前',
+  'taskChecklist.markDone': '标记完成',
+  'taskChecklist.markUndone': '标记未完成',
+  'taskChecklist.unassigned': '未指派',
+  'taskChecklist.primaryOwner': '主负责人：{name}',
+  'taskChecklist.assignAria': '指派参与人（多选）',
+  'taskChecklist.assignTitle': '指派参与人（可多选）',
+  'taskChecklist.noMembers': '还没有成员，请先在首页添加成员。',
+  'taskChecklist.removeAria': '移除 {name}',
+  'taskChecklist.removeEntryAria': '删除条目',
+  'taskChecklist.newEntryPlaceholder': '条目标题，回车确认',
+  'taskChecklist.addEntry': '添加条目',
+  /* ⚠️ 反斜杠是**真路径分隔符**（JSX 属性串里不转义 ⇒ 渲染出来带 `\\`）：
+     写进消息表必须 JS 转义成 `\\\\`，否则渲染会**丢掉两个反斜杠**（zh 渲染变字）。 */
+  'resourcePath.placeholder': '如 D:\\项目资料\\03-方案 或 file://D:/…',
+  'resourcePath.register': '登记本阶段资料文件夹路径…',
+  'resourcePath.open': '打开',
+  'resourcePath.copy': '复制路径',
+  'resourcePath.edit': '修改',
+  'resourcePath.savedToast': '资料路径已保存',
+  'resourcePath.openFallbackToast':
+    '浏览器不允许直接打开本地文件夹，已复制路径，请粘贴到资源管理器地址栏。',
+  'common.confirm': '确定',
 } as const;
 
 /**

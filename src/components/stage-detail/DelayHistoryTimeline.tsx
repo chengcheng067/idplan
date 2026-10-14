@@ -2,15 +2,18 @@ import dayjs from 'dayjs';
 
 import type { StageLog } from '../../core/types/entities';
 import { StageLogType } from '../../core/types/enums';
+import { useLang } from '../../i18n';
 
 /** 延期档案时间线（append-only 渲染：只增不改） */
 export function DelayHistoryTimeline({ logs }: { logs: StageLog[] }): JSX.Element {
+  /* 取词 + 订阅语言变化（空态整句 / 操作人 / 平移标记） */
+  const { t } = useLang();
   const reschedules = logs.filter((l) => l.type === StageLogType.Rescheduled);
 
   if (reschedules.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-line p-4 text-sm leading-6 text-mist">
-        暂无改期记录。拖拽彩条边缘或修改日期并确认后，将在此追加一条不可篡改的档案。
+        {t('delayHistory.empty')}
       </p>
     );
   }
@@ -35,8 +38,9 @@ export function DelayHistoryTimeline({ logs }: { logs: StageLog[] }): JSX.Elemen
               {l.reason && <span className="text-ink/80"> · {l.reason}</span>}
             </p>
             <p className="text-xs text-mist">
-              {dayjs(l.createdAt).format('YYYY-MM-DD HH:mm')} · 操作人 {l.operatorName}
-              {!postponed && ' · 平移/提前'}
+              {dayjs(l.createdAt).format('YYYY-MM-DD HH:mm')}
+              {t('delayHistory.operator', { name: l.operatorName })}
+              {!postponed && t('delayHistory.shifted')}
             </p>
           </li>
         );

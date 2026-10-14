@@ -8,6 +8,7 @@ import { useRepos } from '../../hooks/useRepos';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { ImeInput } from '../common/ImeInput';
+import { useLang } from '../../i18n';
 
 /**
  * 本地资料路径登记 + 打开引导（F12）。
@@ -38,6 +39,10 @@ import { ImeInput } from '../common/ImeInput';
  */
 export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | null {
   // ⚠️ 唯一判定出口（禁止在本组件内自写 !isMember 之类的派生，见 useRoleGuard.ts 收口说明）
+  /* 取词 + 订阅语言变化（三通道文案 / toast 随语言变）
+     ⚠️ 必须在下面那条 `if (!stage.resourcePath && !isAdmin) return null` **之前**
+     （早退之前调 hook 是本仓纪律，见文件头 React #310 警戒）。 */
+  const { t } = useLang();
   const { isAdmin } = useRoleGuard();
   const repos = useRepos();
   const [editing, setEditing] = useState(false);
@@ -52,7 +57,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
     });
     setEditing(false);
     if (pathText.trim()) {
-      useProjectsStore.getState().pushToast('success', '资料路径已保存');
+      useProjectsStore.getState().pushToast('success', t('resourcePath.savedToast'));
     }
   };
 
@@ -64,7 +69,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
       void navigator.clipboard?.writeText(stage.resourcePath);
       useProjectsStore
         .getState()
-        .pushToast('info', '浏览器不允许直接打开本地文件夹，已复制路径，请粘贴到资源管理器地址栏。');
+        .pushToast('info', t('resourcePath.openFallbackToast'));
     }
   };
 
@@ -81,14 +86,14 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
             onClick={tryOpen}
             className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs hover:bg-sand"
           >
-            <ExternalLink size={12} /> 打开
+            <ExternalLink size={12} /> {t('resourcePath.open')}
           </button>
           <button
             type="button"
             onClick={() => void navigator.clipboard?.writeText(stage.resourcePath!)}
             className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs hover:bg-sand"
           >
-            <Copy size={12} /> 复制路径
+            <Copy size={12} /> {t('resourcePath.copy')}
           </button>
           {/* 「修改」= 唯一的写入口 → 管理员专属（成员只读展示，见文件头 P0-19-①） */}
           {isAdmin && (
@@ -97,7 +102,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
               onClick={() => setEditing(true)}
               className="rounded-md px-2 py-1.5 text-xs text-mist hover:bg-sand"
             >
-              修改
+              {t('resourcePath.edit')}
             </button>
           )}
         </div>
@@ -107,7 +112,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
             autoFocus
             value={pathText}
             onChange={(e) => setPathText(e.target.value)}
-            placeholder="如 D:\项目资料\03-方案 或 file://D:/…"
+            placeholder={t('resourcePath.placeholder')}
             className="flex-1 rounded-md border border-pine px-2 py-1.5 text-sm outline-none"
             onKeyDown={(e) => {
               if (e.key === 'Enter') void save();
@@ -118,7 +123,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
             onClick={() => void save()}
             className="rounded-md bg-pine px-3 py-1.5 text-xs text-white hover:bg-pine-deep"
           >
-            保存
+            {t('common.save')}
           </button>
         </div>
       ) : (
@@ -127,7 +132,7 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
           onClick={() => setEditing(true)}
           className="text-sm text-mist underline underline-offset-2 hover:text-pine"
         >
-          登记本阶段资料文件夹路径…
+          {t('resourcePath.register')}
         </button>
       )}
     </div>

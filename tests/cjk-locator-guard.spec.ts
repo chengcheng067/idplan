@@ -360,7 +360,27 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *   但同属「英文态静默失配」的哑雷 —— 登记在此，免得下一个人以为本笔只改了 1 处。
  *   口径同上一段：**真的转换了锚点**才允许下调。
  */
-const BASELINE = 106;
+/*
+ * ── 2026-10-14 · i18n 笔 3-D：106 → **102**（−4，逐行归属） ──
+ * 本笔把**阶段抽屉**的 `aria-label` 改走消息表（`stageDrawer.ariaWithName`），并把
+ * 「删除条目」钮的 aria 改走 `taskChecklist.removeEntryAria`，同笔落两个语言无关钩子：
+ *   · `data-stage-drawer`（挂在抽屉内容根 `<aside>` 上）
+ *   · `data-task-remove`（挂在删除钮上）
+ * ⇒ 判据面内那 4 处**必须**换掉（中文 aria 在英文态静默失配、失败伪装成「控件不存在」）：
+ *   · `tests/v07-c2-member-readonly.spec.tsx:311 / :321`（`[aria-label="删除条目"]` ×2）
+ *   · `tests/v07-dline-shell.spec.ts:1037 / :1100`（`[aria-label="阶段详情：X"]` ×2）
+ *
+ * **实测**：改前 `scanRepo` = 106 → 改后 = **102**；两次命中的 `文件:行` 集合
+ * **只少上面那四行**（`v07-dline-shell` 19 → 17、`v07-c2-member-readonly` 2 → 0，
+ * 其余文件计数一字未动）⇒ 差额逐行一一对应。
+ *
+ * ⚠️ 同笔还拆掉 5 处**不在判据面内**的同类哑雷（`aria-label^="阶段详情"` ×5：
+ *    `tests/qa-batch-a-verify.spec.ts` 4 处 + `overlay-stack-browser.spec.ts` 1 处；
+ *    判据只认 `aria-label=` 精确形态，`^=` 一律看不见）—— 它们**不影响本数字**，
+ *    但同属「英文态静默失配」，登记在此。
+ * 口径同前两段：**真的转换了锚点**才允许下调。
+ */
+const BASELINE = 102;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

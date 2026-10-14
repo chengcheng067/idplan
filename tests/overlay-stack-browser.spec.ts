@@ -150,7 +150,7 @@ const SETTINGS_DRAWER = '[data-settings-drawer]';
 const CONFIRM_CLEAR = '[role="dialog"][aria-label="清空日志"]';
 const IDENTITY_MENU = '[role="menu"][aria-label="身份操作"]';
 const AVATAR = 'button[title="当前身份（点击切换/退出）"]';
-const STAGE_DRAWER = '[role="dialog"][aria-label^="阶段详情"]';
+const STAGE_DRAWER = '[data-stage-drawer]';
 
 describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromium（F2 / F3 / F6）', () => {
   let browser: Browser;

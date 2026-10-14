@@ -308,7 +308,7 @@ describe('v0.7 C2 · 权限派生唯一出口（禁止页面内 !isXxx 派生）
     const h = renderChecklist({ actor: 'member', tasks: [makeTask({ title: '放线', dueDate: DUE })] });
 
     expect(h.querySelectorAll('li').length).toBe(1); // 前提：清单渲染了
-    expect(h.querySelector('[aria-label="删除条目"]'), '成员不得看到删除条目').toBeNull();
+    expect(h.querySelector('[data-task-remove]'), '成员不得看到删除条目').toBeNull();
     expect(
       Array.from(h.querySelectorAll('button')).some((b) => (b.textContent ?? '').includes('添加条目')),
       '成员不得看到「添加条目」',
@@ -318,7 +318,7 @@ describe('v0.7 C2 · 权限派生唯一出口（禁止页面内 !isXxx 派生）
   it('对照组 · 管理员：新增/删除条目入口照旧存在', () => {
     const h = renderChecklist({ actor: 'admin', tasks: [makeTask({ title: '放线', dueDate: DUE })] });
 
-    expect(h.querySelector('[aria-label="删除条目"]'), '管理员必须仍有删除条目').toBeTruthy();
+    expect(h.querySelector('[data-task-remove]'), '管理员必须仍有删除条目').toBeTruthy();
     expect(
       Array.from(h.querySelectorAll('button')).some((b) => (b.textContent ?? '').includes('添加条目')),
       '管理员必须仍有「添加条目」',

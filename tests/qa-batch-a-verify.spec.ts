@@ -589,13 +589,13 @@ await page.click('[data-industry-select-option="indoor"]');
       expect(bar).not.toBeNull();
 
       // 首屏抽屉必须是关的（hook 顺序 bug 只在 null → 有值 的第二次渲染暴露）
-      expect(await page.locator('[role="dialog"][aria-label^="阶段详情"]').count()).toBe(0);
+      expect(await page.locator('[data-stage-drawer]').count()).toBe(0);
 
       // 真实鼠标点击彩条中心
       await page.mouse.click(bar!.x, bar!.y);
       await page.waitForTimeout(900);
 
-      const dlg = page.locator('[role="dialog"][aria-label^="阶段详情"]');
+      const dlg = page.locator('[data-stage-drawer]');
       await expect(dlg.count()).resolves.toBe(1);
       // 应用未白屏：header/main 仍在，且抽屉带阶段名
       expect(await page.locator('header').count()).toBe(1);
@@ -606,10 +606,10 @@ await page.click('[data-industry-select-option="indoor"]');
       // Esc 关闭 → 再次点击应能重开（反复开合不累积破坏 hook 顺序）
       await page.keyboard.press('Escape');
       await page.waitForTimeout(400);
-      expect(await page.locator('[role="dialog"][aria-label^="阶段详情"]').count()).toBe(0);
+      expect(await page.locator('[data-stage-drawer]').count()).toBe(0);
       await page.mouse.click(bar!.x, bar!.y);
       await page.waitForTimeout(600);
-      expect(await page.locator('[role="dialog"][aria-label^="阶段详情"]').count()).toBe(1);
+      expect(await page.locator('[data-stage-drawer]').count()).toBe(1);
 
       const hookErrs = errors.filter((e) => /more hooks than|#310|Rendered more hooks/i.test(e));
       expect(hookErrs).toEqual([]);

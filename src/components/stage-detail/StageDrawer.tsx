@@ -16,6 +16,7 @@ import { Modal } from '../common/Modal';
 import { TaskChecklist } from './TaskChecklist';
 import { DelayHistoryTimeline } from './DelayHistoryTimeline';
 import { ResourcePathButton } from './ResourcePathButton';
+import { stageStatusLabel, useLang } from '../../i18n';
 
 /**
  * 阶段详情侧滑抽屉壳：
@@ -31,6 +32,8 @@ export function StageDrawer({
   projectId: string;
   members: Member[];
 }): JSX.Element | null {
+  /* 取词 + 订阅语言变化（抽屉内的全部文案随语言变） */
+  const { t } = useLang();
   const stageId = useUiStore((s) => s.stageDrawerStageId);
   const close = useUiStore((s) => s.closeStageDrawer);
 
@@ -103,8 +106,21 @@ export function StageDrawer({
   if (!stage) return null;
 
   return (
-    <Modal open onClose={close} placement="right" ariaLabel={`阶段详情：${stage.name}`}>
-      <aside className="flex h-full w-full flex-col border-l border-line bg-paper shadow-raised-lg rounded-l-3xl dark:rounded-l-2xl sm:max-w-[520px]">
+    <Modal
+      open
+      onClose={close}
+      placement="right"
+      ariaLabel={t('stageDrawer.ariaWithName', { name: stage.name })}
+    >
+      {/*
+        ★ 语言无关定位钩子（笔 3-D）：`ariaLabel` 已改走消息表（`stageDrawer.ariaWithName`），
+        英文态形如 `Stage details: X` —— 拿「阶段详情」当选择器的（`[aria-label^="阶段详情"]`）
+        会**静默失配**。取「这是阶段抽屉」请用本钩子（放在抽屉内容根上，语义即「抽屉本体」）。
+      */}
+      <aside
+        data-stage-drawer=""
+        className="flex h-full w-full flex-col border-l border-line bg-paper shadow-raised-lg rounded-l-3xl dark:rounded-l-2xl sm:max-w-[520px]"
+      >
         {/* 手机端顶部抓手横条（提示可手势下滑关闭区域；平板以上隐藏） */}
         <div className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-sand sm:hidden" aria-hidden />
         {/* 头（画板 05：标题列 阶段名 18/600 + 副标题 13 mist + 关闭 36×36 sunken 圆角12） */}
@@ -115,13 +131,16 @@ export function StageDrawer({
               {stage.name}
             </h2>
             <p className="mt-1 text-[13px] text-mist">
-              {project?.name ?? '项目'} · 第 {stage.orderIndex} 阶段
+              {t('stageDrawer.subtitle', {
+                project: project?.name ?? t('common.untitledProject'),
+                n: stage.orderIndex,
+              })}
             </p>
           </div>
           <button
             type="button"
             onClick={close}
-            aria-label="关闭抽屉"
+            aria-label={t('stageDrawer.closeAria')}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sunken text-mist transition-colors hover:bg-sand"
           >
             <X size={18} />
@@ -134,17 +153,17 @@ export function StageDrawer({
           {isAdmin && <DateRow stage={stage} />}
 
           <section className="mt-6">
-            <h3 className="mb-2 text-sm font-medium">本阶段该做</h3>
+            <h3 className="mb-2 text-sm font-medium">{t('stageDrawer.tasksTitle')}</h3>
             <TaskChecklist stage={stage} tasks={tasks} members={members} />
           </section>
 
           <section className="mt-6">
-            <h3 className="mb-2 text-sm font-medium">备注与资料</h3>
+            <h3 className="mb-2 text-sm font-medium">{t('stageDrawer.resourcesTitle')}</h3>
             <ResourcePathButton stage={stage} />
           </section>
 
           <section className="mt-6">
-            <h3 className="mb-2 text-sm font-medium">延期档案（只增不改）</h3>
+            <h3 className="mb-2 text-sm font-medium">{t('stageDrawer.delayArchiveTitle')}</h3>
             <DelayHistoryTimeline logs={logs ?? []} />
           </section>
         </div>
@@ -156,6 +175,8 @@ export function StageDrawer({
 /* ------------------------------- 上区：状态 + 日期 ------------------------------ */
 
 function StatusRow({ stage }: { stage: Stage; projectId: string }): JSX.Element {
+  /* 取词 + 订阅语言变化（切换提示 / 下一阶段 toast 随语言变） */
+  const { t } = useLang();
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
@@ -167,7 +188,7 @@ function StatusRow({ stage }: { stage: Stage; projectId: string }): JSX.Element 
     if (hint?.nextStageName) {
       useProjectsStore
         .getState()
-        .pushToast('info', `可提醒下一阶段「${hint.nextStageName}」的成员开工`);
+        .pushToast('info', t('stageDrawer.nextStageToast', { name: hint.nextStageName }));
     }
   };
 
@@ -179,7 +200,7 @@ function StatusRow({ stage }: { stage: Stage; projectId: string }): JSX.Element 
           type="button"
           onClick={() => void set(s)}
           className={`transition-opacity ${stage.status === s ? 'opacity-100' : 'opacity-60 hover:opacity-90'}`}
-          title={`切换为 ${labelOf(s)}`}
+          title={t('stageDrawer.switchTo', { status: stageStatusLabel(s) })}
         >
           <StatusPill status={s} />
         </button>
@@ -189,6 +210,8 @@ function StatusRow({ stage }: { stage: Stage; projectId: string }): JSX.Element 
 }
 
 function DateRow({ stage }: { stage: Stage }): JSX.Element {
+  /* 取词 + 订阅语言变化（开始/截止标签 + window.prompt + toast 随语言变） */
+  const { t } = useLang();
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
@@ -199,9 +222,9 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
       new Date(newEnd).getTime() > new Date(stage.endAt.slice(0, 10)).getTime();
     let reason: string | null = null;
     if (postponed) {
-      reason = window.prompt('截止日后移需要填写延期原因（将完整留痕）：') ?? '';
+      reason = window.prompt(t('stageDrawer.postponePrompt')) ?? '';
       if (!reason.trim()) {
-        useProjectsStore.getState().pushToast('error', '未填写延期原因，已取消保存。');
+        useProjectsStore.getState().pushToast('error', t('stageDrawer.postponeCancelled'));
         return;
       }
     }
@@ -217,7 +240,7 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
       <label className="flex items-center gap-1.5">
-        <span className="text-mist">开始</span>
+        <span className="text-mist">{t('timeline.dateEdge.start')}</span>
         <input
           type="date"
           value={stage.startAt.slice(0, 10)}
@@ -226,7 +249,7 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
         />
       </label>
       <label className="flex items-center gap-1.5">
-        <span className="text-mist">截止</span>
+        <span className="text-mist">{t('timeline.dateEdge.end')}</span>
         <input
           type="date"
           value={stage.endAt.slice(0, 10)}
@@ -240,14 +263,11 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
 
 /* --------------------------------- 内部工具 --------------------------------- */
 
-function labelOf(s: StageStatus): string {
-  return s === StageStatus.NotStarted
-    ? '未开始'
-    : s === StageStatus.InProgress
-      ? '进行中'
-      : s === StageStatus.Completed
-        ? '已完成'
-        : '延期';
-}
+/*
+ * 原 `labelOf(s)` 已退役（笔 3-D）：它手写的四态取值与 `stageStatusLabel`
+ * （键 `stageStatus.*`）**逐字相同** ⇒ 改走既有键，不新建第二份「未开始/进行中/
+ * 已完成/延期」（那正是本仓禁的「两份真相」）。
+ * ⚠️ 保留这条注释是为了让「四态文案的出处」只有一个可查：`src/i18n/labels.ts`。
+ */
 
 export type { Task };

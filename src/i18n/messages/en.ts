@@ -1344,4 +1344,43 @@ export const enMessages: Record<MessageKey, string> = {
   'reschedule.saveOne': 'Save with a record',
   'reschedule.saveFailed':
     'Save rejected: {n} stages failed to reschedule. Check the delay reason and retry.',
+
+  /* ══════════ Batch 3-D: stage drawer family ══════════ */
+  'timeline.dateEdge.start': 'Start',
+  'timeline.dateEdge.end': 'End',
+  'stageDrawer.ariaWithName': 'Stage details: {name}',
+  'stageDrawer.subtitle': '{project} · Stage {n}',
+  'stageDrawer.closeAria': 'Close drawer',
+  'stageDrawer.tasksTitle': 'To do in this stage',
+  'stageDrawer.resourcesTitle': 'Notes and files',
+  'stageDrawer.delayArchiveTitle': 'Delay archive (append-only)',
+  'stageDrawer.nextStageToast': 'You can remind the members of the next stage "{name}" to start',
+  'stageDrawer.switchTo': 'Switch to {status}',
+  'stageDrawer.postponePrompt':
+    'Moving the end date later requires a reason for delay (kept in full in the history):',
+  'stageDrawer.postponeCancelled': 'No reason given, save cancelled.',
+  'delayHistory.empty':
+    'No reschedules yet. Drag a bar edge, or change the dates and confirm, and an immutable record is appended here.',
+  'delayHistory.operator': ' · by {name}',
+  'delayHistory.shifted': ' · pulled in / shifted',
+  'taskChecklist.markDone': 'Mark as done',
+  'taskChecklist.markUndone': 'Mark as not done',
+  'taskChecklist.unassigned': 'Unassigned',
+  'taskChecklist.primaryOwner': 'Lead owner: {name}',
+  'taskChecklist.assignAria': 'Assign participants (single choice)',
+  'taskChecklist.assignTitle': 'Assign participants (multiple choice)',
+  'taskChecklist.noMembers': 'No members yet. Add members on the home page first.',
+  'taskChecklist.removeAria': 'Remove {name}',
+  'taskChecklist.removeEntryAria': 'Delete entry',
+  'taskChecklist.newEntryPlaceholder': 'Entry title, press Enter to confirm',
+  'taskChecklist.addEntry': 'Add entry',
+  'resourcePath.placeholder': 'e.g. D:\\Projects\\03-Scheme or file://D:/…',
+  'resourcePath.register': 'Register the stage resource folder path…',
+  'resourcePath.open': 'Open',
+  'resourcePath.copy': 'Copy path',
+  'resourcePath.edit': 'Edit',
+  'resourcePath.savedToast': 'Resource path saved',
+  'resourcePath.openFallbackToast':
+    'The browser does not allow opening a local folder directly. The path has been copied — paste it into the File Explorer address bar.',
+  'common.confirm': 'OK',
 };

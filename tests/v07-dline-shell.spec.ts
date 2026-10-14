@@ -1034,7 +1034,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
 
         // ── 打开阶段抽屉（点左列阶段行按钮；这是 openStageDrawer 的唯一真实入口）──
         await page.locator('button', { hasText: STAGE_NAME }).first().click();
-        const drawer = page.locator(`[role="dialog"][aria-label="阶段详情：${STAGE_NAME}"]`);
+        const drawer = page.locator('[data-stage-drawer]');
         await drawer.waitFor({ state: 'visible', timeout: 15000 });
 
         const text = await drawer.innerText();
@@ -1097,7 +1097,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await page.waitForSelector('[aria-label="九阶段时间轴"]', { timeout: 20000 });
 
         await page.locator('button', { hasText: STAGE_NAME }).first().click();
-        const drawer = page.locator(`[role="dialog"][aria-label="阶段详情：${STAGE_NAME}"]`);
+        const drawer = page.locator('[data-stage-drawer]');
         await drawer.waitFor({ state: 'visible', timeout: 15000 });
 
         const labels = await drawer
