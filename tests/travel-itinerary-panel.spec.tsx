@@ -115,7 +115,7 @@ function bodyText(): string {
 
 function trashButton(date: string): HTMLButtonElement {
   const btn = document.body.querySelector(
-    `[data-testid="itinerary-day-${date}"] button[aria-label="删除 ${date} 行程卡"]`,
+    `[data-testid="itinerary-day-${date}"] button[data-itinerary-remove]`,
   ) as HTMLButtonElement | null;
   if (!btn) throw new Error(`未找到 ${date} 的删除按钮`);
   return btn;

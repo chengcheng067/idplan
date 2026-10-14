@@ -9,6 +9,10 @@ import { createTaskActions, useProjectsStore } from '../../store/useProjectsStor
 import { dayjs } from '../../lib/date';
 import { cn } from '../../lib/cn';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { useLang, type InterpolationVars, type MessageKey } from '../../i18n';
+
+/** 取词函数的形状（`filledSummary` 是模块级纯函数，取词器由调用方注入） */
+type Translate = (key: MessageKey, vars?: InterpolationVars) => string;
 
 /** 金额显示（'' 与 null 都显示破折号；汇总条与删除确认共用同一格式出口） */
 function moneyText(n: number | null): string {
@@ -23,13 +27,14 @@ function moneyText(n: number | null): string {
  * 这一下删掉的是一张空卡还是一整天已经核过的账——复述金额就是让他一眼认出来。
  * 空卡返回空串（调用方据此不渲染这一句）。
  */
-function filledSummary(day: ItineraryDay): string {
+function filledSummary(day: ItineraryDay, t: Translate): string {
   const parts: string[] = [];
-  if (day.transport) parts.push(`交通「${day.transport}」`);
-  if (day.accommodation) parts.push(`住宿「${day.accommodation}」`);
-  if (day.budgetAmount !== null) parts.push(`预算 ${moneyText(day.budgetAmount)}`);
-  if (day.actualAmount !== null) parts.push(`实际 ${moneyText(day.actualAmount)}`);
-  return parts.join('、');
+  if (day.transport) parts.push(t('travel.summaryTransport', { value: day.transport }));
+  if (day.accommodation) parts.push(t('travel.summaryAccommodation', { value: day.accommodation }));
+  if (day.budgetAmount !== null) parts.push(t('travel.summaryBudget', { amount: moneyText(day.budgetAmount) }));
+  if (day.actualAmount !== null) parts.push(t('travel.summaryActual', { amount: moneyText(day.actualAmount) }));
+  /* 分隔符住在键里（中文顿号 / 英文逗号）—— 不在组件里硬编标点 */
+  return parts.join(t('travel.summarySep'));
 }
 
 /**
@@ -43,6 +48,8 @@ function filledSummary(day: ItineraryDay): string {
  *   - 非旅游项目不渲染本面板（由 ProjectDetailPage 按 effectiveDomainOf 门控）。
  */
 export function TravelItineraryPanel({ project }: { project: Project }): JSX.Element {
+  /* 取词 + 订阅语言变化（面板内全部文案随语言变） */
+  const { t } = useLang();
   const repos = useRepos();
   const actions = useMemo(() => createTaskActions(repos), [repos]);
   const tasks = useProjectsStore((s) => s.tasks);
@@ -56,10 +63,10 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
   /** 待删除的行程卡（非 null = 确认框打开）——删除不可撤销，故先停在确认框 */
   const [removeTarget, setRemoveTarget] = useState<ItineraryDay | null>(null);
   /** 确认框里那句「该日已填：…」（空卡为空串，调用方据此不渲染） */
-  const removeSummary = removeTarget ? filledSummary(removeTarget) : '';
+  const removeSummary = removeTarget ? filledSummary(removeTarget, t) : '';
 
   const projectTasks = useMemo(
-    () => tasks.filter((t) => t.projectId === project.id),
+    () => tasks.filter((task) => task.projectId === project.id),
     [tasks, project.id],
   );
 
@@ -78,7 +85,7 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
       if (generation === loadGeneration.current) {
         pushToast('error', err instanceof Error && 'userMessage' in err
           ? String((err as { userMessage: unknown }).userMessage)
-          : '每日行程加载失败。');
+          : t('travel.loadFailed'));
       }
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
@@ -101,11 +108,16 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
       const next = await repos.itineraries.update(day.id, { [field]: value });
       setDays((prev) => prev.map((d) => (d.id === next.id ? next : d)));
     } catch {
-      pushToast('error', '保存失败，请重试。');
+      pushToast('error', t('travel.saveFailed'));
     }
   };
 
   const assignTask = async (taskId: string, date: string | null): Promise<void> => {
+    /*
+     * ⚠️ `'我'` **不翻**（B）：它是 `actions.updateTask(..., operatorName)` 的
+     *    **operatorName ⇒ 会被写进任务流水**（与 `'当前用户'` / `'负责人'` 同族的落库值）。
+     *    翻它 = 往库里写英文操作人，历史留痕会随界面语言分叉 —— 这是本笔最容易误翻的一处。
+     */
     await actions.updateTask(taskId, { itineraryDate: date }, '我');
   };
 
@@ -113,7 +125,7 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
     const last = days[days.length - 1];
     const baseDate = last?.date ?? project.plannedEndAt?.slice(0, 10);
     if (!baseDate || !dayjs(baseDate).isValid()) {
-      pushToast('error', '请先设置有效的项目结束日期。');
+      pushToast('error', t('travel.invalidEndDate'));
       return;
     }
     const nextDate = dayjs(baseDate).add(1, 'day').format('YYYY-MM-DD');
@@ -123,7 +135,7 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
     } catch (err) {
       pushToast('error', err instanceof Error && 'userMessage' in err
         ? String((err as { userMessage: unknown }).userMessage)
-        : `无法新增 ${nextDate} 的每日行程卡。`);
+        : t('travel.addDayFailed', { date: nextDate }));
     }
   };
 
@@ -138,16 +150,16 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
    * 失败反馈照抄同文件 `saveField`（:76-78）的 pushToast。
    */
   const removeDay = async (day: ItineraryDay): Promise<void> => {
-    const attached = projectTasks.filter((t) => t.itineraryDate === day.date);
+    const attached = projectTasks.filter((task) => task.itineraryDate === day.date);
     if (attached.length > 0) {
-      pushToast('error', '该日还有任务，请先移走或删除任务。');
+      pushToast('error', t('travel.dayHasTasks'));
       return;
     }
     try {
       await repos.itineraries.remove(day.id);
       setDays((prev) => prev.filter((d) => d.id !== day.id));
     } catch {
-      pushToast('error', '删除行程卡失败，请重试。');
+      pushToast('error', t('travel.removeFailed'));
     }
   };
 
@@ -156,12 +168,12 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
   const totalActual = days.reduce((a, d) => a + (d.actualAmount ?? 0), 0);
   const hasAnyAmount = days.some((d) => d.budgetAmount !== null || d.actualAmount !== null);
 
-  const unassigned = projectTasks.filter((t) => !t.itineraryDate);
+  const unassigned = projectTasks.filter((task) => !task.itineraryDate);
 
   if (loading) {
     return (
       <div className="glass-medium rounded-lg border border-line p-6 text-sm text-mist" data-testid="travel-itinerary-loading">
-        正在生成每日行程…
+        {t('travel.loading')}
       </div>
     );
   }
@@ -170,16 +182,19 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
     <div className="space-y-3" data-testid="travel-itinerary-panel">
       {/* 汇总条 */}
       <div className="glass-medium flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-line px-4 py-3 text-sm shadow-soft">
-        <span className="font-display text-display-sm">每日行程</span>
-        <span className="text-mist">共 {days.length} 天</span>
+        <span className="font-display text-display-sm">{t('travel.title')}</span>
+        <span className="text-mist">{t('travel.totalDays', { n: days.length })}</span>
         {hasAnyAmount && (
           <>
             <span className="flex items-center gap-1.5">
-              <Coins size={14} className="text-mist" aria-hidden /> 预算 <b className="text-ink">{moneyText(totalBudget)}</b>
+              <Coins size={14} className="text-mist" aria-hidden /> {t('travel.budget')}{' '}
+              <b className="text-ink">{moneyText(totalBudget)}</b>
             </span>
-            <span>实际 <b className="text-ink">{moneyText(totalActual)}</b></span>
+            <span>
+              {t('travel.actual')} <b className="text-ink">{moneyText(totalActual)}</b>
+            </span>
             <span className={cn(totalActual > totalBudget ? 'text-clay' : 'text-pine')}>
-              差额 <b>{moneyText(totalBudget - totalActual)}</b>
+              {t('travel.diff')} <b>{moneyText(totalBudget - totalActual)}</b>
             </span>
           </>
         )}
@@ -188,24 +203,26 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
             type="button"
             onClick={() => void reload()}
             className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist hover:bg-sand"
-            title="按当前项目起止日期补齐缺失日期卡（只补不删）"
+            title={t('travel.syncTitle')}
           >
-            <CalendarPlus size={13} className="mr-1 inline" aria-hidden />同步日期
+            <CalendarPlus size={13} className="mr-1 inline" aria-hidden />
+            {t('travel.sync')}
           </button>
           <button
             type="button"
             onClick={() => void addManualDay()}
             className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist hover:bg-sand"
-            title="追加一天（最后一天之后）"
+            title={t('travel.addDayTitle')}
           >
-            <Plus size={13} className="mr-1 inline" aria-hidden />加一天
+            <Plus size={13} className="mr-1 inline" aria-hidden />
+            {t('travel.addDay')}
           </button>
         </span>
       </div>
 
       {/* 每日卡 */}
       {days.map((day, idx) => {
-        const dayTasks = projectTasks.filter((t) => t.itineraryDate === day.date);
+        const dayTasks = projectTasks.filter((task) => task.itineraryDate === day.date);
         const isToday = day.date === dayjs().format('YYYY-MM-DD');
         return (
           <div
@@ -218,13 +235,17 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
           >
             <div className="mb-2.5 flex items-center gap-2">
               <span className="rounded-full bg-pine-soft/60 px-2 py-0.5 text-xs font-semibold text-pine">
-                第 {idx + 1} 天
+                {t('travel.dayIndex', { n: idx + 1 })}
               </span>
               <span className="text-sm font-semibold text-ink">{day.date}</span>
-              {isToday && <span className="text-xs text-pine">· 今天</span>}
+              {isToday && <span className="text-xs text-pine">{t('travel.today')}</span>}
               <button
                 type="button"
-                aria-label={`删除 ${day.date} 行程卡`}
+                /* ★ 语言无关定位钩子（笔 3-E）：aria 已走消息表（`travel.removeDayAria`），
+                   英文态形如 `Delete the day card of 2026-10-01` —— 拿「删除 … 行程卡」当选择器的
+                   会静默失配。取「这一天的删除钮」请用本钩子（外层已有 data-testid 定位到当天卡）。 */
+                data-itinerary-remove=""
+                aria-label={t('travel.removeDayAria', { date: day.date })}
                 onClick={() => setRemoveTarget(day)}
                 disabled={dayTasks.length > 0}
                 className="ml-auto rounded-md p-1 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
@@ -236,46 +257,46 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
               <label className="block text-xs">
                 <span className="mb-1 flex items-center gap-1 font-medium text-mist">
-                  <Bus size={12} aria-hidden /> 交通
+                  <Bus size={12} aria-hidden /> {t('travel.fieldTransport')}
                 </span>
                 <input
                   type="text"
                   defaultValue={day.transport ?? ''}
-                  aria-label={`${day.date} 交通`}
+                  aria-label={t('travel.fieldTransportAria', { date: day.date })}
                   onChange={(e) => setDrafts((p) => ({ ...p, [`${day.id}:transport`]: e.target.value }))}
                   onBlur={(e) => {
                     if (drafts[`${day.id}:transport`] !== undefined) void saveField(day, 'transport', e.target.value);
                   }}
-                  placeholder="如 高铁 G1234 / 市内打车"
+                  placeholder={t('travel.fieldTransportPlaceholder')}
                   className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
                 />
               </label>
               <label className="block text-xs">
                 <span className="mb-1 flex items-center gap-1 font-medium text-mist">
-                  <BedDouble size={12} aria-hidden /> 住宿
+                  <BedDouble size={12} aria-hidden /> {t('travel.fieldAccommodation')}
                 </span>
                 <input
                   type="text"
                   defaultValue={day.accommodation ?? ''}
-                  aria-label={`${day.date} 住宿`}
+                  aria-label={t('travel.fieldAccommodationAria', { date: day.date })}
                   onChange={(e) => setDrafts((p) => ({ ...p, [`${day.id}:accommodation`]: e.target.value }))}
                   onBlur={(e) => {
                     if (drafts[`${day.id}:accommodation`] !== undefined) void saveField(day, 'accommodation', e.target.value);
                   }}
-                  placeholder="如 XX 酒店 · 大床房"
+                  placeholder={t('travel.fieldAccommodationPlaceholder')}
                   className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
                 />
               </label>
               <label className="block text-xs">
                 <span className="mb-1 flex items-center gap-1 font-medium text-mist">
-                  <Coins size={12} aria-hidden /> 预算
+                  <Coins size={12} aria-hidden /> {t('travel.budget')}
                 </span>
                 <input
                   type="number"
                   min={0}
                   step="0.01"
                   defaultValue={day.budgetAmount ?? ''}
-                  aria-label={`${day.date} 预算金额`}
+                  aria-label={t('travel.fieldBudgetAria', { date: day.date })}
                   onChange={(e) => setDrafts((p) => ({ ...p, [`${day.id}:budgetAmount`]: e.target.value }))}
                   onBlur={(e) => {
                     if (drafts[`${day.id}:budgetAmount`] !== undefined) void saveField(day, 'budgetAmount', e.target.value);
@@ -286,14 +307,14 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
               </label>
               <label className="block text-xs">
                 <span className="mb-1 flex items-center gap-1 font-medium text-mist">
-                  <Coins size={12} aria-hidden /> 实际
+                  <Coins size={12} aria-hidden /> {t('travel.actual')}
                 </span>
                 <input
                   type="number"
                   min={0}
                   step="0.01"
                   defaultValue={day.actualAmount ?? ''}
-                  aria-label={`${day.date} 实际金额`}
+                  aria-label={t('travel.fieldActualAria', { date: day.date })}
                   onChange={(e) => setDrafts((p) => ({ ...p, [`${day.id}:actualAmount`]: e.target.value }))}
                   onBlur={(e) => {
                     if (drafts[`${day.id}:actualAmount`] !== undefined) void saveField(day, 'actualAmount', e.target.value);
@@ -307,8 +328,12 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
             {/* 当日任务 */}
             {dayTasks.length > 0 && (
               <ul className="mt-2.5 space-y-1 border-t border-line pt-2.5" data-testid={`itinerary-tasks-${day.date}`}>
-                {dayTasks.map((t) => (
-                  <ItineraryTaskRow key={t.id} task={t} onDetach={() => void assignTask(t.id, null)} />
+                {dayTasks.map((task) => (
+                  <ItineraryTaskRow
+                    key={task.id}
+                    task={task}
+                    onDetach={() => void assignTask(task.id, null)}
+                  />
                 ))}
               </ul>
             )}
@@ -319,21 +344,23 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
       {/* 待排任务池 */}
       {unassigned.length > 0 && (
         <div className="rounded-lg border border-dashed border-line bg-cream/40 p-4" data-testid="itinerary-unassigned">
-          <p className="mb-2 text-xs font-medium text-mist">待排任务（未挂到某一天）</p>
+          <p className="mb-2 text-xs font-medium text-mist">{t('travel.unassignedTitle')}</p>
           <ul className="space-y-1.5">
-            {unassigned.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 text-sm">
-                <span className={cn('min-w-0 flex-1 truncate', taskIsDone(t) && 'text-mist line-through')}>{t.title}</span>
+            {unassigned.map((task) => (
+              <li key={task.id} className="flex items-center gap-2 text-sm">
+                <span className={cn('min-w-0 flex-1 truncate', taskIsDone(task) && 'text-mist line-through')}>
+                  {task.title}
+                </span>
                 <select
-                  aria-label={`将「${t.title}」排入某天`}
+                  aria-label={t('travel.assignAria', { title: task.title })}
                   value=""
                   onChange={(e) => {
                     const date = e.target.value;
-                    if (date) void assignTask(t.id, date);
+                    if (date) void assignTask(task.id, date);
                   }}
                   className="rounded-md border border-line bg-cream px-2 py-1 text-xs text-ink outline-none focus:border-pine"
                 >
-                  <option value="">排入…</option>
+                  <option value="">{t('travel.assignPlaceholder')}</option>
                   {days.map((d) => (
                     <option key={d.id} value={d.date}>{d.date}</option>
                   ))}
@@ -352,8 +379,8 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
       */}
       <ConfirmDialog
         open={removeTarget !== null}
-        title="删除行程卡"
-        confirmText="删除"
+        title={t('travel.removeDialogTitle')}
+        confirmText={t('travel.removeDialogConfirm')}
         danger
         onConfirm={() => {
           const target = removeTarget;
@@ -362,26 +389,28 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
         }}
         onCancel={() => setRemoveTarget(null)}
       >
-        确认删除 {removeTarget?.date} 的行程卡？
-        {removeSummary && <> 该日已填：{removeSummary}。</>}
+        {t('travel.removeDialogBody', { date: removeTarget?.date ?? '' })}
+        {removeSummary && <> {t('travel.removeDialogFilled', { summary: removeSummary })}</>}
         <br />
-        <span className="font-medium text-clay">删除后不可恢复</span>
-        （该日已排的任务不会被删除，只会回到「待排任务」）。
+        <span className="font-medium text-clay">{t('travel.removeDialogIrreversible')}</span>
+        {t('travel.removeDialogNote')}
       </ConfirmDialog>
     </div>
   );
 }
 
 function ItineraryTaskRow({ task, onDetach }: { task: Task; onDetach(): void }): JSX.Element {
+  /* 取词 + 订阅语言变化（本模块级组件自己订阅） */
+  const { t } = useLang();
   return (
     <li className="flex items-center gap-2 text-sm">
       <span className={cn('min-w-0 flex-1 truncate', taskIsDone(task) && 'text-mist line-through')}>{task.title}</span>
       <button
         type="button"
         onClick={onDetach}
-        aria-label={`将「${task.title}」移出当日行程`}
+        aria-label={t('travel.detachAria', { title: task.title })}
         className="rounded-md p-1 text-mist hover:bg-sand"
-        title="移出当日行程"
+        title={t('travel.detachTitle')}
       >
         <X size={13} aria-hidden />
       </button>

@@ -1390,6 +1390,55 @@ export const zhMessages = {
   'resourcePath.openFallbackToast':
     '浏览器不允许直接打开本地文件夹，已复制路径，请粘贴到资源管理器地址栏。',
   'common.confirm': '确定',
+
+  /* ══════════ 笔 3-E：行程面板（`TravelItineraryPanel`） ══════════
+     ⚠️ 「预算 / 实际」各只有**一个**键：汇总条标签与每日卡字段标签**是同一个词**。 */
+  'travel.loading': '正在生成每日行程…',
+  'travel.title': '每日行程',
+  'travel.totalDays': '共 {n} 天',
+  'travel.budget': '预算',
+  'travel.actual': '实际',
+  'travel.diff': '差额',
+  'travel.syncTitle': '按当前项目起止日期补齐缺失日期卡（只补不删）',
+  'travel.sync': '同步日期',
+  'travel.addDayTitle': '追加一天（最后一天之后）',
+  'travel.addDay': '加一天',
+  'travel.dayIndex': '第 {n} 天',
+  'travel.today': '· 今天',
+  'travel.removeDayAria': '删除 {date} 行程卡',
+  'travel.fieldTransport': '交通',
+  'travel.fieldAccommodation': '住宿',
+  'travel.fieldTransportAria': '{date} 交通',
+  'travel.fieldAccommodationAria': '{date} 住宿',
+  'travel.fieldTransportPlaceholder': '如 高铁 G1234 / 市内打车',
+  'travel.fieldAccommodationPlaceholder': '如 XX 酒店 · 大床房',
+  'travel.fieldBudgetAria': '{date} 预算金额',
+  'travel.fieldActualAria': '{date} 实际金额',
+  'travel.unassignedTitle': '待排任务（未挂到某一天）',
+  'travel.assignAria': '将「{title}」排入某天',
+  'travel.assignPlaceholder': '排入…',
+  'travel.detachAria': '将「{title}」移出当日行程',
+  'travel.detachTitle': '移出当日行程',
+  /* 删除二次确认框（danger）：复述该日已填内容 —— 那几张手输值删掉后只有备份可查。
+     四个标签是**片段**（`{value}` 是数据），`日间分隔符` 也住在键里（中文「、」/ 英文「,  」）。 */
+  'travel.summaryTransport': '交通「{value}」',
+  'travel.summaryAccommodation': '住宿「{value}」',
+  'travel.summaryBudget': '预算 {amount}',
+  'travel.summaryActual': '实际 {amount}',
+  'travel.summarySep': '、',
+  'travel.removeDialogTitle': '删除行程卡',
+  'travel.removeDialogConfirm': '删除',
+  'travel.removeDialogBody': '确认删除 {date} 的行程卡？',
+  'travel.removeDialogFilled': '该日已填：{summary}。',
+  'travel.removeDialogIrreversible': '删除后不可恢复',
+  'travel.removeDialogNote': '（该日已排的任务不会被删除，只会回到「待排任务」）。',
+  /* toast / 错误提示（数据侧 message 原样透传，见组件注释） */
+  'travel.loadFailed': '每日行程加载失败。',
+  'travel.saveFailed': '保存失败，请重试。',
+  'travel.invalidEndDate': '请先设置有效的项目结束日期。',
+  'travel.addDayFailed': '无法新增 {date} 的每日行程卡。',
+  'travel.dayHasTasks': '该日还有任务，请先移走或删除任务。',
+  'travel.removeFailed': '删除行程卡失败，请重试。',
 } as const;
 
 /**
