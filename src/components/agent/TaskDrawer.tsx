@@ -145,6 +145,7 @@ const ARTIFACT_KIND_ICONS: Record<string, JSX.Element> = {
 };
 
 function ArtifactRow({ a }: { a: Task['artifacts'][number] }): JSX.Element {
+  const { t } = useLang();
   const pushToast = useProjectsStore((s) => s.pushToast);
   const copyPath = async (): Promise<void> => {
     if (!a.path) return;
@@ -152,9 +153,9 @@ function ArtifactRow({ a }: { a: Task['artifacts'][number] }): JSX.Element {
       await navigator.clipboard.writeText(a.path);
       // AF-02 降级提示：浏览器无法探测本地路径存在性，Electron 桌面端可经
       // desktopBridge 打开（§10-R5，V1）；Web 端明确告知「复制后自行在编辑器打开」
-      pushToast('success', `路径已复制（浏览器无法直接打开本地路径，请粘贴到编辑器/终端）：${a.path}`);
+      pushToast('success', t('ui.taskDrawer.pathCopied', { path: a.path }));
     } catch {
-      pushToast('error', '复制失败（剪贴板不可用），请手动选择路径文本复制。');
+      pushToast('error', t('ui.taskDrawer.copyFailed'));
     }
   };
 
@@ -171,7 +172,7 @@ function ArtifactRow({ a }: { a: Task['artifacts'][number] }): JSX.Element {
             onClick={() => void copyPath()}
             className="inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-line px-2 py-0.5 text-[10px] text-mist transition-colors hover:bg-sand hover:text-ink"
           >
-            <Copy size={11} aria-hidden /> 复制路径
+            <Copy size={11} aria-hidden /> {t('resourcePath.copy')}
           </button>
         </>
       )}
@@ -182,7 +183,7 @@ function ArtifactRow({ a }: { a: Task['artifacts'][number] }): JSX.Element {
           rel="noopener noreferrer"
           className="inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-pine/40 px-2 py-0.5 text-[10px] text-pine transition-colors hover:bg-pine-soft"
         >
-          <ExternalLink size={11} aria-hidden /> 打开
+          <ExternalLink size={11} aria-hidden /> {t('resourcePath.open')}
         </a>
       )}
       {a.note && <p className="w-full text-[10px] text-mist">{a.note}</p>}
@@ -208,7 +209,7 @@ export function TaskDrawer({
    * 少了它，切到英文后这三处术语位**不刷新**（中文态完全看不出来）。
    * 守卫：`tests/i18n-agent-terms.spec.tsx`（含没订阅的反例自证）。
    */
-  useLang();
+  const { t } = useLang();
   const repos = useRepos();
   const members = useMembersStore((s) => s.members);
   const { currentMember } = useRoleGuard();
@@ -250,7 +251,7 @@ export function TaskDrawer({
   );
 
   return (
-    <Modal open onClose={onClose} placement="right" ariaLabel="任务详情">
+    <Modal open onClose={onClose} placement="right" ariaLabel={t('ui.taskDrawer.title')}>
       <div className="glass-strong flex h-full w-full flex-col overflow-y-auto rounded-none border-white/40 p-5 outline-none sm:w-[440px] sm:rounded-l-2xl">
         {/* 头部 */}
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -267,7 +268,7 @@ export function TaskDrawer({
           <button
             type="button"
             onClick={onClose}
-            aria-label="关闭任务详情"
+            aria-label={t('ui.taskDrawer.closeAria')}
             className="shrink-0 rounded-md p-1 text-mist hover:bg-sand"
           >
             ✕
@@ -289,9 +290,9 @@ export function TaskDrawer({
             {human && task.source === 'agent' && task.runId && (
               <span
                 className="rounded-[6px] bg-sand px-1.5 py-0.5 text-[10px] text-mist"
-                title={`来源批次：${task.runId}（写入该任务的那一次 Agent 运行）`}
+                title={t('ui.taskDrawer.runIdTitle', { runId: task.runId })}
               >
-                来源批次 {task.runId.slice(0, 8)}
+                {t('ui.taskDrawer.runIdChip', { short: task.runId.slice(0, 8) })}
               </span>
             )}
             {canClaim && (
@@ -334,7 +335,9 @@ export function TaskDrawer({
               <span className={cn(!human && 'font-mono')}>
                 {task.dueDate ? `${task.dueDate.slice(0, 10)}` : '—'}
                 {dueDays !== null && !taskIsDoneLocal(task) && (
-                  <span className="ml-1 text-mist">（剩余 {dueDays} 天）</span>
+                  <span className="ml-1 text-mist">
+                    {t('ui.taskDrawer.daysLeft', { days: dueDays })}
+                  </span>
                 )}
               </span>
             </Field>
@@ -349,7 +352,7 @@ export function TaskDrawer({
               技术模式直接铺开；人话模式折进「技术详情」（等宽原值属技术字段）。 */}
           {!human && allowedTargets.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] text-mist">流转 →</span>
+              <span className="text-[10px] text-mist">{t('ui.taskDrawer.transition')}</span>
               {allowedTargets.map((to) => (
                 <button
                   key={to}
@@ -368,7 +371,7 @@ export function TaskDrawer({
               零状态、可被浏览器/测试原生展开、语义自带 aria-expanded。 */}
           {human && (
             <details className="mt-3 rounded-[8px] border border-line bg-paper/60 px-2.5 py-2">
-              <summary className="cursor-pointer text-[11px] text-mist">技术详情</summary>
+              <summary className="cursor-pointer text-[11px] text-mist">{t('ui.taskDrawer.techDetails')}</summary>
               <dl className="mt-2 grid grid-cols-2 gap-2">
                 <Field label="id">
                   <span className="font-mono">{task.id}</span>
@@ -395,7 +398,7 @@ export function TaskDrawer({
               </dl>
               {allowedTargets.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] text-mist">流转 →</span>
+                  <span className="text-[10px] text-mist">{t('ui.taskDrawer.transition')}</span>
                   {allowedTargets.map((to) => (
                     <button
                       key={to}
@@ -426,7 +429,7 @@ export function TaskDrawer({
           ) : (
             <>
               {(task.dependsOn ?? []).length > 0 && (
-                <p className="mb-1 text-[10px] text-mist">前置（blocks this）</p>
+                <p className="mb-1 text-[10px] text-mist">{t('ui.taskDrawer.blocks')}</p>
               )}
               <ul className="mb-2 flex flex-col gap-1">
                 {(task.dependsOn ?? []).map((depId) => {
@@ -438,7 +441,7 @@ export function TaskDrawer({
                         onClick={() => openDrawer(depId)}
                         className="w-full truncate rounded-[8px] bg-sand/50 px-2.5 py-1.5 text-left text-xs text-ink transition-colors hover:bg-sand hover:text-pine"
                       >
-                        ↑ <span className="font-mono text-[10px] text-mist">{depId}</span> {dep?.title ?? '（已删除）'}
+                        ↑ <span className="font-mono text-[10px] text-mist">{depId}</span> {dep?.title ?? t('ui.taskDrawer.deleted')}
                       </button>
                     </li>
                   );
@@ -446,7 +449,7 @@ export function TaskDrawer({
               </ul>
               {successors.length > 0 && (
                 <>
-                  <p className="mb-1 text-[10px] text-mist">后继（depends on this）</p>
+                  <p className="mb-1 text-[10px] text-mist">{t('ui.taskDrawer.dependsOn')}</p>
                   <ul className="flex flex-col gap-1">
                     {successors.map((s) => (
                       <li key={s.id}>

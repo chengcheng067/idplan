@@ -1,5 +1,6 @@
 import { Upload } from 'lucide-react';
 
+import { useLang } from '../../i18n';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useBackupIo } from './useBackupIo';
 
@@ -12,6 +13,7 @@ import { useBackupIo } from './useBackupIo';
  * 文字标签在 2xl 以下隐藏（理由同 SaveBackupButton）。
  */
 export function LoadBackupButton(): JSX.Element | null {
+  const { t } = useLang();
   const { isAdmin } = useRoleGuard();
   const { pick, fileInput, confirmDialog } = useBackupIo();
 
@@ -24,9 +26,9 @@ export function LoadBackupButton(): JSX.Element | null {
         type="button"
         onClick={pick}
         className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
-        title="从 JSON 备份包恢复（整体替换当前全部数据）"
+        title={t('ui.backup.loadTitle')}
       >
-        <Upload size={14} /> <span className="hidden 2xl:inline">加载备份</span>
+        <Upload size={14} /> <span className="hidden 2xl:inline">{t('sidebar.loadBackup')}</span>
       </button>
       {fileInput}
       {confirmDialog}

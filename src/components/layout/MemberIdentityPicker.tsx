@@ -135,10 +135,11 @@ export function MemberIdentityPicker({
       railExempt: false,
     });
     const onDocClick = (e: MouseEvent): void => {
-      const t = e.target as Node;
+      // ⚠️ 局部名**不能**叫 `t`（会遮蔽同作用域的取词函数；本批踩过这个坑）
+      const node = e.target as Node;
       // 面板已 portal 出 rootRef，两处都要判（否则点菜单项会自杀式关闭）
-      const insideTrigger = !!rootRef.current?.contains(t);
-      const insidePanel = !!panelRef.current?.contains(t);
+      const insideTrigger = !!rootRef.current?.contains(node);
+      const insidePanel = !!panelRef.current?.contains(node);
       if (!insideTrigger && !insidePanel) setMenuOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -268,11 +269,14 @@ export function MemberIdentityPicker({
         <button
           type="button"
           onClick={onEnterIdentity}
-          title="点击进入身份（我的任务按此身份过滤）"
+          /* ★ 语言无关定位钩子：三个未进入态各一枚，可访问名与可见文字都随语言变，
+             故真机/单测一律按本钩子定位（不再按「点击进入」这四个字全页搜） */
+          data-identity-enter={variant}
+          title={t('ui.identity.enterTitle')}
           className="mt-1 flex h-8 w-8 items-center justify-center rounded-full border border-pine text-pine outline-none transition-colors hover:bg-pine-soft focus-visible:ring-2 focus-visible:ring-pine/40"
         >
           <LogIn size={14} aria-hidden />
-          <span className="sr-only">点击进入</span>
+          <span className="sr-only">{t('ui.identity.enter')}</span>
         </button>
       );
     }
@@ -281,10 +285,11 @@ export function MemberIdentityPicker({
         <button
           type="button"
           onClick={onEnterIdentity}
-          title="点击进入身份（我的任务按此身份过滤）"
+          data-identity-enter={variant}
+          title={t('ui.identity.enterTitle')}
           className="flex h-[52px] w-full items-center justify-center rounded-md border border-dashed border-pine px-2 text-[13px] text-pine outline-none transition-colors hover:bg-pine-soft focus-visible:ring-2 focus-visible:ring-pine/40"
         >
-          点击进入
+          {t('ui.identity.enter')}
         </button>
       );
     }
@@ -292,10 +297,11 @@ export function MemberIdentityPicker({
       <button
         type="button"
         onClick={onEnterIdentity}
+        data-identity-enter={variant}
         className="rounded-md border border-pine px-3 py-1.5 text-sm text-pine transition-colors hover:bg-pine-soft"
-        title="点击进入身份（我的任务按此身份过滤）"
+        title={t('ui.identity.enterTitle')}
       >
-        点击进入
+        {t('ui.identity.enter')}
       </button>
     );
   }
@@ -322,7 +328,8 @@ export function MemberIdentityPicker({
           onClick={toggleMenu}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          title="当前身份（点击切换/退出）"
+          data-identity-trigger="rail"
+          title={t('ui.identity.currentTitle')}
           className="flex h-[52px] w-full items-center gap-2 rounded-md bg-sunken px-2 text-left outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
         >
           {/*
@@ -337,7 +344,9 @@ export function MemberIdentityPicker({
             {(currentMember?.name ?? '?')[0]}
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-[13px] text-ink">{currentMember?.name ?? '未知'}</span>
+            <span className="truncate text-[13px] text-ink">
+              {currentMember?.name ?? t('common.unknown')}
+            </span>
             <span className="truncate text-[11px] text-mist">{roleLabel}</span>
           </span>
         </button>
@@ -356,7 +365,8 @@ export function MemberIdentityPicker({
           onClick={toggleMenu}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          title={`${currentMember?.name ?? ''} · ${roleLabel}（点击切换/退出）`}
+          data-identity-trigger="rail-collapsed"
+          title={`${currentMember?.name ?? ''} · ${roleLabel}${t('ui.identity.switchHint')}`}
           aria-label={currentMember?.name}
           className="mt-1 flex h-8 w-8 items-center justify-center rounded-full text-[13px] text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
           style={{ backgroundColor: currentMember?.avatarColor ?? '#8A959E' }}
@@ -377,8 +387,9 @@ export function MemberIdentityPicker({
            */
           aria-haspopup="menu"
           aria-expanded={menuOpen}
+          data-identity-trigger="topbar"
           className="flex items-center gap-2 rounded-md border border-line bg-paper px-2 py-1.5 text-sm shadow-soft transition-colors hover:bg-sand sm:px-3"
-          title="当前身份（点击切换/退出）"
+          title={t('ui.identity.currentTitle')}
         >
           <span
             className="inline-block h-5 w-5 rounded-full text-center text-xs leading-5 text-white"
@@ -387,7 +398,9 @@ export function MemberIdentityPicker({
             {(currentMember?.name ?? '?')[0]}
           </span>
           {/* 姓名在手机上隐藏（顶栏第一行放不下），xl 以下连管理员徽标一起收起 */}
-          <span className="hidden max-w-[96px] truncate sm:inline">{currentMember?.name ?? '未知'}</span>
+          <span className="hidden max-w-[96px] truncate sm:inline">
+            {currentMember?.name ?? t('common.unknown')}
+          </span>
           {isAdmin && (
             <span className="hidden rounded-full bg-pine-soft px-1.5 py-0.5 text-[10px] font-medium text-pine-deep xl:inline-block">
               {t('memberRole.admin')}
@@ -405,7 +418,7 @@ export function MemberIdentityPicker({
           <div
             ref={panelRef}
             role="menu"
-            aria-label="身份操作"
+            aria-label={t('ui.identity.menuAria')}
             /*
              * ★ 定位钩子（2026-10-14，i18n 纪律）：`aria-label="身份操作"` 是**中文可访问名**，
              *   拿它当定位契约会在英文版下失效（而且 i18n 的中文定位棘轮**不许新增**）。
@@ -438,7 +451,7 @@ export function MemberIdentityPicker({
               }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-sand"
             >
-              切换身份
+              {t('ui.identity.switch')}
             </button>
             <button
               type="button"
@@ -449,7 +462,7 @@ export function MemberIdentityPicker({
               }}
               className="w-full border-t border-line px-3 py-1.5 text-left text-xs text-mist hover:bg-sand"
             >
-              退出身份
+              {t('ui.identity.exit')}
             </button>
           </div>,
           document.body,

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { Button } from '../ui/Button';
+import { useLang } from '../../i18n';
 import { useSettingsStore } from '../../store/useSettingsStore';
 
 /**
@@ -33,6 +34,7 @@ import { useSettingsStore } from '../../store/useSettingsStore';
  * **不要**自己拼 `hydrated` 与 `hydrateError`。
  */
 export function DataGate({ children }: { children: ReactNode }): JSX.Element {
+  const { t } = useLang();
   const readiness = useDataReadiness();
   const hydrateError = useSettingsStore((s) => s.hydrateError);
   const requestRetry = useSettingsStore((s) => s.requestBootstrapRetry);
@@ -43,14 +45,14 @@ export function DataGate({ children }: { children: ReactNode }): JSX.Element {
         data-data-gate="failed"
         className="rounded-2xl border border-clay-soft bg-paper p-8 text-center"
       >
-        <p className="text-[15px] font-semibold text-ink">本地数据装载失败</p>
+        <p className="text-[15px] font-semibold text-ink">{t('ui.dataGate.failedTitle')}</p>
         <p className="mx-auto mt-2 max-w-lg text-[13px] leading-6 text-mist">
-          你的数据仍然保存在本机数据库中，这次只是没能读进界面——
-          <strong className="text-ink">装载失败不等于数据丢失</strong>。请不要删除
-          浏览器/站点数据，也不要重装应用来「修」它。
+          {t('ui.dataGate.failedNotePre')}
+          <strong className="text-ink">{t('ui.dataGate.failedNoteStrong')}</strong>
+          {t('ui.dataGate.failedNoteTail')}
         </p>
         <p className="mx-auto mt-2 max-w-lg text-[13px] leading-6 text-mist">
-          常见原因：另一个窗口正在使用同一份数据，或本机存储暂时不可用。
+          {t('ui.dataGate.reason')}
         </p>
         {hydrateError && (
           <p className="mx-auto mt-3 max-w-lg break-words rounded-2xl bg-cream px-4 py-2 text-[11px] leading-5 text-mist">
@@ -58,9 +60,9 @@ export function DataGate({ children }: { children: ReactNode }): JSX.Element {
           </p>
         )}
         <Button className="mt-4" onClick={requestRetry}>
-          重新装载
+          {t('ui.dataGate.retry')}
         </Button>
-        <p className="mt-2 text-[11px] text-mist">点一下就会重新读取本地数据，不必重启应用。</p>
+        <p className="mt-2 text-[11px] text-mist">{t('ui.dataGate.retryHint')}</p>
       </div>
     );
   }
@@ -72,7 +74,7 @@ export function DataGate({ children }: { children: ReactNode }): JSX.Element {
         aria-busy="true"
         className="rounded-2xl border border-dashed border-line bg-paper p-10 text-center"
       >
-        <p className="text-[13px] text-mist">正在装载本地数据…</p>
+        <p className="text-[13px] text-mist">{t('ui.dataGate.loading')}</p>
       </div>
     );
   }

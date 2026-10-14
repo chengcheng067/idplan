@@ -1,5 +1,6 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
+import { useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
 
 /**
@@ -25,7 +26,8 @@ export function SidebarCollapseToggle({
   /** 被控制元素的 id（`aria-controls` 用） */
   controlsId: string;
 }): JSX.Element {
-  const label = collapsed ? '展开侧边栏' : '收起侧边栏';
+  const { t } = useLang();
+  const label = collapsed ? t('ui.sidebar.expandAria') : t('ui.sidebar.collapseAria');
 
   return (
     <button

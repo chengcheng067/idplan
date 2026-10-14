@@ -1,4 +1,5 @@
 import { StageStatus } from '../../core/types/enums';
+import { STAGE_STATUS_KEYS, useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
 
 /** 四态胶囊：未开始灰 / 进行中绿 / 已完成黛蓝 / 延期赤陶红（PRD §7 色彩规则） */
@@ -9,14 +10,9 @@ export function StatusPill({
   status: StageStatus;
   size?: 'sm' | 'md';
 }): JSX.Element {
-  const label =
-    status === StageStatus.NotStarted
-      ? '未开始'
-      : status === StageStatus.InProgress
-        ? '进行中'
-        : status === StageStatus.Completed
-          ? '已完成'
-          : '延期';
+  const { t } = useLang();
+  /* 四态取词复用 `stageStatus.*`（`STAGE_STATUS_KEYS` 是唯一出处，取值与旧三元逐字一致） */
+  const label = t(STAGE_STATUS_KEYS[status]);
 
   const colorCls =
     status === StageStatus.NotStarted

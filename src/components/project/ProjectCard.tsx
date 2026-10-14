@@ -21,6 +21,7 @@ import { Tag } from '../ui/Tag';
 import { stageSolidColor } from '../timeline/stageColors';
 import { customStageColor } from '../timeline/stageColorKey';
 import { ProjectAppearanceDialog } from './ProjectAppearanceDialog';
+import { useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
 import { ANCHOR_GAP, resolveAnchoredPosition } from '../../lib/anchoredPosition';
 
@@ -104,6 +105,7 @@ export function ProjectCard({
    */
   layout?: 'row' | 'column';
 }): JSX.Element {
+  const { t } = useLang();
   const { role, isAdmin, isMember } = useRoleGuard();
   const memberView = isRestrictedView(role);
   const repos = useRepos();
@@ -175,11 +177,16 @@ export function ProjectCard({
     ? `${domainText} · ${project.clientName}`
     : domainText;
 
-  const stageLabel = cur ? `${CIRCLED[cur.orderIndex - 1] ?? cur.orderIndex} ${cur.name}` : '全部完成';
+  const stageLabel = cur
+    ? `${CIRCLED[cur.orderIndex - 1] ?? cur.orderIndex} ${cur.name}`
+    : t('ui.projectCard.allDone');
   const dueIso = cur?.endAt.slice(0, 10) ?? project.plannedEndAt;
   const dueMd = dueIso.slice(5).replace('-', '-');
   const overdueDays = daysBetween(dueIso, todayIso);
-  const dueText = overdueDays > 0 ? `逾期 ${overdueDays} 天` : `${dueMd} 到期`;
+  const dueText =
+    overdueDays > 0
+      ? t('ui.projectCard.overdue', { days: overdueDays })
+      : t('ui.projectCard.due', { date: dueMd });
 
   /*
     ── v1.0.x · 窄版卡片（`layout === 'column'`）的两个搬家件 ──
@@ -493,8 +500,8 @@ export function ProjectCard({
               e.stopPropagation();
               setPrintPreviewId(project.id);
             }}
-            aria-label="导出日程表"
-            title="打印预览（应用内面板，只读导出）"
+            aria-label={t('ui.projectCard.exportSchedule')}
+            title={t('ui.projectCard.printPreviewTitle')}
             className="shrink-0 rounded-full p-1.5 text-mist transition-all duration-base ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
           >
             <CalendarRange size={16} aria-hidden />
@@ -505,7 +512,7 @@ export function ProjectCard({
             <button
               type="button"
               onClick={openMenu}
-              aria-label="项目更多操作"
+              aria-label={t('ui.projectCard.moreActions')}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               className="rounded-full p-1.5 text-mist transition-all duration-base ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
@@ -541,7 +548,7 @@ export function ProjectCard({
                   }}
                   className="w-full px-3 py-2 text-left text-sm text-ink hover:bg-sunken"
                 >
-                  项目重命名
+                  {t('ui.projectCard.rename')}
                 </button>
                 <button
                   type="button"
@@ -554,7 +561,7 @@ export function ProjectCard({
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink hover:bg-sunken"
                 >
                   <Palette size={14} className="text-mist" aria-hidden />
-                  侧栏方块外观
+                  {t('ui.appearance.title')}
                 </button>
                 <button
                   type="button"
@@ -566,7 +573,7 @@ export function ProjectCard({
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink hover:bg-sunken"
                 >
                   <CalendarRange size={14} className="text-mist" aria-hidden />
-                  导出日程表
+                  {t('ui.projectCard.exportSchedule')}
                 </button>
                 <button
                   type="button"
@@ -579,7 +586,7 @@ export function ProjectCard({
                   className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm text-ink hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Archive size={14} className="text-mist" aria-hidden />
-                  归档项目
+                  {t('ui.projectCard.archive')}
                 </button>
                 <button
                   type="button"
@@ -591,7 +598,7 @@ export function ProjectCard({
                   className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm text-clay hover:bg-clay-soft"
                 >
                   <Trash2 size={14} aria-hidden />
-                  删除项目
+                  {t('ui.projectCard.delete')}
                 </button>
                 </div>,
                 document.body,
@@ -638,7 +645,7 @@ export function ProjectCard({
           视觉权重全部经 opacity 类与 boxShadow 表达，不改 spec 钉的任何值。 */}
       <div className="flex w-full flex-col gap-1">
         <div className="flex w-full items-center justify-between text-[12px]">
-          <span className="text-mist">进度</span>
+          <span className="text-mist">{t('ui.projectCard.progress')}</span>
           <span className={cn('font-medium', tone.text)}>{Math.round(percent)}%</span>
         </div>
         <div className="flex h-2 w-full overflow-hidden rounded-full bg-sunken">
@@ -692,10 +699,10 @@ export function ProjectCard({
       )}
 
       {/* 重命名弹窗 */}
-      <Modal open={renameOpen} onClose={() => setRenameOpen(false)} ariaLabel="项目重命名">
+      <Modal open={renameOpen} onClose={() => setRenameOpen(false)} ariaLabel={t('ui.projectCard.rename')}>
         <div className="glass-strong iridescent-border dialog-pop w-full max-w-md rounded-3xl p-6 shadow-overlay outline-none">
-          <h2 className="font-display text-display-md">项目重命名</h2>
-          <p className="mt-1 text-xs text-mist">修改后将同步到项目详情与所有视图。</p>
+          <h2 className="font-display text-display-md">{t('ui.projectCard.rename')}</h2>
+          <p className="mt-1 text-xs text-mist">{t('ui.projectCard.renameHint')}</p>
           <ImeInput
             autoFocus
             value={renameValue}
@@ -703,8 +710,8 @@ export function ProjectCard({
             onKeyDown={(e) => {
               if (e.key === 'Enter') confirmRename();
             }}
-            placeholder="输入新的项目名称"
-            aria-label="新的项目名称"
+            placeholder={t('ui.projectCard.renamePlaceholder')}
+            aria-label={t('ui.projectCard.newNameAria')}
             className="soft-input mt-4 w-full rounded-2xl px-4 py-3 text-sm text-ink outline-none placeholder:text-mist"
           />
           <div className="mt-5 flex justify-end gap-2">
@@ -713,7 +720,7 @@ export function ProjectCard({
               onClick={() => setRenameOpen(false)}
               className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-base ease-in-out hover:-translate-y-0.5"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -721,7 +728,7 @@ export function ProjectCard({
               disabled={!renameValue.trim() || renameValue.trim() === project.name}
               className="soft-btn-primary rounded-2xl px-5 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:shadow-none"
             >
-              保存
+              {t('common.save')}
             </button>
           </div>
         </div>
@@ -740,8 +747,8 @@ export function ProjectCard({
       {/* 归档确认（danger 变体） */}
       <ConfirmDialog
         open={archiveOpen}
-        title="归档项目"
-        confirmText="归档"
+        title={t('ui.projectCard.archive')}
+        confirmText={t('project.archive')}
         danger
         onConfirm={() => {
           void actions.setArchived(project.id, true);
@@ -749,14 +756,14 @@ export function ProjectCard({
         }}
         onCancel={() => setArchiveOpen(false)}
       >
-        确认归档「{project.name}」？归档后将从首页列表隐藏（可在「已归档」区恢复）。
+        {t('ui.projectCard.archiveConfirm', { name: project.name })}
       </ConfirmDialog>
 
       {/* 永久删除确认（danger 变体，明确不可恢复） */}
       <ConfirmDialog
         open={deleteOpen}
-        title="删除项目"
-        confirmText="删除"
+        title={t('ui.projectCard.delete')}
+        confirmText={t('ui.projectCard.deleteAction')}
         danger
         onConfirm={() => {
           void actions.removeProject(project.id, project.name);
@@ -764,8 +771,9 @@ export function ProjectCard({
         }}
         onCancel={() => setDeleteOpen(false)}
       >
-        确认删除「{project.name}」？该项目下的所有阶段、任务与操作记录将一并永久删除，{' '}
-        <span className="font-medium text-clay">不可恢复</span>。建议先归档而非删除。
+        {t('ui.projectCard.deleteConfirmPre', { name: project.name })}{' '}
+        <span className="font-medium text-clay">{t('ui.projectCard.deleteConfirmDanger')}</span>
+        {t('ui.projectCard.deleteConfirmTail')}
       </ConfirmDialog>
       {/* 0.8.4 打印内置化：应用内打印预览（日程表纸面与独立路由共用） */}
       <PrintPreviewDialog

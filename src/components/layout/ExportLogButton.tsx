@@ -5,6 +5,7 @@ import { FileDown } from 'lucide-react';
 import { createLogExportIo, type LogExportIo } from './useLogExport';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { useLang } from '../../i18n';
 
 /**
  * 「导出日志」按钮（顶栏 · 所有角色可用，调试友好）。
@@ -16,6 +17,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
  * 不含项目业务数据）→ 导出 .log 文件。
  */
 export function ExportLogButton({ compact = false }: { compact?: boolean }): JSX.Element | null {
+  const { t } = useLang();
   const io: LogExportIo = createLogExportIo();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [count, setCount] = useState(0);
@@ -27,7 +29,7 @@ export function ExportLogButton({ compact = false }: { compact?: boolean }): JSX
   const onClick = (): void => {
     const n = io.count();
     if (n === 0) {
-      toast('info', '暂无日志，先正常使用后再导出');
+      toast('info', t('ui.logExport.empty'));
       return;
     }
     setCount(n);
@@ -37,7 +39,7 @@ export function ExportLogButton({ compact = false }: { compact?: boolean }): JSX
   const onConfirm = (): void => {
     setConfirmOpen(false);
     io.export();
-    toast('success', `日志已导出（${count} 条）`);
+    toast('success', t('settings.log.toastExported', { count }));
   };
 
   return (
@@ -46,25 +48,25 @@ export function ExportLogButton({ compact = false }: { compact?: boolean }): JSX
         type="button"
         onClick={onClick}
         className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
-        title="导出前端日志（仅本地运行记录与错误堆栈，不含项目业务数据）"
+        title={t('ui.logExport.titleAttr')}
       >
         <FileDown size={14} />
-        {!compact && <span className="hidden 2xl:inline">导出日志</span>}
+        {!compact && <span className="hidden 2xl:inline">{t('settings.log.export')}</span>}
       </button>
 
       <ConfirmDialog
         open={confirmOpen}
-        title="导出日志"
-        confirmText="导出"
+        title={t('settings.log.export')}
+        confirmText={t('ui.logExport.confirmAction')}
         onConfirm={onConfirm}
         onCancel={() => setConfirmOpen(false)}
       >
         <p>
-          将导出 <strong>{count}</strong> 条前端日志（运行事件 + 错误堆栈），保存为 .log 文件。
+          {t('ui.logExport.confirmPre')}
+          <strong>{count}</strong>
+          {t('ui.logExport.confirmMid')}
         </p>
-        <p className="mt-2 text-xs text-mist">
-          日志仅含本地运行记录与错误堆栈，不含项目/客户业务数据，可放心发给开发排查。
-        </p>
+        <p className="mt-2 text-xs text-mist">{t('ui.logExport.confirmNote')}</p>
       </ConfirmDialog>
     </>
   );

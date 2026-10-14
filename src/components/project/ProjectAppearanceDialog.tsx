@@ -14,6 +14,7 @@ import {
   resolveProjectShortLabel,
 } from '../../lib/projectAccent';
 import { cn } from '../../lib/cn';
+import { useLang } from '../../i18n';
 
 /**
  * 侧栏方块外观编辑弹窗（v0.7 · B1 自定义入口）。
@@ -56,6 +57,7 @@ export function ProjectAppearanceDialog({
   onClose(): void;
   onSave(patch: UpdateProjectCmd): void;
 }): JSX.Element {
+  const { t } = useLang();
   const [label, setLabel] = useState('');
   const [color, setColor] = useState<string | null>(null);
   /** 用户是否**实际点过**色板（见文件头「改动闸门」） */
@@ -100,12 +102,13 @@ export function ProjectAppearanceDialog({
   const previewUsesStageColor = projectCoverColorCss(color) === null;
 
   return (
-    <Modal open={open} onClose={onClose} ariaLabel="侧栏方块外观">
+    <Modal open={open} onClose={onClose} ariaLabel={t('ui.appearance.title')}>
       <div className="glass-strong iridescent-border dialog-pop w-full max-w-md rounded-3xl p-6 shadow-overlay outline-none">
-        <h2 className="font-display text-display-md">侧栏方块外观</h2>
+        <h2 className="font-display text-display-md">{t('ui.appearance.title')}</h2>
         <p className="mt-1 text-xs text-mist">
-          只影响<span className="font-medium text-ink">折叠态侧栏</span>（64px）里的项目方块；
-          展开态侧栏与其它视图始终显示完整项目名。
+          {t('ui.appearance.affectsPre')}
+          <span className="font-medium text-ink">{t('ui.appearance.affectsStrong')}</span>
+          {t('ui.appearance.affectsTail')}
         </p>
 
         {/* ── 简称 ── */}
@@ -113,7 +116,7 @@ export function ProjectAppearanceDialog({
           htmlFor="project-short-label"
           className="mt-5 block text-xs font-medium text-ink"
         >
-          方块简称
+          {t('ui.appearance.shortLabel')}
         </label>
         <ImeInput
           id="project-short-label"
@@ -124,27 +127,31 @@ export function ProjectAppearanceDialog({
           onKeyDown={(e) => {
             if (e.key === 'Enter') confirm();
           }}
-          placeholder={`留空则用项目名首字（${resolveProjectShortLabel(project.name, null)}）`}
-          aria-label="方块简称"
+          placeholder={t('ui.appearance.shortLabelPlaceholder', {
+            initial: resolveProjectShortLabel(project.name, null),
+          })}
+          aria-label={t('ui.appearance.shortLabel')}
           className="soft-input mt-2 w-full rounded-2xl px-4 py-3 text-sm text-ink outline-none placeholder:text-mist"
         />
         <p className="mt-1 text-[11px] text-mist">
-          最多 {PROJECT_SHORT_LABEL_MAX_LENGTH} 个字，留空即回到「项目名首字」。
+          {t('ui.appearance.shortLabelHint', { max: PROJECT_SHORT_LABEL_MAX_LENGTH })}
         </p>
 
         {/* ── 颜色 ── */}
-        <div className="mt-5 text-xs font-medium text-ink">方块颜色</div>
-        <p className="mt-1 text-[11px] text-mist">
-          默认跟随项目当前阶段色；选任一颜色后优先使用该颜色。
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-3" role="radiogroup" aria-label="方块颜色">
+        <div className="mt-5 text-xs font-medium text-ink">{t('ui.appearance.colorLabel')}</div>
+        <p className="mt-1 text-[11px] text-mist">{t('ui.appearance.colorHint')}</p>
+        <div
+          className="mt-3 flex flex-wrap items-center gap-3"
+          role="radiogroup"
+          aria-label={t('ui.appearance.colorLabel')}
+        >
           {/* 跟随阶段色（= coverColor 置 null） */}
           <button
             type="button"
             role="radio"
             aria-checked={color === null}
-            aria-label="跟随阶段色"
-            title="跟随阶段色"
+            aria-label={t('ui.appearance.followStageColor')}
+            title={t('ui.appearance.followStageColor')}
             data-cover-swatch="auto"
             onClick={() => {
               setColor(null);
@@ -193,7 +200,7 @@ export function ProjectAppearanceDialog({
 
         {/* ── 实时预览（与侧栏折叠态方块的尺寸/文字口径一致） ── */}
         <div className="mt-4 flex items-center gap-3 rounded-2xl bg-sunken px-3 py-2">
-          <span className="text-[11px] text-mist">预览</span>
+          <span className="text-[11px] text-mist">{t('ui.appearance.preview')}</span>
           <span className="flex h-9 w-10 items-center justify-center gap-1 rounded-md bg-paper">
             <span
               aria-hidden
@@ -216,7 +223,7 @@ export function ProjectAppearanceDialog({
             onClick={onClose}
             className="soft-btn-ghost rounded-2xl px-5 py-2.5 text-sm font-medium transition-all duration-base ease-in-out hover:-translate-y-0.5"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -225,7 +232,7 @@ export function ProjectAppearanceDialog({
             disabled={!dirty}
             className="soft-btn-primary rounded-2xl px-5 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:shadow-none"
           >
-            保存
+            {t('common.save')}
           </button>
         </div>
       </div>

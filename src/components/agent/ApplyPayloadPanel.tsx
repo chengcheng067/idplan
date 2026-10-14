@@ -160,7 +160,7 @@ export function ApplyPayloadPanel({
           payloadJson = parseMarkdownTasks(trimmed, {
             actorKind: 'agent',
             agentKind: 'markdown',
-            agentName: 'Markdown 清单导入',
+            agentName: t('ui.applyPayload.markdownAgentName'),
             runId: `md-${Date.now()}`,
           });
         }

@@ -36,10 +36,8 @@ import { Bot } from 'lucide-react';
 
 import { projectKindOf } from '../../core/project/visibility';
 import type { Project } from '../../core/types/entities';
+import { useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
-
-/** 徽章文案（唯一出处：测试与组件都从这里取，避免两处各写一份中文） */
-export const AGENT_SOURCE_BADGE_TEXT = 'AI 工作区';
 
 export function ProjectSourceBadge({
   project,
@@ -49,6 +47,10 @@ export function ProjectSourceBadge({
   project: Pick<Project, 'kind'> | null | undefined;
   className?: string;
 }): JSX.Element | null {
+  /* 徽章文案现在只有一个出处（消息表 `ui.agentSourceBadge.text`）：原先那个
+     `AGENT_SOURCE_BADGE_TEXT` 导出常量已退役 —— 它只有本文件一个消费点，
+     留着就是「同一个词的第二份取值」。测试侧用的是自带字面量（`isolation-browser`）。 */
+  const { t } = useLang();
   // 人类侧**零渲染**（v0.8 验收 8：kind 在人类侧不产生任何新的视觉痕迹）。
   // 注意这里返回 null 而不是"渲染一个空 span"——空 span 会让父容器的 gap/flex 布局
   // 多出一个不可见的间隔项，在 action bar 那种 space-between 行里表现为"标题莫名右移"。
@@ -58,7 +60,7 @@ export function ProjectSourceBadge({
     <span
       // 稳定测试钩子：L4 真浏览器用例按它断言"Agent 看板详情/打印页确实标了来源"
       data-project-source-badge="agent"
-      title="这是 AI 工作区里的看板，与「我的项目」相互隔离"
+      title={t('ui.agentSourceBadge.title')}
       className={cn(
         'inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-cream px-2.5 py-1',
         'text-[12px] font-medium text-pine',
@@ -66,7 +68,7 @@ export function ProjectSourceBadge({
       )}
     >
       <Bot size={12} aria-hidden />
-      {AGENT_SOURCE_BADGE_TEXT}
+      {t('ui.agentSourceBadge.text')}
     </span>
   );
 }

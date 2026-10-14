@@ -1,5 +1,6 @@
 import { Save } from 'lucide-react';
 
+import { useLang } from '../../i18n';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useBackupIo } from './useBackupIo';
 
@@ -11,6 +12,7 @@ import { useBackupIo } from './useBackupIo';
  * 文字标签在 2xl 以下隐藏（顶栏在 1280～1535 之间放不下三条带文字的备份按钮）。
  */
 export function SaveBackupButton(): JSX.Element | null {
+  const { t } = useLang();
   const { isAdmin } = useRoleGuard();
   const { save } = useBackupIo();
 
@@ -22,9 +24,9 @@ export function SaveBackupButton(): JSX.Element | null {
       type="button"
       onClick={() => void save()}
       className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
-      title="导出 JSON 备份包（含全部项目、成员与记录）"
+      title={t('ui.backup.saveTitle')}
     >
-      <Save size={14} /> <span className="hidden 2xl:inline">保存备份</span>
+      <Save size={14} /> <span className="hidden 2xl:inline">{t('sidebar.saveBackup')}</span>
     </button>
   );
 }

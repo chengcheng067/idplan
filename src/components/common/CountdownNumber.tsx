@@ -6,6 +6,7 @@
  * 当日=0、昨日=-1（铁律 2 剩余口径）。
  */
 
+import { useLang } from '../../i18n';
 import { remainingDays } from '../../lib/date';
 
 export function CountdownNumber({
@@ -18,6 +19,7 @@ export function CountdownNumber({
   todayIso?: string;
   labelPrefix?: string;
 }): JSX.Element {
+  const { t } = useLang();
   const days = remainingDays(target, todayIso);
   const overdue = days < 0;
   const urgent = !overdue && days <= 3;
@@ -28,10 +30,16 @@ export function CountdownNumber({
   return (
     <div className="flex items-baseline gap-1.5">
       <span className={`font-display text-display-lg leading-none ${colorCls}`}>
-        {overdue ? `逾期 ${Math.abs(days)}` : Math.abs(days)}
+        {overdue ? t('ui.countdown.overdue', { days: Math.abs(days) }) : Math.abs(days)}
       </span>
       <span className={`text-xs ${captionCls}`}>
-        {overdue ? '天' : days === 0 ? '今天截止' : `${labelPrefix || '剩余'}天`}
+        {overdue
+          ? t('ui.countdown.days')
+          : days === 0
+            ? t('ui.countdown.dueToday')
+            : labelPrefix
+              ? `${labelPrefix}${t('ui.countdown.days')}`
+              : t('ui.countdown.daysLeft', { days })}
       </span>
     </div>
   );

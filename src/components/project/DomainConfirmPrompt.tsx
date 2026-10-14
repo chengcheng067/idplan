@@ -49,10 +49,8 @@ import { useRepos } from '../../hooks/useRepos';
 import { createProjectActions } from '../../store/useProjectsStore';
 import { needsDomainConfirm } from '../../core/project/visibility';
 import type { Project } from '../../core/types/entities';
+import { useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
-
-/** 提示条文案（唯一出处） */
-export const DOMAIN_CONFIRM_BAR_TEXT = '此项目板块待确认';
 
 /**
  * 「确认」浮层里的初始级联值。
@@ -79,6 +77,7 @@ export function DomainConfirmPrompt({
   projects: readonly Project[];
   className?: string;
 }): JSX.Element | null {
+  const { t } = useLang();
   const repos = useRepos();
   const { isAdmin } = useRoleGuard();
   const actions = useMemo(() => createProjectActions(repos), [repos]);
@@ -112,14 +111,12 @@ export function DomainConfirmPrompt({
   return (
     <section
       data-domain-confirm-bar=""
-      aria-label="板块待确认"
+      aria-label={t('ui.domainConfirm.aria')}
       className={cn('flex flex-col gap-2 rounded-2xl border border-dashed border-line bg-cream px-4 py-3', className)}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">
         <Info size={14} className="shrink-0 text-amber" aria-hidden />
-        <span className="text-mist">
-          有 {pending.length} 个项目的板块待确认（这些项目目前仍显示在「室内」列，确认后会立即归位）：
-        </span>
+        <span className="text-mist">{t('ui.domainConfirm.summary', { count: pending.length })}</span>
         {pending.map((p) => {
           const isOpen = expandedId === p.id;
           return (
@@ -135,13 +132,13 @@ export function DomainConfirmPrompt({
                   onClick={() => open(p.id)}
                   className="rounded-full border border-line bg-paper px-2.5 py-0.5 text-[12px] text-pine transition-colors hover:bg-sand"
                 >
-                  {isOpen ? '收起' : '确认'}
+                  {isOpen ? t('ui.domainConfirm.collapse') : t('ui.domainConfirm.confirm')}
                 </button>
               )}
             </span>
           );
         })}
-        {!isAdmin && <span className="text-mist">（仅管理员可修改）</span>}
+        {!isAdmin && <span className="text-mist">{t('ui.domainConfirm.adminOnly')}</span>}
       </div>
 
       {expandedId !== null && isAdmin && (
@@ -154,17 +151,19 @@ export function DomainConfirmPrompt({
           <DomainCascade value={value} onChange={setValue} testId="domain-confirm-cascade" />
           <div className="flex items-center justify-end gap-2">
             <span className="mr-auto text-[12px] text-mist">
-              {value.domain ? `将归入「${domainLabel(value.domain)}」` : '请先选择主板块'}
+              {value.domain
+                ? t('ui.domainConfirm.willAssign', { domain: domainLabel(value.domain) })
+                : t('ui.domainConfirm.pickDomainFirst')}
             </span>
             <Button variant="secondary" onClick={() => setExpandedId(null)}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button
               data-domain-confirm-submit={expandedId}
               disabled={value.domain === null || busy}
               onClick={() => void submit(expandedId)}
             >
-              确认归入此板块
+              {t('ui.domainConfirm.submit')}
             </Button>
           </div>
         </div>

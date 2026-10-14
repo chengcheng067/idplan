@@ -104,6 +104,13 @@ import {
 import type { CustomStageDraft } from '../contract-wizard/CustomStageDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
+/*
+ * ⚠️ 模块级取词**别名成 `translate`，不许叫 `t`**：组件里 `const { t } = useLang()`
+ *   会与名为 `t` 的 import 形成遮蔽，而 esbuild 在 JSX 转换里会把**被遮蔽的那个**改名
+ *   成 `t2` ⇒ `tests/helpers/i18n-jsx-space.ts`（按 `callee === 't'` 认取词）看不见它，
+ *   「全仓零命中」那条守卫对本文件**静默失效**（实测：别名前该文件 `runs=0`、别名后恢复）。
+ */
+import { t as translate, useLang } from '../../i18n';
 
 /**
  * 表单草稿（**未经校验**的原始输入）。
@@ -132,34 +139,36 @@ export interface AgentBoardDraft {
  */
 export function validateAgentBoardDraft(draft: AgentBoardDraft): string | null {
   if (draft.name.trim() === '') {
-    return '请填写看板名称。';
+    return translate('ui.agentBoard.errNameRequired');
   }
   const startIso = toIsoDate(draft.plannedStartAt);
   if (!startIso) {
     // 文案明确点出"不会自动填默认日期"，否则用户会以为是自己没看到默认值
-    return '请选择开始日期（本表单不会自动填写默认日期）。';
+    return translate('ui.agentBoard.errStartRequired');
   }
   const endIso = toIsoDate(draft.plannedEndAt);
   if (!endIso) {
-    return '请选择结束日期（本表单不会自动填写默认日期）。';
+    return translate('ui.agentBoard.errEndRequired');
   }
   if (endIso < startIso) {
-    return '结束日期不能早于开始日期。';
+    return translate('ui.agentBoard.errEndBeforeStart');
   }
   if (draft.stageItems.length < MIN_STAGE_COUNT) {
-    return `请至少选择 ${MIN_STAGE_COUNT} 个阶段。`;
+    return translate('ui.agentBoard.errMinStages', { min: MIN_STAGE_COUNT });
   }
   if (draft.stageItems.length > MAX_STAGE_COUNT) {
-    return `单次最多 ${MAX_STAGE_COUNT} 个阶段。`;
+    return translate('ui.agentBoard.errMaxStages', { max: MAX_STAGE_COUNT });
   }
   // 空名阶段：`duplicateStageNames` 会跳过空名（它只判重名），故这里单独兜一次。
   // 漏掉的话会落一个无名阶段 —— 它不报错，但在看板/时间轴上是"看不见的一段"。
   if (draft.stageItems.some((it) => it.name.trim() === '')) {
-    return '阶段名称不能为空。';
+    return translate('ui.agentBoard.errEmptyStageName');
   }
   const duplicates = duplicateStageNames(draft.stageItems);
   if (duplicates.length > 0) {
-    return `阶段名重复：${duplicates.join('、')}，请改名后再提交。`;
+    return translate('ui.agentBoard.errDuplicateStages', {
+      names: duplicates.join(translate('ui.listSeparator')),
+    });
   }
   return null;
 }
@@ -179,7 +188,7 @@ export function toAgentBoardCmd(draft: AgentBoardDraft): CreateAgentBoardCmd {
   if (!startIso || !endIso) {
     throw new ChangxiaError(
       ChangxiaErrorCode.Validation,
-      '请选择有效的开始日期与结束日期（不会自动填充默认日期）。',
+      translate('ui.agentBoard.errInvalidRange'),
     );
   }
   const name = draft.name.trim();
@@ -239,7 +248,7 @@ export async function submitAgentBoardDraft(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof ChangxiaError ? err.userMessage : '创建看板失败，请重试。',
+      error: err instanceof ChangxiaError ? err.userMessage : translate('ui.agentBoard.errCreateFailed'),
     };
   }
 }
@@ -254,6 +263,8 @@ export function CreateAgentBoardDialog({
   /** 建板成功（项目已落库、store 已刷新）。由页面决定"跳到/选中新看板" */
   onCreated(projectId: string): void;
 }): JSX.Element | null {
+  /* 渲染期取词（订阅语言变化）；模块级 `t` 留给上面三个纯函数用 —— 同 `HomePage` 的写法 */
+  const { t } = useLang();
   const repos = useRepos();
 
   const [name, setName] = useState('');
@@ -278,7 +289,7 @@ export function CreateAgentBoardDialog({
    */
   const handleAddCustomStage = (draft: CustomStageDraft): void => {
     if (stageItems.length >= MAX_STAGE_COUNT) {
-      setError(`单次最多 ${MAX_STAGE_COUNT} 个阶段。`);
+      setError(t('ui.agentBoard.errMaxStages', { max: MAX_STAGE_COUNT }));
       return;
     }
     const def = createCustomStageDef({
@@ -328,7 +339,7 @@ export function CreateAgentBoardDialog({
   };
 
   return (
-    <Modal open={open} onClose={onClose} ariaLabel="新建 Agent 看板">
+    <Modal open={open} onClose={onClose} ariaLabel={t('ui.agentBoard.createTitle')}>
       <div
         data-create-agent-board-dialog=""
         className="glass-strong iridescent-border dialog-pop flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl shadow-soft"
@@ -336,11 +347,11 @@ export function CreateAgentBoardDialog({
         {/* 描边挂在外层固定框；滚动交给内层（同 ManualFallbackForm，避免虹彩描边随内容断层） */}
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-display text-display-md">新建 Agent 看板</h3>
+            <h3 className="font-display text-display-md">{t('ui.agentBoard.createTitle')}</h3>
             <button
               type="button"
               onClick={onClose}
-              aria-label="关闭新建 Agent 看板"
+              aria-label={t('ui.agentBoard.createCloseAria')}
               className="rounded-md p-1 text-mist hover:bg-sand"
             >
               <X size={16} />
@@ -349,31 +360,31 @@ export function CreateAgentBoardDialog({
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="block text-sm md:col-span-2">
-              <span className="mb-1 block font-medium">看板名称 *</span>
+              <span className="mb-1 block font-medium">{t('ui.agentBoard.nameLabel')}</span>
               <ImeInput
                 value={name}
-                aria-label="看板名称"
+                aria-label={t('ui.agentBoard.nameAria')}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="如「某某项目 · 排期」"
+                placeholder={t('ui.agentBoard.namePlaceholder')}
                 className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">开始日期 *</span>
+              <span className="mb-1 block font-medium">{t('ui.agentBoard.startLabel')}</span>
               <input
                 type="date"
                 value={plannedStartAt}
-                aria-label="开始日期"
+                aria-label={t('ui.agentBoard.startAria')}
                 onChange={(e) => setPlannedStartAt(e.target.value)}
                 className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">结束日期 *</span>
+              <span className="mb-1 block font-medium">{t('ui.agentBoard.endLabel')}</span>
               <input
                 type="date"
                 value={plannedEndAt}
-                aria-label="结束日期"
+                aria-label={t('ui.agentBoard.endAria')}
                 onChange={(e) => setPlannedEndAt(e.target.value)}
                 className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
               />
@@ -384,15 +395,11 @@ export function CreateAgentBoardDialog({
             「不预填」的显式说明：本表单三件必填项初始全空，若不写一句，
             用户可能以为界面还没加载完（这是刻意的差异，就要说出来）。
           */}
-          <p className="mt-2 text-xs leading-5 text-mist">
-            名称、起止日期与阶段集合都需显式填写，系统不会替你填默认值。
-          </p>
+          <p className="mt-2 text-xs leading-5 text-mist">{t('ui.agentBoard.noPrefillNote')}</p>
 
           {/* 板块筛选器：**只影响阶段池可见范围**，不写入看板归属（见文件头澄清） */}
           <div className="mt-4 rounded-md border border-line bg-cream/40 p-3">
-            <p className="mb-2 text-xs leading-5 text-mist">
-              下面只用来筛出要用的阶段分组，不会改变看板归属。
-            </p>
+            <p className="mb-2 text-xs leading-5 text-mist">{t('ui.agentBoard.filterNote')}</p>
             <DomainCascade value={cascade} onChange={setCascade} />
           </div>
 
@@ -405,9 +412,11 @@ export function CreateAgentBoardDialog({
               className="flex w-full items-center justify-between rounded-md border border-line bg-cream px-3 py-2 text-sm text-ink hover:bg-sand"
             >
               <span>
-                看板阶段 * · 已选 {stageItems.length} 项
+                {t('ui.agentBoard.stagesLabel', { count: stageItems.length })}
                 <span className="ml-2 text-xs text-mist">
-                  {stageItems.length === 0 ? '（请至少选择 1 项）' : `（上限 ${MAX_STAGE_COUNT}）`}
+                  {stageItems.length === 0
+                    ? t('ui.agentBoard.stagesMinHint')
+                    : t('ui.agentBoard.stagesMaxHint', { max: MAX_STAGE_COUNT })}
                 </span>
               </span>
               {stagePanelOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -454,7 +463,8 @@ export function CreateAgentBoardDialog({
             onClick={() => void submit()}
             className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-pine px-4 py-2 text-sm text-white hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Check size={15} /> {submitting ? '创建中…' : '创建看板'}
+            <Check size={15} />{' '}
+            {submitting ? t('ui.agentBoard.creating') : t('ui.agentBoard.createAction')}
           </button>
         </div>
       </div>

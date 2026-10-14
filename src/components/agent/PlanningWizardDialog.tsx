@@ -34,6 +34,7 @@ import { useRepos } from '../../hooks/useRepos';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import type { StageTemplateDomain } from '../../core/types/dto';
 import { logUser } from '../../core/services/log.service';
+import { useLang } from '../../i18n';
 
 type Step = 1 | 2 | 3;
 
@@ -72,6 +73,7 @@ export function PlanningWizardDialog({
   open: boolean;
   onClose(): void;
 }): JSX.Element | null {
+  const { t } = useLang();
   const repos = useRepos();
   const pushToast = useProjectsStore((s) => s.pushToast);
   const [step, setStep] = useState<Step>(1);
@@ -109,20 +111,21 @@ export function PlanningWizardDialog({
     try {
       parsed = JSON.parse(payloadText);
     } catch {
-      setIssues(['不是合法的 JSON——请把 AI 回传的整段内容原样粘进来']);
+      setIssues([t('ui.planning.errBadJson')]);
       return;
     }
     let validated;
     try {
       validated = validateAgentPayload(parsed);
     } catch (err) {
-      setIssues([err instanceof Error ? err.message : 'payload 校验未通过']);
+      setIssues([err instanceof Error ? err.message : t('ui.planning.errInvalidPayload')]);
       return;
     }
     setBusy(true);
     try {
       // 建板（Agent 看板）+ 导入（共享核心：归属门/幂等/留痕全继承）
-      const name = projectName.trim() || `AI 规划 · ${new Date().toLocaleDateString('zh-CN')}`;
+      const name =
+        projectName.trim() || t('ui.planning.defaultName', { date: new Date().toLocaleDateString('zh-CN') });
       const preset = defaultPresetKeyForDomain(domain);
       const project = await createProjectActions(repos).createAgentBoard({
         name,
@@ -133,19 +136,20 @@ export function PlanningWizardDialog({
       const result = await applyAgentPayload(repos, validated, { projectId: project.id });
       pushToast(
         'success',
-        `已建板并导入 ${result.created} 条任务${result.updated > 0 ? `（更新 ${result.updated}）` : ''}`,
+        t('ui.planning.toastImported', { created: result.created }) +
+          (result.updated > 0 ? t('ui.planning.toastUpdated', { updated: result.updated }) : ''),
       );
       logUser('规划向导', `建板「${name}」并导入 ${result.created} 条任务`);
       close();
     } catch (err) {
-      setIssues([err instanceof Error ? err.message : '落库失败（看板可能已建，请检查）']);
+      setIssues([err instanceof Error ? err.message : t('ui.planning.errPersistFailed')]);
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal open onClose={close} ariaLabel="AI 规划向导">
+    <Modal open onClose={close} ariaLabel={t('ui.planning.title')}>
       <div
         data-planning-wizard=""
         className="glass-strong iridescent-border dialog-pop w-[560px] max-w-[92vw] space-y-4 rounded-2xl p-5 shadow-soft"
@@ -154,60 +158,58 @@ export function PlanningWizardDialog({
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-pine-soft">
             <Wand2 size={16} className="text-pine" aria-hidden />
           </span>
-          <h2 className="font-display text-base font-semibold text-ink">AI 规划向导</h2>
+          <h2 className="font-display text-base font-semibold text-ink">{t('ui.planning.title')}</h2>
           <ol className="ml-auto flex items-center gap-1 text-[11px] text-mist">
-            {(['说想法', '给 AI', '收结果'] as const).map((label, i) => (
-              <li key={label} className="flex items-center gap-1">
-                <span
-                  className={cn(
-                    'rounded-md px-1.5 py-0.5',
-                    step === i + 1 ? 'bg-pine-soft font-medium text-pine' : 'text-mist',
-                  )}
-                >
-                  {i + 1}. {label}
-                </span>
-                {i < 2 && <ArrowRight size={10} aria-hidden />}
-              </li>
-            ))}
+            {([t('ui.planning.step1'), t('ui.planning.step2'), t('ui.planning.step3')] as const).map(
+              (label, i) => (
+                <li key={label} className="flex items-center gap-1">
+                  <span
+                    className={cn(
+                      'rounded-md px-1.5 py-0.5',
+                      step === i + 1 ? 'bg-pine-soft font-medium text-pine' : 'text-mist',
+                    )}
+                  >
+                    {i + 1}. {label}
+                  </span>
+                  {i < 2 && <ArrowRight size={10} aria-hidden />}
+                </li>
+              ),
+            )}
           </ol>
         </div>
 
         {step === 1 && (
           <div className="space-y-3" data-planning-step="1">
-            <p className="text-[13px] leading-relaxed text-mist">
-              三步把一个想法变成有任务的 Agent 看板：说清楚想法 → 把指令给你的 AI →
-              把它回的 JSON 粘回来。AI 用你自己那个（Claude / WorkBuddy / 别的都行），
-              这里不调任何模型、不经手你的数据。
-            </p>
+            <p className="text-[13px] leading-relaxed text-mist">{t('ui.planning.intro')}</p>
             <label className="block">
-              <span className="mb-1 block text-[11px] text-mist">项目名称（可留空，AI 会起名）</span>
+              <span className="mb-1 block text-[11px] text-mist">{t('ui.planning.nameLabel')}</span>
               <input
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
-                placeholder="如：门店开业筹备"
+                placeholder={t('ui.planning.namePlaceholder')}
                 className="h-9 w-full rounded-[10px] border border-line bg-paper px-2.5 text-[13px] text-ink outline-none focus:border-pine"
               />
             </label>
             <div>
-              <span className="mb-1 block text-[11px] text-mist">所属行业（决定看板列形态与套餐）</span>
+              <span className="mb-1 block text-[11px] text-mist">{t('ui.planning.domainLabel')}</span>
               <IndustrySelect value={domain} onChange={setDomain} />
             </div>
             <label className="block">
-              <span className="mb-1 block text-[11px] text-mist">我的想法（原文即可，不必工整）</span>
+              <span className="mb-1 block text-[11px] text-mist">{t('ui.planning.ideaLabel')}</span>
               <textarea
                 value={idea}
                 onChange={(e) => setIdea(e.target.value)}
                 rows={3}
-                placeholder="如：先出初版方案给需求方确认，通过后再深化；准备与执行要并行推进；收尾阶段留一周做交付确认。"
+                placeholder={t('ui.planning.ideaPlaceholder')}
                 className="w-full resize-y rounded-[10px] border border-line bg-paper px-2.5 py-2 text-[13px] leading-6 text-ink outline-none focus:border-pine"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[11px] text-mist">我想到的阶段（可空，AI 会调整/补充）</span>
+              <span className="mb-1 block text-[11px] text-mist">{t('ui.planning.stageHintLabel')}</span>
               <input
                 value={stageHint}
                 onChange={(e) => setStageHint(e.target.value)}
-                placeholder="如：概念 → 深化 → 施工图 → 材料 → 施工 → 交付"
+                placeholder={t('ui.planning.stageHintPlaceholder')}
                 className="h-9 w-full rounded-[10px] border border-line bg-paper px-2.5 text-[13px] text-ink outline-none focus:border-pine"
               />
             </label>
@@ -217,7 +219,7 @@ export function PlanningWizardDialog({
                 onClick={() => setStep(2)}
                 className="btn-aura flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[13px] text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
               >
-                下一步：生成给 AI 的指令
+                {t('ui.planning.nextToPrompt')}
                 <ArrowRight size={13} aria-hidden />
               </button>
             </div>
@@ -226,9 +228,7 @@ export function PlanningWizardDialog({
 
         {step === 2 && (
           <div className="space-y-3" data-planning-step="2">
-            <p className="text-[13px] leading-relaxed text-mist">
-              复制下面两段（顺序随意）粘给你的 AI，它回一段 JSON 给你。
-            </p>
+            <p className="text-[13px] leading-relaxed text-mist">{t('ui.planning.copyHint')}</p>
             <pre
               data-planning-prompt=""
               className="max-h-40 overflow-auto whitespace-pre-wrap rounded-[10px] border border-line bg-sunken p-2.5 text-[12px] leading-5 text-ink"
@@ -247,11 +247,9 @@ export function PlanningWizardDialog({
                 className="flex items-center gap-1.5 rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-[12px] text-ink transition-colors hover:bg-cream"
               >
                 {copied ? <Check size={13} className="text-pine" aria-hidden /> : <ClipboardCopy size={13} aria-hidden />}
-                {copied ? '已复制' : '复制我的想法'}
+                {copied ? t('ui.planning.copied') : t('ui.planning.copyIdea')}
               </button>
-              <span className="text-[11px] text-mist">
-                完整的 JSON 格式要求在「粘贴面板 → 接入」里（同样的规则，AI 那边需要看）
-              </span>
+              <span className="text-[11px] text-mist">{t('ui.planning.formatHint')}</span>
             </div>
             <div className="flex justify-between">
               <button
@@ -259,14 +257,14 @@ export function PlanningWizardDialog({
                 onClick={() => setStep(1)}
                 className="rounded-[10px] px-2.5 py-1.5 text-[12px] text-mist transition-colors hover:bg-sand hover:text-ink"
               >
-                上一步
+                {t('ui.planning.prev')}
               </button>
               <button
                 type="button"
                 onClick={() => setStep(3)}
                 className="btn-aura flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[13px] text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
               >
-                下一步：粘回 AI 的结果
+                {t('ui.planning.nextToPaste')}
                 <ArrowRight size={13} aria-hidden />
               </button>
             </div>
@@ -276,7 +274,7 @@ export function PlanningWizardDialog({
         {step === 3 && (
           <div className="space-y-3" data-planning-step="3">
             <label className="block">
-              <span className="mb-1 block text-[11px] text-mist">把 AI 回的 JSON 粘到这里（原样）</span>
+              <span className="mb-1 block text-[11px] text-mist">{t('ui.planning.pasteLabel')}</span>
               <textarea
                 value={payloadText}
                 onChange={(e) => setPayloadText(e.target.value)}
@@ -298,7 +296,7 @@ export function PlanningWizardDialog({
                 onClick={() => setStep(2)}
                 className="rounded-[10px] px-2.5 py-1.5 text-[12px] text-mist transition-colors hover:bg-sand hover:text-ink"
               >
-                上一步
+                {t('ui.planning.prev')}
               </button>
               <button
                 type="button"
@@ -307,7 +305,7 @@ export function PlanningWizardDialog({
                 className="btn-aura flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[13px] text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40 disabled:opacity-40"
               >
                 <Sparkles size={13} aria-hidden />
-                {busy ? '正在建板并导入…' : '建板并导入'}
+                {busy ? t('ui.planning.importing') : t('ui.planning.importAction')}
               </button>
             </div>
           </div>

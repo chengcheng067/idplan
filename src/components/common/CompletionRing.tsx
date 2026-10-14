@@ -1,3 +1,4 @@
+import { useLang } from '../../i18n';
 import { RING_PROGRESS, RING_TEXT, RING_TRACK } from '../timeline/timelineColors';
 
 /**
@@ -15,13 +16,14 @@ export function CompletionRing({
   size?: number;
   strokeWidth?: number;
 }): JSX.Element {
+  const { t } = useLang();
   const clamped = Math.max(0, Math.min(100, Math.round(percent)));
   const r = (size - strokeWidth) / 2;
   const c = 2 * Math.PI * r;
   const dash = (clamped / 100) * c;
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`完成度 ${clamped}%`}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={t('ui.completionRing.aria', { percent: clamped })}>
       <circle
         cx={size / 2}
         cy={size / 2}

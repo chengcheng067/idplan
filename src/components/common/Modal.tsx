@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { createPortal } from 'react-dom';
+import { useLang } from '../../i18n';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { resolveAnchoredPosition, type Point } from '../../lib/anchoredPosition';
 import { usePresence } from '../../hooks/usePresence';
@@ -141,7 +142,7 @@ export function Modal({
   open,
   onClose,
   placement = 'center',
-  ariaLabel = '浮层',
+  ariaLabel,
   anchor = null,
   railLeft,
   zTier,
@@ -163,7 +164,7 @@ export function Modal({
    *               不传 ⇒ 全宽（<xl 无持久侧栏的现状）
    */
   placement?: ModalPlacement;
-  /** 无障碍标签，读屏用 */
+  /** 无障碍标签，读屏用。缺省取消息表 `ui.modal.defaultAria`（原字面量 `'浮层'`） */
   ariaLabel?: string;
   /**
    * 遮罩 z 档显式覆盖（缺省按 placement，见 overlayZClass）。**仅当时序
@@ -190,6 +191,7 @@ export function Modal({
   anchor?: Point | null;
   children: React.ReactNode;
 }): JSX.Element | null {
+  const { t } = useLang();
   const panelRef = useRef<HTMLDivElement | null>(null);
   /** 锚定浮动卡本体（`placement='float'`）；定位需要实测它的尺寸 */
   const floatRef = useRef<HTMLDivElement | null>(null);
@@ -432,7 +434,7 @@ export function Modal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? t('ui.modal.defaultAria')}
       ref={presence.blockRef}
       // z-index 分层：居中弹窗(center)=z-[70] 最高可盖一切；右侧抽屉(right)=z-[60] 属二级浮层，
       // 让其内部冒出的更浅层浮层（如指派弹层 z-[65]）能盖在抽屉之上。抽屉自身不参与 center 的顶层竞争。

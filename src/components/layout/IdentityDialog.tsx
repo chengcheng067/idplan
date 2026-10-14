@@ -12,6 +12,7 @@ import { ChangxiaError, MemberRoleKind } from '../../core/types/enums';
 import { memberHasPassword, type Member } from '../../core/types/entities';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
+import { useLang } from '../../i18n';
 import { logError, logUser } from '../../core/services/log.service';
 
 /**
@@ -33,6 +34,9 @@ const AVATAR_COLORS = ['#3D6B5B', '#D9A441', '#C4553B', '#7E97A8', '#A99BB5', '#
 type MismatchKind = 'no_admin' | 'name_miss' | null;
 
 export function IdentityDialog(): JSX.Element | null {
+  /* 取词函数必须在**任何提前 return 之前**取（下面 `if (flow === 'closed') return null` 之后
+     才有 `handleClose` 等局部函数；hook 顺序稳定是本仓的既有纪律） */
+  const { t } = useLang();
   const repos = useRepos();
   const flow = useSettingsStore((s) => s.identityFlow);
   const adminIntent = useSettingsStore((s) => s.adminIntent);
@@ -59,15 +63,15 @@ export function IdentityDialog(): JSX.Element | null {
       setNotice(null);
       setBusy(false);
       // 对话框面板渲染后聚焦输入框
-      const t = window.setTimeout(() => inputRef.current?.focus(), 0);
-      return () => window.clearTimeout(t);
+      const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
+      return () => window.clearTimeout(timer);
     }
     if (flow === 'password_input') {
       setPassword('');
       setNotice(null);
       setBusy(false);
-      const t = window.setTimeout(() => inputRef.current?.focus(), 0);
-      return () => window.clearTimeout(t);
+      const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
+      return () => window.clearTimeout(timer);
     }
     if (flow === 'closed') {
       setNotice(null);
@@ -117,7 +121,7 @@ export function IdentityDialog(): JSX.Element | null {
           useMembersStore.getState().upsert(created);
           setCurrentMember(created.id);
         }
-        toast('success', `管理员「${trimmed}」已确立`);
+        toast('success', t('ui.identity.toastAdminEstablished', { name: trimmed }));
         logUser('身份', `身份切换：管理员「${trimmed}」确立`);
         closeIdentityFlow();
         return;
@@ -138,10 +142,10 @@ export function IdentityDialog(): JSX.Element | null {
         return;
       }
       setMismatchKind('name_miss');
-      setNotice('名单中没有找到你的名字，请联系管理员添加后重试');
+      setNotice(t('ui.identity.nameMiss'));
       setIdentityFlow('mismatch');
     } catch (err) {
-      toast('error', err instanceof ChangxiaError ? err.userMessage : '身份设置失败，请重试。');
+      toast('error', err instanceof ChangxiaError ? err.userMessage : t('ui.identity.setFailed'));
       logError('身份', `身份切换失败：${trimmed ? `「${trimmed}」` : ''}`, err);
     } finally {
       setBusy(false);
@@ -158,7 +162,7 @@ export function IdentityDialog(): JSX.Element | null {
     try {
       const ok = await repos.members.verifyCredentials(pendingMemberId, plain);
       if (!ok) {
-        setNotice('密码错误，请重试。');
+        setNotice(t('ui.identity.passwordWrong'));
         setPassword('');
         return;
       }
@@ -168,7 +172,7 @@ export function IdentityDialog(): JSX.Element | null {
       setPendingMember(null);
       closeIdentityFlow();
     } catch (err) {
-      toast('error', err instanceof ChangxiaError ? err.userMessage : '密码校验失败，请重试。');
+      toast('error', err instanceof ChangxiaError ? err.userMessage : t('ui.identity.passwordVerifyFailed'));
       logError('身份', '密码登录失败', err);
     } finally {
       setBusy(false);
@@ -180,9 +184,9 @@ export function IdentityDialog(): JSX.Element | null {
       return (
         <div className="space-y-4">
           <p className="text-sm leading-6 text-ink/80">
-            首次使用需要先确定管理员身份（项目负责人）。
+            {t('ui.identity.firstRunLead')}
             <br />
-            管理员可以看到全部项目、成员与备份；成员只能看到分派给自己的任务。
+            {t('ui.identity.firstRunTail')}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -190,18 +194,18 @@ export function IdentityDialog(): JSX.Element | null {
               onClick={() => openIdentityFlow('name_input', true)}
               className="rounded-md bg-pine px-4 py-2 text-sm text-white transition-colors hover:bg-pine-deep"
             >
-              我是管理员
+              {t('ui.identity.iAmAdmin')}
             </button>
             <button
               type="button"
               onClick={() => {
                 setMismatchKind('no_admin');
-                setNotice('系统当前还没有管理员。请联系管理员完成首次设置后再进入。');
+                setNotice(t('ui.identity.noAdminNotice'));
                 setIdentityFlow('mismatch');
               }}
               className="rounded-md border border-line px-4 py-2 text-sm text-mist transition-colors hover:bg-sand"
             >
-              我不是管理员
+              {t('ui.identity.iAmNotAdmin')}
             </button>
           </div>
         </div>
@@ -213,8 +217,8 @@ export function IdentityDialog(): JSX.Element | null {
         <div className="space-y-3">
           <p className="text-sm leading-6 text-ink/80">
             {adminIntent
-              ? '请填写你的姓名，系统会创建/匹配管理员身份。'
-              : '请输入你的姓名（仅在本机匹配，不会展示其他成员名单）。'}
+              ? t('ui.identity.adminNameHint')
+              : t('ui.identity.memberNameHint')}
           </p>
           <ImeInput
             ref={inputRef}
@@ -227,7 +231,7 @@ export function IdentityDialog(): JSX.Element | null {
                 void submit();
               }
             }}
-            placeholder="你的姓名"
+            placeholder={t('ui.identity.namePlaceholder')}
             disabled={busy}
             autoComplete="off"
             spellCheck={false}
@@ -239,7 +243,7 @@ export function IdentityDialog(): JSX.Element | null {
               onClick={handleClose}
               className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -247,7 +251,7 @@ export function IdentityDialog(): JSX.Element | null {
               disabled={busy || !name.trim()}
               className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
             >
-              {adminIntent ? '确认为管理员' : '下一步'}
+              {adminIntent ? t('ui.identity.confirmAdmin') : t('ui.next')}
             </button>
           </div>
         </div>
@@ -259,8 +263,9 @@ export function IdentityDialog(): JSX.Element | null {
       return (
         <div className="space-y-3">
           <p className="text-sm leading-6 text-ink/80">
-            请输入 <b className="text-ink">{pendingMember?.name ?? '该成员'}</b> 的登录密码
-            （由管理员设置；无密码成员无需此步）。
+            {t('ui.identity.passwordLead')}
+            <b className="text-ink">{pendingMember?.name ?? t('ui.identity.thisMember')}</b>
+            {t('ui.identity.passwordMid')}
           </p>
           <ImeInput
             ref={inputRef}
@@ -276,7 +281,7 @@ export function IdentityDialog(): JSX.Element | null {
                 void submitPassword();
               }
             }}
-            placeholder="输入密码"
+            placeholder={t('ui.identity.passwordTitle')}
             disabled={busy}
             autoComplete="current-password"
             className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
@@ -288,7 +293,7 @@ export function IdentityDialog(): JSX.Element | null {
               onClick={handleClose}
               className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -296,7 +301,7 @@ export function IdentityDialog(): JSX.Element | null {
               disabled={busy || !password}
               className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
             >
-              登录
+              {t('ui.identity.login')}
             </button>
           </div>
         </div>
@@ -306,14 +311,14 @@ export function IdentityDialog(): JSX.Element | null {
     // mismatch：停留展示提示，不进入
     return (
       <div className="space-y-4">
-        <p className="text-sm leading-6 text-ink/80">{notice ?? '无法进入。'}</p>
+        <p className="text-sm leading-6 text-ink/80">{notice ?? t('ui.identity.cannotEnterPeriod')}</p>
         <div className="flex justify-end">
           <button
             type="button"
             onClick={handleClose}
             className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
           >
-            知道了
+            {t('ui.identity.gotIt')}
           </button>
         </div>
       </div>
@@ -326,12 +331,12 @@ export function IdentityDialog(): JSX.Element | null {
       onClose={handleClose}
       ariaLabel={
         flow === 'admin_prompt'
-          ? '首次使用引导'
+          ? t('ui.identity.ariaFirstRun')
           : flow === 'name_input'
-            ? '输入身份'
+            ? t('ui.identity.ariaNameInput')
             : flow === 'password_input'
-              ? '输入密码'
-              : '无法进入'
+              ? t('ui.identity.passwordTitle')
+              : t('ui.identity.cannotEnter')
       }
     >
       <div
@@ -341,19 +346,19 @@ export function IdentityDialog(): JSX.Element | null {
         <div className="mb-3 flex items-start justify-between gap-4">
           <h2 className="font-display text-display-md">
             {flow === 'admin_prompt'
-              ? '你是管理员（项目负责人）吗？'
+              ? t('ui.identity.adminPromptTitle')
               : flow === 'name_input'
                 ? adminIntent
-                  ? '设置管理员身份'
-                  : '输入你的姓名'
+                  ? t('ui.identity.setAdminTitle')
+                  : t('ui.identity.nameInputTitle')
                 : flow === 'password_input'
-                  ? '输入密码'
-                  : '暂时无法进入'}
+                  ? t('ui.identity.passwordTitle')
+                  : t('ui.identity.cannotEnterTitle')}
           </h2>
           <button
             type="button"
             onClick={handleClose}
-            aria-label="关闭"
+            aria-label={t('common.close')}
             className="rounded-md p-1 text-mist hover:bg-sand"
           >
             <X size={16} />
