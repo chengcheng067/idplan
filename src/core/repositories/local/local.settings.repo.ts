@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
+import { ChangxiaErrorCode, coreError } from '../../types/enums';
 import type { Setting } from '../../types/entities';
 import type { ISettingsRepository } from '../interfaces';
 import type { ChangxiaDatabase } from './dexie.database';
@@ -12,7 +12,7 @@ export class LocalSettingsRepository implements ISettingsRepository {
       const row = await this.db.settings.get(key);
       return row ? (JSON.parse(row.valueJson) as T) : null;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, `设置项 ${key} 读取失败。`, err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.setting.readFailed', { key }, err);
     }
   }
 
@@ -25,7 +25,7 @@ export class LocalSettingsRepository implements ISettingsRepository {
     try {
       await this.db.settings.put(row);
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, `设置项 ${key} 写入失败。`, err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.setting.writeFailed', { key }, err);
     }
   }
 
@@ -33,7 +33,7 @@ export class LocalSettingsRepository implements ISettingsRepository {
     try {
       return await this.db.settings.toArray();
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '设置表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.setting.tableReadFailed', undefined, err);
     }
   }
 
@@ -44,7 +44,7 @@ export class LocalSettingsRepository implements ISettingsRepository {
         if (rows.length > 0) await this.db.settings.bulkPut(rows);
       });
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '设置表重建失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.setting.tableRebuildFailed', undefined, err);
     }
   }
 }

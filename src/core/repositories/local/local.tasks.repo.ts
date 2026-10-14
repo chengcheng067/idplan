@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode, TaskStatus } from '../../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, TaskStatus, coreError } from '../../types/enums';
 import type { Setting, Task } from '../../types/entities';
 import { taskIsDone, withStatus, normalizeClaimedAt } from '../../types/entities';
 import type { CreateTaskCmd, UpdateTaskCmd } from '../../types/dto';
@@ -68,7 +68,7 @@ export class LocalTasksRepository implements ITasksRepository {
       if (query?.externalId) rows = rows.filter((t) => t.externalId === query.externalId);
       return rows.sort((a, b) => a.orderIndex - b.orderIndex || a.id.localeCompare(b.id));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '任务列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.task.listReadFailed', undefined, err);
     }
   }
 
@@ -86,7 +86,7 @@ export class LocalTasksRepository implements ITasksRepository {
       const row = await this.db.tasks.get(id);
       return row ?? null;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '任务读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.task.readFailed', undefined, err);
     }
   }
 
@@ -103,7 +103,7 @@ export class LocalTasksRepository implements ITasksRepository {
     if (rows.length === 0) return;
     for (const r of rows) {
       if (!r.id || !r.projectId || !r.stageId || !r.title?.trim()) {
-        throw new ChangxiaError(ChangxiaErrorCode.Validation, '任务草稿字段不完整，无法入库。');
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.task.draftIncomplete');
       }
     }
     const needsAllocation = rows.some((r) => r.taskNo === null || r.taskNo === undefined);
@@ -122,13 +122,13 @@ export class LocalTasksRepository implements ITasksRepository {
         await this.writeTaskNoSeq(counter.peek());
       });
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '任务批量写入失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.task.bulkWriteFailed', undefined, err);
     }
   }
 
   async insert(cmd: CreateTaskCmd): Promise<Task> {
     if (!cmd.title?.trim()) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '任务标题不能为空。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.task.titleRequired');
     }
     const now = new Date().toISOString();
     // ★ v0.7：整个「读计数器 → 分配 → 写行 → 回写计数器」必须在**同一个 rw 事务**内。
@@ -181,7 +181,7 @@ export class LocalTasksRepository implements ITasksRepository {
   async update(id: string, cmd: UpdateTaskCmd): Promise<Task> {
     const existing = await this.db.tasks.get(id);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该任务。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.task.notFound');
     }
     const patch = pickDefined(cmd);
     // v0.6 状态双写（status ⇄ done 恒一致，写入侧唯一口径）：
@@ -234,10 +234,10 @@ export class LocalTasksRepository implements ITasksRepository {
     if (rows.length === 0) return { created: 0, updated: 0 };
     for (const r of rows) {
       if (!r.externalId?.trim()) {
-        throw new ChangxiaError(ChangxiaErrorCode.Validation, '幂等键 externalId 不能为空。');
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.task.externalIdRequired');
       }
       if (!r.projectId || !r.stageId || !r.title?.trim()) {
-        throw new ChangxiaError(ChangxiaErrorCode.Validation, '任务字段不完整，无法写入。');
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.task.fieldsIncomplete');
       }
     }
     try {
@@ -332,9 +332,9 @@ export class LocalTasksRepository implements ITasksRepository {
       if (err instanceof ChangxiaError) throw err;
       // 唯一索引（&[projectId+externalId]）竞态冲突 → ConstraintError → 语义化 Conflict
       if (err instanceof Error && err.name === 'ConstraintError') {
-        throw new ChangxiaError(ChangxiaErrorCode.Conflict, '任务幂等键冲突，请重试导入。', err);
+        throw coreError(ChangxiaErrorCode.Conflict, 'coreErr.task.idempotencyConflict', undefined, err);
       }
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '任务幂等写入失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.task.idempotentWriteFailed', undefined, err);
     }
   }
 
@@ -344,19 +344,16 @@ export class LocalTasksRepository implements ITasksRepository {
    */
   async claim(taskId: string, actorMemberId: string): Promise<Task> {
     if (!actorMemberId?.trim()) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '认领人不能为空。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.task.assigneeRequired');
     }
     try {
       return await this.db.transaction('rw', this.db.tasks, async () => {
         const existing = await this.db.tasks.get(taskId);
         if (!existing) {
-          throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该任务。');
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.task.notFound');
         }
         if (existing.status !== TaskStatus.Ready || existing.claimedAt !== null) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Conflict,
-            '该任务已被认领或不处于就绪状态。',
-          );
+          throw coreError(ChangxiaErrorCode.Conflict, 'coreErr.task.notClaimable');
         }
         const next = withStatus(
           {
@@ -371,7 +368,7 @@ export class LocalTasksRepository implements ITasksRepository {
       });
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '任务认领失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.task.claimFailed', undefined, err);
     }
   }
 
@@ -379,7 +376,7 @@ export class LocalTasksRepository implements ITasksRepository {
     try {
       await this.db.tasks.delete(id);
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '任务删除失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.task.deleteFailed', undefined, err);
     }
   }
 }

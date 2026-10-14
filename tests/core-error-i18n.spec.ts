@@ -49,26 +49,14 @@ import { LocalStagesRepository } from '../src/core/repositories/local/local.stag
 import { LocalMembersRepository } from '../src/core/repositories/local/local.members.repo';
 import { StageService } from '../src/core/services/stage.service';
 
-/** 本笔覆盖的键（= 分片里 `coreErr.*` 那批；下一条断言钉住"不多不少"） */
-const KEYS: readonly CoreErrorKey[] = [
-  'coreErr.stage.listReadFailed',
-  'coreErr.stage.readFailed',
-  'coreErr.stage.draftIncomplete',
-  'coreErr.stage.rangeReversed',
-  'coreErr.stage.bulkWriteFailed',
-  'coreErr.stage.notFound',
-  'coreErr.stage.badDate',
-  'coreErr.stage.endBeforeStart',
-  'coreErr.stage.newRangeInvalid',
-  'coreErr.stage.newEndBeforeStart',
-  'coreErr.stage.postponeReasonRequired',
-  'coreErr.stage.completedOnlyReopenInProgress',
-  'coreErr.member.listReadFailed',
-  'coreErr.member.readFailed',
-  'coreErr.member.nameRequired',
-  'coreErr.member.createFailed',
-  'coreErr.member.notFound',
-];
+/**
+ * 本片**已交付**的键全集。
+ *
+ * 刻意**不手抄一份名单**：手抄名单只会变成「加了键忘了加名单」的第二个真相源，
+ * 而 `CORE_ERROR_TEXT` 与分片 zh 的键集相等已由 ① 断言钉住。
+ * 真正必须手写的是下面的 `BASELINE`（载荷基准值），那才是本文件的判别力所在。
+ */
+const KEYS: readonly CoreErrorKey[] = Object.keys(CORE_ERROR_TEXT) as CoreErrorKey[];
 
 /**
  * ★ 载荷基准表 —— **手抄自 `9ca1395`（改动前）的源码字面量**，不是运行时重算。
@@ -101,11 +89,54 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   ['coreErr.member.nameRequired', ChangxiaErrorCode.Validation, '成员姓名不能为空。'],
   ['coreErr.member.createFailed', ChangxiaErrorCode.Storage, '成员创建失败。'],
   ['coreErr.member.notFound', ChangxiaErrorCode.NotFound, '未找到该成员。'],
+
+  /* ── 第 2 批（本地仓储余下 4 文件 / 31 键）：基准值同样**取自改动前的 `HEAD:` 源码** ── */
+  ['coreErr.itinerary.createFailed', ChangxiaErrorCode.Storage, '每日行程创建失败。'],
+  ['coreErr.itinerary.deleteFailed', ChangxiaErrorCode.Storage, '每日行程删除失败。'],
+  ['coreErr.itinerary.generateFailed', ChangxiaErrorCode.Storage, '每日行程生成失败。'],
+  ['coreErr.itinerary.listReadFailed', ChangxiaErrorCode.Storage, '每日行程读取失败。'],
+  ['coreErr.itinerary.missingProjectOrDate', ChangxiaErrorCode.Validation, '每日行程缺少有效项目或日期。'],
+  ['coreErr.itinerary.notFound', ChangxiaErrorCode.NotFound, '未找到该每日行程。'],
+  ['coreErr.itinerary.rangeInvalid', ChangxiaErrorCode.Validation, '旅游项目的起止日期无效，无法生成每日行程。'],
+  ['coreErr.itinerary.updateFailed', ChangxiaErrorCode.Storage, '每日行程更新失败。'],
+  ['coreErr.log.assignmentAppendFailed', ChangxiaErrorCode.Storage, '指派流水写入失败。'],
+  ['coreErr.log.assignmentReadFailed', ChangxiaErrorCode.Storage, '指派流水读取失败。'],
+  ['coreErr.log.projectReadFailed', ChangxiaErrorCode.Storage, '项目流水读取失败。'],
+  ['coreErr.log.stageAppendFailed', ChangxiaErrorCode.Storage, '阶段流水写入失败。'],
+  ['coreErr.log.stageReadFailed', ChangxiaErrorCode.Storage, '阶段流水读取失败。'],
+  // 原本是模板串「设置项 + 变量 + 读取失败。」（基准值 = key 取 theme 时的渲染结果）
+  ['coreErr.setting.readFailed', ChangxiaErrorCode.Storage, '设置项 theme 读取失败。'],
+  ['coreErr.setting.tableReadFailed', ChangxiaErrorCode.Storage, '设置表读取失败。'],
+  ['coreErr.setting.tableRebuildFailed', ChangxiaErrorCode.Storage, '设置表重建失败。'],
+  ['coreErr.setting.writeFailed', ChangxiaErrorCode.Storage, '设置项 theme 写入失败。'],
+  ['coreErr.task.assigneeRequired', ChangxiaErrorCode.Validation, '认领人不能为空。'],
+  ['coreErr.task.bulkWriteFailed', ChangxiaErrorCode.Storage, '任务批量写入失败。'],
+  ['coreErr.task.claimFailed', ChangxiaErrorCode.Storage, '任务认领失败。'],
+  ['coreErr.task.deleteFailed', ChangxiaErrorCode.Storage, '任务删除失败。'],
+  ['coreErr.task.draftIncomplete', ChangxiaErrorCode.Validation, '任务草稿字段不完整，无法入库。'],
+  ['coreErr.task.externalIdRequired', ChangxiaErrorCode.Validation, '幂等键 externalId 不能为空。'],
+  ['coreErr.task.fieldsIncomplete', ChangxiaErrorCode.Validation, '任务字段不完整，无法写入。'],
+  ['coreErr.task.idempotencyConflict', ChangxiaErrorCode.Conflict, '任务幂等键冲突，请重试导入。'],
+  ['coreErr.task.idempotentWriteFailed', ChangxiaErrorCode.Storage, '任务幂等写入失败。'],
+  ['coreErr.task.listReadFailed', ChangxiaErrorCode.Storage, '任务列表读取失败。'],
+  ['coreErr.task.notClaimable', ChangxiaErrorCode.Conflict, '该任务已被认领或不处于就绪状态。'],
+  ['coreErr.task.notFound', ChangxiaErrorCode.NotFound, '未找到该任务。'],
+  ['coreErr.task.readFailed', ChangxiaErrorCode.Storage, '任务读取失败。'],
+  ['coreErr.task.titleRequired', ChangxiaErrorCode.Validation, '任务标题不能为空。'],
 ];
 
-/** 需要插值的键 → 参数（`rangeReversed` 的取值与上面基准表一致） */
+/** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */
 const PARAMS: Partial<Record<CoreErrorKey, Record<string, string>>> = {
   'coreErr.stage.rangeReversed': { name: 'S1' },
+  'coreErr.setting.readFailed': { key: 'theme' },
+  'coreErr.setting.writeFailed': { key: 'theme' },
+};
+
+/** 参数名 → 该键的占位符（③ 的英文插值断言用；手写的期待，不是从实现反推） */
+const PLACEHOLDER_OF: Partial<Record<CoreErrorKey, string>> = {
+  'coreErr.stage.rangeReversed': 'name',
+  'coreErr.setting.readFailed': 'key',
+  'coreErr.setting.writeFailed': 'key',
 };
 
 const zhTable = coreZh as Record<string, string>;
@@ -130,9 +161,10 @@ describe('① 三表不漂：载荷表 / 分片 zh / 分片 en', () => {
     expect(Object.keys(CORE_ERROR_TEXT).sort(), '载荷表与分片 zh 键集不一致').toEqual(
       Object.keys(zhTable).sort(),
     );
-    expect([...KEYS].sort(), '本 spec 点名表漏了/多了键（点名表要跟着载荷表走）').toEqual(
-      Object.keys(CORE_ERROR_TEXT).sort(),
-    );
+    expect(
+      BASELINE.map(([k]) => k).sort(),
+      'BASELINE（载荷基准表）漏了键 —— 加了键就必须补一条**改动前的原文**，不许只加键不记基准',
+    ).toEqual(Object.keys(CORE_ERROR_TEXT).sort());
   });
 
   it('★ 分片 zh 键集 === 分片 en 键集（漏一个英文 = 编译错，这里再钉一次运行期）', () => {
@@ -202,9 +234,10 @@ describe('③ `resolveErrorText` 在两种语言下都给出正确取值', () =>
     if (vars === undefined) {
       expect(english).toBe(enTable[key]);
     } else {
-      // 有插值：英文取值必须**已被替换**（`{name}` 原样端出去 = 界面露出占位符）
-      expect(english).not.toContain('{name}');
-      expect(english).toContain(vars.name!);
+      // 有插值：英文取值必须**已被替换**（占位符原样端出去 = 界面露出 `{name}`）
+      const holder = PLACEHOLDER_OF[key]!;
+      expect(english, `${key} 把 {${holder}} 原样端出去了`).not.toContain(`{${holder}}`);
+      expect(english).toContain(vars[holder]!);
     }
   });
 

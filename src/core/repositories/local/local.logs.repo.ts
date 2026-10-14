@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
+import { ChangxiaErrorCode, coreError } from '../../types/enums';
 import type { AssignmentLog, StageLog } from '../../types/entities';
 import type { ILogsRepository } from '../interfaces';
 import type { ChangxiaDatabase } from './dexie.database';
@@ -20,7 +20,7 @@ export class LocalLogsRepository implements ILogsRepository {
       await this.db.stageLogs.add(row);
       return row;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '阶段流水写入失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.log.stageAppendFailed', undefined, err);
     }
   }
 
@@ -30,7 +30,7 @@ export class LocalLogsRepository implements ILogsRepository {
       // 升序（旧→新）：消费方以 logs[length-1] 取最新一条（QA 验收口径）
       return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '阶段流水读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.log.stageReadFailed', undefined, err);
     }
   }
 
@@ -40,7 +40,7 @@ export class LocalLogsRepository implements ILogsRepository {
       // 升序（旧→新），与 listStageLogsByStage 口径一致
       return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '项目流水读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.log.projectReadFailed', undefined, err);
     }
   }
 
@@ -56,7 +56,7 @@ export class LocalLogsRepository implements ILogsRepository {
       await this.db.assignments.add(row);
       return row;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '指派流水写入失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.log.assignmentAppendFailed', undefined, err);
     }
   }
 
@@ -65,7 +65,7 @@ export class LocalLogsRepository implements ILogsRepository {
       const rows = await this.db.assignments.where('taskId').equals(taskId).toArray();
       return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '指派流水读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.log.assignmentReadFailed', undefined, err);
     }
   }
 }

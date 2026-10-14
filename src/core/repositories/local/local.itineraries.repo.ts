@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, coreError } from '../../types/enums';
 import type { ItineraryDay } from '../../types/entities';
 import type { CreateItineraryDayCmd, UpdateItineraryDayCmd } from '../../types/dto';
 import type { IItinerariesRepository } from '../interfaces';
@@ -20,13 +20,13 @@ export class LocalItinerariesRepository implements IItinerariesRepository {
       const rows = await this.db.itineraries.where('projectId').equals(projectId).toArray();
       return rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '每日行程读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.itinerary.listReadFailed', undefined, err);
     }
   }
 
   async ensureProjectDays(projectId: string, startDate: string, endDate: string): Promise<ItineraryDay[]> {
     if (!isIsoDate(startDate) || !isIsoDate(endDate) || startDate > endDate) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '旅游项目的起止日期无效，无法生成每日行程。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.itinerary.rangeInvalid');
     }
     try {
       await this.db.transaction('rw', this.db.itineraries, async () => {
@@ -54,13 +54,13 @@ export class LocalItinerariesRepository implements IItinerariesRepository {
       return this.listByProject(projectId);
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '每日行程生成失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.itinerary.generateFailed', undefined, err);
     }
   }
 
   async insert(cmd: CreateItineraryDayCmd): Promise<ItineraryDay> {
     if (!cmd.projectId || !isIsoDate(cmd.date)) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '每日行程缺少有效项目或日期。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.itinerary.missingProjectOrDate');
     }
     const now = new Date().toISOString();
     const row: ItineraryDay = {
@@ -78,14 +78,14 @@ export class LocalItinerariesRepository implements IItinerariesRepository {
       await this.db.itineraries.add(row);
       return row;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '每日行程创建失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.itinerary.createFailed', undefined, err);
     }
   }
 
   async update(id: string, cmd: UpdateItineraryDayCmd): Promise<ItineraryDay> {
     const existing = await this.db.itineraries.get(id);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该每日行程。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.itinerary.notFound');
     }
     const next: ItineraryDay = {
       ...existing,
@@ -97,7 +97,7 @@ export class LocalItinerariesRepository implements IItinerariesRepository {
       await this.db.itineraries.put(next);
       return next;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '每日行程更新失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.itinerary.updateFailed', undefined, err);
     }
   }
 
@@ -105,7 +105,7 @@ export class LocalItinerariesRepository implements IItinerariesRepository {
     try {
       await this.db.itineraries.delete(id);
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '每日行程删除失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.itinerary.deleteFailed', undefined, err);
     }
   }
 }
