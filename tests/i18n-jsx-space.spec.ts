@@ -188,17 +188,26 @@ describe('拆句拼接 · 该红的红、不该红的不红', () => {
     expect(r.issues[0]?.rightKey).toBe('b');
   });
 
-  it('★ 边界：`inline-block` / `inline-flex` **不算**块级边界（仍共行 ⇒ 该判）', () => {
-    const src = wrap(
-      '    <span>',
-      "      <span className=\"inline-block\">{t('a')}</span>",
-      '      ',
-      "      <span className=\"inline-flex\">{t('b')}</span>",
-      '    </span>',
-    );
-    const r = checkJsxSpacing({ file: 'f.tsx', source: src, catalog: FIX, lang: 'en' });
-    expect(r.issues.map((i) => i.kind)).toEqual(['glued']);
-  });
+  /*
+    ★ 边界 · **正向夹具**（team-lead 批 (A) 时的护栏第 3 条）：
+      「不含 inline-block / inline-flex / contents」这句**不能只写在注释里** ——
+      要变成**会红的断言**。否则以后有人顺手把某个类加进 `BLOCK_LAYOUT`，
+      **没有任何东西会红**，而那正是本表腐化成白名单的第一步。
+    判据：这几个类**都不脱流**（`inline-*` 仍在行内流里与相邻文字共行；
+    `contents` 让子项参与父级流）⇒ 跨它们的接缝**该判**（`glued`）。
+  */
+  for (const cls of ['inline-block', 'inline-flex', 'inline-grid', 'contents']) {
+    it(`★ 边界：\`${cls}\` **不算**块级边界（不脱流 ⇒ 那里的接缝该判）`, () => {
+      const src = wrap(
+        '    <span>',
+        `      <span className="${cls}">{t('a')}</span>`,
+        `      <span className="${cls}">{t('b')}</span>`,
+        '    </span>',
+      );
+      const r = checkJsxSpacing({ file: 'f.tsx', source: src, catalog: FIX, lang: 'en' });
+      expect(r.issues.map((i) => i.kind), `${cls} 被误当成块级边界 ⇒ 接缝漏判`).toEqual(['glued']);
+    });
+  }
 });
 
 describe('拆句拼接 · 同一条文本流里混着硬编码中文（英文态会露中文）', () => {

@@ -124,6 +124,25 @@ const JSX_FACTORIES = new Set(['jsx', 'jsxs', 'jsxDEV', '_jsx', '_jsxs', '_jsxDE
  *   · **不含** `inline-block` / `inline-flex` / `inline-grid` —— 它们仍在行内流里，
  *     与相邻文字共行 ⇒ 那里的接缝该判。
  *   · **不含** `contents`（子项参与父级流，不构成边界）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * ★★ 本表的**依据**（team-lead 2026-10-14 批 (A) 时的护栏第 1 条，必须写在文件里）★★
+ * ══════════════════════════════════════════════════════════════════════
+ * **依据是「CSS 语义」，不是「我们用过的类名」。** 上表每个 token 都是以
+ * 「它对应的 `display` 值会不会创建**块级格式化上下文 / 让元素脱离行内流**」判进来的：
+ *
+ *   block → block · flex → flex · grid → grid · table → table
+ *   flow-root → flow-root · list-item → list-item
+ *   absolute / fixed → position 脱流（盒子不再参与行内流，相邻文字按它不存在排）
+ *
+ * ⇒ **加 token 的规矩：先说清它对应的 `display` / `position` 值，再说它为什么脱流。**
+ *   ❌ 不许按「历史上哪些类名出现过」往里加 —— 那会让本表慢慢腐化成一张白名单，
+ *      正是本仓禁的那种（「带 allowlist 的守卫必然腐化」）。
+ *   ❌ 不许加 per-callsite 例外（「例外：某某组件」那一类）。
+ *   守卫：`tests/i18n-jsx-space.spec.ts` 有**两个方向**的夹具 ——
+ *     ① `block` 必须切断（且「同形状去掉 `block` 必须红」，防空过判据）；
+ *     ② `inline-block` / `inline-flex` / `contents` **必须不切断**（把「不含」从描述
+ *        变成会红的断言：以后有人顺手把它们加进上表，必然有一条红）。
  */
 const BLOCK_LAYOUT = new Set([
   'block',
