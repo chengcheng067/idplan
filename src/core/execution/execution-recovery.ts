@@ -354,6 +354,22 @@ async function recoverExecution(
 
     const events = await repo.listEvents(execution.id);
     const from = execution.status;
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * ★★ 落库文本的边界判据（team-lead 2026-10-14 裁定，写在写入点就地）★★
+     * ══════════════════════════════════════════════════════════════════════
+     * ① **下面这两条文本随「写入当时的语言」**（`reasons` 由渲染侧用 `t()` 取好传进来）
+     *    —— 不是恒中文。切语言后回看旧条目，看到的是「写入那一刻那种语言」。
+     * ② **它成立的前提有两条，缺一不可**：
+     *      · **没有任何逻辑依赖它**（只能被渲染：`AgentExecutionConsolePage` 的
+     *        `blockedReason` / `terminalReason` 两处）；
+     *      · **它的读者是人**（系统生成的一次性说明，不是被比较/导出/迁移的数据）。
+     * ③ **任何一条不满足 ⇒ 必须改成「存原因码 + 显示层映射」**
+     *    （例如有人想按这段文本做判断、或它被拿去比对/迁移）。
+     * ⚠️ **这个例外必须自带前提**：它**不是**「落库值都可以跟着语言变」的先例 ——
+     *    用户数据类（阶段预设名 / 色号名 / 日志分组键 / `operatorName` 兜底值）
+     *    仍然**一律不翻**（那批会被当数据用）。
+     */
     await repo.updateExecutionStatus(execution.id, {
       status: ExecutionStatus.NeedsAttention,
       blockedReason: reasons.execution,
