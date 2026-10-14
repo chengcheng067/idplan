@@ -47,7 +47,7 @@ import type { PluginManifest } from '../../core/plugin/types';
 import { isDesktop } from '../../lib/desktopBridge';
 import { cn } from '../../lib/cn';
 import { useProjectsStore } from '../../store/useProjectsStore';
-import { pluginFailureText, t as translate, useLang } from '../../i18n';
+import { pluginDisplayName, pluginDisplaySummary, pluginFailureText, t as translate, useLang } from '../../i18n';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { appEnv } from '../../config/env';
 import { API_TOKEN_KEY } from '../../core/repositories/remote/rest.client';
@@ -201,6 +201,16 @@ export function PluginsSection(): JSX.Element {
   const { t } = useLang();
   const reg = usePluginRegistry();
   const toast = useProjectsStore((s) => s.pushToast);
+
+  /**
+   * `id` → **界面显示名**（只有 id 而没有 manifest 对象时的入口）。
+   * 取词规则见 `src/i18n/labels.ts` 的 `pluginDisplayName()`：内置走消息表、自装原样。
+   * 找不到该 manifest 时回落 `id` 本身 —— **不编名字**（编了就看不出它其实不在清单里）。
+   */
+  const displayNameOf = (id: string): string => {
+    const m = reg.manifests.find((x) => x.id === id);
+    return m ? pluginDisplayName(m) : id;
+  };
   /**
    * 插件开关 = **本 NAS/本机的全局设置**，不是个人偏好：一个人拨一下，所有人的侧栏
    * 与路由都跟着变。故只有管理员能改（G3 · 用户已拍板走「管理员策略」）。
@@ -271,7 +281,7 @@ export function PluginsSection(): JSX.Element {
     setNotice(null);
     // 首次启用已安装插件（本地无同意标记）⇒ 先披露再开（手动拷目录的插件绕过了安装披露）
     if (next && reg.installedIds.has(id) && !hasAck(id)) {
-      setPending({ kind: 'enable', pluginId: id, name: reg.manifests.find((m) => m.id === id)?.name ?? id });
+      setPending({ kind: 'enable', pluginId: id, name: displayNameOf(id) });
       return;
     }
     await applyToggle(id, next);
@@ -324,7 +334,7 @@ export function PluginsSection(): JSX.Element {
           // 新插件是启用着的，而界面说过「默认关闭」。
           setError(
             t('plugin.err.installPartial', {
-              name: res.manifest.name,
+              name: pluginDisplayName(res.manifest),
               reason:
                 disabled.reason === 'conflict'
                   ? t('plugin.err.conflictShort')
@@ -335,12 +345,12 @@ export function PluginsSection(): JSX.Element {
         }
         setNotice(
           t('plugin.notice.installed', {
-            name: res.manifest.name,
+            name: pluginDisplayName(res.manifest),
             version: res.manifest.version,
             count: res.fileCount,
           }),
         );
-        toast('success', t('plugin.toast.installed', { name: res.manifest.name }));
+        toast('success', t('plugin.toast.installed', { name: pluginDisplayName(res.manifest) }));
       } catch {
         setError(t('plugin.err.installNoResponse'));
       } finally {
@@ -471,6 +481,9 @@ export function PluginsSection(): JSX.Element {
              * 这个插件有没有自己的设置区块（manifest 声明式给出，见 PluginManifest.settingsSlot）。
              * 没有 ⇒ 齿轮**置灰不隐藏**：「它没有自己的设置」是个该被看见的事实。
              */
+            /** 界面显示名/说明：内置走消息表、自装原样（core 的 manifest 一字不动，见 labels.ts） */
+            const displayName = pluginDisplayName(manifest);
+            const displaySummary = pluginDisplaySummary(manifest);
             const hasOwnSettings = Boolean(manifest.settingsSlot);
             const settingsExpanded = openSettings === manifest.id;
             return (
@@ -488,12 +501,12 @@ export function PluginsSection(): JSX.Element {
                 <div className="flex items-start gap-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[13px] font-medium text-ink">{manifest.name}</span>
+                      <span className="truncate text-[13px] font-medium text-ink">{displayName}</span>
                       <span className="shrink-0 font-mono text-[10px] text-mist">
                         v{manifest.version} · {sourceLabel(manifest)}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-mist">{manifest.summary}</p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-mist">{displaySummary}</p>
                     <p className="mt-0.5 text-[10px] text-mist">
                       {t('plugin.capLabel')}{capabilityText(manifest)}
                     </p>
@@ -511,13 +524,13 @@ export function PluginsSection(): JSX.Element {
                   {installed && (
                     <button
                       type="button"
-                      aria-label={t('plugin.uninstallAria', { name: manifest.name })}
+                      aria-label={t('plugin.uninstallAria', { name: displayName })}
                       data-plugin-uninstall={manifest.id}
                       disabled={busy}
                       onClick={() => {
                         setError(null);
                         setNotice(null);
-                        setUninstallTarget({ id: manifest.id, name: manifest.name });
+                        setUninstallTarget({ id: manifest.id, name: displayName });
                       }}
                       className={cn(
                         'mt-0.5 shrink-0 rounded-md p-1.5 text-mist transition-colors',
@@ -538,13 +551,13 @@ export function PluginsSection(): JSX.Element {
                   */}
                   <button
                     type="button"
-                    aria-label={t('plugin.settingsAria', { name: manifest.name })}
+                    aria-label={t('plugin.settingsAria', { name: displayName })}
                     data-plugin-settings={manifest.id}
                     aria-expanded={hasOwnSettings ? settingsExpanded : undefined}
                     disabled={!hasOwnSettings}
                     title={
                       hasOwnSettings
-                        ? t('plugin.settingsTitleOn', { name: manifest.name })
+                        ? t('plugin.settingsTitleOn', { name: displayName })
                         : t('plugin.settingsTitleOff')
                     }
                     onClick={() =>
@@ -572,7 +585,7 @@ export function PluginsSection(): JSX.Element {
                     role="switch"
                     aria-checked={enabled}
                     aria-label={t(enabled ? 'plugin.toggleAriaDisable' : 'plugin.toggleAriaEnable', {
-                      name: manifest.name,
+                      name: displayName,
                     })}
                     disabled={busy || !isAdmin}
                     data-plugin-toggle={manifest.id}
@@ -618,7 +631,7 @@ export function PluginsSection(): JSX.Element {
                       <PluginSettingsSlot pluginId={manifest.id} />
                     ) : (
                       <p className="text-[11px] leading-relaxed text-mist">
-                        {t('plugin.settingsDisabledHint', { name: manifest.name })}
+                        {t('plugin.settingsDisabledHint', { name: displayName })}
                       </p>
                     )}
                   </div>

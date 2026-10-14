@@ -534,7 +534,7 @@ describe('⑦ mergeInstalledManifests：装与开是两件事', () => {
     expect(merged[0].settingsSlot).toBeUndefined();
   });
 
-  it('entry / installVersion / minHostVersion 透传；summary 空则给默认文案', () => {
+  it('entry / installVersion / minHostVersion 透传；summary 空则落**空串**（人话由渲染层补）', () => {
     const merged = mergeInstalledManifests([], [
       installed('a', { entry: 'index.html', installVersion: '3.1.4', minHostVersion: '0.8.6' }),
       installed('b', { summary: '' }),
@@ -542,7 +542,19 @@ describe('⑦ mergeInstalledManifests：装与开是两件事', () => {
     expect(merged[0].entry).toBe('index.html');
     expect(merged[0].installVersion).toBe('3.1.4');
     expect(merged[0].minHostVersion).toBe('0.8.6');
-    expect(merged[1].summary).toBe('（作者未提供说明）');
+    /*
+     * ⚠️ 这条口径 2026-10-15 改过（英文补齐批 · 段 5 之三），**判据不放宽、而是变强**：
+     *   改动前 core 在这里写死中文兜底「（作者未提供说明）」—— 而 core **拿不到界面语言**
+     *   （不许 import i18n，会把 `lang.ts` 的 `document` 拖进无 DOM 的服务端 program），
+     *   于是英文界面上它永远显示中文。
+     *   现在 core 只落**空串**；同一句中文**逐字搬进了消息表** `plugin.noSummary`，
+     *   由渲染层的 `pluginDisplaySummary()` 补 —— 所以「默认中文」下用户看到的东西零变化。
+     *   ⇒ 断言从「等于那句中文」换成「等于空串 **且** 不含汉字」：后半句是**新增**的锁，
+     *     防止有人日后又把中文兜底写回 core。
+     *   取词链的逐条断言见 `tests/plugin-i18n-names.spec.tsx`。
+     */
+    expect(merged[1].summary).toBe('');
+    expect(merged[1].summary, 'core 里又出现了中文兜底').not.toMatch(/[\u3400-\u4dbf\u4e00-\u9fff]/);
   });
 
   it('内置清单原样在前、自装在后（顺序即展示序：随包在前、第三方在后）', () => {

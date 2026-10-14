@@ -25,7 +25,10 @@ import type { PluginCapability, PluginManifest } from './types';
 export interface InstalledPluginManifest {
   id: string;
   name: string;
-  /** 允许为空（作者不写说明时合并层给默认文案） */
+  /**
+   * 说明。**允许为空串**：作者不写时由渲染层补一句可翻译的占位（`t('plugin.noSummary')`）；
+   * core 自己**不写中文兜底**（它拿不到界面语言，写下的只会是中文一种形态）。
+   */
   summary: string;
   version: string;
   /** 入口文件（.html/.htm/.js/.mjs）——决定沙箱 iframe 的加载形态 */
@@ -75,7 +78,16 @@ export function mergeInstalledManifests(
     out.push({
       id: raw.id,
       name: raw.name,
-      summary: raw.summary || '（作者未提供说明）',
+      /*
+       * ⚠️ 作者没写说明 ⇒ 落**空串**，**不是**中文兜底句。
+       *   理由：core 不许 import i18n（会把 `lang.ts` 的 `document` 拖进无 DOM 的服务端 program ⇒
+       *   `typecheck:server` TS2584），所以这里写下的任何中文都**只会有中文一种形态** ——
+       *   那正是本批在消灭的东西。人话由渲染层补：`pluginDisplaySummary()` 遇空串取
+       *   `t('plugin.noSummary')`（键表见 `src/i18n/labels.ts`）。
+       *   ⚠️ 改动前这里写死的是「（作者未提供说明）」—— 那个字面量**逐字搬进了消息表**，
+       *      所以「默认中文」下用户看到的东西零变化。
+       */
+      summary: raw.summary || '',
       version: raw.version,
       source: 'member',
       // 口径①：强制 false，磁盘 manifest 没有发言权（写它也不认）

@@ -16,6 +16,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ComponentType, ReactNode } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
+import { ChangxiaErrorCode, coreError } from '../types/enums';
 import { useRepos } from '../../hooks/useRepos';
 import {
   describePluginState,
@@ -346,10 +347,21 @@ export function usePluginRegistry(): PluginRegistryValue {
       enabledManifests: enabledPlugins(unhydrated),
       routesFor: (host) => resolveRoutes(host, unhydrated),
       navItems: resolveNavItems(unhydrated),
+      /*
+       * ⚠️ 这里**必须**是 `coreError`（带 `messageKey`），不能是裸 `new Error(中文)`。
+       *   理由：`describeToggleFailure`（PluginsSection）对 `ChangxiaError` 走
+       *   `code` 分类 + `resolveErrorText`（**能出英文**），对其它 `Error` 只做
+       *   `t('plugin.toggleFail.generic', { reason: err.message })` —— 把**原始中文**
+       *   当参数插进英文句子里。改动前这条「无 Provider」降级档正是裸 `Error`，
+       *   所以在英文界面下它会吐一句中文。
+       * ⚠️ `code` 选 `Validation`：这是**宿主装配缺失**（不是存储失败、也不是网络失败）。
+       *   选 `Storage` 会让界面说「保存失败：存储…」—— 把「谁的问题」指错了人。
+       *   `Validation` 落到 UI 的 generic 支，配 `resolveErrorText` 的英文原因，语义正确。
+       */
       setPluginEnabled: async (): Promise<SetPluginEnabledResult> => ({
         ok: false,
         reason: 'failed',
-        error: new Error('插件注册表不可用（无 Provider），无法保存开关'),
+        error: coreError(ChangxiaErrorCode.Validation, 'coreErr.plugin.registryUnavailable'),
       }),
       // 无 Provider ⇒ 无 KV 可读 ⇒ 重读是**无害的空操作**（不是「假装成功」：
       // 本降级档的可观测状态本来就等同「未 hydrate」）。

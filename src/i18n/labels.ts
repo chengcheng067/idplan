@@ -590,3 +590,55 @@ export const MODE_COLLAPSED_KEYS: Readonly<Record<Lang, readonly AgentTermKey[]>
     'blockedBy', // 人话列 `Blocked by`（界面标签式大写）／技术列 `blocked by`（字段名原样小写）
   ],
 };
+
+/* ═══════════════════ 内置插件名/说明（`id` → 文案键）═══════════════════
+ *
+ * ── 为什么映射在**渲染层**、而不是把 core 的 manifest 中文翻掉（判 B 的理由，别改回去）──
+ * `PluginManifest.name` / `.summary` 是**同一个字段的两种来源**：
+ *   · 内置插件 —— 编译期 manifest（`src/core/plugin/builtin/*.manifest.ts`，中文写死）；
+ *   · 成员自装 —— **磁盘 manifest**（`userData/plugins/<id>/manifest.json`，作者自己写的任何语言）。
+ * 若只把内置那份翻成英文，同一个字段就**一半英文一半中文**：
+ * 自装插件的名字永远是作者原文（可能是"我的插件"），内置变成英文 —— 同一列里两种语言并排，
+ * 读者无法判断哪一种才是"正常形态"。⇒ **core 侧一个字不动**，由渲染层按 `id` 映射：
+ *   命中内置 id ⇒ 取消息表；未命中 ⇒ **原样**显示作者写的 `name` / `summary`。
+ *
+ * ── 与「码 → 键」那一族的同一个手法 ──
+ * 与 `PLUGIN_FAILURE_KEYS`（主进程只传码）、`CUSTOM_LIBRARY_HINT_KEYS`（`id` 当键）同款：
+ * **core 不许 import i18n**（会把 `lang.ts` 的 `document` 拖进无 DOM 的服务端 program ⇒
+ * `typecheck:server` TS2584）⇒ 一切"人话"都由本层按机器句柄取。
+ *
+ * ── 三条口径 ──
+ *   ① 未知 id（第三方 / 未来新增内置但忘了登记）**回落原文**，不写死中文兜底
+ *      （与 `pluginFailureText` 的「未知码原样回显码」同一条纪律：可见即错，便于发现遗漏）；
+ *   ② `summary` 为空串 ⇒ `t('plugin.noSummary')`：这一支是**本层补的**，
+ *      因为 core 的 `mergeInstalledManifests` 对「作者没写说明」只落 `''`
+ *      （它不许持有界面语言，也就不能自己写「（作者未提供说明）」这种中文）；
+ *   ③ 同本文件其余取词函数：**不是 hook、不订阅语言变化** ⇒ 调用它的组件必须调 `useLang()`。
+ */
+
+/** 内置插件的显示名（`id` → 消息键）。加内置插件时**必须同步加一行**，否则它在英文界面上是中文。 */
+export const PLUGIN_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
+  'sample-projects': 'plugin.builtin.sampleProjects.name',
+};
+
+/** 内置插件的说明（`id` → 消息键）；与 `PLUGIN_NAME_KEYS` 同 id 集合（有 spec 钉这条） */
+export const PLUGIN_SUMMARY_KEYS: Readonly<Record<string, MessageKey>> = {
+  'sample-projects': 'plugin.builtin.sampleProjects.summary',
+};
+
+/** 插件 manifest → **界面显示名**。内置走消息表；自装原样；两者都没有才回落 `id`。 */
+export function pluginDisplayName(manifest: { id: string; name: string }): string {
+  const key = PLUGIN_NAME_KEYS[manifest.id];
+  if (key !== undefined) return t(key);
+  return manifest.name || manifest.id;
+}
+
+/**
+ * 插件 manifest → **界面显示说明**。
+ * ⚠️ 空串 ⇒ `t('plugin.noSummary')`：core 侧对「作者没写说明」落的是 `''`（见口径②）。
+ */
+export function pluginDisplaySummary(manifest: { id: string; summary: string }): string {
+  const key = PLUGIN_SUMMARY_KEYS[manifest.id];
+  if (key !== undefined) return t(key);
+  return manifest.summary || t('plugin.noSummary');
+}

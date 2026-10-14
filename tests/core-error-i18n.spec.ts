@@ -270,6 +270,9 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   // 两个调用点共用同一键：① `runRescheduleStages` 原文**没有** `.trim()` ② `validateAgentCommand` 原文**有** `.trim()`
   //    ⇒ 两边都把「先拼好的那一截」当 `{detail}` 交进来（判据见 ⑤ 的调用点断言）
   ['coreErr.command.validationFailed', ChangxiaErrorCode.Validation, 'command 校验失败：stages.0 阶段名不能为空'],
+
+  /* ── 段 5 之四（宿主装配缺失）：基准值取自改动前 `PluginRegistryProvider.tsx` 的裸 `Error(...)` 原文 ── */
+  ['coreErr.plugin.registryUnavailable', ChangxiaErrorCode.Validation, '插件注册表不可用（无 Provider），无法保存开关'],
 ];
 
 /** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */
@@ -364,8 +367,21 @@ afterEach(resetLang);
 
 describe('① 三表不漂：载荷表 / 分片 zh / 分片 en', () => {
   it('★ 键集两两相等（载荷表 ⟺ 分片 zh ⟺ 本 spec 的点名表）', () => {
-    expect(Object.keys(CORE_ERROR_TEXT).sort(), '载荷表与分片 zh 键集不一致').toEqual(
-      Object.keys(zhTable).sort(),
+    /*
+     * ⚠️ 判据在 2026-10-15 收窄过一次（段 5 之二/之三），**不是为了放宽**：
+     *   本分片现在同时承载三个命名空间（`coreErr.*` 错误 / `colorWarn.*` 颜色警告 /
+     *   `plugin.*` 插件显示名 —— 分片是**按承接批次**分的，不是按键前缀分的），
+     *   所以「载荷表键集 === 分片**全部**键集」这条已经**不再成立**。
+     *   改成「载荷表键集 === 分片里 **`coreErr.` 前缀**的键集」：
+     *   钉住的仍是**原来那件事**（两侧一处增一处漏都会红），只是不再把别人的命名空间算进来。
+     *   ⇒ 强度不变：`CORE_ERROR_TEXT` 多一个键而分片没加、或分片加了 `coreErr.*` 而表里没有，
+     *     两个方向都照样红。
+     */
+    const shardErrKeys = Object.keys(zhTable)
+      .filter((k) => k.startsWith('coreErr.'))
+      .sort();
+    expect(Object.keys(CORE_ERROR_TEXT).sort(), '载荷表与分片 zh 的 coreErr.* 键集不一致').toEqual(
+      shardErrKeys,
     );
     expect(
       BASELINE.map(([k]) => k).sort(),

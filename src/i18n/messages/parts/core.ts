@@ -230,6 +230,23 @@ export const zh = {
   'colorWarn.darkBandTextLow': '暗色色带上的文字对比度不足（{ratio} < {min}），E1 回退搜索亦无解；请换主色（不建议落库半成品）。',
   'colorWarn.forcedBandShift': '暗色色带偏离了 R5 原生规则（改用比例 {ratios} 中的另一档）以满足文字对比度 ≥ {min}。',
   'colorWarn.unresolvableTriple': '该主色无法派生出「亮/暗两套都达标」的三层令牌；请改用其它主色。',
+
+  /*
+   * ── 段 5 之三/之四：插件名的界面显示 + 兜底句 + 宿主装配失败 ──
+   * ⚠️ 为什么 `plugin.*` 这一族键住在本分片（core 片）：
+   *    分片是**按承接批次分的**，不是按键前缀分的（另三片是 ui / print-ui / misc）。
+   *    本批的插件条目由本片承接（`src/core/plugin/**` 是这批的改动面），
+   *    而 `plugin.*` 的其余键住在主表 `messages/{zh,en}.ts` 里（那不是本片的改动面）。
+   *    主表与分片会在 `zh.ts` 里 spread 合并，**同键两处会撞**（有守卫），故加键前已核过不撞。
+   * 键 → 用途见 `src/i18n/labels.ts` 的 `PLUGIN_NAME_KEYS` / `PLUGIN_SUMMARY_KEYS` 一段。
+   */
+  'plugin.builtin.sampleProjects.name': '示例项目',
+  'plugin.builtin.sampleProjects.summary': '一键灌入 5 个行业的示例项目与任务，用来熟悉看板/月历/甘特',
+  /* ⚠️ 值与 core 侧改动前那句兜底**逐字相同**（`installed.ts` 原先写死的那句）——「默认中文」零变化 */
+  'plugin.noSummary': '（作者未提供说明）',
+
+  /* 段 5 之四：宿主装配缺失（无 Provider）——载荷表与本表逐字相等（有 spec 钉） */
+  'coreErr.plugin.registryUnavailable': '插件注册表不可用（无 Provider），无法保存开关',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -420,4 +437,13 @@ export const en = {
   'colorWarn.darkBandTextLow': 'Text on the dark band has insufficient contrast ({ratio} < {min}); the E1 fallback search found no solution either. Change the main color (do not persist a half-finished result).',
   'colorWarn.forcedBandShift': 'The dark band deviates from the native R5 rule (it uses another step from the ratios {ratios}) to reach a text contrast of at least {min}.',
   'colorWarn.unresolvableTriple': 'This main color cannot derive a three-layer token set where both the light and dark variants pass; use a different main color.',
+
+  /* ── 段 5 之三/之四：插件名的界面显示 + 兜底句 ── */
+  'plugin.builtin.sampleProjects.name': 'Sample projects',
+  'plugin.builtin.sampleProjects.summary': 'Load sample projects and tasks from 5 industries in one click, to get familiar with the board, calendar and Gantt',
+  'plugin.noSummary': '(no description provided by the author)',
+
+  /* 段 5 之四：宿主装配缺失（无 Provider） */
+  'coreErr.plugin.registryUnavailable':
+    'The plugin registry is unavailable (no Provider), so this switch cannot be saved.',
 } as const;

@@ -188,10 +188,19 @@ afterEach(() => setLang('zh'));
 
 describe('色板警告 · ① 三表不漂（载荷表 / 分片 zh / 分片 en）', () => {
   it('★ 键集两两相等，且与本文件的基准表逐键对齐', () => {
-    expect(Object.keys(CORE_WARN_TEXT).sort(), '载荷表与分片 zh 键集不一致').toEqual(
-      KEYS.filter((k) => k in zhTable).sort(),
+    // 判据与 `core-error-i18n.spec.ts` ① 同款、同一次收窄：本分片同时承载三个命名空间
+    // （`coreErr.*` / `colorWarn.*` / `plugin.*`），故按**本表的前缀**取分片侧键集。
+    // 强度不变：两侧一处增一处漏都红。
+    const shardWarnKeys = Object.keys(zhTable)
+      .filter((k) => k.startsWith('colorWarn.'))
+      .sort();
+    expect(Object.keys(CORE_WARN_TEXT).sort(), '载荷表与分片 zh 的 colorWarn.* 键集不一致').toEqual(
+      shardWarnKeys,
     );
-    expect(Object.keys(enTable).filter((k) => k.startsWith('colorWarn.')).sort()).toEqual(KEYS.slice().sort());
+    expect(KEYS.slice().sort(), 'BASELINE 与载荷表键集不一致').toEqual(Object.keys(CORE_WARN_TEXT).sort());
+    expect(Object.keys(enTable).filter((k) => k.startsWith('colorWarn.')).sort()).toEqual(
+      Object.keys(CORE_WARN_TEXT).sort(),
+    );
   });
 
   it('★ zh 取值逐字相等：载荷表 === 分片 zh', () => {

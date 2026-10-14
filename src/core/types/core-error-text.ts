@@ -224,6 +224,9 @@ export const CORE_ERROR_TEXT = {
   'coreErr.remote.httpError': '服务端错误（HTTP {status}）',
   'coreErr.remote.baseUrlRequired': '启用 remote 数据源时必须配置 VITE_API_BASE_URL。',
   'coreErr.command.validationFailed': 'command 校验失败：{detail}',
+
+  /* ── 段 5 之四：宿主装配缺失（无 Provider ⇒ 插件开关存不下来） ── */
+  'coreErr.plugin.registryUnavailable': '插件注册表不可用（无 Provider），无法保存开关',
 } as const;
 
 /** 机器可读的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */
