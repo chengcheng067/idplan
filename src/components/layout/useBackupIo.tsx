@@ -205,8 +205,14 @@ export function useBackupIo(): BackupIo {
         confirmText={pendingSource === 'demo' ? t('backup.dialog.confirmLoad') : t('backup.dialog.confirmRestore')}
         /* 语言无关定位钩子（i18n-EN 批）：真机 spec 原先按
            `[role="dialog"][aria-label="载入示例项目"]` 定位 ⇒ 英文态失配。
-           取值区分两种来源（demo / restore）—— 同一个组件承担两个语义。 */
-        dataAttrs={{ 'data-backup-confirm': pendingSource ?? 'restore' }}
+           取值区分两种来源（file / demo）—— 同一个组件承担两个语义。 */
+        /* ⚠️ 2026-10-15 订正：原写 `pendingSource ?? 'restore'`，而 `pendingSource` 是
+           `useState<'file' | 'demo'>('file')`（:88）—— **永不 nullish**，
+           那个 `?? 'restore'` 是**不可达的死兜底**，且它把取值说成第三种可能。
+           实测后果：夜批有 9 份 spec 据此写 `[data-backup-confirm="restore"]`，
+           而文件恢复路径的真实取值是 `'file'` ⇒ 定位器**永不命中**，
+           表现为 hook 超时 / 整份 spec 静默死掉。⇒ 取值就是 `pendingSource` 本身。 */
+        dataAttrs={{ 'data-backup-confirm': pendingSource }}
         onConfirm={() => void onConfirmRestore()}
         onCancel={() => setConfirmOpen(false)}
       >
