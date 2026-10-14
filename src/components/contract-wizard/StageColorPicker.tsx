@@ -34,9 +34,16 @@ import { stageColorAttrs } from '../timeline/stageColorKey';
 import { normalizeHex } from '../../core/color/contrast';
 import { deriveAndValidate } from '../../core/color/derive-stage-colors';
 import { SWATCH_COLOR_INDEXES, builtinSolidHex } from './stage-color-bridge';
+/* ★ i18n 笔 misc：render 期取词走 `useLang()` 的 `t`（订阅语言变化）。 */
+import { useLang } from '../../i18n';
 
-/** 9 个内置色全部被占用时的建议文案（PRD A10 ②：措辞是「建议自定义一个颜色」，不是「色板已用尽」） */
-export const BUILTIN_COLORS_EXHAUSTED_HINT = '已用 9 个内置色，建议自定义一个颜色以便区分';
+/*
+ * 原 `BUILTIN_COLORS_EXHAUSTED_HINT` 常量（「已用 9 个内置色，建议自定义一个颜色以便区分」）
+ * 已**退役**：模块级常量会把语言冻在 import 那一刻，而它只在下面 render 期上屏。
+ * 文案移到消息表键 `wizard.colorsExhaustedHint`（PRD A10 ② 的措辞口径不变：
+ * 是「建议自定义一个颜色」，不是「色板已用尽」）。
+ * 退役前已 grep 全仓：该导出**零消费方**（src/ 与 tests/ 都无引用）。
+ */
 
 /** 取色器的受控值：内置色号与自定义主色**互斥**（后者优先） */
 export interface StageColorValue {
@@ -56,6 +63,8 @@ export function StageColorPicker({
   builtinExhausted?: boolean;
   testId?: string;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   const { customColor, colorIndex } = value;
 
   // 校验提示：一律取 T02 的派生结果（含「非法主色 ⇒ unresolvable」这一码）
@@ -84,17 +93,21 @@ export function StageColorPicker({
   return (
     <div className="space-y-2" data-testid={testId}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-mist">阶段颜色</span>
+        <span className="text-xs font-medium text-mist">{t('wizard.stageColorLabel')}</span>
 
         {/* 调色板：内置 9 色（点选 = 用内置色号，清掉自定义色） */}
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="内置色板">
+        <div
+          className="flex flex-wrap items-center gap-1"
+          role="group"
+          aria-label={t('wizard.builtinPaletteAria')}
+        >
           {SWATCH_COLOR_INDEXES.map((index) => {
             const active = customColor === null && colorIndex === index;
             return (
               <button
                 key={index}
                 type="button"
-                aria-label={`调色板 ${index}`}
+                aria-label={t('wizard.paletteSwatchAria', { index })}
                 aria-pressed={active}
                 onClick={() => onChange({ customColor: null, colorIndex: index })}
                 style={{ backgroundColor: stageSolidColor(index, index) }}
@@ -111,7 +124,10 @@ export function StageColorPicker({
           <Pipette size={13} className="text-mist" aria-hidden />
           <input
             type="color"
-            aria-label="取色器"
+            aria-label={t('wizard.colorPickerAria')}
+            // ★ 语言无关定位钩子（i18n 笔 misc 同批）：aria 已走消息表 ⇒ 英文态
+            //   取值变了，`[aria-label="取色器"]` 会静默失配。
+            data-stage-color-input=""
             value={pickerValue}
             onChange={(e) => {
               // 脏值丢弃：原生控件正常只吐 `#rrggbb`，此处是**防御**（程序化赋值 / 异常实现）。
@@ -128,11 +144,13 @@ export function StageColorPicker({
         {customColor !== null && (
           <button
             type="button"
-            aria-label="取消自定义颜色"
+            aria-label={t('wizard.resetCustomColorAria')}
+            // ★ 语言无关定位钩子（同上）
+            data-stage-color-reset=""
             onClick={() => onChange({ customColor: null, colorIndex })}
             className="inline-flex items-center gap-1 rounded-md border border-line bg-cream px-1.5 py-0.5 text-xs text-mist hover:bg-sand"
           >
-            <CircleOff size={13} aria-hidden /> 用内置色
+            <CircleOff size={13} aria-hidden />{' '}{t('wizard.useBuiltinColor')}
           </button>
         )}
 
@@ -143,7 +161,7 @@ export function StageColorPicker({
           style={preview}
           className="rounded px-2 py-0.5 text-xs"
         >
-          示例文字
+          {t('wizard.swatchSampleText')}
         </span>
       </div>
 
@@ -161,7 +179,7 @@ export function StageColorPicker({
       {/* 9 个内置色用尽 → 建议自定义色（A10 ②，措辞与「色板已用尽」区分开） */}
       {builtinExhausted && (
         <p data-testid={`${testId}-exhausted`} className="text-[11px] leading-4 text-mist">
-          {BUILTIN_COLORS_EXHAUSTED_HINT}
+          {t('wizard.colorsExhaustedHint')}
         </p>
       )}
     </div>

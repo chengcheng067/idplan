@@ -351,13 +351,13 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     // 自定义阶段入口只在**建档路径**挂载（本表单就是建档路径）
     await click(btn('新增自定义阶段'));
     const nameInput = document.querySelector(
-      'input[aria-label="自定义阶段名称"]',
+      'input[data-custom-stage-name]',
     ) as HTMLInputElement;
     expect(nameInput).toBeTruthy();
     await setInputValue(nameInput, '消防报审');
 
     // 取自定义色 → 草稿携带 customColor（大写归一）
-    const picker = document.querySelector('input[aria-label="取色器"]') as HTMLInputElement;
+    const picker = document.querySelector('input[data-stage-color-input]') as HTMLInputElement;
     expect(picker).toBeTruthy();
     await setInputValue(picker, '#7a1f2b');
 
@@ -390,7 +390,7 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     await pickDomain('indoor');
     await click(btn('新增自定义阶段'));
     await setInputValue(
-      document.querySelector('input[aria-label="自定义阶段名称"]') as HTMLInputElement,
+      document.querySelector('input[data-custom-stage-name]') as HTMLInputElement,
       '消防报审',
     );
     await click(btn('确认新增自定义阶段'));
@@ -411,7 +411,7 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     // 用与已选第 1 段同名的名字新增 —— 弹窗必须即刻拦住
     await click(btn('新增自定义阶段'));
     await setInputValue(
-      document.querySelector('input[aria-label="自定义阶段名称"]') as HTMLInputElement,
+      document.querySelector('input[data-custom-stage-name]') as HTMLInputElement,
       firstStageName,
     );
     // ① 行内提示（判据与落库闸门同源：`duplicateStageNames` / `isDuplicateStageName`）

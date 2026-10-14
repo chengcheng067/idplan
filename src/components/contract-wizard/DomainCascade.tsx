@@ -31,6 +31,10 @@ import {
   isUmbrellaGroup,
 } from '../../core/template/stage-library';
 import type { StageTemplateDomain } from '../../core/types/dto';
+/* ★ i18n 笔 misc：render 期取词走 `useLang()` 的 `t`（订阅语言变化）。
+   ⚠️ 板块**显示名**（室内/景观/…）由 `domainLabel()` 提供，它自己不订阅 ——
+   重渲染由本组件的 `useLang()` 负责（纪律见 `src/i18n/labels.ts` 头注释）。 */
+import { useLang } from '../../i18n';
 
 /** 板块中文标签（UI 文案唯一出处；阶段池分组标题也从这里取，避免两处各写一份） */
 
@@ -103,6 +107,8 @@ export function DomainCascade({
   onChange(next: DomainCascadeValue): void;
   testId?: string;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   const groups = getIndustryGroups();
   const usableDomains = getUsableDomains();
   const umbrella = value.groupKey !== null && isUmbrellaGroup(value.groupKey);
@@ -157,7 +163,7 @@ export function DomainCascade({
     <div className="space-y-3" data-testid={testId}>
       {/* ── 第 1 层：行业大类 / 一级板块 ── */}
       <div>
-        <p className="mb-1.5 text-xs font-medium text-mist">① 行业</p>
+        <p className="mb-1.5 text-xs font-medium text-mist">{t('wizard.step1Industry')}</p>
         <div className="flex flex-wrap gap-1.5">
           {groups.map((g) => {
             const active = value.groupKey === g.key;
@@ -166,7 +172,7 @@ export function DomainCascade({
               <button
                 key={g.key}
                 type="button"
-                aria-label={`行业 ${g.name}`}
+                aria-label={t('wizard.industryAria', { name: g.name })}
                 aria-pressed={active}
                 onClick={() => pickGroup(g.key)}
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
@@ -196,7 +202,7 @@ export function DomainCascade({
       {(umbrella || value.groupKey === null) && (
         <div data-testid={`${testId}-layer2`}>
           <label className="mb-1.5 block text-xs font-medium text-mist" htmlFor={`${testId}-domain`}>
-            ② 主板块（决定快捷套餐与看板归属）
+            {t('wizard.step2MainDomain')}
           </label>
           {/*
             ★ v0.8.5（她截图 #8：「选行业弹出的选项没有统一的 ui 设计」）：
@@ -217,9 +223,7 @@ export function DomainCascade({
       {/* ── 第 3 层：关联板块（多选，仅伞形大类下出现；用于跨大类） ── */}
       {umbrella && (
         <div data-testid={`${testId}-layer3`}>
-          <p className="mb-1.5 text-xs font-medium text-mist">
-            ③ 关联板块（可选，用于同时看到别的行业阶段）
-          </p>
+          <p className="mb-1.5 text-xs font-medium text-mist">{t('wizard.step3Related')}</p>
           <div className="flex flex-wrap gap-1.5">
             {relatedCandidatesOf(value).map((d) => {
               const active = value.relatedDomains.includes(d);
@@ -227,7 +231,7 @@ export function DomainCascade({
                 <button
                   key={d}
                   type="button"
-                  aria-label={`关联板块 ${domainLabel(d)}`}
+                  aria-label={t('wizard.relatedDomainAria', { name: domainLabel(d) })}
                   aria-pressed={active}
                   onClick={() => toggleRelated(d)}
                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
@@ -247,11 +251,13 @@ export function DomainCascade({
 
       {/* 池子范围回显（用户能看到「现在池子里有哪些行业的阶段」） */}
       <p className="text-[11px] leading-4 text-mist" data-testid={`${testId}-visible-domains`}>
-        阶段池范围：
+        {t('wizard.poolScope')}
         {visibleDomainsOf(value).length === 0
-          ? '未限定（全部行业）'
+          ? t('wizard.poolScopeAll')
           : visibleDomainsOf(value).map(domainLabel).join(' / ')}
-        {groupDomains.length > 1 ? `（${groupDomains.length} 个分组）` : ''}
+        {groupDomains.length > 1
+          ? t('wizard.poolScopeGroups', { count: groupDomains.length })
+          : ''}
       </p>
     </div>
   );

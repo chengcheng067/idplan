@@ -20,6 +20,8 @@ import { X } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
+/* ★ i18n 笔 misc：render 期取词走 `useLang()` 的 `t`（订阅语言变化）。 */
+import { useLang } from '../../i18n';
 import { StageColorPicker, type StageColorValue } from './StageColorPicker';
 
 /** 弹窗产出（父组件据此落库 / 记入复用库，本组件不碰仓储） */
@@ -61,6 +63,8 @@ export function CustomStageDialog({
   /** 9 个内置色已全部占用 → 建议自定义颜色（A10 ②） */
   builtinExhausted?: boolean;
 }): JSX.Element | null {
+  /** 取词 + 语言变化订阅点（**必须在 `if (!open) return null` 之前**） */
+  const { t } = useLang();
   const [name, setName] = useState('');
   const [ratioText, setRatioText] = useState('');
   const [color, setColor] = useState<StageColorValue>({
@@ -103,15 +107,15 @@ export function CustomStageDialog({
   };
 
   return (
-    <Modal open={open} onClose={onClose} ariaLabel="新增自定义阶段">
+    <Modal open={open} onClose={onClose} ariaLabel={t('wizard.addCustomStageAria')}>
       <div className="glass-strong iridescent-border dialog-pop flex w-full max-w-md flex-col rounded-2xl shadow-soft">
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-display text-display-md">新增自定义阶段</h3>
+            <h3 className="font-display text-display-md">{t('wizard.addCustomStageAria')}</h3>
             <button
               type="button"
               onClick={onClose}
-              aria-label="取消新增自定义阶段"
+              aria-label={t('wizard.cancelAddCustomStageAria')}
               className="rounded-md p-1 text-mist hover:bg-sand"
             >
               <X size={16} />
@@ -120,12 +124,15 @@ export function CustomStageDialog({
 
           <div className="space-y-3">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">阶段名称 *</span>
+              <span className="mb-1 block font-medium">{t('wizard.fieldStageName')}</span>
               <ImeInput
                 value={name}
-                aria-label="自定义阶段名称"
+                aria-label={t('wizard.customStageNameAria')}
+                // ★ 语言无关定位钩子（i18n 笔 misc 同批）：aria 已走消息表，
+                //   英文态取值变了 ⇒ `[aria-label="自定义阶段名称"]` 会静默失配。
+                data-custom-stage-name=""
                 onChange={(e) => setName(e.target.value)}
-                placeholder="如「消防报审」"
+                placeholder={t('wizard.customStageNamePlaceholder')}
                 className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
               />
             </label>
@@ -133,25 +140,25 @@ export function CustomStageDialog({
             {/* 行内校验提示（A9）：重名 / 空名都阻止提交 */}
             {submitted && nameEmpty && (
               <p data-testid="custom-stage-name-error" className="text-sm leading-6 text-clay">
-                请填写阶段名称。
+                {t('wizard.errStageNameRequired')}
               </p>
             )}
             {duplicate && (
               <p data-testid="custom-stage-duplicate-error" className="text-sm leading-6 text-clay">
-                已有同名阶段「{name.trim()}」，阶段名不能重复。
+                {t('wizard.errDuplicateName', { name: name.trim() })}
               </p>
             )}
 
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">工作量占比（%）</span>
+              <span className="mb-1 block font-medium">{t('wizard.fieldRatio')}</span>
               <ImeInput
                 value={ratioText}
-                aria-label="自定义阶段占比"
+                aria-label={t('wizard.ratioAria')}
                 inputMode="numeric"
                 placeholder={
                   defaultRatioPercent !== undefined
-                    ? `留空按已选阶段平均值 ${defaultRatioPercent}%`
-                    : '留空按平均值'
+                    ? t('wizard.ratioPlaceholderAvg', { percent: defaultRatioPercent })
+                    : t('wizard.ratioPlaceholder')
                 }
                 onChange={(e) => setRatioText(e.target.value)}
                 className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
@@ -166,8 +173,7 @@ export function CustomStageDialog({
             />
 
             <p className="rounded-md border border-line bg-cream/50 p-2 text-[11px] leading-4 text-mist">
-              自定义阶段会以「无模板」形式落库（按序号均分到看板列），并按你选的颜色在
-              时间轴 / 月历 / 打印稿中一致显示。
+              {t('wizard.customStageNotice')}
             </p>
           </div>
 
@@ -177,11 +183,11 @@ export function CustomStageDialog({
               onClick={onClose}
               className="rounded-md border border-line bg-cream px-3 py-1.5 text-sm text-ink hover:bg-sand"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
-              aria-label="确认新增自定义阶段"
+              aria-label={t('wizard.confirmAddCustomStageAria')}
               /*
                * 用 `aria-disabled` 而不是原生 `disabled`：
                *   ① 原生 disabled 的按钮**不派发 click**，于是 `submitted && nameEmpty`
@@ -199,7 +205,7 @@ export function CustomStageDialog({
                   : 'bg-pine hover:bg-pine-deep'
               }`}
             >
-              新增
+              {t('wizard.add')}
             </button>
           </div>
         </div>

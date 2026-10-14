@@ -45,6 +45,11 @@ import type { LucideIcon } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { cn } from '../../lib/cn';
+/* ★ i18n 笔 misc：render 期取词走 `useLang()` 的 `t`（订阅语言变化）。
+   ⚠️ 本文件里那个 `const t = window.setTimeout(...)` 已改名 `timer` ——
+   它会**遮蔽**取词函数（同名 block 作用域），将来在那段 effect 里加一句取词
+   就会静默取到数字、当场类型错。 */
+import { useLang } from '../../i18n';
 import { getIndustryGroups, getUsableDomains, domainLabel } from '../../core/template/stage-library';
 import type { StageTemplateDomain } from '../../core/types/dto';
 
@@ -105,6 +110,8 @@ export function IndustrySelect({
   id?: string;
   className?: string;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -182,8 +189,8 @@ export function IndustrySelect({
     setCursor(idx >= 0 ? idx : 0);
     setQuery('');
     // 焦点移入面板容器（Modal 的焦点圈禁以面板为边界）
-    const t = window.setTimeout(() => panelRef.current?.focus(), 0);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => panelRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -257,7 +264,7 @@ export function IndustrySelect({
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label="主板块"
+        aria-label={t('wizard.mainDomainAria')}
         data-industry-select-trigger=""
         onClick={() => setOpen((v) => !v)}
         className={cn(
@@ -269,7 +276,7 @@ export function IndustrySelect({
       >
         <SelectedIcon size={16} className={cn('shrink-0', value ? 'text-mist' : 'text-mist')} aria-hidden />
         <span className={cn('truncate', value ? 'text-ink' : 'text-mist')}>
-          {value ? domainLabel(value) : '请选择主板块'}
+          {value ? domainLabel(value) : t('wizard.pickMainDomainPlaceholder')}
         </span>
         <ChevronDown
           size={14}
@@ -281,13 +288,18 @@ export function IndustrySelect({
         />
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} placement="dropdown" ariaLabel="选择主板块">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        placement="dropdown"
+        ariaLabel={t('wizard.selectMainDomainAria')}
+      >
         {/* 面板：fixed 锚定触发钮；z 由 Modal overlay（z-[75]）承载 */}
         <div
           ref={panelRef}
           role="listbox"
           tabIndex={-1}
-          aria-label="主板块选项"
+          aria-label={t('wizard.mainDomainOptionsAria')}
           data-industry-select-panel=""
           onKeyDown={onPanelKeyDown}
           style={
@@ -308,8 +320,8 @@ export function IndustrySelect({
                     setQuery(e.target.value);
                     setCursor(0);
                   }}
-                  placeholder="搜索板块…"
-                  aria-label="搜索板块"
+                  placeholder={t('wizard.searchDomainPlaceholder')}
+                  aria-label={t('wizard.searchDomainAria')}
                   className="w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-mist"
                 />
               </div>
@@ -317,7 +329,9 @@ export function IndustrySelect({
           )}
 
           {filtered.length === 0 && (
-            <div className="px-2 py-3 text-center text-[13px] text-mist">没有匹配的板块</div>
+            <div className="px-2 py-3 text-center text-[13px] text-mist">
+              {t('wizard.noMatchingDomain')}
+            </div>
           )}
 
           {filtered.map((row, i) => {
@@ -352,7 +366,7 @@ export function IndustrySelect({
                   )}
                 >
                   <CircleSlash size={14} className="shrink-0" aria-hidden />
-                  <span className="flex-1 truncate">不指定板块</span>
+                  <span className="flex-1 truncate">{t('wizard.noDomainOption')}</span>
                   {selected && <Check size={14} className="shrink-0 text-pine" aria-hidden />}
                 </div>
               );

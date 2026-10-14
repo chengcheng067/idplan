@@ -179,6 +179,54 @@ export const zh = {
   'wizard.pickDomainHint':
     '请先在上方「行业大类 → 主板块」里选定主板块，阶段池与套餐会按该板块列出。',
   'wizard.createButton': '建档（按所选 {count} 个阶段切分）',
+
+  /* 自定义阶段弹窗（CustomStageDialog）：标题 / 字段 / 校验 / 说明 / 两钮 */
+  'wizard.cancelAddCustomStageAria': '取消新增自定义阶段',
+  'wizard.fieldStageName': '阶段名称 *',
+  'wizard.customStageNameAria': '自定义阶段名称',
+  'wizard.customStageNamePlaceholder': '如「消防报审」',
+  'wizard.errStageNameRequired': '请填写阶段名称。',
+  'wizard.errDuplicateName': '已有同名阶段「{name}」，阶段名不能重复。',
+  'wizard.fieldRatio': '工作量占比（%）',
+  'wizard.ratioAria': '自定义阶段占比',
+  'wizard.ratioPlaceholderAvg': '留空按已选阶段平均值 {percent}%',
+  'wizard.ratioPlaceholder': '留空按平均值',
+  'wizard.customStageNotice':
+    '自定义阶段会以「无模板」形式落库（按序号均分到看板列），并按你选的颜色在 时间轴 / 月历 / 打印稿中一致显示。',
+  'wizard.confirmAddCustomStageAria': '确认新增自定义阶段',
+  'wizard.add': '新增',
+
+  /* 阶段取色器（StageColorPicker）：标签 / 色板 aria / 取色器 / 清除 / 预览 / 用尽提示 */
+  'wizard.stageColorLabel': '阶段颜色',
+  'wizard.builtinPaletteAria': '内置色板',
+  'wizard.paletteSwatchAria': '调色板 {index}',
+  'wizard.colorPickerAria': '取色器',
+  'wizard.resetCustomColorAria': '取消自定义颜色',
+  'wizard.useBuiltinColor': '用内置色',
+  'wizard.swatchSampleText': '示例文字',
+  'wizard.colorsExhaustedHint': '已用 9 个内置色，建议自定义一个颜色以便区分',
+
+  /* 主板块下拉（IndustrySelect）：触发钮 / 面板 / 搜索 / 空态 / 「不指定」选项
+     ⚠️ `IndustrySelect.tsx` 里 `'不指定'.includes(q)` 那处是**搜索关键词**（B 类落库/逻辑值），
+     本批**未动**；这里翻的是**上屏标签**。 */
+  'wizard.mainDomainAria': '主板块',
+  'wizard.pickMainDomainPlaceholder': '请选择主板块',
+  'wizard.selectMainDomainAria': '选择主板块',
+  'wizard.mainDomainOptionsAria': '主板块选项',
+  'wizard.searchDomainPlaceholder': '搜索板块…',
+  'wizard.searchDomainAria': '搜索板块',
+  'wizard.noMatchingDomain': '没有匹配的板块',
+  'wizard.noDomainOption': '不指定板块',
+
+  /* 三层级联（DomainCascade）：三步标题 / 两层 aria / 池子范围回显 */
+  'wizard.step1Industry': '① 行业',
+  'wizard.industryAria': '行业 {name}',
+  'wizard.step2MainDomain': '② 主板块（决定快捷套餐与看板归属）',
+  'wizard.step3Related': '③ 关联板块（可选，用于同时看到别的行业阶段）',
+  'wizard.relatedDomainAria': '关联板块 {name}',
+  'wizard.poolScope': '阶段池范围：',
+  'wizard.poolScopeAll': '未限定（全部行业）',
+  'wizard.poolScopeGroups': '（{count} 个分组）',
 } as const;
 
 /**
@@ -337,4 +385,51 @@ export const en = {
   'wizard.pickDomainHint':
     'Choose a main board under “Industry → Main board” above; the stage pool and presets will then be listed for that board.',
   'wizard.createButton': 'Create project (split into the {count} stages selected)',
+
+  'wizard.cancelAddCustomStageAria': 'Cancel adding a custom stage',
+  'wizard.fieldStageName': 'Stage name *',
+  'wizard.customStageNameAria': 'Custom stage name',
+  'wizard.customStageNamePlaceholder': 'e.g. “Fire permit review”',
+  'wizard.errStageNameRequired': 'Please enter a stage name.',
+  'wizard.errDuplicateName':
+    'A stage named “{name}” already exists — stage names must be unique.',
+  'wizard.fieldRatio': 'Share of workload (%)',
+  'wizard.ratioAria': 'Custom stage share',
+  'wizard.ratioPlaceholderAvg': 'Blank uses the average of the selected stages, {percent}%',
+  'wizard.ratioPlaceholder': 'Blank uses the average',
+  'wizard.customStageNotice':
+    'Custom stages are stored as having no template (spread across kanban columns by order) and use the color you pick consistently in the timeline / calendar / printouts.',
+  'wizard.confirmAddCustomStageAria': 'Confirm adding the custom stage',
+  'wizard.add': 'Add',
+
+  'wizard.stageColorLabel': 'Stage color',
+  'wizard.builtinPaletteAria': 'Built-in palette',
+  'wizard.paletteSwatchAria': 'Palette {index}',
+  'wizard.colorPickerAria': 'Color picker',
+  'wizard.resetCustomColorAria': 'Clear custom color',
+  'wizard.useBuiltinColor': 'Use built-in color',
+  'wizard.swatchSampleText': 'Sample text',
+  'wizard.colorsExhaustedHint':
+    'All 9 built-in colors are in use — pick a custom color to tell them apart',
+
+  'wizard.mainDomainAria': 'Main board',
+  'wizard.pickMainDomainPlaceholder': 'Choose a main board',
+  'wizard.selectMainDomainAria': 'Select main board',
+  'wizard.mainDomainOptionsAria': 'Main board options',
+  'wizard.searchDomainPlaceholder': 'Search boards…',
+  'wizard.searchDomainAria': 'Search boards',
+  'wizard.noMatchingDomain': 'No matching boards',
+  'wizard.noDomainOption': 'No main board',
+
+  'wizard.step1Industry': '① Industry',
+  'wizard.industryAria': 'Industry {name}',
+  'wizard.step2MainDomain': '② Main board (determines quick presets and kanban grouping)',
+  'wizard.step3Related':
+    '③ Related boards (optional — to see stages from other industries too)',
+  'wizard.relatedDomainAria': 'Related board {name}',
+  /* 这两条的**段尾/前导空格**是刻意的：它们与相邻取值拼成一句（见 en.ts 文件头 ⑤）。
+     `poolScope` 尾空格分开冒号与后半句；`poolScopeGroups` 前导空格分开板块清单与括号。 */
+  'wizard.poolScope': 'Stage pool covers: ',
+  'wizard.poolScopeAll': 'unrestricted (all industries)',
+  'wizard.poolScopeGroups': ' ({count} groups)',
 } as const;

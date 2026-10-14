@@ -629,7 +629,7 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
   }
 
   async function typeName(value: string): Promise<void> {
-    const input = document.querySelector('input[aria-label="自定义阶段名称"]') as HTMLInputElement;
+    const input = document.querySelector('input[data-custom-stage-name]') as HTMLInputElement;
     expect(input).not.toBeNull();
     await setInputValue(input, value);
   }
@@ -683,7 +683,7 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
       root.render(<DialogHarness existingNames={[]} onSubmit={(d) => (submitted = d)} />),
     );
     await typeName('消防报审');
-    const picker = document.querySelector('input[aria-label="取色器"]') as HTMLInputElement;
+    const picker = document.querySelector('input[data-stage-color-input]') as HTMLInputElement;
     expect(picker).not.toBeNull();
     await setInputValue(picker, '#7a1f2b');
     await click(btn('确认新增自定义阶段'));
@@ -716,17 +716,17 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
       root.render(<DialogHarness existingNames={[]} onSubmit={(d) => (submitted = d)} />),
     );
     await typeName('消防报审');
-    const picker = document.querySelector('input[aria-label="取色器"]') as HTMLInputElement;
+    const picker = document.querySelector('input[data-stage-color-input]') as HTMLInputElement;
 
     // 前置（否则本用例可能假绿）：「脏值注入」这条通道必须先被证明是活的 ——
     // 用一个**合法**值走同一条路，写得进去才说明 onChange 真被调到了；
     // 否则结尾的 `customColor === null` 可能只是「通道根本没通」。
     await setRawInputValue(picker, '#7a1f2b');
-    expect(document.querySelector('button[aria-label="取消自定义颜色"]')).not.toBeNull();
+    expect(document.querySelector('[data-stage-color-reset]')).not.toBeNull();
 
     // 复位成「无自定义色」（等价于用户点「用内置色」）
-    await click(btn('取消自定义颜色'));
-    expect(document.querySelector('button[aria-label="取消自定义颜色"]')).toBeNull();
+    await click(document.querySelector('[data-stage-color-reset]') as HTMLButtonElement);
+    expect(document.querySelector('[data-stage-color-reset]')).toBeNull();
 
     // 正题：非法值必须被丢弃 —— 既不写入，也不把 colorIndex 弄坏
     await setRawInputValue(picker, 'not-a-color');
