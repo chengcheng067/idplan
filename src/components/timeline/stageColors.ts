@@ -131,7 +131,31 @@ export const STAGE_BAND_INK_COLORS: Readonly<Record<number, string>> = {
   9: 'var(--stage-ink-s9)',
 };
 
-/** 九段色的可读名称（用于图例 / 打印稿「阶段色泽」说明，避免散落硬编码中文色名） */
+/**
+ * 九段色的可读名称（用于图例 / 打印稿「阶段色泽」说明，避免散落硬编码中文色名）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * ★ **本表恒中文，不随界面语言走**（i18n-EN 批 · team-lead 2026-10-15 裁定）
+ * ══════════════════════════════════════════════════════════════════════
+ * **不要**照「色号名也要翻」去改本表 —— 它**只被纸面消费**，而本仓口径是
+ * **「纸面（打印稿）恒中文」**（§0.3；仓内证据：`pages/CalendarPrintPage.tsx:219-222`
+ * 给 `buildMonthMeta` 显式传 `'zh'`）。翻了会让**英文用户的打印纸上出现英文色名**。
+ *
+ * **全部 4 个消费点（2026-10-15 实测 `grep -rn STAGE_COLOR_NAMES src/`，只有这 4 处）**：
+ *   · `components/print/SchedulePaper.tsx:294`      —— 图例色块 `title`（预览面板可见、**不打印**）
+ *   · `print/parts/PrintGantt.tsx:177`              —— 甘特图例色块 `title`（同上）
+ *   · `pages/CalendarPrintPage.tsx:459`             —— 月历格内色带 `title`（同上）
+ *   · `pages/CalendarPrintPage.tsx:473`             —— **纸面可见正文**（`阶段色泽：①松墨（概念）…`）
+ *
+ * ⚠️ **看起来的不一致是刻意的**：同族的「配色预设名」在**屏幕侧**确实随语言 ——
+ *   `print/model/print-palette.ts` 的 16 个名（消费点 = 屏幕上的配色选择器 `PaletteSection`，
+ *   取值在 `i18n/messages/parts/print-ui.ts` 的 `print.palette.<模板>.<色>`，**已翻**）。
+ *   ⇒ **屏幕部分随语言、纸面部分恒中文**，两边各有各的口径，**别来「统一」**。
+ *   （判别依据不是「它们看起来是一套命名体系」，而是「**消费点在纸面还是屏幕**」。）
+ *
+ * 反例登记：`core/color/palette-20.ts` 的 20 色名**生产命中为零、只被 spec 引用**
+ *   ⇒ 按「要翻的前提是真的上屏」判**不建键**（不是漏翻）。三者的结局不同，逐条查过。
+ */
 export const STAGE_COLOR_NAMES: Readonly<Record<number, string>> = {
   1: '松墨',
   2: '亮蓝',
