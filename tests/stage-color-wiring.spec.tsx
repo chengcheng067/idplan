@@ -1350,7 +1350,9 @@ describe('⑦ BUG-06 · ② ProjectCard 强调色 → ProjectAppearanceDialog', 
       </MemoryRouter>,
     );
 
-    const menuBtn = must(h, 'button[aria-label="项目更多操作"]', '⋯ 菜单按钮') as HTMLElement;
+    /* 语言无关钩子（i18n-EN 批）：原来按 `button[aria-label="项目更多操作"]` 定位，
+       `ui.projectCard.moreActions` 已走消息表 ⇒ 英文态失配。见 `ProjectCard.tsx` 同名钩子。 */
+    const menuBtn = must(h, 'button[data-project-card-more-trigger]', '⋯ 菜单按钮') as HTMLElement;
     act(() => {
       menuBtn.click();
     });

@@ -158,7 +158,14 @@ function menuPanel(): HTMLElement | null {
 function openMenu(): HTMLElement {
   const h = host;
   if (h === null) throw new Error('卡片未挂载');
-  const btn = h.querySelector<HTMLElement>('button[aria-label="项目更多操作"]');
+  /*
+   * ★ 2026-10-15（i18n-EN 英文补齐批）：原按 `button[aria-label="项目更多操作"]` 定位。
+   *   该 aria 名**已走消息表**（`ui.projectCard.moreActions`，英文态 `More project actions`）
+   *   ⇒ 英文模式下这条**前置本身**就会抛「未找到 ⋯ 菜单按钮」，而失败伪装成
+   *   「按钮不存在」——恰好是本文件全部三个用例的共同前置（一处失配，整文件红）。
+   *   组件侧同批补了 `data-project-card-more-trigger`。
+   */
+  const btn = h.querySelector<HTMLElement>('button[data-project-card-more-trigger]');
   if (btn === null) throw new Error('未找到 ⋯ 菜单按钮');
   act(() => {
     btn.click();

@@ -96,8 +96,8 @@ describe('ProposalReviewPanel（GitHub 审批流范式）', () => {
   it('⑤ 逐条通过/拒绝回调带对 status 与 id', async () => {
     const onDecide = vi.fn();
     await renderInto(container, { proposals: [p('a', 'proposed', 'r', 0.9)], onDecide });
-    const approveBtn = container.querySelector('[aria-label="通过提案 a"]') as HTMLButtonElement;
-    const rejectBtn = container.querySelector('[aria-label="拒绝提案 a"]') as HTMLButtonElement;
+    const approveBtn = container.querySelector('[data-proposal-approve="a"]') as HTMLButtonElement;
+    const rejectBtn = container.querySelector('[data-proposal-reject="a"]') as HTMLButtonElement;
     await act(async () => {
       approveBtn.click();
       rejectBtn.click();
@@ -114,7 +114,7 @@ describe('ProposalReviewPanel（GitHub 审批流范式）', () => {
       onDecideMany,
     });
     expect(container.querySelector('[data-proposal-batch]')).toBeNull(); // ⑦
-    const cb = container.querySelector('[aria-label="选择提案 b"]') as HTMLInputElement;
+    const cb = container.querySelector('[data-proposal-select="b"]') as HTMLInputElement;
     await act(async () => {
       cb.click();
     });
@@ -133,7 +133,7 @@ describe('ProposalReviewPanel（GitHub 审批流范式）', () => {
   it('⑧ 展开 diff 明细：field: before → after', async () => {
     await renderInto(container, { proposals: [p('a', 'proposed', 'r', 0.9, 2)], onDecide: noop });
     expect(container.textContent).not.toContain('f0');
-    const toggle = container.querySelector('[aria-label="展开变更明细"]') as HTMLButtonElement;
+    const toggle = container.querySelector('[data-proposal-expand="a"]') as HTMLButtonElement;
     await act(async () => {
       toggle.click();
     });
@@ -145,7 +145,7 @@ describe('ProposalReviewPanel（GitHub 审批流范式）', () => {
 
   it('批量按钮不传 onDecideMany 时不渲染（能力缺失就不摆出）', async () => {
     await renderInto(container, { proposals: [p('a', 'proposed', 'r', 0.9)], onDecide: noop });
-    const cb = container.querySelector('[aria-label="选择提案 a"]') as HTMLInputElement;
+    const cb = container.querySelector('[data-proposal-select="a"]') as HTMLInputElement;
     await act(async () => {
       cb.click();
     });

@@ -141,6 +141,10 @@ export function ProposalReviewPanel({
                   type="checkbox"
                   checked={isPicked}
                   onChange={() => toggle(p.id)}
+                  /* 语言无关定位钩子：`aria-label` 已走消息表（英文态 `Select proposal a`），
+                     测试若拿中文 aria 当选择器，切英文会静默失配且伪装成「控件不存在」。
+                     下面三个按钮同此（钩子值 = 提案 id，比 aria 文案更稳）。 */
+                  data-proposal-select={p.id}
                   aria-label={t('agentProposal.selectAria', { id: p.id })}
                   className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--color-pine)]"
                 />
@@ -168,6 +172,7 @@ export function ProposalReviewPanel({
                     onClick={() =>
                       setExpanded((cur) => (isOpen ? cur.filter((x) => x !== p.id) : [...cur, p.id]))
                     }
+                    data-proposal-expand={p.id}
                     aria-label={
                       isOpen ? t('agentProposal.collapseAria') : t('agentProposal.expandAria')
                     }
@@ -179,6 +184,7 @@ export function ProposalReviewPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => onDecide(p.id, 'applied')}
+                    data-proposal-approve={p.id}
                     aria-label={t('agentProposal.approveAria', { id: p.id })}
                     className="rounded-md border border-pine/40 bg-pine-soft/50 p-1 text-pine transition-colors hover:bg-pine-soft disabled:opacity-40"
                   >
@@ -188,6 +194,7 @@ export function ProposalReviewPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => onDecide(p.id, 'rejected')}
+                    data-proposal-reject={p.id}
                     aria-label={t('agentProposal.rejectAria', { id: p.id })}
                     className="rounded-md border border-clay/40 bg-clay/10 p-1 text-clay transition-colors hover:bg-clay/20 disabled:opacity-40"
                   >
