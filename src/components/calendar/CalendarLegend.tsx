@@ -30,6 +30,7 @@ import {
 } from './calendarColors';
 import { STAGE_BAR_COLORS } from '../timeline/stageColors';
 import { cn } from '../../lib/cn';
+import { useLang } from '../../i18n';
 
 /**
  * 图例色块：10×10、**无圆角**（画板 14 明确「无圆角」，故不加 rounded-*）。
@@ -54,16 +55,22 @@ function Swatch({
 }
 
 export function CalendarLegend({ showHolidayHint = false }: { showHolidayHint?: boolean }): JSX.Element {
+  // 订阅语言变化（i18n 笔 3-A）：本组件此前整块中文，无任何取词。
+  const { t } = useLang();
   return (
     <div className="flex flex-wrap items-center gap-[10px]">
       {/* 阶段九色：label 10 + 方块 10×10 + gap 2 */}
       <div className="flex items-center gap-[10px]">
-        <span className="text-[10px] text-mist">阶段</span>
+        <span className="text-[10px] text-mist">{t('calendar.stageLabel')}</span>
         <div className="flex items-center gap-[2px]">
           {STAGE_ORDERS.map((i) => (
             /* inline-flex：让外壳**收缩到色块本身**（10×10）。
                若留成 inline，外壳会按行高撑到 ~24px，图例行因此虚高、色块在行内偏上。 */
-            <span key={i} className="inline-flex" title={`阶段${CIRCLED_NUMBERS[i - 1]}`}>
+            <span
+              key={i}
+              className="inline-flex"
+              title={t('calendar.legend.swatchTitle', { n: CIRCLED_NUMBERS[i - 1] })}
+            >
               <Swatch color={STAGE_BAR_COLORS[i]} />
             </span>
           ))}
@@ -73,22 +80,22 @@ export function CalendarLegend({ showHolidayHint = false }: { showHolidayHint?: 
       {/* 既有语义色说明（画板 14 未画，但月历里真实出现，删掉即为功能回退） */}
       <div className="flex items-center gap-[6px]">
         <Swatch color={OVERDUE_COLOR} />
-        <span className="text-[11px] text-mist">逾期</span>
+        <span className="text-[11px] text-mist">{t('calendarStatus.overdue')}</span>
       </div>
 
       <div className="flex items-center gap-[6px]">
         <Swatch color={NOT_STARTED_COLOR} ghost />
-        <span className="text-[11px] text-mist">未开始</span>
+        <span className="text-[11px] text-mist">{t('calendarStatus.notStarted')}</span>
       </div>
 
       <div className="flex items-center gap-[6px]">
         <Swatch color={PROGRESS_DOT_COLOR} round />
-        <span className="text-[11px] text-mist">当前进度位置</span>
+        <span className="text-[11px] text-mist">{t('calendar.legend.progressDot')}</span>
       </div>
 
       {/* 法定节假日说明（纯文字，不加色块：节日名小字本身不带新色） */}
       {showHolidayHint && (
-        <span className="text-[11px] text-mist">节日名 = 法定节假日 · 班 = 调休补班日</span>
+        <span className="text-[11px] text-mist">{t('calendar.legend.holidayHint')}</span>
       )}
     </div>
   );

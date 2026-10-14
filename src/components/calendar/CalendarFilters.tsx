@@ -96,8 +96,8 @@ export function CalendarFilters({
   onClear(): void;
 }): JSX.Element {
   // 订阅语言变化：状态 chip 的文案由 calendarStatusLabel() 在渲染期取，
-  // 少了这个订阅，切语言时 chip 会停在旧语言。
-  useLang();
+  // 少了这个订阅，切语言时 chip 会停在旧语言。`t` 供本文件两处界面字（阶段 / 清除筛选）。
+  const { t } = useLang();
   const hasAny = filters.status.size > 0 || filters.stage.size > 0;
   return (
     <div className="flex flex-wrap items-center gap-[8px]">
@@ -112,7 +112,7 @@ export function CalendarFilters({
       <span className="hidden h-[16px] w-px bg-line md:inline-block" aria-hidden />
 
       {/* 阶段组 */}
-      <span className="text-[12px] text-mist">阶段</span>
+      <span className="text-[12px] text-mist">{t('calendar.stageLabel')}</span>
       {STAGE_ORDERS.map((i) => (
         <StageChip key={i} active={filters.stage.has(i)} stageOrder={i} onClick={() => onToggleStage(i)}>
           <span className="tabular-nums">{CIRCLED_NUMBERS[i - 1]}</span>
@@ -125,7 +125,7 @@ export function CalendarFilters({
           onClick={onClear}
           className={cn(CHIP_BASE, 'text-mist transition-colors hover:bg-sunken hover:text-ink')}
         >
-          清除筛选
+          {t('calendar.filter.clear')}
         </button>
       )}
     </div>

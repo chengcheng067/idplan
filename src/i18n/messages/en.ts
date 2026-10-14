@@ -1286,4 +1286,13 @@ export const enMessages: Record<MessageKey, string> = {
   'handoff.toast.copyFailed':
     'Copy failed (clipboard unavailable). Select the text in the preview area and copy it manually.',
   'handoff.toast.downloaded': '{what} downloaded as .md',
+
+  /* ══════════ 笔 3-A：Calendar (filter row / legend / day popover) ══════════ */
+  'calendar.stageLabel': 'Stage',
+  'calendar.filter.clear': 'Clear filters',
+  'calendar.legend.swatchTitle': 'Stage {n}',
+  'calendar.legend.progressDot': 'Current progress point',
+  'calendar.legend.holidayHint': 'Holiday name = public holiday · Work = make-up workday',
+  'calendar.dayPopover.closeAria': 'Close the day list',
+  'calendar.dayPopover.footHint': 'Press Esc or click outside to close',
 };

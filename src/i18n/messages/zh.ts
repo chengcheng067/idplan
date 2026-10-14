@@ -1267,6 +1267,20 @@ export const zhMessages = {
   'handoff.toast.copied': '{what} 已复制到剪贴板',
   'handoff.toast.copyFailed': '复制失败（剪贴板不可用），请手动全选预览区文本复制。',
   'handoff.toast.downloaded': '{what} 已下载为 .md',
+
+  /* ══════════ 笔 3-A：日历（筛选行 / 图例 / 当日清单浮层） ══════════ */
+  /* 「阶段」这个词**只有这一处出处**：筛选行的组标签与图例首项**共用它**
+     —— 两处同一个词，拆成两个键迟早各自漂成 'Stage' / 'Stages'。 */
+  'calendar.stageLabel': '阶段',
+  'calendar.filter.clear': '清除筛选',
+  'calendar.legend.swatchTitle': '阶段{n}',
+  'calendar.legend.progressDot': '当前进度位置',
+  /* ⚠️ 这句里的 `班` 是**调休补班徽章的那个字**。徽章本身的两个出处
+     （`MonthDayCell` 与 `core/holidays/index.ts`）必须共用**同一个键**，属笔 3-B；
+     本句只是「解释这枚徽章」的说明句，故自成一个键。改任一侧都要回来看这一句。 */
+  'calendar.legend.holidayHint': '节日名 = 法定节假日 · 班 = 调休补班日',
+  'calendar.dayPopover.closeAria': '关闭当日清单',
+  'calendar.dayPopover.footHint': 'Esc 或点击外部关闭',
 } as const;
 
 /**

@@ -321,7 +321,24 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  * ⚠️ 口径复用本文件上一段：**棘轮只许变小，但「没变小」时不许硬改小** ——
  *   这次是**真的转换了锚点**（−2 有逐条出处），才允许下调。
  */
-const BASELINE = 108;
+/*
+ * ── 2026-10-14 · i18n 笔 3-A：108 → **107**（−1，归属清楚） ──
+ * 本笔把 `calendar/DayItemsPopover` 的关闭钮 `aria-label="关闭当日清单"` 改走
+ * `t('calendar.dayPopover.closeAria')` ⇒ `tests/calendar-day-popover.spec.tsx` 里
+ * **那一条** `querySelector('button[aria-label="关闭当日清单"]')` 必须换掉
+ * （批次⑥ 早就为它落了 `data-day-popover-close` 钩子，本次才把最后一处换成它）：
+ *   · 定位改用 `[data-day-popover-close]`（与语言无关）；
+ *   · 可见名单独断言成**消息表里那句**（表里有这句 **且** 页面确实消费该键）。
+ * 同笔顺手把两处同形状的 `getAttribute('aria-label') !== '关闭当日清单'` 过滤
+ * （`agenda-view-v3.spec.tsx` / 同文件）也换成 `!hasAttribute('data-day-popover-close')`
+ * —— 它们**不在**本守卫的判据面内（不在 locator 调用行上），但同属「拿中文 aria 当定位」
+ * 的哑雷：英文态那两个过滤会**一个都不排除**，把 ✕ 当成条目行。
+ *
+ * **实测**：改前 `scanRepo` = 108（`calendar-day-popover.spec.tsx` 占 1 处），
+ * 改后 = **107**，且该文件已从命中清单里消失 ⇒ 差额与上面那一条**一一对应**。
+ * 口径同上一段：**真的转换了锚点**才允许下调。
+ */
+const BASELINE = 107;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

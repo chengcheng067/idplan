@@ -28,6 +28,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 import { cn } from '../../lib/cn';
+import { useLang } from '../../i18n';
 import type { GridDay } from './calendarGrid';
 import type { CalendarEntry } from './calendarMath';
 import { EntryDot } from './EntryDot';
@@ -86,6 +87,10 @@ export function DayItemsPopover({
   onOpenProject(projectId: string): void;
   onClose(): void;
 }): JSX.Element {
+  // i18n 笔 3-A：订阅语言变化 + 取词（本组件此前无 i18n）。
+  // ⚠️ 头部那行 `headLabel` 里的日期部分**本笔未动**（它要走既有的日期出口，
+  //    见 `src/i18n/date.ts` 与接任包 3.1 的「不许造第三份月份格式」）—— 单独一块处理。
+  const { t } = useLang();
   const panelRef = useRef<HTMLDivElement>(null);
   const sheet = useIsSheet();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -217,7 +222,7 @@ export function DayItemsPopover({
            该串走 i18n 后，一切到英文就找不到元素且会伪装成「控件不存在」。
            aria 的无障碍契约仍在（下面那行），只是不再当选择器。 */
         data-day-popover-close=""
-        aria-label="关闭当日清单"
+        aria-label={t('calendar.dayPopover.closeAria')}
         onClick={onClose}
         className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full text-mist transition-colors hover:bg-sand hover:text-ink"
       >
@@ -226,7 +231,7 @@ export function DayItemsPopover({
     </div>
   );
 
-  const foot = <div className="pt-[10px] text-[10px] text-mist">Esc 或点击外部关闭</div>;
+  const foot = <div className="pt-[10px] text-[10px] text-mist">{t('calendar.dayPopover.footHint')}</div>;
 
   return createPortal(
     sheet ? (

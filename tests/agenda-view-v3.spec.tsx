@@ -331,8 +331,11 @@ function panel(): HTMLElement | null {
 
 /** 浮层内的条目行（排除右上 ✕ 关闭钮） */
 function popoverRows(p: HTMLElement): HTMLElement[] {
+  // ★ 升级锁（笔 3-A）：原判据是 `getAttribute('aria-label') !== '关闭当日清单'` ——
+  //   拿中文 aria 当定位（哑雷：那串已改走 t() ⇒ 英文态这个过滤会**一个都不排除**，
+  //   把 ✕ 关闭钮也当成条目行）。改与语言无关的 data 钩子（批次⑥ 已落）。
   return [...p.querySelectorAll('button')].filter(
-    (b) => b.getAttribute('aria-label') !== '关闭当日清单',
+    (b) => !b.hasAttribute('data-day-popover-close'),
   ) as HTMLElement[];
 }
 

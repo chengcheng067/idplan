@@ -44,6 +44,7 @@ import {
   StageStatus,
 } from '../src/core/types/enums';
 import { dayjs } from '../src/lib/date';
+import { catalogOf } from '../src/i18n';
 
 /* ══════════════════════════════ 夹具 ══════════════════════════════ */
 
@@ -251,8 +252,9 @@ function panel(): HTMLElement | null {
 
 /** 浮层内的条目行（排除右上 ✕ 关闭钮） */
 function rowButtons(p: HTMLElement): HTMLButtonElement[] {
+  // ★ 升级锁（笔 3-A）：同 agenda-view-v3 —— 拿中文 aria 当定位 ⇒ 换 data 钩子
   return [...p.querySelectorAll('button')].filter(
-    (b) => b.getAttribute('aria-label') !== '关闭当日清单',
+    (b) => !b.hasAttribute('data-day-popover-close'),
   ) as HTMLButtonElement[];
 }
 
@@ -437,8 +439,19 @@ describe('⑤ 三路关闭（Esc / 点外部 / ✕）与焦点回还', () => {
     act(() => {
       moreBtn().click();
     });
-    const x = panel()!.querySelector<HTMLButtonElement>('button[aria-label="关闭当日清单"]')!;
+    /*
+     * ★ 升级锁（笔 3-A）：原判据 `button[aria-label="关闭当日清单"]` 是**中文 aria 当定位**
+     * —— 那串已改走 `t('calendar.dayPopover.closeAria')`，切英文即变
+     * `Close the day list` ⇒ 这条选择器在英文态**静默失配**（找不到元素），
+     * 而且失败会伪装成「本来就没有关闭钮」。改成两层：
+     *   ① 与语言无关的 `data-day-popover-close` 定位；
+     *   ② 可见名单独断言成**消息表里那句**（表里有这句 **且** 页面确实消费该键）。
+     */
+    const x = panel()!.querySelector<HTMLButtonElement>('[data-day-popover-close]')!;
     expect(x, '应有关闭钮').not.toBeNull();
+    expect(x.getAttribute('aria-label'), '关闭钮的无障碍名 = 消息表那句').toBe(
+      catalogOf('zh')['calendar.dayPopover.closeAria'],
+    );
     act(() => {
       x.click();
     });
