@@ -15,13 +15,16 @@ import {
   firstUnusedColorIndex,
   type CustomStageDef,
 } from '../../core/services/custom-stage.service';
-import {
-  ALL_SCHEDULE_BASIS,
-  SCHEDULE_BASIS_LABELS,
-  type ScheduleBasis,
-} from '../../core/types/enums';
+import { ALL_SCHEDULE_BASIS, type ScheduleBasis } from '../../core/types/enums';
 import type { StageSelectionItem, StageTemplateDomain, StageTemplateItem } from '../../core/types/dto';
 import { useProjectsStore } from '../../store/useProjectsStore';
+/* ★ i18n 笔 misc：本文件同时用两种取词：
+   · `useLang()` 的 `t` —— render 期的全部文案（要订阅语言变化）；
+   · `scheduleBasisLabel()` —— 排期基准的**枚举显示名**取词小函数（它自己不订阅，
+     靠本组件的 `useLang()` 提供重渲染，纪律见 `src/i18n/labels.ts` 头注释）。
+   `SCHEDULE_BASIS_LABELS`（enums 里的中文表）**不再直接上屏** —— 它保留给打印族与
+   服务端（`src/core/**` 不许 import i18n），屏幕侧一律走取词小函数。 */
+import { scheduleBasisLabel, useLang } from '../../i18n';
 import { CustomStageDialog, type CustomStageDraft } from './CustomStageDialog';
 import { stageColorPaint } from './stage-color-bridge';
 
@@ -88,6 +91,8 @@ export function StageSelectPanel({
     items: StageSelectionItem[];
   }>;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点（`scheduleBasisLabel` 这类不订阅的取词靠自己重渲染） */
+  const { t } = useLang();
   /*
    * ⚠️ 这里**刻意没有**「主板块一变就自动重选套餐」的 effect（2026-09-17 删，勿加回）。
    *
@@ -180,7 +185,7 @@ export function StageSelectPanel({
     if (atMax) {
       useProjectsStore
         .getState()
-        .pushToast('error', `单次项目最多 ${MAX_STAGE_COUNT} 个阶段`);
+        .pushToast('error', t('wizard.maxStages', { max: MAX_STAGE_COUNT }));
       return;
     }
     onChange([...selected, item]);
@@ -217,22 +222,22 @@ export function StageSelectPanel({
     <div className="space-y-4">
       {/* 头部：已选 N / 上限 */}
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-ink">选择本次服务的阶段</span>
+        <span className="font-medium text-ink">{t('wizard.selectStagesTitle')}</span>
         <span className="text-mist">
-          已选 {selected.length} / 上限 {MAX_STAGE_COUNT}
+          {t('wizard.selectedCount', { count: selected.length, max: MAX_STAGE_COUNT })}
         </span>
       </div>
 
       {/* 排期基准切换（受控；不传则不渲染） */}
       {scheduleBasis !== undefined && onScheduleBasisChange !== undefined && (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium">排期基准</span>
+          <span className="text-sm font-medium">{t('wizard.scheduleBasis')}</span>
           <div className="flex flex-wrap gap-1.5">
             {ALL_SCHEDULE_BASIS.map((b) => (
               <button
                 key={b}
                 type="button"
-                aria-label={`排期基准 ${SCHEDULE_BASIS_LABELS[b]}`}
+                aria-label={t('wizard.scheduleBasisAria', { label: scheduleBasisLabel(b) })}
                 onClick={() => onScheduleBasisChange(b)}
                 aria-pressed={b === scheduleBasis}
                 className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
@@ -241,7 +246,7 @@ export function StageSelectPanel({
                     : 'border-line bg-paper text-mist hover:bg-sand'
                 }`}
               >
-                {SCHEDULE_BASIS_LABELS[b]}
+                {scheduleBasisLabel(b)}
               </button>
             ))}
           </div>
@@ -252,10 +257,10 @@ export function StageSelectPanel({
       {durations !== undefined && onDurationChange !== undefined && (
         <div className="rounded-md border border-line bg-cream/40 p-2.5">
           <p className="mb-1.5 text-xs font-medium text-mist">
-            按阶段时长排期（为每个阶段填天数，竣工日期自动算出）
+            {t('wizard.byDurationTitle')}
           </p>
           <p className="text-[11px] leading-4 text-mist">
-            未填的阶段按默认占比匀摊。你也可以直接在「展开设置 → 排期基准」切换自然日 / 工作日口径。
+            {t('wizard.byDurationHint')}
           </p>
         </div>
       )}
@@ -263,11 +268,13 @@ export function StageSelectPanel({
       {/* 快捷套餐（A5：只列主板块的套餐） */}
       <div>
         <p className="mb-1.5 text-xs font-medium text-mist">
-          快捷套餐{domain ? `（${domainLabel(domain)}）` : ''}
+          {domain
+            ? t('wizard.quickPresetsWithDomain', { domain: domainLabel(domain) })
+            : t('wizard.quickPresets')}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {presets.length === 0 && (
-            <span className="text-xs text-mist">该板块暂无快捷套餐，请直接勾选阶段。</span>
+            <span className="text-xs text-mist">{t('wizard.noPresets')}</span>
           )}
           {presets.map((p) => {
             const active = currentPresetKey === p.key;
@@ -275,7 +282,7 @@ export function StageSelectPanel({
               <button
                 key={p.key}
                 type="button"
-                aria-label={`套餐 ${p.name}`}
+                aria-label={t('wizard.presetAria', { name: p.name })}
                 onClick={() => applyPreset(p.key)}
                 className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
                   active
@@ -292,7 +299,7 @@ export function StageSelectPanel({
             <button
               key={g.key}
               type="button"
-              aria-label={`自定义套餐 ${g.name}（${g.libraryName}）`}
+              aria-label={t('wizard.customPresetAria', { name: g.name, library: g.libraryName })}
               data-custom-preset={g.key}
               onClick={() => onChange(g.items)}
               className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
@@ -300,7 +307,7 @@ export function StageSelectPanel({
                   ? 'border-pine bg-pine-soft/50 text-pine'
                   : 'border-dashed border-line bg-paper text-mist hover:bg-sand'
               }`}
-              title={`自定义行业包「${g.libraryName}」`}
+              title={t('wizard.customPresetTitle', { library: g.libraryName })}
             >
               ✚ {g.name}
             </button>
@@ -311,15 +318,15 @@ export function StageSelectPanel({
       {/* 阶段池（按板块分组；其余行业可折叠） */}
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <p className="text-xs font-medium text-mist">阶段池</p>
+          <p className="text-xs font-medium text-mist">{t('wizard.stagePool')}</p>
           {onCustomStageSubmit && (
             <button
               type="button"
-              aria-label="新增自定义阶段"
+              aria-label={t('wizard.addCustomStageAria')}
               onClick={() => setDialogOpen(true)}
               className="inline-flex items-center gap-1 rounded-md border border-pine/40 bg-pine-soft/40 px-2 py-0.5 text-xs text-pine hover:bg-pine-soft"
             >
-              <Plus size={12} aria-hidden /> 自定义阶段
+              <Plus size={12} aria-hidden />{' '}{t('wizard.customStages')}
             </button>
           )}
         </div>
@@ -327,10 +334,10 @@ export function StageSelectPanel({
           {/* 自定义阶段分组（恒可见：自定义项不属于任何模板分组） */}
           {(customItems.length > 0 || onCustomStageSubmit !== undefined) && (
             <div data-testid="custom-stage-group">
-              <p className="mb-1 text-xs font-medium text-mist">自定义阶段</p>
+              <p className="mb-1 text-xs font-medium text-mist">{t('wizard.customStages')}</p>
               {customItems.length === 0 ? (
                 <p className="text-[11px] leading-4 text-mist">
-                  暂无自定义阶段。点上方的「＋ 自定义阶段」添加（如「消防报审」）。
+                  {t('wizard.customStagesEmpty')}
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
@@ -376,16 +383,20 @@ export function StageSelectPanel({
                 // 可见文案里的板块清单就成了「名不副实」的部分）
                 aria-label={
                   showOthers
-                    ? '收起其他行业阶段'
-                    : `显示其他行业阶段（${otherDomains.map(domainLabel).join(' / ')}）`
+                    ? t('wizard.collapseOtherDomains')
+                    : t('wizard.showOtherDomains', {
+                        domains: otherDomains.map(domainLabel).join(' / '),
+                      })
                 }
                 aria-expanded={showOthers}
                 onClick={() => setShowOthers((v) => !v)}
                 className="text-xs text-pine hover:underline"
               >
                 {showOthers
-                  ? '收起其他行业阶段'
-                  : `显示其他行业阶段（${otherDomains.map(domainLabel).join(' / ')}）`}
+                  ? t('wizard.collapseOtherDomains')
+                  : t('wizard.showOtherDomains', {
+                      domains: otherDomains.map(domainLabel).join(' / '),
+                    })}
               </button>
             </div>
           )}
@@ -398,25 +409,27 @@ export function StageSelectPanel({
           data-testid="duplicate-stage-warning"
           className="rounded-md border border-clay-soft bg-clay-soft/50 p-2 text-sm leading-6 text-clay"
         >
-          阶段名重复：{duplicates.join('、')}。请改名后再提交（Agent 通道按名定位阶段，重名会歧义）。
+          {t('wizard.duplicateNames', {
+            names: duplicates.join(t('ui.listSeparator')),
+          })}
         </p>
       )}
 
       {/* 已选顺序列表 */}
       <div>
-        <p className="mb-1.5 text-xs font-medium text-mist">已选顺序（可上下调整）</p>
+        <p className="mb-1.5 text-xs font-medium text-mist">{t('wizard.selectedOrderTitle')}</p>
         {/* ≥13 段非阻塞提示（A10 ③）：不弹窗、不阻断提交 */}
         {selected.length >= LONG_STAGE_LIST_HINT_FROM && (
           <p
             data-testid="long-stage-hint"
             className="mb-2 rounded-md border border-line bg-cream/50 p-2 text-xs leading-5 text-mist"
           >
-            已选 {selected.length} 段，阶段较多：建议确认每段都有明确交付物，必要时合并或用套餐。
+            {t('wizard.longListHint', { count: selected.length })}
           </p>
         )}
         {belowMin ? (
           <p className="rounded-md border border-clay-soft bg-clay-soft/50 p-3 text-sm leading-6 text-clay">
-            至少选择 {MIN_STAGE_COUNT} 个阶段
+            {t('wizard.minStages', { min: MIN_STAGE_COUNT })}
           </p>
         ) : (
           <ol className="divide-y divide-sand rounded-md border border-line bg-paper">
@@ -452,11 +465,11 @@ export function StageSelectPanel({
                         min={1}
                         value={durations[item.key] ?? ''}
                         onChange={(e) => onDurationChange(item.key, e.target.value)}
-                        placeholder="天数"
-                        aria-label={`${item.name} 时长（天）`}
+                        placeholder={t('wizard.durationPlaceholder')}
+                        aria-label={t('wizard.durationAria', { name: item.name })}
                         className="h-6 w-10 bg-transparent text-right text-xs tabular-nums text-ink outline-none placeholder:text-mist leading-none"
                       />
-                      <span className="text-[10px] leading-none text-mist">天</span>
+                      <span className="text-[10px] leading-none text-mist">{t('wizard.daysUnit')}</span>
                     </span>
                   )}
                   {/* 占比 */}
@@ -467,7 +480,7 @@ export function StageSelectPanel({
                   <span className="flex h-6 items-center gap-0.5">
                     <button
                       type="button"
-                      aria-label={`上移 ${item.name}`}
+                      aria-label={t('wizard.moveUpAria', { name: item.name })}
                       disabled={index === 0}
                       onClick={() => move(index, -1)}
                       className="h-6 w-6 rounded p-0 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
@@ -476,7 +489,7 @@ export function StageSelectPanel({
                     </button>
                     <button
                       type="button"
-                      aria-label={`下移 ${item.name}`}
+                      aria-label={t('wizard.moveDownAria', { name: item.name })}
                       disabled={index === selected.length - 1}
                       onClick={() => move(index, 1)}
                       className="h-6 w-6 rounded p-0 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
@@ -485,7 +498,7 @@ export function StageSelectPanel({
                     </button>
                     <button
                       type="button"
-                      aria-label={`移除 ${item.name}`}
+                      aria-label={t('wizard.removeAria', { name: item.name })}
                       onClick={() => removeAt(index)}
                       className="h-6 w-6 rounded p-0 text-mist hover:bg-sand hover:text-clay"
                     >
@@ -530,12 +543,17 @@ function StageChip({
   /** 该阶段在项目里的序号（1 起）；池中未落库项无序号，取默认值即可 */
   orderIndex?: number;
 }): JSX.Element {
+  /** 取词 + 语言变化订阅点（本子组件独立渲染，必须自己订阅） */
+  const { t } = useLang();
   // 色点两半件（内联 var() ＋ data-stage-key）**必须成对**，故走单一出口取得
   const paint = stageColorPaint(item, orderIndex);
   return (
     <button
       type="button"
-      aria-label={`${checked ? '取消选择' : '选择'}阶段 ${item.name}`}
+      aria-label={t('wizard.chipToggleAria', {
+        action: checked ? t('wizard.deselect') : t('wizard.select'),
+        name: item.name,
+      })}
       aria-pressed={checked}
       aria-disabled={blocked}
       onClick={onToggle}

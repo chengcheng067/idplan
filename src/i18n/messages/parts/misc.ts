@@ -115,6 +115,48 @@ export const zh = {
   'project.cover.moss': '苔绿',
   'project.cover.mist': '雾灰',
   'project.cover.cream': '米白',
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 区 A · 建档向导族 · `src/components/contract-wizard/**`
+   * ══════════════════════════════════════════════════════════════════════
+   * 位置模板（`{…}` 由 `t()` 插值）：{name} 阶段/套餐名、{max}/{min}/{count} 数字、
+   * {domains}/{library}/{label} 已算好的展示串。**不翻**的：库里的 key/domain
+   * 这类 ASCII 值，以及「阶段名重复」里的名字列表分隔符（复用 `ui.listSeparator`）。
+   */
+  'wizard.maxStages': '单次项目最多 {max} 个阶段',
+  'wizard.selectStagesTitle': '选择本次服务的阶段',
+  'wizard.selectedCount': '已选 {count} / 上限 {max}',
+  'wizard.scheduleBasis': '排期基准',
+  'wizard.scheduleBasisAria': '排期基准 {label}',
+  'wizard.byDurationTitle': '按阶段时长排期（为每个阶段填天数，竣工日期自动算出）',
+  'wizard.byDurationHint':
+    '未填的阶段按默认占比匀摊。你也可以直接在「展开设置 → 排期基准」切换自然日 / 工作日口径。',
+  'wizard.quickPresets': '快捷套餐',
+  'wizard.quickPresetsWithDomain': '快捷套餐（{domain}）',
+  'wizard.noPresets': '该板块暂无快捷套餐，请直接勾选阶段。',
+  'wizard.presetAria': '套餐 {name}',
+  'wizard.customPresetAria': '自定义套餐 {name}（{library}）',
+  'wizard.customPresetTitle': '自定义行业包「{library}」',
+  'wizard.stagePool': '阶段池',
+  'wizard.addCustomStageAria': '新增自定义阶段',
+  'wizard.customStages': '自定义阶段',
+  'wizard.customStagesEmpty': '暂无自定义阶段。点上方的「＋ 自定义阶段」添加（如「消防报审」）。',
+  'wizard.collapseOtherDomains': '收起其他行业阶段',
+  'wizard.showOtherDomains': '显示其他行业阶段（{domains}）',
+  'wizard.duplicateNames': '阶段名重复：{names}。请改名后再提交（Agent 通道按名定位阶段，重名会歧义）。',
+  'wizard.selectedOrderTitle': '已选顺序（可上下调整）',
+  'wizard.longListHint':
+    '已选 {count} 段，阶段较多：建议确认每段都有明确交付物，必要时合并或用套餐。',
+  'wizard.minStages': '至少选择 {min} 个阶段',
+  'wizard.durationPlaceholder': '天数',
+  'wizard.durationAria': '{name} 时长（天）',
+  'wizard.daysUnit': '天',
+  'wizard.moveUpAria': '上移 {name}',
+  'wizard.moveDownAria': '下移 {name}',
+  'wizard.removeAria': '移除 {name}',
+  'wizard.chipToggleAria': '{action}阶段 {name}',
+  'wizard.deselect': '取消选择',
+  'wizard.select': '选择',
 } as const;
 
 /**
@@ -205,4 +247,43 @@ export const en = {
   'project.cover.moss': 'Moss',
   'project.cover.mist': 'Mist',
   'project.cover.cream': 'Cream',
+
+  /* 区 A · 建档向导族 · `src/components/contract-wizard/**` */
+  'wizard.maxStages': 'A project can have at most {max} stages',
+  'wizard.selectStagesTitle': 'Select the stages for this project',
+  'wizard.selectedCount': '{count} selected / limit {max}',
+  'wizard.scheduleBasis': 'Scheduling basis',
+  'wizard.scheduleBasisAria': 'Scheduling basis {label}',
+  'wizard.byDurationTitle':
+    'Schedule by stage duration (enter days per stage; the end date is calculated automatically)',
+  'wizard.byDurationHint':
+    'Stages left blank are spread by the default share. You can also switch between calendar days / workdays under “Advanced settings → Scheduling basis”.',
+  'wizard.quickPresets': 'Quick presets',
+  'wizard.quickPresetsWithDomain': 'Quick presets ({domain})',
+  'wizard.noPresets': 'No quick presets for this board yet — tick the stages directly.',
+  'wizard.presetAria': 'Preset {name}',
+  'wizard.customPresetAria': 'Custom preset {name} ({library})',
+  'wizard.customPresetTitle': 'Custom industry library “{library}”',
+  'wizard.stagePool': 'Stage pool',
+  'wizard.addCustomStageAria': 'Add custom stage',
+  'wizard.customStages': 'Custom stages',
+  'wizard.customStagesEmpty':
+    'No custom stages yet. Use “+ Custom stage” above to add one (for example “Fire permit review”).',
+  'wizard.collapseOtherDomains': 'Hide stages from other industries',
+  'wizard.showOtherDomains': 'Show stages from other industries ({domains})',
+  'wizard.duplicateNames':
+    'Duplicate stage names: {names}. Rename them before submitting (the Agent channel locates stages by name, so duplicates are ambiguous).',
+  'wizard.selectedOrderTitle': 'Selected order (move up / down)',
+  'wizard.longListHint':
+    '{count} stages selected — that is a lot. Make sure each one has a clear deliverable; merge them or use a preset if needed.',
+  'wizard.minStages': 'Select at least {min} stages',
+  'wizard.durationPlaceholder': 'Days',
+  'wizard.durationAria': '{name} duration (days)',
+  'wizard.daysUnit': 'days',
+  'wizard.moveUpAria': 'Move {name} up',
+  'wizard.moveDownAria': 'Move {name} down',
+  'wizard.removeAria': 'Remove {name}',
+  'wizard.chipToggleAria': '{action} stage {name}',
+  'wizard.deselect': 'Deselect',
+  'wizard.select': 'Select',
 } as const;
