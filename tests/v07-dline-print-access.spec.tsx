@@ -44,6 +44,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 
+import { catalogOf } from '../src/i18n';
+
 /* act 环境开关由 `tests/setup.ts` 统一置位（本文件不再自行置位）——
  * 逐文件置位会把告警 / 状态转嫁给同进程的下游 spec，理由详见 setup.ts。 */
 
@@ -838,6 +840,22 @@ function readCode(file: string): string {
 }
 
 /**
+ * 中文文案表（**运行期真表**，走单一出口 `catalogOf`）。
+ *
+ * ★ 为什么这些源码锁要读它（2026-10-14 · i18n 英文补齐批）：
+ *   本轮把界面文案搬进了消息表 ⇒ 「源码里必须含某个中文字面量」这种锁**必然**失效。
+ *   但**锁不能撤**（撤了 = 判据消失），也不能放宽成「任意非空」（= 永远绿的假锁）。
+ *   ⇒ 改成钉**机理**，两条**缺一不可**：
+ *       ① 页面**消费该键**（`t('…')` 出现在剥注释后的源码里）；
+ *       ② 该键的 **zh 取值逐字**是那句话。
+ *     只锁① ⇒ 值被改掉不报；只锁② ⇒ 页面可以不消费它（文案在表里但没人用）。
+ *   两条合起来，与原来那条「源码含该字面量」判别力**等价**（都蕴含「成员零相关阶段时
+ *   渲染出的就是那句话」），而且不再把「文案住在哪个文件」当契约。
+ *   ⚠️ 行为侧还有一条**真渲染**断言（`h.textContent` 含该句），那一层本就在跑。
+ */
+const ZH = catalogOf('zh');
+
+/**
  * 取 `marker` 之后的 `len` 个字符（= 该调用点的**实参窗口**）。
  * 用于「某项必须出现在**这个调用**里」，避免全文 `contain` 被同名的无关位置假绿。
  * `marker` 不存在时返回空串 → 断言必然失败（漏了 marker 也算红）。
@@ -1177,7 +1195,11 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
     );
     // 空态文案在页壳（守卫仍归页面）——hook 只出数据，两处分工各锁一遍
     const shell = readCode('SchedulePrintPage.tsx');
-    expect(shell, '空态必须存在（零相关阶段时不得输出白纸稿）').toContain('该项目的阶段与你无关');
+    // 锁改成「钉机理」：页面消费该键 **且** 该键的 zh 取值逐字是那句话（理由见 `ZH` 的注释）
+    expect(shell, '空态必须由消息表键提供（零相关阶段时不得输出白纸稿）').toContain(
+      "t('print.page.notRelated')",
+    );
+    expect(ZH['print.page.notRelated'], '该键的中文取值必须是那句话').toBe('该项目的阶段与你无关。');
   });
 
   it('★ CalendarPrintPage：三处取数同源吃 `scopedStages`（漏改一处即半成品修法）', () => {
@@ -1192,7 +1214,9 @@ describe('v0.7-D 补漏 · 源码锁（范围收窄 / 委托方门控）', () =>
     );
     // 正向：收窄后的集合变量必须真的被用于可见阶段过滤
     expect(code).toContain('scopedStages.filter((s) => s.visible !== false)');
-    expect(code).toContain('该项目的阶段与你无关');
+    // 同上：消费该键 + 取值逐字（两条缺一不可，见 `ZH` 的注释）
+    expect(code, '空态必须由消息表键提供').toContain("t('print.page.notRelated')");
+    expect(ZH['print.page.notRelated'], '该键的中文取值必须是那句话').toBe('该项目的阶段与你无关。');
   });
 
   /**
