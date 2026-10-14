@@ -149,7 +149,21 @@ const HEAVY = 60000;
 const SETTINGS_DRAWER = '[data-settings-drawer]';
 const CONFIRM_CLEAR = '[data-settings-log-confirm]';
 const IDENTITY_MENU = '[data-identity-menu]';
-const AVATAR = 'button[data-identity-trigger]';
+/*
+ * ⚠️ **匹配集必须与原写法等价**（i18n-EN 批自查修正，**这条修了两次，第一次我自己也修错了**）：
+ *
+ * 原写法是全等 `button[title="当前身份（点击切换/退出）"]`，它**实际**只命中 **rail** 那一枚：
+ *   · `MemberIdentityPicker` 的**全部调用点**只有 `Sidebar.tsx:612`（`rail`）与 `:792`（`rail-collapsed`）
+ *     ⇒ **`data-identity-trigger="topbar"`（`MemberIdentityPicker.tsx:390`）是死代码、不可达**；
+ *   · `rail-collapsed` 的 title 带姓名（`` `${name} · ${roleLabel}${switchHint}` ``）⇒ 被**全等**排除。
+ * ⇒ 所以这里写 `="rail"`。
+ *
+ * ★ 我第一次按**注释**（本文件 :426 写着「点**顶栏**头像」）推断，写成 `="topbar"`
+ *   ⇒ 直接 30s 超时。**教训：注释会过期，等价推断必须看「实际 DOM 里有哪些元素」**
+ *   （`grep '<MemberIdentityPicker'` 两个调用点，比注释可信）。这条正好是 team-lead 那句
+ *   「替换前后各跑一次」的价值 —— 它把我这个错当场咬出来了。
+ */
+const AVATAR = 'button[data-identity-trigger="rail"]';
 const STAGE_DRAWER = '[data-stage-drawer]';
 
 describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromium（F2 / F3 / F6）', () => {
@@ -412,7 +426,12 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
       await clickSidebarSettings(page);
       expect(await page.locator(SETTINGS_DRAWER).count()).toBeGreaterThan(0);
 
-      // 点顶栏头像打开身份菜单（顶栏在遮罩顶缘之上，本来就点得到 —— 菜单也确实"打开"了）
+      /*
+       * 点身份头像打开身份菜单（侧栏左下角那枚；抽屉开着时它在遮罩之上，本来就点得到）。
+       * ⚠️ 原文写的是「点**顶栏**头像」—— **那句话已经过期**：2026-10-12 身份去重后
+       *   顶栏那枚重复胶囊已删，全站身份控件只剩侧栏一处（`MemberIdentityPicker` 的
+       *   调用点只有 `rail`/`rail-collapsed`，`topbar` 分支是死代码）。
+       */
       await page.click(AVATAR);
       await page.waitForSelector(IDENTITY_MENU, { timeout: 5000 });
 

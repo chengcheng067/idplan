@@ -332,8 +332,17 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     // ④ 真实 UI 的「切换身份」：左下角身份触发器 → 菜单「切换身份」→ 姓名「执行乙」
     //    触发器用 title 锚（展开态那枚**刻意没有 aria-label**，见 MemberIdentityPicker
     //    的注释）；菜单用 role+aria-label（与 identity-rail-browser.spec.ts 同口径）。
+    /*
+     * ⚠️ **必须带值限定 `="rail"`**（i18n-EN 批自查修正）：原写法是
+     * `button[title="当前身份（点击切换/退出）"]` —— **全等**匹配，只命中「展开态（rail）」
+     * 与「顶栏（topbar）」；**收起态（rail-collapsed）的 title 带姓名**
+     * （`` `${name} · ${roleLabel}${switchHint}` ``）⇒ 被全等匹配**排除**。
+     * 而 `data-identity-trigger` 是三态**共用**的静态钩子 ⇒ 去掉值限定会把匹配集
+     * **放宽**到含收起态，`.first()` 就可能点到那一枚（隐藏/不可点）。
+     * ⇒ 换锚点要**保持匹配集不变**，不是「能定位到某个身份触发器」就够。
+     */
     await page
-      .locator('[data-app-sidebar] button[data-identity-trigger]')
+      .locator('[data-app-sidebar] button[data-identity-trigger="rail"]')
       .first()
       .click();
     await page.waitForTimeout(400);

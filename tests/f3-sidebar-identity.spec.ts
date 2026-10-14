@@ -255,7 +255,9 @@ describe.skipIf(!CAN_RUN_FRESH)('F3-BROWSER · 退出身份后侧栏不显示项
       // 展开回来 → 退出身份（侧栏左下角身份行 → 退出身份；2026-10-12 前入口在顶栏）
       await page.locator('[data-sidebar-collapse-toggle]').first().click();
       await page.waitForTimeout(300);
-      await page.locator('button[data-identity-trigger]').first().click();
+      /* ⚠️ 带值限定 `="rail"`：原写法是全等 `title="当前身份（点击切换/退出）"`，
+         只命中**展开态**（收起态 title 带姓名，被全等排除）。见 settings-zones.spec.ts 同款说明。 */
+      await page.locator('button[data-identity-trigger="rail"]').first().click();
       await page.waitForTimeout(300);
       await page.locator('button', { hasText: '退出身份' }).first().click();
       await page.waitForTimeout(800);
