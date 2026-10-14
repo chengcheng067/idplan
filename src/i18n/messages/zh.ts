@@ -970,6 +970,10 @@ export const zhMessages = {
     '插件是可单独开关的功能包。停用后它的页面与侧栏入口会立即隐藏 （数据保留，重新启用即恢复）；插件卡片仍在下面的列表里，点它的齿轮可以看到 它自己的设置。开关状态存在本地/NAS 设置里，重启不丢。 第三方插件可从文件安装（重启生效、默认关闭、装前会把权限摊给你看）。',
   'plugin.adminNotice': '插件开关是本 NAS 的全局设置，仅管理员可改；成员只能查看当前状态与各插件自己的设置。',
   'plugin.installFromFile': '从文件安装',
+  /* 笔 4-a：原生「打开文件」对话框的两处文案（由渲染层取词后经 IPC 传给主进程） */
+  'plugin.pick.title': '选择插件的 manifest.json',
+  'plugin.pick.filterName': '插件清单',
+  'plugin.install.unsupportedEnv': '当前运行环境不支持从文件安装（仅桌面版可用）',
   'plugin.skipped': '有 {count} 个本地插件目录未加载（manifest 不完整或版本不兼容），已跳过。',
   'plugin.capLabel': '能力：',
   'plugin.contribLabel': '贡献：',

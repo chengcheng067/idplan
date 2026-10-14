@@ -284,10 +284,17 @@ export function PluginsSection(): JSX.Element {
     setNotice(null);
     const bridge = isDesktop() ? window.idplan?.pluginInstall : undefined;
     if (!bridge) {
-      setError('当前运行环境不支持从文件安装（仅桌面版可用）');
+      setError(t('plugin.install.unsupportedEnv'));
       return;
     }
-    const pick = await bridge.pickManifestFile();
+    /*
+     * ★ 原生「打开文件」对话框的标题与筛选器名**在主进程里拿不到界面语言** ⇒ 由这里取好词传进去
+     *   （笔 4-a：主进程只收参、只当参数用；拿不到就退化成不带标题 / 不过滤，不写中文兜底）。
+     */
+    const pick = await bridge.pickManifestFile({
+      title: t('plugin.pick.title'),
+      filterName: t('plugin.pick.filterName'),
+    });
     if (!pick.ok || pick.canceled || !pick.filePath) return; // 取消：静默
     setPending({ kind: 'install', filePath: pick.filePath });
   };

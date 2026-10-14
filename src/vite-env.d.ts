@@ -117,8 +117,12 @@ interface IdPlanBridge {
    * 不存在时「从文件安装」入口整个不渲染（浏览器 / NAS 端同理）。
    */
   pluginInstall?: {
-    /** 打开文件选择器（只让选 manifest.json）；取消时 canceled=true */
-    pickManifestFile: () => Promise<{
+    /**
+     * 打开文件选择器（只让选 manifest.json）；取消时 canceled=true。
+     * `labels` 由渲染层取好词后传入（原生对话框的标题与筛选器名**不在主进程里写死**，笔 4-a）。
+     * 参数可选：拿不到时主进程退化成「不带标题 / 不过滤」，不会显示中文。
+     */
+    pickManifestFile: (labels?: { title?: string; filterName?: string }) => Promise<{
       ok: boolean;
       canceled?: boolean;
       filePath?: string;

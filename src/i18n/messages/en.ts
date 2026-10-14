@@ -974,6 +974,10 @@ export const enMessages: Record<MessageKey, string> = {
   'plugin.adminNotice':
     'The plugin switch is a NAS-wide setting and only admins can change it; members can see the current state and each plugin’s own settings.',
   'plugin.installFromFile': 'Install from file',
+  'plugin.pick.title': 'Choose the plugin manifest.json',
+  'plugin.pick.filterName': 'Plugin manifest',
+  'plugin.install.unsupportedEnv':
+    'Installing from a file is not supported in this environment (desktop app only)',
   'plugin.skipped': '{count} local plugin folders were skipped (incomplete manifest or unsupported version).',
   'plugin.capLabel': 'Capabilities: ',
   'plugin.contribLabel': 'Contributes: ',

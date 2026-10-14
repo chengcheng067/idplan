@@ -138,7 +138,8 @@ contextBridge.exposeInMainWorld('idplan', {
    * 受控出口。返回值形状见 src/core/plugin/installed.ts 与 vite-env.d.ts。
    */
   pluginInstall: {
-    pickManifestFile: () => ipcRenderer.invoke('plugin:pick-file'),
+    /* labels = 渲染层取好词的 { title, filterName }（主进程不持有界面语言，见 main.cjs 的同名注释） */
+    pickManifestFile: (labels) => ipcRenderer.invoke('plugin:pick-file', labels),
     installFromFile: (filePath) => ipcRenderer.invoke('plugin:install', filePath),
     listInstalled: () => ipcRenderer.invoke('plugin:list'),
     uninstall: (pluginId) => ipcRenderer.invoke('plugin:uninstall', pluginId),

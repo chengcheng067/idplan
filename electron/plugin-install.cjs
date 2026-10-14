@@ -407,8 +407,33 @@ function resolvePlugFile(userDataDir, requestUrl) {
   return { status: 200, filePath: safePath, mime: plugMimeFor(path.extname(safePath)) };
 }
 
+/**
+ * 原生「打开文件」对话框的选项（**纯函数**，可单测。笔 4-a）。
+ *
+ * ── 为什么它在这里而不内联在 main.cjs 的 handler 里 ──
+ * 主进程**不持有界面语言**：对话框标题与筛选器名由渲染层经 IPC 传进来，这里只当参数用。
+ * 「拿不到就退化」这条必须**可执行地**钉住（而不是写在注释里），故抽成纯函数
+ * ——本模块零 Electron 依赖，node 环境的 vitest 能直接 require（见文件头纪律）。
+ *
+ * 退化规则（三条都是**刻意的**）：
+ *   · `title` 非空串才带上；否则**不带 title**（用系统默认标题，绝不在主进程写中文兜底）；
+ *   · `filterName` 非空串才带 `filters`；否则**不过滤**（系统默认「所有文件」）；
+ *   · 传进来的任何东西都不做类型强转 —— 脏值一律当「没传」。
+ * ⚠️ 之所以只认 `extensions: ['json']`：插件目录的入口就是 manifest.json。
+ */
+function manifestPickerOptions(labels) {
+  const src = labels !== null && typeof labels === 'object' ? labels : {};
+  const title = typeof src.title === 'string' && src.title !== '' ? src.title : null;
+  const filterName = typeof src.filterName === 'string' && src.filterName !== '' ? src.filterName : null;
+  const options = { properties: ['openFile'] };
+  if (title !== null) options.title = title;
+  if (filterName !== null) options.filters = [{ name: filterName, extensions: ['json'] }];
+  return options;
+}
+
 module.exports = {
   MAX_PLUGIN_TOTAL_BYTES,
+  manifestPickerOptions,
   PLUGIN_ID_RE,
   pluginsRoot,
   isValidPluginId,

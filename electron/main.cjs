@@ -369,13 +369,14 @@ function registerPlugProtocol() {
 // 暴露面刻意最小（四个），预加载侧只转这四条通道，别的不给。
 
 /** 选文件：只让选 manifest.json（插件目录的入口就是它；选中后整目录落盘） */
-ipcMain.handle('plugin:pick-file', async () => {
+ipcMain.handle('plugin:pick-file', async (_event, labels) => {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
-  const result = await dialog.showOpenDialog(win, {
-    title: '选择插件的 manifest.json',
-    properties: ['openFile'],
-    filters: [{ name: '插件清单', extensions: ['json'] }],
-  });
+  /*
+   * ★ 主进程**不持有界面语言**（笔 4-a）：标题与筛选器名由**渲染层经 IPC 传进来**，只当参数用。
+   *   退化规则（拿不到就「不带标题 / 不过滤」，绝不写中文兜底）抽在共享模块里
+   *   `pluginInstall.manifestPickerOptions` —— 那是纯函数、被 spec 直接 require 钉住。
+   */
+  const result = await dialog.showOpenDialog(win, pluginInstall.manifestPickerOptions(labels));
   if (result.canceled || result.filePaths.length === 0) return { ok: true, canceled: true };
   return { ok: true, canceled: false, filePath: result.filePaths[0] };
 });
