@@ -309,8 +309,16 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
         b.scheduleBasis !== undefined ? String(b.scheduleBasis) : existing.schedule_basis,
       // v0.8：domain 允许显式 null（= 清除，回到读时回落）；
       // kind 走 String() 而非原样透传——归属侧只有 human/agent 两个合法值。
-      // ★ 变更合法性**已由本函数上方的「接管显式意图门」拦下**（值域白名单 + takeover === true），
-      //   故这里只做「不写进非字符串」的收尾，不重复校验（两处规则必然漂移）。
+      // ⚠️ **订正（2026-10-14，原注释与代码事实不符）**：此处原写「变更合法性**已由本函数上方的
+      //   『接管显式意图门』拦下（值域白名单 + takeover）」。**实际不成立** —— 上方那道门
+      //   （本文件承接 `b.kind` 的那个 if）**只判 `kind`**（`isProjectKind` 白名单 + `takeover`），
+      //   **对 `domain` 不做任何校验**。而本行是 `domain` 在 PATCH 路径上的唯一写入点、原样透传。
+      //   ⇒ 现状：`domain` **没有值域约束**。越界值（如 `'exhibition'`）经本接口或备份导入
+      //     （`backup.service.ts` 的 `domain: z.string()` 宽收）都能落库；后果是**看板列集合塌陷**
+      //     ——列派生遍历内置行业时找不到该值 ⇒ 一个行业列都派生不出来，项目被兜底塞进末列、
+      //     且计数/筛选错（实测：`in_progress` 的项目被算进 `todo` 列）。
+      //   ⇒ **因此不能沿用「两处规则必然漂移」作免校验的理由** —— 那条理由的前提（上游已拦）不存在。
+      //     缺口与取舍（拒收 vs 归一化）登记在出包台账的 D2/D3 条。
       domain: b.domain !== undefined ? (b.domain as string | null) : existing.domain,
       kind: b.kind !== undefined ? String(b.kind) : existing.kind,
       status: b.status !== undefined ? String(b.status) : existing.status,
