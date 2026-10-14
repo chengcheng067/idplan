@@ -68,8 +68,19 @@ export const PALETTE_ACCENT_MIN_CONTRAST = 3;
 
 /**
  * 预设变体卡（三枚打包；用户点选即用，保存形态与自定义完全一致）。
- * `nameKey` = 色号显示名的**键**（产品负责人 2026-10-14 拍板：色号 / 配色预设名
- * 也翻，原判 C 灰区改判 A）。落库的是 hex，名字只用于屏幕 ⇒ 换名不动数据。
+ * `nameKey` = **配色预设名**的键（产品负责人 2026-10-14 拍板：配色预设名也翻，
+ * 原判 C 灰区改判 A）。落库的是 hex，名字只用于屏幕 ⇒ 换名不动数据。
+ *
+ * ⚠️ **边界句（防口径交叉，2026-10-15 补）**：这里的「色号」= **配色预设名**
+ *   （屏幕侧，本表 `nameKey`：交通黄 / 站台蓝 / 橙红 …）。
+ *   它**不是** `src/components/timeline/stageColors.ts` 的 `STAGE_COLOR_NAMES`
+ *   （九段阶段色名：松墨 / 亮蓝 / 雾蓝 …）—— **两张表只是词面像，互不相干**：
+ *     · 本表：消费点 = `PaletteSection`（**屏幕**）⇒ 存键、随语言；
+ *     · `STAGE_COLOR_NAMES`：消费点全在**打印族**（`PrintGantt` / `SchedulePaper` /
+ *       `CalendarPrintPage` 等 `title`）⇒ **恒中文**（team-lead 2026-10-15 裁定，
+ *       见 `36f627e` 表头注释）。
+ *   ⇒ 判别依据是「**消费点在纸面还是屏幕**」，**不是「属于哪套命名体系」**。
+ *     读到本句想「顺手把九段色名也翻了」的人：那会当场打红纸面口径，请先读上面那条。
  */
 export interface PrintPalettePreset {
   id: string;
