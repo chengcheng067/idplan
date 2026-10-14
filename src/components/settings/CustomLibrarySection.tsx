@@ -25,9 +25,11 @@
  *      那几个**必须把 `t` 加进 deps**。漏了它回调会捕获旧语言：切英文后 toast 仍是
  *      中文、而界面看着是英文（本仓最怕的那类假绿）。`onRemove` 不取词（只写库 +
  *      落中文日志）⇒ deps 不变。
- *   ② `domainLabel()` 是 `core/template/stage-library` 的**模块级函数、不订阅语言**
- *      ⇒ 它在英文态仍返回中文板块名。**这是有意的**：内置行业名（两套）属
- *      team-lead 未拍板的 C 灰区，本笔一个字都不动。
+ *   ② **板块显示名现在走消息表**（英文补齐批 · 段 5 之五）：`domainLabelKey()` 取
+ *      `domain.<id>`（键表在 `src/i18n/labels.ts`）。原先此处写的是「`domainLabel()` 是
+ *      模块级、不订阅语言 ⇒ 有意不翻」—— 那条理由**已过期**：本组件自己调了 `useLang()`
+ *      （见下一条纪律），所以取词点会随语言切换重渲染。core 的 `DOMAIN_LABELS` 仍**一字不动**，
+ *      它继续当载荷口径的中文出处。
  *   ③ **有意保留中文**现在只剩两处（都不是界面文案，理由见就地注释）：
  *      · 发给 Agent 的失败回帖（`buildAgentFeedbackText` / `buildAgentFileFailureText`）
  *        —— 那是**载荷**不是界面 ⇒ 恒中文，是指令契约；
@@ -61,8 +63,7 @@ import {
   buildCustomLibraryPrompt,
   CUSTOM_LIBRARY_ERROR_HINTS,
 } from '../../core/template/custom-library.prompt';
-import { domainLabel } from '../../core/template/stage-library';
-import { customLibraryHintLabel, customLibraryIssueText, useLang } from '../../i18n';
+import { customLibraryHintLabel, customLibraryIssueText, domainLabelKey, useLang } from '../../i18n';
 import { logUser } from '../../core/services/log.service';
 
 const MAX_MB_LABEL = `${Math.floor(CUSTOM_LIBRARY_MAX_BYTES / 1024)}KB`;
@@ -394,8 +395,8 @@ export function CustomLibrarySection(): JSX.Element {
                 name: success.name,
                 items: success.items,
                 presets: success.presets,
-                // 有意不翻：domainLabel 是模块级、不订阅语言（内置行业名属未拍板的 C 灰区）
-                domain: domainLabel(success.domain),
+                // 走消息表：本组件已订阅 `useLang()` ⇒ 语言切换会重渲染
+                domain: domainLabelKey(success.domain),
               })}
             </p>
             <button
@@ -450,8 +451,8 @@ export function CustomLibrarySection(): JSX.Element {
                   {t('library.rowMeta', {
                     items: lib.items.length,
                     presets: lib.presets.length,
-                    // 有意不翻：同 success 卡（domainLabel 不订阅语言）
-                    domain: domainLabel(lib.domain),
+                    // 同上（本组件已订阅 `useLang()`）
+                    domain: domainLabelKey(lib.domain),
                   })}
                 </span>
                 <button

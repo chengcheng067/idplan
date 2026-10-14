@@ -247,6 +247,25 @@ export const zh = {
 
   /* 段 5 之四：宿主装配缺失（无 Provider）——载荷表与本表逐字相等（有 spec 钉） */
   'coreErr.plugin.registryUnavailable': '插件注册表不可用（无 Provider），无法保存开关',
+
+  /*
+   * ── 段 5 之五：行业板块显示名（10 个 id）──
+   * ⚠️ 值与 core 的 `DOMAIN_LABELS`（`src/core/template/stage-library.ts`）**逐字相同** ——
+   *    那张表**一字不动**（core 不许 import i18n），它继续当载荷口径的中文出处；
+   *    本表是屏幕口径。「默认中文」零变化的机器保证在 `tests/domain-label-i18n.spec.ts`。
+   *    键表见 `src/i18n/labels.ts` 的 `DOMAIN_LABEL_KEYS`（类型是 `Record<StageTemplateDomain, …>`
+   *    ⇒ 将来 `dto.ts` 的联合多一个成员，那里**编译不过**，不会静默漏翻）。
+   */
+  'domain.indoor': '室内',
+  'domain.landscape': '景观',
+  'domain.architecture': '建筑',
+  'domain.exhibition': '展陈',
+  'domain.software': '软件',
+  'domain.marketing': '活动',
+  'domain.film': '影视',
+  'domain.wedding': '婚礼',
+  'domain.consulting': '咨询',
+  'domain.travel': '旅游',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -446,4 +465,16 @@ export const en = {
   /* 段 5 之四：宿主装配缺失（无 Provider） */
   'coreErr.plugin.registryUnavailable':
     'The plugin registry is unavailable (no Provider), so this switch cannot be saved.',
+
+  /* ── 段 5 之五：行业板块显示名（10 个 id）—— 译名由 team-lead 给出 ── */
+  'domain.indoor': 'Interiors',
+  'domain.landscape': 'Landscape',
+  'domain.architecture': 'Architecture',
+  'domain.exhibition': 'Exhibition',
+  'domain.software': 'Software',
+  'domain.marketing': 'Events',
+  'domain.film': 'Film',
+  'domain.wedding': 'Wedding',
+  'domain.consulting': 'Consulting',
+  'domain.travel': 'Travel',
 } as const;

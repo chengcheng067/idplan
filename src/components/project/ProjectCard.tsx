@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { CalendarRange, MoreHorizontal, Archive, Palette, Trash2 } from 'lucide-react';
 
 import type { Member, Project, Stage, Task } from '../../core/types/entities';
-import { domainLabel } from '../../core/template/stage-library';
 import { taskIsDone } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
 import { effectiveDomainOf } from '../../core/project/visibility';
@@ -21,7 +20,7 @@ import { Tag } from '../ui/Tag';
 import { stageSolidColor } from '../timeline/stageColors';
 import { customStageColor } from '../timeline/stageColorKey';
 import { ProjectAppearanceDialog } from './ProjectAppearanceDialog';
-import { useLang } from '../../i18n';
+import { domainLabelKey, useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
 import { ANCHOR_GAP, resolveAnchoredPosition } from '../../lib/anchoredPosition';
 
@@ -169,10 +168,11 @@ export function ProjectCard({
    * 原来这里显示「类型」（`Project.type`）—— 那是「业态（餐饮/民宿…）+ 设计专业（室内/景观…）」
    * 混在一个字段里的旧模型，已按用户决策删除（统一到三层分类：行业大类 → 主板块 → 关联板块）。
    * 改为显示**主板块名**：`effectiveDomainOf` 是 domain 的唯一出口（见 `core/project/visibility.ts`），
-   * 中文化走 `domainLabel`（`DOMAIN_LABELS` 的唯一出处，未覆盖的将来领域原样显示不崩）。
+   * 界面名走 `domainLabelKey`（键表在 `src/i18n/labels.ts`；`DOMAIN_LABELS` 仍是 core 侧的
+   * 唯一出处，core 一个字不动。未覆盖的将来领域两处都原样显示 id、不崩）。
    * ★ 刻意**不是**直接删掉标签：删了会让卡片少一个信息位，用户就再也看不出这个项目属哪个板块。
    */
-  const domainText = domainLabel(effectiveDomainOf(project));
+  const domainText = domainLabelKey(effectiveDomainOf(project));
   const clientText = !memberView && project.clientName
     ? `${domainText} · ${project.clientName}`
     : domainText;

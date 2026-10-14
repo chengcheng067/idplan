@@ -24,7 +24,6 @@ import { IndustrySelect } from './IndustrySelect';
 import { Check, ChevronDown } from 'lucide-react';
 
 import {
-  domainLabel,
   getGroupDomains,
   getIndustryGroups,
   getUsableDomains,
@@ -32,9 +31,10 @@ import {
 } from '../../core/template/stage-library';
 import type { StageTemplateDomain } from '../../core/types/dto';
 /* ★ i18n 笔 misc：render 期取词走 `useLang()` 的 `t`（订阅语言变化）。
-   ⚠️ 板块**显示名**（室内/景观/…）由 `domainLabel()` 提供，它自己不订阅 ——
+   ⚠️ 板块**显示名**（室内/景观/…）由 `domainLabelKey()` 提供（键表在 `src/i18n/labels.ts`），
+   它自己不订阅 ——
    重渲染由本组件的 `useLang()` 负责（纪律见 `src/i18n/labels.ts` 头注释）。 */
-import { useLang } from '../../i18n';
+import { domainLabelKey, useLang } from '../../i18n';
 
 /** 板块中文标签（UI 文案唯一出处；阶段池分组标题也从这里取，避免两处各写一份） */
 
@@ -235,7 +235,7 @@ export function DomainCascade({
                 <button
                   key={d}
                   type="button"
-                  aria-label={t('wizard.relatedDomainAria', { name: domainLabel(d) })}
+                  aria-label={t('wizard.relatedDomainAria', { name: domainLabelKey(d) })}
                   // ★ 语言无关定位钩子（同上）：值域是 ASCII domain
                   data-related-domain={d}
                   aria-pressed={active}
@@ -247,7 +247,7 @@ export function DomainCascade({
                   }`}
                 >
                   {active && <Check size={12} aria-hidden />}
-                  {domainLabel(d)}
+                  {domainLabelKey(d)}
                 </button>
               );
             })}
@@ -260,7 +260,7 @@ export function DomainCascade({
         {t('wizard.poolScope')}
         {visibleDomainsOf(value).length === 0
           ? t('wizard.poolScopeAll')
-          : visibleDomainsOf(value).map(domainLabel).join(' / ')}
+          : visibleDomainsOf(value).map(domainLabelKey).join(' / ')}
         {groupDomains.length > 1
           ? t('wizard.poolScopeGroups', { count: groupDomains.length })
           : ''}

@@ -41,7 +41,6 @@ import { useMemo, useState } from 'react';
 import { Info } from 'lucide-react';
 
 import { Button } from '../ui/Button';
-import { domainLabel } from '../../core/template/stage-library';
 import { DomainCascade } from '../contract-wizard/DomainCascade';
 import type { DomainCascadeValue } from '../contract-wizard/DomainCascade';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
@@ -49,7 +48,7 @@ import { useRepos } from '../../hooks/useRepos';
 import { createProjectActions } from '../../store/useProjectsStore';
 import { needsDomainConfirm } from '../../core/project/visibility';
 import type { Project } from '../../core/types/entities';
-import { useLang } from '../../i18n';
+import { domainLabelKey, useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
 
 /**
@@ -152,7 +151,7 @@ export function DomainConfirmPrompt({
           <div className="flex items-center justify-end gap-2">
             <span className="mr-auto text-[12px] text-mist">
               {value.domain
-                ? t('ui.domainConfirm.willAssign', { domain: domainLabel(value.domain) })
+                ? t('ui.domainConfirm.willAssign', { domain: domainLabelKey(value.domain) })
                 : t('ui.domainConfirm.pickDomainFirst')}
             </span>
             <Button variant="secondary" onClick={() => setExpandedId(null)}>

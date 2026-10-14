@@ -72,7 +72,8 @@ export enum Confidence {
  * 它唯一还活着的职能「决定弹窗初始阶段池」已迁到**主板块**：
  * 见 `StageSelectPanel.defaultPresetKeyForDomain`。
  *
- * 现在投影/详情页显示的是**主板块名**（`domainLabel(effectiveDomainOf(project))`）。
+ * 现在投影/详情页显示的是**主板块名**：core 侧的出处是 `domainLabel()`，屏幕侧走
+ * `domainLabelKey()`（`src/i18n/labels.ts` 的键表 —— core 不许 import i18n，故只能两处、且逐条同义）。
  * 删字段的兼容处理见 `backup.service.ts` 的项目 schema（宽收 + 显式剥离）
  * 与 `tests/backup.legacy-compat.spec.ts` 的「含 type 的老备份仍可导入」三条用例。
  */

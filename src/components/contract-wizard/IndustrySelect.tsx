@@ -49,8 +49,8 @@ import { cn } from '../../lib/cn';
    ⚠️ 本文件里那个 `const t = window.setTimeout(...)` 已改名 `timer` ——
    它会**遮蔽**取词函数（同名 block 作用域），将来在那段 effect 里加一句取词
    就会静默取到数字、当场类型错。 */
-import { useLang } from '../../i18n';
-import { getIndustryGroups, getUsableDomains, domainLabel } from '../../core/template/stage-library';
+import { domainLabelKey, useLang } from '../../i18n';
+import { getIndustryGroups, getUsableDomains } from '../../core/template/stage-library';
 import type { StageTemplateDomain } from '../../core/types/dto';
 
 /**
@@ -164,7 +164,7 @@ export function IndustrySelect({
     if (!q) return rows;
     const hitDomains = selectable.filter(
       (r) =>
-        (r.kind === 'domain' && (domainLabel(r.domain).toLowerCase().includes(q) || r.domain.includes(q))) ||
+        (r.kind === 'domain' && (domainLabelKey(r.domain).toLowerCase().includes(q) || r.domain.includes(q))) ||
         (r.kind === 'none' && '不指定'.includes(q)),
     );
     const hitGroupKeys = new Set(hitDomains.flatMap((r) => (r.kind === 'domain' ? [r.groupKey] : [])));
@@ -247,7 +247,7 @@ export function IndustrySelect({
         typeahead.current = '';
       }, 800);
       const idx = filtered.findIndex(
-        (r) => r.kind === 'domain' && domainLabel(r.domain).toLowerCase().startsWith(typeahead.current),
+        (r) => r.kind === 'domain' && domainLabelKey(r.domain).toLowerCase().startsWith(typeahead.current),
       );
       if (idx >= 0) setCursor(idx);
     }
@@ -276,7 +276,7 @@ export function IndustrySelect({
       >
         <SelectedIcon size={16} className={cn('shrink-0', value ? 'text-mist' : 'text-mist')} aria-hidden />
         <span className={cn('truncate', value ? 'text-ink' : 'text-mist')}>
-          {value ? domainLabel(value) : t('wizard.pickMainDomainPlaceholder')}
+          {value ? domainLabelKey(value) : t('wizard.pickMainDomainPlaceholder')}
         </span>
         <ChevronDown
           size={14}
@@ -390,7 +390,7 @@ export function IndustrySelect({
                 )}
               >
                 <Icon size={14} className="shrink-0 text-mist" aria-hidden />
-                <span className="flex-1 truncate">{domainLabel(d)}</span>
+                <span className="flex-1 truncate">{domainLabelKey(d)}</span>
                 {selected && <Check size={14} className="shrink-0 text-pine" aria-hidden />}
               </div>
             );

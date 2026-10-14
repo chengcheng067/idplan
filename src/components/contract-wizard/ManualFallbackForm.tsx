@@ -39,7 +39,6 @@ import {
   visibleDomainsOf,
   type DomainCascadeValue,
 } from './DomainCascade';
-import { domainLabel } from '../../core/template/stage-library';
 import {
   normalizeCustomLibraries,
   buildCustomPresetItems,
@@ -48,7 +47,7 @@ import {
 import type { CustomStageDraft } from './CustomStageDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
-import { useLang } from '../../i18n';
+import { domainLabelKey, useLang } from '../../i18n';
 
 /**
  * 纯手动兜底建档（与向导并列可达，任何情况下都能建好档）。
@@ -385,7 +384,7 @@ export function ManualFallbackForm({
               */}
               <span className="ml-2 text-xs text-mist">
                 {cascade.domain
-                  ? t('wizard.presetsFilteredBy', { domain: domainLabel(cascade.domain) })
+                  ? t('wizard.presetsFilteredBy', { domain: domainLabelKey(cascade.domain) })
                   : t('wizard.pickDomainFirst')}
               </span>
             </span>

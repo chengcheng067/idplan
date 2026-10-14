@@ -51,6 +51,14 @@ export function buildPlanningPrompt(params: {
 }): string {
   const lines = [
     `项目名称：${params.projectName.trim() || '（未命名，请你据需求起名）'}`,
+    /*
+     * ⚠️ **这里刻意继续用 `domainLabel()`（中文），不改 `domainLabelKey()`** ——
+     * 这段拼出来的是**发给外部 Agent 的 prompt 载荷**（读者是对方的模型，不是界面），
+     * 把它翻成英文等于把界面语言泄进协议：同一份 prompt 会随用户的界面语言变，
+     * 而对方按它判断行业。载荷口径 = 中文，与 `CORE_ERROR_TEXT` / `agent-loopback` 那条边界同一条纪律。
+     * ⇒ 全仓 `domainLabel()` 的剩余屏幕侧消费点**只有这一处**（用
+     *   `grep -rn "domainLabel\b" src/ | grep -v domainLabelKey` 复核可得）。
+     */
     `所属行业：${params.domain ? domainLabel(params.domain) : '（未指定，请你判断）'}`,
     '',
     '我的想法（原文，不要替我改写需求）：',

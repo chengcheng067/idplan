@@ -63,6 +63,8 @@ export {
   CN_HOLIDAY_NAME_KEYS,
   calendarStatusLabel,
   cnHolidayNameLabel,
+  DOMAIN_LABEL_KEYS,
+  domainLabelKey,
   INGRESS_MODE_KEYS,
   MEMBER_ACTOR_KIND_KEYS,
   MEMBER_ROLE_KEYS,

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 
-import { domainLabel, 
+import {
   getItemsByDomains,
   getPresetItems,
   getPresets,
@@ -24,7 +24,7 @@ import { useProjectsStore } from '../../store/useProjectsStore';
      靠本组件的 `useLang()` 提供重渲染，纪律见 `src/i18n/labels.ts` 头注释）。
    `SCHEDULE_BASIS_LABELS`（enums 里的中文表）**不再直接上屏** —— 它保留给打印族与
    服务端（`src/core/**` 不许 import i18n），屏幕侧一律走取词小函数。 */
-import { scheduleBasisLabel, useLang } from '../../i18n';
+import { domainLabelKey, scheduleBasisLabel, useLang } from '../../i18n';
 import { CustomStageDialog, type CustomStageDraft } from './CustomStageDialog';
 import { stageColorPaint } from './stage-color-bridge';
 
@@ -271,7 +271,7 @@ export function StageSelectPanel({
       <div>
         <p className="mb-1.5 text-xs font-medium text-mist">
           {domain
-            ? t('wizard.quickPresetsWithDomain', { domain: domainLabel(domain) })
+            ? t('wizard.quickPresetsWithDomain', { domain: domainLabelKey(domain) })
             : t('wizard.quickPresets')}
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -363,7 +363,7 @@ export function StageSelectPanel({
 
           {poolGroups.map((group) => (
             <div key={group.domain} data-testid={`pool-group-${group.domain}`}>
-              <p className="mb-1 text-xs font-medium text-mist">{domainLabel(group.domain)}</p>
+              <p className="mb-1 text-xs font-medium text-mist">{domainLabelKey(group.domain)}</p>
               <div className="flex flex-wrap gap-1.5">
                 {group.items.map((item) => (
                   <StageChip
@@ -391,7 +391,7 @@ export function StageSelectPanel({
                   showOthers
                     ? t('wizard.collapseOtherDomains')
                     : t('wizard.showOtherDomains', {
-                        domains: otherDomains.map(domainLabel).join(' / '),
+                        domains: otherDomains.map(domainLabelKey).join(' / '),
                       })
                 }
                 aria-expanded={showOthers}
@@ -403,7 +403,7 @@ export function StageSelectPanel({
                 {showOthers
                   ? t('wizard.collapseOtherDomains')
                   : t('wizard.showOtherDomains', {
-                      domains: otherDomains.map(domainLabel).join(' / '),
+                      domains: otherDomains.map(domainLabelKey).join(' / '),
                     })}
               </button>
             </div>

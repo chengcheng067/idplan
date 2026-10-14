@@ -50,6 +50,12 @@ import type {
   CustomLibraryIssue,
   CustomLibraryIssueCode,
 } from '../core/template/custom-library.schema';
+/*
+ * 行业板块的类型（10 个 id）。**必须 `import type`**：类型导入会被擦除 ⇒
+ * 运行期 i18n **不依赖 `stage-library`**（那份文件连带它的模板 JSON 一起，
+ * 不该因为一张取词表被拖进 i18n 的模块图）。
+ */
+import type { StageTemplateDomain } from '../core/types/dto';
 import { t, type InterpolationVars } from './translate';
 import type { Lang } from './lang';
 import type { MessageKey } from './messages/zh';
@@ -641,4 +647,52 @@ export function pluginDisplaySummary(manifest: { id: string; summary: string }):
   const key = PLUGIN_SUMMARY_KEYS[manifest.id];
   if (key !== undefined) return t(key);
   return manifest.summary || t('plugin.noSummary');
+}
+
+/* ═══════════════════ 行业板块显示名（`DOMAIN_LABELS` → 文案键）═══════════════════
+ *
+ * ── 为什么在渲染层另立一张，而不是把 core 的 `DOMAIN_LABELS` 翻掉 ──
+ * `DOMAIN_LABELS`（`src/core/template/stage-library.ts`）住在 **core** 里，而
+ * `src/core/**` **不许 import i18n**（会把 `lang.ts` 的 `document` 拖进无 DOM 的服务端
+ * program ⇒ `typecheck:server` TS2584）。⇒ core 那张表**一字不动**，它继续当
+ * **载荷口径**的中文出处；屏幕侧由本表按 **domain id** 映射。
+ *
+ * ── 与「同字段两种来源」那一族（插件名）不同的地方 ──
+ * 板块名**只有一种来源**（core 那张表），不牵涉作者自带文案，所以这里不存在
+ * 「一半一半」的问题；唯一的风险是**漏登记**（新增领域忘了加一行 ⇒ 英文界面上仍是中文）。
+ * ⇒ 故本表的类型写成 `Record<StageTemplateDomain, MessageKey>`（**不是** `Record<string, …>`）：
+ *   `dto.ts` 的联合多一个成员，**这里就编译不过**。这是本条比插件那张表更强的地方。
+ *
+ * ⚠️ **一处明确不改**：`src/components/agent/PlanningWizardDialog.tsx` 里那句
+ *   `` `所属行业：${domainLabel(...)}` `` —— 它是**拼给外部 Agent 的 prompt 载荷**
+ *   （读者是对方的模型，不是界面），翻它等于把界面语言泄进协议。那里继续用 `domainLabel()`。
+ */
+
+/** 板块 id → 文案键。键形 `domain.<id>`。 */
+export const DOMAIN_LABEL_KEYS: Record<StageTemplateDomain, MessageKey> = {
+  indoor: 'domain.indoor',
+  landscape: 'domain.landscape',
+  architecture: 'domain.architecture',
+  exhibition: 'domain.exhibition',
+  software: 'domain.software',
+  marketing: 'domain.marketing',
+  film: 'domain.film',
+  wedding: 'domain.wedding',
+  consulting: 'domain.consulting',
+  travel: 'domain.travel',
+};
+
+/**
+ * 板块 id → **界面显示名**。
+ *
+ * 回落与 core 的 `domainLabel()` **逐条同义**：core 是 `DOMAIN_LABELS[d] ?? String(d)`，
+ * 这里是 `t(KEY[d]) ?? String(d)` —— 两者对**已登记**的 10 个 id 在 zh 下取值相同，
+ * 对**运行期冒出**的未登记 id 也相同（都原样给 id 本身，不编、不崩）。
+ *
+ * ⚠️ 同本文件其余取词函数：**不是 hook、不订阅语言变化** ⇒ 调用它的组件必须调 `useLang()`
+ * （4 个消费点都已订阅，见各文件）。
+ */
+export function domainLabelKey(domain: StageTemplateDomain): string {
+  const key = DOMAIN_LABEL_KEYS[domain];
+  return key === undefined ? String(domain) : t(key);
 }

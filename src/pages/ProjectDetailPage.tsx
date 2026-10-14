@@ -22,7 +22,6 @@ import {
   useHumanTasks,
 } from '../core/project/visibility';
 import { PrintPreviewDialog } from '../components/print/PrintPreviewDialog';
-import { domainLabel } from '../core/template/stage-library';
 import { TravelItineraryPanel } from '../components/travel/TravelItineraryPanel';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
@@ -40,7 +39,7 @@ import { CountdownNumber } from '../components/common/CountdownNumber';
 import { Badge } from '../components/common/Badge';
 import type { Stage } from '../core/types/entities';
 import { totalDaysInclusive } from '../lib/date';
-import { useLang } from '../i18n';
+import { domainLabelKey, useLang } from '../i18n';
 
 /**
  * 项目详情主视图：顶条信息环 + 九阶段时间轴 + 阶段抽屉。
@@ -414,7 +413,7 @@ export function ProjectDetailPage(): JSX.Element {
             <ProjectSourceBadge project={project} />
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-mist">
-            <Badge tone="pine">{domainLabel(effectiveDomainOf(project))}</Badge>
+            <Badge tone="pine">{domainLabelKey(effectiveDomainOf(project))}</Badge>
             {!memberView && project.clientName && <span>{t('project.client', { name: project.clientName })}</span>}
             {!memberView && project.address && <span>· {project.address}</span>}
             <span>
