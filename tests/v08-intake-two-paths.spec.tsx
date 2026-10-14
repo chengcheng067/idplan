@@ -136,12 +136,18 @@ function btnByText(fragment: string): HTMLButtonElement {
 
 /** 折叠区开关（文案里带已选数量 —— 折起来也看得见用户实际选了几段） */
 function foldToggle(): HTMLButtonElement {
-  return btnByText('本次服务阶段');
+  // ★ 语言无关钩子（i18n 笔 misc 同批）：可见文案已走消息表
+  const el = document.querySelector('[data-stage-fold-toggle]');
+  if (!el) throw new Error('未找到阶段折叠区开关');
+  return el as HTMLButtonElement;
 }
 
 /** 提交按钮（先选主板块才会从 disabled 放开 —— 新口径下它是「能不能提交」的判据） */
 function submitButton(): HTMLButtonElement {
-  return btnByText('建档（按所选');
+  // ★ 语言无关钩子（同上）
+  const el = document.querySelector('[data-manual-submit]');
+  if (!el) throw new Error('未找到建档提交钮');
+  return el as HTMLButtonElement;
 }
 
 /**
@@ -162,9 +168,38 @@ async function pickDomain(domain: string): Promise<void> {
   });
 }
 
-/** 第 1 层「行业」按钮（按 aria-label 定位，顺带锁住行业名） */
+/*
+ * ★ 语言无关定位助手（i18n 笔 misc 同批）：这些控件的 aria/可见文案已走消息表
+ * ⇒ `btn('行业 X')` / `btnByText('本次服务阶段')` 一类在英文态**静默失配**
+ * （失败伪装成「按钮不存在」）。行业名仍被 `data-industry-chip-name` 锁住。
+ */
+function pickIndustryEl(name: string): HTMLButtonElement {
+  const el = document.querySelector(`button[data-industry-chip-name="${name}"]`);
+  if (!el) throw new Error(`未找到行业芯片：${name}`);
+  return el as HTMLButtonElement;
+}
+
+/** 第 1 层「行业」（按语言无关钩子定位，顺带锁住行业名） */
 async function pickIndustry(label: string): Promise<void> {
-  await click(btn(`行业 ${label}`));
+  await click(pickIndustryEl(label));
+}
+
+function addCustomStageBtn(): HTMLButtonElement {
+  const el = document.querySelector('button[data-add-custom-stage]');
+  if (!el) throw new Error('未找到「新增自定义阶段」入口');
+  return el as HTMLButtonElement;
+}
+
+function customStageSubmitBtn(): HTMLButtonElement {
+  const el = document.querySelector('button[data-custom-stage-submit]');
+  if (!el) throw new Error('未找到「确认新增自定义阶段」钮');
+  return el as HTMLButtonElement;
+}
+
+function customStageCloseBtn(): HTMLButtonElement {
+  const el = document.querySelector('button[data-custom-stage-close]');
+  if (!el) throw new Error('未找到「取消新增自定义阶段」钮');
+  return el as HTMLButtonElement;
 }
 
 async function renderForm(): Promise<void> {
@@ -179,9 +214,9 @@ async function renderForm(): Promise<void> {
 
 /** 填最小必填项：项目名称 ＋ 竣工日（开始日已默认今天） */
 async function fillRequired(name: string, endAt: string): Promise<void> {
-  const nameInput = document.querySelector(
-    'input[placeholder="如「某某项目・第一阶段」"]',
-  ) as HTMLInputElement;
+  // ★ 语言无关钩子（i18n 笔 misc 同批）：占位文案已走消息表（且键**不属该组件**，
+  //   英文取值不同）⇒ `input[placeholder="如「某某项目・第一阶段」"]` 英文态静默失配。
+  const nameInput = document.querySelector('input[data-manual-name]') as HTMLInputElement;
   expect(nameInput).toBeTruthy();
   await setInputValue(nameInput, name);
 
@@ -349,7 +384,7 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     expect(foldToggle().textContent).toContain('已选 9 项');
 
     // 自定义阶段入口只在**建档路径**挂载（本表单就是建档路径）
-    await click(btn('新增自定义阶段'));
+    await click(addCustomStageBtn());
     const nameInput = document.querySelector(
       'input[data-custom-stage-name]',
     ) as HTMLInputElement;
@@ -361,7 +396,7 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     expect(picker).toBeTruthy();
     await setInputValue(picker, '#7a1f2b');
 
-    await click(btn('确认新增自定义阶段'));
+    await click(customStageSubmitBtn());
     // 追加到已选末尾（A8）—— 折叠区开关的计数就是用户的即时反馈
     expect(foldToggle().textContent).toContain('已选 10 项');
 
@@ -388,12 +423,12 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     await renderForm();
     await click(foldToggle());
     await pickDomain('indoor');
-    await click(btn('新增自定义阶段'));
+    await click(addCustomStageBtn());
     await setInputValue(
       document.querySelector('input[data-custom-stage-name]') as HTMLInputElement,
       '消防报审',
     );
-    await click(btn('确认新增自定义阶段'));
+    await click(customStageSubmitBtn());
     await fillRequired('复用库项目', '2026-12-31');
     await submitAndWait();
 
@@ -409,7 +444,7 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     const firstStageName = getFirstPresetStageName();
 
     // 用与已选第 1 段同名的名字新增 —— 弹窗必须即刻拦住
-    await click(btn('新增自定义阶段'));
+    await click(addCustomStageBtn());
     await setInputValue(
       document.querySelector('input[data-custom-stage-name]') as HTMLInputElement,
       firstStageName,
@@ -417,11 +452,11 @@ describe('路径乙（完整档）· 展开折叠区 → 三层级联 ＋ 自定
     // ① 行内提示（判据与落库闸门同源：`duplicateStageNames` / `isDuplicateStageName`）
     expect(document.querySelector('[data-testid="custom-stage-duplicate-error"]')).not.toBeNull();
     // ② 提交按钮置为「不可用」语义，且点击后不产出草稿
-    expect(btn('确认新增自定义阶段').getAttribute('aria-disabled')).toBe('true');
-    await click(btn('确认新增自定义阶段'));
+    expect(customStageSubmitBtn().getAttribute('aria-disabled')).toBe('true');
+    await click(customStageSubmitBtn());
     expect(document.querySelector('[data-testid="custom-stage-duplicate-error"]')).not.toBeNull();
 
-    await click(btn('取消新增自定义阶段'));
+    await click(customStageCloseBtn());
     // ③ 被拦下的东西**没有**混进已选（否则用户会带着重名去提交）
     expect(foldToggle().textContent).toContain('已选 9 项');
 

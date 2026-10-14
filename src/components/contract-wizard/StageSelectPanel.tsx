@@ -327,6 +327,8 @@ export function StageSelectPanel({
             <button
               type="button"
               aria-label={t('wizard.addCustomStageAria')}
+              // ★ 语言无关定位钩子（i18n 笔 misc）：aria 已走消息表
+              data-add-custom-stage=""
               onClick={() => setDialogOpen(true)}
               className="inline-flex items-center gap-1 rounded-md border border-pine/40 bg-pine-soft/40 px-2 py-0.5 text-xs text-pine hover:bg-pine-soft"
             >

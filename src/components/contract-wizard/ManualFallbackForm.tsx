@@ -313,6 +313,9 @@ export function ManualFallbackForm({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('project.namePlaceholder')}
+              // ★ 语言无关定位钩子（i18n 笔 misc）：占位文案走消息表（且**键不属本文件**，
+              //   英文取值不同）⇒ `input[placeholder="如「某某项目・第一阶段」"]` 英文态失配。
+              data-manual-name=""
               className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
             />
           </label>
@@ -370,6 +373,8 @@ export function ManualFallbackForm({
             type="button"
             onClick={() => setStagePanelOpen((v) => !v)}
             aria-expanded={stagePanelOpen}
+            // ★ 语言无关定位钩子（i18n 笔 misc）：可见文案已走消息表
+            data-stage-fold-toggle=""
             className="flex w-full items-center justify-between rounded-md border border-line bg-cream px-3 py-2 text-sm text-ink hover:bg-sand"
           >
             <span>
@@ -418,6 +423,8 @@ export function ManualFallbackForm({
 
         <button
           type="button"
+          // ★ 语言无关定位钩子（i18n 笔 misc）：可见文案已走消息表
+          data-manual-submit=""
           disabled={submitting || stageItems.length < MIN_STAGE_COUNT}
           onClick={() => void submit()}
           className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-pine px-4 py-2 text-sm text-white hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-40"

@@ -173,6 +173,10 @@ export function DomainCascade({
                 key={g.key}
                 type="button"
                 aria-label={t('wizard.industryAria', { name: g.name })}
+                // ★ 语言无关定位钩子（i18n 笔 misc）：aria 已走消息表 ⇒
+                //   `aria-label^="行业 "` 这类前缀选择器在英文态会静默失配。
+                data-industry-chip={g.key}
+                data-industry-chip-name={g.name}
                 aria-pressed={active}
                 onClick={() => pickGroup(g.key)}
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
@@ -232,6 +236,8 @@ export function DomainCascade({
                   key={d}
                   type="button"
                   aria-label={t('wizard.relatedDomainAria', { name: domainLabel(d) })}
+                  // ★ 语言无关定位钩子（同上）：值域是 ASCII domain
+                  data-related-domain={d}
                   aria-pressed={active}
                   onClick={() => toggleRelated(d)}
                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${

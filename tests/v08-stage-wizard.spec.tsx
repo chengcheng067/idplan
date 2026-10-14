@@ -38,11 +38,15 @@ import {
   duplicateStageNames,
 } from '../src/components/contract-wizard/StageSelectPanel';
 import {
+  domainLabel,
   getItemsByDomains,
   getPresetsByDomain,
   getUsableDomains,
 } from '../src/core/template/stage-library';
 import { MAX_STAGE_COUNT } from '../src/core/template/split';
+/* ★ 取词出口（i18n 笔 misc）：断言「aria 文案确实由消息表那句 + 名称拼成」时用它。
+   断言两侧同源 ⇒ 中英两种语言下都成立，而不是把中文锁死。 */
+import { t as tRaw } from '../src/i18n';
 import type {
   StageSelectionItem,
   StageTemplateDomain,
@@ -90,6 +94,20 @@ function chip(name: string): HTMLButtonElement {
 function otherDomainsToggle(): HTMLButtonElement {
   const el = document.querySelector('button[data-other-domains-toggle]');
   if (!el) throw new Error('未找到「其他行业阶段」折叠钮');
+  return el as HTMLButtonElement;
+}
+
+/** 第 1 层「行业」芯片（语言无关：`data-industry-chip-name` 仍锁住行业名） */
+function industryChip(name: string): HTMLButtonElement {
+  const el = document.querySelector(`button[data-industry-chip-name="${name}"]`);
+  if (!el) throw new Error(`未找到行业芯片：${name}`);
+  return el as HTMLButtonElement;
+}
+
+/** 自定义阶段弹窗的「确认新增」钮（语言无关钩子） */
+function customStageSubmit(): HTMLButtonElement {
+  const el = document.querySelector('button[data-custom-stage-submit]');
+  if (!el) throw new Error('未找到「确认新增自定义阶段」钮');
   return el as HTMLButtonElement;
 }
 
@@ -150,7 +168,9 @@ function poolGroups(): string[] {
 }
 
 function presetCount(): number {
-  return container.querySelectorAll('button[aria-label^="套餐 "]').length;
+  // ★ 语言无关（i18n 笔 misc 同批）：原来按 `aria-label^="套餐 "` 数，
+  //   aria 走消息表后英文态前缀是 `Preset ` ⇒ 前缀选择器静默失配（数成 0）。
+  return container.querySelectorAll('button[data-preset]').length;
 }
 
 /* ------------------------- ① DomainCascade（三层级联） ------------------------- */
@@ -164,17 +184,23 @@ function CascadeHarness({ initial }: { initial?: DomainCascadeValue }): JSX.Elem
 describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
   it('第 1 层恰 7 项：1 个伞形大类「建筑设计行业」＋ 6 个一级平铺板块（v0.9 增旅游）', async () => {
     await act(async () => root.render(<CascadeHarness />));
-    const layer1 = [...container.querySelectorAll('button[aria-label^="行业 "]')];
+    // ★ 结构走语言无关钩子；行业名由 `data-industry-chip-name` 锁住（与旧断言的七项逐字相同）
+    const layer1 = [...container.querySelectorAll('button[data-industry-chip]')];
     expect(layer1).toHaveLength(7);
-    expect(layer1.map((b) => b.getAttribute('aria-label'))).toEqual([
-      '行业 建筑设计行业',
-      '行业 软件开发',
-      '行业 市场活动',
-      '行业 影视制作',
-      '行业 婚礼策划',
-      '行业 咨询交付',
-      '行业 旅游出行',
+    const layer1Names = layer1.map((b) => b.getAttribute('data-industry-chip-name'));
+    expect(layer1Names).toEqual([
+      '建筑设计行业',
+      '软件开发',
+      '市场活动',
+      '影视制作',
+      '婚礼策划',
+      '咨询交付',
+      '旅游出行',
     ]);
+    // aria 文案 = 消息表那句 + 名称（两侧同源 ⇒ 中英皆成立，且证明 aria 真的绑在该键上）
+    expect(layer1.map((b) => b.getAttribute('aria-label'))).toEqual(
+      layer1Names.map((name) => tRaw('wizard.industryAria', { name: name! })),
+    );
   });
 
   it('默认 = 建筑设计行业 / 室内（PRD A2），池子范围恰 3 个板块', async () => {
@@ -187,7 +213,7 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
 
   it('A1：选「婚礼策划」（一级平铺）→ 第 2 层**不出现**，可见分组恰 1', async () => {
     await act(async () => root.render(<CascadeHarness />));
-    await click(btn('行业 婚礼策划'));
+    await click(industryChip('婚礼策划'));
     expect(container.querySelector('[data-testid="domain-cascade-layer2"]')).toBeNull();
     expect(container.querySelector('[data-testid="domain-cascade-layer3"]')).toBeNull();
     expect(container.querySelector('[data-testid="domain-cascade-visible-domains"]')?.textContent).toContain(
@@ -198,11 +224,11 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
   it('A1：5 个一级平铺板块**逐个点过**都不出现第 2 层', async () => {
     await act(async () => root.render(<CascadeHarness />));
     for (const name of ['软件开发', '市场活动', '影视制作', '婚礼策划', '咨询交付']) {
-      await click(btn(`行业 ${name}`));
+      await click(industryChip(name));
       expect(container.querySelector('[data-testid="domain-cascade-layer2"]')).toBeNull();
     }
     // 回到伞形大类 → 第 2 层回来
-    await click(btn('行业 建筑设计行业'));
+    await click(industryChip('建筑设计行业'));
     expect(container.querySelector('[data-testid="domain-cascade-layer2"]')).not.toBeNull();
   });
 
@@ -242,7 +268,7 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
   it('A2：第 2 层选到「室内」→ 第 1 层**同步**成它所属大类（否则池子范围与主板块自相矛盾）', async () => {
     await act(async () => root.render(<CascadeHarness initial={{ groupKey: 'wedding', domain: 'wedding', relatedDomains: [] }} />));
     // 婚礼是一级平铺 → 无第 2 层；改回伞形大类再验证同步
-    await click(btn('行业 建筑设计行业'));
+    await click(industryChip('建筑设计行业'));
     const trigger2 = container.querySelector('[data-industry-select-trigger]');
     expect(trigger2, 'IndustrySelect 触发钮').not.toBeNull();
     await act(async () => {
@@ -261,14 +287,18 @@ describe('DomainCascade：第 1 层 / 第 2 层 / 第 3 层', () => {
 
   it('A4：第 3 层候选**排除本大类**（同大类内不出现重复勾选项）', async () => {
     await act(async () => root.render(<CascadeHarness />));
-    const related = [...container.querySelectorAll('button[aria-label^="关联板块 "]')].map((b) =>
-      b.getAttribute('aria-label'),
-    );
+    // ★ 语言无关钩子（值域 = ASCII domain）：原来按 `aria-label^="关联板块 "` 数。
+    const related = [...container.querySelectorAll('button[data-related-domain]')];
+    const relatedDomains = related.map((b) => b.getAttribute('data-related-domain'));
     // 本大类是 space(建筑/景观/室内) → 候选里不该出现这三个
-    for (const label of ['关联板块 建筑', '关联板块 景观', '关联板块 室内']) {
-      expect(related).not.toContain(label);
+    for (const d of ['architecture', 'landscape', 'indoor']) {
+      expect(relatedDomains, `同大类候选不该出现 ${d}`).not.toContain(d);
     }
-    expect(related).toContain('关联板块 影视');
+    expect(relatedDomains).toContain('film');
+    // aria 文案 = 消息表那句 + 板块显示名（两侧同源 ⇒ 中英皆成立）
+    expect(
+      related.find((b) => b.getAttribute('data-related-domain') === 'film')?.getAttribute('aria-label'),
+    ).toBe(tRaw('wizard.relatedDomainAria', { name: domainLabel('film') }));
   });
 });
 
@@ -367,11 +397,11 @@ describe('StageSelectPanel：可见分组（A1/A6）', () => {
     expect(poolGroupCount()).toBe(3);
     // 折叠区的无障碍名与可见文案一致（含板块清单；标签用 domainLabel 短名，
     // 与分组标题、第 3 层「关联板块 X」同一套口径）
-    await click(btn('显示其他行业阶段（软件 / 活动 / 影视 / 婚礼 / 咨询 / 旅游）'));
+    await click(otherDomainsToggle());
     expect(poolGroupCount()).toBe(9);
     expect(poolGroups()).toEqual(getUsableDomains());
     // 收起 → 回到 3
-    await click(btn('收起其他行业阶段'));
+    await click(otherDomainsToggle());
     expect(poolGroupCount()).toBe(3);
   });
 
@@ -637,7 +667,7 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
   it('空名 → 阻止提交 + 行内提示', async () => {
     let submitted: CustomStageDraft | null = null;
     await act(async () => root.render(<DialogHarness existingNames={[]} onSubmit={(d) => (submitted = d)} />));
-    const submit = btn('确认新增自定义阶段');
+    const submit = customStageSubmit();
     // 「不可用」信号（置灰 + aria-disabled）与「点击后给出原因」两件事都要成立：
     // 这就是不用原生 disabled 的原因 —— 原生 disabled 不派发 click，行内提示无从出现。
     expect(submit.getAttribute('aria-disabled')).toBe('true');
@@ -646,8 +676,8 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
     expect(byTestId('custom-stage-name-error')).not.toBeNull(); // 且给出了原因
     // 补一刀：填上合法名后同一按钮必须放行（否则「阻止提交」可能只是把按钮焊死）
     await typeName('消防报审');
-    expect(btn('确认新增自定义阶段').getAttribute('aria-disabled')).toBe('false');
-    await click(btn('确认新增自定义阶段'));
+    expect(customStageSubmit().getAttribute('aria-disabled')).toBe('false');
+    await click(customStageSubmit());
     expect(submitted).not.toBeNull();
   });
 
@@ -658,8 +688,8 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
     );
     await typeName('提案');
     expect(byTestId('custom-stage-duplicate-error')).not.toBeNull();
-    expect(btn('确认新增自定义阶段').getAttribute('aria-disabled')).toBe('true');
-    await click(btn('确认新增自定义阶段'));
+    expect(customStageSubmit().getAttribute('aria-disabled')).toBe('true');
+    await click(customStageSubmit());
     expect(submitted).toBeNull();
   });
 
@@ -669,7 +699,7 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
       root.render(<DialogHarness existingNames={['提案']} onSubmit={(d) => (submitted = d)} />),
     );
     await typeName('消防报审');
-    await click(btn('确认新增自定义阶段'));
+    await click(customStageSubmit());
     expect(submitted).not.toBeNull();
     expect(submitted!.name).toBe('消防报审');
     expect(submitted!.ratioPercent).toBeNull(); // 留空 ⇒ 父组件按平均值兜底
@@ -686,7 +716,7 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
     const picker = document.querySelector('input[data-stage-color-input]') as HTMLInputElement;
     expect(picker).not.toBeNull();
     await setInputValue(picker, '#7a1f2b');
-    await click(btn('确认新增自定义阶段'));
+    await click(customStageSubmit());
     // 归一化后统一为**大写** `#RRGGBB`（全仓唯一归一化器 ＝ core/color 的 normalizeHex；
     // 备份往返夹具 `tests/backup.roundtrip.spec.ts` 也是大写口径）
     expect(submitted!.customColor).toBe('#7A1F2B');
@@ -730,7 +760,7 @@ describe('CustomStageDialog：新增自定义阶段（TBD-1：仅建档时可加
 
     // 正题：非法值必须被丢弃 —— 既不写入，也不把 colorIndex 弄坏
     await setRawInputValue(picker, 'not-a-color');
-    await click(btn('确认新增自定义阶段'));
+    await click(customStageSubmit());
     expect(submitted).not.toBeNull();
     expect(submitted!.customColor).toBeNull();
     expect(submitted!.colorIndex).toBe(3);

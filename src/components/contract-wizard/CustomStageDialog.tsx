@@ -116,6 +116,8 @@ export function CustomStageDialog({
               type="button"
               onClick={onClose}
               aria-label={t('wizard.cancelAddCustomStageAria')}
+              // ★ 语言无关定位钩子（i18n 笔 misc）：aria 已走消息表
+              data-custom-stage-close=""
               className="rounded-md p-1 text-mist hover:bg-sand"
             >
               <X size={16} />
@@ -188,6 +190,8 @@ export function CustomStageDialog({
             <button
               type="button"
               aria-label={t('wizard.confirmAddCustomStageAria')}
+              // ★ 语言无关定位钩子（i18n 笔 misc）：aria 已走消息表
+              data-custom-stage-submit=""
               /*
                * 用 `aria-disabled` 而不是原生 `disabled`：
                *   ① 原生 disabled 的按钮**不派发 click**，于是 `submitted && nameEmpty`
