@@ -64,6 +64,8 @@ import {
 import { getPresetItems } from '../src/core/template/stage-library';
 import { CUSTOM_STAGE_PRESET_KEY } from '../src/core/template/stage-fallback';
 import { ChangxiaError, ChangxiaErrorCode } from '../src/core/types/enums';
+/* `t` 取当前语言的原始值（i18n-misc 在 `v08-stage-wizard.spec.tsx` 同款别名） */
+import { t as tRaw } from '../src/i18n';
 
 /* ════════════════════════════════ 纯函数层 ════════════════════════════════ */
 
@@ -374,9 +376,21 @@ function named<T extends Element>(selector: string, what: string): T {
   return el;
 }
 
-const nameInput = (): HTMLInputElement => named<HTMLInputElement>('input[aria-label="看板名称"]', '看板名称输入');
-const startInput = (): HTMLInputElement => named<HTMLInputElement>('input[aria-label="开始日期"]', '开始日期输入');
-const endInput = (): HTMLInputElement => named<HTMLInputElement>('input[aria-label="结束日期"]', '结束日期输入');
+/*
+ * ★ 语言无关钩子（i18n 笔 ui 同批 · 2026-10-15）：这三个 `aria-label` **已走消息表**
+ *   （`ui.agentBoard.nameAria` / `startAria` / `endAria`），英文态分别是
+ *   `Board name` / `Start date` / `End date` ⇒ 原来按中文 aria 定位，切到英文模式会
+ *   **静默失配**，而且失败会伪装成「元素不存在」（不是「文案变了」）。
+ *   换锚点**没有放宽判据**：原来那条「aria 名就是那句中文」的隐式断言，由下面
+ *   「三个字段的 aria 名取自消息表」那条同源用例**更强地**接住 —— 它断言
+ *   `aria 文案 === tRaw(<键>)`（两侧同源 ⇒ 中英皆成立，且证明 aria 真的绑在该键上）。
+ */
+const nameInput = (): HTMLInputElement =>
+  named<HTMLInputElement>('input[data-create-agent-board-name]', '看板名称输入');
+const startInput = (): HTMLInputElement =>
+  named<HTMLInputElement>('input[data-create-agent-board-start]', '开始日期输入');
+const endInput = (): HTMLInputElement =>
+  named<HTMLInputElement>('input[data-create-agent-board-end]', '结束日期输入');
 const submitBtn = (): HTMLButtonElement =>
   named<HTMLButtonElement>('[data-create-agent-board-submit]', '提交按钮');
 const errorBox = (): HTMLElement | null => q<HTMLElement>('[data-create-agent-board-error]');
@@ -439,6 +453,20 @@ async function submitAndWaitForProject(): Promise<void> {
 /* ------------------------------ 用例 ------------------------------ */
 
 describe('CreateAgentBoardDialog ·「不预填」是这个表单的验收项（B9）', () => {
+  /*
+   * 这条是上面换锚点（`aria-label="中文"` → `data-create-agent-board-*`）的**判据补偿**：
+   * 原来「按中文 aria 找得到元素」隐含断言了 aria 名是那句中文；现在改为断言
+   * aria 名 === 消息表译文（`tRaw` 取当前语言）⇒ 中英模式下都成立，且**比原来更强**：
+   * 若有人把 `aria-label={t('ui.agentBoard.nameAria')}` 删掉或换成裸字符串，
+   * data-* 锚点还在（元素照样找得到），但这条会红。
+   */
+  it('★ 三个字段的 aria 名取自消息表（中英同源，且证明 aria 真的绑在键上）', async () => {
+    await renderDialog();
+    expect(nameInput().getAttribute('aria-label')).toBe(tRaw('ui.agentBoard.nameAria'));
+    expect(startInput().getAttribute('aria-label')).toBe(tRaw('ui.agentBoard.startAria'));
+    expect(endInput().getAttribute('aria-label')).toBe(tRaw('ui.agentBoard.endAria'));
+  });
+
   it('★ 挂载即：两个日期输入**都是空的**（没有"今天"之类的默认值）', async () => {
     await renderDialog();
     expect(startInput().value).toBe('');

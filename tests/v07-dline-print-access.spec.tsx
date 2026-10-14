@@ -598,9 +598,16 @@ const findScheduleEntry = (h: ParentNode): HTMLButtonElement | null =>
   Array.from(h.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim() === '日程表') ??
   null;
 
-/** 卡片「导出日程表」入口：成员档是图标按钮，故按 aria-label 判 */
+/*
+ * 卡片「导出日程表」入口：成员档是图标按钮，故按 `data-*` 判。
+ * ★ 2026-10-15（i18n-EN 英文补齐批）：原按 `aria-label="导出日程表"` 定位 —— 该 aria 名
+ *   **已走消息表**（`ui.projectCard.exportSchedule`，英文态 `Export schedule`）⇒ 英文模式下
+ *   这条会静默失配，而失败会伪装成「入口不存在」——正好撞在本文件要证的「成员看得到 /
+ *   未进身份看不到」上（假红与假绿都可能）。组件侧同批补了
+ *   `data-project-card-export-schedule` / `data-project-card-more-trigger` 两枚钩子。
+ */
 const findCardExportEntry = (h: ParentNode): HTMLButtonElement | null =>
-  h.querySelector('button[aria-label="导出日程表"]');
+  h.querySelector('button[data-project-card-export-schedule]');
 
 describe('v0.7-D · 打印入口门控（ProjectDetailPage / ProjectCard）', () => {
   it('★ 成员在项目详情页看得到「日程表」入口，且看不到「归档」（放开打印 ≠ 放开写）', () => {
@@ -702,7 +709,7 @@ describe('v0.7-D · 打印入口门控（ProjectDetailPage / ProjectCard）', ()
     expect(h.textContent).toContain(PROJECT.name); // 前提：卡片真的画了
     expect(findCardExportEntry(h), '成员必须能从卡片直接导出日程表').toBeTruthy();
     // 反向：管理员的 ⋯ 菜单（含重命名 / 外观 / 归档 / 删除四个写操作）不得下放给成员
-    expect(h.querySelector('button[aria-label="项目更多操作"]'), '成员的卡片不得出现 ⋯ 写操作菜单').toBeNull();
+    expect(h.querySelector('button[data-project-card-more-trigger]'), '成员的卡片不得出现 ⋯ 写操作菜单').toBeNull();
 
     setActor('none');
     const h2 = mount(
@@ -735,7 +742,7 @@ describe('v0.7-D · 打印入口门控（ProjectDetailPage / ProjectCard）', ()
       </MemoryRouter>,
     );
 
-    expect(h.querySelector('button[aria-label="项目更多操作"]'), '管理员必须仍有 ⋯ 菜单').toBeTruthy();
+    expect(h.querySelector('button[data-project-card-more-trigger]'), '管理员必须仍有 ⋯ 菜单').toBeTruthy();
     expect(findCardExportEntry(h), '管理员走 ⋯ 菜单，不应再多一个重复入口').toBeNull();
   });
 });

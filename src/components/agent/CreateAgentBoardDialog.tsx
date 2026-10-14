@@ -363,6 +363,12 @@ export function CreateAgentBoardDialog({
               <span className="mb-1 block font-medium">{t('ui.agentBoard.nameLabel')}</span>
               <ImeInput
                 value={name}
+                /*
+                 * 语言无关定位钩子：`aria-label` 已走消息表（英文态是 `Board name`），
+                 * 测试若拿中文 aria 当选择器，切到英文会**静默失配**且伪装成「元素不存在」。
+                 * 同一理由见 `contract-wizard/StageSelectPanel.tsx` 的 `data-stage-chip`。
+                 */
+                data-create-agent-board-name=""
                 aria-label={t('ui.agentBoard.nameAria')}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('ui.agentBoard.namePlaceholder')}
@@ -374,6 +380,7 @@ export function CreateAgentBoardDialog({
               <input
                 type="date"
                 value={plannedStartAt}
+                data-create-agent-board-start=""
                 aria-label={t('ui.agentBoard.startAria')}
                 onChange={(e) => setPlannedStartAt(e.target.value)}
                 className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"
@@ -384,6 +391,7 @@ export function CreateAgentBoardDialog({
               <input
                 type="date"
                 value={plannedEndAt}
+                data-create-agent-board-end=""
                 aria-label={t('ui.agentBoard.endAria')}
                 onChange={(e) => setPlannedEndAt(e.target.value)}
                 className="w-full rounded-md border border-line bg-cream px-2 py-1.5 text-sm text-ink outline-none focus:border-pine"

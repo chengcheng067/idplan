@@ -501,6 +501,9 @@ export function ProjectCard({
               setPrintPreviewId(project.id);
             }}
             aria-label={t('ui.projectCard.exportSchedule')}
+            /* 语言无关定位钩子：`aria-label` 已走消息表（英文态 `Export schedule`），
+               测试若拿中文 aria 当选择器，切英文会静默失配（伪装成「按钮不存在」）。 */
+            data-project-card-export-schedule=""
             title={t('ui.projectCard.printPreviewTitle')}
             className="shrink-0 rounded-full p-1.5 text-mist transition-all duration-base ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"
           >
@@ -513,6 +516,8 @@ export function ProjectCard({
               type="button"
               onClick={openMenu}
               aria-label={t('ui.projectCard.moreActions')}
+              /* 语言无关定位钩子（同上：aria 已走消息表，英文态 `More project actions`） */
+              data-project-card-more-trigger=""
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               className="rounded-full p-1.5 text-mist transition-all duration-base ease-in-out hover:-translate-y-0.5 hover:bg-sunken hover:text-pine"

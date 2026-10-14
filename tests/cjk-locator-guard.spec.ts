@@ -415,8 +415,34 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  * 口径同前几段：**真的转换了锚点**才允许下调；「绿着不下调」= 凭空留出 N 格让新错溜过去。
  * ⚠️ 本文件仍有一批**判据面看不见**的同族哑雷（`aria-label^=` 与跨行写法），
  *    它们的规模与归属**不体现在这个数字里**，别把「数字降了」读成「都转换完了」。
+ *
+ * ── 2026-10-15（i18n-EN 英文补齐批 · `i18n-ui` 的「活哑雷」普查笔）──
+ * **实测**：改前 86 → 改后 **83**（−3）。
+ *   · 逐条归因（**只有** `tests/v07-dline-print-access.spec.tsx` 变了，3 → **0**）：
+ *       `button[aria-label="导出日程表"]`（:603）与 `button[aria-label="项目更多操作"]`
+ *       （:705 反向、:738 正向）共 3 处 ⇒ 换成 `data-project-card-export-schedule` /
+ *       `data-project-card-more-trigger`（组件侧同批补的钩子，见 `ProjectCard.tsx`）。
+ *   · 按文件分布**逐条核对**（同一命令对比 86 那次）：`v07-dline-shell` 仍 17、
+ *     `v07-board-acceptance` 仍 11、`print-selector-modules` 仍 7、`qa-batch-a-verify` 仍 7、
+ *     `proposal-review-panel` 仍 5 …—— 除 `v07-dline-print-access` 外**一份都没动**，
+ *     所以这 −3 是「真转换」，不是「扫窄了」。
+ *   · ★ **同一笔里另有 3 处转换，不体现在这个数字里**（写下来免得下一个人对不上账）：
+ *     `tests/agent-board-create.spec.tsx` 的 `input[aria-label="看板名称"/"开始日期"/"结束日期"]`
+ *     换成了 `data-create-agent-board-*`。它们**本来就没进过本闸** —— 原写法
+ *     `named<HTMLInputElement>('input[aria-label="…"]', …)` 不在
+ *     `locator / querySelector / waitForSelector` 调用里，判据面看不见（守卫的已知边界：
+ *     它按**调用形态**认，不按属性本身认）。⇒「改了 6 处、数字只降 3」是**对的**，
+ *     不等于另外 3 处没改。给那 3 处补的判据是**同源断言**（aria 文案 === `tRaw(<键>)`），
+ *     不是棘轮 —— 见该 spec 里「三个字段的 aria 名取自消息表」那条。
+ *   · **本批通用读数纪律（建议沿用）**：棘轮数字**只用来对账「判据面内」的转换**；
+ *     判据面外的同族哑雷要**另立台账**，否则「数字没动」会被误读成「没干活」。
+ *     ⚠️ 别把两套数字相减当「漏报数」：普查脚本（`tools/i18n-ui-selector-census-nocomment.mjs`）
+ *     口径**更宽**（引号紧邻即认；且含守卫自身夹具 11 处、`print-selector-modules` 7 处等），
+ *     实测活代码 114 处。两者是「找人」与「上闸」两种用途，不是同一把尺。
+ *   复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` 读测试名里的
+ *     「当前 N / 基线 M」（或把 `BASELINE` 临时置 0，失败文案会直接印出**按文件分布**）⇒ 83
  */
-const BASELINE = 86;
+const BASELINE = 83;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());
