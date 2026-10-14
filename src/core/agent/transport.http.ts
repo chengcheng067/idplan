@@ -60,7 +60,7 @@
  *     四个 HTTP 类别（200/400/401/500）+ 网络异常全部有明确去向。
  */
 
-import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, coreError } from '../types/enums';
 import type { AgentImportQuery, ApplyResult } from '../types/agent-payload';
 
 /* ============================================================================================
@@ -248,21 +248,31 @@ export function mapHttpError(status: number, body: unknown): ChangxiaError {
       : null;
   const serverCode = typeof parsed?.code === 'string' ? parsed.code : undefined;
 
-  const fallback = `Agent 通道请求失败（HTTP ${status}${serverCode ? ` · ${serverCode}` : ''}）。`;
+  /*
+   * ⚠️ 两分支的**读者不同**，故处置不同：
+   *   · 服务端给了权威 `userMessage` ⇒ **原样透传**（真因，**不建键、不翻** —— 它是对方的程序写的）；
+   *   · 服务端没给 ⇒ 用本仓自己的兜底句，**那一句才进载荷文案表**（它会在英文界面里露出来）。
+   * 兜底句是拼出来的（`HTTP 500 · network`），故把「状态码」与「码后缀」当参数交给模板。
+   */
+  const suffix = serverCode ? ` · ${serverCode}` : '';
+  const failure = (code: ChangxiaErrorCode): ChangxiaError =>
+    serverMessage !== null
+      ? new ChangxiaError(code, serverMessage)
+      : coreError(code, 'coreErr.agent.channelRequestFailed', { status, suffix });
 
   if (status === 401) {
-    return new ChangxiaError(ChangxiaErrorCode.Validation, serverMessage ?? fallback);
+    return failure(ChangxiaErrorCode.Validation);
   }
   if (status === 400) {
-    return new ChangxiaError(ChangxiaErrorCode.Validation, serverMessage ?? fallback);
+    return failure(ChangxiaErrorCode.Validation);
   }
   if (status === 404) {
-    return new ChangxiaError(ChangxiaErrorCode.NotFound, serverMessage ?? fallback);
+    return failure(ChangxiaErrorCode.NotFound);
   }
   if (status === 409) {
-    return new ChangxiaError(ChangxiaErrorCode.Conflict, serverMessage ?? fallback);
+    return failure(ChangxiaErrorCode.Conflict);
   }
-  return new ChangxiaError(ChangxiaErrorCode.Storage, serverMessage ?? fallback);
+  return failure(ChangxiaErrorCode.Storage);
 }
 
 /** 安全解析 JSON（非 JSON / 空 body → null，不抛） */
@@ -297,10 +307,7 @@ async function requestText(
 ): Promise<{ ok: boolean; status: number; text: string }> {
   const doFetch = getFetch();
   if (!doFetch) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Network,
-      '当前运行环境不提供 fetch，无法访问 Agent 通道。',
-    );
+    throw coreError(ChangxiaErrorCode.Network, 'coreErr.agent.fetchUnavailable');
   }
 
   const controller = newAbortController();
@@ -320,11 +327,10 @@ async function requestText(
     return { ok: res.ok, status: res.status, text };
   } catch (err) {
     const aborted = (err as { name?: string } | null)?.name === 'AbortError';
-    throw new ChangxiaError(
+    throw coreError(
       ChangxiaErrorCode.Network,
-      aborted
-        ? `连接超时（${AGENT_HTTP_TIMEOUT_MS / 1000}s）：请检查地址是否可达、服务是否已启动。`
-        : '无法连接到该地址：请检查地址、网络与服务是否已启动。',
+      aborted ? 'coreErr.agent.timeout' : 'coreErr.agent.connectFailed',
+      aborted ? { seconds: AGENT_HTTP_TIMEOUT_MS / 1000 } : undefined,
       err,
     );
   } finally {
@@ -381,7 +387,7 @@ export async function importTasks(
   const base = normalizeBaseUrl(baseUrl);
   const url = buildEndpointUrl(base, AGENT_IMPORT_PATH);
   if (!url) {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '请先填写 Agent 服务地址。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.agent.baseUrlRequired');
   }
 
   const headers: Record<string, string> = {
@@ -399,10 +405,7 @@ export async function importTasks(
   const body = parseJsonSafe(res.text);
   if (!res.ok) throw mapHttpError(res.status, body);
   if (body === null) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.ParseFailed,
-      '服务端返回的不是合法 JSON，无法确认导入结果。',
-    );
+    throw coreError(ChangxiaErrorCode.ParseFailed, 'coreErr.agent.badJson');
   }
   return body as ApplyResult;
 }

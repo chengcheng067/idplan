@@ -32,7 +32,7 @@
 
 import { z } from 'zod';
 
-import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../types/enums';
+import { coreError, ChangxiaErrorCode, StageStatus } from '../types/enums';
 import type { IRepositoryBundle, ISettingsRepository } from '../repositories/interfaces';
 import type { Stage } from '../types/entities';
 import { assertAgentWritableProject } from './payload.apply';
@@ -151,9 +151,13 @@ export async function runRescheduleStages(
   // ① schema 复验（防绕过 validateAgentCommand 的直接调用）
   const parsed = rescheduleStagesCommandSchema.safeParse(cmd);
   if (!parsed.success) {
-    throw new ChangxiaError(
+    throw coreError(
       ChangxiaErrorCode.Validation,
-      `command 校验失败：${parsed.error.issues[0]?.path.join('.') || '(root)'} ${parsed.error.issues[0]?.message ?? ''}`,
+      'coreErr.command.validationFailed',
+      {
+        // 原式**没有** `.trim()` ⇒ 这里也不 trim（逐字节一致性优先）
+        detail: `${parsed.error.issues[0]?.path.join('.') || '(root)'} ${parsed.error.issues[0]?.message ?? ''}`,
+      },
       parsed.error,
     );
   }
@@ -243,9 +247,13 @@ export function validateAgentCommand(json: unknown): RescheduleStagesCommand {
   const parsed = rescheduleStagesCommandSchema.safeParse(json);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    throw new ChangxiaError(
+    throw coreError(
       ChangxiaErrorCode.Validation,
-      `command 校验失败：${issue?.path.join('.') || '(root)'} ${issue?.message ?? ''}`.trim(),
+      'coreErr.command.validationFailed',
+      {
+        // 原式带 `.trim()` ⇒ 先 trim 再交给模板（与「先拼后 trim」等价，理由同 agent-payload 那一处）
+        detail: `${issue?.path.join('.') || '(root)'} ${issue?.message ?? ''}`.trim(),
+      },
       parsed.error,
     );
   }

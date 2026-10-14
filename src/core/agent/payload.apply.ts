@@ -37,14 +37,7 @@
  *     把这个功能当 bug 删掉。
  */
 
-import {
-  ChangxiaError,
-  ChangxiaErrorCode,
-  MemberActorKind,
-  MemberRoleKind,
-  projectKindOf,
-  TaskStatus,
-} from '../types/enums';
+import { coreError, ChangxiaErrorCode, MemberActorKind, MemberRoleKind, projectKindOf, TaskStatus } from '../types/enums';
 import { stableId } from '../../lib/stableHash';
 import type { Project, Stage, Task, TaskArtifact } from '../types/entities';
 import type {
@@ -127,10 +120,7 @@ function readDeclaredStageName(raw: string | null | undefined): string | null {
   if (raw === null || raw === undefined) return null;
   const trimmed = raw.trim();
   if (trimmed.length === 0) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      'stageName 不能为空；未声明落点阶段名时请完全不要传该参数。',
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.payloadApply.stageNameRequired');
   }
   return trimmed;
 }
@@ -160,11 +150,10 @@ export function resolveAgentProjectId(params: {
   const p = nonBlankId(params.payloadProjectId);
   const e = nonBlankId(params.externalProjectId);
   if (p !== null && e !== null && p !== e) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `query 与 payload 的 projectId 不一致（外部指定=${e} / payload=${p}），` +
-        '系统拒绝猜测落点，未写入任何数据。',
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.payloadApply.projectIdMismatch', {
+      external: e,
+      payload: p,
+    });
   }
   return p ?? e;
 }
@@ -183,17 +172,10 @@ export async function assertAgentWritableProject(
 ): Promise<Project> {
   const project = await repos.projects.get(projectId);
   if (!project) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.ProjectUnresolved,
-      `目标项目（id=${projectId}）不存在，可能已被删除，请重新选择。`,
-    );
+    throw coreError(ChangxiaErrorCode.ProjectUnresolved, 'coreErr.payloadApply.targetMissing', { projectId: projectId });
   }
   if (projectKindOf(project) !== 'agent') {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.ProjectUnresolved,
-      `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道不能往里写任务。` +
-        ' 人类项目只能由你主动发起（界面手动粘贴 / 显式接管），Agent token 无法触碰。',
-    );
+    throw coreError(ChangxiaErrorCode.ProjectUnresolved, 'coreErr.payloadApply.targetNotAgent', { projectId: projectId });
   }
   return project;
 }
@@ -220,10 +202,7 @@ async function resolve(
     externalProjectId: opts?.projectId,
   });
   if (!projectId) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      'payload 未指定目标项目，请先选择项目后再导入。',
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.payloadApply.projectRequired');
   }
   // ★ v0.8.5：存在性 + kind 归属门抽取为共享函数 assertAgentWritableProject
   //   （命令通道复用同一道门；门内注释保留完整判据史）。行为与本文件历史逐字一致。

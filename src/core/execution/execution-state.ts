@@ -13,7 +13,7 @@
  *     （执行成功 ≠ 业务完成，只有写回成功才进完成态）。
  */
 
-import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
+import { coreError, ChangxiaErrorCode } from '../types/enums';
 import {
   ATTEMPT_NON_TERMINAL_STATUSES,
   AttemptStatus,
@@ -81,10 +81,10 @@ export function canTransition(from: ExecutionStatus, to: ExecutionStatus): boole
  */
 export function assertTransition(from: ExecutionStatus, to: ExecutionStatus): void {
   if (!canTransition(from, to)) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `非法的执行状态转移：${from} → ${to}`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.execution.badTransition', {
+      from: from,
+      to: to,
+    });
   }
 }
 
@@ -132,10 +132,10 @@ export function canAttemptTransition(from: AttemptStatus, to: AttemptStatus): bo
 /** 断言 Attempt 转移合法，非法抛 ChangxiaError（含 from/to） */
 export function assertAttemptTransition(from: AttemptStatus, to: AttemptStatus): void {
   if (!canAttemptTransition(from, to)) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `非法的执行尝试状态转移：${from} → ${to}`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.execution.badAttemptTransition', {
+      from: from,
+      to: to,
+    });
   }
 }
 
@@ -219,10 +219,12 @@ export function assertStatusTransition(
   if (next === ExecutionStatus.Completed) {
     const result = canComplete(current, proposals);
     if (!result.ok) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `非法的执行状态转移：${current.status} → ${next}（${result.reason}）`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.execution.completeRejected', {
+        from: current.status,
+        to: next,
+        // 原式是 `${result.reason}` —— `String()` 与模板插值逐字等价（缺值时都是 "undefined"）
+        reason: String(result.reason),
+      });
     }
   }
 }
@@ -282,10 +284,11 @@ export function assertExecutionConfirmed(
 
   // ① 授予点限制：显式**写入**（对象）确认，却不在授予点 → 拒绝（堵缺口 C）。
   if (opts.confirmationWrittenByCaller && current !== grantPoint) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `确认凭据只能在授予点（${grantPoint}）写入；当前状态为 ${current}，不允许写入确认（execution=${execution.id}）。`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.execution.confirmOnlyAtGrantPoint', {
+      grantPoint: grantPoint,
+      current: current,
+      executionId: execution.id,
+    });
   }
 
   // ② 字段非空与 ③ 内容绑定：仅对「即将真实执行」的态做门槛。
@@ -294,17 +297,19 @@ export function assertExecutionConfirmed(
   }
   const confirmation = execution.confirmation;
   if (!confirmation || !confirmation.confirmedAt || !confirmation.confirmedBy || !confirmation.planHash) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `未确认的执行单不得进入 ${next} 态：要求 confirmation.confirmedAt / confirmedBy / planHash 均非空（execution=${execution.id}）`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.execution.confirmationIncomplete', {
+      next: next,
+      executionId: execution.id,
+    });
   }
   // ③ 内容绑定：确认必须对应「这一版计划」。
   const actualHash = computePlanHash(execution);
   if (confirmation.planHash !== actualHash) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `进入 ${next} 态被拒：确认绑定的计划（planHash=${confirmation.planHash}）与当前执行单的计划（planHash=${actualHash}）不一致，确认已失效；离开授予点后无法重新确认，此执行单只能取消或失败后新建（execution=${execution.id}）。`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.execution.planHashMismatch', {
+      next: next,
+      boundHash: confirmation.planHash,
+      actualHash: actualHash,
+      executionId: execution.id,
+    });
   }
 }

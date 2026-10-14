@@ -196,6 +196,29 @@ export const CORE_ERROR_TEXT = {
   'coreErr.backup.domainRejected': '{offenders}。主板块 domain 只接受 {allowed}（共 {count} 个），或显式 null（= 清除，回到读时回落）。本包已被拒绝，库未做任何改动。',
   'coreErr.backup.schemaInvalid': '备份文件结构校验失败：{detail}',
   'coreErr.backup.importUnsupported': '当前数据源不支持备份导入。',
+
+  /* ── 段 4 之三：payload 落点 / 执行状态机 / Agent 通道 / remote 客户端 / 命令校验 ── */
+  'coreErr.payloadApply.stageNameRequired': 'stageName 不能为空；未声明落点阶段名时请完全不要传该参数。',
+  'coreErr.payloadApply.projectIdMismatch': 'query 与 payload 的 projectId 不一致（外部指定={external} / payload={payload}），系统拒绝猜测落点，未写入任何数据。',
+  'coreErr.payloadApply.targetMissing': '目标项目（id={projectId}）不存在，可能已被删除，请重新选择。',
+  'coreErr.payloadApply.targetNotAgent': '目标项目（id={projectId}）不是 Agent 看板，Agent 通道不能往里写任务。 人类项目只能由你主动发起（界面手动粘贴 / 显式接管），Agent token 无法触碰。',
+  'coreErr.payloadApply.projectRequired': 'payload 未指定目标项目，请先选择项目后再导入。',
+  'coreErr.execution.badTransition': '非法的执行状态转移：{from} → {to}',
+  'coreErr.execution.badAttemptTransition': '非法的执行尝试状态转移：{from} → {to}',
+  'coreErr.execution.completeRejected': '非法的执行状态转移：{from} → {to}（{reason}）',
+  'coreErr.execution.confirmOnlyAtGrantPoint': '确认凭据只能在授予点（{grantPoint}）写入；当前状态为 {current}，不允许写入确认（execution={executionId}）。',
+  'coreErr.execution.confirmationIncomplete': '未确认的执行单不得进入 {next} 态：要求 confirmation.confirmedAt / confirmedBy / planHash 均非空（execution={executionId}）',
+  'coreErr.execution.planHashMismatch': '进入 {next} 态被拒：确认绑定的计划（planHash={boundHash}）与当前执行单的计划（planHash={actualHash}）不一致，确认已失效；离开授予点后无法重新确认，此执行单只能取消或失败后新建（execution={executionId}）。',
+  'coreErr.agent.fetchUnavailable': '当前运行环境不提供 fetch，无法访问 Agent 通道。',
+  'coreErr.agent.timeout': '连接超时（{seconds}s）：请检查地址是否可达、服务是否已启动。',
+  'coreErr.agent.connectFailed': '无法连接到该地址：请检查地址、网络与服务是否已启动。',
+  'coreErr.agent.baseUrlRequired': '请先填写 Agent 服务地址。',
+  'coreErr.agent.badJson': '服务端返回的不是合法 JSON，无法确认导入结果。',
+  'coreErr.agent.channelRequestFailed': 'Agent 通道请求失败（HTTP {status}{suffix}）。',
+  'coreErr.remote.connectFailed': '无法连接到服务器，请检查局域网地址配置。',
+  'coreErr.remote.httpError': '服务端错误（HTTP {status}）',
+  'coreErr.remote.baseUrlRequired': '启用 remote 数据源时必须配置 VITE_API_BASE_URL。',
+  'coreErr.command.validationFailed': 'command 校验失败：{detail}',
 } as const;
 
 /** 机器可读的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */

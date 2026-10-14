@@ -45,7 +45,7 @@ import type {
   ItineraryDay,
   WritebackProposal,
 } from '../../types/entities';
-import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, StageStatus, coreError } from '../../types/enums';
 import type { ProjectQuery, TaskQuery, TaskUpsertRow } from '../interfaces';
 import type {
   AppendExecutionEventCmd,
@@ -86,20 +86,20 @@ export class RestClient {
         signal: controller.signal,
       });
     } catch (err) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Network,
-        '无法连接到服务器，请检查局域网地址配置。',
-        err,
-      );
+      throw coreError(ChangxiaErrorCode.Network, 'coreErr.remote.connectFailed', undefined, err);
     } finally {
       clearTimeout(timer);
     }
 
     if (!res.ok) {
-      let userMessage = `服务端错误（HTTP ${res.status}）`;
+      /*
+       * ⚠️ 两分支读者不同：服务端给了权威 `userMessage` ⇒ **原样透传**（真因，不建键）；
+       * 没给 ⇒ 用本仓自己的默认句「服务端错误（HTTP n）」，那一句才进载荷文案表。
+       */
+      let serverMessage: string | null = null;
       try {
         const payload = (await res.json()) as { error?: { userMessage?: string } };
-        if (payload?.error?.userMessage) userMessage = payload.error.userMessage;
+        if (payload?.error?.userMessage) serverMessage = payload.error.userMessage;
       } catch {
         /* 非 JSON 错误体保持默认文案 */
       }
@@ -124,7 +124,9 @@ export class RestClient {
             : res.status === 400 || res.status === 422
               ? ChangxiaErrorCode.Validation
               : ChangxiaErrorCode.Network;
-      throw new ChangxiaError(code, userMessage);
+      throw serverMessage !== null
+        ? new ChangxiaError(code, serverMessage)
+        : coreError(code, 'coreErr.remote.httpError', { status: res.status });
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
@@ -594,10 +596,7 @@ export const API_TOKEN_KEY = 'idplan.apiToken';
 /** remote bundle 装配（rest.client 同时承担 createRemoteRepositories 职责） */
 export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle {
   if (!apiBaseUrl) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Network,
-      '启用 remote 数据源时必须配置 VITE_API_BASE_URL。',
-    );
+    throw coreError(ChangxiaErrorCode.Network, 'coreErr.remote.baseUrlRequired');
   }
   // v0.6：VITE_API_TOKEN 预留位启用——Docker 化局域网部署时可配简单 Bearer token；
   // 未配置时空串，与改造前行为完全一致（不发送 Authorization header）。
