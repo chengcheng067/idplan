@@ -52,6 +52,8 @@ export type { MessageKey } from './messages/zh';
 export {
   AGENT_TERM_KEYS,
   CALENDAR_STATUS_KEYS,
+  CUSTOM_LIBRARY_HINT_KEYS,
+  customLibraryHintLabel,
   CN_HOLIDAY_NAME_KEYS,
   calendarStatusLabel,
   cnHolidayNameLabel,

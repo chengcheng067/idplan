@@ -42,6 +42,7 @@ import { useRepos } from '../../hooks/useRepos';
 import { cn } from '../../lib/cn';
 import {
   validateCustomLibrary,
+  CUSTOM_LIBRARY_KEY_PREFIX,
   CUSTOM_LIBRARY_MAX_BYTES,
   type CustomLibraryFile,
   type CustomLibraryIssue,
@@ -58,7 +59,7 @@ import {
   translateCustomLibraryIssue,
 } from '../../core/template/custom-library.prompt';
 import { domainLabel } from '../../core/template/stage-library';
-import { useLang } from '../../i18n';
+import { customLibraryHintLabel, useLang } from '../../i18n';
 import { logUser } from '../../core/services/log.service';
 
 const MAX_MB_LABEL = `${Math.floor(CUSTOM_LIBRARY_MAX_BYTES / 1024)}KB`;
@@ -401,11 +402,16 @@ export function CustomLibrarySection(): JSX.Element {
         {/* ⑥ 失败路径人话化：预告卡（最常见三种）→ 逐条错误 → 一键复制 */}
         {failure && (
           <div className="mt-2 space-y-1.5">
-            {/* 有意不翻：h.title / h.fix 的取值来自 custom-library.prompt.ts（提示词载荷模块，不在本笔范围） */}
+            {/*
+              笔·分界表 裁 2：预告卡文案改走消息表（键 `customLibrary.hint.<id>.title` / `.fix`）。
+              `h.id` 就是键；`key-prefix` 那张的前缀是 schema 常量 ⇒ 当**参数**传进去。
+              原注释「有意不翻…不在本笔范围」已作废：那正是本笔要修的那半屏中文。
+            */}
             <ul className="space-y-0.5 rounded-md border border-amber/40 bg-amber-soft px-2 py-1.5 text-[11px] text-ink">
               {CUSTOM_LIBRARY_ERROR_HINTS.map((h) => (
                 <li key={h.id} className="leading-5">
-                  · {h.title}——{h.fix}
+                  · {customLibraryHintLabel(h.id, 'title')}——
+                  {customLibraryHintLabel(h.id, 'fix', { prefix: CUSTOM_LIBRARY_KEY_PREFIX })}
                 </li>
               ))}
             </ul>

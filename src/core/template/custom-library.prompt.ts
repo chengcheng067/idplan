@@ -58,6 +58,18 @@ const TASKS_MAX = 20;
 /* ---------- 最小完整示例（真实可导入；TS 类型钉死在 CustomLibraryFile 上） ---------- */
 
 /**
+ * ⚠️ **有意不翻（载荷示例数据）** —— team-lead 2026-10-14 裁定（分界表 §零 · 裁 1）。
+ *
+ * 为什么本段的 7 个中文串（包名 / 两个阶段名 / 两条任务名 / 套餐名 / 套餐说明）**保持中文不动**：
+ *   ① 它们**会被用户抄进自己的 JSON**（示例里的名字就是用户下一步要写的东西）⇒ 属**数据**不属界面文案；
+ *   ② `tests/industry-neutral-copy.spec.ts` 已把「我的茶空间流程」登记为**中性示例名**，
+ *      动它要同批重看那条锁 ⇒ 收益小、牵连大。
+ * 反向锁：`tests/custom-library-hints-i18n.spec.ts` 钉住这 7 串**仍是中文原值**（翻了即红，K21）。
+ * 📌 待办台账（team-lead 记）：英文用户会拿到一份**中文示例**。将来若要动，
+ *    **必须同时动「载荷示例数据」与 `industry-neutral-copy` 那条锁**，不许只改一半。
+ */
+
+/**
  * 2 阶段 + 1 套餐的骨架。用户/Agent 照这个形状写即可过校验。
  * 类型标注 = CustomLibraryFile ⇒ 这个示例若与 schema 不再兼容，tsc 先红，
  * 不会出现「prompt 里的示例导入被拒」的漂移。
@@ -274,12 +286,20 @@ export function translateCustomLibraryIssue(issue: CustomLibraryIssue, raw?: unk
 
 /* ---------- ⑥ 预告卡：最常见三种错误的自救指引（静态三张，置于错误列表上方） ---------- */
 
+/** 三张预告卡的稳定 id（**同时就是文案键**：`customLibrary.hint.<id>.title` / `.fix`） */
+export type CustomLibraryErrorHintId = 'json-only' | 'key-prefix' | 'dangling-reference';
+
+/**
+ * 一张预告卡的**结构**（team-lead 2026-10-14 裁定：分界表 §零 · 裁 2 走方案 (a)）。
+ *
+ * ⚠️ 这里**只有 `id`**，没有 `title` / `fix`：本模块在 `src/core/**`，**不许 import i18n**
+ *   （会把 `lang.ts` 的 `document` 拖进无 DOM 的服务端 program ⇒ `typecheck:server` 红 TS2584；
+ *    `src/lib/date.ts` 与 `src/constants/agentTerms.ts` 都栽过）。
+ *   `id` 本来就是个键 ⇒ 文案由 UI 层用 `customLibraryHintLabel(id, 'title' | 'fix')` 取词。
+ *   键表在 `src/i18n/labels.ts`（码 → 键的既定形态），双向集合相等由 spec 钉住。
+ */
 export interface CustomLibraryErrorHint {
-  id: 'json-only' | 'key-prefix' | 'dangling-reference';
-  /** 错误名 */
-  title: string;
-  /** 自救动作 */
-  fix: string;
+  id: CustomLibraryErrorHintId;
 }
 
 /**
@@ -288,22 +308,16 @@ export interface CustomLibraryErrorHint {
  * 只给动作，不说 zod/schema。
  */
 export const CUSTOM_LIBRARY_ERROR_HINTS: readonly CustomLibraryErrorHint[] = [
-  {
-    id: 'json-only',
-    title: 'Agent 多输出了说明文字，不是纯 JSON',
-    fix: '回到 Agent 回复里，从第一个 { 复制到最后一个 }，存成 .json 再导入。',
-  },
-  {
-    id: 'key-prefix',
-    title: '阶段 key 忘了 usr. 前缀',
-    fix: `所有 key 都要以 ${CUSTOM_LIBRARY_KEY_PREFIX} 开头，如 ${CUSTOM_LIBRARY_KEY_PREFIX}site。`,
-  },
-  {
-    id: 'dangling-reference',
-    title: '套餐引用了本包没有的阶段 key',
-    fix: '检查每个套餐 itemKeys 里的 key，是否都写进了同一个文件的阶段里。',
-  },
+  { id: 'json-only' },
+  { id: 'key-prefix' },
+  { id: 'dangling-reference' },
 ];
+/*
+ * 三张卡的**文案**在消息表（键 `customLibrary.hint.<id>.title` / `.fix`），不在本文件 ——
+ * 见 `CustomLibraryErrorHint` 的注释（本模块不许 import i18n）。
+ * `key-prefix` 那张的正文里有前缀，由 UI 侧把 `CUSTOM_LIBRARY_KEY_PREFIX` 当**参数**拼进去
+ * （前缀是 schema 常量 = 数据，不是文案）。
+ */
 
 /**
  * ⑥-3「一键复制全部错误，贴回给 Agent」的文案（纯函数，UI 只负责复制）。

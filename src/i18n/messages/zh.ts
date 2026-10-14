@@ -1449,6 +1449,24 @@ export const zhMessages = {
   'meta.description':
     'ID Plan — 跨行业项目排程工具：把合同变成一张看得懂的阶段时间轴：把合同变成一张看得懂的阶段时间轴。',
 
+  /* ══════════ 笔·分界表 裁 2：行业库失败预告卡（键 = `customLibrary.hint.<id>.<part>`） ══════════
+     ★ 这 6 条 zh 取值与改动前的 `title` / `fix` 中文**逐字相同**（硬线）。
+     ⚠️ `key-prefix.fix` 里的 `{prefix}` 是**参数**（schema 常量 `usr.`，是数据不是文案）。
+     ⚠️ `json-only.fix` 里那对 `{ }` 是**字面大括号**：`t()` 的占位符只认 `{\w+}`，
+        括号内是空格 + 汉字 ⇒ 不会误当占位符（有 spec 逐字锁住）。 */
+  'customLibrary.hint.json-only.title':
+    'Agent 多输出了说明文字，不是纯 JSON',
+  'customLibrary.hint.json-only.fix':
+    '回到 Agent 回复里，从第一个 { 复制到最后一个 }，存成 .json 再导入。',
+  'customLibrary.hint.key-prefix.title':
+    '阶段 key 忘了 usr. 前缀',
+  'customLibrary.hint.key-prefix.fix':
+    '所有 key 都要以 {prefix} 开头，如 {prefix}site。',
+  'customLibrary.hint.dangling-reference.title':
+    '套餐引用了本包没有的阶段 key',
+  'customLibrary.hint.dangling-reference.fix':
+    '检查每个套餐 itemKeys 里的 key，是否都写进了同一个文件的阶段里。',
+
   /* ══════════ 笔 3-E：行程面板（`TravelItineraryPanel`） ══════════
      ⚠️ 「预算 / 实际」各只有**一个**键：汇总条标签与每日卡字段标签**是同一个词**。 */
   'travel.loading': '正在生成每日行程…',

@@ -1433,6 +1433,20 @@ export const enMessages: Record<MessageKey, string> = {
   'meta.description':
     'ID Plan — a cross-industry project scheduling tool: turn a contract into a stage timeline anyone can read.',
 
+  /* ══════════ Boundary-table ruling 2: custom-library failure hint cards ══════════ */
+  'customLibrary.hint.json-only.title':
+    'The Agent added explanation text — that is not pure JSON',
+  'customLibrary.hint.json-only.fix':
+    'Go back to the Agent reply, copy from the first { to the last }, save it as a .json file and import again.',
+  'customLibrary.hint.key-prefix.title':
+    'A stage key is missing the usr. prefix',
+  'customLibrary.hint.key-prefix.fix':
+    'Every key must start with {prefix}, for example {prefix}site.',
+  'customLibrary.hint.dangling-reference.title':
+    'A preset references a stage key this pack does not have',
+  'customLibrary.hint.dangling-reference.fix':
+    'Check that every key in each preset itemKeys is defined as a stage in the same file.',
+
   /* ══════════ Batch 3-E: travel itinerary panel ══════════ */
   'travel.loading': 'Generating the daily itinerary…',
   'travel.title': 'Daily itinerary',

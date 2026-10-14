@@ -36,7 +36,7 @@ import type { ProjectCalendarStatus } from '../core/types/enums';
  *    而那份配置无 DOM —— 理由见下方 Agent 术语表区块）。
  */
 import type { AgentTermKey, AgentTermMode } from '../constants/agentTerms';
-import { t } from './translate';
+import { t, type InterpolationVars } from './translate';
 import type { Lang } from './lang';
 import type { MessageKey } from './messages/zh';
 
@@ -221,6 +221,54 @@ export function pluginFailureText(failure: PluginFailure): string {
   const key = PLUGIN_FAILURE_KEYS[failure.code];
   if (key === undefined) return failure.code;
   return t(key, failure.params);
+}
+
+/* ═══════════ 行业库失败预告卡（笔·分界表 裁 2）：`id` → 文案键 ═══════════
+ *
+ * ── 为什么是「码 → 键」而不是把文案写进 core ──
+ * `CUSTOM_LIBRARY_ERROR_HINTS` 在 `src/core/template/**`，**不许 import i18n**
+ * （会把 `lang.ts` 的 `document` 拖进无 DOM 的服务端 program ⇒ `typecheck:server` 红 TS2584）。
+ * 那三张卡各有现成的 `id` ⇒ 直接拿它当键（键命名空间 `customLibrary.hint.<id>.title` / `.fix`），
+ * core 只留结构。
+ *
+ * ── 双向集合相等（K12 列举完备性 + K14 消费锁）──
+ * spec（`tests/custom-library-hints-i18n.spec.ts`）断三处集合两两相等：
+ *   `HINTS 的 id 集 ⟺ 本表的键集 ⟺ zh 表里 customLibrary.hint.* 反解出的 id 集`。
+ *   少一个 id ⇒ 那张卡渲染成码；多一个键 ⇒ 死词条。
+ *
+ * ⚠️ **硬线**：6 条 zh 取值与改动前 `title` / `fix` 的中文**逐字相同**
+ *    （spec 里存的是**改前抄下的原值**做基准，不是改后重算 —— 那只能证明「自己等于自己」）。
+ */
+export const CUSTOM_LIBRARY_HINT_KEYS: Readonly<
+  Record<string, { title: MessageKey; fix: MessageKey }>
+> = {
+  'json-only': {
+    title: 'customLibrary.hint.json-only.title',
+    fix: 'customLibrary.hint.json-only.fix',
+  },
+  'key-prefix': {
+    title: 'customLibrary.hint.key-prefix.title',
+    fix: 'customLibrary.hint.key-prefix.fix',
+  },
+  'dangling-reference': {
+    title: 'customLibrary.hint.dangling-reference.title',
+    fix: 'customLibrary.hint.dangling-reference.fix',
+  },
+};
+
+/**
+ * 预告卡取词（**屏幕侧唯一入口**）：`part` 决定取 `title` 还是 `fix`。
+ * 未知 id 原样回显 id（可见即错，**不写中文兜底**）。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function customLibraryHintLabel(
+  id: string,
+  part: 'title' | 'fix',
+  vars?: InterpolationVars,
+): string {
+  const keys = CUSTOM_LIBRARY_HINT_KEYS[id];
+  if (keys === undefined) return id;
+  return t(keys[part], vars);
 }
 
 /* ─────────────────── Agent 写回状态五态（AgentActivityStream） ─────────────────── */
