@@ -234,10 +234,12 @@ export function StageSelectPanel({
           <span className="text-sm font-medium">{t('wizard.scheduleBasis')}</span>
           <div className="flex flex-wrap gap-1.5">
             {ALL_SCHEDULE_BASIS.map((b) => (
+              /* 语言无关定位钩子 `data-schedule-basis`（同 StageChip 上方注释）：枚举值 ASCII */
               <button
                 key={b}
                 type="button"
                 aria-label={t('wizard.scheduleBasisAria', { label: scheduleBasisLabel(b) })}
+                data-schedule-basis={b}
                 onClick={() => onScheduleBasisChange(b)}
                 aria-pressed={b === scheduleBasis}
                 className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
@@ -283,6 +285,8 @@ export function StageSelectPanel({
                 key={p.key}
                 type="button"
                 aria-label={t('wizard.presetAria', { name: p.name })}
+                data-preset={p.key}
+                data-preset-name={p.name}
                 onClick={() => applyPreset(p.key)}
                 className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
                   active
@@ -389,6 +393,8 @@ export function StageSelectPanel({
                       })
                 }
                 aria-expanded={showOthers}
+                // 语言无关定位钩子（同一理由见 StageChip 上的 data-stage-chip 注释）
+                data-other-domains-toggle=""
                 onClick={() => setShowOthers((v) => !v)}
                 className="text-xs text-pine hover:underline"
               >
@@ -481,6 +487,8 @@ export function StageSelectPanel({
                     <button
                       type="button"
                       aria-label={t('wizard.moveUpAria', { name: item.name })}
+                      data-row-action="up"
+                      data-row-name={item.name}
                       disabled={index === 0}
                       onClick={() => move(index, -1)}
                       className="h-6 w-6 rounded p-0 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
@@ -490,6 +498,8 @@ export function StageSelectPanel({
                     <button
                       type="button"
                       aria-label={t('wizard.moveDownAria', { name: item.name })}
+                      data-row-action="down"
+                      data-row-name={item.name}
                       disabled={index === selected.length - 1}
                       onClick={() => move(index, 1)}
                       className="h-6 w-6 rounded p-0 text-mist hover:bg-sand disabled:cursor-not-allowed disabled:opacity-30"
@@ -499,6 +509,8 @@ export function StageSelectPanel({
                     <button
                       type="button"
                       aria-label={t('wizard.removeAria', { name: item.name })}
+                      data-row-action="remove"
+                      data-row-name={item.name}
                       onClick={() => removeAt(index)}
                       className="h-6 w-6 rounded p-0 text-mist hover:bg-sand hover:text-clay"
                     >
@@ -554,6 +566,12 @@ function StageChip({
         action: checked ? t('wizard.deselect') : t('wizard.select'),
         name: item.name,
       })}
+      // ★ 语言无关定位钩子（i18n 笔 misc 同批落地）：`aria-label` 已走消息表 ⇒
+      //   英文态取值变了，任何 `aria-label="选择阶段 X"` 的选择器会**静默失配**
+      //   （失败伪装成「按钮不存在」）。`data-stage-chip-name` 供按名字定位，
+      //   `data-stage-chip`（= 阶段 key，ASCII 稳定）供不需要人名的场合。
+      data-stage-chip={item.key}
+      data-stage-chip-name={item.name}
       aria-pressed={checked}
       aria-disabled={blocked}
       onClick={onToggle}

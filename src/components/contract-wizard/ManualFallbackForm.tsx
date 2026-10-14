@@ -173,7 +173,7 @@ export function ManualFallbackForm({
     if (stageItems.length >= MAX_STAGE_COUNT) {
       useProjectsStore
         .getState()
-        .pushToast('error', `单次项目最多 ${MAX_STAGE_COUNT} 个阶段`);
+        .pushToast('error', t('wizard.maxStages', { max: MAX_STAGE_COUNT }));
       return;
     }
     const def = createCustomStageDef({
@@ -231,27 +231,27 @@ export function ManualFallbackForm({
   const submit = async (): Promise<void> => {
     setError(null);
     if (!name.trim() || !endAt) {
-      setError('项目名称与竣工日为必填。');
+      setError(t('wizard.errNameAndEndRequired'));
       return;
     }
     const startIso = toIsoDate(startAt);
     const endIso = toIsoDate(endAt);
     if (!startIso || !endIso) {
-      setError('开始日或竣工日格式不正确，请选择有效日期。');
+      setError(t('wizard.errBadDates'));
       return;
     }
     if (endIso < startIso) {
-      setError('竣工日不能早于开始日。');
+      setError(t('wizard.errEndBeforeStart'));
       return;
     }
     if (stageItems.length < MIN_STAGE_COUNT) {
-      setError(`至少选择 ${MIN_STAGE_COUNT} 个阶段。`);
+      setError(t('wizard.minStagesRequired', { min: MIN_STAGE_COUNT }));
       return;
     }
     // A9：同项目内阶段名不可重复 → 行内提示 + **阻止提交**（与 StageSelectPanel 同一判据）
     const duplicateNames = duplicateStageNames(stageItems);
     if (duplicateNames.length > 0) {
-      setError(`阶段名重复：${duplicateNames.join('、')}，请改名后再提交。`);
+      setError(t('wizard.duplicateNamesShort', { names: duplicateNames.join(t('ui.listSeparator')) }));
       return;
     }
     setSubmitting(true);
@@ -284,23 +284,23 @@ export function ManualFallbackForm({
     } catch (err) {
       // 展示真实原因（含 userMessage），不再用笼统的「请检查日期是否有效」误导用户
       const userMessage = (err as { userMessage?: string })?.userMessage;
-      setError(userMessage ?? '建档失败，请重试。');
+      setError(userMessage ?? t('wizard.createFailed'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Modal open={open} onClose={onClose} ariaLabel="手动建档">
+    <Modal open={open} onClose={onClose} ariaLabel={t('wizard.manualTitle')}>
       <div className="glass-strong iridescent-border dialog-pop flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl shadow-soft">
         {/* 描边挂在外层固定框；滚动交给内层，避免虹彩描边伪元素随内容断层露线 */}
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-display text-display-md">手动建档</h3>
+          <h3 className="font-display text-display-md">{t('wizard.manualTitle')}</h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="关闭手动建档"
+            aria-label={t('wizard.closeManualAria')}
             className="rounded-md p-1 text-mist hover:bg-sand"
           >
             <X size={16} />
@@ -308,7 +308,7 @@ export function ManualFallbackForm({
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="block text-sm">
-            <span className="mb-1 block font-medium">项目名称 *</span>
+            <span className="mb-1 block font-medium">{t('wizard.fieldName')}</span>
             <ImeInput
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -317,7 +317,7 @@ export function ManualFallbackForm({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block font-medium">地址</span>
+            <span className="mb-1 block font-medium">{t('wizard.fieldAddress')}</span>
             <ImeInput
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -325,7 +325,7 @@ export function ManualFallbackForm({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block font-medium">客户名称</span>
+            <span className="mb-1 block font-medium">{t('wizard.fieldClient')}</span>
             <ImeInput
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
@@ -334,7 +334,7 @@ export function ManualFallbackForm({
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">开始 *</span>
+              <span className="mb-1 block font-medium">{t('wizard.fieldStart')}</span>
               <input
                 type="date"
                 value={startAt}
@@ -344,8 +344,10 @@ export function ManualFallbackForm({
             </label>
             <label className="block text-sm">
               <span className="mb-1 block font-medium">
-                竣工 *
-                {durationEnabled && <span className="ml-1 font-normal text-pine">（已按阶段时长算出）</span>}
+                {t('wizard.fieldEnd')}
+                {durationEnabled && (
+                  <span className="ml-1 font-normal text-pine">{t('wizard.endComputedHint')}</span>
+                )}
               </span>
               <input
                 type="date"
@@ -371,15 +373,15 @@ export function ManualFallbackForm({
             className="flex w-full items-center justify-between rounded-md border border-line bg-cream px-3 py-2 text-sm text-ink hover:bg-sand"
           >
             <span>
-              本次服务阶段 · 已选 {stageItems.length} 项
+              {t('wizard.stagesSelectedItems', { count: stageItems.length })}
               {/*
                 ★ 反馈 #5：不再写「默认：室内·全流程 9 段」——那是旧默认值留下的误导。
                 未选主板块时不预置任何阶段，这里改为提示下一步该做什么。
               */}
               <span className="ml-2 text-xs text-mist">
                 {cascade.domain
-                  ? `套餐按「${domainLabel(cascade.domain)}」筛选，点开选择`
-                  : '请先在上方选择行业与主板块'}
+                  ? t('wizard.presetsFilteredBy', { domain: domainLabel(cascade.domain) })
+                  : t('wizard.pickDomainFirst')}
               </span>
             </span>
             {stagePanelOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -392,7 +394,7 @@ export function ManualFallbackForm({
                   data-manual-stage-hint=""
                   className="mb-2 rounded-md bg-sunken px-3 py-2 text-xs text-mist"
                 >
-                  请先在上方「行业大类 → 主板块」里选定主板块，阶段池与套餐会按该板块列出。
+                  {t('wizard.pickDomainHint')}
                 </p>
               )}
               <StageSelectPanel
@@ -420,7 +422,8 @@ export function ManualFallbackForm({
           onClick={() => void submit()}
           className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-pine px-4 py-2 text-sm text-white hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Check size={15} /> 建档（按所选 {stageItems.length} 个阶段切分）
+          <Check size={15} />{' '}
+          {t('wizard.createButton', { count: stageItems.length })}
         </button>
         </div>
       </div>

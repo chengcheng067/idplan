@@ -196,6 +196,38 @@ function btn(label: string): HTMLButtonElement {
   return el as HTMLButtonElement;
 }
 
+/*
+ * ★ 语言无关定位助手（i18n 笔 misc 同批）：这些控件的 `aria-label` 已走消息表
+ * ⇒ 英文态取值会变，`btn('选择阶段 X')` 一类的选择器会**静默失配**。
+ * 钩子由 `StageSelectPanel` 提供（`data-stage-chip-name` / `data-row-action` /
+ * `data-preset-name` / `data-schedule-basis` / `data-other-domains-toggle`）。
+ */
+function chip(name: string): HTMLButtonElement {
+  const el = container.querySelector(`button[data-stage-chip-name="${name}"]`);
+  if (!el) throw new Error(`未找到阶段芯片：${name}`);
+  return el as HTMLButtonElement;
+}
+
+function rowAction(action: 'up' | 'down' | 'remove', name: string): HTMLButtonElement {
+  const el = container.querySelector(
+    `button[data-row-action="${action}"][data-row-name="${name}"]`,
+  );
+  if (!el) throw new Error(`未找到行内 ${action} 钮：${name}`);
+  return el as HTMLButtonElement;
+}
+
+function preset(name: string): HTMLButtonElement {
+  const el = container.querySelector(`button[data-preset-name="${name}"]`);
+  if (!el) throw new Error(`未找到套餐胶囊：${name}`);
+  return el as HTMLButtonElement;
+}
+
+function scheduleBasis(value: ScheduleBasis): HTMLButtonElement {
+  const el = container.querySelector(`button[data-schedule-basis="${value}"]`);
+  if (!el) throw new Error(`未找到排期基准钮：${value}`);
+  return el as HTMLButtonElement;
+}
+
 /** 点击并 flush React 更新 */
 async function click(button: HTMLButtonElement): Promise<void> {
   await act(async () => {
@@ -225,7 +257,7 @@ describe('StageSelectPanel：套餐 / 阶段池 / 已选列表', () => {
   it('勾选池中新项 → 追加到已选末尾', async () => {
     const items = getPresetItems('indoor_concept'); // 5 项
     await mountHarness({ initialSelected: items });
-    await click(btn('选择阶段 施工图深化'));
+    await click(chip('施工图深化'));
     expect(latest).toHaveLength(6);
     expect(latest[5]!.key).toBe('indoor.construction_drawing');
   });
@@ -233,7 +265,7 @@ describe('StageSelectPanel：套餐 / 阶段池 / 已选列表', () => {
   it('取消勾选已选项 → 从已选列表移除', async () => {
     const items = getPresetItems('indoor_full');
     await mountHarness({ initialSelected: items });
-    await click(btn('取消选择阶段 提案'));
+    await click(chip('提案'));
     expect(latest).toHaveLength(8);
     expect(latest.some((i) => i.key === 'indoor.proposal')).toBe(false);
   });
@@ -241,7 +273,7 @@ describe('StageSelectPanel：套餐 / 阶段池 / 已选列表', () => {
   it('已选列表 ✕ 移除 → 后继项前移补位', async () => {
     const items = getPresetItems('indoor_full');
     await mountHarness({ initialSelected: items });
-    await click(btn('移除 提案'));
+    await click(rowAction('remove', '提案'));
     expect(latest).toHaveLength(8);
     expect(latest[0]!.key).toBe('indoor.measure');
   });
@@ -249,10 +281,10 @@ describe('StageSelectPanel：套餐 / 阶段池 / 已选列表', () => {
   it('↑ 上移 / ↓ 下移 调序 → 顺序即最终 orderIndex', async () => {
     const items = getPresetItems('indoor_full');
     await mountHarness({ initialSelected: items });
-    await click(btn('上移 测量'));
+    await click(rowAction('up', '测量'));
     expect(latest[0]!.key).toBe('indoor.measure');
     expect(latest[1]!.key).toBe('indoor.proposal');
-    await click(btn('下移 测量'));
+    await click(rowAction('down', '测量'));
     expect(latest[0]!.key).toBe('indoor.proposal');
     expect(latest[1]!.key).toBe('indoor.measure');
   });
@@ -260,7 +292,7 @@ describe('StageSelectPanel：套餐 / 阶段池 / 已选列表', () => {
   it('点击套餐按钮 → 整体替换为套餐集合，归属为该套餐 key', async () => {
     const items = getPresetItems('indoor_full');
     await mountHarness({ initialSelected: items });
-    await click(btn('套餐 室内·方案止（含效果图）'));
+    await click(preset('室内·方案止（含效果图）'));
     expect(latest.map((i) => i.key)).toEqual(getPresetItems('indoor_concept').map((i) => i.key));
     expect(presetKeyOfItems(latest)).toBe('indoor_concept');
   });
@@ -279,7 +311,7 @@ describe(`StageSelectPanel：边界（下限 1 / 上限 ${MAX_STAGE_COUNT}）`, 
     // mount 不触发 onChange，快照对齐初始选择
     latest = selected;
     // 未选中的下一个阶段标记 aria-disabled（点击被拒并 toast）
-    const nextBtn = btn(`选择阶段 ${pool[MAX_STAGE_COUNT]!.name}`);
+    const nextBtn = chip(pool[MAX_STAGE_COUNT]!.name);
     expect(nextBtn.getAttribute('aria-disabled')).toBe('true');
     await click(nextBtn);
     expect(latest).toHaveLength(MAX_STAGE_COUNT); // 未接受
@@ -294,7 +326,7 @@ describe(`StageSelectPanel：边界（下限 1 / 上限 ${MAX_STAGE_COUNT}）`, 
     const pool = getStageLibraryItems();
     const selected = pool.slice(0, MAX_STAGE_COUNT);
     await mountHarness({ initialSelected: selected });
-    await click(btn(`取消选择阶段 ${pool[0]!.name}`));
+    await click(chip(pool[0]!.name));
     expect(latest).toHaveLength(MAX_STAGE_COUNT - 1);
   });
 });
@@ -344,7 +376,7 @@ describe('StageSelectPanel：切换主板块不覆盖已选（验收 A5）', () 
     const full = getPresetItems('indoor_full');
     await mountHarness({ initialSelected: full, domain: 'indoor' });
     // 手动取消一项
-    await click(btn('取消选择阶段 提案'));
+    await click(chip('提案'));
     expect(latest).toHaveLength(8);
     // 主板块变化不得覆盖
     await act(async () => {
@@ -368,7 +400,7 @@ describe('StageSelectPanel：排期基准切换（自然日 / 工作日）', () 
       scheduleBasis: basis,
       onBasisChange: (b) => (basis = b),
     });
-    await click(btn('排期基准 按工作日'));
+    await click(scheduleBasis(ScheduleBasis.Workday));
     expect(basis).toBe(ScheduleBasis.Workday);
   });
 });

@@ -157,6 +157,28 @@ export const zh = {
   'wizard.chipToggleAria': '{action}阶段 {name}',
   'wizard.deselect': '取消选择',
   'wizard.select': '选择',
+
+  /* 手动兜底建档（ManualFallbackForm）：表单校验 / 弹窗骨架 / 字段标签 / 提交钮 */
+  'wizard.errNameAndEndRequired': '项目名称与竣工日为必填。',
+  'wizard.errBadDates': '开始日或竣工日格式不正确，请选择有效日期。',
+  'wizard.errEndBeforeStart': '竣工日不能早于开始日。',
+  'wizard.minStagesRequired': '至少选择 {min} 个阶段。',
+  'wizard.duplicateNamesShort': '阶段名重复：{names}，请改名后再提交。',
+  'wizard.createFailed': '建档失败，请重试。',
+  'wizard.manualTitle': '手动建档',
+  'wizard.closeManualAria': '关闭手动建档',
+  'wizard.fieldName': '项目名称 *',
+  'wizard.fieldAddress': '地址',
+  'wizard.fieldClient': '客户名称',
+  'wizard.fieldStart': '开始 *',
+  'wizard.fieldEnd': '竣工 *',
+  'wizard.endComputedHint': '（已按阶段时长算出）',
+  'wizard.stagesSelectedItems': '本次服务阶段 · 已选 {count} 项',
+  'wizard.presetsFilteredBy': '套餐按「{domain}」筛选，点开选择',
+  'wizard.pickDomainFirst': '请先在上方选择行业与主板块',
+  'wizard.pickDomainHint':
+    '请先在上方「行业大类 → 主板块」里选定主板块，阶段池与套餐会按该板块列出。',
+  'wizard.createButton': '建档（按所选 {count} 个阶段切分）',
 } as const;
 
 /**
@@ -250,7 +272,13 @@ export const en = {
 
   /* 区 A · 建档向导族 · `src/components/contract-wizard/**` */
   'wizard.maxStages': 'A project can have at most {max} stages',
-  'wizard.selectStagesTitle': 'Select the stages for this project',
+  /* ⚠️ 段尾空格是**刻意**的：这一句与 `wizard.selectedCount` 是 `<div class="flex
+     … justify-between">` 里的**两个兄弟 span**，视觉靠 justify-between 分开，
+     但 JSX 在相邻表达式容器之间**不产生任何空白** ⇒ 英文态会粘成
+     `…this project20 selected / limit 20`。空格只能写进英文取值（en.ts 文件头 ⑤）。
+     中文态不需要（中文之间不加空格是对的）⇒ zh 取值不带空格。
+     守卫：`tests/i18n-jsx-space.spec.ts` 全仓扫描（零豁免）。 */
+  'wizard.selectStagesTitle': 'Select the stages for this project ',
   'wizard.selectedCount': '{count} selected / limit {max}',
   'wizard.scheduleBasis': 'Scheduling basis',
   'wizard.scheduleBasisAria': 'Scheduling basis {label}',
@@ -286,4 +314,27 @@ export const en = {
   'wizard.chipToggleAria': '{action} stage {name}',
   'wizard.deselect': 'Deselect',
   'wizard.select': 'Select',
+
+  'wizard.errNameAndEndRequired': 'Project name and completion date are required.',
+  'wizard.errBadDates':
+    'The start or completion date is not a valid date — please pick valid dates.',
+  'wizard.errEndBeforeStart': 'The completion date cannot be earlier than the start date.',
+  'wizard.minStagesRequired': 'Select at least {min} stages.',
+  'wizard.duplicateNamesShort':
+    'Duplicate stage names: {names}. Rename them before submitting.',
+  'wizard.createFailed': 'Failed to create the project — please try again.',
+  'wizard.manualTitle': 'Manual setup',
+  'wizard.closeManualAria': 'Close manual setup',
+  'wizard.fieldName': 'Project name *',
+  'wizard.fieldAddress': 'Address',
+  'wizard.fieldClient': 'Client name',
+  'wizard.fieldStart': 'Start *',
+  'wizard.fieldEnd': 'Completion *',
+  'wizard.endComputedHint': '(calculated from stage durations)',
+  'wizard.stagesSelectedItems': 'Stages for this project · {count} selected',
+  'wizard.presetsFilteredBy': 'Presets filtered by “{domain}” — expand to choose',
+  'wizard.pickDomainFirst': 'Choose an industry and a main board above first',
+  'wizard.pickDomainHint':
+    'Choose a main board under “Industry → Main board” above; the stage pool and presets will then be listed for that board.',
+  'wizard.createButton': 'Create project (split into the {count} stages selected)',
 } as const;

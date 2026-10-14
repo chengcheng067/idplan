@@ -75,6 +75,24 @@ function btn(label: string): HTMLButtonElement {
   return el as HTMLButtonElement;
 }
 
+/*
+ * ★ 阶段池芯片 / 折叠钮改用**语言无关钩子**（i18n 笔 misc 同批）。
+ * 为什么不能用 `btn('选择阶段 X')`：`aria-label` 已走消息表，英文态取值变成
+ * `Select stage X` ⇒ 选择器会**静默失配**（失败伪装成「按钮不存在」）。
+ * 钩子由 `StageSelectPanel` 的 `StageChip` / 折叠钮提供。
+ */
+function chip(name: string): HTMLButtonElement {
+  const el = document.querySelector(`button[data-stage-chip-name="${name}"]`);
+  if (!el) throw new Error(`未找到阶段芯片：${name}`);
+  return el as HTMLButtonElement;
+}
+
+function otherDomainsToggle(): HTMLButtonElement {
+  const el = document.querySelector('button[data-other-domains-toggle]');
+  if (!el) throw new Error('未找到「其他行业阶段」折叠钮');
+  return el as HTMLButtonElement;
+}
+
 /** 按 testid 查元素（同样查 `document`，兼容弹窗） */
 function byTestId(testId: string): HTMLElement | null {
   return document.querySelector(`[data-testid="${testId}"]`);
@@ -307,7 +325,7 @@ const SPACE_DOMAINS: StageTemplateDomain[] = ['architecture', 'landscape', 'indo
 /**
  * 池中项目的**渲染顺序**（＝ DOM 顺序：先按板块声明序、板块内按库序）。
  *
- * 为什么不能直接用 `getItemsByDomains(...)` 的顺序去 `btn('选择阶段 X')`：
+ * 为什么不能直接用 `getItemsByDomains(...)` 的顺序去 `chip('X')`：
  * 该函数按 **JSON 声明顺序**返回，而池子按**板块声明顺序**分组渲染，两者不同；
  * 模板库里存在跨板块同名项（如「概念方案」在景观与建筑各有一条），
  * 顺序不一致时 `btn(name)` 会命中**另一条**同名项 —— 测试会以一种极难察觉的方式假绿/假红。
@@ -390,7 +408,7 @@ describe('StageSelectPanel：可见分组（A1/A6）', () => {
     // 同大类内的板块不重复出现：每个阶段项在池里**只渲染一次**
     const indoorItems = getItemsByDomains(['indoor']);
     for (const item of indoorItems) {
-      const hits = [...container.querySelectorAll(`button[aria-label="选择阶段 ${item.name}"]`)];
+      const hits = [...container.querySelectorAll(`button[data-stage-chip-name="${item.name}"]`)];
       expect(hits).toHaveLength(1);
     }
     // 且「影视」分组确实在（跨大类扩展生效）
@@ -400,7 +418,7 @@ describe('StageSelectPanel：可见分组（A1/A6）', () => {
   it('不过滤（不传 visibleDomains）→ 全部行业分组平铺（改造前行为，既有调用点零改动）', async () => {
     await act(async () => root.render(<PanelHarness initialSelected={[]} />));
     expect(poolGroups()).toEqual(getUsableDomains());
-    expect(container.querySelector('button[aria-label="显示其他行业阶段"]')).toBeNull();
+    expect(container.querySelector('[data-other-domains-toggle]')).toBeNull();
   });
 });
 
@@ -461,7 +479,7 @@ describe('StageSelectPanel：上限 20 与可达性（验收 5 / 设计 §1.3）
       ),
     );
     for (const item of umbrella.slice(0, MAX_STAGE_COUNT)) {
-      await click(btn(`选择阶段 ${item.name}`));
+      await click(chip(item.name));
     }
     expect(latest).toHaveLength(MAX_STAGE_COUNT);
     expect(
@@ -488,7 +506,7 @@ describe('StageSelectPanel：上限 20 与可达性（验收 5 / 设计 §1.3）
     latest = selected;
     // 第 21 项：点它必须被拒（aria-disabled + 不改动已选 + toast）
     const target = container.querySelector(
-      `button[aria-label="选择阶段 ${rest.name}"]`,
+      `button[data-stage-chip-name="${rest.name}"]`,
     ) as HTMLButtonElement;
     expect(target?.getAttribute('aria-disabled')).toBe('true');
     await click(target);
@@ -520,15 +538,15 @@ describe('StageSelectPanel：上限 20 与可达性（验收 5 / 设计 §1.3）
     );
     // 可见池里只有 9 项：全部勾完后池里**再无未选项**（20 在这个池子里构造不出来）
     for (const item of indoorItems) {
-      await click(btn(`选择阶段 ${item.name}`));
+      await click(chip(item.name));
     }
     expect(latest).toHaveLength(indoorItems.length);
     expect(poolGroupCount()).toBe(1);
 
     // 展开其他行业后仍可继续勾（折叠只是**视觉**，不是硬边界；第 1 层只决定可见范围）
-    await click(btn('显示其他行业阶段（建筑 / 景观 / 软件 / 活动 / 影视 / 婚礼 / 咨询 / 旅游）'));
+    await click(otherDomainsToggle());
     const outsider = getItemsByDomains(['wedding'])[0]!;
-    await click(btn(`选择阶段 ${outsider.name}`));
+    await click(chip(outsider.name));
     expect(latest).toHaveLength(indoorItems.length + 1);
   });
 

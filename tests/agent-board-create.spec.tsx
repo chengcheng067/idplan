@@ -383,8 +383,10 @@ const errorBox = (): HTMLElement | null => q<HTMLElement>('[data-create-agent-bo
 
 /** 阶段池里任意一个"选择阶段"芯片（不依赖具体阶段名，避免与模板库文案耦合） */
 function firstStageChip(): HTMLButtonElement {
-  const el = q<HTMLButtonElement>('button[aria-label^="选择阶段 "]');
-  if (!el) throw new Error('阶段池里没有任何「选择阶段」按钮（可见分组为空？）');
+  // ★ 语言无关钩子（i18n 笔 misc 同批）：`aria-label` 已走消息表，英文态前缀变成
+  //   `Select stage ` ⇒ 原来的 `aria-label^="选择阶段 "` 会**静默失配**。
+  const el = q<HTMLButtonElement>('button[data-stage-chip]');
+  if (!el) throw new Error('阶段池里没有任何阶段芯片（可见分组为空？）');
   return el;
 }
 
@@ -557,7 +559,7 @@ describe('CreateAgentBoardDialog · 正常填写 ⇒ 真建出一块 Agent 看�
 
   it('阶段名可读：落库的阶段名与池中芯片同名（不是 key / 占位符）', async () => {
     await renderDialog();
-    const chipName = (firstStageChip().getAttribute('aria-label') ?? '').replace('选择阶段 ', '');
+    const chipName = firstStageChip().getAttribute('data-stage-chip-name') ?? '';
     expect(chipName.trim()).not.toBe('');
 
     await setInputValue(nameInput(), '阶段名对照');
