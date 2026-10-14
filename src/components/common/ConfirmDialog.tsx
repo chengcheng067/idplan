@@ -60,6 +60,12 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
+            /* 语言无关定位钩子（i18n-EN 批）：这两个按钮的**可见文案**来自 `cancelText`/`confirmText`
+               （如 `backup.dialog.confirmRestore = '确认恢复'`），真机 spec 原先按
+               `getByRole('button', { name: '确认恢复' })` 定位 ⇒ 英文态静默失配。
+               注意：`getByRole(name)` **同时是 a11y 断言**，故使用方要**换钩子 + 补同源断言**
+               （`name === tRaw(<键>)`），不能只换锚点。 */
+            data-confirm-cancel=""
             className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
           >
             {cancelLabel}
@@ -67,6 +73,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
+            data-confirm-ok=""
             className={`rounded-md px-3 py-1.5 text-sm text-white transition-colors ${
               danger ? 'bg-clay hover:bg-clay-deep' : 'bg-pine hover:bg-pine-deep'
             }`}

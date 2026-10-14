@@ -277,6 +277,10 @@ export function TaskDrawer({
             type="button"
             onClick={onClose}
             aria-label={t('ui.taskDrawer.closeAria')}
+            /* 语言无关定位钩子（i18n-EN 批）：`v07-board-acceptance:1122` 按
+               `drawer.getByRole('button', { name: '关闭任务详情' })` 定位 ⇒ 英文态静默失配
+               （该名来自 `ui.taskDrawer.closeAria`，是有键的）。 */
+            data-task-drawer-close=""
             className="shrink-0 rounded-md p-1 text-mist hover:bg-sand"
           >
             ✕

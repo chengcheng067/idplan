@@ -74,6 +74,13 @@ export function SegmentedControl<T extends string>({
             key={opt.value}
             type="button"
             role="tab"
+            /*
+             * 语言无关定位钩子（i18n-EN 批）：`aria-label` 只在外层容器上，**每段自身没有可访问名之外的稳定锚**
+             * —— 值取自 `opt.value`（ASCII、稳定），真机 spec 原先按
+             * `getByRole('tab', { name: '月历' })` 定位 ⇒ 英文态静默失配。
+             * ⚠️ `getByRole(name)` 同时是 a11y 断言 ⇒ 使用方要**换钩子 + 补同源断言**。
+             */
+            data-seg-option={opt.value}
             aria-selected={selected}
             disabled={opt.disabled}
             onClick={() => {

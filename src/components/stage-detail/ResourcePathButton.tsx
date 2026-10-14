@@ -84,6 +84,10 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
           <button
             type="button"
             onClick={tryOpen}
+            /* 语言无关定位钩子（i18n-EN 批）：真机 spec 原先按 `getByRole('button', { name: '打开' })`
+               定位（`v07-dline-shell` 阶段抽屉只读通道那条）⇒ 英文态静默失配。
+               ⚠️ `getByRole(name)` 同时是 a11y 断言 ⇒ 使用方要**换钩子 + 补同源断言**。 */
+            data-resource-path-open=""
             className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs hover:bg-sand"
           >
             <ExternalLink size={12} /> {t('resourcePath.open')}
@@ -91,6 +95,8 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
           <button
             type="button"
             onClick={() => void navigator.clipboard?.writeText(stage.resourcePath!)}
+            /* 语言无关定位钩子（同上；`v07-dline-shell:1056/1108` 按 `getByRole(name:'复制路径')` 定位） */
+            data-resource-path-copy=""
             className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs hover:bg-sand"
           >
             <Copy size={12} /> {t('resourcePath.copy')}
@@ -100,6 +106,8 @@ export function ResourcePathButton({ stage }: { stage: Stage }): JSX.Element | n
             <button
               type="button"
               onClick={() => setEditing(true)}
+              /* 语言无关定位钩子（同上；`v07-dline-shell:1047` 用 `getByRole(name:'修改').count()` **反向**断言成员看不到它） */
+              data-resource-path-edit=""
               className="rounded-md px-2 py-1.5 text-xs text-mist hover:bg-sand"
             >
               {t('resourcePath.edit')}

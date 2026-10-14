@@ -121,6 +121,10 @@ function MonthArrow({
       type="button"
       onClick={onClick}
       aria-label={direction === 'prev' ? t('calendar.prevMonth') : t('calendar.nextMonth')}
+      /* 语言无关定位钩子（i18n-EN 批）：`calendar-popover-geometry.spec.ts:448` 按
+         `getByRole('button', { name: '下个月' })` 定位 ⇒ 英文态静默失配。
+         取值 = 方向（ASCII），比 aria 文案稳。⚠️ `getByRole(name)` 是 a11y 断言 ⇒ 使用方补同源断言。 */
+      data-calendar-nav={direction}
       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-line bg-paper text-ink transition-colors hover:bg-sunken md:h-[32px] md:w-[32px]"
     >
       <Icon size={16} aria-hidden />

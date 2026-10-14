@@ -113,6 +113,10 @@ export function ReadyQueue({
               <button
                 type="button"
                 onClick={() => onClaim(task.id)}
+                /* 语言无关定位钩子（i18n-EN 批）：`v07-board-acceptance:1128` 按
+                   `drawer.getByRole('button', { name: '认领', exact: true }).count()` 定位 ⇒
+                   英文态静默失配。⚠️ `getByRole(name)` 同时是 a11y 断言 ⇒ 使用方要**换钩子 + 补同源断言**。 */
+                data-ready-queue-claim=""
                 className="inline-flex h-[30px] shrink-0 items-center rounded-[10px] bg-pine px-3 text-xs font-medium text-white transition-colors hover:bg-pine-deep"
               >
                 {t('agentQueue.claim')}
