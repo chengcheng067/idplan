@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CalendarDays, X } from 'lucide-react';
 
-import { ALL_REST_POLICIES, ChangxiaError, RestPolicyKind, ScheduleBasis } from '../../core/types/enums';
+import { ALL_REST_POLICIES, resolveErrorText, RestPolicyKind, ScheduleBasis } from '../../core/types/enums';
 import type { RestPolicyConfig } from '../../core/types/entities';
 import { useRepos } from '../../hooks/useRepos';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
@@ -280,7 +280,7 @@ export function RestPolicyEditor({
     } catch (err) {
       useProjectsStore
         .getState()
-        .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('restPolicy.err.saveFailed'));
+        .pushToast('error', resolveErrorText(err, t, t('restPolicy.err.saveFailed')));
     } finally {
       setSaving(false);
     }

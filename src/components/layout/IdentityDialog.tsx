@@ -8,7 +8,7 @@ import { useProjectsStore } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import { matchActiveMemberByName } from '../../hooks/useRoleGuard';
 import { createMemberActions } from '../../store/useMembersStore';
-import { ChangxiaError, MemberRoleKind } from '../../core/types/enums';
+import { resolveErrorText, MemberRoleKind } from '../../core/types/enums';
 import { memberHasPassword, type Member } from '../../core/types/entities';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
@@ -145,7 +145,7 @@ export function IdentityDialog(): JSX.Element | null {
       setNotice(t('ui.identity.nameMiss'));
       setIdentityFlow('mismatch');
     } catch (err) {
-      toast('error', err instanceof ChangxiaError ? err.userMessage : t('ui.identity.setFailed'));
+      toast('error', resolveErrorText(err, t, t('ui.identity.setFailed')));
       logError('身份', `身份切换失败：${trimmed ? `「${trimmed}」` : ''}`, err);
     } finally {
       setBusy(false);
@@ -172,7 +172,7 @@ export function IdentityDialog(): JSX.Element | null {
       setPendingMember(null);
       closeIdentityFlow();
     } catch (err) {
-      toast('error', err instanceof ChangxiaError ? err.userMessage : t('ui.identity.passwordVerifyFailed'));
+      toast('error', resolveErrorText(err, t, t('ui.identity.passwordVerifyFailed')));
       logError('身份', '密码登录失败', err);
     } finally {
       setBusy(false);

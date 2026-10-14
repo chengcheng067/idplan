@@ -79,7 +79,7 @@ import { useState } from 'react';
 import { Check, ChevronDown, ChevronUp, X } from 'lucide-react';
 
 import type { StageSelectionItem } from '../../core/types/dto';
-import { ChangxiaError, ChangxiaErrorCode } from '../../core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, resolveErrorText } from '../../core/types/enums';
 import { MAX_STAGE_COUNT, MIN_STAGE_COUNT } from '../../core/template/split';
 import { CUSTOM_STAGE_PRESET_KEY, DEFAULT_PROJECT_DOMAIN } from '../../core/template/stage-fallback';
 import {
@@ -248,7 +248,7 @@ export async function submitAgentBoardDraft(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof ChangxiaError ? err.userMessage : translate('ui.agentBoard.errCreateFailed'),
+      error: resolveErrorText(err, translate, translate('ui.agentBoard.errCreateFailed')),
     };
   }
 }

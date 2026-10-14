@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, UserRound, UserX, Crown, XCircle, Pencil, Check, X, KeyRound, LayoutGrid } from 'lucide-react';
 
 import { memberHasPassword, type Member } from '../../core/types/entities';
-import { ChangxiaError, MemberActorKind, MemberRoleKind } from '../../core/types/enums';
+import { resolveErrorText, MemberActorKind, MemberRoleKind } from '../../core/types/enums';
 import { useMembersStore } from '../../store/useMembersStore';
 import { createMemberActions } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
@@ -117,7 +117,7 @@ export function MembersPageSection(): JSX.Element | null {
     } catch (err) {
       useProjectsStore
         .getState()
-        .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('member.toastDemoteFailed'));
+        .pushToast('error', resolveErrorText(err, t, t('member.toastDemoteFailed')));
     }
   };
 

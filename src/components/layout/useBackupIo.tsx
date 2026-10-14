@@ -9,7 +9,7 @@ import {
   validateBackupJson,
 } from '../../core/services/backup.service';
 import { logError, logUser } from '../../core/services/log.service';
-import { ChangxiaError } from '../../core/types/enums';
+import { resolveErrorText } from '../../core/types/enums';
 import type { BackupPackage } from '../../core/types/dto';
 import type { IRepositoryBundle } from '../../core/repositories/interfaces';
 import { buildDemoBackup, withHostPolicySettings } from '../../core/demo/demoDataFactory';
@@ -173,7 +173,7 @@ export function useBackupIo(): BackupIo {
     } catch (err) {
       toast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : t('backup.toast.restoreFailed'),
+        resolveErrorText(err, t, t('backup.toast.restoreFailed')),
       );
       logError('备份', '从备份恢复失败', err);
     }

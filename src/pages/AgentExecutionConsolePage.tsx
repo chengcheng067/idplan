@@ -26,7 +26,7 @@ import {
 
 import { useRepos } from '../hooks/useRepos';
 import { useUiStore } from '../store/useUiStore';
-import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
+import { resolveErrorText, ChangxiaErrorCode } from '../core/types/enums';
 import {
   AttemptStatus,
   ExecutionStatus,
@@ -717,9 +717,16 @@ export function AgentExecutionConsolePage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailMissing, setDetailMissing] = useState(false);
 
-  const message = useCallback((err: unknown, fallback: string): string => {
-    return err instanceof ChangxiaError ? err.userMessage : fallback;
-  }, []);
+  /*
+   * ⚠️ deps 必须是 `[t]`，不能是 `[]`：`t` 来自 `useLang()`（内部是 `useCallback(…, [lang])`），
+   * 切语言后是**新函数**。写着 `[]` 的话这个 useCallback 会一直捕获**首次渲染的那份 `t`**，
+   * 于是「切到英文后，错误正文仍停在上一门语言」—— 而那看起来完全正常（不报错、不崩）。
+   * 同族纪律：**默认值 / 空 deps 会让错的那一支看起来是对的**。
+   */
+  const message = useCallback(
+    (err: unknown, fallback: string): string => resolveErrorText(err, t, fallback),
+    [t],
+  );
 
   /* —— 装载列表 —— */
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
   type StageTemplateDomain,
 } from '../../core/types/dto';
 import type { ScheduleBasis } from '../../core/types/enums';
+import { resolveErrorText } from '../../core/types/enums';
 import { DEFAULT_SCHEDULE_BASIS } from '../../core/types/entities';
 import { getPresetItems } from '../../core/template/stage-library';
 import { DEFAULT_PROJECT_DOMAIN } from '../../core/template/stage-fallback';
@@ -283,8 +284,7 @@ export function ManualFallbackForm({
       void navigate(`/project/${project.id}`);
     } catch (err) {
       // 展示真实原因（含 userMessage），不再用笼统的「请检查日期是否有效」误导用户
-      const userMessage = (err as { userMessage?: string })?.userMessage;
-      setError(userMessage ?? t('wizard.createFailed'));
+      setError(resolveErrorText(err, t, t('wizard.createFailed')));
     } finally {
       setSubmitting(false);
     }

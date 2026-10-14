@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bus, BedDouble, Coins, Plus, Trash2, CalendarPlus, X } from 'lucide-react';
 
 import type { ItineraryDay, Project, Task } from '../../core/types/entities';
+import { resolveErrorText } from '../../core/types/enums';
 import { taskIsDone } from '../../core/types/entities';
 import { useRepos } from '../../hooks/useRepos';
 import { createTaskActions, useProjectsStore } from '../../store/useProjectsStore';
@@ -83,9 +84,7 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
       if (generation === loadGeneration.current) setDays(nextDays);
     } catch (err) {
       if (generation === loadGeneration.current) {
-        pushToast('error', err instanceof Error && 'userMessage' in err
-          ? String((err as { userMessage: unknown }).userMessage)
-          : t('travel.loadFailed'));
+        pushToast('error', resolveErrorText(err, t, t('travel.loadFailed')));
       }
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
@@ -133,9 +132,7 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
       const row = await repos.itineraries.insert({ projectId: project.id, date: nextDate });
       setDays((prev) => [...prev, row].sort((a, b) => a.date.localeCompare(b.date)));
     } catch (err) {
-      pushToast('error', err instanceof Error && 'userMessage' in err
-        ? String((err as { userMessage: unknown }).userMessage)
-        : t('travel.addDayFailed', { date: nextDate }));
+      pushToast('error', resolveErrorText(err, t, t('travel.addDayFailed', { date: nextDate })));
     }
   };
 

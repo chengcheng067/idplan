@@ -51,7 +51,7 @@ import { pluginFailureText, t as translate, useLang } from '../../i18n';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { appEnv } from '../../config/env';
 import { API_TOKEN_KEY } from '../../core/repositories/remote/rest.client';
-import { ChangxiaError, ChangxiaErrorCode } from '../../core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, resolveErrorText } from '../../core/types/enums';
 
 /** 本机「启用前已披露」同意标记（localStorage：不进备份、不跟 ID 走） */
 const ACK_PREFIX = 'idplan.pluginAck.';
@@ -146,9 +146,9 @@ function describeToggleFailure(err: unknown): string {
       if (appEnv.dataSource === 'remote' && !hasStoredApiToken()) {
         return translate('plugin.toggleFail.noToken');
       }
-      return translate('plugin.toggleFail.remote', { reason: err.userMessage });
+      return translate('plugin.toggleFail.remote', { reason: resolveErrorText(err, translate) });
     }
-    return translate('plugin.toggleFail.generic', { reason: err.userMessage });
+    return translate('plugin.toggleFail.generic', { reason: resolveErrorText(err, translate) });
   }
   const msg = err instanceof Error ? err.message : String(err);
   return translate('plugin.toggleFail.generic', { reason: msg });

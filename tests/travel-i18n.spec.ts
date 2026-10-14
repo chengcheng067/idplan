@@ -16,6 +16,8 @@ import { join } from 'node:path';
 
 import { maskComments } from './helpers/cjk-locator-guard';
 import { catalogOf, t, type MessageKey } from '../src/i18n';
+/* 英文补齐批 · core 片第二波：错误正文改走 core 的解析器（core 内零 i18n，`t` 由渲染层注入） */
+import { ChangxiaError, ChangxiaErrorCode, resolveErrorText } from '../src/core/types/enums';
 
 const rootDir = join(__dirname, '..');
 const read = (p: string): string => readFileSync(join(rootDir, p), 'utf8');
@@ -112,7 +114,35 @@ describe('② 钩子背后有人话 + 禁区（B）不许被翻', () => {
   });
 
   it('数据侧 `userMessage` 原样透传（不翻）：只在**没有**它时才用消息表兜底句', () => {
-    expect(src).toMatch(/userMessage: unknown \}\)\.userMessage\)[\s\S]{0,80}?: t\('travel\.loadFailed'\)/);
+    /*
+     * ⚠️ **换载体、不放松口径**（英文补齐批 · core 片的第二波）：本条原先锁的是**源码形状**
+     *   `userMessage: unknown })?.userMessage) … : t('travel.loadFailed')` ——
+     *   那是「鸭子类型分支」的写法。现在两处改走 core 的 `resolveErrorText(err, t, 兜底句)`，
+     *   形状变了，**口径一字未松**：
+     *     · 有机器码（core 已结构化）⇒ 取本地化文案；
+     *     · 无机器码但有 `userMessage` ⇒ **原样透传**（数据层事实不被兜底句盖掉）；
+     *     · 都没有 ⇒ 才用 `t('travel.loadFailed')`。
+     *   ⇒ 故本条的**正判据从「源码形状」升级成「可执行行为」**（比原来更硬：
+     *     形状可以被写成「看起来对」而实际分支错，行为断言不会）。
+     */
+    expect(src, '两处错误正文没走 core 的解析器（机理未接）').toMatch(
+      /resolveErrorText\(err, t, t\('travel\.loadFailed'\)\)/,
+    );
+    expect(src, '追加一天那处的兜底句丢了').toMatch(
+      /resolveErrorText\(err, t, t\('travel\.addDayFailed', \{ date: nextDate \}\)\)/,
+    );
+
+    // ★ 行为断言（换载体后新增的**比原来更硬**的那一条）：真因必须逐字回来
+    const real = new ChangxiaError(ChangxiaErrorCode.Storage, '每日行程读取失败。');
+    expect(
+      resolveErrorText(real, t, t('travel.loadFailed')),
+      '无机器码的真因被兜底句盖掉了 —— 渲染层改写了数据层事实',
+    ).toBe('每日行程读取失败。');
+    // 反向：没有真因时才轮到兜底句（否则上面那条会退化成「永远返回入参」的假绿）
+    expect(resolveErrorText(new Error('boom'), t, t('travel.loadFailed'))).toBe(
+      t('travel.loadFailed'),
+    );
+
     /*
      * 反面判据要**窄**：不许把 `userMessage` 塞进任何 `t(...)` 实参里
      * （那等于让渲染层改写数据层事实 —— 文案会说「加载失败」而真实原因被吞掉）。

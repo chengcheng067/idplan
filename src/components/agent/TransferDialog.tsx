@@ -61,7 +61,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, X } from 'lucide-react';
 
 import type { Project, Stage, Task } from '../../core/types/entities';
-import { ChangxiaError } from '../../core/types/enums';
+import { resolveErrorText } from '../../core/types/enums';
 import { planTaskMove, previewMove } from '../../core/services/agent-takeover.service';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { useLang } from '../../i18n';
@@ -233,7 +233,7 @@ export function TransferDialog({
     } catch (err) {
       // 就地展示服务端/领域的真实原因（member 被服务端拒绝时，用户看到的应当是
       // "只有管理员可以接管"这类具体文案，而不是笼统的"操作失败"）
-      setError(err instanceof ChangxiaError ? err.userMessage : t('agentTransfer.failed'));
+      setError(resolveErrorText(err, t, t('agentTransfer.failed')));
     } finally {
       setSubmitting(false);
     }
