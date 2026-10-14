@@ -94,6 +94,7 @@ import {
   SIDEBAR_W_COLLAPSED,
   SIDEBAR_W_EXPANDED,
 } from '../../store/useLayoutStore';
+import { useLang } from '../../i18n';
 import { useXlViewport } from '../../hooks/useXlViewport';
 import { titleBarHeight } from '../../lib/topbarMetrics';
 import { isDesktop } from '../../lib/desktopBridge';
@@ -210,21 +211,23 @@ export function PrintSelectorPanel({
   forcedNote: string;
   onClose(): void;
 }): JSX.Element {
+  /** 屏幕侧取词 + 语言订阅（本组件是**屏幕**，纸面另有恒中文通路） */
+  const { t } = useLang();
   const meta = printTemplateMeta(template);
   return (
     <div
       role="group"
-      aria-label="模板与模块"
+      aria-label={t('print.selector.title')}
       data-print-selector-panel=""
       className="flex max-h-full w-full max-w-[680px] flex-col overflow-hidden rounded-md border border-line bg-paper shadow-overlay"
     >
       {/* 头：标题 + ✕（Esc / 点遮罩由 Modal center 档提供，共三路关闭） */}
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-        <h3 className="font-display text-sm font-semibold text-ink">模板与模块</h3>
+        <h3 className="font-display text-sm font-semibold text-ink">{t('print.selector.title')}</h3>
         <button
           type="button"
           onClick={onClose}
-          aria-label="关闭模板与模块"
+          aria-label={t('print.selector.close')}
           className="rounded-[8px] p-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
         >
           <X size={16} />
@@ -236,37 +239,37 @@ export function PrintSelectorPanel({
       <div className="grid min-h-0 flex-1 xl:grid-cols-[240px_minmax(0,1fr)]">
         <div
           role="radiogroup"
-          aria-label="阅读方式"
+          aria-label={t('print.selector.readMode')}
           className="flex gap-2 overflow-x-auto border-b border-line p-2 xl:flex-col xl:overflow-x-visible xl:border-b-0 xl:border-r"
         >
-          {PRINT_TEMPLATES.map((t) => {
-            const current = t.id === template;
-            const dots = t.id === 'classic' ? null : PRINT_TEMPLATE_PALETTES[t.id].baseline;
+          {PRINT_TEMPLATES.map((tpl) => {
+            const current = tpl.id === template;
+            const dots = tpl.id === 'classic' ? null : PRINT_TEMPLATE_PALETTES[tpl.id].baseline;
             return (
               <button
-                key={t.id}
+                key={tpl.id}
                 type="button"
                 role="radio"
                 aria-checked={current}
-                data-print-template-option={t.id}
-                onClick={() => onTemplatePick(t.id)}
+                data-print-template-option={tpl.id}
+                onClick={() => onTemplatePick(tpl.id)}
                 className={`flex w-[220px] shrink-0 items-center gap-2.5 rounded-sm px-2 py-2 text-left transition-colors xl:w-full ${
                   current ? 'bg-pine-soft' : 'hover:bg-sand'
                 }`}
               >
                 {/* 缩略图 96×64：真图（期六到位）优先；经典无真图 ⇒ 版本字母 + 基线三色点占位 */}
                 <span className="h-16 w-24 shrink-0 overflow-hidden rounded-sm border border-line bg-cream">
-                  {t.thumb ? (
+                  {tpl.thumb ? (
                     <img
-                      src={t.thumb}
-                      alt={printTemplateName(t.id) + ' 第 1 页预览'}
-                      data-print-template-thumb={t.id}
+                      src={tpl.thumb}
+                      alt={t('print.template.thumbAlt', { name: printTemplateName(tpl.id) })}
+                      data-print-template-thumb={tpl.id}
                       className="h-full w-full object-cover"
                     />
                   ) : (
                     <span aria-hidden className="flex h-full w-full flex-col items-center justify-center">
                       <span className="text-[15px] font-bold leading-none text-ink">
-                        {t.version || '经'}
+                        {tpl.version || t('print.template.classicGlyph')}
                       </span>
                       {dots && (
                         <span className="mt-1.5 flex gap-1">
@@ -280,9 +283,9 @@ export function PrintSelectorPanel({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13px] font-medium text-ink">
-                    {printTemplateName(t.id)}
+                    {printTemplateName(tpl.id)}
                   </span>
-                  <span className="block truncate text-[11px] text-mist">{t.scene}</span>
+                  <span className="block truncate text-[11px] text-mist">{t(tpl.sceneKey)}</span>
                 </span>
               </button>
             );
@@ -297,7 +300,9 @@ export function PrintSelectorPanel({
           {meta.usesBlocks ? (
             <>
               <div className="flex items-center justify-between px-3 pb-1 pt-3">
-                <span className="text-[11px] font-medium text-mist">打印内容（五块）</span>
+                <span className="text-[11px] font-medium text-mist">
+                  {t('print.selector.blocksTitle')}
+                </span>
               </div>
               {unitRows.map((row) => (
                 <label
@@ -319,7 +324,7 @@ export function PrintSelectorPanel({
                   原因、可摘项随版式而定——三件事一句话说清，不加灰行 */}
               <p className="px-3 pb-1.5 pt-1 text-[11px] leading-relaxed text-mist">
                 {forcedNote}
-                模板自身的版式构件（刊头 / 页脚线 / 页序 / 摘要块）不在此列；可摘项随版式而定。
+                {t('print.selector.blocksNote')}
               </p>
             </>
           ) : (
@@ -336,7 +341,7 @@ export function PrintSelectorPanel({
             <PaletteSection template={template} />
           ) : (
             <div className="border-t border-line px-3 pb-2 pt-2 text-[11px] leading-relaxed text-mist">
-              配色：{printTemplateName(template)} 页面建设中，三槽位与预设已就绪，页面落地后生效。
+              {t('print.selector.paletteBuilding', { name: printTemplateName(template) })}
             </div>
           )}
         </div>
@@ -344,8 +349,18 @@ export function PrintSelectorPanel({
 
       {/* 底：状态条（预计页数同源）+ 即时生效明示（无应用/取消，Esc 即纯关闭） */}
       <div className="border-t border-line px-4 py-2 text-[11px] leading-relaxed text-mist">
-        当前 {enabledModuleCount} {meta.usesBlocks ? '块' : '个模块'} · 预计 {pagesCount} 页
-        <span className="ml-2">勾选与配色即时生效、无需确认；Esc / 点遮罩 / ✕ 均为纯关闭</span>
+        {t('print.selector.status', {
+          count: enabledModuleCount,
+          unit: t(
+            meta.usesBlocks ? 'print.selector.status.blocks' : 'print.selector.status.modules',
+          ),
+          pages: pagesCount,
+        })}
+        {/* `{' '}`：状态读数与「即时生效」明示是两句话，中间必须有真空白
+            （只靠 ml-2 的视觉留白，文本流里会粘成 `pagesToggles…` / `页勾选…`）。
+            tests/i18n-jsx-space.spec.ts 的 `{' '}` 口径，两种语言都生效。 */}
+        {' '}
+        <span className="ml-2">{t('print.selector.effectNote')}</span>
       </div>
     </div>
   );
@@ -384,12 +399,13 @@ export function PrintModuleSection({
   onSelectAll?: () => void;
   onSelectNone?: () => void;
 }): JSX.Element {
+  const { t } = useLang();
   const caps = printTemplateModules(template);
   const on = new Set(enabledModules);
   return (
     <div data-print-module-section="">
       <div className="flex items-center justify-between px-2 pb-1 pt-2">
-        <span className="text-[11px] font-medium text-mist">输出模块</span>
+        <span className="text-[11px] font-medium text-mist">{t('print.selector.outputs')}</span>
         <span className="flex gap-1">
           <button
             type="button"
@@ -397,7 +413,7 @@ export function PrintModuleSection({
             onClick={onSelectAll}
             className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
           >
-            全选
+            {t('print.selector.selectAll')}
           </button>
           <button
             type="button"
@@ -405,7 +421,7 @@ export function PrintModuleSection({
             onClick={onSelectNone}
             className="rounded-sm px-1.5 py-0.5 text-[11px] text-mist transition-colors hover:bg-sand hover:text-ink"
           >
-            反选
+            {t('print.selector.selectNone')}
           </button>
         </span>
       </div>
@@ -415,8 +431,12 @@ export function PrintModuleSection({
           // 三态：原生（有原生页）/ 通用（generic 标记）/ 暂不可用（能力表没有）
           const avail = cap === undefined ? 'off' : cap.pages.length > 0 ? 'native' : cap.generic ? 'generic' : 'off';
           const native = avail === 'native';
-          const pageHint = native ? cap!.pages.map((p) => p.label).join(' + ') : '';
-          const hint = native ? pageHint : avail === 'generic' ? '通用渲染' : '该外表下暂不可用';
+          const pageHint = native ? cap!.pages.map((p) => t(p.labelKey)).join(' + ') : '';
+          const hint = native
+            ? pageHint
+            : avail === 'generic'
+              ? t('print.selector.generic')
+              : t('print.selector.unavailable');
           return (
             <label
               key={m.id}
@@ -435,8 +455,10 @@ export function PrintModuleSection({
                 className="h-3.5 w-3.5 shrink-0 accent-pine disabled:opacity-40"
               />
               <span className="min-w-0 flex-1">
-                <span className="block whitespace-nowrap text-[13px] font-medium">{m.label}</span>
-                <span className="block truncate text-[11px] text-mist">{m.hint}</span>
+                <span className="block whitespace-nowrap text-[13px] font-medium">
+                  {t(m.labelKey)}
+                </span>
+                <span className="block truncate text-[11px] text-mist">{t(m.hintKey)}</span>
               </span>
               {/* 渲染方式提示（原生页名 / 通用渲染 / 禁用原因；超长截断，完整值进 title） */}
               <span className="shrink-0 max-w-[120px] truncate text-[11px] text-mist" title={hint}>
@@ -447,7 +469,7 @@ export function PrintModuleSection({
         })}
       </div>
       <p className="px-2 pb-1.5 text-[11px] leading-relaxed text-mist">
-        阶段清单 / 任务清单 / 成员名册在无原生页的外表下走通用渲染；暂不可用的模块将随通用渲染陆续支持。模块勾选按外表各存一套，换外表不丢失。
+        {t('print.selector.modulesNote')}
       </p>
     </div>
   );
@@ -485,6 +507,7 @@ export function PrintZoomControls({
   /** 拖滑块 / 键盘微调（入参 = 百分比整数） */
   onScale(percent: number): void;
 }): JSX.Element {
+  const { t } = useLang();
   const percent = Math.round(scale * 100);
   // 「100%」锚点在 custom 且值恰为 100 时点亮（拖滑块到 100 也点亮，见文件头）
   const atHundred = zoom === 'custom' && percent === 100;
@@ -502,8 +525,12 @@ export function PrintZoomControls({
   );
   return (
     <div className="flex items-center gap-2" data-print-zoom-controls="">
-      <div className="flex rounded-[8px] border border-line bg-cream p-0.5" role="group" aria-label="预览缩放">
-        {anchorBtn(zoom === 'fit', '适应', onFit)}
+      <div
+        className="flex rounded-[8px] border border-line bg-cream p-0.5"
+        role="group"
+        aria-label={t('print.zoom.group')}
+      >
+        {anchorBtn(zoom === 'fit', t('print.zoom.fit'), onFit)}
         {anchorBtn(atHundred, '100%', onHundred)}
       </div>
       <input
@@ -513,7 +540,7 @@ export function PrintZoomControls({
         step={5}
         value={percent}
         onChange={(e) => onScale(Number(e.target.value))}
-        aria-label="预览缩放滑块"
+        aria-label={t('print.zoom.slider')}
         data-print-zoom-slider=""
         className="h-1 w-36 cursor-pointer accent-pine"
       />
@@ -535,6 +562,7 @@ export function PrintPreviewDialog({
   onClose: () => void;
 }): JSX.Element | null {
   /** 打印偏好（个人偏好，localStorage 持久化；无角色门控——成员也打印） */
+  const { t } = useLang();
   const storedBlocks = usePrintPrefsStore((s) => s.blocks);
   const template = usePrintPrefsStore((s) => s.template);
   /** 每模板一套「启用模块」勾选态（D/E/H 的正主；批 2/3/4 才切单元模型） */
@@ -726,7 +754,7 @@ export function PrintPreviewDialog({
     window.setTimeout(() => setPrintBusy(false), 150);
     const via = printPaper(root);
     if (via === 'main') {
-      useProjectsStore.getState().pushToast('info', '已回退主窗口打印。');
+      useProjectsStore.getState().pushToast('info', t('print.action.printedMain'));
     }
   }, [printBusy, canOutput]);
 
@@ -750,7 +778,7 @@ export function PrintPreviewDialog({
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       await exportSchedulePngPages(els, schedulePngFileName(d.project.name));
     } catch {
-      useProjectsStore.getState().pushToast('error', 'PNG 导出失败，请改用「打印 / 另存为 PDF」。');
+      useProjectsStore.getState().pushToast('error', t('print.action.pngFailed'));
     } finally {
       setExporting(false);
       if (wasGray) setGrayscale(true);
@@ -769,8 +797,8 @@ export function PrintPreviewDialog({
   /** 五块模型的选择器行（今天 = 可勾的块；装置与不可摘块不进清单，见 PrintSelectorPanel 注） */
   const unitRows = printToggleableUnits(template).map((spec) => ({
     id: spec.id as PrintBlockId,
-    label: spec.label,
-    hint: spec.hint,
+    label: t(spec.labelKey),
+    hint: t(spec.hintKey),
     checked: unitEnabled(units, spec.id),
   }));
   /**
@@ -782,15 +810,16 @@ export function PrintPreviewDialog({
    * 不可摘、**原因各不相同**（B1 是项目名载体、B5 是署名与页码载体 + 披露件），
    * 故按单元 id 逐条给原因，不再用一句通用文案套所有行。
    */
-  const FORCED_REASON: Partial<Record<PrintUnitId, string>> = {
-    header: '由该模板的刊头承载项目名与页序，属版式构件',
-    footer:
-      '在本模板由版式构件承担（署名 = 页底巨字、页码 = 页眉页序），脚注是治理披露，都不随勾选变化',
+  const FORCED_REASON: Partial<Record<PrintUnitId, Parameters<typeof t>[0]>> = {
+    header: 'print.forced.header',
+    footer: 'print.forced.footer',
   };
   const forcedNote = forcedBlockUnits(template)
-    .map(
-      (u) =>
-        `「${u.label}」${FORCED_REASON[u.id as PrintUnitId] ?? '属该模板的版式构件'} —— 该模板当前不可摘。`,
+    .map((u) =>
+      t('print.forced.note', {
+        label: t(u.labelKey),
+        reason: t(FORCED_REASON[u.id as PrintUnitId] ?? 'print.forced.fallback'),
+      }),
     )
     .join('');
 
@@ -800,7 +829,7 @@ export function PrintPreviewDialog({
       onClose={onClose}
       placement="fullscreen"
       railLeft={xl ? `${railLeftPx}px` : undefined}
-      ariaLabel="打印预览"
+      ariaLabel={t('print.preview.title')}
     >
       <div data-print-preview="" className="print-preview flex h-full w-full flex-col bg-paper">
         {/* 工具条：win32 桌面端避让系统三键（与 SettingsDialog 同款 titleBarHeight） */}
@@ -810,9 +839,11 @@ export function PrintPreviewDialog({
           style={{ paddingTop: isDesktop() ? titleBarHeight() : 0, height: isDesktop() ? 56 + titleBarHeight() : 56 }}
         >
           <Printer size={16} className="text-pine" aria-hidden />
-          <h2 className="font-display text-base font-semibold text-ink">打印预览</h2>
+          <h2 className="font-display text-base font-semibold text-ink">
+            {t('print.preview.title')}
+          </h2>
           <span className="text-xs text-mist">
-            {d.project.name} · 预计 {pagesCount} 页 · A4
+            {t('print.preview.head', { name: d.project.name, pages: pagesCount })}
           </span>
           <span className="ml-auto" />
           {/* 模板与模块（反馈 #9.2/#9.3 升格；期二中截改模块勾选；期六改弹窗） */}
@@ -820,28 +851,28 @@ export function PrintPreviewDialog({
             type="button"
             aria-expanded={selectorOpen}
             aria-haspopup="dialog"
-            aria-label="模板与模块"
+            aria-label={t('print.selector.title')}
             onClick={() => setSelectorOpen((v) => !v)}
             className={`inline-flex items-center gap-1 rounded-[6px] border border-line bg-cream px-2 py-0.5 text-xs font-medium transition-colors ${
               selectorOpen ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
             }`}
           >
             <ListChecks size={14} aria-hidden />
-            模板与模块
+            {t('print.selector.title')}
           </button>
           {/* 灰度预览（决策文档 §3.2-②）：纸面套 grayscale(1)，选色自查 + 灰度验收 */}
           <button
             type="button"
             data-print-grayscale-toggle=""
             aria-pressed={grayscale}
-            aria-label="灰度预览"
+            aria-label={t('print.grayscale.aria')}
             onClick={() => setGrayscale((v) => !v)}
             className={`inline-flex items-center gap-1 rounded-[6px] border border-line bg-cream px-2 py-0.5 text-xs font-medium transition-colors ${
               grayscale ? 'bg-paper text-ink shadow-soft' : 'text-mist hover:text-ink'
             }`}
           >
             <Palette size={14} aria-hidden />
-            灰度
+            {t('print.grayscale.label')}
           </button>
           {/* 缩放（期五）：适应/100% 快速锚点 + 连续滑块（Ctrl+滚轮同源）；
               预览瞬态——不进 prefs、不进打印（.print-zoom-layer 打印重置）、
@@ -862,7 +893,7 @@ export function PrintPreviewDialog({
           <button
             type="button"
             onClick={onClose}
-            aria-label="关闭打印预览"
+            aria-label={t('print.preview.close')}
             className="rounded-[8px] p-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
           >
             <X size={16} />
@@ -996,10 +1027,11 @@ export function PrintPreviewDialog({
                   data-print-template-building=""
                   className="my-10 w-[420px] rounded-md border border-line bg-paper p-6 text-center"
                 >
-                  <p className="text-sm font-medium text-ink">{printTemplateName(template)} · 页面建设中</p>
+                  <p className="text-sm font-medium text-ink">
+                    {t('print.building.title', { name: printTemplateName(template) })}
+                  </p>
                   <p className="mt-2 text-xs leading-relaxed text-mist">
-                    模板已注册（{meta.modules.length} 个原生模块；模块勾选与配色槽位已就绪），
-                    页面将在后续批次实现。当前不会输出任何纸面，打印与导出已禁用。
+                    {t('print.building.body', { count: meta.modules.length })}
                   </p>
                 </div>
               )}
@@ -1016,7 +1048,7 @@ export function PrintPreviewDialog({
           onClose={() => setSelectorOpen(false)}
           placement="center"
           zTier={78}
-          ariaLabel="模板与模块"
+          ariaLabel={t('print.selector.title')}
         >
           <PrintSelectorPanel
             template={template}
@@ -1044,7 +1076,7 @@ export function PrintPreviewDialog({
           className="no-print flex h-16 items-center gap-3 border-t border-line bg-paper px-4"
         >
           <span className="text-xs text-mist">
-            {canOutput ? '需要 PDF？在打印对话框选「另存为 PDF」' : '该模板页面建设中，暂不可打印'}
+            {canOutput ? t('print.action.needPdf') : t('print.action.notPrintable')}
           </span>
           <span className="ml-auto" />
           <button
@@ -1052,7 +1084,7 @@ export function PrintPreviewDialog({
             onClick={onClose}
             className="inline-flex items-center gap-1.5 rounded-[10px] px-4 py-2 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -1061,7 +1093,11 @@ export function PrintPreviewDialog({
             className="inline-flex items-center gap-1.5 rounded-[10px] border border-line bg-paper px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download size={14} />
-            {pngBusy ? '生成中…' : pagesCount > 1 ? `导出 PNG（${pagesCount} 张）` : '导出 PNG'}
+            {pngBusy
+              ? t('print.action.busy')
+              : pagesCount > 1
+                ? t('print.action.exportPngCount', { count: pagesCount })
+                : t('print.action.exportPng')}
           </button>
           <button
             type="button"
@@ -1069,7 +1105,7 @@ export function PrintPreviewDialog({
             disabled={printBusy || !canOutput}
             className="inline-flex items-center gap-1.5 rounded-[10px] bg-pine px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Printer size={16} /> 打印
+            <Printer size={16} /> {t('print.action.print')}
           </button>
         </div>
       </div>

@@ -62,6 +62,7 @@
  * **五套全部转正**——注册表不再有「建设中」条目。
  */
 
+import { t, type MessageKey } from '../../i18n';
 import type {
   PrintPageKind,
   PrintTemplateId,
@@ -75,12 +76,14 @@ export type PrintSkinId = 'default';
 
 export interface PrintSkin {
   id: PrintSkinId;
-  /** 选择器用文案 */
-  label: string;
+  /** 选择器用文案（**键**：屏幕侧取词，`t(labelKey)`；纸面恒中文） */
+  labelKey: MessageKey;
 }
 
 /** 皮肤注册表（legacy，仅「经典」= 现有视觉） */
-export const PRINT_SKINS: ReadonlyArray<PrintSkin> = [{ id: 'default', label: '经典' }];
+export const PRINT_SKINS: ReadonlyArray<PrintSkin> = [
+  { id: 'default', labelKey: 'print.template.classic.label' },
+];
 
 /**
  * 皮肤 id → CSS 类名（**静态映射，禁止改成模板字符串拼接**，理由见文件头）。
@@ -115,26 +118,30 @@ export type PrintModuleId =
   | 'agent-execution'
   | 'writeback-proposals';
 
-/** 模块元数据（label 模块名 + hint 一句话内容说明，选择器中截行文） */
+/**
+ * 模块元数据（labelKey 模块名 + hintKey 一句话内容说明，选择器中截行文）。
+ * ⚠️ 存的是**文案键**不是文案：本表是**屏幕侧**（选择器）的数据源，取词一律
+ * `t(m.labelKey)`；纸面（`documents/**`）不消费本表，故「纸面恒中文」不受影响。
+ */
 export interface PrintModuleMeta {
   id: PrintModuleId;
-  label: string;
-  hint: string;
+  labelKey: MessageKey;
+  hintKey: MessageKey;
 }
 
 /** 11 个内容模块全量元数据（选择器中截按此序逐行呈现；顺序 = 决策文档 §3.1 M1→M11） */
 export const PRINT_MODULES: ReadonlyArray<PrintModuleMeta> = [
-  { id: 'stage-list', label: '阶段清单', hint: 'Stage 四态 / 日期 / 占比 / 负责人' },
-  { id: 'task-list', label: '任务清单', hint: 'taskNo / 七态 / 负责人 / 产出物数' },
-  { id: 'delay-ledger', label: '延期台账', hint: 'StageLog 改期 · 旧 / 新结束日 / 原因' },
-  { id: 'member-roster', label: '成员名册', hint: '角色 · 负责任务数' },
-  { id: 'progress-matrix', label: '进度矩阵', hint: '阶段内任务完成度 / 日期 / 占比' },
-  { id: 'dependency-network', label: '依赖网络', hint: 'dependsOn 有向图 · 环与缺失引用' },
-  { id: 'workload-composition', label: '工作量构成', hint: 'ratioPercent 堆叠条 · 分期汇总' },
-  { id: 'milestone-acceptance', label: '里程碑验收', hint: 'M1 / M2 / M3 · 验收清单与签署' },
-  { id: 'artifact-list', label: '产出物清单', hint: '种类 / 关联任务 / 来源' },
-  { id: 'agent-execution', label: 'Agent 执行', hint: '10 态四组流程 · runId / confidence' },
-  { id: 'writeback-proposals', label: '写回提案', hint: '五态 · 四项白名单 · confidence' },
+  { id: 'stage-list', labelKey: 'print.module.stageList.label', hintKey: 'print.module.stageList.hint' },
+  { id: 'task-list', labelKey: 'print.module.taskList.label', hintKey: 'print.module.taskList.hint' },
+  { id: 'delay-ledger', labelKey: 'print.module.delayLedger.label', hintKey: 'print.module.delayLedger.hint' },
+  { id: 'member-roster', labelKey: 'print.module.memberRoster.label', hintKey: 'print.module.memberRoster.hint' },
+  { id: 'progress-matrix', labelKey: 'print.module.progressMatrix.label', hintKey: 'print.module.progressMatrix.hint' },
+  { id: 'dependency-network', labelKey: 'print.module.dependencyNetwork.label', hintKey: 'print.module.dependencyNetwork.hint' },
+  { id: 'workload-composition', labelKey: 'print.module.workloadComposition.label', hintKey: 'print.module.workloadComposition.hint' },
+  { id: 'milestone-acceptance', labelKey: 'print.module.milestoneAcceptance.label', hintKey: 'print.module.milestoneAcceptance.hint' },
+  { id: 'artifact-list', labelKey: 'print.module.artifactList.label', hintKey: 'print.module.artifactList.hint' },
+  { id: 'agent-execution', labelKey: 'print.module.agentExecution.label', hintKey: 'print.module.agentExecution.hint' },
+  { id: 'writeback-proposals', labelKey: 'print.module.writebackProposals.label', hintKey: 'print.module.writebackProposals.hint' },
 ];
 
 /** 全部模块 id（遍历 / 校验 / 勾选态排序用） */
@@ -152,10 +159,11 @@ export function isPrintModuleId(value: unknown): value is PrintModuleId {
 
 /* ============================== 模板注册表 ============================== */
 
-/** 原生页（模块在某外表下的标志布局渲染：kind + 页名；M10 = 两页） */
+/** 原生页（模块在某外表下的标志布局渲染：kind + 页名键；M10 = 两页） */
 export interface PrintNativePage {
   id: PrintPageKind;
-  label: string;
+  /** 页名**键**（屏幕侧取词；同一 kind 在不同外表下可不同名，故逐套给键） */
+  labelKey: MessageKey;
 }
 
 /**
@@ -188,9 +196,10 @@ export interface PrintTemplateMeta {
   id: PrintTemplateId;
   /** 版本名（A/D/E/H；经典为空串） */
   version: string;
-  label: string;
-  /** 一句话场景（选择器卡片副文案） */
-  scene: string;
+  /** 模板显示名**键**（屏幕侧；`printTemplateName()` 是唯一取词出口） */
+  labelKey: MessageKey;
+  /** 一句话场景（选择器卡片副文案）的**键** */
+  sceneKey: MessageKey;
   /**
    * 真缩略图（期六：需求方 10-09 提供的四张首页预览图，落
    * `public/print-thumbs/`，vite public 语义——引用范式同 `/logo.png`）。
@@ -217,8 +226,8 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
   {
     id: 'classic',
     version: '',
-    label: '经典',
-    scene: '现有排程纸面：甘特摘要 + 阶段清单，五块可摘',
+    labelKey: 'print.template.classic.label',
+    sceneKey: 'print.template.classic.scene',
     thumb: undefined,
     implemented: true,
     usesBlocks: true,
@@ -227,8 +236,8 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
   {
     id: 'swiss-schedule',
     version: 'A',
-    label: 'Swiss Schedule',
-    scene: '时刻表式竖读扫描：阶段 / 任务 / 延期 / 成员',
+    labelKey: 'print.template.swissSchedule.label',
+    sceneKey: 'print.template.swissSchedule.scene',
     thumb: '/print-thumbs/A-swiss-schedule-p1.png',
     implemented: true,
     // 2026-10-13「5 块 × 4 模板」重构 · 批 1：A 起走**五块模型**（决策 1：选择器
@@ -239,22 +248,22 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     modules: [
       {
         module: 'stage-list',
-        pages: [{ id: 'stage-overview', label: '阶段总览' }],
+        pages: [{ id: 'stage-overview', labelKey: 'print.page.swiss.stageOverview' }],
         generic: false,
       },
       {
         module: 'task-list',
-        pages: [{ id: 'task-register', label: '任务读号表' }],
+        pages: [{ id: 'task-register', labelKey: 'print.page.swiss.taskRegister' }],
         generic: false,
       },
       {
         module: 'delay-ledger',
-        pages: [{ id: 'delay-ledger', label: '延期记录表' }],
+        pages: [{ id: 'delay-ledger', labelKey: 'print.page.swiss.delayLedger' }],
         generic: false,
       },
       {
         module: 'member-roster',
-        pages: [{ id: 'member-roster', label: '成员责任表' }],
+        pages: [{ id: 'member-roster', labelKey: 'print.page.swiss.memberRoster' }],
         generic: false,
       },
     ],
@@ -262,8 +271,8 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
   {
     id: 'data-editorial',
     version: 'D',
-    label: 'Data Editorial',
-    scene: '横读矩阵与数据图形：进度 / 依赖 / 工作量 / 验收',
+    labelKey: 'print.template.dataEditorial.label',
+    sceneKey: 'print.template.dataEditorial.scene',
     thumb: '/print-thumbs/D-data-editorial-p1.png',
     implemented: true,
     // 2026-10-13 批 B：D 起走**五块模型**（决策 1）；4 个原生模块条目保留在
@@ -288,22 +297,22 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
       },
       {
         module: 'progress-matrix',
-        pages: [{ id: 'progress-matrix', label: '阶段进度矩阵' }],
+        pages: [{ id: 'progress-matrix', labelKey: 'print.page.data.progressMatrix' }],
         generic: false,
       },
       {
         module: 'dependency-network',
-        pages: [{ id: 'dependency-network', label: '任务依赖网络' }],
+        pages: [{ id: 'dependency-network', labelKey: 'print.page.data.dependencyNetwork' }],
         generic: false,
       },
       {
         module: 'workload-composition',
-        pages: [{ id: 'workload-composition', label: '阶段工作量构成' }],
+        pages: [{ id: 'workload-composition', labelKey: 'print.page.data.workloadComposition' }],
         generic: false,
       },
       {
         module: 'milestone-acceptance',
-        pages: [{ id: 'milestone-acceptance', label: '里程碑与验收' }],
+        pages: [{ id: 'milestone-acceptance', labelKey: 'print.page.data.milestoneAcceptance' }],
         generic: false,
       },
     ],
@@ -311,8 +320,8 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
   {
     id: 'editorial-index',
     version: 'E',
-    label: 'Editorial Index',
-    scene: '跳读大编号索引：阶段 / 成员 / 产出物归档',
+    labelKey: 'print.template.editorialIndex.label',
+    sceneKey: 'print.template.editorialIndex.scene',
     thumb: '/print-thumbs/E-editorial-index-p1.png',
     implemented: true,
     // 2026-10-13 批 C：E 起走**五块模型**（决策 1）；3 个原生模块条目保留在
@@ -322,7 +331,7 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     modules: [
       {
         module: 'stage-list',
-        pages: [{ id: 'stage-index', label: '阶段目录' }],
+        pages: [{ id: 'stage-index', labelKey: 'print.page.editorial.stageIndex' }],
         generic: false,
       },
       {
@@ -332,12 +341,12 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
       },
       {
         module: 'member-roster',
-        pages: [{ id: 'member-index', label: '成员执行体目录' }],
+        pages: [{ id: 'member-index', labelKey: 'print.page.editorial.memberIndex' }],
         generic: false,
       },
       {
         module: 'artifact-list',
-        pages: [{ id: 'artifact-index', label: '产出物清单' }],
+        pages: [{ id: 'artifact-index', labelKey: 'print.module.artifactList.label' }],
         generic: false,
       },
     ],
@@ -345,10 +354,10 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
   {
     id: 'agent-poster',
     version: 'H',
-    label: 'Agent Poster',
+    labelKey: 'print.template.agentPoster.label',
     // 人类化批次（规格 §1.2.5）：用户可见文案必须改——旧文案是「H 默认纸面
     // 100% 是 Agent」的证据链之一。
-    scene: '海报式跳读：阶段 / 任务 / 成员的公告板',
+    sceneKey: 'print.template.agentPoster.scene',
     thumb: '/print-thumbs/H-agent-poster-p1.png',
     implemented: true,
     // 2026-10-13 批 D：H 起走**五块模型**（决策 1）；它的 3 个原生模块条目
@@ -363,17 +372,17 @@ export const PRINT_TEMPLATES: ReadonlyArray<PrintTemplateMeta> = [
     modules: [
       {
         module: 'stage-list',
-        pages: [{ id: 'stage-overview', label: '阶段海报' }],
+        pages: [{ id: 'stage-overview', labelKey: 'print.page.poster.stageOverview' }],
         generic: true,
       },
       {
         module: 'task-list',
-        pages: [{ id: 'task-register', label: '任务海报' }],
+        pages: [{ id: 'task-register', labelKey: 'print.page.poster.taskRegister' }],
         generic: true,
       },
       {
         module: 'member-roster',
-        pages: [{ id: 'member-roster', label: '成员海报' }],
+        pages: [{ id: 'member-roster', labelKey: 'print.page.poster.memberRoster' }],
         generic: true,
       },
     ],
@@ -396,19 +405,21 @@ export function printTemplateClass(id: PrintTemplateId): string {
 }
 
 /** 全部模板 id（遍历 / 校验用） */
-export const PRINT_TEMPLATE_IDS: readonly PrintTemplateId[] = PRINT_TEMPLATES.map((t) => t.id);
+export const PRINT_TEMPLATE_IDS: readonly PrintTemplateId[] = PRINT_TEMPLATES.map((tpl) => tpl.id);
 
 /** 取模板元数据；未知 id 回落 classic（与 printTemplateClass 同口径） */
 export function printTemplateMeta(id: PrintTemplateId): PrintTemplateMeta {
-  return PRINT_TEMPLATES.find((t) => t.id === id) ?? PRINT_TEMPLATES[0]!;
+  return PRINT_TEMPLATES.find((tpl) => tpl.id === id) ?? PRINT_TEMPLATES[0]!;
 }
 
 /** 选择器显示名：「A · Swiss Schedule」；经典无版本号。
  *  ⚠️ 用拼接不用模板字符串——本文件被 spec 以「零模板串」整体锁死（JIT 类名纪律的
- *  blanket 守卫），显示名拼一下无成本，别为一行字在文件里开模板串的口子。 */
+ *  blanket 守卫），显示名拼一下无成本，别为一行字在文件里开模板串的口子。
+ *  取词走 `t()`：调用方是渲染期组件（已订阅语言 ⇒ 切语言会重渲染并重新调用本函数）。 */
 export function printTemplateName(id: PrintTemplateId): string {
   const meta = printTemplateMeta(id);
-  return meta.version ? meta.version + ' · ' + meta.label : meta.label;
+  const label = t(meta.labelKey);
+  return meta.version ? meta.version + ' · ' + label : label;
 }
 
 /** 该模板的模块能力表（经典返回空——它的输出粒度是五块） */

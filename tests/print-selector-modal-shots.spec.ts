@@ -33,6 +33,7 @@ import { PrintSelectorPanel } from '../src/components/print/PrintPreviewDialog';
 import { printToggleableUnits } from '../src/print/model/print-units';
 import type { PrintBlockId } from '../src/print/model/print-units';
 import { printTemplateMeta } from '../src/components/print/print-templates';
+import { t } from '../src/i18n';
 import type { PrintTemplateId } from '../src/components/print/print-templates';
 import { printTemplateModuleIds } from '../src/components/print/print-templates';
 import { builtCss as readBuiltCss } from './helpers/built-css';
@@ -99,8 +100,8 @@ function panelMarkup(template: PrintTemplateId = 'swiss-schedule'): string {
       onSelectNoneModules: () => {},
       unitRows: printToggleableUnits(template).map((u) => ({
         id: u.id as PrintBlockId,
-        label: u.label,
-        hint: u.hint,
+        label: t(u.labelKey),
+        hint: t(u.hintKey),
         checked: true,
       })),
       onToggleUnit: () => {},

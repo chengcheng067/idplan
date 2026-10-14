@@ -28,6 +28,7 @@ import { useRoleGuard } from '../hooks/useRoleGuard';
 import { effectiveDomainOf, useProjectById } from '../core/project/visibility';
 import { dayjs } from '../lib/date';
 import { cn } from '../lib/cn';
+import { useLang } from '../i18n';
 
 /** 金额展示：null → `—`（不把 null 打成 ¥0，那会伪造「已确认零花费」） */
 function fmtMoney(n: number | null): string {
@@ -45,6 +46,7 @@ function fmtDelta(n: number): string {
 
 export function ItineraryPrintPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
+  const { t } = useLang();
   const project = useProjectById(id);
   const repos = useRepos();
   const { role, hydrated } = useRoleGuard();
@@ -98,7 +100,7 @@ export function ItineraryPrintPage(): JSX.Element {
   }, [ordered]);
 
   if (!hydrated) {
-    return <div className="py-16 text-center text-mist">正在装载行程单…</div>;
+    return <div className="py-16 text-center text-mist">{t('print.page.loading.itinerary')}</div>;
   }
   if (role === null) {
     return <Navigate to="/" replace />;
@@ -106,9 +108,9 @@ export function ItineraryPrintPage(): JSX.Element {
   if (!project) {
     return (
       <div className="py-16 text-center text-mist">
-        <p className="mb-3">未找到该项目。</p>
+        <p className="mb-3">{t('print.page.notFound')}</p>
         <Link to="/" className="text-pine underline underline-offset-2">
-          ← 返回项目列表
+          {t('print.page.backToList')}
         </Link>
       </div>
     );
@@ -116,9 +118,9 @@ export function ItineraryPrintPage(): JSX.Element {
   if (!isTravel) {
     return (
       <div className="py-16 text-center text-mist">
-        <p className="mb-3">「{project.name}」不是旅游项目，没有客户行程单。</p>
+        <p className="mb-3">{t('print.page.notTravel', { name: project.name })}</p>
         <Link to={`/project/${project.id}`} className="text-pine underline underline-offset-2">
-          ← 返回项目详情
+          {t('print.page.backToProjectDetail')}
         </Link>
       </div>
     );
@@ -134,13 +136,13 @@ export function ItineraryPrintPage(): JSX.Element {
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-ink hover:bg-sunken"
         >
           <Printer size={14} aria-hidden />
-          打印 / 导出 PDF
+          {t('print.page.printPdf')}
         </button>
         <Link
           to={`/project/${project.id}`}
           className="rounded-md border border-line px-3 py-1.5 text-sm text-mist hover:bg-sunken"
         >
-          返回项目
+          {t('print.page.backToProject')}
         </Link>
       </div>
 
@@ -163,7 +165,7 @@ export function ItineraryPrintPage(): JSX.Element {
       </header>
 
       {loading ? (
-        <p className="py-10 text-center text-mist">正在装载行程单…</p>
+        <p className="py-10 text-center text-mist">{t('print.page.loading.itinerary')}</p>
       ) : ordered.length === 0 ? (
         <p className="py-10 text-center text-mist">该项目还没有每日行程，请先在项目详情里设置行程。</p>
       ) : (

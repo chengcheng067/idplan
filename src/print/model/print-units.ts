@@ -35,6 +35,7 @@
  * 之上的说明与 `PrintPreviewDialog` 的分支注释）。
  */
 
+import type { MessageKey } from '../../i18n';
 import { DEFAULT_SCHEDULE_PAPER_BLOCKS, type SchedulePaperBlocks } from '../../lib/schedule-print';
 import type { PrintModuleId } from '../../components/print/print-templates';
 import type { PrintTemplateId } from './print-view-model';
@@ -89,19 +90,25 @@ export const PRINT_BLOCK_IDS: readonly PrintBlockId[] = [
   'footer',
 ];
 
-/** 5 块的展示元数据（label + hint；经典选择器与四版选择器**同一份文案**） */
+/**
+ * 5 块的展示元数据（labelKey + hintKey；经典选择器与四版选择器**同一份文案**）。
+ * ⚠️ 存的是**文案键**：本表唯一的消费方是**屏幕侧选择器**（`PrintPreviewDialog`
+ * 的行装配），取词一律 `t(m.labelKey)`。纸面（`documents/**`）只读 `enabled`，
+ * 不读 label —— 故「纸面恒中文」不受影响。
+ */
 export interface PrintBlockMeta {
   id: PrintBlockId;
-  label: string;
-  hint: string;
+  labelKey: MessageKey;
+  hintKey: MessageKey;
 }
 
 export const PRINT_BLOCKS: readonly PrintBlockMeta[] = [
-  { id: 'header', label: '打印头部', hint: '项目名 / 周期' },
-  { id: 'timeline', label: '打印时间轴', hint: '甘特图' },
-  { id: 'projectInfo', label: '项目信息', hint: '排期基准' },
-  { id: 'stageTable', label: '阶段清单', hint: '表格' },
-  { id: 'footer', label: '页脚', hint: '署名 / 页码' },
+  { id: 'header', labelKey: 'print.unit.header.label', hintKey: 'print.unit.header.hint' },
+  { id: 'timeline', labelKey: 'print.unit.timeline.label', hintKey: 'print.unit.timeline.hint' },
+  { id: 'projectInfo', labelKey: 'print.unit.projectInfo.label', hintKey: 'print.unit.projectInfo.hint' },
+  // 「阶段清单」与模块 M1 同一串（同一个词只建一个键，按取值 grep 全表后复用）
+  { id: 'stageTable', labelKey: 'print.module.stageList.label', hintKey: 'print.unit.stageTable.hint' },
+  { id: 'footer', labelKey: 'print.unit.footer.label', hintKey: 'print.unit.footer.hint' },
 ];
 
 /** 块 id → 元数据；未知 id 回落首块（行行有文案，不裸奔；同 printModuleMeta 手法） */
@@ -123,8 +130,9 @@ export function printBlockMeta(id: PrintBlockId): PrintBlockMeta {
 export interface PrintUnitSpec {
   id: PrintUnitId;
   kind: PrintUnitKind;
-  label: string;
-  hint: string;
+  /** 行文案**键**（屏幕侧取词；纸面不消费本字段） */
+  labelKey: MessageKey;
+  hintKey: MessageKey;
   /** 本套模板下不可取消（今天 = 恒开、不进选择器；模型上仍是一等单元） */
   forced: boolean;
 }
@@ -134,15 +142,15 @@ function blockSpecs(forced: readonly PrintBlockId[] = []): PrintUnitSpec[] {
   return PRINT_BLOCKS.map((b) => ({
     id: b.id,
     kind: 'block' as const,
-    label: b.label,
-    hint: b.hint,
+    labelKey: b.labelKey,
+    hintKey: b.hintKey,
     forced: forced.includes(b.id),
   }));
 }
 
-/** 装置声明：label / hint 逐套给（今天只用于注册表完整性，将来进选择器时直接可用） */
-function deviceSpec(id: PrintDeviceId, label: string, hint: string): PrintUnitSpec {
-  return { id, kind: 'device', label, hint, forced: true };
+/** 装置声明：labelKey / hintKey 逐套给（今天只用于注册表完整性，将来进选择器时直接可用） */
+function deviceSpec(id: PrintDeviceId, labelKey: MessageKey, hintKey: MessageKey): PrintUnitSpec {
+  return { id, kind: 'device', labelKey, hintKey, forced: true };
 }
 
 /**
@@ -164,19 +172,19 @@ export const PRINT_TEMPLATE_UNITS: Record<PrintTemplateId, readonly PrintUnitSpe
   'swiss-schedule': [
     // A：B1 不可取消（项目名住在板头站名，§2.6 A·B1 = 丙）
     ...blockSpecs(['header']),
-    deviceSpec('swiss-topbar', '黑顶栏', 'logo / 栏目 / 页题 / 品牌·页序（版式构件）'),
-    deviceSpec('swiss-percent', '板头巨字完成度', '右对齐版面锚点（版式构件）'),
-    deviceSpec('swiss-bottombar', '黑底栏', '署名 / 页码 / 数据时间（版式构件）'),
+    deviceSpec('swiss-topbar', 'print.unit.swissTopbar.label', 'print.unit.swissTopbar.hint'),
+    deviceSpec('swiss-percent', 'print.unit.swissPercent.label', 'print.unit.swissPercent.hint'),
+    deviceSpec('swiss-bottombar', 'print.unit.swissBottombar.label', 'print.unit.swissBottombar.hint'),
   ],
   'data-editorial': [
     ...blockSpecs(['header']),
-    deviceSpec('de-head', '刊头装置', 'mono 顶行 / 巨字标题 / 橙副标 / 3px 硬边线'),
-    deviceSpec('de-band', '页尾完成度横带', '每页的聚合横带（版式构件）'),
+    deviceSpec('de-head', 'print.unit.deHead.label', 'print.unit.deHead.hint'),
+    deviceSpec('de-band', 'print.unit.deBand.label', 'print.unit.deBand.hint'),
   ],
   'editorial-index': [
     ...blockSpecs(['header']),
-    deviceSpec('ei-giant-title', '两行巨题', '衬线巨题（目录身份装置）'),
-    deviceSpec('ei-sheet-tag', 'SHEET 页签', 'SHEET nn / NN · A4（刊头身份；与页脚页码并存）'),
+    deviceSpec('ei-giant-title', 'print.unit.eiGiantTitle.label', 'print.unit.eiGiantTitle.hint'),
+    deviceSpec('ei-sheet-tag', 'print.unit.eiSheetTag.label', 'print.unit.eiSheetTag.hint'),
   ],
   'agent-poster': [
     // H：B1 **与 B5 都不可取消**（§2.6 · 丙 + 批 D 裁决第 1 条）。
@@ -191,10 +199,10 @@ export const PRINT_TEMPLATE_UNITS: Record<PrintTemplateId, readonly PrintUnitSpe
     // 与同节纪律 1「H 的 B5 恒为禁用行」自相矛盾；team-lead 已裁定取**禁用行**
     // 并作废规则表那句（文档已改一致）。
     ...blockSpecs(['header', 'footer']),
-    deviceSpec('ap-flood-top', '页顶出血巨字', '品牌词 + 叠字主题词（页锚点）'),
-    deviceSpec('ap-flood-bottom', '页底出血巨字', 'IDPLAN（B5 的署名由它承担，不许摘）'),
-    deviceSpec('ap-spine', '中轴与栏头线', '双栏语法本体'),
-    deviceSpec('ap-sum', '居中摘要块', '装置本体；B2 借它的第 4 个载荷'),
+    deviceSpec('ap-flood-top', 'print.unit.apFloodTop.label', 'print.unit.apFloodTop.hint'),
+    deviceSpec('ap-flood-bottom', 'print.unit.apFloodBottom.label', 'print.unit.apFloodBottom.hint'),
+    deviceSpec('ap-spine', 'print.unit.apSpine.label', 'print.unit.apSpine.hint'),
+    deviceSpec('ap-sum', 'print.unit.apSum.label', 'print.unit.apSum.hint'),
   ],
 };
 
@@ -240,8 +248,8 @@ export type PrintUnitSource = 'user' | 'default' | 'forced';
 export interface ResolvedPrintUnit {
   id: PrintUnitId;
   kind: PrintUnitKind;
-  label: string;
-  hint: string;
+  labelKey: MessageKey;
+  hintKey: MessageKey;
   enabled: boolean;
   source: PrintUnitSource;
   /** 本套模板下不可取消（模型上仍是一等单元；今天不进选择器清单） */

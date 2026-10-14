@@ -48,6 +48,7 @@ class ResizeObserverStub {
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub;
 
 import { PrintModuleSection, PrintPreviewDialog } from '../src/components/print/PrintPreviewDialog';
+import { t } from '../src/i18n';
 import {
   PRINT_MODULES,
   PRINT_MODULE_IDS,
@@ -412,8 +413,9 @@ describe('期二+期三 · L1-a 模块能力表', () => {
     ]);
     expect(PRINT_MODULES).toHaveLength(11);
     for (const m of PRINT_MODULES) {
-      expect(m.label.length, `${m.id} 模块名非空`).toBeGreaterThan(0);
-      expect(m.hint.length, `${m.id} 一句话内容说明非空`).toBeGreaterThan(0);
+      // 存的是**文案键**（屏幕侧取词）⇒ 断言「键能取到非空行文」，比断言字段非空更强
+      expect(t(m.labelKey).length, `${m.id} 模块名非空`).toBeGreaterThan(0);
+      expect(t(m.hintKey).length, `${m.id} 一句话内容说明非空`).toBeGreaterThan(0);
     }
     // 类型守卫：页 kind 不是模块 id（两层类型不许串）
     expect(isPrintModuleId('stage-list')).toBe(true);
@@ -492,17 +494,19 @@ describe('期二+期三 · L1-a 模块能力表', () => {
       'member-roster',
     ]);
     // 每条能力表条目至少一态（原生页 or 通用标记），不允许空跑
-    for (const t of PRINT_TEMPLATE_IDS) {
-      for (const cap of printTemplateModules(t)) {
+    // ⚠️ 循环变量叫 `tpl` 不叫 `t`：`t` 是本文件顶部 import 的取词函数，
+    //    用 `t` 当循环变量会**遮蔽**它（历史上本批有过这类误替换事故）。
+    for (const tpl of PRINT_TEMPLATE_IDS) {
+      for (const cap of printTemplateModules(tpl)) {
         expect(
           cap.pages.length > 0 || cap.generic,
-          `${t} 的 ${cap.module} 应有原生页或通用标记`,
+          `${tpl} 的 ${cap.module} 应有原生页或通用标记`,
         ).toBe(true);
-        for (const p of cap.pages) expect(p.label.length, '原生页名非空').toBeGreaterThan(0);
+        for (const p of cap.pages) expect(t(p.labelKey).length, '原生页名非空').toBeGreaterThan(0);
       }
       // 能力表序 = PRINT_MODULES 序（enabledSheetsOf 的页序不变量）
-      const order = printTemplateModuleIds(t).map((m) => PRINT_MODULE_IDS.indexOf(m));
-      expect([...order].sort((a, b) => a - b), `${t} 能力表按 M1→M11 序`).toEqual(order);
+      const order = printTemplateModuleIds(tpl).map((m) => PRINT_MODULE_IDS.indexOf(m));
+      expect([...order].sort((a, b) => a - b), `${tpl} 能力表按 M1→M11 序`).toEqual(order);
     }
   });
 

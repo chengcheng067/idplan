@@ -5,6 +5,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, Download, FileText, Printer } from 'lucide-react';
 
 import { useProjectsStore } from '../store/useProjectsStore';
+import { useLang } from '../i18n';
 import { useProjectById, useProjectStages, useProjectTasks } from '../core/project/visibility';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { SchedulePaper } from '../components/print/SchedulePaper';
@@ -25,6 +26,7 @@ import { exportSchedulePngPages, schedulePngFileName } from '../lib/schedule-pri
  */
 export function SchedulePrintPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
+  const { t } = useLang();
   /*
    * ── ★ v0.8 T04-A：本页三行原始读改走漏斗的 id 收窄出口（设计 §7.2 #17 特判 / §7.5）──
    *
@@ -80,14 +82,14 @@ export function SchedulePrintPage(): JSX.Element {
     try {
       await exportSchedulePngPages(els, schedulePngFileName(project?.name ?? 'project'));
     } catch {
-      useProjectsStore.getState().pushToast('error', 'PNG 导出失败，请改用「打印 / 另存为 PDF」。');
+      useProjectsStore.getState().pushToast('error', t('print.action.pngFailed'));
     } finally {
       setPngBusy(false);
     }
   };
 
   if (!hydrated) {
-    return <div className="py-16 text-center text-mist">正在装载日程表…</div>;
+    return <div className="py-16 text-center text-mist">{t('print.page.loading.schedule')}</div>;
   }
 
   /**
@@ -115,9 +117,9 @@ export function SchedulePrintPage(): JSX.Element {
   if (!project) {
     return (
       <div className="py-16 text-center text-mist">
-        <p className="mb-3">未找到该项目。</p>
+        <p className="mb-3">{t('print.page.notFound')}</p>
         <Link to="/" className="text-pine underline underline-offset-2">
-          ← 返回项目列表
+          {t('print.page.backToList')}
         </Link>
       </div>
     );
@@ -139,9 +141,9 @@ export function SchedulePrintPage(): JSX.Element {
   if (memberView && sections.length === 0) {
     return (
       <div className="py-16 text-center text-mist">
-        <p className="mb-3">该项目的阶段与你无关。</p>
+        <p className="mb-3">{t('print.page.notRelated')}</p>
         <Link to="/my-tasks" className="text-pine underline underline-offset-2">
-          ← 返回我的任务
+          {t('print.page.backToMyTasks')}
         </Link>
       </div>
     );
@@ -156,7 +158,7 @@ export function SchedulePrintPage(): JSX.Element {
           to={`/project/${project.id}`}
           className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
-          <ArrowLeft size={14} /> 返回项目
+          <ArrowLeft size={14} /> {t('print.page.backToProject')}
         </Link>
         {/* ★ §7.3 #17 的「来源标识」：放在 `no-print` 操作栏内 ⇒
             只对**屏幕前的人**可见，不会印进客户稿（打印稿是给客户看的，
@@ -173,26 +175,28 @@ export function SchedulePrintPage(): JSX.Element {
             「预计」只修饰语义，**不是**另算一个近似值；另算必然与真实分页漂移。
             下方 `导出 PNG（N 张）` 保持原样：它数的是**实际会产出的文件数**
             （`exportSchedulePngPages` 逐页导，页数就是 `pages.length`），是确定值不用「预计」。 */}
-        <span className="text-xs text-mist">预计 {pages.length} 页 · A4</span>
+        <span className="text-xs text-mist">
+          {t('print.page.estimatedPages', { pages: pages.length })}
+        </span>
         <button
           type="button"
           onClick={onPrint}
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
-          <Printer size={14} /> 打印
+          <Printer size={14} /> {t('print.action.print')}
         </button>
         <button
           type="button"
           onClick={onExportPdf}
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
-          <FileText size={14} /> 导出 PDF
+          <FileText size={14} /> {t('print.page.exportPdf')}
         </button>
         <Link
           to={`/project/${project.id}/calendar-print`}
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
-          <CalendarDays size={14} /> 月历视图
+          <CalendarDays size={14} /> {t('print.page.calendarView')}
         </Link>
         <button
           type="button"
@@ -200,11 +204,16 @@ export function SchedulePrintPage(): JSX.Element {
           disabled={pngBusy}
           className="inline-flex items-center gap-1.5 rounded-md bg-pine px-3 py-1.5 text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
         >
-          <Download size={14} /> {pngBusy ? '生成中…' : `导出 PNG${pages.length > 1 ? `（${pages.length} 张）` : ''}`}
+          <Download size={14} />{' '}
+          {pngBusy
+            ? t('print.action.busy')
+            : pages.length > 1
+              ? t('print.action.exportPngCount', { count: pages.length })
+              : t('print.action.exportPng')}
         </button>
         {pdfHint && (
           <span className="w-full text-xs text-mist">
-            已在打印对话框打开：请选择「另存为 PDF」即可导出。
+            {t('print.page.pdfDialogHint')}
           </span>
         )}
       </div>

@@ -32,6 +32,7 @@
  * 开放自定义会造成「打印稿与应用内不同色」的分裂（决策文档 §3.2 边界）。
  */
 
+import { t, type MessageKey } from '../../i18n';
 import { contrast } from '../../core/color/contrast';
 import { CONTRAST_WARN_MAIN_ON_PAGE, TEXT_MIN_CONTRAST } from '../../core/color/derive-stage-colors';
 
@@ -51,19 +52,28 @@ export type PrintPaletteSlot = keyof PrintPalette;
 
 export const PRINT_PALETTE_SLOTS: readonly PrintPaletteSlot[] = ['accent', 'ink', 'line'];
 
-export const PRINT_PALETTE_SLOT_LABELS: Record<PrintPaletteSlot, string> = {
-  accent: '身份色',
-  ink: '主文字',
-  line: '线色',
+/**
+ * 三槽位的**显示名键**（屏幕侧唯一消费方 = `PaletteSection`，取词 `t(...)`）。
+ * ⚠️ 存键不存值：本表只服务**屏幕**（配色选择器）；纸面拿的是 `PrintPalette`
+ * 的三枚 hex，一个字都不读本表 ⇒「纸面恒中文」不受影响。
+ */
+export const PRINT_PALETTE_SLOT_LABELS: Record<PrintPaletteSlot, MessageKey> = {
+  accent: 'print.palette.slot.accent',
+  ink: 'print.palette.slot.ink',
+  line: 'print.palette.slot.line',
 };
 
 /** 非文字/图形级对比度阈值（WCAG 1.4.11：3:1）——仓库无同义常量，此处单一定义 */
 export const PALETTE_ACCENT_MIN_CONTRAST = 3;
 
-/** 预设变体卡（三枚打包；用户点选即用，保存形态与自定义完全一致） */
+/**
+ * 预设变体卡（三枚打包；用户点选即用，保存形态与自定义完全一致）。
+ * `nameKey` = 色号显示名的**键**（产品负责人 2026-10-14 拍板：色号 / 配色预设名
+ * 也翻，原判 C 灰区改判 A）。落库的是 hex，名字只用于屏幕 ⇒ 换名不动数据。
+ */
 export interface PrintPalettePreset {
   id: string;
-  name: string;
+  nameKey: MessageKey;
   palette: PrintPalette;
 }
 
@@ -72,8 +82,8 @@ export interface PrintPalettePairSpec {
   a: PrintPaletteSlot | 'paper';
   b: PrintPaletteSlot | 'paper';
   min: number;
-  /** 人读标签（禁存提示里指名用） */
-  label: string;
+  /** 人读标签的**键**（禁存提示里指名用；调用方 `t(labelKey)`） */
+  labelKey: MessageKey;
 }
 
 /** 每模板的配色规格：纸底 + 设计师基线 + 预设组 + 闸门配对 */
@@ -147,16 +157,16 @@ const SWISS_SCHEDULE_PALETTE: PrintTemplatePaletteSpec = {
   paper: 'accent',
   baseline: { accent: '#F2D957', ink: '#191816', line: '#191816' },
   pairs: [
-    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, label: '主文字 vs 纸面' },
-    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, label: '线色 vs 纸面' },
+    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, labelKey: 'print.palette.pair.inkPaper' },
+    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, labelKey: 'print.palette.pair.linePaper' },
     // A 的身份区：黑顶/底栏上的黄字。accent 与 line 任一枚跑偏都会出「白栏黄字」事故
-    { a: 'accent', b: 'line', min: PALETTE_MIN_CONTRAST.ink, label: '栏内反白字 vs 栏底' },
+    { a: 'accent', b: 'line', min: PALETTE_MIN_CONTRAST.ink, labelKey: 'print.palette.pair.accentLine' },
   ],
   presets: [
-    { id: 'traffic-yellow', name: '交通黄', palette: { accent: '#F2D957', ink: '#191816', line: '#191816' } },
-    { id: 'platform-blue', name: '站台蓝', palette: { accent: '#16324F', ink: '#F2D957', line: '#F2D957' } },
-    { id: 'ochre', name: '赭石', palette: { accent: '#8C4A2F', ink: '#F5E9DA', line: '#F5E9DA' } },
-    { id: 'pine', name: '松墨', palette: { accent: '#1E4D3B', ink: '#F2D957', line: '#F2D957' } },
+    { id: 'traffic-yellow', nameKey: 'print.palette.swiss.trafficYellow', palette: { accent: '#F2D957', ink: '#191816', line: '#191816' } },
+    { id: 'platform-blue', nameKey: 'print.palette.swiss.platformBlue', palette: { accent: '#16324F', ink: '#F2D957', line: '#F2D957' } },
+    { id: 'ochre', nameKey: 'print.palette.swiss.ochre', palette: { accent: '#8C4A2F', ink: '#F5E9DA', line: '#F5E9DA' } },
+    { id: 'pine', nameKey: 'print.palette.swiss.pine', palette: { accent: '#1E4D3B', ink: '#F2D957', line: '#F2D957' } },
   ],
 };
 
@@ -170,15 +180,15 @@ const DATA_EDITORIAL_PALETTE: PrintTemplatePaletteSpec = {
   paper: '#FFFFFF',
   baseline: { accent: '#EF4B23', ink: '#0A0A0A', line: '#C9C9C9' },
   pairs: [
-    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, label: '主文字 vs 纸底' },
-    { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, label: '身份色 vs 纸底' },
-    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, label: '线色 vs 纸底' },
+    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, labelKey: 'print.palette.pair.inkPage' },
+    { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, labelKey: 'print.palette.pair.accentPage' },
+    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, labelKey: 'print.palette.pair.linePage' },
   ],
   presets: [
-    { id: 'signal-orange', name: '橙红', palette: { accent: '#EF4B23', ink: '#0A0A0A', line: '#C9C9C9' } },
-    { id: 'indigo', name: '靛蓝', palette: { accent: '#3B5BDB', ink: '#0A0A0A', line: '#C9C9C9' } },
-    { id: 'pine-green', name: '墨绿', palette: { accent: '#1F7A4D', ink: '#0A0A0A', line: '#C9C9C9' } },
-    { id: 'sienna', name: '赭石', palette: { accent: '#A0522D', ink: '#0A0A0A', line: '#C9C9C9' } },
+    { id: 'signal-orange', nameKey: 'print.palette.data.signalOrange', palette: { accent: '#EF4B23', ink: '#0A0A0A', line: '#C9C9C9' } },
+    { id: 'indigo', nameKey: 'print.palette.data.indigo', palette: { accent: '#3B5BDB', ink: '#0A0A0A', line: '#C9C9C9' } },
+    { id: 'pine-green', nameKey: 'print.palette.data.pineGreen', palette: { accent: '#1F7A4D', ink: '#0A0A0A', line: '#C9C9C9' } },
+    { id: 'sienna', nameKey: 'print.palette.data.sienna', palette: { accent: '#A0522D', ink: '#0A0A0A', line: '#C9C9C9' } },
   ],
 };
 
@@ -199,15 +209,15 @@ const EDITORIAL_INDEX_PALETTE: PrintTemplatePaletteSpec = {
   paper: '#F5F2EC',
   baseline: { accent: '#B04A2F', ink: '#141414', line: '#CFC6B4' },
   pairs: [
-    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, label: '主文字 vs 纸底' },
-    { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, label: '焦点色 vs 纸底' },
-    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, label: '发丝线 vs 纸底' },
+    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, labelKey: 'print.palette.pair.inkPage' },
+    { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, labelKey: 'print.palette.pair.focusPage' },
+    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, labelKey: 'print.palette.pair.hairlinePage' },
   ],
   presets: [
-    { id: 'vermilion', name: '赭红', palette: { accent: '#B04A2F', ink: '#141414', line: '#CFC6B4' } },
-    { id: 'indigo', name: '靛蓝', palette: { accent: '#2B4ACB', ink: '#141414', line: '#CFC6B4' } },
-    { id: 'pine-green', name: '墨绿', palette: { accent: '#1F7A4D', ink: '#141414', line: '#CFC6B4' } },
-    { id: 'sienna', name: '赭石', palette: { accent: '#A0522D', ink: '#141414', line: '#CFC6B4' } },
+    { id: 'vermilion', nameKey: 'print.palette.editorial.vermilion', palette: { accent: '#B04A2F', ink: '#141414', line: '#CFC6B4' } },
+    { id: 'indigo', nameKey: 'print.palette.editorial.indigo', palette: { accent: '#2B4ACB', ink: '#141414', line: '#CFC6B4' } },
+    { id: 'pine-green', nameKey: 'print.palette.editorial.pineGreen', palette: { accent: '#1F7A4D', ink: '#141414', line: '#CFC6B4' } },
+    { id: 'sienna', nameKey: 'print.palette.editorial.sienna', palette: { accent: '#A0522D', ink: '#141414', line: '#CFC6B4' } },
   ],
 };
 
@@ -251,16 +261,16 @@ const AGENT_POSTER_PALETTE: PrintTemplatePaletteSpec = {
   paper: '#DEDDD4',
   baseline: { accent: '#E2522B', ink: '#0A0A0A', line: '#91918A' },
   pairs: [
-    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, label: '主文字 vs 纸底' },
-    { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, label: '状态色 vs 纸底' },
-    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, label: '分隔线 vs 纸底' },
+    { a: 'ink', b: 'paper', min: PALETTE_MIN_CONTRAST.ink, labelKey: 'print.palette.pair.inkPage' },
+    { a: 'accent', b: 'paper', min: PALETTE_MIN_CONTRAST.accent, labelKey: 'print.palette.pair.statusPage' },
+    { a: 'line', b: 'paper', min: PALETTE_MIN_CONTRAST.line, labelKey: 'print.palette.pair.dividerPage' },
   ],
   // 线色与基线同值（已过闸）；signal-orange 的 accent 差异是「预设必须真过闸」的算术必需
   presets: [
-    { id: 'signal-orange', name: '橙', palette: { accent: '#DA4B21', ink: '#0A0A0A', line: '#91918A' } },
-    { id: 'vermilion', name: '朱红', palette: { accent: '#C8102E', ink: '#0A0A0A', line: '#91918A' } },
-    { id: 'indigo', name: '靛蓝', palette: { accent: '#3B5BDB', ink: '#0A0A0A', line: '#91918A' } },
-    { id: 'pine-green', name: '墨绿', palette: { accent: '#1F7A4D', ink: '#0A0A0A', line: '#91918A' } },
+    { id: 'signal-orange', nameKey: 'print.palette.poster.signalOrange', palette: { accent: '#DA4B21', ink: '#0A0A0A', line: '#91918A' } },
+    { id: 'vermilion', nameKey: 'print.palette.poster.vermilion', palette: { accent: '#C8102E', ink: '#0A0A0A', line: '#91918A' } },
+    { id: 'indigo', nameKey: 'print.palette.poster.indigo', palette: { accent: '#3B5BDB', ink: '#0A0A0A', line: '#91918A' } },
+    { id: 'pine-green', nameKey: 'print.palette.poster.pineGreen', palette: { accent: '#1F7A4D', ink: '#0A0A0A', line: '#91918A' } },
   ],
 };
 
@@ -292,7 +302,7 @@ export function effectivePalette(templateId: PrintTemplateId): PrintPalette | nu
 export interface PrintPalettePairResult {
   a: PrintPaletteSlot | 'paper';
   b: PrintPaletteSlot | 'paper';
-  label: string;
+  labelKey: MessageKey;
   /** 实测 WCAG 比值 */
   ratio: number;
   min: number;
@@ -338,7 +348,7 @@ export function checkPrintPalette(
 
   const pairs: PrintPalettePairResult[] = spec.pairs.map((pair) => {
     const ratio = contrast(sideColor(pair.a, palette, spec), sideColor(pair.b, palette, spec));
-    return { a: pair.a, b: pair.b, label: pair.label, ratio, min: pair.min, pass: ratio >= pair.min };
+    return { a: pair.a, b: pair.b, labelKey: pair.labelKey, ratio, min: pair.min, pass: ratio >= pair.min };
   });
   const failures = pairs.filter((p) => !p.pass);
   return {
@@ -348,9 +358,16 @@ export function checkPrintPalette(
     message:
       failures.length === 0
         ? null
-        : `对比度不足，已禁止保存：${failures
-            .map((f) => `${f.label} ${formatContrastRatio(f.ratio)}（需 ≥${f.min}:1）`)
-            .join('；')}`,
+        : t('print.palette.gate.blocked') +
+          failures
+            .map(
+              (f) =>
+                t(f.labelKey) +
+                ' ' +
+                formatContrastRatio(f.ratio) +
+                t('print.palette.gate.need', { min: f.min }),
+            )
+            .join(t('print.palette.gate.join')),
   };
 }
 

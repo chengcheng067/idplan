@@ -27,6 +27,7 @@ import {
   type PrintPalette,
 } from '../src/print/model/print-palette';
 import { contrast } from '../src/core/color/contrast';
+import { t } from '../src/i18n';
 import type { PrintTemplateId } from '../src/print/model/print-view-model';
 
 const FOUR: ReadonlyArray<Exclude<PrintTemplateId, 'classic'>> = [
@@ -48,7 +49,7 @@ describe('配色架构 · 硬闸门（禁存，不是提示）', () => {
       }
       for (const preset of spec.presets) {
         const r = checkPrintPalette(id, preset.palette);
-        expect(r.ok, `${id} 预设「${preset.name}」应过闸：${r.message ?? ''}`).toBe(true);
+        expect(r.ok, `${id} 预设「${t(preset.nameKey)}」应过闸：${r.message ?? ''}`).toBe(true);
       }
     }
   });
@@ -80,14 +81,14 @@ describe('配色架构 · 硬闸门（禁存，不是提示）', () => {
     const gate = checkPrintPalette('agent-poster', spec.baseline);
     expect(gate.ok, 'H 基线的偏离是**登记的**：ok 必须为 false，不是意外踩线').toBe(false);
     expect(
-      gate.failures.map((f) => f.label),
+      gate.failures.map((f) => t(f.labelKey)),
       '偏离只剩「状态色 vs 纸底」一条（accent 是身份色，改它=改模板身份）；line 已归队',
     ).toEqual(['状态色 vs 纸底']);
     expect(gate.message).toContain('已禁止保存'); // 闸门语义未被"登记"稀释
 
     // 没跌破的两对仍要守——免得「登记偏离」变成整张闸门作废
-    expect(gate.pairs.find((p) => p.label === '主文字 vs 纸底')!.pass).toBe(true);
-    expect(gate.pairs.find((p) => p.label === '分隔线 vs 纸底')!.pass, 'line 不是例外').toBe(true);
+    expect(gate.pairs.find((p) => t(p.labelKey) === '主文字 vs 纸底')!.pass).toBe(true);
+    expect(gate.pairs.find((p) => t(p.labelKey) === '分隔线 vs 纸底')!.pass, 'line 不是例外').toBe(true);
   });
 
   it('①d H 版四个预设不许继承基线的偏离：逐个实测过闸，线色与基线同值（唯一异值在 accent）', () => {
@@ -97,15 +98,15 @@ describe('配色架构 · 硬闸门（禁存，不是提示）', () => {
     for (const preset of spec.presets) {
       expect(
         checkPrintPalette('agent-poster', preset.palette).ok,
-        `${preset.name} 预设应过闸`,
+        `${t(preset.nameKey)} 预设应过闸`,
       ).toBe(true);
       // 2026-10-11 P1-3：线色回归「与基线同值」——line 自身已过闸（2.3258），
       // 原先那条「为过闸而同色相加深」的 #B4B4B4 由此退役（它是为 1.348 那版
       // 基线打的补丁，补丁的前提没了）。ink 同理，四张预设一律照基线的墨色。
-      expect(preset.palette.line, `${preset.name} 的线色必须与基线同值（不再是例外）`).toBe(
+      expect(preset.palette.line, `${t(preset.nameKey)} 的线色必须与基线同值（不再是例外）`).toBe(
         spec.baseline.line,
       );
-      expect(preset.palette.ink, `${preset.name} 的主文字与基线同值`).toBe(spec.baseline.ink);
+      expect(preset.palette.ink, `${t(preset.nameKey)} 的主文字与基线同值`).toBe(spec.baseline.ink);
     }
     expect(
       spec.presets.every((p) => p.palette.line === '#91918A'),
@@ -161,7 +162,7 @@ describe('配色架构 · 硬闸门（禁存，不是提示）', () => {
     const bad: PrintPalette = { accent: '#FFF8E1', ink: '#FFFFFF', line: '#FFFFFF' };
     const gate = checkPrintPalette('swiss-schedule', bad);
     expect(gate.ok).toBe(false);
-    expect(gate.pairs.map((p) => p.label)).toEqual([
+    expect(gate.pairs.map((p) => t(p.labelKey))).toEqual([
       '主文字 vs 纸面',
       '线色 vs 纸面',
       '栏内反白字 vs 栏底',

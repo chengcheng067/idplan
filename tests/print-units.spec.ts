@@ -58,6 +58,7 @@ import {
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, StageLog } from '../src/core/types/entities';
 import { PRINT_PREFS_STORAGE_KEY, usePrintPrefsStore } from '../src/store/usePrintPrefsStore';
+import { t } from '../src/i18n';
 
 const ROOT = resolve(__dirname, '..');
 const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf-8');
@@ -72,8 +73,9 @@ describe('批 1 地基 · L1-a 统一注册表（5 块 + 逐套装置声明）',
     expect(Object.keys(DEFAULT_SCHEDULE_PAPER_BLOCKS).sort()).toEqual([...PRINT_BLOCK_IDS].sort());
     expect(PRINT_BLOCKS.map((b) => b.id)).toEqual([...PRINT_BLOCK_IDS]);
     for (const b of PRINT_BLOCKS) {
-      expect(b.label.length, `${b.id} 行文非空`).toBeGreaterThan(0);
-      expect(b.hint.length, `${b.id} 说明非空`).toBeGreaterThan(0);
+      // 存的是**文案键**（屏幕侧取词）⇒ 断言「键能取到非空行文」，比断言字段非空更强
+      expect(t(b.labelKey).length, `${b.id} 行文非空`).toBeGreaterThan(0);
+      expect(t(b.hintKey).length, `${b.id} 说明非空`).toBeGreaterThan(0);
     }
     // 类型守卫：5 块与装置都是合法单元 id；页 kind 不是
     expect(isPrintUnitId('timeline')).toBe(true);
@@ -88,8 +90,8 @@ describe('批 1 地基 · L1-a 统一注册表（5 块 + 逐套装置声明）',
       const blocks = units.filter((u) => u.kind === 'block');
       expect(blocks.map((b) => b.id), `${id} 的五块齐全`).toEqual([...PRINT_BLOCK_IDS]);
       for (const u of units) {
-        expect(u.label.length, `${id}/${u.id} label 非空`).toBeGreaterThan(0);
-        expect(u.hint.length, `${id}/${u.id} hint 非空`).toBeGreaterThan(0);
+        expect(t(u.labelKey).length, `${id}/${u.id} label 非空`).toBeGreaterThan(0);
+        expect(t(u.hintKey).length, `${id}/${u.id} hint 非空`).toBeGreaterThan(0);
       }
     }
     // 装置表（§2.6 逐套的版性构件；今天 forced，将来开放勾选时直接用这张表）

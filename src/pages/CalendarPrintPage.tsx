@@ -5,6 +5,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download, FileText, Printer } from 'lucide-react';
 
 import { useProjectsStore } from '../store/useProjectsStore';
+import { useLang } from '../i18n';
 import { useProjectById, useProjectStages, useProjectTasks } from '../core/project/visibility';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -133,6 +134,7 @@ function monthsBetween(startAt: string, endAt: string): string[] {
  */
 export function CalendarPrintPage(): JSX.Element {
   const { id = '' } = useParams<{ id: string }>();
+  const { t } = useLang();
   /*
     ★ v0.8 T04-A · §7.3 #18「单项目直达」特判（与 #17 同类，理由逐字同构，
     见 `SchedulePrintPage.tsx` 的对应注释）。三点不同之处：
@@ -230,7 +232,7 @@ export function CalendarPrintPage(): JSX.Element {
   const nowText = `${nowIso.slice(0, 10)} ${nowIso.slice(11, 16)}`;
 
   if (!hydrated) {
-    return <div className="py-16 text-center text-mist">正在装载月历…</div>;
+    return <div className="py-16 text-center text-mist">{t('print.page.loading.calendar')}</div>;
   }
 
   /**
@@ -253,9 +255,9 @@ export function CalendarPrintPage(): JSX.Element {
   if (!project) {
     return (
       <div className="py-16 text-center text-mist">
-        <p className="mb-3">未找到该项目。</p>
+        <p className="mb-3">{t('print.page.notFound')}</p>
         <Link to="/" className="text-pine underline underline-offset-2">
-          ← 返回项目列表
+          {t('print.page.backToList')}
         </Link>
       </div>
     );
@@ -274,9 +276,9 @@ export function CalendarPrintPage(): JSX.Element {
   if (memberView && visibleStages.length === 0) {
     return (
       <div className="py-16 text-center text-mist">
-        <p className="mb-3">该项目的阶段与你无关。</p>
+        <p className="mb-3">{t('print.page.notRelated')}</p>
         <Link to="/my-tasks" className="text-pine underline underline-offset-2">
-          ← 返回我的任务
+          {t('print.page.backToMyTasks')}
         </Link>
       </div>
     );
@@ -293,7 +295,7 @@ export function CalendarPrintPage(): JSX.Element {
     try {
       await exportSchedulePngPages(els, schedulePngFileName(`${project.name}-月历`));
     } catch {
-      useProjectsStore.getState().pushToast('error', 'PNG 导出失败，请改用「打印 / 另存为 PDF」。');
+      useProjectsStore.getState().pushToast('error', t('print.action.pngFailed'));
     } finally {
       setPngBusy(false);
     }
@@ -307,26 +309,28 @@ export function CalendarPrintPage(): JSX.Element {
           to={`/project/${project.id}`}
           className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
-          <ArrowLeft size={14} /> 返回项目
+          <ArrowLeft size={14} /> {t('print.page.backToProject')}
         </Link>
         {/* ★ §7.3 #18 的「来源标识」：同日程表打印页 —— 放 `no-print` 操作栏内，
             只给屏幕看，不印进客户稿。 */}
         <ProjectSourceBadge project={project} />
         <span className="ml-auto" />
-        <span className="text-xs text-mist">共 {entries.length} 页 · A4</span>
+        <span className="text-xs text-mist">
+          {t('print.page.totalPages', { pages: entries.length })}
+        </span>
         <button
           type="button"
           onClick={onPrint}
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
-          <Printer size={14} /> 打印
+          <Printer size={14} /> {t('print.action.print')}
         </button>
         <button
           type="button"
           onClick={onExportPdf}
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-mist transition-colors hover:bg-sunken hover:text-ink"
         >
-          <FileText size={14} /> 导出 PDF
+          <FileText size={14} /> {t('print.page.exportPdf')}
         </button>
         <button
           type="button"
@@ -334,7 +338,12 @@ export function CalendarPrintPage(): JSX.Element {
           disabled={pngBusy}
           className="inline-flex items-center gap-1.5 rounded-md bg-pine px-3 py-1.5 text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
         >
-          <Download size={14} /> {pngBusy ? '生成中…' : `导出 PNG${entries.length > 1 ? `（${entries.length} 张）` : ''}`}
+          <Download size={14} />{' '}
+          {pngBusy
+            ? t('print.action.busy')
+            : entries.length > 1
+              ? t('print.action.exportPngCount', { count: entries.length })
+              : t('print.action.exportPng')}
         </button>
       </div>
 

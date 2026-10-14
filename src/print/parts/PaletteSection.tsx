@@ -30,6 +30,7 @@ import {
   type PrintPaletteSlot,
 } from '../../print/model/print-palette';
 import { usePrintPrefsStore } from '../../store/usePrintPrefsStore';
+import { useLang } from '../../i18n';
 import type { PrintTemplateId } from '../../print/model/print-view-model';
 
 /** 开放配色的四版（classic 是品牌资产，调用方不渲染本截；类型上就堵住） */
@@ -56,6 +57,9 @@ export function PaletteSection({
   /** 编辑器初始草稿（缺省 = 当前有效配色：自定义或设计师基线） */
   initialPalette?: PrintPalette;
 }): JSX.Element {
+  /** 屏幕侧取词 + 语言订阅（语言一变本组件重渲染 ⇒ 上面那行 `checkPrintPalette`
+   *  的 message 与下面所有行文一起换语言） */
+  const { t } = useLang();
   const spec = PRINT_TEMPLATE_PALETTES[template];
   const custom = usePrintPrefsStore((s) => s.palette[template]);
   const setPalette = usePrintPrefsStore((s) => s.setPalette);
@@ -74,14 +78,22 @@ export function PaletteSection({
   return (
     <section data-print-palette-section="" className="border-t border-line px-3 pb-3 pt-2">
       <div className="flex items-center justify-between pb-1.5">
-        <span className="text-[11px] font-medium text-mist">配色（三枚受控 token）</span>
+        <span className="text-[11px] font-medium text-mist">{t('print.palette.section.title')}</span>
         <span className="text-[11px] text-mist">
-          {custom ? (activePreset ? `预设 · ${activePreset.name}` : '自定义') : '设计师基线'}
+          {custom
+            ? activePreset
+              ? t('print.palette.section.preset', { name: t(activePreset.nameKey) })
+              : t('print.palette.section.custom')
+            : t('print.palette.section.baseline')}
         </span>
       </div>
 
       {/* 预设变体卡（主路径）：三枚打包，点选即用 */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1.5" role="group" aria-label="配色预设">
+      <div
+        className="flex gap-1.5 overflow-x-auto pb-1.5"
+        role="group"
+        aria-label={t('print.palette.presetGroup')}
+      >
         {spec.presets.map((preset) => {
           const active = samePalette(custom, preset.palette);
           return (
@@ -91,7 +103,7 @@ export function PaletteSection({
               data-print-palette-preset={preset.id}
               aria-pressed={active}
               onClick={() => setPalette(template, preset.palette)}
-              title={`${preset.name}（三枚打包，已过灰度验收）`}
+              title={t('print.palette.presetTitle', { name: t(preset.nameKey) })}
               className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors ${
                 active ? 'border-pine bg-pine-soft text-pine' : 'border-line text-mist hover:text-ink'
               }`}
@@ -101,7 +113,7 @@ export function PaletteSection({
                 <span className="h-3 w-3 rounded-sm border border-line" style={{ background: preset.palette.ink }} />
                 <span className="h-3 w-3 rounded-sm border border-line" style={{ background: preset.palette.line }} />
               </span>
-              {preset.name}
+              {t(preset.nameKey)}
             </button>
           );
         })}
@@ -115,7 +127,7 @@ export function PaletteSection({
           onClick={() => setOpen((v) => !v)}
           className="rounded-md border border-line px-2 py-1 text-[11px] text-mist transition-colors hover:text-ink"
         >
-          {open ? '收起自定义' : '自定义'}
+          {open ? t('print.palette.toggle.expand') : t('print.palette.section.custom')}
         </button>
         {custom && (
           <button
@@ -124,7 +136,7 @@ export function PaletteSection({
             onClick={() => setPalette(template, null)}
             className="rounded-md px-2 py-1 text-[11px] text-mist transition-colors hover:text-ink"
           >
-            恢复基线
+            {t('print.palette.reset')}
           </button>
         )}
       </div>
@@ -134,7 +146,7 @@ export function PaletteSection({
         <div data-print-palette-editor="" className="mt-2 flex flex-col gap-2">
           {PRINT_PALETTE_SLOTS.map((slot: PrintPaletteSlot) => (
             <label key={slot} className="flex items-center gap-2 text-[11px] text-ink">
-              <span className="w-12 shrink-0 text-mist">{PRINT_PALETTE_SLOT_LABELS[slot]}</span>
+              <span className="w-12 shrink-0 text-mist">{t(PRINT_PALETTE_SLOT_LABELS[slot])}</span>
               <input
                 type="color"
                 data-print-palette-input={slot}
@@ -150,16 +162,20 @@ export function PaletteSection({
           <ul className="flex flex-col gap-0.5">
             {gate.pairs.map((pair) => (
               <li
-                key={pair.label}
-                data-print-palette-pair={pair.a === 'paper' || pair.b === 'paper' ? `${pair.a}-${pair.b}` : pair.label}
+                key={pair.labelKey}
+                data-print-palette-pair={pair.a + '-' + pair.b}
                 data-pass={pair.pass || undefined}
                 className={`flex items-center justify-between text-[11px] ${
                   pair.pass ? 'text-mist' : 'font-medium text-clay'
                 }`}
               >
-                <span>{pair.label}</span>
+                <span>{t(pair.labelKey)}</span>
                 <span className="tabular-nums">
-                  {formatContrastRatio(pair.ratio)} / 需 ≥{pair.min}:1 {pair.pass ? '✓' : '✗'}
+                  {t('print.palette.pair.ratio', {
+                    ratio: formatContrastRatio(pair.ratio),
+                    min: pair.min,
+                  })}{' '}
+                  {pair.pass ? '✓' : '✗'}
                 </span>
               </li>
             ))}
@@ -180,9 +196,11 @@ export function PaletteSection({
               onClick={() => setPalette(template, draft)}
               className="rounded-md bg-pine px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-50"
             >
-              保存自定义
+              {t('print.palette.save')}
             </button>
-            {!gate.ok && <span className="text-[11px] text-mist">达标后才可保存</span>}
+            {!gate.ok && (
+              <span className="text-[11px] text-mist">{t('print.palette.saveHint')}</span>
+            )}
           </div>
         </div>
       )}
