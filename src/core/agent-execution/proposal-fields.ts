@@ -12,20 +12,19 @@
  *     夹取=伪造 agent 自报的值）。
  */
 
-import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
+import { coreError, ChangxiaErrorCode } from '../types/enums';
 
 export function normalizeProposalReason(raw: string | null | undefined): string | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw !== 'string') {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '提案 reason 必须是字符串。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.proposal.reasonNotString');
   }
   const t = raw.trim();
   if (t.length === 0) return null;
   if (t.length > 200) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `提案 reason 超长（${t.length} > 200 字）：请压缩后再提交。`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.proposal.reasonTooLong', {
+      length: t.length,
+    });
   }
   return t;
 }
@@ -33,10 +32,7 @@ export function normalizeProposalReason(raw: string | null | undefined): string 
 export function normalizeProposalConfidence(raw: number | null | undefined): number | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || raw > 1) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      '提案 confidence 必须是 0..1 的有限数（不夹取：越界值说明调用方算错了）。',
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.proposal.confidenceInvalid');
   }
   return raw;
 }

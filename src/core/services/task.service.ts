@@ -11,13 +11,7 @@
  * 依赖：只依赖 `ITasksRepository`（含 v0.6 新增的 get/claim），零直接 DB 访问。
  */
 
-import {
-  ChangxiaError,
-  ChangxiaErrorCode,
-  TASK_STATUS_LABELS,
-  TASK_STATUS_TRANSITIONS,
-  TaskStatus,
-} from '../types/enums';
+import { coreError, ChangxiaErrorCode, TASK_STATUS_LABELS, TASK_STATUS_TRANSITIONS, TaskStatus } from '../types/enums';
 import { withStatus } from '../types/entities';
 import type { Task } from '../types/entities';
 import type { ITasksRepository } from '../repositories/interfaces';
@@ -32,10 +26,10 @@ export class TaskService {
   public assertTransition(from: TaskStatus, to: TaskStatus): void {
     const allowed = TASK_STATUS_TRANSITIONS[from] ?? [];
     if (!allowed.includes(to)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `不允许从「${TASK_STATUS_LABELS[from]}」流转到「${TASK_STATUS_LABELS[to]}」。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.task.transitionNotAllowed', {
+        from: TASK_STATUS_LABELS[from],
+        to: TASK_STATUS_LABELS[to],
+      });
     }
   }
 
@@ -46,7 +40,7 @@ export class TaskService {
   public async transitionStatus(taskId: string, to: TaskStatus): Promise<Task> {
     const current = await this.tasks.get(taskId);
     if (!current) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该任务。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.task.notFound');
     }
     this.assertTransition(current.status, to);
     // update() 内部按 status 重派生 done（withStatus 语义），此处无需重复双写

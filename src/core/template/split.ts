@@ -19,7 +19,8 @@ import type {
 } from '../types/dto';
 import { getTemplateStages } from './nine-stages';
 import { legacyColorIndexOf, legacyTemplateKeyOf } from './stage-fallback';
-import { ChangxiaError, ChangxiaErrorCode, ScheduleBasis, StageStatus } from '../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, ScheduleBasis, StageStatus, coreError } from '../types/enums';
+import type { CoreErrorKey, CoreErrorParams } from '../types/core-error-text';
 import {
   DEFAULT_REST_POLICY,
   DEFAULT_SCHEDULE_BASIS,
@@ -96,10 +97,9 @@ function initSpans(totalDays: number, ratios: Array<{ orderIndex: number; ratioP
       spans.reduce((a, b) => (b.length > a.length ? b : a));
     target.length += residual;
     if (target.length < 1) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `总工期过短，无法按所选 ${spans.length} 个阶段切分（各阶段至少 1 天）。请检查起止日期。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.totalTooShort', {
+        count: spans.length,
+      });
     }
   }
   return { spans };
@@ -109,10 +109,10 @@ function initSpans(totalDays: number, ratios: Array<{ orderIndex: number; ratioP
 function assertSum(spans: SegmentSpan[], totalDays: number): void {
   const sum = spans.reduce((acc, s) => acc + s.length, 0);
   if (sum !== totalDays) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `切分内部错误：阶段总天数 ${sum} ≠ 总工期 ${totalDays}`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.internalSumMismatch', {
+      sum,
+      totalDays,
+    });
   }
 }
 
@@ -150,8 +150,12 @@ function applyPins(
     ((iso: string): number =>
       Math.round((new Date(`${iso}T00:00:00Z`).getTime() - baseMs) / MS_DAY));
 
-  const conflict = (msg: string): ChangxiaError =>
-    new ChangxiaError(ChangxiaErrorCode.Conflict, msg);
+  /*
+   * 冲突抛错器（本文件内部用）：`key` 是**载荷文案键**（`CORE_ERROR_TEXT`），
+   * `params` 与界面口径共用 ⇒ 载荷中文由 `coreError` 渲染，逐字不变。
+   */
+  const conflict = (key: CoreErrorKey, params?: CoreErrorParams): ChangxiaError =>
+    coreError(ChangxiaErrorCode.Conflict, key, params);
 
   /* ------------------ 1. 锚点 → 天偏移 + 越界校验 ------------------ */
   interface Pin {
@@ -167,7 +171,7 @@ function applyPins(
       (startOff !== undefined && (startOff < 0 || startOff >= totalDays)) ||
       (endOff !== undefined && (endOff < 0 || endOff >= totalDays))
     ) {
-      throw conflict(`锚点开始日期超出项目工期范围（阶段 ${orderIndex}）。`);
+      throw conflict('coreErr.split.anchorOutOfRange', { orderIndex });
     }
     pinList.push({ orderIndex, startOff, endOff });
   }
@@ -186,7 +190,7 @@ function applyPins(
     if (idx === undefined) continue;
     const setCut = (pos: number, val: number): void => {
       if (cuts[pos] !== null && cuts[pos] !== val) {
-        throw conflict('锚点钉住后无法满足总工期约束：请核对锚点日期是否落在工期内且互不矛盾。');
+        throw conflict('coreErr.split.anchorUnsatisfiable');
       }
       cuts[pos] = val;
     };
@@ -200,7 +204,7 @@ function applyPins(
     const v = cuts[i];
     if (v !== null) {
       if (v < prevBound) {
-        throw conflict('锚点钉住后无法满足总工期约束：请核对锚点日期是否落在工期内且互不矛盾。');
+        throw conflict('coreErr.split.anchorUnsatisfiable');
       }
       prevBound = v;
     }
@@ -211,9 +215,7 @@ function applyPins(
   const splitProportional = (room: number, weights: number[], firstOrderIndex: number): number[] => {
     const cnt = weights.length;
     if (room < cnt) {
-      throw conflict(
-        `锚点重切后空间不足（阶段 ${firstOrderIndex} 起的连续段落至少各需 1 天）。请调整锚点或总工期。`,
-      );
+      throw conflict('coreErr.split.anchorRunTooShort', { orderIndex: firstOrderIndex });
     }
     const out = new Array<number>(cnt).fill(1);
     const remain = room - cnt;
@@ -301,13 +303,13 @@ function resolveSplitStages(stageItems: StageSelectionItem[] | undefined): Split
     }));
   }
   if (stageItems.length < MIN_STAGE_COUNT) {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '请至少选择 1 个阶段。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.selectAtLeastOneStage');
   }
   if (stageItems.length > MAX_STAGE_COUNT) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Validation,
-      `单次项目最多 ${MAX_STAGE_COUNT} 个阶段，当前已选 ${stageItems.length} 个。`,
-    );
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.tooManyStages', {
+      max: MAX_STAGE_COUNT,
+      selected: stageItems.length,
+    });
   }
   return stageItems.map((item, idx) => ({
     orderIndex: idx + 1,
@@ -333,12 +335,12 @@ export function previewSplit(input: SplitInput): StageDraft[] {
   const startDate = toIsoDate(startAt);
   const endDate = toIsoDate(endAt);
   if (!startDate || !endDate) {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '项目起止日期无效。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.projectRangeInvalid');
   }
   const startD = new Date(`${startDate}T00:00:00Z`);
   const endD = new Date(`${endDate}T00:00:00Z`);
   if (endD.getTime() < startD.getTime()) {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '截止日期早于开始日期。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.endBeforeStart');
   }
 
   // 总单位数：自然日口径 = 自然日天数；工作日口径 = 区间内工作日数（含头尾，跳过休息日）
@@ -346,11 +348,9 @@ export function previewSplit(input: SplitInput): StageDraft[] {
     ? countWorkdays(startDate, endDate, policy)
     : Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
   if (totalUnits < 1) {
-    throw new ChangxiaError(
+    throw coreError(
       ChangxiaErrorCode.Validation,
-      useWorkday
-        ? '该工期范围内没有任何工作日，无法按工作日排期。请调整起止日期或休息制度。'
-        : '项目起止日期无效。',
+      useWorkday ? 'coreErr.split.noWorkdayInRange' : 'coreErr.split.projectRangeInvalid',
     );
   }
 
@@ -362,7 +362,7 @@ export function previewSplit(input: SplitInput): StageDraft[] {
   }));
   const ratioTotal = ratios.reduce((acc, r) => acc + r.ratioPercent, 0);
   if (ratioTotal <= 0) {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '阶段占比合计必须大于 0。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.ratioSumZero');
   }
 
   let spans = initSpans(
@@ -446,10 +446,10 @@ export function computeEndAtByDurations(
 ): { endAt: string; spans: Array<{ orderIndex: number; startAt: string; endAt: string; days: number }> } {
   const startDate = toIsoDate(startAt);
   if (!startDate) {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '开始日期无效。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.startDateInvalid');
   }
   if (items.length === 0) {
-    throw new ChangxiaError(ChangxiaErrorCode.Validation, '请至少选择 1 个阶段。');
+    throw coreError(ChangxiaErrorCode.Validation, 'coreErr.split.selectAtLeastOneStage');
   }
   const useWorkday = basis === ScheduleBasis.Workday;
 

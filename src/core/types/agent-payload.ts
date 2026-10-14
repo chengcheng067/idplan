@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 
-import { ChangxiaError, ChangxiaErrorCode, ProjectCalendarStatus, TaskStatus } from './enums';
+import { ChangxiaErrorCode, ProjectCalendarStatus, TaskStatus, coreError } from './enums';
 
 export const AGENT_PAYLOAD_SCHEMA_ID = 'idplan-agent-payload/v1' as const;
 
@@ -246,9 +246,15 @@ export function validateAgentPayload(json: unknown): AgentPayloadV1 {
   const parsed = agentPayloadSchema.safeParse(json);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    throw new ChangxiaError(
+    // 原式是「(前缀 + detail).trim()」；这里把 detail **先** trim 再交给 coreErrorText
+    // ⇒ 结果逐字节相同（前缀 `payload 校验失败：` 两端无空白、detail 不以空白开头）。
+    // 基准值已写死在 tests/core-error-i18n.spec.ts 的 BASELINE 里。
+    throw coreError(
       ChangxiaErrorCode.Validation,
-      `payload 校验失败：${issue?.path.join('.') || '(root)'} ${issue?.message ?? ''}`.trim(),
+      'coreErr.payload.validationFailed',
+      {
+        detail: `${issue?.path.join('.') || '(root)'} ${issue?.message ?? ''}`.trim(),
+      },
       parsed.error,
     );
   }

@@ -150,6 +150,25 @@ export const zh = {
   'coreErr.db.openFailed': '本地数据库打开失败，请检查浏览器隐私模式或存储空间。',
   'coreErr.db.preMigrationBackupReadFailed': '迁移前备份读取失败。',
   'coreErr.datasource.initFailed': '本地数据源初始化失败。',
+
+  /* ── 段 4 之一：切分 / 任务流转 / 写回提案字段 / payload 校验 ── */
+  'coreErr.split.totalTooShort': '总工期过短，无法按所选 {count} 个阶段切分（各阶段至少 1 天）。请检查起止日期。',
+  'coreErr.split.internalSumMismatch': '切分内部错误：阶段总天数 {sum} ≠ 总工期 {totalDays}',
+  'coreErr.split.anchorOutOfRange': '锚点开始日期超出项目工期范围（阶段 {orderIndex}）。',
+  'coreErr.split.anchorUnsatisfiable': '锚点钉住后无法满足总工期约束：请核对锚点日期是否落在工期内且互不矛盾。',
+  'coreErr.split.anchorRunTooShort': '锚点重切后空间不足（阶段 {orderIndex} 起的连续段落至少各需 1 天）。请调整锚点或总工期。',
+  'coreErr.split.selectAtLeastOneStage': '请至少选择 1 个阶段。',
+  'coreErr.split.tooManyStages': '单次项目最多 {max} 个阶段，当前已选 {selected} 个。',
+  'coreErr.split.projectRangeInvalid': '项目起止日期无效。',
+  'coreErr.split.endBeforeStart': '截止日期早于开始日期。',
+  'coreErr.split.noWorkdayInRange': '该工期范围内没有任何工作日，无法按工作日排期。请调整起止日期或休息制度。',
+  'coreErr.split.ratioSumZero': '阶段占比合计必须大于 0。',
+  'coreErr.split.startDateInvalid': '开始日期无效。',
+  'coreErr.task.transitionNotAllowed': '不允许从「{from}」流转到「{to}」。',
+  'coreErr.proposal.reasonNotString': '提案 reason 必须是字符串。',
+  'coreErr.proposal.reasonTooLong': '提案 reason 超长（{length} > 200 字）：请压缩后再提交。',
+  'coreErr.proposal.confidenceInvalid': '提案 confidence 必须是 0..1 的有限数（不夹取：越界值说明调用方算错了）。',
+  'coreErr.payload.validationFailed': 'payload 校验失败：{detail}',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -261,4 +280,23 @@ export const en = {
   'coreErr.db.openFailed': 'Failed to open the local database; check private browsing mode or available storage.',
   'coreErr.db.preMigrationBackupReadFailed': 'Failed to read the pre-migration backup.',
   'coreErr.datasource.initFailed': 'Failed to initialize the local data source.',
+
+  /* ── 段 4 之一：切分 / 任务流转 / 写回提案字段 / payload 校验 ── */
+  'coreErr.split.totalTooShort': 'The total duration is too short to split into the selected {count} stages (each stage needs at least 1 day). Please check the start and end dates.',
+  'coreErr.split.internalSumMismatch': 'Internal split error: total stage days {sum} ≠ total duration {totalDays}',
+  'coreErr.split.anchorOutOfRange': 'The anchor start date falls outside the project duration (stage {orderIndex}).',
+  'coreErr.split.anchorUnsatisfiable': 'The total-duration constraint cannot be satisfied with these pinned anchors: check that the anchor dates fall inside the project duration and do not contradict each other.',
+  'coreErr.split.anchorRunTooShort': 'Not enough room after re-splitting around the anchors (the consecutive segments from stage {orderIndex} each need at least 1 day). Adjust the anchors or the total duration.',
+  'coreErr.split.selectAtLeastOneStage': 'Select at least one stage.',
+  'coreErr.split.tooManyStages': 'A project can have at most {max} stages; {selected} are currently selected.',
+  'coreErr.split.projectRangeInvalid': 'The project start and end dates are invalid.',
+  'coreErr.split.endBeforeStart': 'The end date is earlier than the start date.',
+  'coreErr.split.noWorkdayInRange': 'There are no workdays inside this date range, so workday-based scheduling is not possible. Adjust the dates or the rest policy.',
+  'coreErr.split.ratioSumZero': 'The sum of the stage ratios must be greater than 0.',
+  'coreErr.split.startDateInvalid': 'The start date is invalid.',
+  'coreErr.task.transitionNotAllowed': 'Cannot move from "{from}" to "{to}".',
+  'coreErr.proposal.reasonNotString': 'The proposal reason must be a string.',
+  'coreErr.proposal.reasonTooLong': 'The proposal reason is too long ({length} > 200 characters); please shorten it and submit again.',
+  'coreErr.proposal.confidenceInvalid': 'The proposal confidence must be a finite number between 0 and 1 (no clamping: an out-of-range value means the caller computed it wrong).',
+  'coreErr.payload.validationFailed': 'Payload validation failed: {detail}',
 } as const;

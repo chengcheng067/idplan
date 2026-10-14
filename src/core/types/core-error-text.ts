@@ -150,6 +150,25 @@ export const CORE_ERROR_TEXT = {
   'coreErr.db.openFailed': '本地数据库打开失败，请检查浏览器隐私模式或存储空间。',
   'coreErr.db.preMigrationBackupReadFailed': '迁移前备份读取失败。',
   'coreErr.datasource.initFailed': '本地数据源初始化失败。',
+
+  /* ── 段 4 之一：切分 / 任务流转 / 写回提案字段 / payload 校验 ── */
+  'coreErr.split.totalTooShort': '总工期过短，无法按所选 {count} 个阶段切分（各阶段至少 1 天）。请检查起止日期。',
+  'coreErr.split.internalSumMismatch': '切分内部错误：阶段总天数 {sum} ≠ 总工期 {totalDays}',
+  'coreErr.split.anchorOutOfRange': '锚点开始日期超出项目工期范围（阶段 {orderIndex}）。',
+  'coreErr.split.anchorUnsatisfiable': '锚点钉住后无法满足总工期约束：请核对锚点日期是否落在工期内且互不矛盾。',
+  'coreErr.split.anchorRunTooShort': '锚点重切后空间不足（阶段 {orderIndex} 起的连续段落至少各需 1 天）。请调整锚点或总工期。',
+  'coreErr.split.selectAtLeastOneStage': '请至少选择 1 个阶段。',
+  'coreErr.split.tooManyStages': '单次项目最多 {max} 个阶段，当前已选 {selected} 个。',
+  'coreErr.split.projectRangeInvalid': '项目起止日期无效。',
+  'coreErr.split.endBeforeStart': '截止日期早于开始日期。',
+  'coreErr.split.noWorkdayInRange': '该工期范围内没有任何工作日，无法按工作日排期。请调整起止日期或休息制度。',
+  'coreErr.split.ratioSumZero': '阶段占比合计必须大于 0。',
+  'coreErr.split.startDateInvalid': '开始日期无效。',
+  'coreErr.task.transitionNotAllowed': '不允许从「{from}」流转到「{to}」。',
+  'coreErr.proposal.reasonNotString': '提案 reason 必须是字符串。',
+  'coreErr.proposal.reasonTooLong': '提案 reason 超长（{length} > 200 字）：请压缩后再提交。',
+  'coreErr.proposal.confidenceInvalid': '提案 confidence 必须是 0..1 的有限数（不夹取：越界值说明调用方算错了）。',
+  'coreErr.payload.validationFailed': 'payload 校验失败：{detail}',
 } as const;
 
 /** 机器可读的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */

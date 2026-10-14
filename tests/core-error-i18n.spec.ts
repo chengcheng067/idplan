@@ -171,6 +171,25 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   ['coreErr.db.openFailed', ChangxiaErrorCode.Storage, '本地数据库打开失败，请检查浏览器隐私模式或存储空间。'],
   ['coreErr.db.preMigrationBackupReadFailed', ChangxiaErrorCode.Storage, '迁移前备份读取失败。'],
   ['coreErr.datasource.initFailed', ChangxiaErrorCode.Storage, '本地数据源初始化失败。'],
+
+  /* ── 段 4 之一（切分/任务流转/提案字段/payload 校验）：参数化那几条 = PARAMS 渲染后的结果 ── */
+  ['coreErr.split.totalTooShort', ChangxiaErrorCode.Validation, '总工期过短，无法按所选 3 个阶段切分（各阶段至少 1 天）。请检查起止日期。'],
+  ['coreErr.split.internalSumMismatch', ChangxiaErrorCode.Validation, '切分内部错误：阶段总天数 7 ≠ 总工期 9'],
+  ['coreErr.split.anchorOutOfRange', ChangxiaErrorCode.Conflict, '锚点开始日期超出项目工期范围（阶段 2）。'],
+  ['coreErr.split.anchorUnsatisfiable', ChangxiaErrorCode.Conflict, '锚点钉住后无法满足总工期约束：请核对锚点日期是否落在工期内且互不矛盾。'],
+  ['coreErr.split.anchorRunTooShort', ChangxiaErrorCode.Conflict, '锚点重切后空间不足（阶段 2 起的连续段落至少各需 1 天）。请调整锚点或总工期。'],
+  ['coreErr.split.selectAtLeastOneStage', ChangxiaErrorCode.Validation, '请至少选择 1 个阶段。'],
+  ['coreErr.split.tooManyStages', ChangxiaErrorCode.Validation, '单次项目最多 9 个阶段，当前已选 10 个。'],
+  ['coreErr.split.projectRangeInvalid', ChangxiaErrorCode.Validation, '项目起止日期无效。'],
+  ['coreErr.split.endBeforeStart', ChangxiaErrorCode.Validation, '截止日期早于开始日期。'],
+  ['coreErr.split.noWorkdayInRange', ChangxiaErrorCode.Validation, '该工期范围内没有任何工作日，无法按工作日排期。请调整起止日期或休息制度。'],
+  ['coreErr.split.ratioSumZero', ChangxiaErrorCode.Validation, '阶段占比合计必须大于 0。'],
+  ['coreErr.split.startDateInvalid', ChangxiaErrorCode.Validation, '开始日期无效。'],
+  ['coreErr.task.transitionNotAllowed', ChangxiaErrorCode.Validation, '不允许从「草稿」流转到「已完成」。'],
+  ['coreErr.proposal.reasonNotString', ChangxiaErrorCode.Validation, '提案 reason 必须是字符串。'],
+  ['coreErr.proposal.reasonTooLong', ChangxiaErrorCode.Validation, '提案 reason 超长（201 > 200 字）：请压缩后再提交。'],
+  ['coreErr.proposal.confidenceInvalid', ChangxiaErrorCode.Validation, '提案 confidence 必须是 0..1 的有限数（不夹取：越界值说明调用方算错了）。'],
+  ['coreErr.payload.validationFailed', ChangxiaErrorCode.Validation, 'payload 校验失败：projects.0 不是合法的主板块'],
 ];
 
 /** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */
@@ -192,8 +211,18 @@ const PARAMS: Partial<Record<CoreErrorKey, Record<string, string | number>>> = {
   'coreErr.writeback.executionMissing': { executionId: 'ex1' },
   'coreErr.writeback.alreadySettled': { status: 'applied', executionId: 'ex1' },
   'coreErr.writeback.decidedByRequired': { status: 'applied', executionId: 'ex1' },
+  'coreErr.split.totalTooShort': { count: 3 },
+  'coreErr.split.internalSumMismatch': { sum: 7, totalDays: 9 },
+  'coreErr.split.anchorOutOfRange': { orderIndex: 2 },
+  'coreErr.split.anchorRunTooShort': { orderIndex: 2 },
+  'coreErr.split.tooManyStages': { max: 9, selected: 10 },
+  'coreErr.task.transitionNotAllowed': { from: '草稿', to: '已完成' },
+  'coreErr.proposal.reasonTooLong': { length: 201 },
+  'coreErr.payload.validationFailed': { detail: 'projects.0 不是合法的主板块' },
 };
 
+
+const CJK = /[㐀-䶿一-鿿]/;
 
 const zhTable = coreZh as Record<string, string>;
 const enTable = coreEn as Record<string, string>;
@@ -285,8 +314,24 @@ describe('③ `resolveErrorText` 在两种语言下都给出正确取值', () =>
     setLang('en');
     const english = resolveErrorText(err, t);
     expect(english.length).toBeGreaterThan(0);
-    expect(english, `${key} 在英文下仍给中文`).not.toMatch(/[\u3400-\u4dbf\u4e00-\u9fff]/);
     const vars = PARAMS[key];
+
+    /*
+     * ★ 渲染结果「不含汉字」这条**只在实参本身不含汉字时**才成立 —— 且判据是**推导出来的**，不是豁免名单。
+     *
+     * 为什么不能一律断言「渲染结果无汉字」：有两条键的**实参**天生是中文，且**不该**被翻译：
+     *   · `coreErr.task.transitionNotAllowed` —— 实参取自 `TASK_STATUS_LABELS`
+     *     （core 的中文状态名，同时是打印族 D 的唯一中文出处）；
+     *   · `coreErr.payload.validationFailed` —— 实参是 zod 的 `issue.message`（真因）。
+     * ⇒ 正解分别是「在 `src/i18n/labels.ts` 侧用 `taskStatusLabel()` 合成整句」（core 外，本片不做）
+     *   与「真因原样透传」（**不该翻**）。两者都**登记在案**，见交付文档 §3.4 / §6。
+     *
+     * 「英文模板本身无汉字」这条**不放松**：由 ①「en 取值非空且不含汉字」逐键钉着（判的是模板）。
+     */
+    const varsHaveCjk = (vars ?? {}) && Object.values(vars ?? {}).some((v) => CJK.test(String(v)));
+    if (!varsHaveCjk) {
+      expect(english, `${key} 在英文下仍给中文`).not.toMatch(CJK);
+    }
     if (vars === undefined) {
       expect(english).toBe(enTable[key]);
     } else {
