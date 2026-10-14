@@ -190,6 +190,12 @@ export const CORE_ERROR_TEXT = {
   'coreErr.project.presetOrNamesRequired': '请至少指定一个阶段套餐，或显式声明阶段名。',
   'coreErr.project.domainNotUsable': '「{domain}」不是可用的主板块。',
   'coreErr.project.presetNotFound': '未找到阶段套餐（presetKey={presetKey}）：套餐名不存在，请核对 stage-library 的 21 个套餐。',
+
+  /* ── 备份校验 / 数据源（段 5）── */
+  'coreErr.backup.domainOffender': '第 {n} 条项目（id={id}）的行业值「{value}」不合法',
+  'coreErr.backup.domainRejected': '{offenders}。主板块 domain 只接受 {allowed}（共 {count} 个），或显式 null（= 清除，回到读时回落）。本包已被拒绝，库未做任何改动。',
+  'coreErr.backup.schemaInvalid': '备份文件结构校验失败：{detail}',
+  'coreErr.backup.importUnsupported': '当前数据源不支持备份导入。',
 } as const;
 
 /** 机器可读的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */

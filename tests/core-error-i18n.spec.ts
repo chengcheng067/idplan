@@ -211,6 +211,12 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   ['coreErr.project.presetOrNamesRequired', ChangxiaErrorCode.Validation, '请至少指定一个阶段套餐，或显式声明阶段名。'],
   ['coreErr.project.domainNotUsable', ChangxiaErrorCode.Validation, '「unknown」不是可用的主板块。'],
   ['coreErr.project.presetNotFound', ChangxiaErrorCode.Validation, '未找到阶段套餐（presetKey=x_full）：套餐名不存在，请核对 stage-library 的 21 个套餐。'],
+
+  /* ── 段 5 第 1 批（备份校验 / 数据源）：基准值取自改动前的 `HEAD:` 源码 ── */
+  ['coreErr.backup.domainOffender', ChangxiaErrorCode.Validation, '第 2 条项目（id=p2）的行业值「xyz」不合法'],
+  ['coreErr.backup.domainRejected', ChangxiaErrorCode.Validation, '第 2 条项目（id=p2）的行业值「xyz」不合法。主板块 domain 只接受 indoor / landscape（共 2 个），或显式 null（= 清除，回到读时回落）。本包已被拒绝，库未做任何改动。'],
+  ['coreErr.backup.schemaInvalid', ChangxiaErrorCode.Validation, '备份文件结构校验失败：data.projects Unexpected token'],
+  ['coreErr.backup.importUnsupported', ChangxiaErrorCode.Storage, '当前数据源不支持备份导入。'],
 ];
 
 /** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */
@@ -248,6 +254,9 @@ const PARAMS: Partial<Record<CoreErrorKey, Record<string, string | number>>> = {
   'coreErr.project.duplicateStageNames': { names: '方案、深化' },
   'coreErr.project.domainNotUsable': { domain: 'unknown' },
   'coreErr.project.presetNotFound': { presetKey: 'x_full' },
+  'coreErr.backup.domainOffender': { n: 2, id: 'p2', value: 'xyz' },
+  'coreErr.backup.domainRejected': { offenders: '第 2 条项目（id=p2）的行业值「xyz」不合法', allowed: 'indoor / landscape', count: 2 },
+  'coreErr.backup.schemaInvalid': { detail: 'data.projects Unexpected token' },
 };
 
 

@@ -16,13 +16,14 @@ import type {
   WritebackProposal,
 } from '../types/entities';
 import {
-  ChangxiaError,
   ChangxiaErrorCode,
   MemberActorKind,
   ScheduleBasis,
   TaskStatus,
+  coreError,
   type TaskSource,
 } from '../types/enums';
+import { coreErrorText } from '../types/core-error-text';
 import type { IRepositoryBundle } from '../repositories/interfaces';
 import {
   DEFAULT_RECOVERY_REASONS,
@@ -148,15 +149,19 @@ const projectsSchema = z.array(projectSchema).superRefine((rows, ctx) => {
     const value = row.domain;
     if (value == null) return;
     if (allowed.includes(value)) return;
-    offenders.push(`第 ${i + 1} 条项目（id=${row.id}）的行业值「${String(value)}」不合法`);
+    offenders.push(
+      coreErrorText('coreErr.backup.domainOffender', { n: i + 1, id: row.id, value: String(value) }),
+    );
   });
   if (offenders.length === 0) return;
   ctx.addIssue({
     code: z.ZodIssueCode.custom,
     // path 留空 = 指向 `data.projects` 整段；每条记录的定位在 message 里（含 id，比下标更好用）
-    message:
-      `${offenders.join('；')}。主板块 domain 只接受 ${allowed.join(' / ')}（共 ${allowed.length} 个），` +
-      '或显式 null（= 清除，回到读时回落）。本包已被拒绝，库未做任何改动。',
+    message: coreErrorText('coreErr.backup.domainRejected', {
+      offenders: offenders.join('；'),
+      allowed: allowed.join(' / '),
+      count: allowed.length,
+    }),
   });
 });
 
@@ -522,9 +527,10 @@ export function validateBackupJson(json: unknown): BackupPackage {
   const parsed = backupSchema.safeParse(json);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    throw new ChangxiaError(
+    throw coreError(
       ChangxiaErrorCode.Validation,
-      `备份文件结构校验失败：${issue?.path.join('.') || '(root)'} ${issue?.message ?? ''}`.trim(),
+      'coreErr.backup.schemaInvalid',
+      { detail: `${issue?.path.join('.') || '(root)'} ${issue?.message ?? ''}`.trim() },
       parsed.error,
     );
   }
@@ -592,10 +598,7 @@ export class BackupService {
     // 1) 结构校验（含 roleKind 枚举归一）
     const normalized = validateBackupJson(pkg);
     if (!this.bundle.admin) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Storage,
-        '当前数据源不支持备份导入。',
-      );
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.backup.importUnsupported');
     }
     // 2) 落库前组装：一律用 zod 归一产物，保证「老备份缺字段 → 落库后必有显式值」。
     //    - members：roleKind / actorKind / agentKind .default() 补齐（v0.2 / v0.6 范式）；

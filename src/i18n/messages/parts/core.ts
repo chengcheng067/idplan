@@ -190,6 +190,12 @@ export const zh = {
   'coreErr.project.presetOrNamesRequired': '请至少指定一个阶段套餐，或显式声明阶段名。',
   'coreErr.project.domainNotUsable': '「{domain}」不是可用的主板块。',
   'coreErr.project.presetNotFound': '未找到阶段套餐（presetKey={presetKey}）：套餐名不存在，请核对 stage-library 的 21 个套餐。',
+
+  /* ── 备份校验 / 数据源（段 5）── */
+  'coreErr.backup.domainOffender': '第 {n} 条项目（id={id}）的行业值「{value}」不合法',
+  'coreErr.backup.domainRejected': '{offenders}。主板块 domain 只接受 {allowed}（共 {count} 个），或显式 null（= 清除，回到读时回落）。本包已被拒绝，库未做任何改动。',
+  'coreErr.backup.schemaInvalid': '备份文件结构校验失败：{detail}',
+  'coreErr.backup.importUnsupported': '当前数据源不支持备份导入。',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -341,4 +347,10 @@ export const en = {
   'coreErr.project.presetOrNamesRequired': 'Specify at least one stage preset, or declare the stage names explicitly.',
   'coreErr.project.domainNotUsable': '"{domain}" is not an available domain.',
   'coreErr.project.presetNotFound': 'Stage preset not found (presetKey={presetKey}): the preset name does not exist; check the 21 presets in stage-library.',
+
+  /* ── 备份校验 / 数据源（段 5）── */
+  'coreErr.backup.domainOffender': 'Item {n} (id={id}) has an invalid industry value "{value}"',
+  'coreErr.backup.domainRejected': '{offenders}. The main-board domain only accepts {allowed} ({count} total), or an explicit null (= clear, falls back at read time). This package was rejected; the database was not modified.',
+  'coreErr.backup.schemaInvalid': 'Backup file structure validation failed: {detail}',
+  'coreErr.backup.importUnsupported': 'The current data source does not support backup import.',
 } as const;
