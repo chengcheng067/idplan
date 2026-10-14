@@ -2,9 +2,19 @@
  * 英文文案表。
  *
  * ⚠️ 类型声明为 `Record<MessageKey, string>`（`MessageKey` 由 `zh.ts` 推导）
- * ⇒ **少写任何一个键都编译不过**（`npx tsc --noEmit` 直接报缺键），
- * 多写一个不存在的键同样报错。这是「中英两列都得给」的机器保障，
- * 不靠人记、不靠 review。
+ * ⇒ **少写任何一个键都编译不过**（`npx tsc --noEmit` 直接报缺键）。
+ *
+ * ⚠️ **订正（2026-10-15 · 分片复核发现）**：本文件原先还写着「多写一个不存在的键
+ *    同样报错」—— 那句话**只对内联键成立**：`Record<…>` 的 excess-property 检查
+ *    管的是**对象字面量里直接写的**属性，**管不到 object spread 进来的属性**。
+ *    四片（`parts/{ui,print-ui,core,misc}.ts`）是 `...enXxx` 展开进来的 ⇒
+ *    **分片里多写一个 zh 没有的 en 键，本文件不会报错**（整个键静默多出来，
+ *    英文表比中文表多一项，`t()` 取不到、也没人用）。
+ *    ⇒ 这条的兜底**不是 tsc**，而是 `tests/i18n-messages-parts.spec.ts:68`
+ *      （「每个分片 zh 键集 === en 键集」）会当场红，**并点名是哪个键**。
+ *      另有一条更外层的账：`tests/i18n-index-exit.spec.ts` 钉
+ *      「`catalogOf('en')` 的键集 === `MESSAGE_KEYS`」。
+ *    这是「中英两列都得给」的机器保障，不靠人记、不靠 review。
  *
  * 翻译口径：
  *   ① 学术/工程术语优先（Stage / Task / Baseline / Artifact），不造词；

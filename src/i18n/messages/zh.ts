@@ -89,7 +89,12 @@ export const zhMessages = {
   'appearance.langHint': '切换后界面文案即时更新，无需重启。',
 
   /* ──────────────────────── 侧栏主导航 ──────────────────────── */
-  'nav.mainAria': '主导航',  'nav.projects': '项目',
+  // ⚠️ 一行一对（2026-10-15 拆行）：原先 `'nav.mainAria'` 与 `'nav.projects'` 写在同一行，
+  //    任何**行锚定**的键数扫描（`grep -cE "^ {2}'[^']+':"`，含本批的棘轮与分片守卫用的
+  //    同一个形态）都会**少算 1 且不报错**（实测 1155 vs 真值 1156，且 en 侧是正常一行一键
+  //    ⇒ 两侧不对称）。不改键名、不改取值，只把它拆成两行。
+  'nav.mainAria': '主导航',
+  'nav.projects': '项目',
   'nav.board': '看板',
   'nav.myTasks': '我的任务',
   'nav.agent': 'Agent',
