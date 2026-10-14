@@ -338,7 +338,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       .click();
     await page.waitForTimeout(400);
     await page
-      .locator('[role="menu"][aria-label="身份操作"] [role="menuitem"]')
+      .locator('[data-identity-menu] [role="menuitem"]')
       .first()
       .click();
     await page.waitForTimeout(400);

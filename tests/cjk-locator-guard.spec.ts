@@ -380,7 +380,23 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *    但同属「英文态静默失配」，登记在此。
  * 口径同前两段：**真的转换了锚点**才允许下调。
  */
-const BASELINE = 102;
+/*
+ * ── 2026-10-15 · i18n-EN 英文补齐批（分片 `ui`，负责区 `src/components/**`）：102 → **96** ──
+ * `MemberIdentityPicker` 的菜单可访问名 `aria-label="身份操作"` 改走消息表
+ * （`ui.identity.menuAria`）—— 它是**中文界面文案**，英文态下按它定位会静默失配。
+ * 同批把**判据面内**的这些调用点换成既有钩子 `[data-identity-menu]`（该钩子 2026-10-14 已立好）：
+ *   · `tests/overlay-stack.spec.tsx`（5 处 `[role="menu"][aria-label="身份操作"]`）
+ *   · `tests/identity-single-home.spec.tsx:127`
+ *   · `tests/settings-zones.spec.ts:341`
+ *   · `tests/overlay-stack-browser.spec.ts:151` 是 `const IDENTITY_MENU = '…'` **赋值**形态
+ *     （不在 locator 调用行上）⇒ 本来就**不被判据面命中**；改它是为了同源，**不构成本次差额**。
+ * **实测**：改前 102 → 改后 **96**（−6；判据面内 7 处里只有 6 处真的计入 —— 判据按**行**判
+ * 且要求命中行落在 locator 调用上，赋值/跨行写法看不见，见本文件开头的「已知局限」）。
+ * ⚠️ 同族还有 **6 处判据面看不见**的中文锚点（`button[title="当前身份（点击切换/退出）"]`
+ *    与「全页搜『点击进入』文本」的载荷，散在 16 个 spec 里）**本笔未转换**，已登记在交付报告；
+ *    组件侧已同批补好 `data-identity-trigger` / `data-identity-enter` 两个钩子，换起来是机械活。
+ */
+const BASELINE = 96;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

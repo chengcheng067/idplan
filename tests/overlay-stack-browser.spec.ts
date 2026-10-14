@@ -148,7 +148,7 @@ const HEAVY = 60000;
 
 const SETTINGS_DRAWER = '[data-settings-drawer]';
 const CONFIRM_CLEAR = '[role="dialog"][aria-label="清空日志"]';
-const IDENTITY_MENU = '[role="menu"][aria-label="身份操作"]';
+const IDENTITY_MENU = '[data-identity-menu]';
 const AVATAR = 'button[title="当前身份（点击切换/退出）"]';
 const STAGE_DRAWER = '[data-stage-drawer]';
 

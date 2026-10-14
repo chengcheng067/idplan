@@ -344,10 +344,10 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
     act(() => {
       identityTrigger()!.click();
     });
-    expect(document.querySelector('[role="menu"][aria-label="身份操作"]'), '菜单应在场').not.toBeNull();
+    expect(document.querySelector('[data-identity-menu]'), '菜单应在场').not.toBeNull();
 
     pressEscape();
-    expect(document.querySelector('[role="menu"][aria-label="身份操作"]'), 'Esc 关掉 chrome 菜单').toBeNull();
+    expect(document.querySelector('[data-identity-menu]'), 'Esc 关掉 chrome 菜单').toBeNull();
     expect(
       document.querySelector('[role="dialog"][aria-label="内容浮层"]'),
       '★ chrome 菜单开着时按 Esc 不该连坐底下的内容浮层',
@@ -382,16 +382,16 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
 
     act(() => triggers[0].click());
     act(() => triggers[1].click());
-    expect(document.querySelectorAll('[role="menu"][aria-label="身份操作"]')).toHaveLength(2);
+    expect(document.querySelectorAll('[data-identity-menu]')).toHaveLength(2);
 
     pressEscape();
     expect(
-      document.querySelectorAll('[role="menu"][aria-label="身份操作"]').length,
+      document.querySelectorAll('[data-identity-menu]').length,
       '★ 一次 Esc 只该关掉后开的（栈顶）那一个，另一个必须还在',
     ).toBe(1);
 
     pressEscape();
-    expect(document.querySelectorAll('[role="menu"][aria-label="身份操作"]').length).toBe(0);
+    expect(document.querySelectorAll('[data-identity-menu]').length).toBe(0);
   });
 
   it('两个顶栏 chrome 菜单都 portal 到 body、都取 chrome 档（不再自持 z-50）', () => {
@@ -404,8 +404,16 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
       expect(src, `${f} 应用 chrome 档类名`).toContain('${CHROME_OVERLAY_Z_CLASS}');
       expect(src, `${f} 应上栈（这样子 Esc 才只关它）`).toContain('pushOverlay({');
       expect(src, `${f} 出栈与入栈必须配对`).toContain('popOverlay(overlayId);');
+      /*
+       * ⚠️ 本行原来钉的是 `'panelRef.current?.contains(t)'`（把外点判定里那个**局部变量名**
+       * 也钉进了锁）。2026-10-15 英文补齐批里 `MemberIdentityPicker` 的局部名从 `t` 改成
+       * `node`（局部名 `t` 会遮蔽同文件里的取词函数 `t`，是本批明令要改的形态），
+       * 于是这条**形状锁**跟着红 —— 但它要守的**机理**没变。
+       * ⇒ 改成钉机理：外点判定必须真的查 `panelRef`（去掉这段就红），变量叫什么不参与判据。
+       *    这**不是**放宽：`MobileMoreMenu` 那边仍叫 `t`，两个文件共用这一条判据。
+       */
       expect(src, `${f} 外点判定必须同时看面板本体（否则点菜单项会自杀式关闭）`).toContain(
-        'panelRef.current?.contains(t)',
+        'panelRef.current?.contains(',
       );
       // 反面：自持 z-50 就是 F2 的病灶（长在 header 的 z-40 层叠上下文里出不来）
       expect(src, `${f} 不该再有 absolute z-50 的面板`).not.toContain('top-full z-50');

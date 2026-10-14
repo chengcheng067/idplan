@@ -124,7 +124,7 @@ function collapsedTrigger(): HTMLButtonElement {
 }
 
 function panel(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('[role="menu"][aria-label="身份操作"]');
+  return document.querySelector<HTMLElement>('[data-identity-menu]');
 }
 
 function openMenu(): HTMLElement {
