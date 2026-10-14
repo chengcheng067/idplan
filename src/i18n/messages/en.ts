@@ -964,4 +964,96 @@ export const enMessages: Record<MessageKey, string> = {
   'settings.support.feedbackTitle': 'Feedback',
   'settings.support.feedbackCaption':
     'Scan the code to tell me what feels off, or which feature you want next.',
+
+  /* ═════════ Settings ▸ Plugins (PluginsSection, 笔 1-③) ═════════ */
+  'plugin.title': 'Plugins',
+  'plugin.count': '{installed} installed · {enabled} enabled',
+  /* 与 zh 同形保留明文星号（那是原文的显示缺陷，不是翻译问题；改动会破坏 zh 逐字证明） */
+  'plugin.intro':
+    'Plugins are functional bundles you can **toggle individually**. Disabling one hides its pages and sidebar entry right away (data is kept and comes back when you re-enable it); the plugin card stays in the list below, and its gear opens its own settings. Toggle state is stored in the local / NAS settings and survives a restart. Third-party plugins can be installed from a file (restart required, disabled by default, and you are shown its permissions before installing).',
+  'plugin.adminNotice':
+    'The plugin switch is a NAS-wide setting and only admins can change it; members can see the current state and each plugin’s own settings.',
+  'plugin.installFromFile': 'Install from file',
+  'plugin.skipped': '{count} local plugin folders were skipped (incomplete manifest or unsupported version).',
+  'plugin.capLabel': 'Capabilities: ',
+  'plugin.contribLabel': 'Contributes: ',
+  'plugin.notExplicit': '(not set manually · {state} by default)',
+  'plugin.stateOn': 'enabled',
+  'plugin.stateOff': 'disabled',
+  'plugin.empty': 'This build ships with no plugins.',
+  'plugin.settingsDisabledHint':
+    '“{name}” is currently disabled — enable it and its own settings will appear here.',
+  'plugin.uninstallAria': 'Uninstall plugin {name}',
+  'plugin.settingsAria': 'Settings for {name}',
+  'plugin.settingsTitleOn': 'Open “{name}”’s own settings',
+  'plugin.settingsTitleOff': 'This plugin has no settings of its own',
+  'plugin.toggleAriaDisable': 'Disable plugin {name}',
+  'plugin.toggleAriaEnable': 'Enable plugin {name}',
+  'plugin.toggleTitleAdminOnly':
+    'The plugin switch is a NAS-wide setting and only admins can change it',
+
+  'plugin.contrib.pages': '{count} pages',
+  'plugin.contrib.nav': '{count} sidebar entries',
+  'plugin.contrib.settings': 'a settings block',
+  'plugin.contrib.fullPage': 'a full-page sandbox UI',
+  'plugin.contrib.none': 'no UI contribution (data / tool plugin)',
+  'plugin.cap.none': 'No data capabilities required',
+  'plugin.cap.readOnly': 'Read-only access to your project data (cannot write)',
+  'plugin.source.builtin': 'Bundled',
+  'plugin.source.member': 'Member-installed',
+
+  'plugin.toggleFail.storage':
+    'Save failed, the switch did not take effect — local storage is not writable. Check the browser’s storage permission and retry.',
+  'plugin.toggleFail.noToken':
+    'No access token configured: this NAS requires writes to carry a token. Go to Settings → NAS service, fill it in and retry.',
+  'plugin.toggleFail.remote': 'The server rejected the write, or the server is unreachable: {reason}',
+  'plugin.toggleFail.generic': 'Save failed, the switch did not take effect: {reason}',
+
+  'plugin.disclosure.lead': 'The code you are about to run comes from ',
+  'plugin.disclosure.strongFile': 'a file you picked',
+  'plugin.disclosure.nameSuffix': ' (“{name}”)',
+  'plugin.disclosure.tail':
+    ' — it is installed only on this computer, and it runs only on this computer.',
+  'plugin.disclosure.readLead': 'It can ',
+  'plugin.disclosure.readStrong': 'read',
+  'plugin.disclosure.readMid': ' your project data (projects / stages / tasks), and it ',
+  'plugin.disclosure.readDeny': 'cannot write',
+  'plugin.disclosure.readTail': ';',
+  'plugin.disclosure.sandbox':
+    'It runs in a sandbox and cannot reach your other data (login credentials and other plugins’ data are out of its reach);',
+  'plugin.disclosure.netLead': 'but it ',
+  'plugin.disclosure.netStrong': 'can access the network',
+  'plugin.disclosure.netTail':
+    ' — v1 does not restrict its egress, so only install plugins from sources you trust;',
+  'plugin.disclosure.effect':
+    'Restart required after install; new plugins are disabled by default — installing and enabling are two different things.',
+
+  'plugin.confirmRun.title': 'Run code from a file',
+  'plugin.confirmRun.confirm': 'I trust this file, continue',
+  'plugin.confirmUninstall.title': 'Uninstall plugin',
+  'plugin.confirmUninstall.confirm': 'Uninstall',
+  'plugin.confirmUninstall.bodyPre': 'All files of “',
+  'plugin.confirmUninstall.bodyTail':
+    '” will be deleted and the plugin will be disabled. This cannot be undone; after a restart it disappears from the list (the data it read is unaffected — plugins cannot write anyway).',
+
+  'plugin.err.conflictToggle':
+    'This setting was changed on another device. Refresh and retry (nothing was written this time; what you see may be someone else’s new value).',
+  'plugin.err.conflictShort': 'This setting was changed on another device. Refresh and retry.',
+  'plugin.err.notDesktop':
+    'Installing from a file is not supported in this environment (desktop only).',
+  'plugin.err.installFailed': 'Install failed: {reason}',
+  'plugin.err.installPartial':
+    '“{name}” was installed, but the “disabled by default” state could not be saved: {reason}',
+  'plugin.err.installNoResponse': 'Install failed: the main process did not respond',
+  'plugin.err.uninstallAbortedConflict':
+    'Uninstall aborted: this setting was changed on another device. Refresh and retry.',
+  'plugin.err.uninstallAborted': 'Uninstall aborted — could not disable this plugin first: {reason}',
+  'plugin.err.uninstallFailed': 'Uninstall failed: {reason}',
+  'plugin.err.uninstallNoResponse': 'Uninstall failed: the main process did not respond',
+  'plugin.err.mainNoResponse': 'the main process did not respond',
+  'plugin.notice.installed':
+    'Installed “{name}” v{version} ({count} files) — takes effect after a restart, disabled by default',
+  'plugin.notice.uninstalled': 'Uninstalled “{name}” — it disappears from the list after a restart',
+  'plugin.toast.installed': 'Plugin “{name}” installed; takes effect after a restart',
+  'plugin.toast.uninstalled': 'Plugin “{name}” uninstalled',
 };

@@ -957,6 +957,95 @@ export const zhMessages = {
   'settings.support.wechatCaption': '这工具省了你的时间的话，可以请我喝杯咖啡。',
   'settings.support.feedbackTitle': '反馈建议',
   'settings.support.feedbackCaption': '用得别扭、想要什么功能，扫码直接跟我说。',
+
+  /* ═════════ 设置 ▸ 插件（PluginsSection · 英文线 0009 · 笔 1-③）═════════
+   * 这一屏此前**一处 i18n 都没有**（66 个模块级函数 + 组件里的字面量全是中文）。
+   * ⚠️ `plugin.intro` 取值里的 `**单独开关**` 是**原文就有的明文星号**（不是 Markdown
+   *    上下文，界面上真的显示两个星号）——本批**照抄不改**（zh 逐字不变的硬约束），
+   *    英文侧同形保留 ⇒ 这是**一个已存在的显示缺陷，不是本次翻译引入的**，
+   *    单开一笔修更合适（改了 zh 取值就破坏了「逐字不变」这层证明）。 */
+  'plugin.title': '插件',
+  'plugin.count': '已装 {installed} · 启用 {enabled}',
+  'plugin.intro':
+    '插件是可**单独开关**的功能包。停用后它的页面与侧栏入口会立即隐藏 （数据保留，重新启用即恢复）；插件卡片仍在下面的列表里，点它的齿轮可以看到 它自己的设置。开关状态存在本地/NAS 设置里，重启不丢。 第三方插件可从文件安装（重启生效、默认关闭、装前会把权限摊给你看）。',
+  'plugin.adminNotice': '插件开关是本 NAS 的全局设置，仅管理员可改；成员只能查看当前状态与各插件自己的设置。',
+  'plugin.installFromFile': '从文件安装',
+  'plugin.skipped': '有 {count} 个本地插件目录未加载（manifest 不完整或版本不兼容），已跳过。',
+  'plugin.capLabel': '能力：',
+  'plugin.contribLabel': '贡献：',
+  'plugin.notExplicit': '（尚未手动设置 · 默认{state}）',
+  'plugin.stateOn': '启用',
+  'plugin.stateOff': '停用',
+  'plugin.empty': '这个构建没有附带任何插件。',
+  'plugin.settingsDisabledHint': '「{name}」当前是停用状态——启用它之后，它自己的设置会出现在这里。',
+  'plugin.uninstallAria': '卸载插件 {name}',
+  'plugin.settingsAria': '{name} 的设置',
+  'plugin.settingsTitleOn': '打开「{name}」自己的设置',
+  'plugin.settingsTitleOff': '这个插件没有自己的设置',
+  'plugin.toggleAriaDisable': '停用插件 {name}',
+  'plugin.toggleAriaEnable': '启用插件 {name}',
+  'plugin.toggleTitleAdminOnly': '插件开关是本 NAS 的全局设置，仅管理员可改',
+
+  /* ── 贡献点 / 能力 / 来源（三张小表的取值，模块级取词函数用）── */
+  'plugin.contrib.pages': '{count} 个页面',
+  'plugin.contrib.nav': '{count} 个侧栏入口',
+  'plugin.contrib.settings': '设置区块',
+  'plugin.contrib.fullPage': '沙箱整页界面',
+  'plugin.contrib.none': '无界面贡献（数据/工具类）',
+  'plugin.cap.none': '无需任何数据能力',
+  'plugin.cap.readOnly': '只读你的项目数据（不可写入）',
+  'plugin.source.builtin': '随包分发',
+  'plugin.source.member': '成员自装',
+
+  /* ── 开关失败的三类文案 ── */
+  'plugin.toggleFail.storage': '保存失败，开关未生效——本地存储不可写，请检查浏览器存储权限后重试',
+  'plugin.toggleFail.noToken':
+    '未配置访问令牌：本 NAS 的服务端要求写入携带访问令牌，请到 设置 → NAS 服务 填写后重试',
+  'plugin.toggleFail.remote': '写入被服务端拒绝或服务端不可达：{reason}',
+  'plugin.toggleFail.generic': '保存失败，开关未生效：{reason}',
+
+  /* ── 启用前披露（装 / 首次启用两个入口共用同一份诚实文本）── */
+  'plugin.disclosure.lead': '你将要运行的代码来自',
+  'plugin.disclosure.strongFile': '你选择的文件',
+  'plugin.disclosure.nameSuffix': '（「{name}」）',
+  'plugin.disclosure.tail': '——它只装在这台电脑上，也只在这台电脑上运行。',
+  'plugin.disclosure.readLead': '它可以',
+  'plugin.disclosure.readStrong': '只读',
+  'plugin.disclosure.readMid': '你的项目数据（项目 / 阶段 / 任务），',
+  'plugin.disclosure.readDeny': '不可写入',
+  'plugin.disclosure.readTail': '；',
+  'plugin.disclosure.sandbox': '它跑在沙箱里，摸不到你的其它数据（登录凭据、其它插件的数据它拿不到）；',
+  'plugin.disclosure.netLead': '但它',
+  'plugin.disclosure.netStrong': '可以访问网络',
+  'plugin.disclosure.netTail': '——v1 未做出入口限制，请只装你信任的来源的插件；',
+  'plugin.disclosure.effect': '安装后重启生效；新插件默认关闭——「装」与「开」是两件事。',
+
+  /* ── 两处二次确认 ── */
+  'plugin.confirmRun.title': '运行来自文件的代码',
+  'plugin.confirmRun.confirm': '我信任这个文件，继续',
+  'plugin.confirmUninstall.title': '卸载插件',
+  'plugin.confirmUninstall.confirm': '卸载',
+  'plugin.confirmUninstall.bodyPre': '将删除「',
+  'plugin.confirmUninstall.bodyTail':
+    '」的全部文件并停用它。此操作不可恢复， 重启后它将从列表消失（它读过的数据不受影响——插件本来就写不了）。',
+
+  /* ── 动态文案：错误 / 通知 / toast（`t` 在事件回调里取当时语言）── */
+  'plugin.err.conflictToggle':
+    '该设置已被其他设备修改，请刷新后重试（本次未写入，你看到的可能是别人的新值）',
+  'plugin.err.conflictShort': '该设置已被其他设备修改，请刷新后重试',
+  'plugin.err.notDesktop': '当前运行环境不支持从文件安装（仅桌面版可用）',
+  'plugin.err.installFailed': '安装失败：{reason}',
+  'plugin.err.installPartial': '「{name}」已安装，但「默认关闭」状态没写成：{reason}',
+  'plugin.err.installNoResponse': '安装失败：主进程未响应',
+  'plugin.err.uninstallAbortedConflict': '卸载已中止：该设置已被其他设备修改，请刷新后重试',
+  'plugin.err.uninstallAborted': '卸载已中止——无法先停用这个插件：{reason}',
+  'plugin.err.uninstallFailed': '卸载失败：{reason}',
+  'plugin.err.uninstallNoResponse': '卸载失败：主进程未响应',
+  'plugin.err.mainNoResponse': '主进程未响应',
+  'plugin.notice.installed': '已安装「{name}」v{version}（{count} 个文件）——重启后生效，默认关闭',
+  'plugin.notice.uninstalled': '已卸载「{name}」——重启后从列表消失',
+  'plugin.toast.installed': '插件「{name}」已安装，重启后生效',
+  'plugin.toast.uninstalled': '插件「{name}」已卸载',
 } as const;
 
 /**

@@ -47,6 +47,7 @@ import type { PluginManifest } from '../../core/plugin/types';
 import { isDesktop } from '../../lib/desktopBridge';
 import { cn } from '../../lib/cn';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { t as translate, useLang } from '../../i18n';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { appEnv } from '../../config/env';
 import { API_TOKEN_KEY } from '../../core/repositories/remote/rest.client';
@@ -75,11 +76,11 @@ function writeAck(pluginId: string): void {
 /** 插件贡献点的一句话概括（给用户看「停用它会少什么」）。 */
 function contributionText(m: PluginManifest): string {
   const parts: string[] = [];
-  if (m.routes?.length) parts.push(`${m.routes.length} 个页面`);
-  if (m.nav?.length) parts.push(`${m.nav.length} 个侧栏入口`);
-  if (m.settingsSlot) parts.push('设置区块');
-  if (m.entry) parts.push('沙箱整页界面');
-  return parts.length > 0 ? parts.join(' · ') : '无界面贡献（数据/工具类）';
+  if (m.routes?.length) parts.push(translate('plugin.contrib.pages', { count: m.routes.length }));
+  if (m.nav?.length) parts.push(translate('plugin.contrib.nav', { count: m.nav.length }));
+  if (m.settingsSlot) parts.push(translate('plugin.contrib.settings'));
+  if (m.entry) parts.push(translate('plugin.contrib.fullPage'));
+  return parts.length > 0 ? parts.join(' · ') : translate('plugin.contrib.none');
 }
 
 /**
@@ -89,12 +90,14 @@ function contributionText(m: PluginManifest): string {
  */
 function capabilityText(m: PluginManifest): string {
   const caps = m.capabilities ?? [];
-  if (caps.length === 0) return '无需任何数据能力';
-  return caps.includes('data.read') ? '只读你的项目数据（不可写入）' : String(caps.join('、'));
+  if (caps.length === 0) return translate('plugin.cap.none');
+  return caps.includes('data.read')
+    ? translate('plugin.cap.readOnly')
+    : String(caps.join('、'));
 }
 
 function sourceLabel(m: PluginManifest): string {
-  return m.source === 'builtin' ? '随包分发' : '成员自装';
+  return m.source === 'builtin' ? translate('plugin.source.builtin') : translate('plugin.source.member');
 }
 
 /**
@@ -137,18 +140,18 @@ function hasStoredApiToken(): boolean {
 function describeToggleFailure(err: unknown): string {
   if (err instanceof ChangxiaError) {
     if (err.code === ChangxiaErrorCode.Storage) {
-      return '保存失败，开关未生效——本地存储不可写，请检查浏览器存储权限后重试';
+      return translate('plugin.toggleFail.storage');
     }
     if (err.code === ChangxiaErrorCode.Network) {
       if (appEnv.dataSource === 'remote' && !hasStoredApiToken()) {
-        return '未配置访问令牌：本 NAS 的服务端要求写入携带访问令牌，请到 设置 → NAS 服务 填写后重试';
+        return translate('plugin.toggleFail.noToken');
       }
-      return `写入被服务端拒绝或服务端不可达：${err.userMessage}`;
+      return translate('plugin.toggleFail.remote', { reason: err.userMessage });
     }
-    return `保存失败，开关未生效：${err.userMessage}`;
+    return translate('plugin.toggleFail.generic', { reason: err.userMessage });
   }
   const msg = err instanceof Error ? err.message : String(err);
-  return `保存失败，开关未生效：${msg}`;
+  return translate('plugin.toggleFail.generic', { reason: msg });
 }
 
 /** 待处理的披露对话（安装 / 首次启用两种入口，同一份诚实文本） */
@@ -156,30 +159,46 @@ type PendingDisclosure = { kind: 'install'; filePath: string } | { kind: 'enable
 
 /** 披露对话框正文——v1 做不到的事一律直说，不做空头支票（网络出口尤其） */
 function DisclosureBody({ pluginName }: { pluginName?: string }): JSX.Element {
+  /** 组件 ⇒ 必须自己订阅（模块级 translate 不订阅） */
+  const { t } = useLang();
   return (
     <>
       <p>
-        你将要运行的代码来自<strong className="text-ink">你选择的文件</strong>
-        {pluginName ? `（「${pluginName}」）` : ''}
-        ——它只装在这台电脑上，也只在这台电脑上运行。
+        {t('plugin.disclosure.lead')}
+        <strong className="text-ink">{t('plugin.disclosure.strongFile')}</strong>
+        {pluginName ? t('plugin.disclosure.nameSuffix', { name: pluginName }) : ''}
+        {t('plugin.disclosure.tail')}
       </p>
       <ul className="mt-2 list-disc space-y-1 pl-4">
         <li>
-          它可以<strong className="text-ink">只读</strong>你的项目数据（项目 / 阶段 / 任务），
-          <strong className="text-ink">不可写入</strong>；
+          {t('plugin.disclosure.readLead')}
+          <strong className="text-ink">{t('plugin.disclosure.readStrong')}</strong>
+          {t('plugin.disclosure.readMid')}
+          <strong className="text-ink">{t('plugin.disclosure.readDeny')}</strong>
+          {t('plugin.disclosure.readTail')}
         </li>
-        <li>它跑在沙箱里，摸不到你的其它数据（登录凭据、其它插件的数据它拿不到）；</li>
+        <li>{t('plugin.disclosure.sandbox')}</li>
         <li>
-          但它<strong className="text-clay">可以访问网络</strong>
-          ——v1 未做出入口限制，请只装你信任的来源的插件；
+          {t('plugin.disclosure.netLead')}
+          <strong className="text-clay">{t('plugin.disclosure.netStrong')}</strong>
+          {t('plugin.disclosure.netTail')}
         </li>
-        <li>安装后重启生效；新插件默认关闭——「装」与「开」是两件事。</li>
+        <li>{t('plugin.disclosure.effect')}</li>
       </ul>
     </>
   );
 }
 
 export function PluginsSection(): JSX.Element {
+  /**
+   * 取词 + **语言变化订阅点**（少了它，切语言时本区不重渲染 —— 本仓「假绿」的经典形态）。
+   *
+   * ⚠️ 模块级的 `contributionText` / `capabilityText` / `sourceLabel` 用的是**模块级
+   *    `translate`**（非 hook、不订阅；同 `src/i18n/labels.ts` 那批取词函数的体例）：
+   *    它们不是组件，但**在本组件的渲染期被调用** ⇒ 本组件订阅了，它们拿到的就是
+   *    当前语言。`describeToggleFailure` 则在**事件回调**里调用，直接取当时语言。
+   */
+  const { t } = useLang();
   const reg = usePluginRegistry();
   const toast = useProjectsStore((s) => s.pushToast);
   /**
@@ -240,7 +259,7 @@ export function PluginsSection(): JSX.Element {
       if (res.ok) return;
       setError(
         res.reason === 'conflict'
-          ? '该设置已被其他设备修改，请刷新后重试（本次未写入，你看到的可能是别人的新值）'
+          ? t('plugin.err.conflictToggle')
           : describeToggleFailure(res.error),
       );
     } finally {
@@ -287,7 +306,7 @@ export function PluginsSection(): JSX.Element {
       try {
         const res = await bridge.installFromFile(p.filePath);
         if (!res.ok) {
-          setError(`安装失败：${res.reason}`);
+          setError(t('plugin.err.installFailed', { reason: res.reason }));
           return;
         }
         writeAck(res.manifest.id);
@@ -297,20 +316,26 @@ export function PluginsSection(): JSX.Element {
           // 文件已落盘、状态没写成 ⇒ **不许**报告成完全成功：否则用户重启后发现
           // 新插件是启用着的，而界面说过「默认关闭」。
           setError(
-            `「${res.manifest.name}」已安装，但「默认关闭」状态没写成：${
-              disabled.reason === 'conflict'
-                ? '该设置已被其他设备修改，请刷新后重试'
-                : describeToggleFailure(disabled.error)
-            }`,
+            t('plugin.err.installPartial', {
+              name: res.manifest.name,
+              reason:
+                disabled.reason === 'conflict'
+                  ? t('plugin.err.conflictShort')
+                  : describeToggleFailure(disabled.error),
+            }),
           );
           return;
         }
         setNotice(
-          `已安装「${res.manifest.name}」v${res.manifest.version}（${res.fileCount} 个文件）——重启后生效，默认关闭`,
+          t('plugin.notice.installed', {
+            name: res.manifest.name,
+            version: res.manifest.version,
+            count: res.fileCount,
+          }),
         );
-        toast('success', `插件「${res.manifest.name}」已安装，重启后生效`);
+        toast('success', t('plugin.toast.installed', { name: res.manifest.name }));
       } catch {
-        setError('安装失败：主进程未响应');
+        setError(t('plugin.err.installNoResponse'));
       } finally {
         setInstalling(false);
       }
@@ -338,20 +363,20 @@ export function PluginsSection(): JSX.Element {
         // 这条中止语义与改造前一致：那时 setPluginEnabled 抛错，被下面的 catch 接住。
         setError(
           disabled.reason === 'conflict'
-            ? '卸载已中止：该设置已被其他设备修改，请刷新后重试'
-            : `卸载已中止——无法先停用这个插件：${describeToggleFailure(disabled.error)}`,
+            ? t('plugin.err.uninstallAbortedConflict')
+            : t('plugin.err.uninstallAborted', { reason: describeToggleFailure(disabled.error) }),
         );
         return;
       }
       const res = await window.idplan?.pluginInstall?.uninstall(target.id);
       if (!res || !res.ok) {
-        setError(`卸载失败：${res?.reason ?? '主进程未响应'}`);
+        setError(t('plugin.err.uninstallFailed', { reason: res?.reason ?? t('plugin.err.mainNoResponse') }));
         return;
       }
-      setNotice(`已卸载「${target.name}」——重启后从列表消失`);
-      toast('success', `插件「${target.name}」已卸载`);
+      setNotice(t('plugin.notice.uninstalled', { name: target.name }));
+      toast('success', t('plugin.toast.uninstalled', { name: target.name }));
     } catch {
-      setError('卸载失败：主进程未响应');
+      setError(t('plugin.err.uninstallNoResponse'));
     } finally {
       setBusyId(null);
     }
@@ -362,10 +387,10 @@ export function PluginsSection(): JSX.Element {
       <div className="mb-2 flex items-center gap-1.5">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
           <Puzzle size={14} className="text-mist" aria-hidden />
-          插件
+          {t('plugin.title')}
         </h3>
         <span className="text-[11px] text-mist">
-          已装 {rows.length} · 启用 {rows.filter((r) => r.enabled).length}
+          {t('plugin.count', { installed: rows.length, enabled: rows.filter((r) => r.enabled).length })}
         </span>
       </div>
 
@@ -378,10 +403,7 @@ export function PluginsSection(): JSX.Element {
           假文案比没有文案更坏——它会让人以为「关掉插件后去设置里就找不到它了」。
         */}
         <p className="mb-2 text-[11px] leading-relaxed text-mist">
-          插件是可**单独开关**的功能包。停用后它的页面与侧栏入口会立即隐藏
-          （数据保留，重新启用即恢复）；插件卡片仍在下面的列表里，点它的齿轮可以看到
-          它自己的设置。开关状态存在本地/NAS 设置里，重启不丢。
-          第三方插件可从文件安装（重启生效、默认关闭、装前会把权限摊给你看）。
+          {t('plugin.intro')}
         </p>
 
         {/*
@@ -394,7 +416,7 @@ export function PluginsSection(): JSX.Element {
             data-plugins-admin-notice=""
             className="mb-2 rounded-md border border-amber/40 bg-amber-soft px-2 py-1 text-[11px] text-amber"
           >
-            插件开关是本 NAS 的全局设置，仅管理员可改；成员只能查看当前状态与各插件自己的设置。
+            {t('plugin.adminNotice')}
           </p>
         )}
 
@@ -411,7 +433,7 @@ export function PluginsSection(): JSX.Element {
             )}
           >
             {installing ? <Loader2 size={12} className="animate-spin" aria-hidden /> : <FolderInput size={12} aria-hidden />}
-            从文件安装
+            {t('plugin.installFromFile')}
           </button>
         )}
 
@@ -427,7 +449,7 @@ export function PluginsSection(): JSX.Element {
         )}
         {reg.skippedPlugins.length > 0 && (
           <p className="mb-2 text-[10px] text-amber">
-            有 {reg.skippedPlugins.length} 个本地插件目录未加载（manifest 不完整或版本不兼容），已跳过。
+            {t('plugin.skipped', { count: reg.skippedPlugins.length })}
           </p>
         )}
 
@@ -462,13 +484,13 @@ export function PluginsSection(): JSX.Element {
                     </div>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-mist">{manifest.summary}</p>
                     <p className="mt-0.5 text-[10px] text-mist">
-                      能力：{capabilityText(manifest)}
+                      {t('plugin.capLabel')}{capabilityText(manifest)}
                     </p>
                     <p className="mt-0.5 text-[10px] text-mist">
-                      贡献：{contributionText(manifest)}
+                      {t('plugin.contribLabel')}{contributionText(manifest)}
                       {!explicit && (
                         <span className="ml-1.5 text-mist/80">
-                          （尚未手动设置 · 默认{enabled ? '启用' : '停用'}）
+                          {t('plugin.notExplicit', { state: enabled ? t('plugin.stateOn') : t('plugin.stateOff') })}
                         </span>
                       )}
                     </p>
@@ -478,7 +500,7 @@ export function PluginsSection(): JSX.Element {
                   {installed && (
                     <button
                       type="button"
-                      aria-label={`卸载插件 ${manifest.name}`}
+                      aria-label={t('plugin.uninstallAria', { name: manifest.name })}
                       data-plugin-uninstall={manifest.id}
                       disabled={busy}
                       onClick={() => {
@@ -505,11 +527,15 @@ export function PluginsSection(): JSX.Element {
                   */}
                   <button
                     type="button"
-                    aria-label={`${manifest.name} 的设置`}
+                    aria-label={t('plugin.settingsAria', { name: manifest.name })}
                     data-plugin-settings={manifest.id}
                     aria-expanded={hasOwnSettings ? settingsExpanded : undefined}
                     disabled={!hasOwnSettings}
-                    title={hasOwnSettings ? `打开「${manifest.name}」自己的设置` : '这个插件没有自己的设置'}
+                    title={
+                      hasOwnSettings
+                        ? t('plugin.settingsTitleOn', { name: manifest.name })
+                        : t('plugin.settingsTitleOff')
+                    }
                     onClick={() =>
                       setOpenSettings((cur) => (cur === manifest.id ? null : manifest.id))
                     }
@@ -534,10 +560,12 @@ export function PluginsSection(): JSX.Element {
                     type="button"
                     role="switch"
                     aria-checked={enabled}
-                    aria-label={`${enabled ? '停用' : '启用'}插件 ${manifest.name}`}
+                    aria-label={t(enabled ? 'plugin.toggleAriaDisable' : 'plugin.toggleAriaEnable', {
+                      name: manifest.name,
+                    })}
                     disabled={busy || !isAdmin}
                     data-plugin-toggle={manifest.id}
-                    title={isAdmin ? undefined : '插件开关是本 NAS 的全局设置，仅管理员可改'}
+                    title={isAdmin ? undefined : t('plugin.toggleTitleAdminOnly')}
                     onClick={() => void onToggle(manifest.id, !enabled)}
                     className={cn(
                       'relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors',
@@ -579,7 +607,7 @@ export function PluginsSection(): JSX.Element {
                       <PluginSettingsSlot pluginId={manifest.id} />
                     ) : (
                       <p className="text-[11px] leading-relaxed text-mist">
-                        「{manifest.name}」当前是停用状态——启用它之后，它自己的设置会出现在这里。
+                        {t('plugin.settingsDisabledHint', { name: manifest.name })}
                       </p>
                     )}
                   </div>
@@ -590,16 +618,16 @@ export function PluginsSection(): JSX.Element {
         </ul>
 
         {rows.length === 0 && (
-          <p className="py-3 text-center text-[11px] text-mist">这个构建没有附带任何插件。</p>
+          <p className="py-3 text-center text-[11px] text-mist">{t('plugin.empty')}</p>
         )}
       </div>
 
       {/* 安装 / 首次启用前披露（同一份诚实文本：只读、沙箱、网络出口开着、重启生效） */}
       <ConfirmDialog
         open={pending !== null}
-        title="运行来自文件的代码"
-        confirmText="我信任这个文件，继续"
-        cancelText="取消"
+        title={t('plugin.confirmRun.title')}
+        confirmText={t('plugin.confirmRun.confirm')}
+        cancelText={t('common.cancel')}
         onConfirm={() => void onDisclosureConfirm()}
         onCancel={() => setPending(null)}
       >
@@ -609,15 +637,16 @@ export function PluginsSection(): JSX.Element {
       {/* 卸载二次确认（删目录不可恢复） */}
       <ConfirmDialog
         open={uninstallTarget !== null}
-        title="卸载插件"
-        confirmText="卸载"
+        title={t('plugin.confirmUninstall.title')}
+        confirmText={t('plugin.confirmUninstall.confirm')}
         danger
         onConfirm={() => void onUninstallConfirm()}
         onCancel={() => setUninstallTarget(null)}
       >
         <p>
-          将删除「<strong>{uninstallTarget?.name}</strong>」的全部文件并停用它。此操作不可恢复，
-          重启后它将从列表消失（它读过的数据不受影响——插件本来就写不了）。
+          {t('plugin.confirmUninstall.bodyPre')}
+          <strong>{uninstallTarget?.name}</strong>
+          {t('plugin.confirmUninstall.bodyTail')}
         </p>
       </ConfirmDialog>
     </section>
