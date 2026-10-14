@@ -285,10 +285,9 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
     });
   }
 
+  /** 身份触发器：按语言无关钩子定位（原先按中文 title，英文态会静默失配） */
   function identityTrigger(): HTMLButtonElement | null {
-    return document.querySelector<HTMLButtonElement>(
-      'button[title="当前身份（点击切换/退出）"]',
-    );
+    return document.querySelector<HTMLButtonElement>('button[data-identity-trigger]');
   }
 
   beforeEach(() => {
@@ -376,7 +375,7 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
       </>,
     );
     const triggers = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('button[title="当前身份（点击切换/退出）"]'),
+      document.querySelectorAll<HTMLButtonElement>('button[data-identity-trigger]'),
     );
     expect(triggers, '应有两枚身份入口').toHaveLength(2);
 
@@ -411,6 +410,13 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
        * 于是这条**形状锁**跟着红 —— 但它要守的**机理**没变。
        * ⇒ 改成钉机理：外点判定必须真的查 `panelRef`（去掉这段就红），变量叫什么不参与判据。
        *    这**不是**放宽：`MobileMoreMenu` 那边仍叫 `t`，两个文件共用这一条判据。
+       *
+       * ★ 本条的**边界**（写在它自己旁边，免得下一个人当它是全部）：
+       *   它只证「源码里**存在**这段判定」，**不证传参/生效正确**（`contains(node)` 里传错一个
+       *   变量它照样绿）。「判定**真的**吃的是面板本体」由**运行时**用例证：
+       *   `tests/member-identity-picker-dismiss.spec.tsx:135`「点面板内部不关闭」——
+       *   面板是 portal 到 body 的（不在 `rootRef` 子树里），若外点判定没查 `panelRef`，
+       *   该用例会当场红。⇒ 两条一「存在」一「生效」，缺一条都不完整。
        */
       expect(src, `${f} 外点判定必须同时看面板本体（否则点菜单项会自杀式关闭）`).toContain(
         'panelRef.current?.contains(',

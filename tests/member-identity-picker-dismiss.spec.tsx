@@ -69,9 +69,14 @@ function mountPicker(): void {
   });
 }
 
-/** 触发按钮（已进入身份时的那个：title 稳定，改文案也不会让本 spec 失效） */
+/**
+ * 触发按钮（已进入身份时那个）。
+ * ★ 2026-10-15（i18n-EN 英文补齐批）：原按中文 title `button[title="当前身份（点击切换/退出）"]`
+ *   定位 ⇒ 英文态静默失配；组件侧同批补了 `data-identity-trigger="topbar|rail|rail-collapsed"`，
+ *   这里改按钩子定位（钩子与文案无关 ⇒ 改文案不会再让本 spec 失效，这正是原注释想要的性质）。
+ */
 function trigger(): HTMLButtonElement {
-  const b = document.querySelector<HTMLButtonElement>('button[title="当前身份（点击切换/退出）"]');
+  const b = document.querySelector<HTMLButtonElement>('button[data-identity-trigger]');
   if (b === null) throw new Error('未找到身份触发按钮（前置：已进入身份）');
   return b;
 }

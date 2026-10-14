@@ -103,24 +103,42 @@ function mount(variant: IdentityPickerVariant): HTMLElement {
   return h;
 }
 
-/** 已进入身份时的触发按钮（展开态与顶栏胶囊共用这一份 title，是稳定选择器） */
+/**
+ * 已进入身份时的触发按钮（展开态与顶栏胶囊共用同一枚钩子）。
+ *
+ * ★ 2026-10-15（i18n-EN 英文补齐批）改法：原先是 `button[title="当前身份（点击切换/退出）"]` ——
+ *   **中文 title 当定位契约**，英文态下静默失配（找不到元素、且失败伪装成「控件不存在」）。
+ *   组件侧同批补了 `data-identity-trigger="topbar|rail|rail-collapsed"`，这里一律按钩子定位。
+ *   ⚠️ 本文件里对 **title 内容** 的断言（:271 / :287 / :291 / :292）**保留不动** ——
+ *   那是「锁文案本身」的内容断言，不是定位契约，归 `cjk-locator-guard` 明文不锁的那一类。
+ */
 function trigger(): HTMLButtonElement {
-  const b = document.querySelector<HTMLButtonElement>('button[title="当前身份（点击切换/退出）"]');
+  const b = document.querySelector<HTMLButtonElement>('button[data-identity-trigger]');
   if (b === null) throw new Error('未找到身份触发器（前置：已进入身份）');
   return b;
 }
 
 /**
- * 收起态那枚的触发器。**它的 title 与展开态故意不同**（`姓名 · 角色（点击切换/退出）`）——
+ * 收起态那枚的触发器（`data-identity-trigger="rail-collapsed"`）。
+ * **它的 title 与展开态故意不同**（`姓名 · 角色（点击切换/退出）`）——
  * 64px 宽只剩一个首字，tooltip 是唯一能读出"我是谁"的地方，不能为了选择器整齐就把它
- * 换成与展开态一样的通用文案。见下方那条专门的断言。
+ * 换成与展开态一样的通用文案（`title` 内容仍由下方专门断言 + 姓名前缀守着）。
  */
 function collapsedTrigger(): HTMLButtonElement {
-  const b = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-    (x) => (x.getAttribute('title') ?? '').startsWith(`${ADMIN.name} · `),
+  const b = document.querySelector<HTMLButtonElement>(
+    'button[data-identity-trigger="rail-collapsed"]',
   );
   if (b === null) throw new Error('未找到收起态身份控件（前置：已进入身份）');
   return b;
+}
+
+/**
+ * 未进入身份时那枚入口（三种 variant 共用 `data-identity-enter`）。
+ * 原先按**可见文本**「点击进入」全页搜 —— 同理，中文文案当定位契约在英文态会静默失配。
+ * ⚠️ 「这四个字必须在 DOM 里」那条断言（:316）**保留**：它锁的是「有文本」，不是「用文本定位」。
+ */
+function enterEntry(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('[data-identity-enter]');
 }
 
 function panel(): HTMLElement | null {
@@ -223,7 +241,7 @@ describe('身份去重 · 侧栏身份行是唯一身份控件（variant="rail"�
     enter(false);
     mount('rail');
 
-    const btn = buttonByText('点击进入');
+    const btn = enterEntry();
     expect(btn, '未进入身份时侧栏身份行必须给「点击进入」——否则顶栏一删就全站无入口').not.toBeNull();
     // 与已进入态占据同一行高：底部固定区不许因此抖一下
     expect(btn?.className, '未进入态占同一行高 52').toContain('h-[52px]');
@@ -245,7 +263,7 @@ describe('身份去重 · 侧栏身份行是唯一身份控件（variant="rail"�
     });
     mount('rail');
     act(() => {
-      buttonByText('点击进入')?.click();
+      enterEntry()?.click();
     });
     expect(useSettingsStore.getState().identityFlow, '无管理员 ⇒ 先确立管理员').toBe(
       'admin_prompt',
@@ -305,7 +323,7 @@ describe('身份去重 · 收起态（variant="rail-collapsed"）', () => {
      *   （实测：member-board-layout M-02 / calendar-anchor C-01 两例在 1152×864 超时）。
      *   允许改视觉，**不允许把文本从这个按钮上拿走**。
      */
-    const btn = buttonByText('点击进入');
+    const btn = enterEntry();
     expect(
       btn,
       '★ 收起态未进入身份也必须有「点击进入」的文本（1024–1280 那一档靠它）',
