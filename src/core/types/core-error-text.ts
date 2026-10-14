@@ -1,5 +1,10 @@
 /**
- * 核心层用户面错误文案的**载荷中文唯一出处**（英文补齐批 · core 片）。
+ * 核心层用户面文案的**载荷中文唯一出处**（英文补齐批 · core 片）。
+ *
+ * 两张表，同形态同理：
+ *   · `CORE_ERROR_TEXT` / `coreErrorText()` —— 错误文案（`ChangxiaError.userMessage` 的渲染输入）；
+ *   · `CORE_WARN_TEXT`  / `coreWarnText()`  —— 警告文案（`DeriveWarning.message` 的渲染输入）。
+ * 为什么两张而不并成一张：见 `CORE_WARN_TEXT` 上方那段（消费类型不同 + 判据要精确）。
  *
  * ══════════════════════════════════════════════════════════════════════
  * 为什么核心层要自己持有一份中文表，而不直接调 `t('…')`
@@ -229,16 +234,66 @@ export function isCoreErrorKey(key: string): key is CoreErrorKey {
   return Object.prototype.hasOwnProperty.call(CORE_ERROR_TEXT, key);
 }
 
+/** 模板渲染：缺变量时**原样保留** `{name}`（与 `src/i18n/translate.ts` 的 `t()` 同口径） */
+function render(template: string, params?: CoreErrorParams): string {
+  if (params === undefined) return template;
+  return template.replace(PLACEHOLDER, (whole, name: string) =>
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : whole,
+  );
+}
+
 /**
  * 渲染**载荷中文**（= 改动前源码里那句字面量）。
  *
- * 占位符缺变量时**原样保留** `{name}` —— 与 `src/i18n/translate.ts` 的 `t()` 同口径：
- * 漏传变量要一眼看得见，而不是渲染成 `undefined` 混进协议字段。
+ * 占位符缺变量时**原样保留** `{name}` —— 漏传变量要一眼看得见，而不是渲染成
+ * `undefined` 混进协议字段。
  */
 export function coreErrorText(key: CoreErrorKey, params?: CoreErrorParams): string {
-  const raw: string = CORE_ERROR_TEXT[key];
-  if (params === undefined) return raw;
-  return raw.replace(PLACEHOLDER, (whole, name: string) =>
-    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : whole,
-  );
+  return render(CORE_ERROR_TEXT[key], params);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * 第二张表：**警告**的载荷文案（`DeriveWarning.message`）
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * 与上面那张表**同形态、同理**（载荷口径的渲染输入 + 键挂给渲染层），但**不并进同一张表**：
+ *   · 消费类型不同 —— `DeriveWarning` 不是 `ChangxiaError`，它的「码」是另一套冻结联合；
+ *   · 并进去会让「错误表 ⟺ 基准表键集」那条断言把警告一起算进来，判据就不再精确
+ *     （一条断言管两件事 = 出问题时不知道该看哪边）。
+ *
+ * ⚠️ ★ 为什么这里的文案句柄是**键**而不是 `code`（这是本条设计的关键，别改回去）：
+ *   `DeriveWarningCode` 是**四码冻结联合**（`src/core/color/derive-stage-colors.ts:113`
+ *   明写「不要新增第 5 个码，否则 T03 的穷尽分支会编译失败」），而这 8 处告警**挤在 4 个码上**
+ *   —— 例如 `low-band-contrast` 一个码覆盖 **3 条完全不同的文案**。
+ *   ⇒ **码无法当文案句柄**（拿码去查表必然有 3 处查到同一句，界面会静默印错话）。
+ *   ⇒ 于是照 `ChangxiaError` 同款：`code` 一字不动（留给穷尽分支与既有断言），
+ *     另加 `messageKey` + `params` 管文案。
+ */
+export const CORE_WARN_TEXT = {
+  /*
+   * ⚠️ `{raw}` 传进来的是**已经 `JSON.stringify` 过的串**（**含双引号**）。
+   * 改动前那句是 `` `主色 ${JSON.stringify(String(mainHex))} 不是合法颜色…` `` ⇒ 渲染结果**带引号**。
+   * 若传 `String(mainHex)` 会把引号吃掉 ⇒ **载荷文案少两个字符**（而这句是回给落库/日志的）。
+   */
+  'colorWarn.badMainHex': '主色 {raw} 不是合法颜色（期望 #RRGGBB），已按 {ink} 兜底；请重新取色。',
+  'colorWarn.mainChromaTooLow': '主色彩度过低（C*={chroma} < {min}）：派生的阶段色与界面中性色（墨色/边框/灰底）属同一视觉层级，时间轴与月历上难以识别；建议换一个有色相的色。',
+  'colorWarn.mainInvisibleOnLight': '主色在亮色底上不可见（对比度 {ratio} < {min}）；建议同色相加深。',
+  'colorWarn.solidInvisibleOnDark': '派生出的实心块（暗色主题用 lightBar）在暗色底上不可见（对比度 {ratio} < {min}）；建议同色相变浅或加深。',
+  'colorWarn.lightBandTextLow': '亮色色带上的文字对比度不足（{ratio} < {min}），即使走完 R2 的全部叠白档位仍无解；建议换主色。',
+  'colorWarn.darkBandTextLow': '暗色色带上的文字对比度不足（{ratio} < {min}），E1 回退搜索亦无解；请换主色（不建议落库半成品）。',
+  'colorWarn.forcedBandShift': '暗色色带偏离了 R5 原生规则（改用比例 {ratios} 中的另一档）以满足文字对比度 ≥ {min}。',
+  'colorWarn.unresolvableTriple': '该主色无法派生出「亮/暗两套都达标」的三层令牌；请改用其它主色。',
+} as const;
+
+/** 警告表的插值参数；与错误表**同形**，只是名字分开 —— 免得读警告代码时以为在用错误类型 */
+export type CoreWarnParams = CoreErrorParams;
+
+/** 警告的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */
+export type CoreWarnKey = keyof typeof CORE_WARN_TEXT;
+
+/**
+ * 渲染警告的**载荷中文**（= 改动前源码里那句字面量）。
+ * 与 `coreErrorText` 共用同一套插值语义（缺变量原样保留 `{name}`）。
+ */
+export function coreWarnText(key: CoreWarnKey, params?: CoreErrorParams): string {
+  return render(CORE_WARN_TEXT[key], params);
 }

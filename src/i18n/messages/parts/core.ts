@@ -219,6 +219,17 @@ export const zh = {
   'coreErr.remote.httpError': '服务端错误（HTTP {status}）',
   'coreErr.remote.baseUrlRequired': '启用 remote 数据源时必须配置 VITE_API_BASE_URL。',
   'coreErr.command.validationFailed': 'command 校验失败：{detail}',
+
+  /* ── 段 5 之二：色板派生警告（8 条）——
+        载荷句柄是**键**不是 `code`：`DeriveWarningCode` 四码冻结，且一个码覆盖最多 3 条不同文案 ── */
+  'colorWarn.badMainHex': '主色 {raw} 不是合法颜色（期望 #RRGGBB），已按 {ink} 兜底；请重新取色。',
+  'colorWarn.mainChromaTooLow': '主色彩度过低（C*={chroma} < {min}）：派生的阶段色与界面中性色（墨色/边框/灰底）属同一视觉层级，时间轴与月历上难以识别；建议换一个有色相的色。',
+  'colorWarn.mainInvisibleOnLight': '主色在亮色底上不可见（对比度 {ratio} < {min}）；建议同色相加深。',
+  'colorWarn.solidInvisibleOnDark': '派生出的实心块（暗色主题用 lightBar）在暗色底上不可见（对比度 {ratio} < {min}）；建议同色相变浅或加深。',
+  'colorWarn.lightBandTextLow': '亮色色带上的文字对比度不足（{ratio} < {min}），即使走完 R2 的全部叠白档位仍无解；建议换主色。',
+  'colorWarn.darkBandTextLow': '暗色色带上的文字对比度不足（{ratio} < {min}），E1 回退搜索亦无解；请换主色（不建议落库半成品）。',
+  'colorWarn.forcedBandShift': '暗色色带偏离了 R5 原生规则（改用比例 {ratios} 中的另一档）以满足文字对比度 ≥ {min}。',
+  'colorWarn.unresolvableTriple': '该主色无法派生出「亮/暗两套都达标」的三层令牌；请改用其它主色。',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -399,4 +410,14 @@ export const en = {
   'coreErr.remote.httpError': 'Server error (HTTP {status})',
   'coreErr.remote.baseUrlRequired': 'VITE_API_BASE_URL must be configured when the remote data source is enabled.',
   'coreErr.command.validationFailed': 'Command validation failed: {detail}',
+
+  /* ── 段 5 之二：色板派生警告（8 条） ── */
+  'colorWarn.badMainHex': 'The main color {raw} is not a valid color (expected #RRGGBB); fell back to {ink}. Pick the color again.',
+  'colorWarn.mainChromaTooLow': 'The main color has too little chroma (C*={chroma} < {min}): the derived stage colors sit at the same visual level as the neutral interface colors (ink / borders / gray surfaces), so they are hard to tell apart on the timeline and month calendar. Pick a color with a hue.',
+  'colorWarn.mainInvisibleOnLight': 'The main color is invisible on the light background (contrast {ratio} < {min}); deepen it within the same hue.',
+  'colorWarn.solidInvisibleOnDark': 'The derived solid block (the dark theme uses lightBar) is invisible on the dark background (contrast {ratio} < {min}); lighten or deepen it within the same hue.',
+  'colorWarn.lightBandTextLow': 'Text on the light band has insufficient contrast ({ratio} < {min}); even after exhausting all of the R2 white-overlay steps there is no solution. Choose a different main color.',
+  'colorWarn.darkBandTextLow': 'Text on the dark band has insufficient contrast ({ratio} < {min}); the E1 fallback search found no solution either. Change the main color (do not persist a half-finished result).',
+  'colorWarn.forcedBandShift': 'The dark band deviates from the native R5 rule (it uses another step from the ratios {ratios}) to reach a text contrast of at least {min}.',
+  'colorWarn.unresolvableTriple': 'This main color cannot derive a three-layer token set where both the light and dark variants pass; use a different main color.',
 } as const;

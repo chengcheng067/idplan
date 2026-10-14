@@ -41,6 +41,8 @@ import {
   tryParseHex,
 } from './contrast';
 
+import { coreWarnText, type CoreWarnKey, type CoreWarnParams } from '../types/core-error-text';
+
 /* ------------------------------------------------------------------ R0 常量 */
 
 /** 面内字的中性近黑（脚本 `INK`，:26；= global.css 的 --ink） */
@@ -118,12 +120,42 @@ export type DeriveWarningCode =
 
 export interface DeriveWarning {
   code: DeriveWarningCode;
+  /**
+   * ★ 文案句柄 —— **必填**（没有哪条告警是没有键的；`params` 才是可选的）。
+   *
+   * ⚠️ **为什么不拿 `code` 当句柄**（改回去就出事）：`DeriveWarningCode` 是**四码冻结联合**，
+   *    而下面的 8 处告警**挤在 4 个码上** —— `low-band-contrast` 一个码覆盖 **3 条完全不同**的文案
+   *    （彩度过低 / 亮带字不足 / 暗带字不足）。拿码去查文案表，这三处必然查到同一句 ⇒ 界面**静默印错话**。
+   *    ⇒ 故 `code` **一字不动**（留给穷尽分支与既有断言），另设本键管文案。
+   *    形态与 `ChangxiaError` 的 `code` + `messageKey` 完全同款。
+   */
+  messageKey: CoreWarnKey;
+  /**
+   * 插值参数。取值形态由各告警点决定，两条硬规矩：
+   *   · `toFixed` 的结果**当 string 传**（传数值会把尾零丢掉：`"4.50"` → `4.5`）；
+   *   · 需要引号的串（如 `JSON.stringify` 的结果）**连引号一起传**。
+   */
+  params?: CoreWarnParams;
+  /** 载荷中文（由 `CORE_WARN_TEXT` 渲染，**逐字节等于改动前那句字面量**） */
   message: string;
 }
 
 export interface DeriveResult {
   colors: DerivedStageColors;
   warnings: DeriveWarning[];
+}
+
+/**
+ * 造一条警告：**载荷中文**（`message`，逐字节与改动前相同）＋ **机器码**（`messageKey` / `params`）。
+ *
+ * ★ 为什么要这个局部 helper，而不是在 8 处各写各的：
+ *   同一组插值参数要**同时**喂给「载荷渲染」和「渲染层取词」两边。若各写一遍，早晚有一处只改了一边
+ *   ⇒ **载荷口径与界面口径分叉**，而且两边单独看都"像对的"（这类漏只在英文界面上才显形）。
+ *   把两半钉在**一次调用**里，从结构上消掉它 —— 同款理由见 `electron/plugin-install.cjs`
+ *   的「主进程不持有界面语言 ⇒ 只回机器码」。
+ */
+function warn(code: DeriveWarningCode, messageKey: CoreWarnKey, params?: CoreWarnParams): DeriveWarning {
+  return { code, messageKey, params, message: coreWarnText(messageKey, params) };
 }
 
 /* ------------------------------------------------------------------ R3 / R6 选字 */
@@ -327,29 +359,38 @@ export function deriveAndValidate(mainHex: string): DeriveResult {
   const normalized = normalizeHex(mainHex);
 
   if (normalized === null) {
-    warnings.push({
-      code: 'unresolvable',
-      message: `主色 ${JSON.stringify(String(mainHex))} 不是合法颜色（期望 #RRGGBB），已按 ${INK} 兜底；请重新取色。`,
-    });
+    warnings.push(
+      warn('unresolvable', 'colorWarn.badMainHex', {
+        // ⚠️ 必须是**已 stringify 的串**（连双引号一起交）：原式是 `${JSON.stringify(String(mainHex))}`
+        //    ⇒ 渲染结果**带引号**（`主色 "xyz" 不是…`）。改成 `String(mainHex)` 会吃掉引号 = 载荷少两个字符。
+        raw: JSON.stringify(String(mainHex)),
+        ink: INK,
+      }),
+    );
   }
   const main = normalized ?? INK;
 
   // ① 中性/零彩度主色（T02 新增判定；`#FFFFFF` / `#000000` / `#808080` 都会命中）
   const chroma = labChroma(main);
   if (chroma < NEUTRAL_CHROMA_MIN) {
-    warnings.push({
-      code: 'low-band-contrast',
-      message: `主色彩度过低（C*=${chroma.toFixed(1)} < ${NEUTRAL_CHROMA_MIN}）：派生的阶段色与界面中性色（墨色/边框/灰底）属同一视觉层级，时间轴与月历上难以识别；建议换一个有色相的色。`,
-    });
+    warnings.push(
+      warn('low-band-contrast', 'colorWarn.mainChromaTooLow', {
+        // ⚠️ `toFixed(1)` 的结果**当 string 传**：传数值会丢尾零（`"4.50"` → `4.5`）
+        chroma: chroma.toFixed(1),
+        min: NEUTRAL_CHROMA_MIN,
+      }),
+    );
   }
 
   // ② V8（警告级）：主色在亮页白底上不可见
   const onLight = contrast(main, PAPER_LIGHT);
   if (onLight < CONTRAST_WARN_MAIN_ON_PAGE) {
-    warnings.push({
-      code: 'low-page-contrast',
-      message: `主色在亮色底上不可见（对比度 ${onLight.toFixed(2)} < ${CONTRAST_WARN_MAIN_ON_PAGE}）；建议同色相加深。`,
-    });
+    warnings.push(
+      warn('low-page-contrast', 'colorWarn.mainInvisibleOnLight', {
+        ratio: onLight.toFixed(2),
+        min: CONTRAST_WARN_MAIN_ON_PAGE,
+      }),
+    );
   }
 
   const lightBand = pickLightBand(main);
@@ -358,40 +399,51 @@ export function deriveAndValidate(mainHex: string): DeriveResult {
   // ③ 暗色主题的实心块 = lightBand（R4）：若它糊在暗页底上，暗色主题也会"看不见"
   const solidOnDark = contrast(lightBand, PAPER_DARK);
   if (solidOnDark < CONTRAST_WARN_MAIN_ON_PAGE) {
-    warnings.push({
-      code: 'low-page-contrast',
-      message: `派生出的实心块（暗色主题用 lightBar）在暗色底上不可见（对比度 ${solidOnDark.toFixed(2)} < ${CONTRAST_WARN_MAIN_ON_PAGE}）；建议同色相变浅或加深。`,
-    });
+    warnings.push(
+      warn('low-page-contrast', 'colorWarn.solidInvisibleOnDark', {
+        ratio: solidOnDark.toFixed(2),
+        min: CONTRAST_WARN_MAIN_ON_PAGE,
+      }),
+    );
   }
 
   // ④ 亮带字色硬闸（PRD A12③）—— R2 自带 9 档搜索，走到底仍不达标才会命中
   const lightInk = chooseText(lightBand, main);
   const lightContrast = contrast(lightBand, lightInk);
   if (lightContrast < TEXT_MIN_CONTRAST) {
-    warnings.push({
-      code: 'low-band-contrast',
-      message: `亮色色带上的文字对比度不足（${lightContrast.toFixed(2)} < ${TEXT_MIN_CONTRAST}），即使走完 R2 的全部叠白档位仍无解；建议换主色。`,
-    });
+    warnings.push(
+      warn('low-band-contrast', 'colorWarn.lightBandTextLow', {
+        ratio: lightContrast.toFixed(2),
+        min: TEXT_MIN_CONTRAST,
+      }),
+    );
   }
 
   // ⑤ E1 结果
   const darkInk = chooseTextDark(dark.band, main);
   const darkContrast = contrast(dark.band, darkInk);
   if (dark.shifted) {
-    warnings.push({
-      code: 'forced-band-shift',
-      message: `暗色色带偏离了 R5 原生规则（改用比例 ${DARK_BAND_FALLBACK_SEARCH.join('/')} 中的另一档）以满足文字对比度 ≥ ${TEXT_MIN_CONTRAST}。`,
-    });
+    warnings.push(
+      warn('forced-band-shift', 'colorWarn.forcedBandShift', {
+        /*
+         * ⚠️ 这个表达式**必须留在本行原地**，不许抽成 helper / 常量：
+         * `tests/stage-color-derive.spec.ts:745`（I-05）锁的是「本文件源码里出现
+         * `DARK_BAND_FALLBACK_SEARCH.join('/')`」这条**形状**（剥注释后按源码文本正则匹配）。
+         * 抽出去 ⇒ 那条锁红 ⇒ 下一个人会去**改锁**（= 放宽判据），而不是改回来。
+         */
+        ratios: DARK_BAND_FALLBACK_SEARCH.join('/'),
+        min: TEXT_MIN_CONTRAST,
+      }),
+    );
   }
   if (!dark.resolved || darkContrast < TEXT_MIN_CONTRAST) {
-    warnings.push({
-      code: 'low-band-contrast',
-      message: `暗色色带上的文字对比度不足（${darkContrast.toFixed(2)} < ${TEXT_MIN_CONTRAST}），E1 回退搜索亦无解；请换主色（不建议落库半成品）。`,
-    });
-    warnings.push({
-      code: 'unresolvable',
-      message: '该主色无法派生出「亮/暗两套都达标」的三层令牌；请改用其它主色。',
-    });
+    warnings.push(
+      warn('low-band-contrast', 'colorWarn.darkBandTextLow', {
+        ratio: darkContrast.toFixed(2),
+        min: TEXT_MIN_CONTRAST,
+      }),
+    );
+    warnings.push(warn('unresolvable', 'colorWarn.unresolvableTriple'));
   }
 
   return { colors: { light: triple(main, lightBand, lightInk), dark: triple(lightBand, dark.band, darkInk) }, warnings };

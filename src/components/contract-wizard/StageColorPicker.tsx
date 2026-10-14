@@ -165,12 +165,27 @@ export function StageColorPicker({
         </span>
       </div>
 
-      {/* 校验提示（非阻塞：只提示，不挡提交） */}
+      {/*
+        校验提示（非阻塞：只提示，不挡提交）。
+
+        ⚠️ **`key` 不能用 `w.code`** —— 源码上 `low-band-contrast` 有**三处独立 push**
+        （`derive-stage-colors.ts`：彩度过低 / 亮带字不足 / 暗带字不足）
+        ⇒ 若三者同时命中，同一个 `<ul>` 里会出现**重复的 React key**（复用/合并兄弟节点）。
+        **实测（636,319 个输入：全立方 step 3 + 全灰阶 + 非法串）同码重复 0 例**
+        ⇒ 三处的触发条件在实践中互斥，**现在不会真的合并**，所以这不是「已经伤了用户」的缺陷，
+        而是**判据脆弱**：`code` 的不重复性靠颜色数学的巧合，不由类型或契约保证。
+        改用 `messageKey`（逐处唯一）后，这个缺口从「巧合」变成「结构上不可能」；
+        `tests/color-warn-i18n.spec.ts` ⑥ 另把「同码不重复」钉成显式不变式。
+
+        ⚠️ 文案走 `t(w.messageKey, w.params)`（**界面口径**），不是 `w.message`
+        —— 后者是**载荷口径**的中文（回给落库/日志的那份），在英文界面上会一直印中文。
+        机器码由 core 侧 `warn()` 与 `message` 从**同一次调用**产出，两边不会各自漂。
+      */}
       {warnings.length > 0 && (
         <ul data-testid={`${testId}-warnings`} className="space-y-0.5">
           {warnings.map((w) => (
-            <li key={w.code} className="text-[11px] leading-4 text-clay">
-              {w.message}
+            <li key={w.messageKey} className="text-[11px] leading-4 text-clay">
+              {t(w.messageKey, w.params)}
             </li>
           ))}
         </ul>
