@@ -192,6 +192,13 @@ export function IdentityDialog(): JSX.Element | null {
             <button
               type="button"
               onClick={() => openIdentityFlow('name_input', true)}
+              /* 语言无关定位钩子（i18n-EN 批 · team-lead 裁定①）：真机流程原先按**中文文案**
+                 （`x.textContent.trim() === '我是管理员'`）找这三枚按钮 —— 而那在**英文环境**
+                 （`i18n-browser.spec.ts` 的 `openEnglish()` 冷启动即 en）下**必然找不到**，
+                 `?.click()` 还会**静默不点**，失败伪装成「后面的输入框不存在」。
+                 ⚠️ 三枚按钮**各给独立值、不共用**：共用值＝当场造一个「匹配集变宽」
+                 （见 C-口径 40 半二，本批已为此栽过一次）。 */
+              data-identity-role="admin"
               className="rounded-md bg-pine px-4 py-2 text-sm text-white transition-colors hover:bg-pine-deep"
             >
               {t('ui.identity.iAmAdmin')}
@@ -204,6 +211,7 @@ export function IdentityDialog(): JSX.Element | null {
                 setIdentityFlow('mismatch');
               }}
               className="rounded-md border border-line px-4 py-2 text-sm text-mist transition-colors hover:bg-sand"
+              data-identity-role="member"
             >
               {t('ui.identity.iAmNotAdmin')}
             </button>
@@ -256,6 +264,9 @@ export function IdentityDialog(): JSX.Element | null {
               type="button"
               onClick={() => void submit()}
               disabled={busy || !name.trim()}
+              /* 语言无关定位钩子（同上）。**这一枚是双语义按钮**（`确认为管理员` / `下一步`）
+                 ⇒ 取值随语义走，而不是写死一个值 —— 否则两种语义会共用一个匹配集。 */
+              data-identity-submit={adminIntent ? 'confirm-admin' : 'next'}
               className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
             >
               {adminIntent ? t('ui.identity.confirmAdmin') : t('ui.next')}

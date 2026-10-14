@@ -209,7 +209,13 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     return { ctx, page };
   }
 
-  /** 确立管理员身份（同 qa-batch-a-verify 口径） */
+  /**
+   * 确立管理员身份（同 qa-batch-a-verify 口径）。
+   *
+   * ⚠️ **按中文找按钮是对的，不要"顺手统一"成钩子**：本 spec 不切语言（出厂中文）。
+   * 只有 `i18n-browser.spec.ts` 那份必须用钩子（它 `openEnglish()` 冷启动即英文）
+   * —— 详见 `tests/i18n-browser.spec.ts` 的 `becomeAdmin` 注释。
+   */
   async function becomeAdmin(page: Page): Promise<void> {
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find(
@@ -297,6 +303,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
    *      也不是本次设置层级改动的产物（改动前它靠的是「身份为空」这个偶然态）。
    */
   async function becomeMember(page: Page): Promise<void> {
+    // ⚠️ 中文前置是有意的（本 spec 不切语言）；理由见上面 becomeAdmin 的注释。别统一成钩子。
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find(
         (x) => (x.textContent ?? '').trim() === '我是管理员',

@@ -111,22 +111,31 @@ describe.skipIf(!CAN_RUN_FRESH)('界面语言 · 英文 767 档六区导航几�
     return { ctx, page };
   }
 
-  /** 确立管理员身份（同 qa-batch-a-verify / settings-zones 口径；这一步的界面是中文） */
+  /**
+   * 确立管理员身份。
+   *
+   * ★ 2026-10-15（i18n-EN 批 · team-lead 裁定①）：**本函数是"同款 becomeAdmin"里唯一必须用钩子的一份**，
+   *   因为它跑在**英文环境**（`openEnglish()` 冷启动 `idplan-lang=en`）——
+   *   而原先那两句按**中文 `textContent`** 找按钮：
+   *   ```js
+   *   Array.from(document.querySelectorAll('button')).find((x) => x.textContent.trim() === '我是管理员')
+   *   ```
+   *   在英文态**必然找不到**，且 `b?.click()` 会**静默不点** ⇒ 弹窗不出现 ⇒
+   *   后面 `fill(...)` 超时，**失败伪装成「输入框不存在」**。
+   *   ⚠️ 这**不是本批引入的红**：`ui.identity.namePlaceholder` 的英文值是 `Your name`
+   *   ⇒ 原写法 `input[placeholder="你的姓名"]` 在英文态同样必然失配；而该中文前置与
+   *   本 spec 是**同一笔 `87db400`** 引进的 ⇒ 从它诞生起就不可能跑通（**E13 活体实证**）。
+   *
+   * ✅ 改成钩子后**比原来更严**：`locator.click()` 找不到会**抛错**（不再静默），
+   *   而且 auto-wait 取代了原来那个 `waitForTimeout(400)` 的猜测。
+   *   ⚠️ **`qa-batch-a-verify` / `settings-zones` / `board-env.ts` 里那三份同款 `becomeAdmin`
+   *   保持中文路径不动** —— 它们跑在中文环境，按中文找按钮是**对的**。
+   *   **别看到"三处中文 + 一处钩子"就顺手统一**：那会把那三处的正确性一起改掉。
+   */
   async function becomeAdmin(page: Page): Promise<void> {
-    await page.evaluate(() => {
-      const b = Array.from(document.querySelectorAll('button')).find(
-        (x) => (x.textContent ?? '').trim() === '我是管理员',
-      );
-      b?.click();
-    });
-    await page.waitForTimeout(400);
+    await page.locator('[data-identity-role="admin"]').click();
     await page.locator('input[data-identity-name-input]').fill('严过关');
-    await page.evaluate(() => {
-      const b = Array.from(document.querySelectorAll('button')).find((x) =>
-        (x.textContent ?? '').includes('确认为管理员'),
-      );
-      b?.click();
-    });
+    await page.locator('[data-identity-submit="confirm-admin"]').click();
     await page.waitForTimeout(1000);
     const guideSkip = page.locator('button', { hasText: '先四处看看' });
     if (await guideSkip.count()) {

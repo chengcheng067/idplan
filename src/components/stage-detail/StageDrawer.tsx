@@ -111,6 +111,17 @@ export function StageDrawer({
       onClose={close}
       placement="right"
       ariaLabel={t('stageDrawer.ariaWithName', { name: stage.name })}
+      /*
+       * ★ 语言无关定位钩子 · **dialog 层**（i18n-EN 批 · team-lead 裁定②）。
+       * 与下面 `<aside data-stage-drawer>` 那枚**不是同一个元素**，差一层：
+       *   `[role="dialog"]`（Modal 底座，**aria-label 在这一层**）→ …→ `<aside>`（抽屉本体）。
+       * ⚠️ 因此取 aria-label 必须用本钩子；用 `data-stage-drawer` 会读到**没有该属性的那一层**
+       *   （`qa-batch-a-verify` 的 `expect(label).toMatch(/^阶段详情：.+/)` 就是这么红的 ——
+       *   而 `StageDrawer.tsx:116-118` 的注释早就写过「拿『阶段详情』当选择器会静默失配」，
+       *   同一段话没提醒到「层级」这一半）。
+       * ⚠️ 两枚钩子**名字不同、匹配集不重叠**（C-口径 40 半二）。
+       */
+      dataAttrs={{ 'data-stage-dialog': '' }}
     >
       {/*
         ★ 语言无关定位钩子（笔 3-D）：`ariaLabel` 已改走消息表（`stageDrawer.ariaWithName`），

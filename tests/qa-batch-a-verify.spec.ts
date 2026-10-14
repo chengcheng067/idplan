@@ -188,7 +188,15 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
     return { ctx, page, errors };
   }
 
-  /** 确立管理员身份（否则项目详情落「请先进入身份」空态，时间轴与阶段彩条不渲染） */
+  /**
+   * 确立管理员身份（否则项目详情落「请先进入身份」空态，时间轴与阶段彩条不渲染）。
+   *
+   * ⚠️ **这里按中文找按钮是对的，不要"顺手统一"成钩子**（i18n-EN 批 · team-lead 裁定①）：
+   * 本 spec **不切语言**（跑在出厂中文下）⇒ 中文 `textContent` 就是当时的真实界面。
+   * 唯一必须用钩子的是 `i18n-browser.spec.ts` 那份 —— 它的 `openEnglish()` 让应用**冷启动即英文**，
+   * 中文前置在那里必然失配（也因此它从诞生起就没跑通过，详见该文件的注释）。
+   * ⇒ 判据：**看这份 spec 有没有切语言**，不是看"哪个写法更新"。
+   */
   async function becomeAdmin(page: Page): Promise<void> {
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find(
@@ -607,8 +615,25 @@ await page.click('[data-industry-select-option="indoor"]');
       // 应用未白屏：header/main 仍在，且抽屉带阶段名
       expect(await page.locator('header').count()).toBe(1);
       expect(await page.locator('main').count()).toBe(1);
-      const label = await dlg.first().getAttribute('aria-label');
+      /*
+       * ★ 2026-10-15（i18n-EN 批 · team-lead 裁定②）修「换锚点丢层级」的**第三例**：
+       * `aria-label` 在**外层 `Modal` 底座**（`data-stage-dialog`）上；
+       * `data-stage-drawer` 挂的是里面的 `<aside>`（抽屉**本体**）—— 两者**差一层**
+       * （`StageDrawer.tsx:110-114` 的注释把 DOM 层次写得很清楚）。
+       * ⇒ 读 aria-label 必须取**外层**。
+       * ⚠️ **判据一个字没放宽**：仍是 `^阶段详情：.+`（team-lead 明令：放宽成"非空"= 把锁变成假锁，比红着更坏）。
+       */
+      const label = await page.locator('[data-stage-dialog]').first().getAttribute('aria-label');
       expect(label).toMatch(/^阶段详情：.+/);
+      /*
+       * 防复发断言（**同时也是本次那个 `got object` 的类型取证**）：
+       * 「抽屉本体那一层**没有** aria-label」正是"读错层"的形状 —— 把它钉住，
+       * 下次谁把选择器指回 `data-stage-drawer`，这条会立刻告诉他"你读的是没有该属性的那一层"。
+       */
+      expect(
+        await dlg.first().getAttribute('aria-label'),
+        '抽屉本体（aside）不该有 aria-label —— 有的话说明层级又变了，请重新确认上面取的是哪一层',
+      ).toBeNull();
 
       // Esc 关闭 → 再次点击应能重开（反复开合不累积破坏 hook 顺序）
       await page.keyboard.press('Escape');

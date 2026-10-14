@@ -200,6 +200,9 @@ export async function bootstrapAdminWithDemo(page: Page, serverUrl: string): Pro
   await page.goto(serverUrl);
   await page.waitForSelector('header', { timeout: 20000 });
 
+  // ⚠️ 中文前置是有意的（本夹具的所有消费者都不切语言，跑在出厂中文下）。
+  //    唯一例外是 `i18n-browser.spec.ts`，它自己有 `becomeAdmin`（冷启动即英文 ⇒ 用钩子）。
+  //    ⇒ 判据是「这份 spec 有没有切语言」，不是「哪个写法更新」。别统一。
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '我是管理员');
     b?.click();
