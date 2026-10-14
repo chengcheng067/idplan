@@ -132,29 +132,41 @@ export const STAGE_BAND_INK_COLORS: Readonly<Record<number, string>> = {
 };
 
 /**
- * 九段色的可读名称（用于图例 / 打印稿「阶段色泽」说明，避免散落硬编码中文色名）。
+ * 九段色的可读名称。**纸面口径：恒中文** —— 含**纸面族组件内的 `title`**
+ * （title 不上纸，但它同族的兄弟全是中文，单独拆 3 处会造成「逐处判不清」）。
  *
  * ══════════════════════════════════════════════════════════════════════
- * ★ **本表恒中文，不随界面语言走**（i18n-EN 批 · team-lead 2026-10-15 裁定）
+ * 口径（i18n-EN 批 · team-lead 2026-10-15 裁定，**不是「色号名特殊」，是通用口径**）
  * ══════════════════════════════════════════════════════════════════════
- * **不要**照「色号名也要翻」去改本表 —— 它**只被纸面消费**，而本仓口径是
- * **「纸面（打印稿）恒中文」**（§0.3；仓内证据：`pages/CalendarPrintPage.tsx:219-222`
- * 给 `buildMonthMeta` 显式传 `'zh'`）。翻了会让**英文用户的打印纸上出现英文色名**。
+ * **别来「统一」**：仓里同族的屏幕侧色名**确实随语言**（`print/model/print-palette.ts` 的
+ * 16 个名 → `print.palette.<模板>.<色>`，消费点是屏幕上的配色选择器 `PaletteSection`）。
+ * ⇒ **屏幕部分随语言、纸面部分恒中文**，两边各有口径。判别依据**不是**「看起来像一套命名体系」，
+ *   而是「**消费点在纸面还是屏幕**」。
  *
- * **全部 4 个消费点（2026-10-15 实测 `grep -rn STAGE_COLOR_NAMES src/`，只有这 4 处）**：
- *   · `components/print/SchedulePaper.tsx:294`      —— 图例色块 `title`（预览面板可见、**不打印**）
- *   · `print/parts/PrintGantt.tsx:177`              —— 甘特图例色块 `title`（同上）
- *   · `pages/CalendarPrintPage.tsx:459`             —— 月历格内色带 `title`（同上）
- *   · `pages/CalendarPrintPage.tsx:473`             —— **纸面可见正文**（`阶段色泽：①松墨（概念）…`）
+ * **为什么 3 处 `title` 也不翻**（不是「title 不打印所以无所谓」，而是**同族一致性**）：
+ *   纸面族里**渲染含中文的 `title` 并集共 9 处**（2026-10-15 在 HEAD 实测）：
+ *     · 含**中文字面量**的 7 处：`print/pages/generic/panels.tsx` ×3（:76 `阶段健康度`
+ *       / :123 `任务状态分布` / :162 `席位与门控`）、
+ *       `print/pages/data-editorial/WorkloadCompositionPage.tsx` ×2（:47 `占比` / :54 `未分配`）、
+ *       `print/pages/agent-poster/SpanGantt.tsx` ×1（:153 `… 天`）、
+ *       `pages/CalendarPrintPage.tsx` ×1（:468，含 `阶段`，**同时**取值来自本表）
+ *     · 另有 2 处 title 的中文**全部来自本表**：`print/parts/PrintGantt.tsx:177`、
+ *       `components/print/SchedulePaper.tsx:294`
+ *   复跑命令（在仓根执行，`\` 是 shell 续行）：
+ *     grep -rn "title=" src/print/ src/components/print/ src/pages/CalendarPrintPage.tsx \
+ *       src/pages/SchedulePrintPage.tsx src/pages/ItineraryPrintPage.tsx | grep -P "[\x{4e00}-\x{9fff}]"
+ *   ⇒ 只把与色名有关的那 3 处翻成英文，同族立刻变成「**3 英 6 中**」，
+ *     下一个人判不出该走哪条，还得为另 6 处逐处重审。**同族一致性 > 单点「该不该翻」**。
  *
- * ⚠️ **看起来的不一致是刻意的**：同族的「配色预设名」在**屏幕侧**确实随语言 ——
- *   `print/model/print-palette.ts` 的 16 个名（消费点 = 屏幕上的配色选择器 `PaletteSection`，
- *   取值在 `i18n/messages/parts/print-ui.ts` 的 `print.palette.<模板>.<色>`，**已翻**）。
- *   ⇒ **屏幕部分随语言、纸面部分恒中文**，两边各有各的口径，**别来「统一」**。
- *   （判别依据不是「它们看起来是一套命名体系」，而是「**消费点在纸面还是屏幕**」。）
+ * **本表消费点（2026-10-15 在 HEAD 实测 `grep -rn STAGE_COLOR_NAMES src/`，只有这 4 处）**：
+ *   · `pages/CalendarPrintPage.tsx:468`         —— 月历格内色带 `title`（预览可见、不上纸）
+ *   · `pages/CalendarPrintPage.tsx:482`         —— **纸面可见正文**：`阶段色泽：①松墨（概念）…`
+ *   · `print/parts/PrintGantt.tsx:177`          —— 甘特图例色块 `title`
+ *   · `components/print/SchedulePaper.tsx:294`  —— 经典纸面图例色块 `title`
  *
- * 反例登记：`core/color/palette-20.ts` 的 20 色名**生产命中为零、只被 spec 引用**
- *   ⇒ 按「要翻的前提是真的上屏」判**不建键**（不是漏翻）。三者的结局不同，逐条查过。
+ * ⚠️ **将来若屏幕侧要用色名（比如阶段取色器）⇒ 另建键，不要复用、也不要改本表。**
+ *   另例登记：`core/color/palette-20.ts` 的 20 色名**生产命中为零、只被 spec 引用**
+ *   ⇒ 按「要翻的前提是**真的上屏**」判**不建键**（不是漏翻）。三者结局不同，逐条查过。
  */
 export const STAGE_COLOR_NAMES: Readonly<Record<number, string>> = {
   1: '松墨',
