@@ -476,6 +476,15 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *       之间另做了锚点转换（`git rev-parse HEAD` 在这中间前进过）。
  *       ⇒ 本笔把基线一律下调到**提交前实测值 70**（棘轮只许降；留 6 格余量等于让新错溜过去）。
  *       下一笔若发现「70 不是它造成的」，按同一体例再记一次即可 —— **不要**把别人的额度算成自己的。
+ *       ★ **具名（2026-10-15 补，`i18n-ui` 已落盘并主动来对账）**：那 −6 = `i18n-ui` 的 **`dcbac8a`**
+ *         —— `tests/proposal-review-panel.spec.tsx` **5 处**（`container.querySelector('[aria-label="通过提案 a"]')`
+ *         这类 ⇒ 组件侧新增 `data-proposal-approve / -reject / -select / -expand`，值 = 提案 id）+
+ *         `tests/project-card-menu-dismiss.spec.tsx:161` **1 处**（`button[aria-label="项目更多操作"]`
+ *         ⇒ `button[data-project-card-more-trigger]`）。**本笔（`i18n-print`）不冒领这 −6。**
+ *         合账：`83 → 70` = **−7（本笔）** + **−6（`dcbac8a`）**。
+ *         ⇒ 本条由 `i18n-print` 补写，但**内容归属 `i18n-ui`**（它自己那笔没碰本文件 —— 因为
+ *         `git commit` 的 pathspec 粒度是**文件**不是 hunk，它一提交就会把本笔未定稿的半截锁进去；
+ *         它把这个文件让给我，宁让自己的转换挂在别人的变更史里 —— 这个取舍是对的，记一笔）。
  *   · 复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` ⇒ 测试名印
  *     「当前 **70** / 基线 70」（此读数为**下调那一刻**的实测值；再跑若更小，是别人又转换了）。
  */
