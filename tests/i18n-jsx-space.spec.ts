@@ -7,9 +7,16 @@
  * 判据与边界写在 `tests/helpers/i18n-jsx-space.ts` 的文件头，这里只钉行为。
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { catalogOf } from '../src/i18n';
-import { checkJsxSpacing, needsSpaceEn, scanRepoJsxSpacing } from './helpers/i18n-jsx-space';
+import {
+  checkJsxSpacing,
+  needsSpaceEn,
+  scanRepoJsxSpacing,
+  tsxFiles,
+} from './helpers/i18n-jsx-space';
 
 /** 夹具用的小消息表（键名与取值都刻意做得像真句子） */
 const FIX: Record<string, string> = {
@@ -235,6 +242,17 @@ describe('拆句拼接 · 同一条文本流里混着硬编码中文（英文态
  *   零豁免的代价是**它必须真的走在那些接缝上**，否则"零命中"可能只是没扫到。
  *   下面这条变异自证就是付这个代价：把仓库里某个**真实接缝**上的尾随空格抹掉，
  *   扫描必须从 0 变 >0，且命中的正是那个键。
+ *
+ *   ★★ 2026-10-15 补：**"解析失败"必须与"命中"分成两张表** ★★
+ *   起因是一次真实的假红：`StageSelectPanel.tsx` 少一个 `}` ⇒ `esbuild` 在 transform
+ *   阶段 throw ⇒ `scanRepoJsxSpacing` **整条抛出**（它自己只做 map，不接错误）
+ *   ⇒ 本文件三条（en / zh / 变异自证）**同时红**，读起来像"全仓都坏了"，
+ *   而真因只有一个文件、且**不是**这三条判据要抓的东西。
+ *   **"全仓都坏"长得像"你的错"** —— 与"失败长得像成功"是同一族的镜像。
+ *   ⇒ 这里把扫描拆成两级结果：`issues`（命中）与 `parseFailures`（解析失败），
+ *     **解析失败不参与 glued 判据**，且逐文件重扫以便一次列全所有失败文件（含行）。
+ *   ⚠️ 约束：`tests/helpers/i18n-jsx-space.ts` 的**既有导出一律不动**（另有 worker 在读它），
+ *     本隔离只用它现成的 `tsxFiles` / `checkJsxSpacing` / `scanRepoJsxSpacing`。
  * ══════════════════════════════════════════════════════════════════════ */
 describe('拆句拼接 · 全仓扫描（零豁免）', () => {
   const en = catalogOf('en') as unknown as Record<string, string>;
@@ -243,13 +261,85 @@ describe('拆句拼接 · 全仓扫描（零豁免）', () => {
   const fmt = (issues: ReturnType<typeof scanRepoJsxSpacing>): string =>
     issues.map((i) => `  [${i.kind}] ${i.file}:${i.line}  「${i.left}」+「${i.right}」`).join('\n');
 
+  /** 解析失败的一条（`line` 取 esbuild 给的定位；取不到就 null，不编） */
+  interface JsxParseFailure {
+    file: string;
+    line: number | null;
+    message: string;
+  }
+
+  /** 从 esbuild 的 TransformFailure 里取「行 + 文本」（取不到就降级，不抛） */
+  const esbuildWhy = (e: unknown): { line: number | null; text: string } => {
+    const err = e as {
+      errors?: Array<{ text?: string; location?: { line?: number } | null }>;
+      message?: string;
+    };
+    const first = err.errors?.[0];
+    return {
+      line: first?.location?.line ?? null,
+      text: first?.text ?? err.message ?? String(e),
+    };
+  };
+
+  const fmtParse = (rows: JsxParseFailure[]): string =>
+    rows.map((r) => `  ✗ ${r.file}:${r.line ?? '?'}  ${r.message}`).join('\n');
+
+  /**
+   * 全仓扫描的**两级结果**。全部能解析时与原先**完全同路**（走 `scanRepoJsxSpacing`）；
+   * 一旦有文件解析失败，改为逐文件重扫 ⇒ 列出**每一个**失败文件，其余文件照常判命中。
+   */
+  const scanRepoTwoLevels = (
+    catalog: Record<string, string>,
+    lang: 'zh' | 'en',
+  ): { issues: ReturnType<typeof scanRepoJsxSpacing>; parseFailures: JsxParseFailure[]; thrown: string | null } => {
+    const root = process.cwd();
+    try {
+      return { issues: scanRepoJsxSpacing(root, catalog, lang), parseFailures: [], thrown: null };
+    } catch (e) {
+      const thrown = esbuildWhy(e).text;
+      const issues: ReturnType<typeof scanRepoJsxSpacing> = [];
+      const parseFailures: JsxParseFailure[] = [];
+      for (const file of tsxFiles(root)) {
+        try {
+          const source = readFileSync(join(root, file), 'utf-8');
+          issues.push(...checkJsxSpacing({ file, source, catalog, lang }).issues);
+        } catch (inner) {
+          const why = esbuildWhy(inner);
+          parseFailures.push({ file, line: why.line, message: why.text });
+        }
+      }
+      return { issues, parseFailures, thrown };
+    }
+  };
+
+  /**
+   * 解析失败那张表的断言 —— **单独一条，且用 `expect.soft`**：
+   * `soft` 的意义是「**不打断**后面那条 glued 断言」⇒ 无论有没有语法错，
+   * glued 那一栏都会被真的判一次（红/绿都是实测出来的），这就是"两者分离"的实现方式。
+   * 若用硬断言，语法错会**先**抛出、glued 那栏根本没跑 —— 看起来仍像"全仓都坏"。
+   */
+  const expectNoParseFailure = (parseFailures: JsxParseFailure[], thrown: string | null): void => {
+    expect
+      .soft(
+        parseFailures.map((p) => `${p.file}:${p.line ?? '?'}`),
+        '⚠️ **解析失败**（与下面的 glued 命中是两件事，别混着读）：\n' +
+          `${fmtParse(parseFailures)}\n` +
+          (thrown ? `（整仓扫描抛出的第一条：${thrown}）\n` : '') +
+          '⇒ 一个文件语法错会让整条扫描 throw、看起来像"全仓都坏了"；' +
+          '此处已隔离：解析失败**不参与** glued 判据，请按本表点名的那一个文件去修。',
+      )
+      .toEqual([]);
+  };
+
   it('★ en 侧：全仓零命中', () => {
-    const issues = scanRepoJsxSpacing(process.cwd(), en, 'en');
+    const { issues, parseFailures, thrown } = scanRepoTwoLevels(en, 'en');
+    expectNoParseFailure(parseFailures, thrown);
     expect(issues.length, `英文态拆句拼接问题：\n${fmt(issues)}`).toBe(0);
   });
 
   it('★ zh 侧：全仓零命中', () => {
-    const issues = scanRepoJsxSpacing(process.cwd(), zh, 'zh');
+    const { issues, parseFailures, thrown } = scanRepoTwoLevels(zh, 'zh');
+    expectNoParseFailure(parseFailures, thrown);
     expect(issues.length, `中文态拆句拼接问题：\n${fmt(issues)}`).toBe(0);
   });
 
@@ -260,7 +350,8 @@ describe('拆句拼接 · 全仓扫描（零豁免）', () => {
     expect(mutated, '变异必须真的改动取值（否则下面那条是在自欺）').not.toBe(fixed);
     expect(mutated.length).toBe(fixed.length - 1);
 
-    const issues = scanRepoJsxSpacing(process.cwd(), { ...en, [target]: mutated }, 'en');
+    const { issues, parseFailures, thrown } = scanRepoTwoLevels({ ...en, [target]: mutated }, 'en');
+    expectNoParseFailure(parseFailures, thrown);
     expect(issues.length, '抹掉空格后必须由「零命中」变成「有命中」').toBeGreaterThan(0);
     expect(
       issues.some((i) => i.leftKey === target),
