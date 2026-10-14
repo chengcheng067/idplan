@@ -64,7 +64,7 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug D · 路由切换回顶（真 Chromium）',
 
   /** 管理员去成员看板的真实路径：成员行「看板」钮（title 精确锁定，排除视图切换同名钮） */
   async function openBoardViaMemberRow(page: Page): Promise<void> {
-    await page.locator('button[title="查看该成员的看板"]').first().click();
+    await page.locator('button[data-member-board-open]').first().click();
     await page.waitForFunction(() => window.location.pathname === '/member-board', null, { timeout: 15000 });
     await page.waitForTimeout(500);
   }

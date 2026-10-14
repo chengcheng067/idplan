@@ -251,7 +251,15 @@ export function TaskDrawer({
   );
 
   return (
-    <Modal open onClose={onClose} placement="right" ariaLabel={t('ui.taskDrawer.title')}>
+    <Modal
+      open
+      onClose={onClose}
+      placement="right"
+      ariaLabel={t('ui.taskDrawer.title')}
+      /* 语言无关定位钩子（i18n-EN 批）：`v07-board-acceptance.spec.ts` 原先按
+         `[role="dialog"][aria-label="任务详情"]` 定位 ⇒ 英文态失配（真机侧没有 `.closest()`）。 */
+      dataAttrs={{ 'data-task-drawer': '' }}
+    >
       <div className="glass-strong flex h-full w-full flex-col overflow-y-auto rounded-none border-white/40 p-5 outline-none sm:w-[440px] sm:rounded-l-2xl">
         {/* 头部 */}
         <div className="mb-3 flex items-start justify-between gap-3">

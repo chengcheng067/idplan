@@ -120,7 +120,7 @@ describe.skipIf(!CAN_RUN_FRESH)('界面语言 · 英文 767 档六区导航几�
       b?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),

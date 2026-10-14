@@ -45,7 +45,7 @@ import { staleInputs } from './helpers/board-env';
 const DIST_INDEX = resolve(__dirname, '..', 'build-dist', 'index.html');
 
 /** 首页视图切换控件的稳定锚点（`HomePage.tsx:121` 的 ariaLabel） */
-const VIEW_SWITCH = '[role="tablist"][aria-label="首页视图切换"]';
+const VIEW_SWITCH = '[role="tablist"][data-home-view-switch]';
 
 /** 探测已安装的 chromium 可执行文件（跨平台；与 layout-walkthrough 同一实现） */
 function resolveChromium(): string | null {

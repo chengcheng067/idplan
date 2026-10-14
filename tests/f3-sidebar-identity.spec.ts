@@ -179,7 +179,7 @@ describe.skipIf(!CAN_RUN_FRESH)('F3-BROWSER · 退出身份后侧栏不显示项
       '身份流程里找不到「我是管理员」按钮（旧写法静默点空 ⇒ 本函数随后直接 return，用例会在"未进入身份"下继续跑）',
     ).toBe(true);
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('探针甲');
+    await page.locator('input[data-identity-name-input]').fill('探针甲');
     const clickedAdminConfirm = await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),
@@ -255,7 +255,7 @@ describe.skipIf(!CAN_RUN_FRESH)('F3-BROWSER · 退出身份后侧栏不显示项
       // 展开回来 → 退出身份（侧栏左下角身份行 → 退出身份；2026-10-12 前入口在顶栏）
       await page.locator('[data-sidebar-collapse-toggle]').first().click();
       await page.waitForTimeout(300);
-      await page.locator('button[title="当前身份（点击切换/退出）"]').first().click();
+      await page.locator('button[data-identity-trigger]').first().click();
       await page.waitForTimeout(300);
       await page.locator('button', { hasText: '退出身份' }).first().click();
       await page.waitForTimeout(800);

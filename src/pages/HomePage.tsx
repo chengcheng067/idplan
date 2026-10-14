@@ -233,6 +233,13 @@ export function HomePage(): JSX.Element {
       <div className="flex items-center">
         <SegmentedControl<HomeViewMode>
           size="lg"
+          /*
+           * 语言无关定位钩子（i18n-EN 批）：`ui-batch-a-geometry.spec.ts:48` 原先按
+           * `aria-label="首页视图切换"` 定位这个控件，而该 aria 名已走消息表
+           * （英文态 `Switch home view`）⇒ 英文模式下会静默找不到控件。
+           * 走 `SegmentedControl` 既有的 `dataAttrs` 通道（它**有意**只开 `data-*` 口子）。
+           */
+          dataAttrs={{ 'data-home-view-switch': '' }}
           ariaLabel={t('home.viewSwitchAria')}
           value={homeViewMode}
           onChange={setHomeViewMode}

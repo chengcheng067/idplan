@@ -67,7 +67,7 @@ const ADMIN_ID = 'm-admin';
 const SECRET = 'idplan-agent-token-GEOMETRY-SECRET-xyz789';
 
 /* ------------------------------ DOM 锚点（与 jsdom spec 同款，均为源码里的稳定属性） ------------------------------ */
-const DIALOG = '[role="dialog"][aria-label="接入外部写入方"]';
+const DIALOG = '[role="dialog"]:has([data-agent-ingress-panel])';
 const PANEL = '[data-agent-ingress-panel]';
 const MANUAL = '[data-ingress-manual]';
 const TOKEN_INPUT = '[data-ingress-token-input]';

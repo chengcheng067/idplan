@@ -503,6 +503,10 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               setSettingsOpen(true);
             }}
             aria-label={t('settings.title')}
+            /* 语言无关定位钩子（i18n-EN 批）：`layout-walkthrough.spec.ts:272` 与
+               `qa-batch-a-verify.spec.ts:1155` 原先按 `[data-app-sidebar] [aria-label="设置"]`
+               计数，而该 aria 名已走消息表（英文态 `Settings`）。两态互斥渲染 ⇒ 同值即可。 */
+            data-sidebar-settings=""
             title={t('sidebar.settingsTitle')}
             className={cn(navItemClass(false, false, inDrawer), 'relative')}
           >
@@ -722,6 +726,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               setSettingsOpen(true);
             }}
             aria-label={t('settings.title')}
+            /* 语言无关定位钩子（同上，收起态） */
+            data-sidebar-settings=""
             title={t('settings.title')}
             className="relative flex h-10 w-10 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
           >

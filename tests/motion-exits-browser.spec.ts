@@ -179,7 +179,7 @@ describe.skipIf(!CAN_RUN_FRESH)(`出口接线 · 真 Chromium（不拦输入 / r
       b?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),

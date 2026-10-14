@@ -160,7 +160,7 @@ describe.skipIf(!CAN_RUN_FRESH)('手机档 ⋮ 菜单 · Agent 项受插件开�
       Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '我是管理员')?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').includes('确认为管理员'))?.click();
     });

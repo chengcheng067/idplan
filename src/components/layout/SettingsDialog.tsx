@@ -893,6 +893,8 @@ export function SettingsDialog({
         open={confirmClearOpen}
         title={t('settings.log.clear')}
         confirmText={t('settings.log.clearConfirm')}
+        /* 语言无关定位钩子（i18n-EN 批）：真机 spec 原先按 `[role="dialog"][aria-label="清空日志"]` 定位 */
+        dataAttrs={{ 'data-settings-log-confirm': '' }}
         onConfirm={onClear}
         onCancel={() => setConfirmClearOpen(false)}
       >

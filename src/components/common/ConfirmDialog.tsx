@@ -24,6 +24,7 @@ export function ConfirmDialog({
   danger = false,
   onConfirm,
   onCancel,
+  dataAttrs,
 }: {
   open: boolean;
   title: string;
@@ -31,6 +32,8 @@ export function ConfirmDialog({
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  /** 只允许 `data-*` 钩子透传到 dialog 底座（真机 spec 定位用）。理由与形态同 `Modal.tsx` 的同名 prop。 */
+  dataAttrs?: Record<`data-${string}`, string>;
   onConfirm(): void;
   onCancel(): void;
 }): JSX.Element | null {
@@ -39,7 +42,7 @@ export function ConfirmDialog({
   const confirmLabel = confirmText ?? t('common.confirm');
   const cancelLabel = cancelText ?? t('common.cancel');
   return (
-    <Modal open={open} onClose={onCancel} ariaLabel={title}>
+    <Modal open={open} onClose={onCancel} ariaLabel={title} dataAttrs={dataAttrs}>
       <div className="glass-strong iridescent-border dialog-pop w-full max-w-md rounded-2xl p-4 shadow-soft outline-none sm:p-5">
         <div className="mb-3 flex items-start justify-between gap-4">
           <h2 className="font-display text-display-md">{title}</h2>

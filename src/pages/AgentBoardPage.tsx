@@ -1188,6 +1188,13 @@ export function AgentBoardPage(): JSX.Element {
               属同类「两份真相」，已随本批收口删除——详见 agentTerms.ts 内的说明。）
             */}
             <section
+              /*
+               * 语言无关定位钩子（i18n-EN 批）：`v07-board-acceptance.spec.ts`
+               * 原先按 `main section[aria-label="现在该做什么"]` 定位，而该 aria 名已走
+               * 消息表（英文态 `What to do now`）⇒ 英文模式下整条用例静默失配。
+               * 同页下方按 `HUMAN_BOARD_GROUP_ORDER` 循环的那几段也用同一枚钩子的不同取值。
+               */
+              data-board-section="now"
               aria-label={t('agentBoard.nowTitle')}
               className="flex flex-col gap-3 rounded-3xl border border-pine bg-pine-soft p-6"
             >
@@ -1279,6 +1286,8 @@ export function AgentBoardPage(): JSX.Element {
                 return (
                   <section
                     key={group}
+                    /* 语言无关定位钩子（同 `now` 段）：取值 = 分组键 confirm/ready/doing/done/hidden */
+                    data-board-section={group}
                     aria-label={t(HUMAN_GROUP_TITLE_KEYS[group])}
                     className="flex min-w-0 flex-col gap-2.5"
                   >

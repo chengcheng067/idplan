@@ -487,8 +487,37 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *         它把这个文件让给我，宁让自己的转换挂在别人的变更史里 —— 这个取舍是对的，记一笔）。
  *   · 复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` ⇒ 测试名印
  *     「当前 **70** / 基线 70」（此读数为**下调那一刻**的实测值；再跑若更小，是别人又转换了）。
+ *
+ * ── 2026-10-15（i18n-EN 批 · `i18n-ui` 的「窗口批改造」：测试侧 67 处）──
+ * **实测**：改前 70 → 改后 **42**（−28）。
+ *   · 本笔把 team-lead 转派的普查清单里**归我**的部分一次做掉：测试侧 **67 处 / 21 文件**
+ *     换成 `data-*` 钩子（生产侧同批补钩子，见 `i18n-ui-selector-replace.mjs` 的规则表）。
+ *   · **−28 逐文件归因**（与「70」那份按文件分布逐条比）：
+ *       `qa-batch-a-verify`         7 → **0**（−7）
+ *       `v07-board-acceptance`     11 → **4**（−7）
+ *       `settings-zones`            4 → **0**（−4）
+ *       `settings-drawer-flicker`   4 → **1**（−3）
+ *       `v07-dline-shell`          17 → **15**（−2）
+ *       `stage-select-rows-geometry` 2 → **0**（−2）
+ *       `identity-rail-browser`     1 → **0**（−1）
+ *       `layout-walkthrough`        1 → **0**（−1）
+ *       `overlay-stack-browser`     1 → **0**（−1）
+ *     合计 **−28**；其余文件计数**一字未动** ⇒ 真转换、非扫窄。
+ *   · ★ **改了 67 处、数字只降 28**：差额 **39 处不在判据面内**，成因有**两类**（与上一段那类不同）：
+ *       ① **`title=` 属性选择器不在五形态内** —— 守卫只认 `aria-label=` / `getByRole` /
+ *          `getByLabel` / `getByPlaceholder` / `getByTitle`；`button[title="中文"]` 这种
+ *          **CSS 属性选择器不认**（本笔实测属此类的：`route-scroll-reset:67`、
+ *          `f3-sidebar-identity:258`、`overlay-stack-browser:152` 等）。
+ *       ② **子串比较符形态**（`input[placeholder*="搜索"]`；`board-env.ts` 那一处）。
+ *       上一段那类的成因是「**不在 locator 调用里**」（`named(...)` / `must(...)`）；
+ *       本段这类的成因是「**属性种类/写法不在五形态内**」—— 两者都不进数字，都要单独登记。
+ *       ⇒ **数字是下界，不是工作量**；这句话在本批已被独立验证三次（96→86 那次、本笔的
+ *       agent-board 3 处、以及这里的 39 处）。
+ *   · **判据零放宽**：全部是「取元素的方式」变更，断言内容与条数**一字未动**。
+ *     13 份 browser 族**本机跑不了**（依赖 `build-dist`）⇒ 另在重建产物后单独跑，读数记在那一笔。
+ *   · 复跑：同上一段的命令 ⇒ 测试名印「当前 **42** / 基线 42」。
  */
-const BASELINE = 70;
+const BASELINE = 42;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

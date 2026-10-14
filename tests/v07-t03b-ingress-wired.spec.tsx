@@ -237,7 +237,7 @@ function makeMember(id: string, name: string, roleKind: MemberRoleKind): Member 
 /** 工具行按钮：`termFor('applyPayload', 'human')` = 「导入任务」 */
 const IMPORT_LABEL = '导入任务';
 /** 接入面板的 **Modal 底座** —— 页侧 `isAdmin &&` 门控的唯一判别式 */
-const INGRESS_DIALOG = '[role="dialog"][aria-label="接入外部写入方"]';
+const INGRESS_DIALOG = '[role="dialog"]:has([data-agent-ingress-panel])';
 /** 面板自身的根标记（面板内部还有一道门控，故它**不能**单独用作页侧判别式） */
 const INGRESS_PANEL = '[data-agent-ingress-panel]';
 /** 手动粘贴面板的 Modal 底座（ariaLabel 与工具行按钮同词，但角色限定为 dialog） */

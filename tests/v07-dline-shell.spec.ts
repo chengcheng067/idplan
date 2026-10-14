@@ -1030,7 +1030,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await band.click();
 
         await page.waitForURL('**/project/**', { timeout: 20000 });
-        await page.waitForSelector('[aria-label="九阶段时间轴"]', { timeout: 20000 });
+        await page.waitForSelector('[data-timeline]', { timeout: 20000 });
 
         // ── 打开阶段抽屉（点左列阶段行按钮；这是 openStageDrawer 的唯一真实入口）──
         await page.locator('button', { hasText: STAGE_NAME }).first().click();
@@ -1094,7 +1094,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       try {
         await page.setViewportSize({ width: 1600, height: 900 });
         await page.goto(`${BASE}project/prj-v07b`);
-        await page.waitForSelector('[aria-label="九阶段时间轴"]', { timeout: 20000 });
+        await page.waitForSelector('[data-timeline]', { timeout: 20000 });
 
         await page.locator('button', { hasText: STAGE_NAME }).first().click();
         const drawer = page.locator('[data-stage-drawer]');

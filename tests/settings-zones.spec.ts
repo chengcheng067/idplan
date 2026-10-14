@@ -218,7 +218,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       b?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),
@@ -265,7 +265,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
 
   /** <md 走「⋮ 更多 → 设置」入口 */
   async function openSettingsViaMoreMenu(page: Page): Promise<void> {
-    await page.locator('button[aria-label="更多操作"]').first().click();
+    await page.locator('button[data-mobile-more-trigger]').first().click();
     await page.waitForTimeout(400);
     await page
       .locator('[role="menu"] [role="menuitem"]', { hasText: '设置' })
@@ -304,7 +304,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       b?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),
@@ -333,7 +333,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
     //    触发器用 title 锚（展开态那枚**刻意没有 aria-label**，见 MemberIdentityPicker
     //    的注释）；菜单用 role+aria-label（与 identity-rail-browser.spec.ts 同口径）。
     await page
-      .locator('[data-app-sidebar] button[title="当前身份（点击切换/退出）"]')
+      .locator('[data-app-sidebar] button[data-identity-trigger]')
       .first()
       .click();
     await page.waitForTimeout(400);
@@ -342,7 +342,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       .first()
       .click();
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('执行乙');
+    await page.locator('input[data-identity-name-input]').fill('执行乙');
     await page.locator('button', { hasText: '下一步' }).first().click();
     await page.waitForTimeout(1200);
     // 自检：屏幕上出现的是成员姓名，否则后续断言 vacuous
@@ -515,7 +515,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       await openSettingsViaMoreMenu(page);
 
       const geo = await page.evaluate(() => {
-        const nav = document.querySelector('nav[aria-label="设置分区"]') as HTMLElement | null;
+        const nav = document.querySelector('nav[data-settings-nav]') as HTMLElement | null;
         const panel = document.querySelector('[data-settings-zone-panel]') as HTMLElement | null;
         const drawer = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
         if (!nav || !panel || !drawer) return null;
@@ -565,7 +565,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       await openSettingsViaMoreMenu(page);
 
       const fits = await page.evaluate(() => {
-        const nav = document.querySelector('nav[aria-label="设置分区"]') as HTMLElement | null;
+        const nav = document.querySelector('nav[data-settings-nav]') as HTMLElement | null;
         if (!nav) return null;
         const btns = Array.from(nav.querySelectorAll<HTMLElement>('[data-settings-zone]'));
         return {
@@ -647,7 +647,7 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       expect(m!.sidebarCenterHit, '抽屉或遮罩盖住了侧栏（反馈 #1 的形态要件）').toBe(true);
 
       // ③ 折叠侧栏（真点侧栏上的折叠开关，设置在打开期间也能点）⇒ 随缘到 64
-      await page.locator('[data-app-sidebar] button[aria-label="收起侧边栏"]').first().click();
+      await page.locator('[data-app-sidebar] button[data-sidebar-collapse-toggle]').first().click();
       await page.waitForTimeout(600); // 侧栏宽度过渡 180ms + 余量
       const c = await probe();
       expect(c).not.toBeNull();

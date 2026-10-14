@@ -146,6 +146,7 @@ export function Modal({
   anchor = null,
   railLeft,
   zTier,
+  dataAttrs,
   children,
 }: {
   open: boolean;
@@ -189,6 +190,23 @@ export function Modal({
    * 缺省时退回右浮动（老调用方零改动）。
    */
   anchor?: Point | null;
+  /**
+   * 只允许 **`data-*` 钩子**透传到 `role="dialog"` 底座（真机 spec 用它定位）。
+   *
+   * ★ 为什么需要（2026-10-15，i18n-EN 批）：`role="dialog"` 的**可访问名**来自 `ariaLabel`，
+   *   而它现在已经走 i18n 消息表 ⇒ **英文态会变**（`设置` → `Settings`）。
+   *   真机 spec 原先按 `[role="dialog"][aria-label="设置"]` 定位，切英文即**静默失配**，
+   *   且失败会伪装成「弹窗不存在」——正是最该防的那种哑雷。
+   *   ⚠️ **真机（Playwright）不能用 `.closest()`**：那是 DOM API，`page.locator()` 没有它
+   *   （jsdom 侧可以用，见 `i18n-print` 在 `print-selector-modules` 的 `selectorDialog()`；
+   *   需要跨库时用 Playwright 的 `:has()`：`[role="dialog"]:has([data-xxx])`）。
+   *   ⇒ 所以 dialog 级定位必须由底座自己开一个口子。
+   *
+   * ⚠️ 类型刻意收成 `Record<\`data-${string}\`, string>`：**不开任意 props 透传的洞**
+   *   （与 `ui/SegmentedControl.tsx` 的同名 prop 同一形态与同一理由）；
+   *   要透别的属性请单独开口子并说明理由。
+   */
+  dataAttrs?: Record<`data-${string}`, string>;
   children: React.ReactNode;
 }): JSX.Element | null {
   const { t } = useLang();
@@ -435,6 +453,7 @@ export function Modal({
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel ?? t('ui.modal.defaultAria')}
+      {...dataAttrs}
       ref={presence.blockRef}
       // z-index 分层：居中弹窗(center)=z-[70] 最高可盖一切；右侧抽屉(right)=z-[60] 属二级浮层，
       // 让其内部冒出的更浅层浮层（如指派弹层 z-[65]）能盖在抽屉之上。抽屉自身不参与 center 的顶层竞争。

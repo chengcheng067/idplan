@@ -203,6 +203,10 @@ export function useBackupIo(): BackupIo {
         title={pendingSource === 'demo' ? t('backup.dialog.loadDemoTitle') : t('backup.dialog.restoreTitle')}
         danger
         confirmText={pendingSource === 'demo' ? t('backup.dialog.confirmLoad') : t('backup.dialog.confirmRestore')}
+        /* 语言无关定位钩子（i18n-EN 批）：真机 spec 原先按
+           `[role="dialog"][aria-label="载入示例项目"]` 定位 ⇒ 英文态失配。
+           取值区分两种来源（demo / restore）—— 同一个组件承担两个语义。 */
+        dataAttrs={{ 'data-backup-confirm': pendingSource ?? 'restore' }}
         onConfirm={() => void onConfirmRestore()}
         onCancel={() => setConfirmOpen(false)}
       >

@@ -192,7 +192,7 @@ async function enterMemberBoard(page: Page, serverUrl: string): Promise<void> {
     '身份流程里找不到「我是管理员」按钮（旧写法静默点空 ⇒ 失败推到后面等首启卡，方向指错）',
   ).toBe(true);
   await page.waitForTimeout(400);
-  await page.locator('input[placeholder="你的姓名"]').fill('探针甲');
+  await page.locator('input[data-identity-name-input]').fill('探针甲');
   const clickedAdminConfirm = await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').includes('确认为管理员'));
     if (!b) return false;

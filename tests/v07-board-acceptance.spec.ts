@@ -882,7 +882,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
   it('B-03 · 「现在该做什么」取 computeReadyTasks 置顶条（置顶条取自 ready 集，非整组）', async () => {
     const page = await openBoard({ resetMode: true });
 
-    const top = page.locator('main section[aria-label="现在该做什么"]');
+    const top = page.locator('main section[data-board-section="now"]');
     const topText = await top.innerText();
     // 置顶条 = ready[0]：两条 ready 中 dueDate 更早的那条（2099-12-30 < 2099-12-31）
     expect(topText).toContain(READY_BARRIER_TITLE);
@@ -901,8 +901,8 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
 
     // 置顶条可点开抽屉（不是装饰性文本）
     await top.locator('button').first().click();
-    await page.waitForSelector('[role="dialog"][aria-label="任务详情"]', { timeout: 10000 });
-    expect(await page.locator('[role="dialog"][aria-label="任务详情"] h2').innerText()).toBe(
+    await page.waitForSelector('[data-task-drawer]', { timeout: 10000 });
+    expect(await page.locator('[data-task-drawer] h2').innerText()).toBe(
       READY_BARRIER_TITLE,
     );
 
@@ -927,7 +927,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     }
 
     // 四组视图退场
-    expect(await page.locator('main section[aria-label="待我确认"]').count()).toBe(0);
+    expect(await page.locator('main section[data-board-section="confirm"]').count()).toBe(0);
 
     // 技术模式完整显示 7 值状态（人话模式隐藏的英文状态，在这里是本体）
     const mainText = await page.locator('main').innerText();
@@ -1013,7 +1013,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     /** 读「人话组标题」/「技术泳道标题」的文字色（text-ink token 的投影） */
     const readTitleColors = (): Promise<{ group: string; lane: string }> =>
       page.evaluate(() => {
-        const g = document.querySelector('main section[aria-label="待我确认"] h2');
+        const g = document.querySelector('main section[data-board-section="confirm"] h2');
         const lanes = Array.from(document.querySelectorAll('main section h2')).find(
           (h) => (h.textContent ?? '').trim() === 'draft',
         );
@@ -1061,7 +1061,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
 
     // 用「进行中」组的卡片开抽屉（in_progress，技术字段最全：startAt / claimedAt / status）
     await page.getByRole('button', { name: '绘制平面初稿', exact: true }).click();
-    const drawer = page.locator('[role="dialog"][aria-label="任务详情"]');
+    const drawer = page.locator('[data-task-drawer]');
     await drawer.waitFor({ state: 'visible', timeout: 10000 });
 
     // ① 折叠态：抽屉**概要区**（抽屉内第一个 section）不得出现英文状态
@@ -1137,7 +1137,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
   it('B-09 · 置顶条小字计数 == 「可开工」组计数，且置顶条任务属于该组', async () => {
     const page = await openBoard({ resetMode: true });
 
-    const topText = await page.locator('main section[aria-label="现在该做什么"]').innerText();
+    const topText = await page.locator('main section[data-board-section="now"]').innerText();
     const groups = await readGroups(page);
     const readyGroup = groups.find((g) => g.label === '可开工');
     expect(readyGroup).toBeDefined();
@@ -1153,7 +1153,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     //    数相等只说明两个集合大小一致（可能各自换了内容）；成员断言直接锁住
     //    「置顶源 ⊆ 分组源」这个包含关系，防的是将来有人把两个源改成不同集合。
     const topTitle = (
-      await page.locator('main section[aria-label="现在该做什么"] button span').first().innerText()
+      await page.locator('main section[data-board-section="now"] button span').first().innerText()
     ).trim();
     expect(topTitle).toBe(READY_BARRIER_TITLE);
     expect(await readGroupOfCard(page, topTitle)).toBe('可开工');
@@ -1187,7 +1187,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     }
     // 位置：在四组**下方**（承接四组之后，不是插在中间打断分区）
     const position = await page.evaluate(() => {
-      const last = document.querySelector('main section[aria-label="已完成"]');
+      const last = document.querySelector('main section[data-board-section="done"]');
       const el = document.querySelector('[data-board-hidden-hint]');
       if (!last || !el) return 'missing';
       return last.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING

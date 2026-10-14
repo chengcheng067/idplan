@@ -147,9 +147,9 @@ window.idplan = {
 const HEAVY = 60000;
 
 const SETTINGS_DRAWER = '[data-settings-drawer]';
-const CONFIRM_CLEAR = '[role="dialog"][aria-label="清空日志"]';
+const CONFIRM_CLEAR = '[data-settings-log-confirm]';
 const IDENTITY_MENU = '[data-identity-menu]';
-const AVATAR = 'button[title="当前身份（点击切换/退出）"]';
+const AVATAR = 'button[data-identity-trigger]';
 const STAGE_DRAWER = '[data-stage-drawer]';
 
 describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromium（F2 / F3 / F6）', () => {
@@ -187,7 +187,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
       b?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),
@@ -255,7 +255,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
     // ③ 侧栏底部点「载入示例项目」→ 它走**覆盖式导入的二次确认**（ConfirmDialog）
     const ok = await clickText(page, '载入示例项目');
     expect(ok, '侧栏应有「载入示例项目」入口（管理员 + 插件已启用）').toBe(true);
-    await page.waitForSelector('[role="dialog"][aria-label="载入示例项目"]', { timeout: 5000 });
+    await page.waitForSelector('[data-backup-confirm="demo"]', { timeout: 5000 });
     expect(await clickText(page, '确认载入'), '确认框应有「确认载入」').toBe(true);
     await page.waitForTimeout(3000);
     // 首页应出现演示项目卡（前置：数据确实落库了，否则后续断言空转成假绿）
@@ -480,7 +480,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层层级 / 遮罩交互模型 · 真 Chromi
         .soft(drawerStillOpen, '★ 切身份不该把设置抽屉关掉 —— 修前它恰好被关掉了，这正是那条死路')
         .toBe(true);
       // 身份流程确实起来了（姓名输入框），不是"什么都没发生"
-      expect.soft(await page.locator('input[placeholder="你的姓名"]').count()).toBeGreaterThan(0);
+      expect.soft(await page.locator('input[data-identity-name-input]').count()).toBeGreaterThan(0);
     } finally {
       await ctx.close();
     }

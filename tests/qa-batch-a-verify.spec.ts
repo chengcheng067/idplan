@@ -197,7 +197,7 @@ describe.skipIf(!CAN_RUN_FRESH)('QA 复核 · 批次 A（真构建产物 + 真 C
       b?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),
@@ -342,7 +342,7 @@ await page.click('[data-industry-select-option="indoor"]');
    */
   function probeSettingsDrawer(page: Page) {
     return page.evaluate(() => {
-      const dlg = document.querySelector('[role="dialog"][aria-label="设置"]') as HTMLElement | null;
+      const dlg = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
       const panel = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
       if (!dlg || !panel) return null;
       const dr = dlg.getBoundingClientRect();
@@ -389,7 +389,7 @@ await page.click('[data-industry-select-option="indoor"]');
    *   点击静默失败、后面全部假红（找不到卡片）。故这里显式选「室内」。
    */
   async function createProjectOnHome(page: Page, name: string): Promise<void> {
-    await page.locator('button[aria-label="更多操作"]').first().click();
+    await page.locator('button[data-mobile-more-trigger]').first().click();
     await page.waitForTimeout(400);
     await page
       .locator('[role="menu"] [role="menuitem"]', { hasText: '新建项目' })
@@ -462,7 +462,7 @@ await page.click('[data-industry-select-option="indoor"]');
       await createProjectOnHome(page, 'QA遮挡·下卡');
 
       const geom = await page.evaluate(() => {
-        const dots = Array.from(document.querySelectorAll('button[aria-label="项目更多操作"]'));
+        const dots = Array.from(document.querySelectorAll('button[data-project-card-more-trigger]'));
         const rects = dots.map((d) => {
           const card = d.closest('[role="button"]') as HTMLElement | null;
           const dr = d.getBoundingClientRect();
@@ -542,7 +542,7 @@ await page.click('[data-industry-select-option="indoor"]');
       const hovered = await page.evaluate((p) => {
         const el = document.elementFromPoint(p.x, p.y) as HTMLElement | null;
         const card = el?.closest('[role="button"]') as HTMLElement | null;
-        const dotBtn = el?.closest('button[aria-label="项目更多操作"]');
+        const dotBtn = el?.closest('button[data-project-card-more-trigger]');
         const host = card ?? (dotBtn?.closest('[role="button"]') as HTMLElement | null);
         return host ? getComputedStyle(host).transform : 'NO-CARD';
       }, hoverPoint);
@@ -1044,7 +1044,7 @@ await page.click('[data-industry-select-option="indoor"]');
         // ② ′ 随缘判别（反馈 #1 的活的要件）：设置打开期间真点侧栏折叠开关
         //    ⇒ 抽屉左缘随缘到新侧栏右缘、侧栏中心仍命中侧栏自己
         //    （她想设置时还能切侧栏——见 settings-zones S-Z4 同口径行为）
-        await page.locator('[data-app-sidebar] button[aria-label="收起侧边栏"]').first().click();
+        await page.locator('[data-app-sidebar] button[data-sidebar-collapse-toggle]').first().click();
         await page.waitForTimeout(600); // 侧栏宽度过渡 180ms + 余量
         const c = await probeSettingsDrawer(page);
         expect(c).not.toBeNull();
@@ -1073,7 +1073,7 @@ await page.click('[data-industry-select-option="indoor"]');
       await page.setViewportSize({ width: 767, height: 900 });
       await page.waitForTimeout(500);
 
-      const more = page.locator('button[aria-label="更多操作"]');
+      const more = page.locator('button[data-mobile-more-trigger]');
       await more.first().click();
       await page.waitForTimeout(400);
       await page
@@ -1118,7 +1118,7 @@ await page.click('[data-industry-select-option="indoor"]');
       // 它是抽屉本体的父级；圈禁的起点在这个 wrapper 上，别把断言写成
       // 「焦点必须在抽屉本体内」，那是量错了层次）
       const inDrawer = await page.evaluate(() => {
-        const dlg = document.querySelector('[role="dialog"][aria-label="设置"]');
+        const dlg = document.querySelector('[data-settings-drawer]');
         return !!dlg && dlg.contains(document.activeElement);
       });
       expect(inDrawer, '打开设置后焦点不在 dialog 子树内').toBe(true);
@@ -1126,7 +1126,7 @@ await page.click('[data-industry-select-option="indoor"]');
       // Esc 关（Modal 既有契约）
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
-      expect(await page.locator('[role="dialog"][aria-label="设置"]').count()).toBe(0);
+      expect(await page.locator('[data-settings-drawer]').count()).toBe(0);
 
       // 关闭后焦点回触发钮（侧栏那个「设置」——Modal lastFocusRef 还原）
       const backToTrigger = await page.evaluate(() => {
@@ -1149,14 +1149,14 @@ await page.click('[data-industry-select-option="indoor"]');
     try {
       await becomeAdmin(page);
       // 顶栏不得再有设置按钮（画板 02/12 顶栏只有 面包屑 + 搜索 + 头像）
-      expect(await page.locator('header [aria-label="设置"]').count()).toBe(0);
+      expect(await page.locator('header [data-sidebar-settings]').count()).toBe(0);
       expect(await page.locator('header [aria-label="休息制度"]').count()).toBe(0);
       // 侧栏入口仍在（只断言「没有了」会把入口丢失误判为通过）
-      const sidebarBtn = page.locator('[data-app-sidebar] [aria-label="设置"]');
+      const sidebarBtn = page.locator('[data-app-sidebar] [data-sidebar-settings]');
       expect(await sidebarBtn.count()).toBeGreaterThanOrEqual(1);
       await sidebarBtn.first().click();
       await page.waitForTimeout(600);
-      expect(await page.locator('[role="dialog"][aria-label="设置"]').count()).toBe(1);
+      expect(await page.locator('[data-settings-drawer]').count()).toBe(1);
     } finally {
       await ctx.close();
     }

@@ -212,7 +212,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.8 · 已选顺序行内控件真几何（真
     if (await gateBtn.count()) {
       await gateBtn.first().click();
       await page.waitForTimeout(400);
-      await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+      await page.locator('input[data-identity-name-input]').fill('严过关');
       const confirm = page.locator('button', { hasText: '确认为管理员' });
       if (await confirm.count()) await confirm.first().click();
       await page.waitForTimeout(800);
@@ -237,10 +237,10 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.8 · 已选顺序行内控件真几何（真
     if (hbVisible) {
       await hamburger.first().click();
       await page.waitForTimeout(400);
-      const drawerNew = page.locator('[role="dialog"] button[aria-label="新建项目"]');
+      const drawerNew = page.locator('[role="dialog"] button[data-sidebar-new-project]');
       await drawerNew.first().click();
     } else {
-      const sideNew = page.locator('[data-app-sidebar] button[aria-label="新建项目"]');
+      const sideNew = page.locator('[data-app-sidebar] button[data-sidebar-new-project]');
       await sideNew.first().click();
     }
     await page.waitForTimeout(600);

@@ -131,7 +131,7 @@ async function passFirstRun(page: Page): Promise<void> {
       Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '我是管理员')?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('探针官');
+    await page.locator('input[data-identity-name-input]').fill('探针官');
     await page.evaluate(() => {
       Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').includes('确认为管理员'))?.click();
     });
@@ -157,7 +157,7 @@ async function openClearLogConfirm(page: Page): Promise<void> {
   await page.evaluate(() => {
     Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '清空日志')?.click();
   });
-  await page.waitForSelector('[role="dialog"][aria-label="清空日志"]', { timeout: 5000 });
+  await page.waitForSelector('[data-settings-log-confirm]', { timeout: 5000 });
   await page.waitForTimeout(600);
 }
 
@@ -349,10 +349,10 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
       await page.evaluate(() => {
         (document.querySelector('button[aria-label="关闭设置"]') as HTMLButtonElement | null)?.click();
       });
-      await page.waitForFunction(() => document.querySelector('[role="dialog"][aria-label="设置"]') === null, undefined, {
+      await page.waitForFunction(() => document.querySelector('[data-settings-drawer]') === null, undefined, {
         timeout: 2000,
       });
-      expect(await page.evaluate(() => document.querySelector('[role="dialog"][aria-label="设置"]'))).toBeNull();
+      expect(await page.evaluate(() => document.querySelector('[data-settings-drawer]'))).toBeNull();
     } finally {
       await ctx.close();
     }

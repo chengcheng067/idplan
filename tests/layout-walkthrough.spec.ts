@@ -267,9 +267,9 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 A · L-01~L-08 布局验收（真�
     // 画板 02/03/06/07/12/14 的顶栏**只有**面包屑 + 搜索 + 头像三块，无设置按钮；
     // 设置入口在设计稿里位于**侧栏底部**（板 02 L73），故这里必须两头都断言：
     // 顶栏没有、侧栏仍在 —— 只断言"没有了"会把「入口丢失」误判成通过。
-    expect(await page.locator('header [aria-label="设置"]').count()).toBe(0);
+    expect(await page.locator('header [data-sidebar-settings]').count()).toBe(0);
     expect(
-      await page.locator('[data-app-sidebar] [aria-label="设置"]').count(),
+      await page.locator('[data-app-sidebar] [data-sidebar-settings]').count(),
     ).toBeGreaterThanOrEqual(1);
 
     // 桌面端常驻搜索框（ImeInput）**可见**——这是 v0.7 新结构（不再是折叠图标）。
@@ -541,7 +541,7 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 A · L-01~L-08 布局验收（真�
       await page.waitForTimeout(300);
 
       // 返回箭头存在（详情页面包屑特征）
-      expect(await page.locator('header [aria-label="返回上一页"]').count()).toBe(1);
+      expect(await page.locator('header [data-topbar-back]').count()).toBe(1);
       const htext = (await page.locator('header').innerText()).replace(/\s+/g, '');
       // 三段：项目 / 我的项目 / {项目名(回落 项目详情)}
       expect(htext).toContain('我的项目');

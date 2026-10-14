@@ -205,7 +205,7 @@ export async function bootstrapAdminWithDemo(page: Page, serverUrl: string): Pro
     b?.click();
   });
   await page.waitForTimeout(400);
-  await page.locator('input[placeholder="你的姓名"]').fill('探针甲');
+  await page.locator('input[data-identity-name-input]').fill('探针甲');
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').includes('确认为管理员'));
     b?.click();
@@ -297,7 +297,7 @@ export async function enterMemberBoard(page: Page): Promise<void> {
    *  ② **<xl（1280 以下）侧栏自身是抽屉**：身份行在 DOM 里但整体不可见 ⇒ 先用顶栏汉堡
    *     `[data-nav-menu-trigger]` 把侧栏打开（≥xl 是持久左栏，不需要这一步）。
    */
-  const identityTrigger = page.locator('[data-app-sidebar] button[title$="（点击切换/退出）"]:visible');
+  const identityTrigger = page.locator('[data-app-sidebar] button[data-identity-trigger]:visible');
   if ((await identityTrigger.count()) === 0) {
     const burger = page.locator('[data-nav-menu-trigger]');
     if ((await burger.count()) > 0) {
@@ -307,7 +307,7 @@ export async function enterMemberBoard(page: Page): Promise<void> {
   }
   if ((await identityTrigger.count()) === 0) {
     throw new Error(
-      '前置失败：找不到**可见的**身份触发器（`[data-app-sidebar] button[title$="（点击切换/退出）"]:visible`）。' +
+      '前置失败：找不到**可见的**身份触发器（`[data-app-sidebar] button[data-identity-trigger]:visible`）。' +
         '可能成因：(a) 身份控件又被搬回了顶栏/别处；(b) 侧栏档位变了（<xl 是抽屉，需要先开侧栏）；' +
         '(c) 本次导入后身份压根没建立（那应当由 assertAdminIdentity 先报）。',
     );
@@ -316,7 +316,7 @@ export async function enterMemberBoard(page: Page): Promise<void> {
   await page.waitForTimeout(400);
   await page.locator('[data-identity-menu] [role="menuitem"]').first().click();
   await page.waitForTimeout(400);
-  await page.locator('input[placeholder="你的姓名"]').fill('执行乙');
+  await page.locator('input[data-identity-name-input]').fill('执行乙');
   await page.evaluate(() => {
     const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent ?? '').trim() === '下一步');
     b?.click();

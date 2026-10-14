@@ -197,7 +197,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
       b?.click();
     });
     await page.waitForTimeout(400);
-    await page.locator('input[placeholder="你的姓名"]').fill('严过关');
+    await page.locator('input[data-identity-name-input]').fill('严过关');
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll('button')).find((x) =>
         (x.textContent ?? '').includes('确认为管理员'),
@@ -408,7 +408,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
       await page.mouse.click(entry!.x, entry!.y);
       await page.waitForTimeout(700);
       expect(
-        await page.locator('input[placeholder="你的姓名"]').count(),
+        await page.locator('input[data-identity-name-input]').count(),
         '★ 点左下角「点击进入」应走到姓名输入（与顶栏原来同一口径）',
       ).toBeGreaterThan(0);
     } finally {
@@ -488,7 +488,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
       await page.mouse.click(narrowEntry!.x, narrowEntry!.y);
       await page.waitForTimeout(700);
       expect(
-        await page.locator('input[placeholder="你的姓名"]').count(),
+        await page.locator('input[data-identity-name-input]').count(),
         '★ 收起态点这枚入口必须真的走进身份流程',
       ).toBeGreaterThan(0);
     } finally {
@@ -528,7 +528,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
       };
       for (const host of Array.from(document.querySelectorAll('[data-app-sidebar]'))) {
         if (!visible(host)) continue; // ① 跳过隐藏的常驻侧栏
-        const nav = host.querySelector('nav[aria-label="主导航"]');
+        const nav = host.querySelector('nav[data-main-nav]');
         const a = (nav ? matchIn(nav) : undefined) ?? matchIn(host); // ②
         if (!a || !visible(a)) continue;
         const r = a.getBoundingClientRect();
@@ -710,7 +710,7 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
           (b) => b.getAttribute('aria-label') ?? '',
         );
         const wc = ['最小化', '最大化', '关闭'].filter((n) => labels.includes(n)).length;
-        return { wc, search: h.querySelectorAll('input[type="search"], input[placeholder*="搜索"]').length };
+        return { wc, search: h.querySelectorAll('input[type="search"], input[data-topbar-search]').length };
       });
       expect(headerBits.wc, '顶栏三键（最小化/最大化/关闭）应仍在').toBe(3);
       expect(headerBits.search, '顶栏搜索应仍在').toBeGreaterThan(0);
