@@ -16,6 +16,13 @@ import { requireToken, requireWriteToken, writeAuthMode, unauthorizedBody, WRITE
 //   都在 INSERT 期抛 `SQLITE_CONSTRAINT_NOTNULL: projects.type`、整笔事务回滚（导入全废）。
 //   占位值**从同一处取**（不手打第二份字面量），与 `projects.routes.ts` 同源。
 import { LEGACY_PROJECT_TYPE_PLACEHOLDER } from '../lib/legacy-project-type';
+// ★ 主板块（domain）值域：与 PATCH / 建档两条路**共用同一份**白名单（转发 `getUsableDomains()`），
+//   不在此处复刻第二份取值清单。用途见导入端点里的「整库替换前的值域前置」整段注释。
+import {
+  describeDomainOffenders,
+  findDomainOffenders,
+  usableProjectDomainsText,
+} from '../lib/project-domain';
 
 // ★ v0.7（T01-b）：备份导入的号段归一走**前后端共享的同一份纯函数** —— 与 local
 //   适配器的 `local.admin.repo.replaceAllImport` **逐字同义**（硬约束见 interfaces.ts）。
@@ -512,6 +519,41 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     const pkg = req.body as {
       data: Record<string, Array<Record<string, unknown>>>;
     };
+    /* ======================================================================================
+     * ★ 整库替换前的值域前置：`data.projects[].domain` 必须在白名单内，否则**整包拒收**
+     *
+     * ── 为什么这一层必须有（客户端 zod 不是充分条件）──
+     * ① 本端点不只有浏览器在用：它是 **NAS → NAS 整机迁移通道**（`GET /api/backup` +
+     *    本端点，共用 `x-agent-token`，见 `server/lib/agent-auth.ts` 文件头）。直连调用
+     *    的包里 `domain` 不受任何校验 —— 而库里一旦只有越界值，看板 `deriveColumns()`
+     *    遍历内置行业时找不到它 ⇒ **一个行业列都派生不出来**、项目被兜底塞进末列，
+     *    计数与筛选同时错（详见 `server/lib/project-domain.ts` 文件头）。
+     * ② 客户端 `backup.service.ts` 的 zod 只在**浏览器侧**跑；「服务端也拒」才是
+     *    「整库不变式：库里 domain ⊆ 合法集」的保证（本仓判据：安全/完整性边界在服务端）。
+     *
+     * ── 位置：**必须在 `db.transaction()` 之前** ──
+     * 本端点是「先 DELETE 全表、再 INSERT」的整库替换；把校验放进事务里虽然也能靠回滚
+     * 兜住，但错误会在「库已被清空」的中间态抛出，排障时无法区分「包坏」与「库坏」。
+     * 放在事务外 ⇒ 非法包**一行都不写**（含 settings 的任务号计数器）。
+     *
+     * ── 错误必须定位到具体记录（产品裁决的配套要求）──
+     * 口径是**拒收**而不是清洗，代价是「含脏值的老备份包导不进来」——这个代价是已知且被
+     * 接受的，前提是用户能自己修那份包。所以文案里给全：**第几条 + 项目 id + 实际值 +
+     * 允许的取值全表**，而不是笼统一句「导入失败」。
+     * ==================================================================================== */
+    const domainOffenders = findDomainOffenders(pkg.data?.projects ?? []);
+    if (domainOffenders.length > 0) {
+      void reply.status(400);
+      return {
+        error: {
+          code: 'invalid_field',
+          userMessage:
+            '备份导入被拒绝（库未做任何改动）。' +
+            `${describeDomainOffenders(domainOffenders)}。` +
+            `主板块 domain 只接受 ${usableProjectDomainsText()}，或显式 null（= 清除，回到读时回落）。`,
+        },
+      };
+    }
     // T14：脱敏备份回导支持——hasPassword 是导出侧派生字段（非表列），
     // 服务端导出 → 再导入的闭环必须剔除，否则 INSERT has_password 报 no such column。
     for (const m of pkg.data?.members ?? []) {

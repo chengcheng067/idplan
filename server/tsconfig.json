@@ -48,6 +48,14 @@
  *   `globalThis.indexedDB`（浏览器 API），纳入后 `npm run typecheck:server` 会红两条
  *   TS7017（已实测）。故 `sqlite.bundle.ts` 改为**本地复刻同语义的 pickDefined**
  *   （见该文件注释：三行循环，语义逐字一致；跨端一致由两处单测各自锁住）。
+ *
+ *   v0.8 追加（2026-10-14）：`Project.domain`（主板块）值域收口。上一条 `stage-library.ts`
+ *   如今**多了一类消费方**：`server/lib/project-domain.ts` 转发它的 `getUsableDomains()`
+ *   作为「主板块合法取值」的**唯一出处**，供三条写入路径共用 —— `PATCH /api/projects/:id`
+ *   与 `POST /api/projects`（`routes/projects.routes.ts`）以及整库替换
+ *   `POST /api/backup/import`（`routes/meta.routes.ts`）。
+ *   之所以仍用同一份 JSON 而不是服务端抄一份数组：抄一份的必然症状是「JSON 新增行业后
+ *   服务端仍拒收它」，而 `include` 里已有该文件 ⇒ 类型检查会自动跟随，无需另加条目。
  */
 {
   "compilerOptions": {

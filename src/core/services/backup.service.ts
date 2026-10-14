@@ -30,6 +30,11 @@ import {
   type RecoveryReasons,
 } from '../execution/execution-recovery';
 import { normalizeProjectRow, normalizeStageRow } from '../template/stage-fallback';
+// ★ 主板块（domain）的合法取值 = `templates/stage-library.json` 算出的「可用主板块」。
+//   同一个事实**只有这一个出处**：建档/确认的 UI（`IndustrySelect` / `DomainCascade`）、
+//   `ProjectService.confirmProjectDomain`、以及服务端三条写入路径都收敛到它。
+//   本文件只是**消费**它，绝不在备份 schema 里抄一份字面量数组。
+import { getUsableDomains } from '../template/stage-library';
 
 /**
  * 现行备份 schema 版本。
@@ -80,8 +85,22 @@ const projectSchema = z
      * v0.8 主板块。**用 `z.string()` 而非设计文档 §3.3 写的 `z.nativeEnum(...)`**——
      * `StageTemplateDomain`（`dto.ts:326`）是**字符串字面量联合类型**而不是 TS enum，
      * `z.nativeEnum()` 只吃 `enum` 对象，写上去直接**编译不过**。
-     * 改用宽收也正合本文件既有策略：枚举字段一律 `z.string()`（见 `type` / `status`），
-     * 保证将来新增行业值时旧客户端不被拒绝；窄化在 `normalizeProjectRow` 内完成。
+     *
+     * ⚠️ **本字段的宽收范围已收窄（2026-10-14 产品裁决：拒收，不归一化）** ——
+     *   上面那条「枚举字段一律 `z.string()` 宽收，保证将来新增行业值时旧客户端不被拒绝」
+     *   的理由**在 `domain` 上不成立**，两条证据：
+     *     ① 它不是「将来才会新增的对外契约枚举」，而是**内容层数据**（`stage-library.json`
+     *        的 `domains`）。新增行业必然同时更新该 JSON ⇒ 白名单自动跟随，
+     *        旧客户端读到新 JSON 也就认识了新值 —— 宽收换不来任何兼容收益。
+     *     ② 越界值的**唯一**去处就是「系统不认识它」：看板列集合由 `deriveColumns()`
+     *        遍历内置行业派生，越界值 ⇒ **一个行业列都派生不出来**（整行只剩 `todo`
+     *        一个列盒）、项目被兜底塞进末列，计数与筛选同时错
+     *        （实测：`in_progress` 的项目被算进 `todo`）。
+     *   故 `domain` 从「宽收枚举」改为**白名单收窄**；`kind` / `status` / `type`
+     *   仍按原策略宽收（它们各有各的宽收理由，见各自的注释 —— 不要顺手一起改）。
+     *   收窄只发生在**导入校验**这一处：越界值一律**整包拒收**（不是清洗，见下），
+     *   配套要求是错误文案必须**定位到具体记录**（第几条 + 项目 id），否则用户没法修那份包。
+     *   归一产物仍原样透传（`normalizeProjectRow` 只 `?? null`、不反查、不改写）。
      */
     domain: z.string().nullable().optional(),
     /**
@@ -100,6 +119,46 @@ const projectSchema = z
     updatedAt: isoString,
   })
   .transform(normalizeProjectRow);
+
+/**
+ * 项目数组（v0.8 主板块值域门）。**为什么校验挂在「数组」这一层而不是 `domain` 字段上**：
+ *
+ * ── 产品口径：**拒收**越界值，不做归一化（2026-10-14 拍板）──
+ * 归一化（把 `'exhibition'` 改写成 `'indoor'`）会**静默改写用户数据**，且让「这个脏值从哪来」
+ * 永久失去线索。代价（已接受）：含脏值的老备份包会**导不进来** —— 正因如此，错误文案必须
+ * 让用户能自己修那份包，即**定位到具体记录**（第几条 + 项目 id + 实际值 + 允许的取值全表）。
+ * 字段级 `.refine()` 只能给出 `data.projects.2.domain`（0 基下标、没有 id），达不到这个要求；
+ * 挂在数组上才能一次报出**全部**越界记录（用户改一遍就能重导，不必「修一条、再导一次」）。
+ *
+ * ── 白名单的出处（唯一）──
+ * `getUsableDomains()`：口径 = 出现在 `industryGroups` 且阶段库里至少有一个阶段项
+ * （`exhibition` 因此被排除 —— 它没有阶段项，放进来会让项目阶段池为空）。
+ * 与建档 UI 的候选、`ProjectService.confirmProjectDomain`、服务端三条写入路径**同一份**。
+ * 服务端侧的对偶实现是 `server/lib/project-domain.ts`（同一份取值来源，措辞各写一份 ——
+ * `src/` 不得 import `server/`，方向反了）。改动其一时请同步另一处的措辞。
+ *
+ * ── 只校验 `domain` 一个字段（刻意）──
+ * 本笔是「给主板块补一道值域门」，不是「收紧备份格式」：其余字段一律保持既有宽收策略。
+ * `domain` 缺键 / 显式 `null` = 「未确认」，**合法**（老备份本就没有这个键）。
+ */
+const projectsSchema = z.array(projectSchema).superRefine((rows, ctx) => {
+  const allowed = getUsableDomains() as readonly string[];
+  const offenders: string[] = [];
+  rows.forEach((row, i) => {
+    const value = row.domain;
+    if (value == null) return;
+    if (allowed.includes(value)) return;
+    offenders.push(`第 ${i + 1} 条项目（id=${row.id}）的行业值「${String(value)}」不合法`);
+  });
+  if (offenders.length === 0) return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    // path 留空 = 指向 `data.projects` 整段；每条记录的定位在 message 里（含 id，比下标更好用）
+    message:
+      `${offenders.join('；')}。主板块 domain 只接受 ${allowed.join(' / ')}（共 ${allowed.length} 个），` +
+      '或显式 null（= 清除，回到读时回落）。本包已被拒绝，库未做任何改动。',
+  });
+});
 
 /**
  * 阶段 schema。要点：
@@ -440,7 +499,9 @@ const backupSchema = z.object({
     exportedAt: isoString,
   }),
   data: z.object({
-    projects: z.array(projectSchema),
+    // ★ 用 `projectsSchema`（= `z.array(projectSchema)` + 主板块值域门），不是裸 `z.array`：
+    //   越界 domain 必须**整包拒收**并定位到具体记录（见该常量上方注释）。
+    projects: projectsSchema,
     stages: z.array(stageSchema),
     tasks: z.array(taskSchema),
     itineraries: z.array(itineraryDaySchema).default([]),

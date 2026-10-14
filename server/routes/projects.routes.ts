@@ -12,6 +12,9 @@ import { dayjs, isIsoDate } from '../../src/lib/date';
 import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../../src/core/template/stage-fallback';
 // v0.8 已下线的 `projects.type` 遗留列占位值（**单一出处**，导入路由从这里取同一个值）
 import { LEGACY_PROJECT_TYPE_PLACEHOLDER } from '../lib/legacy-project-type';
+// v0.8 主板块（domain）的值域判定（**单一出处**：转发 `stage-library.getUsableDomains()`；
+// 与备份导入路由 `meta.routes.ts` 共用同一份白名单与同一份错误文案）
+import { isProjectDomain, projectDomainRejection } from '../lib/project-domain';
 
 interface ProjectRow {
   id: string;
@@ -181,6 +184,26 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
           '前端按人类侧显示它，服务端候选清单却把它排除。）',
       );
     }
+
+    /* ======================================================================================
+     * v0.8 主板块（domain）的值域门 —— **与 PATCH 路径、备份导入路径共用同一份白名单**
+     *
+     * ── 为什么建项目也要校验（三条路同口径）──
+     * 本行曾是纯透传：`(body.domain as string | null) ?? null`。而建档 UI 的候选本身就
+     * 是 `getUsableDomains()`，用户**选不出**越界值 ⇒ 能走到这里的越界值只来自
+     * 「照搬字段映射的脚本 / 手工拼的请求」。JSON 里没有的主板块一旦落库，看板
+     * `deriveColumns()` 遍历不到它 ⇒ 该项目**一列都派生不出来**、被兜底塞进末列，
+     * 且分桶回落后**计数与筛选同时错**（详见 `server/lib/project-domain.ts` 文件头）。
+     *
+     * `domain` **未传 / 显式 null** → 原样（null = 未确认，读时回落），行为与今天逐字一致。
+     * 本门**只**收窄值域，不碰任何其它字段（不是清洗、不是归一）。
+     * ==================================================================================== */
+    if (body.domain !== undefined && body.domain !== null) {
+      if (typeof body.domain !== 'string' || !isProjectDomain(body.domain)) {
+        void reply.status(400);
+        return invalidField(projectDomainRejection(body.domain));
+      }
+    }
     // ⚠️ 列清单与占位符个数必须逐一对齐（v0.8 起 17 个 ?）。加列时三处同改：
     //    列清单 / VALUES / .run() 实参，漏一处就是运行期 'too few/many parameters'。
     db.prepare(
@@ -277,6 +300,35 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       }
     }
 
+    /* ======================================================================================
+     * v0.8 主板块（domain）的值域门 —— 三条写入路径共用同一份白名单（本文件两条 + 备份导入）
+     *
+     * ── 这道门的由来（原先没有，是被复核查出来的真缺口）──
+     * 上方那道门只判 `kind`，`domain` 一路**零校验透传**到 UPDATE。后果不是洁癖：
+     * 越界值（如 `'exhibition'` —— 它在 `StageTemplateDomain` 类型里、却**不在**
+     * `templates/stage-library.json` 的 `domains` 里，也没有任何阶段项）一旦落库：
+     *   · `deriveColumns()` 的 `used` 非空 ⇒ 「至少 indoor」的保险**不触发**；
+     *   · 同一函数随后 `for (const [domainKey] of getDomains())` 遍历内置行业，
+     *     永远匹配不到该值 ⇒ **一个行业列都派生不出来**（整行只剩 `todo` 一个列盒）；
+     *   · `groupByColumn()` 的兜底把项目塞进末列（此时末列就是 `todo`）⇒ 实测
+     *     `in_progress` 的项目被算进「待启动」**列**，计数与筛选同时错。
+     *
+     * ── 口径：拒收，不归一化（产品负责人 2026-10-14 拍板）──
+     * 归一化（把越界值改写成 indoor）会**静默改写用户数据**，且抹掉「这个值从哪来」的线索。
+     * 拒收的代价是「含脏值的老备份包导不进来」，已知并接受 —— 因此备份侧的错误文案
+     * 必须定位到具体记录（见 `meta.routes.ts` 的导入端点）。
+     *
+     * ── 零回归 ──
+     * `domain` **未传** → 不变（字段级更新语义）；**显式 null** → 清除（回到读时回落）。
+     * 这两条与今天逐字一致，只有「非空且不在白名单」这一种新情况返回 400，且**不写库**。
+     * ==================================================================================== */
+    if (b.domain !== undefined && b.domain !== null) {
+      if (typeof b.domain !== 'string' || !isProjectDomain(b.domain)) {
+        void reply.status(400);
+        return invalidField(projectDomainRejection(b.domain));
+      }
+    }
+
     // undefined = 不变（字段级更新语义），null = 显式清除。两态必须分开处理，
     // 否则「只改简称」的请求会把封面/阶段溯源字段一并擦掉。
     const merged: ProjectRow = {
@@ -307,19 +359,19 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
           : existing.stage_template_version,
       schedule_basis:
         b.scheduleBasis !== undefined ? String(b.scheduleBasis) : existing.schedule_basis,
-      // v0.8：domain 允许显式 null（= 清除，回到读时回落）；
-      // kind 走 String() 而非原样透传——归属侧只有 human/agent 两个合法值。
-      // ⚠️ **订正（2026-10-14，原注释与代码事实不符）**：此处原写「变更合法性**已由本函数上方的
-      //   『接管显式意图门』拦下（值域白名单 + takeover）」。**实际不成立** —— 上方那道门
-      //   （本文件承接 `b.kind` 的那个 if）**只判 `kind`**（`isProjectKind` 白名单 + `takeover`），
-      //   **对 `domain` 不做任何校验**。而本行是 `domain` 在 PATCH 路径上的唯一写入点、原样透传。
-      //   ⇒ 现状：`domain` **没有值域约束**。越界值（如 `'exhibition'`）经本接口或备份导入
-      //     （`backup.service.ts` 的 `domain: z.string()` 宽收）都能落库；后果是**看板列集合塌陷**
-      //     ——列派生遍历内置行业时找不到该值 ⇒ 一个行业列都派生不出来，项目被兜底塞进末列、
-      //     且计数/筛选错（实测：`in_progress` 的项目被算进 `todo` 列）。
-      //   ⇒ **因此不能沿用「两处规则必然漂移」作免校验的理由** —— 那条理由的前提（上游已拦）不存在。
-      //     缺口与取舍（拒收 vs 归一化）登记在出包台账的 D2/D3 条。
+      // v0.8：domain 允许显式 null（= 清除，回到读时回落）；非空值必须是白名单内的主板块。
+      // ⚠️ **本条注释的两度订正（留痕，勿再漂）**：
+      //   ① 原写「变更合法性已由本函数上方的『接管显式意图门』拦下（值域白名单 + takeover）」——
+      //      **不成立**：上方那道门只判 `kind`（`isProjectKind` + `takeover`），`domain` 零校验。
+      //      该错误陈述已作废（它曾让本行合法地免于校验）。
+      //   ② 现状（2026-10-14 起）：**值域约束由本函数上方的专用 domain 门给出**，白名单转发自
+      //      `getUsableDomains()`（`server/lib/project-domain.ts`）—— 与建档路径
+      //      （`POST /api/projects`）和备份导入路径（`meta.routes.ts`）**同一份**。
+      //      本行仍是 `domain` 在 PATCH 路径上的**唯一写入点**，但它现在只可能在「未传」
+      //      （→ 取 existing）或「已过白名单」时才被求值到。
+      // ⚠️ 不要再写「两处规则必然漂移所以不校验」——那条理由的前提是「上游已拦」，不成立于此处。
       domain: b.domain !== undefined ? (b.domain as string | null) : existing.domain,
+      // kind 走 String() 而非原样透传——归属侧只有 human/agent 两个合法值（上方门已判完值域）。
       kind: b.kind !== undefined ? String(b.kind) : existing.kind,
       status: b.status !== undefined ? String(b.status) : existing.status,
       revision: existing.revision + 1,
