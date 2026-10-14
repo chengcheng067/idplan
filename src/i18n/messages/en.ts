@@ -827,7 +827,7 @@ export const enMessages: Record<MessageKey, string> = {
   'agentTransfer.title': 'Take over “{name}”',
   'agentTransfer.cancelAria': 'Cancel takeover',
   'agentTransfer.warning':
-    'Takeover moves this board’s data **into the human workspace**, after which it is managed on the “My projects” side. Only admins can do this.',
+    'Takeover moves this board’s data into the human workspace, after which it is managed on the “My projects” side. Only admins can do this.',
   'agentTransfer.modeLegend': 'Takeover method',
   'agentTransfer.mode.convert.label': 'Convert to a full project',
   'agentTransfer.mode.convert.hint':
@@ -970,7 +970,7 @@ export const enMessages: Record<MessageKey, string> = {
   'plugin.count': '{installed} installed · {enabled} enabled',
   /* 与 zh 同形保留明文星号（那是原文的显示缺陷，不是翻译问题；改动会破坏 zh 逐字证明） */
   'plugin.intro':
-    'Plugins are functional bundles you can **toggle individually**. Disabling one hides its pages and sidebar entry right away (data is kept and comes back when you re-enable it); the plugin card stays in the list below, and its gear opens its own settings. Toggle state is stored in the local / NAS settings and survives a restart. Third-party plugins can be installed from a file (restart required, disabled by default, and you are shown its permissions before installing).',
+    'Plugins are functional bundles you can toggle individually. Disabling one hides its pages and sidebar entry right away (data is kept and comes back when you re-enable it); the plugin card stays in the list below, and its gear opens its own settings. Toggle state is stored in the local / NAS settings and survives a restart. Third-party plugins can be installed from a file (restart required, disabled by default, and you are shown its permissions before installing).',
   'plugin.adminNotice':
     'The plugin switch is a NAS-wide setting and only admins can change it; members can see the current state and each plugin’s own settings.',
   'plugin.installFromFile': 'Install from file',

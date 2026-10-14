@@ -816,7 +816,7 @@ export const zhMessages = {
   'agentTransfer.title': '接管「{name}」',
   'agentTransfer.cancelAria': '取消接管',
   'agentTransfer.warning':
-    '接管会把这块看板里的数据**移入人类工作区**，此后它归「我的项目」一侧管理。 该操作仅管理员可用。',
+    '接管会把这块看板里的数据移入人类工作区，此后它归「我的项目」一侧管理。 该操作仅管理员可用。',
   'agentTransfer.modeLegend': '接管方式',
   'agentTransfer.mode.convert.label': '转为正式项目',
   'agentTransfer.mode.convert.hint': '整块看板变成人类工作区里的一个项目（名称与阶段一并保留）。',
@@ -967,7 +967,7 @@ export const zhMessages = {
   'plugin.title': '插件',
   'plugin.count': '已装 {installed} · 启用 {enabled}',
   'plugin.intro':
-    '插件是可**单独开关**的功能包。停用后它的页面与侧栏入口会立即隐藏 （数据保留，重新启用即恢复）；插件卡片仍在下面的列表里，点它的齿轮可以看到 它自己的设置。开关状态存在本地/NAS 设置里，重启不丢。 第三方插件可从文件安装（重启生效、默认关闭、装前会把权限摊给你看）。',
+    '插件是可单独开关的功能包。停用后它的页面与侧栏入口会立即隐藏 （数据保留，重新启用即恢复）；插件卡片仍在下面的列表里，点它的齿轮可以看到 它自己的设置。开关状态存在本地/NAS 设置里，重启不丢。 第三方插件可从文件安装（重启生效、默认关闭、装前会把权限摊给你看）。',
   'plugin.adminNotice': '插件开关是本 NAS 的全局设置，仅管理员可改；成员只能查看当前状态与各插件自己的设置。',
   'plugin.installFromFile': '从文件安装',
   'plugin.skipped': '有 {count} 个本地插件目录未加载（manifest 不完整或版本不兼容），已跳过。',
