@@ -17,6 +17,16 @@ REPO=$(cd "$HERE/../.." && pwd)              # 仓库根
 cd "$REPO" || exit 1
 STEP="${1:-未指定}"
 
+# ★ 闸门累加器（2026-10-14 修；**窗口内仪器改动，已重跑自检并留痕**）
+#   为什么要加：原先本脚本**只把争用/脏树/未知「打印」出来，没有任何 exit** ⇒ 退出码恒 0；
+#   调用方写 `bash step-precheck.sh 5.5; if [ $? -ne 0 ]; then abort; fi` 时**闸门形同虚设**。
+#   实测（18:32:10 那轮）：③ 明明写着「VITEST=2 CHROME=47 ⇒ 本轮读数不可比（争用）」，
+#   退出码却是 0，于是全量照样起了 ⇒ 那一轮读数**作废**。
+#   ⇒ 通用形态：**闸门类脚本必须自证「它会拦」，不只是「它算得对」。**
+#     （「会报 / 不误报」讲的是**它对不对**；「退出码会不会拦」讲的是**它有没有约束力** ——
+#      两件事，前者通过不代表后者通过。这是本族在本项目出的最新一个出口。）
+BLOCK_REASON=""
+
 UNKNOWN="未知"
 
 # 统一的「计数或未知」：run 成功才认它的数，失败一律未知
@@ -41,11 +51,13 @@ DIRTY=$(git status --porcelain 2>/dev/null)
 GIT_RC=$?
 if [ "$GIT_RC" != "0" ]; then
   DIRTY_N="${UNKNOWN}"
+  BLOCK_REASON="${BLOCK_REASON}git status 失败(未知); "
   echo "   git status 失败（rc=${GIT_RC}）⇒ 条数 = ${UNKNOWN}（不是 0！）"
 else
   DIRTY_N=$(printf '%s\n' "$DIRTY" | grep -c . )
   echo "   git status --porcelain 条数 = ${DIRTY_N}"
   if [ "${DIRTY_N}" != "0" ]; then
+    BLOCK_REASON="${BLOCK_REASON}树不干净(${DIRTY_N}); "
     echo "   ★ 工作树不干净 ⇒ 报告 team-lead，不要自行清理（可能是别人在飞的活）。"
     printf '%s\n' "$DIRTY" | sed 's/^/     /'
   fi
@@ -58,6 +70,7 @@ echo "② 产物与过期输入"
 DIST_INDEX="build-dist/index.html"
 STALE_N="${UNKNOWN}"
 if [ ! -f "$DIST_INDEX" ]; then
+  BLOCK_REASON="${BLOCK_REASON}产物不存在(过期输入未知); "
   echo "   ★ ${DIST_INDEX} 不存在 ⇒ CAN_RUN = false ⇒ 真机族**整族**跳过。"
   echo "     那种状态的读数测的是**另一个集合**（CAN_RUN 失效时整门应为 31 个 / 209 条）⇒ 不可与 20/148 比。"
   echo "     过期输入计数 = ${UNKNOWN}（find -newer 一个不存在的文件只会报错，**它的 0 是假的**）"
@@ -67,6 +80,7 @@ else
     -newer "$DIST_INDEX" -type f 2>/dev/null)
   FIND_RC=$?
   if [ "$FIND_RC" != "0" ]; then
+    BLOCK_REASON="${BLOCK_REASON}过期输入未知(find 失败); "
     echo "   ★ find -newer 失败（rc=${FIND_RC}）⇒ 过期输入计数 = ${UNKNOWN}"
   else
     STALE_N=$(printf '%s\n' "$STALE_LIST" | grep -c . )
@@ -95,6 +109,17 @@ else
     -*) CONTEND="${UNKNOWN}" ;;   # -1 = 探针报的未知
     *) CONTEND="$C_RAW" ;;
   esac
+fi
+
+# ★ 争用 ⇒ 判定「不许起跑」（2026-10-14 加）。
+#   为什么要有这一段：本脚本原先把 VITEST=N 与「本轮读数不可比」**打印**出来，
+#   却**没有任何 exit** ⇒ 退出码恒 0 ⇒ 调用方的 `if rc!=0 then abort` 形同虚设。
+#   实测 18:32:10 那轮：③ 明写 VITEST=2 CHROME=47、明写「不可比」，退出码仍是 0，
+#   于是全量照样起了 ⇒ **那一轮读数作废**。
+if [ "${CONTEND}" = "${UNKNOWN}" ]; then
+  BLOCK_REASON="${BLOCK_REASON}争用未知(未知≠成立); "
+elif [ "${CONTEND}" != "0" ]; then
+  BLOCK_REASON="${BLOCK_REASON}有 ${CONTEND} 个跑批进程(争用⇒该轮读数不可比); "
 fi
 
 # ── ④ 代码代 ───────────────────────────────────────────────────────────────
@@ -148,3 +173,31 @@ case "${STEP}" in
     ;;
 esac
 echo "==================================================================="
+
+# ── 闸门：把上面的结论收进**退出码**（2026-10-14 加；见文件头 BLOCK_REASON 注释） ──
+# 说明：以下三条与 §⑤ 的叙述**同源**，此处再判一次是为了让「结论」变成「约束」。
+case "${STEP}" in
+  2.5)
+    if [ "${DIRTY_N}" = "0" ] && [ "${STALE_N}" != "0" ] && [ "${STALE_N}" != "${UNKNOWN}" ]; then
+      :   # 前提成立
+    else
+      BLOCK_REASON="${BLOCK_REASON}2.5 前提不成立(脏=${DIRTY_N} 过期输入=${STALE_N}); "
+    fi
+    ;;
+  5|5.5|5.6)
+    if [ "${STALE_N}" = "0" ]; then
+      :   # 产物新鲜，前提成立
+    else
+      BLOCK_REASON="${BLOCK_REASON}产物未新鲜(过期输入=${STALE_N}); "
+    fi
+    ;;
+esac
+
+if [ -n "${BLOCK_REASON}" ]; then
+  echo "[gate] step=${STEP} verdict=BLOCK reason=${BLOCK_REASON}"
+  echo "[gate] **不许起跑**（退出码 1）。清场后重跑本检查。"
+  exit 1
+fi
+echo "[gate] step=${STEP} verdict=PASS reason=无"
+echo "[gate] 允许起跑（退出码 0）。"
+exit 0
