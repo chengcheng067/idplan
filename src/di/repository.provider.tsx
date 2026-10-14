@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { appEnv } from '../config/env';
 import { createRepositories } from '../core/repositories';
-import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, resolveErrorText } from '../core/types/enums';
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { detectLocalDbVersion, isDbAheadOfApp, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
@@ -99,10 +99,7 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
       if (!cancelledRef.current) setBundle(b);
     } catch (err: unknown) {
       if (cancelledRef.current) return;
-      const msg =
-        err instanceof ChangxiaError
-          ? err.userMessage
-          : translate('di.repo.initFailed');
+      const msg = resolveErrorText(err, translate, translate('di.repo.initFailed'));
       setFatal({ kind: 'storage', message: msg });
     }
   }, []);

@@ -4,7 +4,7 @@ import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { bootstrapAllStores, useRepos } from './useRepos';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { ChangxiaError } from '../core/types/enums';
+import { resolveErrorText } from '../core/types/enums';
 /* ★ i18n 笔 misc：三处文案都在「事件发生时算一次」的位置（成功/失败/toast），
    故用模块级 `t`（不订阅）——与 `useLang.ts` 头注释第 ③ 条同口径。 */
 import { t } from '../i18n';
@@ -64,7 +64,8 @@ async function runBootstrap(repos: IRepositoryBundle): Promise<boolean> {
  * 退回原生 Error.message（截断，避免超长堆栈撑破错误面）。
  */
 function describeFailure(err: unknown): string {
-  if (err instanceof ChangxiaError && err.userMessage) return err.userMessage;
+  const real = resolveErrorText(err, t);
+  if (real) return real;
   if (err instanceof Error && err.message) return err.message.slice(0, 200);
   return t('bootstrap.unknownError');
 }

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 import type { Member } from '../core/types/entities';
 import type { CreateMemberCmd, UpdateMemberCmd } from '../core/types/dto';
-import { ChangxiaError } from '../core/types/enums';
+import { resolveErrorText } from '../core/types/enums';
 import { useProjectsStore, setMemberCacheForNames } from './useProjectsStore';
 import { t } from '../i18n';
 
@@ -54,7 +54,7 @@ export function createMemberActions(repos: import('../core/repositories/interfac
       } catch (err) {
         useProjectsStore
           .getState()
-          .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.memberAddFailed'));
+          .pushToast('error', resolveErrorText(err, t, t('toast.memberAddFailed')));
         return false;
       }
     },
@@ -67,7 +67,7 @@ export function createMemberActions(repos: import('../core/repositories/interfac
       } catch (err) {
         useProjectsStore
           .getState()
-          .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.updateFailed'));
+          .pushToast('error', resolveErrorText(err, t, t('toast.updateFailed')));
       }
     },
 

@@ -18,7 +18,7 @@ import { create } from 'zustand';
 import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import type { AgentPayloadV1, ApplyResult } from '../core/types/agent-payload';
 import { tryValidateAgentPayload } from '../core/types/agent-payload';
-import { ChangxiaError, TaskStatus } from '../core/types/enums';
+import { TaskStatus, resolveErrorText } from '../core/types/enums';
 import type { Task } from '../core/types/entities';
 import { taskIsDone } from '../core/types/entities';
 import { TaskService } from '../core/services/task.service';
@@ -97,7 +97,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : t('toast.payloadPreviewFailed'),
+        resolveErrorText(err, t, t('toast.payloadPreviewFailed')),
       );
       return null;
     }
@@ -137,7 +137,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : t('toast.payloadWriteFailed'),
+        resolveErrorText(err, t, t('toast.payloadWriteFailed')),
       );
       return null;
     }
@@ -176,7 +176,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : t('toast.handoffFailed'),
+        resolveErrorText(err, t, t('toast.handoffFailed')),
       );
       return '';
     }
@@ -191,7 +191,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : t('toast.claimFailed'),
+        resolveErrorText(err, t, t('toast.claimFailed')),
       );
     }
   },
@@ -205,7 +205,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        err instanceof ChangxiaError ? err.userMessage : t('toast.agentStatusTransitionFailed'),
+        resolveErrorText(err, t, t('toast.agentStatusTransitionFailed')),
       );
     }
   },

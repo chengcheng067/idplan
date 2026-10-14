@@ -23,6 +23,7 @@ import {
   ChangxiaErrorCode,
   StageStatus,
   TaskStatus,
+  resolveErrorText,
 } from '../core/types/enums';
 import { taskIsDone, withStatus } from '../core/types/entities';
 import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../core/template/stage-fallback';
@@ -211,7 +212,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         return project;
       } catch (err) {
         // 向上抛真实原因（含 userMessage），由调用方表单展示，避免笼统的「请检查日期」误导文案
-        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.projectCreateFailed');
+        const msg = resolveErrorText(err, t, t('toast.projectCreateFailed'));
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -232,7 +233,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         return project;
       } catch (err) {
         // 向上抛真实原因（含 userMessage），由调用方表单展示，避免笼统的「请检查日期」误导文案
-        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.projectCreateFailed');
+        const msg = resolveErrorText(err, t, t('toast.projectCreateFailed'));
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -254,7 +255,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.putProject(updated);
         store.pushToast('success', t('toast.projectUpdated'));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.updateFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.updateFailed')));
       }
     },
 
@@ -283,7 +284,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
       } catch (err) {
         store.pushToast(
           'error',
-          err instanceof ChangxiaError ? err.userMessage : t('toast.projectDomainConfirmFailed'),
+          resolveErrorText(err, t, t('toast.projectDomainConfirmFailed')),
         );
         return false;
       }
@@ -340,7 +341,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         return project;
       } catch (err) {
         // 向上抛真实原因（含 userMessage），由调用方表单展示，避免笼统的「创建失败」误导文案
-        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.boardCreateFailed');
+        const msg = resolveErrorText(err, t, t('toast.boardCreateFailed'));
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -359,7 +360,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
           store.pushToast('success', t('toast.restoredToActive'));
         }
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.actionFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.actionFailed')));
       }
     },
 
@@ -375,7 +376,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         }));
         store.pushToast('success', t('toast.projectDeleted', { name: projectName ?? t('common.untitledProject') }));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.deleteFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.deleteFailed')));
       }
     },
 
@@ -397,7 +398,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.pushToast('success', t('toast.projectPromoted', { name: updated.name }));
         return updated;
       } catch (err) {
-        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.takeoverFailed');
+        const msg = resolveErrorText(err, t, t('toast.takeoverFailed'));
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -445,7 +446,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         );
         return outcome;
       } catch (err) {
-        const msg = err instanceof ChangxiaError ? err.userMessage : t('toast.tasksMoveFailed');
+        const msg = resolveErrorText(err, t, t('toast.tasksMoveFailed'));
         store.pushToast('error', msg);
         throw err instanceof ChangxiaError ? err : new ChangxiaError(ChangxiaErrorCode.Storage, msg);
       }
@@ -461,7 +462,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.pushToast('success', t('toast.rescheduled'));
         return true;
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.rescheduleFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.rescheduleFailed')));
         return false;
       }
     },
@@ -480,7 +481,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.pushToast('success', t('toast.statusUpdated'));
         return unlockHint;
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.statusTransitionFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.statusTransitionFailed')));
         return null;
       }
     },
@@ -491,7 +492,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         const updated = await repos.stages.update(stageId, cmd);
         store.putStage(updated);
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.saveFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.saveFailed')));
       }
     },
 
@@ -529,7 +530,7 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
         store.putTask(task); // 回滚
         store.pushToast(
           'error',
-          err instanceof ChangxiaError ? err.userMessage : t('toast.taskStatusSaveFailedRolledBack'),
+          resolveErrorText(err, t, t('toast.taskStatusSaveFailedRolledBack')),
         );
       }
     },
@@ -565,7 +566,7 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
         store.putTask(updated);
         store.pushToast('success', t('toast.taskSaved'));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.taskSaveFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.taskSaveFailed')));
       }
     },
 
@@ -590,7 +591,7 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
         store.addTaskLocal(created);
         store.pushToast('success', t('toast.entryAdded'));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.entryAddFailed'));
+        store.pushToast('error', resolveErrorText(err, t, t('toast.entryAddFailed')));
       }
     },
 
@@ -604,7 +605,7 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
         if (snapshot) store.addTaskLocal(snapshot);
         store.pushToast(
           'error',
-          err instanceof ChangxiaError ? err.userMessage : t('toast.entryDeleteFailedReverted'),
+          resolveErrorText(err, t, t('toast.entryDeleteFailedReverted')),
         );
       }
     },
