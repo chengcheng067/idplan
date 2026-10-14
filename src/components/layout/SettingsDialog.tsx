@@ -430,6 +430,8 @@ export function SettingsDialog({
               type="button"
               onClick={onClose}
               aria-label={t('settings.closeAria')}
+              /* 语言无关定位钩子（i18n-EN 批）：`settings-drawer-flicker.spec.ts:350` 曾按中文 aria 定位 */
+              data-settings-close=""
               className="rounded-[8px] p-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
             >
               <X size={16} />
@@ -445,6 +447,8 @@ export function SettingsDialog({
           <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
             <nav
               aria-label={t('settings.navAria')}
+              /* 语言无关定位钩子（同文件关闭钮）：`settings-zones.spec.ts:518/568` 曾按 `nav[aria-label="设置分区"]` 定位 */
+              data-settings-nav=""
               className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-2 xl:w-[168px] xl:flex-col xl:overflow-y-auto xl:border-b-0 xl:border-r xl:px-3 xl:py-4"
             >
               {visibleZones.map((z) => {

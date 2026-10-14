@@ -159,7 +159,9 @@ export function SidebarNav({
   ];
 
   return (
-    <nav aria-label={t('nav.mainAria')} className="flex flex-col gap-1 px-2">
+    /* 语言无关定位钩子（i18n-EN 批）：`identity-rail-browser.spec.ts:531` 曾按
+       `nav[aria-label="主导航"]` 定位，而该 aria 名已走消息表（英文态 `Main navigation`）。 */
+    <nav aria-label={t('nav.mainAria')} data-main-nav="" className="flex flex-col gap-1 px-2">
       {entries.map((entry) =>
         'group' in entry ? (
           <div key="agent" data-sidebar-nav-sub="">

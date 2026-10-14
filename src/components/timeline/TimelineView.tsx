@@ -307,6 +307,9 @@ export function TimelineView({
                 className="block select-none"
               role="img"
               aria-label={t('timeline.aria')}
+              /* 语言无关定位钩子（i18n-EN 批）：`v07-dline-shell.spec.ts:1033/1097` 曾按
+                 `[aria-label="九阶段时间轴"]` 等它出现，而该 aria 名已走消息表。 */
+              data-timeline=""
             >
               {/* 共享 defs：激活发光（挂在 SVG 根，filter 的 url(#stage-glow) 才能解析） */}
               <StageBarDefs />

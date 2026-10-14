@@ -584,6 +584,11 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               onClick={openManualForm}
               aria-label={t('sidebar.newProject')}
               title={t('sidebar.newProject')}
+              /* 语言无关定位钩子：`aria-label`/`title` 已走消息表（英文态 `New Project`）。
+                 值区分展开/收起两态（两态互斥渲染，但选择器要能**唯一**命中）；
+                 `stage-select-rows-geometry` 还按宿主区分（`[role="dialog"]` 抽屉版
+                 vs `[data-app-sidebar]` 常驻版）—— 同一个 Sidebar 两种宿主，故钩子值不带宿主。 */
+              data-sidebar-new-project="expanded"
               className="btn-aura flex w-full items-center justify-center gap-2.5 rounded-2xl px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
             >
               <PenLine size={18} className="shrink-0" aria-hidden />
@@ -757,6 +762,8 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
               onClick={openManualForm}
               aria-label={t('sidebar.newProject')}
               title={t('sidebar.newProject')}
+              /* 语言无关定位钩子（同上，收起态） */
+              data-sidebar-new-project="collapsed"
               className="btn-aura flex h-10 w-10 items-center justify-center rounded-md text-white outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
             >
               <PenLine size={18} aria-hidden />

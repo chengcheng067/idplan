@@ -122,6 +122,9 @@ function SearchField({
         onChange={(e) => setSearchQuery(e.target.value)}
         placeholder={t('topbar.searchPlaceholder')}
         aria-label={t('topbar.searchAria')}
+        /* 语言无关定位钩子（i18n-EN 批）：placeholder/aria 均已走消息表，
+           真 Chromium 的 `identity-rail-browser.spec.ts:713` 曾按 `placeholder*="搜索"` 定位。 */
+        data-topbar-search=""
         className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-mist"
       />
       {onClose && (
@@ -182,6 +185,8 @@ function Breadcrumbs(): JSX.Element | null {
           type="button"
           onClick={() => navigate(-1)}
           aria-label={t('topbar.backAria')}
+          /* 语言无关定位钩子（同文件搜索框）：`layout-walkthrough.spec.ts:544` 曾按中文 aria 定位 */
+          data-topbar-back=""
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-mist outline-none transition-colors hover:bg-sand hover:text-ink focus-visible:ring-2 focus-visible:ring-pine/40"
         >
           <ArrowLeft size={18} aria-hidden />

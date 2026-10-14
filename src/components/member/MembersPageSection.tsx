@@ -513,6 +513,9 @@ function MemberRow({
             type="button"
             onClick={onOpenBoard}
             title={t('member.openBoardTitle')}
+            /* 语言无关定位钩子（i18n-EN 批）：`route-scroll-reset.spec.ts:67` 曾按
+               `title="查看该成员的看板"` 定位，而该 title 已走消息表。 */
+            data-member-board-open=""
             className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-pine sm:px-2"
           >
             <LayoutGrid size={12} /> <span className="hidden sm:inline">{t('nav.board')}</span>

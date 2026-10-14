@@ -232,6 +232,13 @@ export function IdentityDialog(): JSX.Element | null {
               }
             }}
             placeholder={t('ui.identity.namePlaceholder')}
+            /*
+             * 语言无关定位钩子：`placeholder` 已走消息表（`ui.identity.namePlaceholder`，
+             * 英文态是 `Your name`）。真 Chromium 那批 spec 里有 **10 处 / 10 文件**
+             * 按 `input[placeholder="你的姓名"]` 填这个框（`helpers/board-env.ts` 是共用夹具，
+             * 一处失配会连带整族 spec 红，而报错是"找不到输入框"）。⇒ 统一改按本钩子定位。
+             */
+            data-identity-name-input=""
             disabled={busy}
             autoComplete="off"
             spellCheck={false}
