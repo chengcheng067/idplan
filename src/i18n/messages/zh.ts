@@ -887,6 +887,76 @@ export const zhMessages = {
     '接入 ID Plan；自然语言由 Agent 侧自己解析——ID Plan 不解析自然语言、不调用大模型。 接入地址与访问令牌在 Agent 看板的接入面板里生成与管理，此处不重复。',
   'agentSettings.boardHint': 'Agent 看板是 AI 工作区：执行记录、接入面板与任务队列都在那里。',
   'agentSettings.openBoard': '打开 Agent 看板',
+
+  /* ═════════ 设置抽屉 · 四个分区正文（SettingsDialog · 英文线 0009 · 笔 1-②）═════════
+   * 分区**小标题**早已走 `settings.section.*`；这一批是各区的正文 —— 它们此前
+   * 一条都没进文案表，即「设置屏只有标题是英文、正文整块中文」的实际来源。 */
+  /* ── 排程区 · 排期口径说明 ── */
+  'settings.schedule.basisPre': '排期基准（自然日 / 工作日）是',
+  'settings.schedule.basisStrong': '项目级',
+  /* 取值里那个空格 = 原文同一 JSXText 内的换行（JSX 折成一个空格），下同 */
+  'settings.schedule.basisTail':
+    '设置：新建项目时在阶段选择里指定，之后随该项目保存，本页没有全局默认项。 月历以周一为一周起始，当前不可切换。',
+
+  /* ── 数据与备份区 · 数据存在哪 ── */
+  'settings.data.wherePre': '你的数据存放在',
+  'settings.data.whereNas': '你的 NAS',
+  'settings.data.whereLocal': '本机',
+  'settings.data.addressLead': '（服务地址：',
+  'settings.data.notConfigured': '（未配置）',
+  'settings.data.whereTail': '）。备份是 JSON 文件，保存在你自己选的位置。',
+  'settings.data.localTail':
+    '（这台电脑的应用数据里，不上传）。备份是 JSON 文件，保存在你自己选的位置。',
+
+  /* ── 数据与备份区 · 备份两枚按钮 ──
+   * ⚠️ 与 `sidebar.saveBackup` **同值不同面**（侧栏底部那枚是同一份 useBackupIo 的
+   * 另一个入口）。不复用的理由：键名是位置契约，设置屏读 `sidebar.*` 会误导下一个人；
+   * 而两者将来分头改文案是正常需求。`导入备份` 与侧栏的 `加载备份` 本来就不同词。 */
+  'settings.data.saveBackup': '保存备份',
+  'settings.data.loadBackup': '导入备份',
+  'settings.data.backupHint':
+    '保存备份 = 导出全部数据为 JSON 文件；导入备份 = 从 JSON 文件 整体替换当前全部数据（不可撤销，恢复前建议先留档）。',
+
+  /* ── 数据与备份区 · 前端日志 ── */
+  'settings.log.count': '{count} 条',
+  'settings.log.emptyLead': '暂无日志。日志默认在',
+  'settings.log.emptyOnError': '报错时',
+  'settings.log.emptyOr': '或',
+  'settings.log.emptyKeyOps': '执行关键操作',
+  'settings.log.emptyTail':
+    '（身份切换、备份导入导出）时 才记录。正常浏览页面不会有日志，属正常现象。遇到"输入法打不出字"这类问题时， 请先复现一次再回来导出。',
+  'settings.log.recordedPre': '已记录 ',
+  'settings.log.recordedTail':
+    ' 条运行事件，可导出为 .log 文件发给开发。日志仅含运行记录与错误堆栈，不含项目/客户业务数据。',
+  'settings.log.export': '导出日志',
+  'settings.log.clear': '清空日志',
+  'settings.log.clearConfirm': '清空',
+  'settings.log.clearPre': '将清空当前 ',
+  'settings.log.clearTail': ' 条前端日志。此操作不可恢复，如需排查问题建议先导出。',
+  'settings.log.toastExported': '日志已导出（{count} 条）',
+  'settings.log.toastCleared': '日志已清空',
+
+  /* ── 数据与备份区 · 检查更新（仅 Windows 桌面端渲染）── */
+  'settings.update.checking': '检查中…',
+  'settings.update.check': '检查更新',
+  'settings.update.upToDate': '已是最新版本（{version}）。',
+  'settings.update.hasUpdate': '发现新版本 {version}',
+  'settings.update.download': '前往下载',
+  'settings.update.failed': '检查失败：{error}',
+
+  /* ── 关于区 ── */
+  'settings.about.version': '版本号',
+  'settings.about.license': '开源许可',
+  'settings.about.betaNote': '内测版本，功能与数据格式仍可能调整。',
+  'settings.about.frontend': '前端',
+  'settings.about.packaging': '打包',
+  'settings.about.issueLead': '如有 bug 请提交 GitHub Issue：',
+
+  /* ── 关于区 · 赞赏与反馈（两张微信卡）── */
+  'settings.support.wechatTitle': '赞赏支持',
+  'settings.support.wechatCaption': '这工具省了你的时间的话，可以请我喝杯咖啡。',
+  'settings.support.feedbackTitle': '反馈建议',
+  'settings.support.feedbackCaption': '用得别扭、想要什么功能，扫码直接跟我说。',
 } as const;
 
 /**

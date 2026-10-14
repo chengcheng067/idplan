@@ -901,4 +901,67 @@ export const enMessages: Record<MessageKey, string> = {
   'agentSettings.boardHint':
     'The Agent board is the AI workspace: execution records, the ingress panel and the task queue all live there.',
   'agentSettings.openBoard': 'Open Agent board',
+
+  /* ═════════ Settings drawer · the four zones' body copy (笔 1-②) ═════════ */
+  'settings.schedule.basisPre': 'The scheduling basis (calendar days / workdays) is ',
+  /* 段尾空格：下一段（basisTail）在英文里要接着读，而中文侧那里不能有空格 */
+  'settings.schedule.basisStrong': 'project-level ',
+  'settings.schedule.basisTail':
+    'set when you create the project, in the stage picker; it is then saved with that project and this page has no global default. The calendar week starts on Monday, and that is not switchable yet.',
+
+  'settings.data.wherePre': 'Your data lives ',
+  'settings.data.whereNas': 'on your NAS',
+  'settings.data.whereLocal': 'on this computer',
+  'settings.data.addressLead': ' (server address: ',
+  'settings.data.notConfigured': '(not configured)',
+  'settings.data.whereTail': '). Backups are JSON files saved wherever you choose.',
+  'settings.data.localTail':
+    ' (inside this computer’s app data, never uploaded). Backups are JSON files saved wherever you choose.',
+
+  'settings.data.saveBackup': 'Save backup',
+  'settings.data.loadBackup': 'Import backup',
+  'settings.data.backupHint':
+    'Save backup = export all data as a JSON file; Import backup = replace all current data from a JSON file (no undo, so keep a copy first).',
+
+  'settings.log.count': '{count} entries',
+  'settings.log.emptyLead': 'No log entries yet. By default this log only records',
+  /* 段尾空格：中文「报错时**或**执行关键操作」之间不加空格，英文必须加 ——
+   * 该接缝在 JSX 里没有 `{' '}`（原文中文就靠 CJK 直接相邻），故空格只能落在取值尾部 */
+  'settings.log.emptyOnError': 'errors ',
+  'settings.log.emptyOr': 'or',
+  'settings.log.emptyKeyOps': 'key actions',
+  'settings.log.emptyTail':
+    ' (identity switching, backup import/export). Normal browsing produces no entries, which is expected. When you run into something like “the IME types no characters”, reproduce it once and then come back to export.',
+  'settings.log.recordedPre': 'Recorded ',
+  'settings.log.recordedTail':
+    ' runtime events, exportable as a .log file to send to the developer. The log contains only runtime records and error stacks — no project or customer business data.',
+  'settings.log.export': 'Export log',
+  'settings.log.clear': 'Clear log',
+  'settings.log.clearConfirm': 'Clear',
+  'settings.log.clearPre': 'Clear the current ',
+  'settings.log.clearTail':
+    ' frontend log entries. This cannot be undone; if you are troubleshooting, export them first.',
+  'settings.log.toastExported': 'Log exported ({count} entries)',
+  'settings.log.toastCleared': 'Log cleared',
+
+  'settings.update.checking': 'Checking…',
+  'settings.update.check': 'Check for updates',
+  'settings.update.upToDate': 'You are on the latest version ({version}).',
+  'settings.update.hasUpdate': 'New version {version} available',
+  'settings.update.download': 'Go to download',
+  'settings.update.failed': 'Check failed: {error}',
+
+  'settings.about.version': 'Version',
+  'settings.about.license': 'License',
+  'settings.about.betaNote': 'Beta build — features and data formats may still change.',
+  'settings.about.frontend': 'Frontend',
+  'settings.about.packaging': 'Packaged',
+  /* 段尾空格：后面紧跟的是仓库 URL 链接（原文中文用全角「：」直接接，英文要留一格） */
+  'settings.about.issueLead': 'Found a bug? Please file a GitHub issue: ',
+
+  'settings.support.wechatTitle': 'Support the author',
+  'settings.support.wechatCaption': 'If this tool saves you time, you can buy me a coffee.',
+  'settings.support.feedbackTitle': 'Feedback',
+  'settings.support.feedbackCaption':
+    'Scan the code to tell me what feels off, or which feature you want next.',
 };

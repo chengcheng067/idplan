@@ -369,14 +369,15 @@ export function SettingsDialog({
   const onExport = (): void => {
     const n = io.export();
     onClose();
-    toast('success', `日志已导出（${n} 条）`);
+    toast('success', t('settings.log.toastExported', { count: n }));
   };
 
   const onClear = (): void => {
     clearLogs();
     setConfirmClearOpen(false);
-    logUser('设置', '清空日志');
-    toast('success', '日志已清空');
+    // logUser 的**第一个参数是分组键**（非显示文本）⇒ 按 release-checklist §5 口径不翻
+    logUser('设置', t('settings.log.clear'));
+    toast('success', t('settings.log.toastCleared'));
   };
 
   return (
@@ -386,7 +387,7 @@ export function SettingsDialog({
         onClose={onClose}
         placement="left-rail"
         railLeft={`${railLeftPx}px`}
-        ariaLabel="设置"
+        ariaLabel={t('settings.drawerAria')}
       >
         {/*
           v0.8.6.0002 · 反馈 #1：贴侧栏右缘展开的全高抽屉（左缘 = 侧栏右缘，
@@ -603,9 +604,9 @@ export function SettingsDialog({
                       </h3>
                     </div>
                     <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-                      排期基准（自然日 / 工作日）是<strong className="text-ink">项目级</strong>
-                      设置：新建项目时在阶段选择里指定，之后随该项目保存，本页没有全局默认项。
-                      月历以周一为一周起始，当前不可切换。
+                      {t('settings.schedule.basisPre')}
+                      <strong className="text-ink">{t('settings.schedule.basisStrong')}</strong>
+                      {t('settings.schedule.basisTail')}
                     </p>
                   </section>
 
@@ -634,14 +635,17 @@ export function SettingsDialog({
                     <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
                       {appEnv.dataSource === 'remote' ? (
                         <>
-                          你的数据存放在<strong className="text-ink">你的 NAS</strong>（服务地址：
-                          <span className="font-mono text-ink">{appEnv.apiBaseUrl || '（未配置）'}</span>
-                          ）。备份是 JSON 文件，保存在你自己选的位置。
+                          {t('settings.data.wherePre')}
+                          <strong className="text-ink">{t('settings.data.whereNas')}</strong>
+                          {t('settings.data.addressLead')}
+                          <span className="font-mono text-ink">{appEnv.apiBaseUrl || t('settings.data.notConfigured')}</span>
+                          {t('settings.data.whereTail')}
                         </>
                       ) : (
                         <>
-                          你的数据存放在<strong className="text-ink">本机</strong>
-                          （这台电脑的应用数据里，不上传）。备份是 JSON 文件，保存在你自己选的位置。
+                          {t('settings.data.wherePre')}
+                          <strong className="text-ink">{t('settings.data.whereLocal')}</strong>
+                          {t('settings.data.localTail')}
                         </>
                       )}
                     </p>
@@ -661,19 +665,18 @@ export function SettingsDialog({
                         onClick={() => void save()}
                         className="flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
                       >
-                        保存备份
+                        {t('settings.data.saveBackup')}
                       </button>
                       <button
                         type="button"
                         onClick={pick}
                         className="flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
                       >
-                        导入备份
+                        {t('settings.data.loadBackup')}
                       </button>
                     </div>
                     <p className="mt-1.5 text-xs text-mist">
-                      保存备份 = 导出全部数据为 JSON 文件；导入备份 = 从 JSON 文件
-                      整体替换当前全部数据（不可撤销，恢复前建议先留档）。
+                      {t('settings.data.backupHint')}
                     </p>
                   </section>
 
@@ -685,22 +688,23 @@ export function SettingsDialog({
                         {t('settings.section.frontendLog')}
                       </h3>
                       <span className="rounded-md bg-cream px-2 py-0.5 text-xs text-mist">
-                        {count} 条
+                        {t('settings.log.count', { count })}
                       </span>
                     </div>
 
                     {count === 0 ? (
                       <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-                        暂无日志。日志默认在{' '}
-                        <strong className="text-ink">报错时</strong>或{' '}
-                        <strong className="text-ink">执行关键操作</strong>（身份切换、备份导入导出）时
-                        才记录。正常浏览页面不会有日志，属正常现象。遇到"输入法打不出字"这类问题时，
-                        请先复现一次再回来导出。
+                        {t('settings.log.emptyLead')}{' '}
+                        <strong className="text-ink">{t('settings.log.emptyOnError')}</strong>
+                        {t('settings.log.emptyOr')}{' '}
+                        <strong className="text-ink">{t('settings.log.emptyKeyOps')}</strong>
+                          {t('settings.log.emptyTail')}
                       </p>
                     ) : (
                       <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-                        已记录 <strong className="text-ink">{count}</strong> 条运行事件，可导出为 .log
-                        文件发给开发。日志仅含运行记录与错误堆栈，不含项目/客户业务数据。
+                        {t('settings.log.recordedPre')}
+                        <strong className="text-ink">{count}</strong>
+                        {t('settings.log.recordedTail')}
                       </p>
                     )}
 
@@ -711,7 +715,7 @@ export function SettingsDialog({
                         className="flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
                       >
                         <FileDown size={15} className="text-mist" aria-hidden />
-                        导出日志
+                        {t('settings.log.export')}
                       </button>
                       <button
                         type="button"
@@ -719,7 +723,7 @@ export function SettingsDialog({
                         className="flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm text-mist transition-colors hover:bg-sand hover:text-clay"
                       >
                         <Trash2 size={15} className="text-mist" aria-hidden />
-                        清空日志
+                        {t('settings.log.clear')}
                       </button>
                     </div>
                   </section>
@@ -743,30 +747,32 @@ export function SettingsDialog({
                           disabled={status === 'checking'}
                           className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {status === 'checking' ? '检查中…' : '检查更新'}
+                          {status === 'checking' ? t('settings.update.checking') : t('settings.update.check')}
                         </button>
 
                         {status === 'up-to-date' && (
                           <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
-                            已是最新版本（{BUILD_VERSION}）。
+                            {t('settings.update.upToDate', { version: BUILD_VERSION })}
                           </p>
                         )}
                         {status === 'has-update' && payload && (
                           <div className="rounded-xl border border-clay/40 bg-clay-soft px-3.5 py-2.5 text-xs">
-                            <p className="font-medium text-clay-deep">发现新版本 {payload.latest}</p>
+                            <p className="font-medium text-clay-deep">
+                              {t('settings.update.hasUpdate', { version: payload.latest })}
+                            </p>
                             <a
                               href={payload.exeAssetUrl || payload.releaseUrl || REPO_URL}
                               target="_blank"
                               rel="noreferrer"
                               className="mt-1 inline-block text-pine underline-offset-2 hover:underline"
                             >
-                              前往下载
+                              {t('settings.update.download')}
                             </a>
                           </div>
                         )}
                         {status === 'error' && (
                           <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-2.5 text-xs text-mist">
-                            检查失败：{error}
+                            {t('settings.update.failed', { error: error ?? '' })}
                           </p>
                         )}
                       </div>
@@ -811,30 +817,30 @@ export function SettingsDialog({
                     </div>
                     <dl className="space-y-1.5 rounded-[12px] border border-line bg-cream/40 px-3.5 py-3 text-xs">
                       <div className="flex items-center justify-between gap-3">
-                        <dt className="text-mist">版本号</dt>
+                        <dt className="text-mist">{t('settings.about.version')}</dt>
                         <dd className="font-medium text-ink">{BUILD_VERSION}</dd>
                       </div>
                       {/* 开源许可（MIT，仓库根 LICENSE）——反馈 #7 分区方案里「关于」区的明列项 */}
                       <div className="flex items-center justify-between gap-3">
-                        <dt className="text-mist">开源许可</dt>
+                        <dt className="text-mist">{t('settings.about.license')}</dt>
                         <dd className="text-ink">MIT</dd>
                       </div>
                       {/* 内测提示（v0.7）：与标题 Beta 徽标呼应，克制地说明版本状态 */}
                       <p className="pt-0.5 text-[11px] leading-relaxed text-mist">
-                        内测版本，功能与数据格式仍可能调整。
+                        {t('settings.about.betaNote')}
                       </p>
                       <div className="flex items-center justify-between gap-3">
-                        <dt className="text-mist">前端</dt>
+                        <dt className="text-mist">{t('settings.about.frontend')}</dt>
                         <dd className="text-ink">{FRONTEND_STACK}</dd>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <dt className="text-mist">打包</dt>
+                        <dt className="text-mist">{t('settings.about.packaging')}</dt>
                         <dd className="text-ink">{buildDate}</dd>
                       </div>
                     </dl>
 
                     <p className="mt-1.5 text-[11px] text-mist">
-                      如有 bug 请提交 GitHub Issue：
+                      {t('settings.about.issueLead')}
                       <a
                         href={REPO_URL}
                         target="_blank"
@@ -859,16 +865,16 @@ export function SettingsDialog({
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <WeChatCard
-                        title="赞赏支持"
+                        title={t('settings.support.wechatTitle')}
                         icon={Heart}
                         img="/wechat-pay.jpg"
-                        caption="这工具省了你的时间的话，可以请我喝杯咖啡。"
+                        caption={t('settings.support.wechatCaption')}
                       />
                       <WeChatCard
-                        title="反馈建议"
+                        title={t('settings.support.feedbackTitle')}
                         icon={MessageSquare}
                         img="/wechat-contact.jpg"
-                        caption="用得别扭、想要什么功能，扫码直接跟我说。"
+                        caption={t('settings.support.feedbackCaption')}
                       />
                     </div>
                   </section>
@@ -881,13 +887,15 @@ export function SettingsDialog({
 
       <ConfirmDialog
         open={confirmClearOpen}
-        title="清空日志"
-        confirmText="清空"
+        title={t('settings.log.clear')}
+        confirmText={t('settings.log.clearConfirm')}
         onConfirm={onClear}
         onCancel={() => setConfirmClearOpen(false)}
       >
         <p>
-          将清空当前 <strong>{count}</strong> 条前端日志。此操作不可恢复，如需排查问题建议先导出。
+{t('settings.log.clearPre')}
+          <strong>{count}</strong>
+          {t('settings.log.clearTail')}
         </p>
       </ConfirmDialog>
 
