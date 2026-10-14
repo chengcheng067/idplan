@@ -40,8 +40,13 @@ export function HandoffPanel({
    * 语言变化订阅点（**必须**）：下方 5 处 `termFor('handoff'|'ready'|'stageShort', termMode)`
    * 不是 hook、不订阅语言 —— 少了这一行，切到英文后这几处**不刷新**（中文态看不出来）。
    * 守卫：`tests/i18n-agent-terms.spec.tsx`。
+   *
+   * ★ i18n 笔 2.2：本行同时解构出 `t` —— 本文件其余界面字（toast / 范围选项 / 空态 /
+   *   页脚说明 / 两枚按钮 / 副标题 / 关闭 aria）都改走 `t()`。**`copy` / `download` 是
+   *   普通函数（不是 useCallback）⇒ 每次渲染重建、闭包里的 `t` 恒是当下语言**，
+   *   不存在 `useCallback` 那类「捕获旧语言」的陷阱。
    */
-  useLang();
+  const { t } = useLang();
   const members = useMembersStore((s) => s.members);
   const pushToast = useProjectsStore((s) => s.pushToast);
 
@@ -94,9 +99,9 @@ export function HandoffPanel({
     if (!text.trim()) return;
     try {
       await navigator.clipboard.writeText(text);
-      pushToast('success', `${termFor('handoff', termMode)} 已复制到剪贴板`);
+      pushToast('success', t('handoff.toast.copied', { what: termFor('handoff', termMode) }));
     } catch {
-      pushToast('error', '复制失败（剪贴板不可用），请手动全选预览区文本复制。');
+      pushToast('error', t('handoff.toast.copyFailed'));
     }
   };
 
@@ -113,7 +118,7 @@ export function HandoffPanel({
     document.body.removeChild(a);
     // ★ 与 downloadBackup 同款：revoke 必须让出一拍（同步 revoke 与下载启动存在竞态，详见那里注释）
     setTimeout(() => URL.revokeObjectURL(url), 0);
-    pushToast('success', `${termFor('handoff', termMode)} 已下载为 .md`);
+    pushToast('success', t('handoff.toast.downloaded', { what: termFor('handoff', termMode) }));
   };
 
   return (
@@ -122,12 +127,12 @@ export function HandoffPanel({
       <div className="mb-3 flex items-center justify-between gap-4">
         <h2 className="font-display text-display-md">
           {termFor('handoff', termMode)}{' '}
-          <span className="text-xs font-normal text-mist">（给下一个 Agent 的 prompt 包）</span>
+          <span className="text-xs font-normal text-mist">{t('handoff.subtitle')}</span>
         </h2>
         <button
           type="button"
           onClick={onClose}
-          aria-label="关闭"
+          aria-label={t('common.close')}
           className="rounded-md p-1 text-mist hover:bg-sand"
         >
           <X size={16} />
@@ -138,9 +143,9 @@ export function HandoffPanel({
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         {(
           [
-            ['ready', `${termFor('ready', termMode)}（推荐）`],
-            ['all', '全部任务'],
-            ['stage', `指定${termFor('stageShort', termMode)}`],
+            ['ready', t('handoff.scope.ready', { label: termFor('ready', termMode) })],
+            ['all', t('handoff.scope.all')],
+            ['stage', t('handoff.scope.stage', { label: termFor('stageShort', termMode) })],
           ] as Array<[HandoffScope, string]>
         ).map(([key, label]) => (
           <button
@@ -175,12 +180,13 @@ export function HandoffPanel({
 
       {/* 预览（等宽、全量展示供人工审阅敏感信息） */}
       <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-[12px] border border-line bg-paper p-3 font-mono text-[11px] leading-5 text-ink">
-        {text || '（当前范围为空，无可生成内容。）'}
+        {text || t('handoff.empty')}
       </pre>
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <span className="text-[10px] text-mist">
-          内容不含成员敏感字段（contact / passwordHash）；生成时间 {generatedAt.slice(0, 10) || '—'}
+          {t('handoff.footNote')}
+          {generatedAt.slice(0, 10) || '—'}
         </span>
         <div className="flex gap-2">
           <button
@@ -188,14 +194,14 @@ export function HandoffPanel({
             onClick={() => void copy()}
             className="inline-flex items-center gap-1.5 rounded-md border border-pine px-3 py-1.5 text-sm text-pine transition-colors hover:bg-pine-soft"
           >
-            <Copy size={13} aria-hidden /> 复制
+            <Copy size={13} aria-hidden /> {t('handoff.copy')}
           </button>
           <button
             type="button"
             onClick={download}
             className="inline-flex items-center gap-1.5 rounded-md bg-pine px-3 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep"
           >
-            <Download size={13} aria-hidden /> 下载 .md
+            <Download size={13} aria-hidden /> {t('handoff.download')}
           </button>
         </div>
       </div>

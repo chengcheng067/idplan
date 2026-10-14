@@ -1250,6 +1250,23 @@ export const zhMessages = {
     '应用启动时发现该执行单处于运行中，但当前进程已不可能有执行在运行（进程重启 / 备份恢复绕过状态校验），收敛为待处理；确认凭据保持不变，若计划未变更则确认仍然有效、可重新进入运行（无需重新确认）。',
   'execution.recovery.attemptReason':
     '随执行单一同收敛：该 attempt 所属进程已不存在（进程重启 / 备份恢复绕过状态校验），打断为 interrupted。',
+
+  /* ══════════ 笔 2.2：Agent 看板 ▸ handoff bundle 面板（HandoffPanel） ══════════ */
+  /* ⚠️ 本面板的**生成物本体**（`core/agent/handoff.ts` 里那段交给外部 Agent 的 markdown）
+     是 **D 类、不翻**（发给外部 Agent 的提示词契约不随界面语言切换）—— 本组只翻面板自己的 UI 字。
+     `{what}` = `termFor('handoff', termMode)`（已走既有术语表），`{label}` 同理。 */
+  'handoff.subtitle': '（给下一个 Agent 的 prompt 包）',
+  'handoff.scope.ready': '{label}（推荐）',
+  'handoff.scope.all': '全部任务',
+  'handoff.scope.stage': '指定{label}',
+  'handoff.empty': '（当前范围为空，无可生成内容。）',
+  /* 结尾**带一个空格**：原文是 `…生成时间 {generatedAt…}`，空格在字面量里 */
+  'handoff.footNote': '内容不含成员敏感字段（contact / passwordHash）；生成时间 ',
+  'handoff.copy': '复制',
+  'handoff.download': '下载 .md',
+  'handoff.toast.copied': '{what} 已复制到剪贴板',
+  'handoff.toast.copyFailed': '复制失败（剪贴板不可用），请手动全选预览区文本复制。',
+  'handoff.toast.downloaded': '{what} 已下载为 .md',
 } as const;
 
 /**

@@ -1272,4 +1272,18 @@ export const enMessages: Record<MessageKey, string> = {
     'On startup this execution was found in the running state, but no execution can be running in the current process any more (the process restarted, or a backup restore bypassed status validation); it has been converged to needs attention. The confirmation credentials are unchanged — if the plan has not changed, the confirmation is still valid and the execution can enter running again without re-confirming.',
   'execution.recovery.attemptReason':
     'Converged together with its execution: the process this attempt belonged to no longer exists (the process restarted, or a backup restore bypassed status validation), so it was interrupted.',
+
+  /* ══════════ 笔 2.2：Agent board ▸ handoff bundle panel ══════════ */
+  'handoff.subtitle': '(prompt pack for the next Agent)',
+  'handoff.scope.ready': '{label} (recommended)',
+  'handoff.scope.all': 'All tasks',
+  'handoff.scope.stage': 'Pick {label}',
+  'handoff.empty': '(Current scope is empty — nothing to generate.)',
+  'handoff.footNote': 'No member-sensitive fields (contact / passwordHash) are included; generated at ',
+  'handoff.copy': 'Copy',
+  'handoff.download': 'Download .md',
+  'handoff.toast.copied': '{what} copied to clipboard',
+  'handoff.toast.copyFailed':
+    'Copy failed (clipboard unavailable). Select the text in the preview area and copy it manually.',
+  'handoff.toast.downloaded': '{what} downloaded as .md',
 };
