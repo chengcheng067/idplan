@@ -1076,6 +1076,135 @@ export const zhMessages = {
   'library.exportAria': '导出行业包 {name}',
   'library.removeAria': '删除行业包 {name}',
   'library.empty': '还没有导入行业包。内置 9 个主板块的套餐随包分发。',
+
+  /* ══════════ 笔 1-⑤：休息制度（入口 / 编辑器 / 重算确认弹窗） ══════════ */
+  /* 档位名（restPolicy.doubleOff / singleOff / bigSmallWeek）与星期名（weekday.*）
+     在更上方，本批沿用不动。 */
+  'restPolicy.entryTitle': '公司休息制度（双休 / 单休 / 大小休）',
+  'restPolicy.dialogAria': '公司休息制度',
+  'restPolicy.dialogTitle': '公司休息制度',
+  'restPolicy.intro':
+    '决定全系统哪些天是工作日（月历底纹、时间轴休息条带、改期吸附与工期口径）。',
+  'restPolicy.holidays.label': '跳过国家法定节假日（含调休补班日）',
+  'restPolicy.holidays.note':
+    '内置 {years} 年法定节假日与调休补班日安排（来源：国务院办公厅 年度通知），次年安排公布后随版本更新。开启后保存时，可按新口径重算已排阶段（保存前有确认预览）。',
+  /* ⚠️ 本键取值**结尾带一个空格**：原文 `单休休息日 = <span>…</span>` 里，
+     那个空格是 JSXText 的**尾随空格**（真实渲染字符）⇒ 必须逐字带进取值。
+     与之相对，`restPolicy.double.lead` / `restPolicy.preview.lead` **不带**尾随空格
+     （原文那里是 `={' '}`，空格由 JSX 出）—— **两处形状不同，别统一**。 */
+  'restPolicy.single.lead': '单休休息日 = ',
+  'restPolicy.single.tail': '（每周只休这一天）',
+  'restPolicy.single.restoreTitle': '恢复出厂口径：周日休息',
+  'restPolicy.single.restore': '恢复默认（周日）',
+  'restPolicy.single.note':
+    '默认周日（与历史行为一致）。改为周内单休后，保存时可按新口径重算已排阶段。',
+  'restPolicy.double.lead': '双休休息日 =',
+  'restPolicy.double.tail': '（每周休这{days}）',
+  'restPolicy.double.twoDays': '两天',
+  'restPolicy.double.oneDay': '一天，再选一天',
+  'restPolicy.double.restoreTitle': '恢复出厂口径：周六+周日',
+  'restPolicy.double.restore': '恢复默认（周六+周日）',
+  'restPolicy.double.note':
+    '连续两天或分开两天都可以。已选两天后点其他日期不生效；点已选可取消 （至少保留一天）。改为自定义双休日后，保存时可按新口径重算已排阶段。',
+  'restPolicy.preview.lead': '未来 {weeks} 周预览 · 锚点周',
+  'restPolicy.preview.unset': '未设置',
+  'restPolicy.preview.tail': '（大休周）',
+  'restPolicy.preview.swapTitle': '把锚点周整体位移一周，大小休对调',
+  'restPolicy.preview.swap': '从下周起对调',
+  'restPolicy.preview.legendOn': '灰底为休息日（已含法定节假日与调休补班日；补班日照常上班）。',
+  'restPolicy.preview.legendOff':
+    '灰底为休息日。未开启「跳过国家法定节假日」时，遇法定节假日请手动改期。',
+  'restPolicy.bigWeek': '大休',
+  'restPolicy.smallWeek': '小休',
+  'restPolicy.dayRest': '{date} 休息',
+  'restPolicy.dayWork': '{date} 上班',
+  'restPolicy.footer.note': '切换制度后保存时，将按新口径重算已排阶段（保存前有确认预览）。',
+  'restPolicy.saving': '保存中…',
+  'restPolicy.toast.saved': '休息制度已保存',
+  'restPolicy.toast.savedNoRecalc': '休息制度已保存（没有阶段需要重算）',
+  'restPolicy.err.doubleIncomplete': '双休需选满两个休息日才能保存。',
+  'restPolicy.err.saveFailed': '休息制度保存失败。',
+
+  /* ── 重算确认弹窗（RestPolicyRecalcDialog）── */
+  'restPolicy.recalc.dialogAria': '切换休息制度后重算',
+  'restPolicy.recalc.dialogTitle': '切换休息制度后重算',
+  'restPolicy.recalc.subtitle.single': '（单休休息日 = {day}）',
+  'restPolicy.recalc.cancelAria': '取消重算',
+  'restPolicy.recalc.impact':
+    '将重算 {projects} 个工作日制项目的 {stages} 个阶段 （已完成 {frozen} 个冻结不动）',
+  'restPolicy.recalc.dueCount':
+    '{count} 个任务的到期日将落在阶段新区间之外（默认不跟随，可在下方选择对齐）。',
+  'restPolicy.recalc.mode.keep': '工期不变（默认）',
+  'restPolicy.recalc.mode.keepHint': '各阶段工作日工期不变，起止按新制度链式平移',
+  'restPolicy.recalc.mode.custom': '调整工期',
+  'restPolicy.recalc.mode.customHint': '逐阶段填写新的工作日天数（留空 = 原工期不变）',
+  'restPolicy.recalc.row.count': '{changed} / {total} 个阶段将变化',
+  'restPolicy.recalc.row.frozen': ' · {count} 个已完成冻结',
+  'restPolicy.recalc.row.plannedEnd': ' · 竣工日 {from} → {to}',
+  'restPolicy.recalc.th.stage': '阶段',
+  'restPolicy.recalc.th.oldRange': '原起止',
+  'restPolicy.recalc.th.newRange': '新起止',
+  'restPolicy.recalc.th.workdays': '工期（工作日）',
+  'restPolicy.recalc.freezeFull': ' · 冻结',
+  'restPolicy.recalc.freezeStart': ' · 冻起点',
+  'restPolicy.recalc.unchanged': '不变',
+  'restPolicy.recalc.daysPlaceholder': '{count} 天',
+  'restPolicy.recalc.noWorkdayProjects':
+    '没有工作日制项目（自然日排程项目与休息制度无关，不受影响）。',
+  'restPolicy.recalc.align.label': '把到期日平移到阶段新区间内（保持阶段内相对偏移）',
+  'restPolicy.recalc.align.hint': 'dueDate 是任务级承诺（可能对人承诺了具体日子），默认不跟随。',
+  'restPolicy.recalc.backup.warning': '重算不可撤销（无 undo，恢复靠备份）',
+  'restPolicy.recalc.backup.busy': '备份中…',
+  'restPolicy.recalc.backup.do': '先去备份',
+  'restPolicy.recalc.ledger.pre': '重算会写进阶段流水（每阶段一条改期记录），',
+  'restPolicy.recalc.ledger.strong': '打印延期台账时可见',
+  'restPolicy.recalc.ledger.post': '——「谁把哪个阶段从哪天改到哪天、为什么」可查。',
+  'restPolicy.recalc.applying': '重算中…',
+  'restPolicy.recalc.confirm': '确认重算并保存制度',
+  'restPolicy.recalc.noChanges': '没有需要重算的阶段（新口径下零变化）。',
+  'restPolicy.recalc.err.failed': '重算失败，制度未保存。',
+  'restPolicy.recalc.toast.stages': '已按新制度重算 {count} 个阶段',
+  'restPolicy.recalc.toast.projects': '（{count} 个项目竣工日顺延）',
+  'restPolicy.recalc.toast.tasks': '，{count} 个任务到期日已对齐',
+  'restPolicy.recalc.toast.names': '：{names}',
+  'restPolicy.recalc.toast.nameSep': '、',
+  'restPolicy.recalc.toast.failed': '{summary}；{count} 条写入失败，请重试',
+
+  /* ══════════ 笔 1-⑤：设置 ▸ 排程 ▸ 打印标识 + 海报大字 ══════════ */
+  'printLogo.title': '打印标识',
+  'printLogo.status.uploaded':
+    '已上传。打印时落在四版模板与经典纸面的固定位置 （经典在页脚署名旁，A 在黑顶栏左端，D 在每页头部左上格， E / H 在每页左上角发丝线下方，H 第一页在巨字下方左侧）。',
+  'printLogo.status.empty': '未上传。四版模板与经典纸面统一显示「ID Plan」文字标，不留空。',
+  'printLogo.processing': '处理中…',
+  'printLogo.replace': '更换标识',
+  'printLogo.upload': '上传标识',
+  'printLogo.remove': '删除',
+  'printLogo.uploadAria': '上传打印标识',
+  'printLogo.support.note':
+    '支持 PNG / JPG / SVG；上传时自动转灰度并二值化（黑白打印可辨）， 限 {kb}KB 以内（备份 JSON 不被一张图撑爆， 随备份换设备恢复）。仅管理员可改。',
+  'printLogo.toast.uploaded': '打印标识已更新，四版模板与经典纸面同步生效',
+  'printLogo.toast.removed': '已删除，四版将显示「ID Plan」文字标',
+
+  /* ── 海报大字（H 版页顶出血巨字的载荷）── */
+  'printLogo.brandWord.title': '海报大字',
+  'printLogo.brandWord.aria': '海报大字',
+  'printLogo.brandWord.note':
+    '海报大字（H 版页顶出血巨字）· 留空则用 {word}。 纸面恒大写显示（输入小写也会以大写印出），上半部分越出纸缘形成出血 ——上限 {max} 字符（超出部分保存时截断， 再长会把词义裁掉）。H 版页底的「IDPLAN」是固定品牌装置，不随此项变化。',
+  'printLogo.brandWord.overlong': '已超出上限，保存时截断为「{kept}」（上限 {max} 字符）',
+  'printLogo.brandWord.toastCleared': '海报大字已清空，H 版页顶巨字回落「{word}」',
+  'printLogo.brandWord.toastSaved': '海报大字已更新为「{word}」，H 版页顶巨字同步生效',
+
+  /* ── 上传前处理（src/lib/print-logo-image.ts）的六条失败原因 ── */
+  'printLogo.err.processFailed': 'logo 处理失败',
+  'printLogo.err.decodeFailed': '图片解码失败，请换 PNG / JPG / SVG 文件',
+  'printLogo.err.canvasUnavailable': '画布不可用',
+  'printLogo.err.readFailed': '图片读取失败',
+  'printLogo.err.svgNoSize': '该 SVG 未包含宽高，无法处理——请改用 PNG，或在 SVG 内写明 width / height',
+  'printLogo.err.tooLarge': '处理后仍超过 {kb}KB——请先用图片工具简化logo（纯色、少细节）再上传',
+
+  /* ── 两条带「请重试」的保存/删除失败（与既有 toast.saveFailed / toast.deleteFailed 不同值）── */
+  'toast.saveFailedRetry': '保存失败，请重试',
+  'toast.deleteFailedRetry': '删除失败，请重试',
 } as const;
 
 /**

@@ -220,8 +220,9 @@ export function RestPolicyRecalcDialog({
   onConfirmed,
 }: RestPolicyRecalcDialogProps): JSX.Element {
   const repos = useRepos();
-  // 订阅语言变化：制度名与阶段态文案在渲染期取（见 i18n 的 useLang 纪律）
-  useLang();
+  // 订阅语言变化：制度名与阶段态文案在渲染期取（见 i18n 的 useLang 纪律）。
+  // `t` 同时供本文件其余文案使用（toast 走同一份 `t`，故切语言后反馈也是新语言）。
+  const { t } = useLang();
   /**
    * ★ 旧制度快照（审计 F1-④）：**挂载时取一次**，此后不再跟随 store 变化。
    *
@@ -250,6 +251,9 @@ export function RestPolicyRecalcDialog({
   const tasks = useProjectsStore((s) => s.tasks);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
+  // ⚠️ 有意不翻（笔 1-⑤）：`当前用户` 是**落库的操作人字段**（写进 StageLog.operatorName，
+  // 随重算流水落盘、日后按显示用读）——与阶段预设名同类，team-lead 已裁定维持中文。
+  // 它在本弹窗里**从不渲染**（只作为参数交给 applyRestPolicyRecalc）。
   const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
 
   /** 工期模式：keep=工期不变（默认）；custom=调整工期（每阶段天数覆盖） */
@@ -328,7 +332,7 @@ export function RestPolicyRecalcDialog({
       const ok = await exportBackupToFile(repos);
       useProjectsStore
         .getState()
-        .pushToast(ok ? 'success' : 'error', ok ? '备份包已保存' : '备份导出失败。');
+        .pushToast(ok ? 'success' : 'error', ok ? t('backup.toast.saved') : t('backup.toast.exportFailed'));
     } finally {
       setBacking(false);
     }
@@ -398,45 +402,57 @@ export function RestPolicyRecalcDialog({
         .map((p) => p.projectName);
       // `skipped` 不计进「已重算」条数：那是上一轮就写好的，重复计数等于虚报
       const summary =
-        `已按新制度重算 ${result.updatedStages.length} 个阶段` +
+        t('restPolicy.recalc.toast.stages', { count: result.updatedStages.length }) +
         (result.updatedProjects.length > 0
-          ? `（${result.updatedProjects.length} 个项目竣工日顺延）`
+          ? t('restPolicy.recalc.toast.projects', { count: result.updatedProjects.length })
           : '') +
-        (alignDue && result.updatedTasks.length > 0 ? `，${result.updatedTasks.length} 个任务到期日已对齐` : '') +
-        (projectNames.length > 0 ? `：${projectNames.join('、')}` : '');
+        (alignDue && result.updatedTasks.length > 0
+          ? t('restPolicy.recalc.toast.tasks', { count: result.updatedTasks.length })
+          : '') +
+        (projectNames.length > 0
+          ? t('restPolicy.recalc.toast.names', {
+              names: projectNames.join(t('restPolicy.recalc.toast.nameSep')),
+            })
+          : '');
       useProjectsStore
         .getState()
         .pushToast(result.failed > 0 ? 'error' : 'success',
-          result.failed > 0 ? `${summary}；${result.failed} 条写入失败，请重试` : summary);
+          result.failed > 0
+            ? t('restPolicy.recalc.toast.failed', { summary, count: result.failed })
+            : summary);
 
       if (result.failed === 0) onConfirmed();
     } catch (err) {
       useProjectsStore
         .getState()
-        .pushToast('error', err instanceof Error ? err.message : '重算失败，制度未保存。');
+        .pushToast('error', err instanceof Error ? err.message : t('restPolicy.recalc.err.failed'));
     } finally {
       setApplying(false);
     }
   };
 
   return (
-    <Modal open onClose={onClose} ariaLabel="切换休息制度后重算">
+    <Modal open onClose={onClose} ariaLabel={t('restPolicy.recalc.dialogAria')}>
       <div className="glass-strong iridescent-border dialog-pop flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl shadow-soft">
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display text-display-md text-ink">切换休息制度后重算</h2>
+              <h2 className="font-display text-display-md text-ink">
+                {t('restPolicy.recalc.dialogTitle')}
+              </h2>
               <p className="mt-1 text-xs text-mist">
                 {restPolicyLabel(oldPolicyAtOpen.kind)} →{' '}
                 <span className="text-ink">{restPolicyLabel(draft.kind)}</span>
                 {draft.kind === RestPolicyKind.SingleOff &&
-                  `（单休休息日 = ${weekdayFullLabel(draft.singleRestWeekday ?? 6)}）`}
+                  t('restPolicy.recalc.subtitle.single', {
+                    day: weekdayFullLabel(draft.singleRestWeekday ?? 6),
+                  })}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              aria-label="取消重算"
+              aria-label={t('restPolicy.recalc.cancelAria')}
               className="rounded-md p-1 text-mist transition-colors hover:bg-sand"
             >
               <X size={16} />
@@ -450,12 +466,15 @@ export function RestPolicyRecalcDialog({
           >
             <p className="flex items-center gap-2 font-medium">
               <AlertTriangle size={15} className="text-amber" aria-hidden />
-              将重算 {plan.affectedProjectCount} 个工作日制项目的 {plan.changedStageCount} 个阶段
-              （已完成 {plan.frozenStageCount} 个冻结不动）
+              {t('restPolicy.recalc.impact', {
+                projects: plan.affectedProjectCount,
+                stages: plan.changedStageCount,
+                frozen: plan.frozenStageCount,
+              })}
             </p>
             {plan.taskShiftCount > 0 && (
               <p className="mt-1 text-xs text-mist" data-testid="recalc-due-count">
-                {plan.taskShiftCount} 个任务的到期日将落在阶段新区间之外（默认不跟随，可在下方选择对齐）。
+                {t('restPolicy.recalc.dueCount', { count: plan.taskShiftCount })}
               </p>
             )}
           </div>
@@ -471,8 +490,8 @@ export function RestPolicyRecalcDialog({
                 className="accent-pine"
                 data-testid="recalc-mode-keep"
               />
-              <span className="font-medium text-ink">工期不变（默认）</span>
-              <span className="text-xs text-mist">各阶段工作日工期不变，起止按新制度链式平移</span>
+              <span className="font-medium text-ink">{t('restPolicy.recalc.mode.keep')}</span>
+              <span className="text-xs text-mist">{t('restPolicy.recalc.mode.keepHint')}</span>
             </label>
             <label className="flex cursor-pointer items-center gap-2.5 rounded-[10px] border border-line px-3 py-2.5 text-sm transition-colors hover:bg-sand">
               <input
@@ -483,8 +502,8 @@ export function RestPolicyRecalcDialog({
                 className="accent-pine"
                 data-testid="recalc-mode-custom"
               />
-              <span className="font-medium text-ink">调整工期</span>
-              <span className="text-xs text-mist">逐阶段填写新的工作日天数（留空 = 原工期不变）</span>
+              <span className="font-medium text-ink">{t('restPolicy.recalc.mode.custom')}</span>
+              <span className="text-xs text-mist">{t('restPolicy.recalc.mode.customHint')}</span>
             </label>
           </div>
 
@@ -505,10 +524,17 @@ export function RestPolicyRecalcDialog({
                     {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     <span className="font-medium text-ink">{pp.projectName}</span>
                     <span className="text-xs text-mist">
-                      {pp.changedStageCount} / {pp.stages.length} 个阶段将变化
-                      {pp.frozenStageCount > 0 && ` · ${pp.frozenStageCount} 个已完成冻结`}
+                      {t('restPolicy.recalc.row.count', {
+                        changed: pp.changedStageCount,
+                        total: pp.stages.length,
+                      })}
+                      {pp.frozenStageCount > 0 &&
+                        t('restPolicy.recalc.row.frozen', { count: pp.frozenStageCount })}
                       {pp.plannedEndAtChanged &&
-                        ` · 竣工日 ${pp.oldPlannedEndAt} → ${pp.newPlannedEndAt}`}
+                        t('restPolicy.recalc.row.plannedEnd', {
+                          from: pp.oldPlannedEndAt,
+                          to: pp.newPlannedEndAt,
+                        })}
                     </span>
                   </button>
                   {open && (
@@ -516,11 +542,19 @@ export function RestPolicyRecalcDialog({
                       <table className="w-full text-left text-xs">
                         <thead>
                           <tr className="text-mist">
-                            <th className="px-3 py-1.5 font-normal">阶段</th>
-                            <th className="px-3 py-1.5 font-normal">原起止</th>
-                            <th className="px-3 py-1.5 font-normal">新起止</th>
+                            <th className="px-3 py-1.5 font-normal">
+                              {t('restPolicy.recalc.th.stage')}
+                            </th>
+                            <th className="px-3 py-1.5 font-normal">
+                              {t('restPolicy.recalc.th.oldRange')}
+                            </th>
+                            <th className="px-3 py-1.5 font-normal">
+                              {t('restPolicy.recalc.th.newRange')}
+                            </th>
                             {mode === 'custom' && (
-                              <th className="px-3 py-1.5 font-normal">工期（工作日）</th>
+                              <th className="px-3 py-1.5 font-normal">
+                                {t('restPolicy.recalc.th.workdays')}
+                              </th>
                             )}
                           </tr>
                         </thead>
@@ -540,8 +574,8 @@ export function RestPolicyRecalcDialog({
                                   )}
                                 >
                                   {stageStatusLabel(sp.status)}
-                                  {sp.freeze === 'full' && ' · 冻结'}
-                                  {sp.freeze === 'start' && ' · 冻起点'}
+                                  {sp.freeze === 'full' && t('restPolicy.recalc.freezeFull')}
+                                  {sp.freeze === 'start' && t('restPolicy.recalc.freezeStart')}
                                 </span>
                               </td>
                               <td className="px-3 py-1.5 tabular-nums text-mist">
@@ -553,7 +587,9 @@ export function RestPolicyRecalcDialog({
                                     {sp.newStartAt} ~ {sp.newEndAt}
                                   </span>
                                 ) : (
-                                  <span className="text-mist">不变</span>
+                                  <span className="text-mist">
+                                    {t('restPolicy.recalc.unchanged')}
+                                  </span>
                                 )}
                               </td>
                               {mode === 'custom' && (
@@ -562,7 +598,9 @@ export function RestPolicyRecalcDialog({
                                     type="text"
                                     inputMode="numeric"
                                     value={durations[sp.stageId] ?? ''}
-                                    placeholder={`${sp.workdays} 天`}
+                                    placeholder={t('restPolicy.recalc.daysPlaceholder', {
+                                      count: sp.workdays,
+                                    })}
                                     disabled={sp.freeze === 'full'}
                                     onChange={(e) =>
                                       reviseInputs(() =>
@@ -588,7 +626,7 @@ export function RestPolicyRecalcDialog({
             })}
             {plan.projects.length === 0 && (
               <p className="rounded-[10px] border border-line px-3 py-2.5 text-xs text-mist">
-                没有工作日制项目（自然日排程项目与休息制度无关，不受影响）。
+                {t('restPolicy.recalc.noWorkdayProjects')}
               </p>
             )}
           </div>
@@ -605,10 +643,10 @@ export function RestPolicyRecalcDialog({
               />
               <span>
                 <span className="font-medium text-ink">
-                  把到期日平移到阶段新区间内（保持阶段内相对偏移）
+                  {t('restPolicy.recalc.align.label')}
                 </span>
                 <span className="mt-0.5 block text-xs text-mist">
-                  dueDate 是任务级承诺（可能对人承诺了具体日子），默认不跟随。
+                  {t('restPolicy.recalc.align.hint')}
                 </span>
               </span>
             </label>
@@ -617,7 +655,7 @@ export function RestPolicyRecalcDialog({
           {/* 备份建议（不强制，措辞硬）+ 流水告知 */}
           <div className="mb-4 space-y-2 rounded-[12px] border border-line bg-cream/60 p-3">
             <p className="flex flex-wrap items-center gap-2 text-xs text-mist">
-              <span className="font-medium text-clay">重算不可撤销（无 undo，恢复靠备份）</span>
+              <span className="font-medium text-clay">{t('restPolicy.recalc.backup.warning')}</span>
               <button
                 type="button"
                 onClick={() => void onBackup()}
@@ -625,12 +663,14 @@ export function RestPolicyRecalcDialog({
                 data-testid="recalc-backup"
                 className="inline-flex items-center gap-1 rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink disabled:opacity-40"
               >
-                <Save size={12} /> {backing ? '备份中…' : '先去备份'}
+                <Save size={12} />{' '}
+                {backing ? t('restPolicy.recalc.backup.busy') : t('restPolicy.recalc.backup.do')}
               </button>
             </p>
             <p className="text-xs text-mist">
-              重算会写进阶段流水（每阶段一条改期记录），<b className="text-ink">打印延期台账时可见</b>
-              ——「谁把哪个阶段从哪天改到哪天、为什么」可查。
+              {t('restPolicy.recalc.ledger.pre')}
+              <b className="text-ink">{t('restPolicy.recalc.ledger.strong')}</b>
+              {t('restPolicy.recalc.ledger.post')}
               {/* 这句承诺在「stage 落库成功但 log 写失败」时会落空；本次重算不是原子的，
                   残局与 v1.1 设计见上方 onConfirm 前的「残局留痕」注释块。 */}
             </p>
@@ -642,7 +682,7 @@ export function RestPolicyRecalcDialog({
               onClick={onClose}
               className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -654,11 +694,11 @@ export function RestPolicyRecalcDialog({
                 confirmDisabled ? 'bg-pine-soft text-mist' : 'bg-pine hover:bg-pine-deep',
               )}
             >
-              {applying ? '重算中…' : '确认重算并保存制度'}
+              {applying ? t('restPolicy.recalc.applying') : t('restPolicy.recalc.confirm')}
             </button>
           </div>
           {!plan.hasChanges && (
-            <p className="mt-2 text-right text-xs text-mist">没有需要重算的阶段（新口径下零变化）。</p>
+            <p className="mt-2 text-right text-xs text-mist">{t('restPolicy.recalc.noChanges')}</p>
           )}
         </div>
       </div>

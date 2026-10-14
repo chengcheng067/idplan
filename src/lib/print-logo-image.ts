@@ -18,7 +18,21 @@
  * 二值 PNG 通常极小；复杂 logo 超限时按 320 → 240 → 160 → 120 逐档
  * 降采样重出，仍超 200KB 才拒绝（备份 JSON 不被一张图撑爆——决策文档
  * §3.1 把这条列为该方案唯一的真实风险）。
+ *
+ * ── 失败文案（笔 1-⑤ · 2026-10-14 中英切换）──
+ * 六条失败原因改走 `t()`（键前缀 `printLogo.err.`）。取词体例：本文件是**非组件的
+ * 库模块**（无 React），故用模块级 `t`（不订阅），由**调用它的组件** `PrintLogoSection`
+ * 的 `useLang()` 订阅；`processPrintLogoFile` 在**事件回调**里被调用，取的是当时语言
+ * ⇒ 切英文后失败提示当场是英文。同 `src/store/useProjectsStore.ts` 那批的既定体例。
+ *
+ * ⚠️ **连带后果（下一个人要知道）**：本文件此前是**零依赖**模块，故
+ * `tests/print-logo.spec.ts` 的 L4（真 Chromium）用 esbuild **只做转译、不打包**
+ * 就能把源码喂给页面。接入 i18n 后产物里会留下一句 `import '../i18n'`，
+ * 静态服务器解析不到 ⇒ L4 的 esbuild 调用**必须**加 `--bundle`（该文件里已同步改，
+ * 并把「零依赖」的说法改成「经 i18n 取词」）。若将来要把本文件改回零依赖，
+ * 替代形态是「只传失败码、渲染层取词」（同 plugin-install.cjs 的口径）。
  */
+import { t } from '../i18n';
 
 /** dataURL 长度上限（字符数 ≈ base64 后的存储体积；200KB） */
 export const PRINT_LOGO_MAX_CHARS = 200 * 1024;
@@ -106,7 +120,7 @@ export interface PrintLogoProcessResult {
   ok: boolean;
   /** 处理后的 dataURL（ok 时） */
   dataUrl?: string;
-  /** 失败原因（人话，直接进 toast） */
+  /** 失败原因（人话，直接进 toast；按**调用当时**的语言取词） */
   reason?: string;
 }
 
@@ -121,7 +135,7 @@ function loadImage(file: File): Promise<HTMLImageElement> {
     };
     img.onerror = (): void => {
       URL.revokeObjectURL(url);
-      reject(new Error('图片解码失败，请换 PNG / JPG / SVG 文件'));
+      reject(new Error(t('printLogo.err.decodeFailed')));
     };
     img.src = url;
   });
@@ -139,7 +153,7 @@ function binarizeToDataUrl(img: HTMLImageElement, maxEdge: number): string {
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('画布不可用');
+  if (!ctx) throw new Error(t('printLogo.err.canvasUnavailable'));
   ctx.drawImage(img, 0, 0, w, h);
 
   const image = ctx.getImageData(0, 0, w, h);
@@ -159,12 +173,15 @@ export async function processPrintLogoFile(file: File): Promise<PrintLogoProcess
   try {
     img = await loadImage(file);
   } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : '图片读取失败' };
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : t('printLogo.err.readFailed'),
+    };
   }
   if (!img.naturalWidth || !img.naturalHeight) {
     return {
       ok: false,
-      reason: '该 SVG 未包含宽高，无法处理——请改用 PNG，或在 SVG 内写明 width / height',
+      reason: t('printLogo.err.svgNoSize'),
     };
   }
 
@@ -173,11 +190,14 @@ export async function processPrintLogoFile(file: File): Promise<PrintLogoProcess
   try {
     fitted = firstFittingDataUrl((maxEdge) => binarizeToDataUrl(img, maxEdge));
   } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : '图片处理失败' };
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : t('printLogo.err.processFailed'),
+    };
   }
   if (fitted !== null) return { ok: true, dataUrl: fitted };
   return {
     ok: false,
-    reason: `处理后仍超过 ${Math.round(PRINT_LOGO_MAX_CHARS / 1024)}KB——请先用图片工具简化logo（纯色、少细节）再上传`,
+    reason: t('printLogo.err.tooLarge', { kb: Math.round(PRINT_LOGO_MAX_CHARS / 1024) }),
   };
 }

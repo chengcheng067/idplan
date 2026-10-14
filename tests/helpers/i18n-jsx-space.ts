@@ -99,6 +99,43 @@ const INLINE_TAGS = new Set([
 const FRAGMENTS = new Set(['_Fragment', 'Fragment']);
 const JSX_FACTORIES = new Set(['jsx', 'jsxs', 'jsxDEV', '_jsx', '_jsxs', '_jsxDEV']);
 
+/**
+ * 让元素**自成一块 / 脱离行内流**的布局类（Tailwind 原子类，逐 token 精确比）。
+ *
+ * 为什么需要它（2026-10-14 · 笔 1-⑤ 实测踩到的误报）：
+ *   本核原先把「哪里切断文本流」**只按标签名**判（`<div>`/`<p>` 不透明，见下方
+ *   `INLINE_TAGS` 的反面）。但**同一个 `<span>` 加一个 `block` 类同样是块级
+ *   格式化上下文** —— 它与相邻兄弟**不共行**，跨过去判「缺空格」是误报。
+ *   现场（`RestPolicyRecalcDialog.tsx` 的到期日对齐勾选块）：
+ *
+ *       <span>
+ *         <span className="font-medium text-ink">{t('…align.label')}</span>
+ *         <span className="mt-0.5 block text-xs text-mist">{t('…align.hint')}</span>
+ *       </span>
+ *
+ *   中文态看不出问题（原先两侧都是中文字面量，`keys.length === 0` 直接不判），
+ *   两侧改走 `t()` 之后这条接缝才被判 —— **报出来的却是视觉上并不存在的一行**。
+ *   ⇒ 判据补上「class 里带块级/脱流 token 的子项 = 文本流边界」，与既有夹具
+ *     「块级容器（`<div>`/`<p>`）切断文本流 ⇒ 不跨着判」**同一条理由**，不是新豁免。
+ *
+ * ⚠️ 三处边界（免得下一个人以为它管得比实际宽）：
+ *   · **只看字符串字面量 className**；模板串 / 表达式一律当未知 ⇒ **不切断**
+ *     （保守方向：宁可多判，不少判）。
+ *   · **不含** `inline-block` / `inline-flex` / `inline-grid` —— 它们仍在行内流里，
+ *     与相邻文字共行 ⇒ 那里的接缝该判。
+ *   · **不含** `contents`（子项参与父级流，不构成边界）。
+ */
+const BLOCK_LAYOUT = new Set([
+  'block',
+  'flex',
+  'grid',
+  'table',
+  'flow-root',
+  'list-item',
+  'absolute',
+  'fixed',
+]);
+
 /** 左贴标点：右段以它们开头时**不需要**空格 */
 const RIGHT_ATTACH = /^[,.;:!?)\]}"'’”…%]/;
 /** 右贴标点：左段以它们结尾时**不需要**空格 */
@@ -231,6 +268,21 @@ function compositeUnit(node: ts.Node, catalog: Record<string, string>): SpaceUni
   return null;
 }
 
+/**
+ * 该子项是不是**块级/脱流**元素（class 里带 `BLOCK_LAYOUT` 的 token）？
+ * 只认字符串字面量 className —— 见 `BLOCK_LAYOUT` 的边界说明。
+ */
+function isBlockLevel(node: ts.Node): boolean {
+  if (!ts.isCallExpression(node)) return false;
+  const name = calleeName(node.expression);
+  if (!name || !JSX_FACTORIES.has(name)) return false;
+  const props = node.arguments[1];
+  if (!props || !ts.isObjectLiteralExpression(props)) return false;
+  const cls = objectProp(props, 'className');
+  if (!cls || !ts.isStringLiteral(cls)) return false;
+  return cls.text.split(/\s+/).some((tok) => BLOCK_LAYOUT.has(tok));
+}
+
 /** 一次 jsx 调用的 **直接子项**（每个子项一个单元）；有一个解释不了就整条不判 */
 function childUnitsOf(call: ts.CallExpression, catalog: Record<string, string>): SpaceUnit[] | null {
   const name = calleeName(call.expression);
@@ -242,6 +294,9 @@ function childUnitsOf(call: ts.CallExpression, catalog: Record<string, string>):
   const list = ts.isArrayLiteralExpression(children) ? Array.from(children.elements) : [children];
   const out: SpaceUnit[] = [];
   for (const c of list) {
+    // 块级/脱流子项 = 文本流边界：跨过它的接缝**不共行**，判它缺空格是误报。
+    // 与 `<div>`/`<p>` 那条既有判据同理由（见 BLOCK_LAYOUT 注释）。
+    if (isBlockLevel(c)) return null;
     const u = compositeUnit(c, catalog);
     if (u === null) return null;
     out.push(u);
@@ -350,7 +405,8 @@ export function checkJsxSpacing(opts: {
           const children = objectProp(props, 'children');
           if (children && ts.isArrayLiteralExpression(children)) {
             for (const c of children.elements) {
-              if (compositeUnit(c, catalog) === null) unchecked++;
+              // 块级子项也算「没判」——它自己就是边界，跨它的接缝不进判据（见 BLOCK_LAYOUT）
+              if (compositeUnit(c, catalog) === null || isBlockLevel(c)) unchecked++;
             }
           }
         }

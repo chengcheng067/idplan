@@ -147,6 +147,58 @@ describe('拆句拼接 · 该红的红、不该红的不红', () => {
     const r = checkJsxSpacing({ file: 'f.tsx', source: src, catalog: FIX, lang: 'en' });
     expect(r.issues).toEqual([]);
   });
+
+  /*
+    ★ 块级边界 · **按 class 判**（2026-10-14 · 笔 1-⑤ 实测踩出来的误报，配对夹具）
+    现场：`RestPolicyRecalcDialog.tsx` 的到期日对齐勾选块 ——
+        <span>
+          <span className="font-medium text-ink">{t('…label')}</span>
+          <span className="mt-0.5 block text-xs text-mist">{t('…hint')}</span>
+        </span>
+    上方那条既有夹具只按**标签名**判块级（`<p>`/`<div>`）；而**同一个 `<span>` 加一个
+    `block` 类**同样是块级格式化上下文 ⇒ 两个子项不共行，跨过去判「缺空格」是误报。
+    中文态原先看不见它（两侧都是中文字面量 ⇒ `keys.length === 0` 直接不判），
+    **两侧改走 `t()` 之后才被判出来** —— 所以这两条必须成对：
+      ① 带 `block` ⇒ 必须不红（否则现场那条会一直假红）；
+      ② 把 `block` 去掉、形状其余全同 ⇒ **必须红**（否则 ① 是个空过判据，
+         将来有人把边界写宽了也没人发现）。
+  */
+  it('★ 负例：`class="… block …"` 的子项 = 块级边界 ⇒ 跨它的接缝不判（不误报）', () => {
+    const src = wrap(
+      '    <span>',
+      "      <span className=\"font-medium\">{t('a')}</span>",
+      "      <span className=\"mt-0.5 block text-xs\">{t('b')}</span>",
+      '    </span>',
+    );
+    const r = checkJsxSpacing({ file: 'f.tsx', source: src, catalog: FIX, lang: 'en' });
+    expect(r.issues, '两块视觉上各成一行，判它缺空格是误报').toEqual([]);
+    expect(r.unchecked, '但要**透明地报出来**：这条接缝没判').toBeGreaterThan(0);
+  });
+
+  it('★ 判别力：同一形状**去掉 block** ⇒ 必须红（否则上一条是空过判据）', () => {
+    const src = wrap(
+      '    <span>',
+      "      <span className=\"font-medium\">{t('a')}</span>",
+      "      <span className=\"mt-0.5 text-xs\">{t('b')}</span>",
+      '    </span>',
+    );
+    const r = checkJsxSpacing({ file: 'f.tsx', source: src, catalog: FIX, lang: 'en' });
+    expect(r.issues.map((i) => i.kind)).toEqual(['glued']);
+    expect(r.issues[0]?.leftKey).toBe('a');
+    expect(r.issues[0]?.rightKey).toBe('b');
+  });
+
+  it('★ 边界：`inline-block` / `inline-flex` **不算**块级边界（仍共行 ⇒ 该判）', () => {
+    const src = wrap(
+      '    <span>',
+      "      <span className=\"inline-block\">{t('a')}</span>",
+      '      ',
+      "      <span className=\"inline-flex\">{t('b')}</span>",
+      '    </span>',
+    );
+    const r = checkJsxSpacing({ file: 'f.tsx', source: src, catalog: FIX, lang: 'en' });
+    expect(r.issues.map((i) => i.kind)).toEqual(['glued']);
+  });
 });
 
 describe('拆句拼接 · 同一条文本流里混着硬编码中文（英文态会露中文）', () => {

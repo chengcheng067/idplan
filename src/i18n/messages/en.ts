@@ -1096,4 +1096,137 @@ export const enMessages: Record<MessageKey, string> = {
   'library.removeAria': 'Delete industry library {name}',
   'library.empty':
     'No industry library imported yet. Presets for the 9 built-in domains ship with the app.',
+
+  /* ══════════ 笔 1-⑤：Rest policy（entry / editor / recalc confirm dialog） ══════════ */
+  'restPolicy.entryTitle': 'Company rest policy (two days off / one day off / alternating weeks)',
+  'restPolicy.dialogAria': 'Company rest policy',
+  'restPolicy.dialogTitle': 'Company rest policy',
+  'restPolicy.intro':
+    'Decides which days are workdays across the system (calendar shading, timeline rest bands, reschedule snapping, and duration accounting).',
+  'restPolicy.holidays.label': 'Skip Chinese public holidays (including make-up workdays)',
+  'restPolicy.holidays.note':
+    'Bundled public-holiday and make-up-workday schedule for {years} (source: annual notice of the General Office of the State Council); updated with new releases once next year’s schedule is published. When it is on, saving can recalculate already-scheduled stages under the new rules (a confirmation preview appears first).',
+  'restPolicy.single.lead': 'Single rest day = ',
+  'restPolicy.single.tail': ' (only this day off each week)',
+  'restPolicy.single.restoreTitle': 'Restore the factory default: Sunday off',
+  'restPolicy.single.restore': 'Restore default (Sunday)',
+  'restPolicy.single.note':
+    'Default is Sunday (matching historical behaviour). After switching to a single weekday off, saving can recalculate already-scheduled stages under the new rules.',
+  'restPolicy.double.lead': 'Double rest days =',
+  'restPolicy.double.tail': ' ({days} off each week)',
+  'restPolicy.double.twoDays': 'two days',
+  'restPolicy.double.oneDay': 'one day — pick another',
+  'restPolicy.double.restoreTitle': 'Restore the factory default: Saturday + Sunday',
+  'restPolicy.double.restore': 'Restore default (Sat + Sun)',
+  'restPolicy.double.note':
+    'Two consecutive days or two separate days both work. Once two days are selected, clicking other dates has no effect; clicking a selected day deselects it (at least one day must remain). After switching to custom double rest days, saving can recalculate already-scheduled stages under the new rules.',
+  'restPolicy.preview.lead': 'Next {weeks} weeks · anchor week',
+  'restPolicy.preview.unset': 'not set',
+  'restPolicy.preview.tail': ' (big-rest week)',
+  'restPolicy.preview.swapTitle': 'Shift the anchor week by one week to swap big and small rest weeks',
+  'restPolicy.preview.swap': 'Swap from next week',
+  'restPolicy.preview.legendOn':
+    'Grey cells are rest days (public holidays and make-up workdays included; make-up workdays are still workdays).',
+  'restPolicy.preview.legendOff':
+    'Grey cells are rest days. With “Skip Chinese public holidays” off, reschedule manually when a public holiday falls on a workday.',
+  'restPolicy.bigWeek': 'Big rest',
+  'restPolicy.smallWeek': 'Small rest',
+  'restPolicy.dayRest': '{date} rest day',
+  'restPolicy.dayWork': '{date} workday',
+  'restPolicy.footer.note':
+    'Saving after switching the policy recalculates already-scheduled stages under the new rules (a confirmation preview appears first).',
+  'restPolicy.saving': 'Saving…',
+  'restPolicy.toast.saved': 'Rest policy saved',
+  'restPolicy.toast.savedNoRecalc': 'Rest policy saved (no stages needed recalculating)',
+  'restPolicy.err.doubleIncomplete': 'Pick both rest days before saving a two-day-off policy.',
+  'restPolicy.err.saveFailed': 'Failed to save the rest policy.',
+
+  'restPolicy.recalc.dialogAria': 'Recalculate after switching the rest policy',
+  'restPolicy.recalc.dialogTitle': 'Recalculate after switching the rest policy',
+  'restPolicy.recalc.subtitle.single': ' (single rest day = {day})',
+  'restPolicy.recalc.cancelAria': 'Cancel recalculation',
+  'restPolicy.recalc.impact':
+    'Will recalculate {stages} stages across {projects} workday-based projects ({frozen} completed ones stay frozen)',
+  'restPolicy.recalc.dueCount':
+    '{count} task due dates will fall outside the new stage range (not followed by default; align them below if you want).',
+  'restPolicy.recalc.mode.keep': 'Keep durations (default)',
+  'restPolicy.recalc.mode.keepHint':
+    'Each stage keeps its workday duration; start and end shift along the chain under the new policy',
+  'restPolicy.recalc.mode.custom': 'Adjust durations',
+  'restPolicy.recalc.mode.customHint':
+    'Enter a new workday count per stage (leave blank to keep the original duration)',
+  'restPolicy.recalc.row.count': '{changed} / {total} stages will change',
+  'restPolicy.recalc.row.frozen': ' · {count} completed and frozen',
+  'restPolicy.recalc.row.plannedEnd': ' · completion date {from} → {to}',
+  'restPolicy.recalc.th.stage': 'Stage',
+  'restPolicy.recalc.th.oldRange': 'Old range',
+  'restPolicy.recalc.th.newRange': 'New range',
+  'restPolicy.recalc.th.workdays': 'Duration (workdays)',
+  'restPolicy.recalc.freezeFull': ' · frozen',
+  'restPolicy.recalc.freezeStart': ' · start frozen',
+  'restPolicy.recalc.unchanged': 'unchanged',
+  'restPolicy.recalc.daysPlaceholder': '{count} days',
+  'restPolicy.recalc.noWorkdayProjects':
+    'No workday-based projects (calendar-day projects are unaffected by the rest policy).',
+  'restPolicy.recalc.align.label':
+    'Shift due dates into the new stage range (keeping their relative offset inside the stage)',
+  'restPolicy.recalc.align.hint':
+    'dueDate is a task-level promise (it may have been promised to someone for a specific day), so it is not followed by default.',
+  'restPolicy.recalc.backup.warning': 'Recalculation cannot be undone (no undo — restore from a backup)',
+  'restPolicy.recalc.backup.busy': 'Backing up…',
+  'restPolicy.recalc.backup.do': 'Back up first',
+  'restPolicy.recalc.ledger.pre':
+    'The recalculation is written to the stage log (one reschedule entry per stage), ',
+  'restPolicy.recalc.ledger.strong': 'visible when printing the delay ledger',
+  'restPolicy.recalc.ledger.post':
+    ' — “who moved which stage from which day to which day, and why” is traceable.',
+  'restPolicy.recalc.applying': 'Recalculating…',
+  'restPolicy.recalc.confirm': 'Confirm recalculation and save policy',
+  'restPolicy.recalc.noChanges': 'No stages need recalculating (zero change under the new rules).',
+  'restPolicy.recalc.err.failed': 'Recalculation failed; the policy was not saved.',
+  'restPolicy.recalc.toast.stages': 'Recalculated {count} stages under the new rest policy',
+  'restPolicy.recalc.toast.projects': ' ({count} project completion dates shifted)',
+  'restPolicy.recalc.toast.tasks': ', {count} task due dates aligned',
+  'restPolicy.recalc.toast.names': ': {names}',
+  'restPolicy.recalc.toast.nameSep': ', ',
+  'restPolicy.recalc.toast.failed': '{summary}; {count} writes failed, please retry',
+
+  /* ══════════ 笔 1-⑤：Settings ▸ Scheduling ▸ Print logo + poster headline ══════════ */
+  'printLogo.title': 'Print logo',
+  'printLogo.status.uploaded':
+    'Uploaded. It is placed at a fixed position in all four template versions and on the classic sheet (classic: next to the footer signature; A: left end of the black top bar; D: top-left cell of each page header; E / H: below the hairline at the top-left of each page, and on page 1 of H below the headline).',
+  'printLogo.status.empty':
+    'Not uploaded. All four template versions and the classic sheet show the “ID Plan” wordmark instead — never a blank space.',
+  'printLogo.processing': 'Processing…',
+  'printLogo.replace': 'Replace logo',
+  'printLogo.upload': 'Upload logo',
+  'printLogo.remove': 'Remove',
+  'printLogo.uploadAria': 'Upload print logo',
+  'printLogo.support.note':
+    'Supports PNG / JPG / SVG; uploads are converted to greyscale and binarised automatically (readable in black-and-white printing), limited to {kb}KB (so a single image cannot blow up the backup JSON, which travels with backups when you switch devices). Administrators only.',
+  'printLogo.toast.uploaded': 'Print logo updated; all four templates and the classic sheet now use it',
+  'printLogo.toast.removed': 'Removed; the four versions will show the “ID Plan” wordmark',
+
+  'printLogo.brandWord.title': 'Poster headline',
+  'printLogo.brandWord.aria': 'Poster headline',
+  'printLogo.brandWord.note':
+    'Poster headline (the bleed headline at the top of H page 1) · leave blank to use {word}. It is always printed in capitals (lowercase input is printed uppercase), and its upper part bleeds past the paper edge — limit {max} characters (longer input is truncated on save; any longer would cut the meaning off). The “IDPLAN” at the bottom of H pages is a fixed brand device and does not follow this field.',
+  'printLogo.brandWord.overlong':
+    'Over the limit; it will be truncated on save to “{kept}” (limit {max} characters)',
+  'printLogo.brandWord.toastCleared':
+    'Poster headline cleared; the H page-top headline falls back to “{word}”',
+  'printLogo.brandWord.toastSaved':
+    'Poster headline updated to “{word}”; the H page-top headline follows',
+
+  'printLogo.err.processFailed': 'logo processing failed',
+  'printLogo.err.decodeFailed': 'Could not decode the image — use a PNG / JPG / SVG file',
+  'printLogo.err.canvasUnavailable': 'canvas unavailable',
+  'printLogo.err.readFailed': 'Could not read the image',
+  'printLogo.err.svgNoSize':
+    'This SVG has no width/height, so it cannot be processed — use a PNG, or write width / height inside the SVG',
+  'printLogo.err.tooLarge':
+    'Still over {kb}KB after processing — simplify the logo with an image tool first (flat colour, little detail), then upload again',
+
+  'toast.saveFailedRetry': 'Save failed, please retry',
+  'toast.deleteFailedRetry': 'Delete failed, please retry',
 };

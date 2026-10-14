@@ -31,6 +31,16 @@ import { RestPolicyRecalcDialog } from './RestPolicyRecalcDialog';
  * src/i18n/messages/{zh,en}.ts，本文件在渲染期用 weekdayFullLabel(idx) /
  * weekdayShortLabel(idx) / restPolicyLabel(kind) 取词（序号 0..6 = 周一..周日）。
  * ⇒ 本文件不再持有任何文案表，也不再直接 import core/types 的标签表。
+ *
+ * ★ 2026-10-14（笔 1-⑤）本文件**其余文案**也改走 `t()`（键前缀 `restPolicy.`）：
+ *   · 组件里 `const { t } = useLang()`（`useLang()` 同时是语言变化的订阅点）；
+ *   · 事件回调里的 toast 直接取当时语言；
+ *   · 日期标签那几处是 `title` 模板（`{date} 休息` / `{date} 上班`）。
+ *   ⚠️ `restPolicy.single.lead` 的 zh 取值**结尾带一个空格**：原文是
+ *     `单休休息日 = <span>…</span>`，那个空格是 JSXText 的**尾随空格**（真实渲染字符，
+ *     不是排版）⇒ 必须逐字带进取值，否则中文态会从「单休休息日 = 周日」变成
+ *     「单休休息日 =周日」。`restPolicy.double.lead` / `preview.lead` 则**不带**尾随空格：
+ *     原文那里是 `双休休息日 ={' '}`，空格由 JSX 里的 `{' '}` 出（两处形状**不同，别统一**）。
  */
 
 /** 大小休预览周数（设置弹窗「未来 4 周」） */
@@ -41,6 +51,7 @@ const PREVIEW_WEEKS = 4;
  * 点击打开 RestPolicyDialog。
  */
 export function RestPolicySettingsButton(): JSX.Element | null {
+  const { t } = useLang();
   const { isAdmin } = useRoleGuard();
   const [open, setOpen] = useState(false);
 
@@ -53,9 +64,10 @@ export function RestPolicySettingsButton(): JSX.Element | null {
         type="button"
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
-        title="公司休息制度（双休 / 单休 / 大小休）"
+        title={t('restPolicy.entryTitle')}
       >
-        <CalendarDays size={14} /> <span className="hidden 2xl:inline">休息制度</span>
+        <CalendarDays size={14} />{' '}
+        <span className="hidden 2xl:inline">{t('settings.section.restPolicy')}</span>
       </button>
       {open && <RestPolicyDialog onClose={() => setOpen(false)} />}
     </>
@@ -100,8 +112,8 @@ export function RestPolicyEditor({
 }): JSX.Element {
   const repos = useRepos();
   // 订阅语言变化：档位与星期文案由 restPolicyLabel() / weekdayFullLabel() 在渲染期取，
-  // 少了这个订阅，切语言时本编辑器会停在旧语言。
-  useLang();
+  // 少了这个订阅，切语言时本编辑器会停在旧语言。`t` 同时供本文件其余文案使用。
+  const { t } = useLang();
   const saved = useSettingsStore((s) => s.restPolicy);
   const savedEffective = useSettingsStore((s) => s.effectiveRestPolicy);
   const applyToStore = useSettingsStore((s) => s.setRestPolicy);
@@ -231,7 +243,7 @@ export function RestPolicyEditor({
     applyToStore(next);
     // 草稿已落库（= saved）：解脏，之后 saved 的变化可继续同步
     dirtyRef.current = false;
-    useProjectsStore.getState().pushToast('success', '休息制度已保存');
+    useProjectsStore.getState().pushToast('success', t('restPolicy.toast.saved'));
     // 独立弹窗保存后关闭；嵌入态只提示、留在设置面板内
     if (onClose) onClose();
   };
@@ -239,7 +251,7 @@ export function RestPolicyEditor({
   const onSave = async (): Promise<void> => {
     // 双休未选满两天 ⇒ 拒存（1 天是编辑瞬态；双休语义 = 一周休两天）
     if (draft.kind === RestPolicyKind.DoubleOff && !doubleComplete) {
-      useProjectsStore.getState().pushToast('error', '双休需选满两个休息日才能保存。');
+      useProjectsStore.getState().pushToast('error', t('restPolicy.err.doubleIncomplete'));
       return;
     }
     setSaving(true);
@@ -260,7 +272,7 @@ export function RestPolicyEditor({
         await persist(draft);
         useProjectsStore
           .getState()
-          .pushToast('success', '休息制度已保存（没有阶段需要重算）');
+          .pushToast('success', t('restPolicy.toast.savedNoRecalc'));
         return;
       }
       // 有变化 → 弹确认窗；确认后由弹窗完成「落库制度 + 应用重算」再回调关闭
@@ -268,7 +280,7 @@ export function RestPolicyEditor({
     } catch (err) {
       useProjectsStore
         .getState()
-        .pushToast('error', err instanceof ChangxiaError ? err.userMessage : '休息制度保存失败。');
+        .pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('restPolicy.err.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -276,9 +288,7 @@ export function RestPolicyEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-mist">
-        决定全系统哪些天是工作日（月历底纹、时间轴休息条带、改期吸附与工期口径）。
-      </p>
+      <p className="text-xs text-mist">{t('restPolicy.intro')}</p>
 
       {/* 三档单选：遍历 ALL_REST_POLICIES，文案走 i18n（restPolicyLabel） */}
       <div className="space-y-2">
@@ -325,11 +335,10 @@ export function RestPolicyEditor({
             className="accent-pine"
             data-testid="skip-holidays-toggle"
           />
-          <span className="font-medium text-ink">跳过国家法定节假日（含调休补班日）</span>
+          <span className="font-medium text-ink">{t('restPolicy.holidays.label')}</span>
         </label>
         <p className="mt-1.5 text-[11px] leading-relaxed text-mist">
-          内置 {cnHolidayYears().join(' / ')} 年法定节假日与调休补班日安排（来源：国务院办公厅
-          年度通知），次年安排公布后随版本更新。开启后保存时，可按新口径重算已排阶段（保存前有确认预览）。
+          {t('restPolicy.holidays.note', { years: cnHolidayYears().join(' / ') })}
         </p>
       </div>
 
@@ -346,17 +355,18 @@ export function RestPolicyEditor({
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs text-mist">
-              单休休息日 = <span className="text-ink">{weekdayFullLabel(restWeekday)}</span>
-              （每周只休这一天）
+              {t('restPolicy.single.lead')}
+              <span className="text-ink">{weekdayFullLabel(restWeekday)}</span>
+              {t('restPolicy.single.tail')}
             </span>
             {restWeekday !== 6 && (
               <button
                 type="button"
                 onClick={() => updateDraft((prev) => ({ ...prev, singleRestWeekday: 6 }))}
                 className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
-                title="恢复出厂口径：周日休息"
+                title={t('restPolicy.single.restoreTitle')}
               >
-                恢复默认（周日）
+                {t('restPolicy.single.restore')}
               </button>
             )}
           </div>
@@ -382,7 +392,7 @@ export function RestPolicyEditor({
           </div>
 
           <p className="mt-2 text-[11px] leading-relaxed text-mist">
-            默认周日（与历史行为一致）。改为周内单休后，保存时可按新口径重算已排阶段。
+            {t('restPolicy.single.note')}
           </p>
         </div>
       )}
@@ -401,11 +411,15 @@ export function RestPolicyEditor({
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs text-mist">
-              双休休息日 ={' '}
+              {t('restPolicy.double.lead')}{' '}
               <span className="text-ink">
                 {doubleDays.map((d) => weekdayFullLabel(d)).join(' + ')}
               </span>
-              （每周休这{doubleComplete ? '两天' : '一天，再选一天'}）
+              {t('restPolicy.double.tail', {
+                days: doubleComplete
+                  ? t('restPolicy.double.twoDays')
+                  : t('restPolicy.double.oneDay'),
+              })}
             </span>
             {!isDefaultDoubleDays && (
               <button
@@ -413,9 +427,9 @@ export function RestPolicyEditor({
                 onClick={() => updateDraft((prev) => ({ ...prev, doubleRestWeekdays: undefined }))}
                 data-testid="double-rest-restore"
                 className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
-                title="恢复出厂口径：周六+周日"
+                title={t('restPolicy.double.restoreTitle')}
               >
-                恢复默认（周六+周日）
+                {t('restPolicy.double.restore')}
               </button>
             )}
           </div>
@@ -441,12 +455,11 @@ export function RestPolicyEditor({
           </div>
 
           <p className="mt-2 text-[11px] leading-relaxed text-mist">
-            连续两天或分开两天都可以。已选两天后点其他日期不生效；点已选可取消
-            （至少保留一天）。改为自定义双休日后，保存时可按新口径重算已排阶段。
+            {t('restPolicy.double.note')}
           </p>
           {!doubleComplete && (
             <p className="mt-1 text-[11px] font-medium text-clay" data-testid="double-rest-incomplete">
-              双休需选满两个休息日才能保存。
+              {t('restPolicy.err.doubleIncomplete')}
             </p>
           )}
         </div>
@@ -457,16 +470,19 @@ export function RestPolicyEditor({
         <div className="mt-4 rounded-[12px] border border-line bg-cream/60 p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs text-mist">
-              未来 {PREVIEW_WEEKS} 周预览 · 锚点周{' '}
-              <span className="text-ink">{draft.anchorWeek ?? '未设置'}</span>（大休周）
+              {t('restPolicy.preview.lead', { weeks: PREVIEW_WEEKS })}{' '}
+              <span className="text-ink">
+                {draft.anchorWeek ?? t('restPolicy.preview.unset')}
+              </span>
+              {t('restPolicy.preview.tail')}
             </span>
             <button
               type="button"
               onClick={onSwap}
               className="rounded-md border border-line bg-paper px-2.5 py-1 text-xs text-mist transition-colors hover:bg-sand hover:text-ink"
-              title="把锚点周整体位移一周，大小休对调"
+              title={t('restPolicy.preview.swapTitle')}
             >
-              从下周起对调
+              {t('restPolicy.preview.swap')}
             </button>
           </div>
 
@@ -488,12 +504,16 @@ export function RestPolicyEditor({
                     week.bigWeek ? 'text-pine' : 'text-mist',
                   )}
                 >
-                  {week.bigWeek ? '大休' : '小休'}
+                  {week.bigWeek ? t('restPolicy.bigWeek') : t('restPolicy.smallWeek')}
                 </span>
                 {week.days.map((d) => (
                   <span
                     key={d.date}
-                    title={d.rest ? `${d.date} 休息` : `${d.date} 上班`}
+                    title={
+                      d.rest
+                        ? t('restPolicy.dayRest', { date: d.date })
+                        : t('restPolicy.dayWork', { date: d.date })
+                    }
                     className={cn(
                       'flex h-7 items-center justify-center rounded-[6px] text-[11px]',
                       d.rest ? 'bg-rest-day text-mist' : 'border border-line text-ink',
@@ -508,16 +528,14 @@ export function RestPolicyEditor({
 
           <p className="mt-2 text-[11px] text-mist">
             {draft.skipHolidays === true
-              ? '灰底为休息日（已含法定节假日与调休补班日；补班日照常上班）。'
-              : '灰底为休息日。未开启「跳过国家法定节假日」时，遇法定节假日请手动改期。'}
+              ? t('restPolicy.preview.legendOn')
+              : t('restPolicy.preview.legendOff')}
           </p>
         </div>
       )}
 
       <div className="mt-5 flex items-center justify-between gap-3">
-        <span className="text-[11px] text-mist">
-          切换制度后保存时，将按新口径重算已排阶段（保存前有确认预览）。
-        </span>
+        <span className="text-[11px] text-mist">{t('restPolicy.footer.note')}</span>
         <div className="flex gap-2">
           {!embedded && onClose && (
             <button
@@ -525,7 +543,7 @@ export function RestPolicyEditor({
               onClick={onClose}
               className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand hover:text-ink"
             >
-              取消
+              {t('common.cancel')}
             </button>
           )}
           <button
@@ -537,7 +555,7 @@ export function RestPolicyEditor({
               saving ? 'bg-pine-soft text-mist' : 'bg-pine hover:bg-pine-deep',
             )}
           >
-            {saving ? '保存中…' : '保存'}
+            {saving ? t('restPolicy.saving') : t('common.save')}
           </button>
         </div>
       </div>
@@ -568,19 +586,20 @@ export function RestPolicyEditor({
  * 仅承载 Modal + 标题/关闭，编辑主体委托 RestPolicyEditor。
  */
 export function RestPolicyDialog({ onClose }: { onClose(): void }): JSX.Element {
+  const { t } = useLang();
   return (
-    <Modal open onClose={onClose} ariaLabel="公司休息制度">
+    <Modal open onClose={onClose} ariaLabel={t('restPolicy.dialogAria')}>
       <div className="glass-strong iridescent-border dialog-pop flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl shadow-soft">
         {/* 描边挂在外层固定框；滚动交给内层，避免虹彩描边伪元素随内容断层露线 */}
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display text-display-md text-ink">公司休息制度</h2>
+              <h2 className="font-display text-display-md text-ink">{t('restPolicy.dialogTitle')}</h2>
             </div>
             <button
               type="button"
               onClick={onClose}
-              aria-label="关闭"
+              aria-label={t('common.close')}
               className="rounded-md p-1 text-mist transition-colors hover:bg-sand hover:text-ink"
             >
               <X size={16} />

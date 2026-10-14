@@ -31,6 +31,7 @@ import { ImagePlus, Trash2, Type } from 'lucide-react';
 
 import { useRepos } from '../../hooks/useRepos';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { t as translate, useLang } from '../../i18n';
 import { logUser } from '../../core/services/log.service';
 import { usePrintLogo, savePrintLogo } from '../../print/adapters/use-print-logo';
 import {
@@ -44,13 +45,24 @@ import {
 import { processPrintLogoFile, PRINT_LOGO_MAX_CHARS } from '../../lib/print-logo-image';
 import { PrintLogoMark } from '../../print/parts/PrintLogoMark';
 
-/** 超出上限时的即时提示文案（保存前就能看到会截断成什么） */
+/**
+ * 超出上限时的即时提示文案（保存前就能看到会截断成什么）。
+ *
+ * ⚠️ 取词体例：本函数是**模块级纯函数**（非组件），故用模块级 `translate`
+ * （不订阅语言）；**由调用它的组件** `useLang()` 订阅 ⇒ 切语言时整块重渲染，
+ * 渲染期那一句 `{overlongHint(draft)}` 会用当时语言重新求值。
+ * （同 `src/i18n/labels.ts` 那批 `xxxLabel()` 的既定体例。）
+ */
 function overlongHint(raw: string): string {
   const kept = normalizeBrandWord(raw);
-  return `已超出上限，保存时截断为「${kept}」（上限 ${PRINT_BRAND_WORD_MAX_CHARS} 字符）`;
+  return translate('printLogo.brandWord.overlong', {
+    kept,
+    max: PRINT_BRAND_WORD_MAX_CHARS,
+  });
 }
 
 export function PrintLogoSection(): JSX.Element {
+  const { t } = useLang();
   const repos = useRepos();
   const toast = useProjectsStore((s) => s.pushToast);
   const { logo, reload } = usePrintLogo();
@@ -71,15 +83,15 @@ export function PrintLogoSection(): JSX.Element {
     try {
       const res = await processPrintLogoFile(file);
       if (!res.ok || !res.dataUrl) {
-        toast('error', res.reason ?? 'logo 处理失败');
+        toast('error', res.reason ?? t('printLogo.err.processFailed'));
         return;
       }
       await savePrintLogo(repos, res.dataUrl);
       reload();
       logUser('打印标识', 'logo 已上传（灰度二值化后入 settings KV）');
-      toast('success', '打印标识已更新，四版模板与经典纸面同步生效');
+      toast('success', t('printLogo.toast.uploaded'));
     } catch {
-      toast('error', '保存失败，请重试');
+      toast('error', t('toast.saveFailedRetry'));
     } finally {
       setBusy(false);
       // 清空 input：同一文件二次选择也要触发 change
@@ -93,9 +105,9 @@ export function PrintLogoSection(): JSX.Element {
       await savePrintLogo(repos, '');
       reload();
       logUser('打印标识', 'logo 已删除（回落文字标）');
-      toast('info', '已删除，四版将显示「ID Plan」文字标');
+      toast('info', t('printLogo.toast.removed'));
     } catch {
-      toast('error', '删除失败，请重试');
+      toast('error', t('toast.deleteFailedRetry'));
     } finally {
       setBusy(false);
     }
@@ -111,11 +123,11 @@ export function PrintLogoSection(): JSX.Element {
       toast(
         'success',
         saved === DEFAULT_PRINT_BRAND_WORD
-          ? `海报大字已清空，H 版页顶巨字回落「${DEFAULT_PRINT_BRAND_WORD}」`
-          : `海报大字已更新为「${saved}」，H 版页顶巨字同步生效`,
+          ? t('printLogo.brandWord.toastCleared', { word: DEFAULT_PRINT_BRAND_WORD })
+          : t('printLogo.brandWord.toastSaved', { word: saved }),
       );
     } catch {
-      toast('error', '保存失败，请重试');
+      toast('error', t('toast.saveFailedRetry'));
     } finally {
       setBusy(false);
     }
@@ -126,7 +138,7 @@ export function PrintLogoSection(): JSX.Element {
       <div className="mb-2 flex items-center gap-1.5">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
           <ImagePlus size={14} className="text-mist" aria-hidden />
-          打印标识
+          {t('printLogo.title')}
         </h3>
       </div>
       <div className="space-y-3 rounded-[12px] border border-line bg-cream/40 px-3.5 py-3">
@@ -136,16 +148,17 @@ export function PrintLogoSection(): JSX.Element {
             <PrintLogoMark logo={logo} height={26} />
           </span>
           <p className="text-[11px] leading-relaxed text-mist">
+            {/*
+              ⚠️ 这两支**必须保持 `<>…</>` 片段形态**：`zh-render-diff.mts` 的文本流只有在
+              「jsx(Fragment, {children: …})」这一层才看得见 —— 写成裸三元
+              `{logo ? t('a') : t('b')}` 会让探针**一条都采不到**（它不解释三元），
+              于是这一整段文案就脱离了「渲染态逐字」那层自证（实测：改裸三元后探针报
+              「仅在旧」两条）。片段在这里同时是**可证明性**的载体。
+            */}
             {logo ? (
-              <>
-                已上传。打印时落在四版模板与经典纸面的固定位置
-                （经典在页脚署名旁，A 在黑顶栏左端，D 在每页头部左上格，
-                E / H 在每页左上角发丝线下方，H 第一页在巨字下方左侧）。
-              </>
+              <>{t('printLogo.status.uploaded')}</>
             ) : (
-              <>
-                未上传。四版模板与经典纸面统一显示「ID Plan」文字标，不留空。
-              </>
+              <>{t('printLogo.status.empty')}</>
             )}
           </p>
         </div>
@@ -158,7 +171,11 @@ export function PrintLogoSection(): JSX.Element {
             className="flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand disabled:opacity-60"
           >
             <ImagePlus size={15} className="text-mist" aria-hidden />
-            {busy ? '处理中…' : logo ? '更换标识' : '上传标识'}
+            {busy
+              ? t('printLogo.processing')
+              : logo
+                ? t('printLogo.replace')
+                : t('printLogo.upload')}
           </button>
           {logo && (
             <button
@@ -168,7 +185,7 @@ export function PrintLogoSection(): JSX.Element {
               className="inline-flex items-center gap-1.5 rounded-[10px] border border-line px-3 py-2.5 text-sm text-mist transition-colors hover:bg-sand hover:text-clay disabled:opacity-60"
             >
               <Trash2 size={14} aria-hidden />
-              删除
+              {t('printLogo.remove')}
             </button>
           )}
           <input
@@ -176,15 +193,13 @@ export function PrintLogoSection(): JSX.Element {
             type="file"
             accept="image/png,image/jpeg,image/svg+xml"
             className="hidden"
-            aria-label="上传打印标识"
+            aria-label={t('printLogo.uploadAria')}
             onChange={(e) => void onPick(e.target.files?.[0])}
           />
         </div>
 
         <p className="text-[11px] leading-relaxed text-mist">
-          支持 PNG / JPG / SVG；上传时自动转灰度并二值化（黑白打印可辨），
-          限 {Math.round(PRINT_LOGO_MAX_CHARS / 1024)}KB 以内（备份 JSON 不被一张图撑爆，
-          随备份换设备恢复）。仅管理员可改。
+          {t('printLogo.support.note', { kb: Math.round(PRINT_LOGO_MAX_CHARS / 1024) })}
         </p>
       </div>
 
@@ -192,7 +207,7 @@ export function PrintLogoSection(): JSX.Element {
       <div className="mb-2 mt-4 flex items-center gap-1.5">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
           <Type size={14} className="text-mist" aria-hidden />
-          海报大字
+          {t('printLogo.brandWord.title')}
         </h3>
       </div>
       <div className="space-y-3 rounded-[12px] border border-line bg-cream/40 px-3.5 py-3">
@@ -201,7 +216,7 @@ export function PrintLogoSection(): JSX.Element {
             type="text"
             value={draft}
             disabled={busy}
-            aria-label="海报大字"
+            aria-label={t('printLogo.brandWord.aria')}
             placeholder={DEFAULT_PRINT_BRAND_WORD}
             onChange={(e) => {
               setEditing(true);
@@ -215,14 +230,14 @@ export function PrintLogoSection(): JSX.Element {
             disabled={busy || (!editing && draft === brandWord)}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand disabled:opacity-60"
           >
-            保存
+            {t('common.save')}
           </button>
         </div>
         <p className="text-[11px] leading-relaxed text-mist">
-          海报大字（H 版页顶出血巨字）· 留空则用 {DEFAULT_PRINT_BRAND_WORD}。
-          纸面恒大写显示（输入小写也会以大写印出），上半部分越出纸缘形成出血
-          ——上限 {PRINT_BRAND_WORD_MAX_CHARS} 字符（超出部分保存时截断，
-          再长会把词义裁掉）。H 版页底的「IDPLAN」是固定品牌装置，不随此项变化。
+          {t('printLogo.brandWord.note', {
+            word: DEFAULT_PRINT_BRAND_WORD,
+            max: PRINT_BRAND_WORD_MAX_CHARS,
+          })}
         </p>
         {isBrandWordOverlong(draft) && (
           <p className="text-[11px] leading-relaxed text-clay" role="status">

@@ -658,12 +658,21 @@ const CHROMIUM_PATH = resolveChromium();
 const CAN_RUN = existsSync(DIST_INDEX) && CHROMIUM_PATH !== null;
 
 /**
- * L4 怎么在真 Chromium 里跑**真实源码**：print-logo-image.ts 是零依赖的
- * 浏览器模块，静态服务器喂不了 TS。故用 esbuild CLI（**子进程**执行——
- * 不用 vite 的 transform API：vitest 的模块运行器在 vm realm 里，esbuild 的
+ * L4 怎么在真 Chromium 里跑**真实源码**：print-logo-image.ts 是浏览器模块，
+ * 静态服务器喂不了 TS。故用 esbuild CLI（**子进程**执行——不用 vite 的
+ * transform API：vitest 的模块运行器在 vm realm 里，esbuild 的
  * `TextEncoder instanceof Uint8Array` 不变量会假红，实测踩过）把源码转成
- * ESM，落临时 .mjs，经安全端口静态服务供页面 `import()`——测的是**这份
- * 源码**，不是抄录副本。
+ * ESM，落临时 .mjs，经安全端口静态服务供页面 `import()`——测的是**这份源码**，
+ * 不是抄录副本。
+ *
+ * ⚠️ **2026-10-14（笔 1-⑤ i18n）起必须 `--bundle`**：本文件原先是**零依赖**
+ * 模块，只做转译就够；现在它的失败文案经 `t()` 从 `src/i18n` 取词，转译产物里
+ * 会留一句 `import '../i18n'` —— 静态服务器只喂 `/print-logo-image.mjs`，
+ * 相对导入解析不到，页面 `import()` 会当场失败（这是**接入 i18n 的连带后果**，
+ * 不是打包偏好）。`--bundle` 把 i18n 与文案表一起内联进这一个 .mjs
+ * （实测 3.7KB → 约 237KB；esbuild 按 browser 平台把 react 的
+ * `process.env.NODE_ENV` 替换掉，产物里零 `process` 引用，页面里不会 ReferenceError）。
+ * 断言一个都没改 —— 换的是「怎么把源码送进页面」，不是判据。
  */
 async function serveTransformedModule(): Promise<{ url: string; close(): Promise<void> }> {
   const os = await import('node:os');
@@ -674,6 +683,7 @@ async function serveTransformedModule(): Promise<{ url: string; close(): Promise
     esbuildBin,
     join(ROOT, 'src', 'lib', 'print-logo-image.ts'),
     '--format=esm',
+    '--bundle',
     `--outfile=${outFile}`,
   ]);
   const js = readFileSync(outFile, 'utf-8');
