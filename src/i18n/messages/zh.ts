@@ -93,6 +93,8 @@ export const zhMessages = {
   'nav.agentExecutions': '执行记录',
   'nav.homeAria': 'ID Plan 首页',
   'nav.sidebarAria': '主导航侧边栏',
+  /* 窄窗（<xl）时侧栏以抽屉形态出现，这是该抽屉浮层的无障碍名（与「主导航侧边栏」不同面） */
+  'nav.drawerAria': '导航菜单',
   'sidebar.agentBoards': 'Agent 看板',
   'sidebar.noIdentityHint':
     '还未进入身份。点侧栏最下方的身份行选择成员后，这里会显示你能看到与改动的项目。',
@@ -148,6 +150,16 @@ export const zhMessages = {
   'topbar.searchAria': '搜索项目、任务或客户',
   'topbar.searchClearAria': '清空并关闭搜索',
   'topbar.backAria': '返回上一页',
+  /* 汉堡（<xl 的侧栏抽屉触发器，与手机档 MobileMoreMenu 的 ⋮ 不是同一个控件） */
+  'topbar.navMenuAria': '打开导航菜单',
+  /* 平板档（768–1279）的搜索图标按钮 */
+  'topbar.searchOpenAria': '打开搜索',
+  'topbar.searchOpenTitle': '搜索（⌘K）',
+  /* Electron 自绘窗口三键（Windows 专有；macOS 走系统红绿灯，整块不渲染） */
+  'topbar.windowControlsAria': '窗口控制',
+  'topbar.windowMinimize': '最小化',
+  'topbar.windowMaximize': '最大化',
+  'topbar.windowRestore': '还原',
 
   /* ────────────────────── 星期（两套粒度）────────────────────── */
   /* 短名：月历 7 列表头（改造前是「一~日」单字） */
@@ -848,6 +860,33 @@ export const zhMessages = {
   'agentTransfer.submitting': '处理中…',
   'agentTransfer.confirm': '确认接管',
   'agentTransfer.failed': '接管失败，请重试。',
+
+  /* ───────── 插件沙箱宿主（PluginSandboxFrame · 全屏插件页的顶条与失败态）─────────
+   * ⚠️ 失败文案**存键不存字**：宿主把 `{ key, vars }` 放进 state、渲染期才 `t()`。
+   *    存当时译文会在切语言后不重译（本仓 `TransferDialog` 栽过的同款缺陷）。 */
+  'plugin.frame.loadFailed': '插件加载失败：{error}',
+  'plugin.frame.readyTimeout':
+    '插件未能在 3 秒内就绪——入口文件未声明 window.IDPlanPlugin.mount，或产物加载失败',
+  'plugin.frame.localInstall': '成员自装',
+  'plugin.frame.backToApp': '回到主界面',
+
+  /* ───────── agent-board 插件自己的设置（AgentSettingsPanel · 设置 ▸ 插件 ▸ 齿轮）─────────
+   * 三块的**小标题**早已走 `settings.section.*`（搬位置时给的）；这里是搬进来之后
+   * 一直没接的**正文**。取值逐字取自搬迁前的源码（搬位置那笔承诺过「文案逐字一致」）。 */
+  'agentSettings.seatRowLabel': 'Agent 席位',
+  'agentSettings.seatUsed': '已用 {used}/{limit}',
+  'agentSettings.seatOver': '已超出免费席位额度（{limit} 个）——不影响使用，仅作提示。',
+  'agentSettings.dbUsageLabel': '本地库占用',
+  'agentSettings.dbUsageEstimated': '（估算）',
+  'agentSettings.dbUsageHint': '未来单库超过约 50MB 时会在此提示清理 / 分库建议。',
+  'agentSettings.ingress.lead': '外部 Agent 通过本机回环地址以',
+  'agentSettings.ingress.strong': '结构化命令',
+  /* 取值里那一个空格不是手滑：原文是**同一个 JSXText 内的换行**，JSX 把它折成一个空格，
+   * 故换成单个键之后必须由取值自己带着（同 `agentTransfer.dropped.head` 的做法）。 */
+  'agentSettings.ingress.tail':
+    '接入 ID Plan；自然语言由 Agent 侧自己解析——ID Plan 不解析自然语言、不调用大模型。 接入地址与访问令牌在 Agent 看板的接入面板里生成与管理，此处不重复。',
+  'agentSettings.boardHint': 'Agent 看板是 AI 工作区：执行记录、接入面板与任务队列都在那里。',
+  'agentSettings.openBoard': '打开 Agent 看板',
 } as const;
 
 /**

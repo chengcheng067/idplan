@@ -234,6 +234,8 @@ function Breadcrumbs(): JSX.Element | null {
 export function TopBar(): JSX.Element {
   const location = useLocation();
   const openSidebarDrawer = useLayoutStore((s) => s.openSidebarDrawer);
+  /** 取词 + **语言变化订阅点**（汉堡与平板搜索按钮的无障碍名走 i18n，少了它切语言不刷新） */
+  const { t } = useLang();
 
   const desktopSearchRef = useRef<HTMLInputElement>(null);
   const tabletSearchRef = useRef<HTMLInputElement>(null);
@@ -322,7 +324,7 @@ export function TopBar(): JSX.Element {
                  （data-mobile-more-trigger / aria-label 更多操作，md:hidden）**不是同一个控件**，
                  两个钩子不可互用。 */
               data-nav-menu-trigger=""
-              aria-label="打开导航菜单"
+              aria-label={t('topbar.navMenuAria')}
               aria-controls="app-sidebar"
               className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink"
             >
@@ -365,8 +367,8 @@ export function TopBar(): JSX.Element {
                     tabletSearchRef.current?.select();
                   }, 0);
                 }}
-                aria-label="打开搜索"
-                title="搜索（⌘K）"
+                aria-label={t('topbar.searchOpenAria')}
+                title={t('topbar.searchOpenTitle')}
                 className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-line text-mist transition-colors hover:bg-sand hover:text-ink"
               >
                 <Search size={18} aria-hidden />
@@ -458,6 +460,11 @@ export function TopBar(): JSX.Element {
 function WindowControls({ width }: { width: number }): JSX.Element {
   const controls = window.idplan?.windowControls;
   const [maximized, setMaximized] = useState(false);
+  /**
+   * 取词 + **语言变化订阅点**：窗口三键与容器组的无障碍名 / tooltip 走 i18n。
+   * 少了这次订阅，切到英文后屏读器仍读中文（本仓「假绿」的经典形态）。
+   */
+  const { t } = useLang();
 
   useEffect(() => {
     if (!controls) return;
@@ -495,15 +502,15 @@ function WindowControls({ width }: { width: number }): JSX.Element {
     <div
       data-window-controls=""
       role="group"
-      aria-label="窗口控制"
+      aria-label={t('topbar.windowControlsAria')}
       className="flex h-full shrink-0 items-stretch"
       style={{ width }}
     >
       <button
         type="button"
         data-window-control="minimize"
-        aria-label="最小化"
-        title="最小化"
+        aria-label={t('topbar.windowMinimize')}
+        title={t('topbar.windowMinimize')}
         onClick={() => controls?.minimize()}
         className={cn(btnBase, 'hover:bg-sand hover:text-ink')}
       >
@@ -512,8 +519,8 @@ function WindowControls({ width }: { width: number }): JSX.Element {
       <button
         type="button"
         data-window-control="maximize"
-        aria-label={maximized ? '还原' : '最大化'}
-        title={maximized ? '还原' : '最大化'}
+        aria-label={maximized ? t('topbar.windowRestore') : t('topbar.windowMaximize')}
+        title={maximized ? t('topbar.windowRestore') : t('topbar.windowMaximize')}
         onClick={() => controls?.toggleMaximize()}
         className={cn(btnBase, 'hover:bg-sand hover:text-ink')}
       >
@@ -522,8 +529,8 @@ function WindowControls({ width }: { width: number }): JSX.Element {
       <button
         type="button"
         data-window-control="close"
-        aria-label="关闭"
-        title="关闭"
+        aria-label={t('common.close')}
+        title={t('common.close')}
         onClick={() => controls?.close()}
         className={cn(btnBase, 'hover:bg-clay hover:text-white')}
       >

@@ -43,6 +43,7 @@ import { Puzzle } from 'lucide-react';
 
 import { usePluginRegistry } from './PluginRegistryProvider';
 import type { PluginManifest } from './types';
+import { useLang, type InterpolationVars, type MessageKey } from '../../i18n';
 import {
   PLUGIN_MSG,
   PLUGIN_MSG_VERSION,
@@ -161,7 +162,14 @@ export function useActiveInstalledPlugin(): PluginManifest | null {
 export function PluginFrameHost({ active }: { active: PluginManifest | null }): JSX.Element {
   const reg = usePluginRegistry();
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  /**
+   * 失败态**存键不存字**（`{ key, vars }`），渲染期才 `t()`。
+   * 存当时的译文会在切语言后不重译 —— 本仓 `TransferDialog` 栽过的同款缺陷
+   * （它的 `error` state 存的是字符串，重开弹窗才恢复）。
+   */
+  const [failed, setFailed] = useState<{ key: MessageKey; vars?: InterpolationVars } | null>(null);
+  /** 取词 + **语言变化订阅点**：顶条与失败态都走 i18n，少了它切语言不刷新 */
+  const { t } = useLang();
 
   const projects = useHumanProjects();
   const stages = useHumanStages();
@@ -220,7 +228,7 @@ export function PluginFrameHost({ active }: { active: PluginManifest | null }): 
       const d = e.data as { v?: number; type?: string; error?: string } | null;
       if (!d || typeof d !== 'object' || d.v !== PLUGIN_MSG_VERSION) return;
       if (d.type === PLUGIN_MSG.ready) {
-        if (d.error) setFailed(`插件加载失败：${d.error}`);
+        if (d.error) setFailed({ key: 'plugin.frame.loadFailed', vars: { error: d.error } });
         else setFailed(null);
         push(); // 握手后立即补推当前快照（挂载瞬间那条广播可能已丢失）
       } else if (d.type === PLUGIN_MSG.unmountAck) {
@@ -242,11 +250,8 @@ export function PluginFrameHost({ active }: { active: PluginManifest | null }): 
     let readyTimer = 0;
     if (!htmlMode) {
       readyTimer = window.setTimeout(() => {
-        setFailed(
-          (cur) =>
-            cur ??
-            '插件未能在 3 秒内就绪——入口文件未声明 window.IDPlanPlugin.mount，或产物加载失败',
-        );
+        // 键而非译文：与 d.error 那支同款（`cur ??` 保住已有失败原因，不覆盖）
+        setFailed((cur) => cur ?? { key: 'plugin.frame.readyTimeout' });
       }, READY_TIMEOUT_MS);
     }
 
@@ -277,7 +282,7 @@ export function PluginFrameHost({ active }: { active: PluginManifest | null }): 
             <Puzzle size={13} className="text-mist" aria-hidden />
             <span className="truncate text-[12px] font-medium text-ink">{active.name}</span>
             <span className="shrink-0 font-mono text-[10px] text-mist">
-              v{active.version} · 成员自装
+              v{active.version} · {t('plugin.frame.localInstall')}
             </span>
             <button
               type="button"
@@ -289,13 +294,13 @@ export function PluginFrameHost({ active }: { active: PluginManifest | null }): 
                 'outline-none focus-visible:ring-2 focus-visible:ring-pine/40',
               )}
             >
-              回到主界面
+              {t('plugin.frame.backToApp')}
             </button>
           </div>
 
           {failed && (
             <p className="shrink-0 border-t border-clay/40 bg-clay/5 px-4 py-2 text-[11px] text-clay">
-              {failed}
+              {t(failed.key, failed.vars)}
             </p>
           )}
         </>

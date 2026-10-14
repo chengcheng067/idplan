@@ -98,27 +98,35 @@ export function AgentSettingsPanel(): JSX.Element {
         </div>
         <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5 text-xs leading-6">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-mist">Agent 席位</span>
+            {/*
+              ⚠️ 标签侧用 `<div>` 而不是 `<span>`：这一行是**两栏 flex**（标签 / 数值各
+              一个 flex item），两者之间没有任何文本流，只是被 `justify-between` 拉开的
+              两块。`tests/i18n-jsx-space.spec.ts` 按「同一 children 数组里相邻的行内
+              文本段」判空格，会把 `span` 兄弟误判成一句话的两段（英文侧真报了一次）。
+              flex item 自带 blockify ⇒ 换成 `<div>` **布局零变化**，同时让扫描器的模型
+              与真实文本流一致。本仓同形先例：`MyTasksPage.tsx:139` 的 `<h1>` + `<span>`。
+            */}
+            <div className="text-mist">{t('agentSettings.seatRowLabel')}</div>
             <span className="font-mono text-ink">
-              已用 {agentSeatUsed}/{AGENT_SEAT_LIMIT}
+              {t('agentSettings.seatUsed', { used: agentSeatUsed, limit: AGENT_SEAT_LIMIT })}
             </span>
           </div>
           {agentSeatOver && (
             <p className="text-[11px] text-amber">
-              已超出免费席位额度（{AGENT_SEAT_LIMIT} 个）——不影响使用，仅作提示。
+              {t('agentSettings.seatOver', { limit: AGENT_SEAT_LIMIT })}
             </p>
           )}
           <div className="mt-1 flex items-center justify-between gap-2">
-            <span className="text-mist">本地库占用</span>
+            <span className="text-mist">{t('agentSettings.dbUsageLabel')}</span>
             <span className="font-mono text-ink">
               {dbUsage ? formatBytes(dbUsage.bytes) : '—'}
               {dbUsage && dbUsage.source === 'serialization-fallback' && (
-                <span className="ml-1 text-[10px] text-mist">（估算）</span>
+                <span className="ml-1 text-[10px] text-mist">{t('agentSettings.dbUsageEstimated')}</span>
               )}
             </span>
           </div>
           <p className="mt-1 text-[11px] text-mist">
-            未来单库超过约 50MB 时会在此提示清理 / 分库建议。
+            {t('agentSettings.dbUsageHint')}
           </p>
         </div>
       </section>
@@ -135,9 +143,9 @@ export function AgentSettingsPanel(): JSX.Element {
           </h3>
         </div>
         <p className="rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-          外部 Agent 通过本机回环地址以<strong className="text-ink">结构化命令</strong>
-          接入 ID Plan；自然语言由 Agent 侧自己解析——ID Plan 不解析自然语言、不调用大模型。
-          接入地址与访问令牌在 Agent 看板的接入面板里生成与管理，此处不重复。
+          {t('agentSettings.ingress.lead')}
+          <strong className="text-ink">{t('agentSettings.ingress.strong')}</strong>
+          {t('agentSettings.ingress.tail')}
         </p>
       </section>
 
@@ -150,7 +158,7 @@ export function AgentSettingsPanel(): JSX.Element {
           </h3>
         </div>
         <p className="mb-2 rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-          Agent 看板是 AI 工作区：执行记录、接入面板与任务队列都在那里。
+          {t('agentSettings.boardHint')}
         </p>
         {/*
           这个 Link 只在 agent-board 启用时会被渲染（`PluginSettingsSlot` 判启用态，
@@ -169,7 +177,7 @@ export function AgentSettingsPanel(): JSX.Element {
           className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand"
         >
           <Bot size={15} className="text-mist" aria-hidden />
-          打开 Agent 看板
+          {t('agentSettings.openBoard')}
         </Link>
       </section>
     </div>

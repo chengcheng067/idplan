@@ -90,6 +90,8 @@ export const enMessages: Record<MessageKey, string> = {
   'nav.agentExecutions': 'Execution records',
   'nav.homeAria': 'ID Plan home',
   'nav.sidebarAria': 'Main navigation sidebar',
+  /* The <xl sidebar drawer's own overlay label (a different surface from the aside above) */
+  'nav.drawerAria': 'Navigation menu',
   'sidebar.agentBoards': 'Agent boards',
   'sidebar.noIdentityHint':
     'No identity yet. Pick a member from the identity row at the bottom of the sidebar and the projects you can see and change will show up here.',
@@ -150,6 +152,16 @@ export const enMessages: Record<MessageKey, string> = {
   'topbar.searchAria': 'Search projects, tasks or clients',
   'topbar.searchClearAria': 'Clear and close search',
   'topbar.backAria': 'Go back',
+  /* Hamburger (<xl sidebar drawer trigger — NOT the <md MobileMoreMenu ⋮) */
+  'topbar.navMenuAria': 'Open navigation menu',
+  /* Tablet (768–1279) search icon button */
+  'topbar.searchOpenAria': 'Open search',
+  'topbar.searchOpenTitle': 'Search (⌘K)',
+  /* Electron self-drawn window controls (Windows only; macOS keeps the native traffic lights) */
+  'topbar.windowControlsAria': 'Window controls',
+  'topbar.windowMinimize': 'Minimize',
+  'topbar.windowMaximize': 'Maximize',
+  'topbar.windowRestore': 'Restore',
 
   /* ───────────────────── Weekdays (short + full) ───────────────────── */
   'weekday.short.mon': 'Mon',
@@ -866,4 +878,27 @@ export const enMessages: Record<MessageKey, string> = {
   'agentTransfer.submitting': 'Working…',
   'agentTransfer.confirm': 'Confirm takeover',
   'agentTransfer.failed': 'Takeover failed, please try again.',
+
+  /* ───────── Plugin sandbox host (PluginSandboxFrame) ───────── */
+  'plugin.frame.loadFailed': 'Plugin failed to load: {error}',
+  'plugin.frame.readyTimeout':
+    'The plugin was not ready within 3 seconds — its entry file never declared window.IDPlanPlugin.mount, or its bundle failed to load.',
+  'plugin.frame.localInstall': 'Member-installed',
+  'plugin.frame.backToApp': 'Back to app',
+
+  /* ───────── agent-board plugin's own settings (AgentSettingsPanel) ───────── */
+  'agentSettings.seatRowLabel': 'Agent seats',
+  'agentSettings.seatUsed': 'In use {used}/{limit}',
+  'agentSettings.seatOver': 'Over the free seat allowance ({limit}) — this does not block anything, it is a notice.',
+  'agentSettings.dbUsageLabel': 'Local DB usage',
+  'agentSettings.dbUsageEstimated': '(estimated)',
+  'agentSettings.dbUsageHint':
+    'Once a single DB grows past roughly 50MB, cleanup / split suggestions will appear here.',
+  'agentSettings.ingress.lead': 'External Agents use ',
+  'agentSettings.ingress.strong': 'structured commands',
+  'agentSettings.ingress.tail':
+    ' over the loopback address to reach ID Plan; natural language is parsed by the Agent side — ID Plan does not parse natural language and does not call any LLM. The access address and token are generated and managed in the Agent board’s ingress panel, so they are not repeated here.',
+  'agentSettings.boardHint':
+    'The Agent board is the AI workspace: execution records, the ingress panel and the task queue all live there.',
+  'agentSettings.openBoard': 'Open Agent board',
 };

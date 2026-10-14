@@ -821,7 +821,7 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
         open={!xl && drawerOpen}
         onClose={closeDrawer}
         placement="left"
-        ariaLabel="导航菜单"
+        ariaLabel={t('nav.drawerAria')}
       >
         <div
           data-app-sidebar=""
