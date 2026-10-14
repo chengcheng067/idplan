@@ -26,9 +26,11 @@ import { Check, KeyRound, PlugZap, Save, Server } from 'lucide-react';
 import { appEnv } from '../../config/env';
 import { API_TOKEN_KEY } from '../../core/repositories/remote/rest.client';
 import { API_TOKEN_EVENT } from '../../di/repository.provider';
+import { useLang } from '../../i18n';
 import { logUser } from '../../core/services/log.service';
 
 export function NasServiceSection(): JSX.Element | null {
+  const { t } = useLang();
   const remote = appEnv.dataSource === 'remote';
   const [draft, setDraft] = useState('');
   const [configured, setConfigured] = useState(false);
@@ -79,19 +81,23 @@ export function NasServiceSection(): JSX.Element | null {
       <div className="mb-2 flex items-center gap-1.5">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
           <Server size={14} className="text-mist" aria-hidden />
-          NAS 服务
+          {t('nas.title')}
         </h3>
       </div>
       <div className="space-y-2.5 rounded-[12px] border border-line bg-cream/40 px-3.5 py-3">
         <div className="flex items-center justify-between gap-3 text-xs">
-          <span className="text-mist">服务地址</span>
-          <span className="font-medium text-ink">{appEnv.apiBaseUrl || '（未配置）'}</span>
+          <span className="text-mist">{t('nas.address')}</span>
+          <span className="font-medium text-ink">{appEnv.apiBaseUrl || t('nas.addressUnset')}</span>
         </div>
         <p className="text-[11px] leading-relaxed text-mist">
-          保存备份 / 从备份恢复需要服务端令牌。请在 NAS 的后端容器环境变量里配置
+          {/*
+            ⚠️ 这条文本流会被 tests/i18n-jsx-space.spec.ts 判空格（三个子项都可解释）：
+            `IDPLAN_AGENT_TOKEN` 是**硬编码字面量**（左右贴不带空格）⇒ 它两侧的空格
+            按 en.ts 文件头 ⑤ 的「例外」放在**英文取值的前导/尾随**里（中文态不能有空格）。
+          */}
+          {t('nas.note.pre')}
           <code className="mx-1 rounded bg-line/60 px-1">IDPLAN_AGENT_TOKEN</code>
-          （UGOS：Docker 套件 → idplan-backend → 编辑 → 环境变量），
-          把同一串值填在下面。令牌只存在本机浏览器里，不上传、不回显。
+          {t('nas.note.post')}
         </p>
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -104,7 +110,7 @@ export function NasServiceSection(): JSX.Element | null {
               type="password"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={configured ? '已配置 · 输入新值可更换' : '粘贴服务端配置的同一串令牌'}
+              placeholder={configured ? t('nas.tokenConfigured') : t('nas.tokenPlaceholder')}
               className="w-full rounded-[10px] border border-line bg-paper py-1.5 pl-7 pr-2.5 text-xs text-ink placeholder:text-mist/70 focus:border-ink/40 focus:outline-none"
             />
           </div>
@@ -115,17 +121,17 @@ export function NasServiceSection(): JSX.Element | null {
             className="flex items-center gap-1 rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
           >
             {saved ? <Check size={13} className="text-moss" /> : <Save size={13} />}
-            {saved ? '已保存' : '保存'}
+            {saved ? t('nas.saved') : t('common.save')}
           </button>
           <button
             type="button"
             onClick={() => void testConnection()}
             disabled={probe === 'testing'}
-            title="用当前令牌向服务端备份通道发一次只读探测"
+            title={t('nas.probeTitle')}
             className="flex items-center gap-1 rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
           >
             <PlugZap size={13} />
-            {probe === 'testing' ? '探测中' : '测试连接'}
+            {probe === 'testing' ? t('nas.probing') : t('nas.test')}
           </button>
         </div>
         {probe !== 'idle' && (
@@ -134,17 +140,14 @@ export function NasServiceSection(): JSX.Element | null {
               probe === 'ok' ? 'text-moss' : probe === 'testing' ? 'text-mist' : 'text-amber'
             }`}
           >
-            {probe === 'ok' && '备份通道连通：令牌已被服务端接受，可以正常保存备份。'}
-            {probe === 'auth' &&
-              '服务端拒绝了令牌（401）：两侧值不一致，或服务端 IDPLAN_AGENT_TOKEN 未配/留空。'}
-            {probe === 'net' && '连不上服务端：检查地址是否可达（应为本机局域网的 NAS 地址）。'}
-            {probe === 'err' && '服务端返回了意外状态，稍后重试或查看 NAS 容器日志。'}
-            {probe === 'testing' && '正在探测备份通道…'}
+            {probe === 'ok' && t('nas.probe.ok')}
+            {probe === 'auth' && t('nas.probe.auth')}
+            {probe === 'net' && t('nas.probe.net')}
+            {probe === 'err' && t('nas.probe.err')}
+            {probe === 'testing' && t('nas.probe.testing')}
           </p>
         )}
-        {configured && (
-          <p className="text-[11px] text-moss">当前已配置备份令牌，保存备份应该可以正常使用了。</p>
-        )}
+        {configured && <p className="text-[11px] text-moss">{t('nas.configuredNote')}</p>}
       </div>
     </section>
   );

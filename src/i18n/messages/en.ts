@@ -1229,4 +1229,41 @@ export const enMessages: Record<MessageKey, string> = {
 
   'toast.saveFailedRetry': 'Save failed, please retry',
   'toast.deleteFailedRetry': 'Delete failed, please retry',
+
+  /* ══════════ 笔 1-⑥：Settings ▸ Data & Backup ▸ NAS service ══════════ */
+  'nas.title': 'NAS service',
+  'nas.address': 'Server address',
+  'nas.addressUnset': '(not configured)',
+  /* ⚠️ 段间空格归英文取值：`note.pre` **尾随空格**（右段是硬编码的
+     `IDPLAN_AGENT_TOKEN`），`note.post` **前导空格**（左段同上）。中文态那两处紧贴、不能有空格。 */
+  'nas.note.pre':
+    'Saving or restoring backups requires a server token. Set it in the backend container environment on your NAS: ',
+  'nas.note.post':
+    ' (UGOS: Docker Suite → idplan-backend → Edit → Environment variables), then paste the same value below. The token lives only in this browser; it is never uploaded and never shown back.',
+  'nas.tokenConfigured': 'Configured · enter a new value to replace it',
+  'nas.tokenPlaceholder': 'Paste the same token configured on the server',
+  'nas.saved': 'Saved',
+  'nas.probeTitle': 'Send one read-only probe to the server backup channel with the current token',
+  'nas.probing': 'Probing',
+  'nas.test': 'Test connection',
+  'nas.probe.ok': 'Backup channel reachable: the server accepted the token, backups should work.',
+  'nas.probe.auth':
+    'The server rejected the token (401): the two sides differ, or IDPLAN_AGENT_TOKEN is unset or blank on the server.',
+  'nas.probe.net':
+    'Cannot reach the server: check that the address is reachable (it should be your NAS on the local network).',
+  'nas.probe.err':
+    'The server returned an unexpected status; retry later or check the NAS container logs.',
+  'nas.probe.testing': 'Probing the backup channel…',
+  'nas.configuredNote': 'A backup token is configured; saving backups should work now.',
+
+  /* ══════════ 笔 1-⑥：Plugin settings slot ▸ Sample projects ══════════ */
+  'sample.title': 'Sample projects',
+  'sample.note.lead': 'Load ',
+  'sample.note.demo': '5 demo projects',
+  'sample.note.mid':
+    ' (across industries, with stages, tasks and dates) to quickly see how the board / calendar / Gantt work. It is ',
+  'sample.note.strong': 'overwriting',
+  'sample.note.tail':
+    ': it replaces all current data at once and cannot be undone. Back up first with “Save backup” if you have real data.',
+  'sample.loading': 'Loading…',
 };

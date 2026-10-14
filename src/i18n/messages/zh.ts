@@ -1205,6 +1205,39 @@ export const zhMessages = {
   /* ── 两条带「请重试」的保存/删除失败（与既有 toast.saveFailed / toast.deleteFailed 不同值）── */
   'toast.saveFailedRetry': '保存失败，请重试',
   'toast.deleteFailedRetry': '删除失败，请重试',
+
+  /* ══════════ 笔 1-⑥：设置 ▸ 数据与备份 ▸ NAS 服务（仅 remote 数据源渲染） ══════════ */
+  'nas.title': 'NAS 服务',
+  'nas.address': '服务地址',
+  'nas.addressUnset': '（未配置）',
+  /* ⚠️ 这条与下一段夹着**硬编码字面量** `<code>IDPLAN_AGENT_TOKEN</code>`：
+     zh 两侧紧贴（无空格），故 en 的段间空格落在 post 的**前导**上（en.ts 文件头 ⑤ 的例外）。 */
+  'nas.note.pre': '保存备份 / 从备份恢复需要服务端令牌。请在 NAS 的后端容器环境变量里配置',
+  'nas.note.post':
+    '（UGOS：Docker 套件 → idplan-backend → 编辑 → 环境变量）， 把同一串值填在下面。令牌只存在本机浏览器里，不上传、不回显。',
+  'nas.tokenConfigured': '已配置 · 输入新值可更换',
+  'nas.tokenPlaceholder': '粘贴服务端配置的同一串令牌',
+  'nas.saved': '已保存',
+  'nas.probeTitle': '用当前令牌向服务端备份通道发一次只读探测',
+  'nas.probing': '探测中',
+  'nas.test': '测试连接',
+  'nas.probe.ok': '备份通道连通：令牌已被服务端接受，可以正常保存备份。',
+  'nas.probe.auth': '服务端拒绝了令牌（401）：两侧值不一致，或服务端 IDPLAN_AGENT_TOKEN 未配/留空。',
+  'nas.probe.net': '连不上服务端：检查地址是否可达（应为本机局域网的 NAS 地址）。',
+  'nas.probe.err': '服务端返回了意外状态，稍后重试或查看 NAS 容器日志。',
+  'nas.probe.testing': '正在探测备份通道…',
+  'nas.configuredNote': '当前已配置备份令牌，保存备份应该可以正常使用了。',
+
+  /* ══════════ 笔 1-⑥：插件设置槽 ▸ 示例项目（内置插件 sample-projects） ══════════ */
+  'sample.title': '示例项目',
+  /* 五段之间的空格归属见 SampleProjectsSettings.tsx 的 JSX 注释：zh 只有 lead 带尾随空格 */
+  'sample.note.lead': '载入 ',
+  'sample.note.demo': '5 个演示项目',
+  'sample.note.mid':
+    '（跨行业，含阶段、任务与日期）， 用来快速看懂看板 / 月历 / 甘特是怎么走的。它是',
+  'sample.note.strong': '覆盖式',
+  'sample.note.tail': '的：会整体替换当前全部数据且不可撤销， 有真实数据请先「保存备份」留档。',
+  'sample.loading': '载入中…',
 } as const;
 
 /**

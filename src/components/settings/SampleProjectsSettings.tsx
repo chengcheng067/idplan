@@ -44,15 +44,24 @@ export function SampleProjectsSettings(): JSX.Element {
       <div className="mb-2 flex items-center gap-1.5">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
           <Sparkles size={14} className="text-mist" aria-hidden />
-          示例项目
+          {t('sample.title')}
         </h3>
       </div>
 
+      {/*
+        ⚠️ 这条文本流会被 tests/i18n-jsx-space.spec.ts 判空格（五个子项都可解释：
+        `{t()}` 与行内 `<strong>` 交替）。五段之间的空格**全在取值里**，且中英不同：
+          · `lead`  zh `载入 ` / en `Load `      —— 两侧都带**尾随空格**（原文 `载入 <strong>`）
+          · `mid`   zh `（跨行业…它是` / en ` (across… It is ` —— **zh 无空格**（`</strong>（` 紧贴），
+                    en **前导 + 尾随**各一个（左段是拉丁取值、右段是拉丁取值）
+          · `tail`  zh `的：…` / en `: …`     —— 两侧都**不带**空格（`: ` 是右贴标点，不必补）
+      */}
       <p className="mb-2 rounded-xl border border-line bg-cream/60 px-3.5 py-3 text-xs leading-relaxed text-mist">
-        载入 <strong className="text-ink">5 个演示项目</strong>（跨行业，含阶段、任务与日期），
-        用来快速看懂看板 / 月历 / 甘特是怎么走的。它是
-        <strong className="text-ink">覆盖式</strong>的：会整体替换当前全部数据且不可撤销，
-        有真实数据请先「保存备份」留档。
+        {t('sample.note.lead')}
+        <strong className="text-ink">{t('sample.note.demo')}</strong>
+        {t('sample.note.mid')}
+        <strong className="text-ink">{t('sample.note.strong')}</strong>
+        {t('sample.note.tail')}
       </p>
 
       <button
@@ -64,7 +73,7 @@ export function SampleProjectsSettings(): JSX.Element {
         className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-line bg-cream/60 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-60"
       >
         <Sparkles size={15} className="text-mist" aria-hidden />
-        {busy ? '载入中…' : t('sidebar.loadDemo')}
+        {busy ? t('sample.loading') : t('sidebar.loadDemo')}
       </button>
       {!isAdmin && <p className="mt-1.5 text-[11px] text-mist">{t('guide.adminOnlyTitle')}</p>}
 
