@@ -1238,6 +1238,18 @@ export const zhMessages = {
   'sample.note.strong': '覆盖式',
   'sample.note.tail': '的：会整体替换当前全部数据且不可撤销， 有真实数据请先「保存备份」留档。',
   'sample.loading': '载入中…',
+
+  /* ══════════ 笔 2.1：执行域 · 僵尸态收敛的两条**审计原因串** ══════════ */
+  /* ⚠️ 这两条会被 `recoverZombieExecutions` **落库**（`execution.blockedReason` /
+     attempt 的 `terminalReason` + 审计事件的 reason），再被
+     `AgentExecutionConsolePage.tsx:662/379` 用 `t('agentConsole.blockedReason', { reason })`
+     嵌进句子里渲染 —— 所以它们必须是英文，否则英文态会看到「Blocked: …一长串中文」。
+     取值由**写入点**注入（`di/repository.provider.tsx` 与 `useBackupIo`），
+     定义侧（`src/core/execution/execution-recovery.ts`）**不** import i18n。 */
+  'execution.recovery.reason':
+    '应用启动时发现该执行单处于运行中，但当前进程已不可能有执行在运行（进程重启 / 备份恢复绕过状态校验），收敛为待处理；确认凭据保持不变，若计划未变更则确认仍然有效、可重新进入运行（无需重新确认）。',
+  'execution.recovery.attemptReason':
+    '随执行单一同收敛：该 attempt 所属进程已不存在（进程重启 / 备份恢复绕过状态校验），打断为 interrupted。',
 } as const;
 
 /**

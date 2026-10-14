@@ -741,3 +741,75 @@ describe('僵尸判据：单一出处与备份恢复场景', () => {
     expect((await bundle.executions.getExecution(other.id))?.status).toBe(ExecutionStatus.Running);
   });
 });
+
+/* ══════════════════════ i18n 笔 2.1：原因串可注入 ══════════════════════ */
+
+/**
+ * 缺陷原文：收敛落库的 `blockedReason` / `terminalReason` 是**中文常量**，
+ * 而 `AgentExecutionConsolePage.tsx:662 / :379` 把它们用
+ * `t('agentConsole.blockedReason', { reason })` **嵌进一句英文**里渲染
+ * ⇒ 英文态看到「Blocked: …（一长串中文）」。
+ *
+ * 修法（team-lead 定的形态）：**取词在写入点**，`execution-recovery.ts` 只收一个算好的串
+ * （那个文件在服务端 tsconfig 的 include 面内，import i18n 会红 TS2584）。
+ *
+ * 本组锁两件事：
+ *   ① **注入真的到达两个写入点**（execution 的 blockedReason + 审计事件、attempt 的
+ *      terminalReason + 审计事件）—— 只到一半会留下「一个英文一个中文」的半成品；
+ *   ② **不传时行为与改造前逐字节相同**（上面的用例全部不传 reasons，已在跑）。
+ */
+describe('recoverZombieExecutions：原因串可注入（i18n 写入点取词）', () => {
+  const INJECTED = { execution: 'INJECTED-EXEC-REASON', attempt: 'INJECTED-ATTEMPT-REASON' };
+
+  it('两个写入点都吃注入值：blockedReason / terminalReason / 两条审计 reason', async () => {
+    const id = await newExecution('i1');
+    await toRunning(id);
+    await addRunningAttempt(id);
+
+    await recoverZombieExecutions(bundle.executions, scope, INJECTED);
+
+    const exec = await bundle.executions.getExecution(id);
+    expect(exec?.blockedReason, 'execution 的 blockedReason').toBe(INJECTED.execution);
+    expect((await bundle.executions.listAttempts(id))[0]!.terminalReason, 'attempt 的 terminalReason').toBe(
+      INJECTED.attempt,
+    );
+
+    const events = await bundle.executions.listEvents(id);
+    const statusChanged = events.filter((e) => e.type === 'status_changed' && e.actor === 'system');
+    const attemptFinished = events.filter((e) => e.type === 'attempt_finished');
+    expect(statusChanged[0]!.reason, 'status_changed 的 reason').toBe(INJECTED.execution);
+    expect(attemptFinished[0]!.reason, 'attempt_finished 的 reason').toBe(INJECTED.attempt);
+  });
+
+  it('★ 两边不漂：出厂常量与 zh 消息表逐字相同（否则非渲染侧写下的句子会和界面不一致）', async () => {
+    /*
+     * 注入形态下有两个「中文出处」：`DEFAULT_RECOVERY_REASONS`（不传时的回落）与
+     * `zh.ts` 的两个键（渲染侧 `t()` 取的那份）。**两者必须逐字相同** ——
+     * 否则：走启动装配点写入的是消息表那份、走别的路径（无渲染侧、单测、未来的
+     * 服务端调用）写入的是常量那份，同一次收敛会按调用方得到两句不同的话。
+     */
+    const { catalogOf } = await import('../src/i18n');
+    expect(catalogOf('zh')['execution.recovery.reason']).toBe(DEFAULT_RECOVERY_REASON);
+    expect(catalogOf('zh')['execution.recovery.attemptReason']).toBe(DEFAULT_ATTEMPT_RECOVERY_REASON);
+  });
+
+  it('★ 两个渲染侧写入点都真的传了 t() 取好的串（防「忘了传」⇒ 英文态仍是中文）', async () => {
+    /*
+     * 这是一条**源码接线锁**：注入形态下，`DEFAULT_RECOVERY_REASONS` 是中文出厂值，
+     * 谁忘了在调用点传 `t(...)`，功能测试**全绿**而英文态照旧露中文（典型假绿）。
+     * 判据 = 两个调用点都出现 `t('execution.recovery.reason')` 与 `…attemptReason`。
+     */
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const root = resolve(__dirname, '..');
+    const sites = [
+      'src/di/repository.provider.tsx', // 启动装配点
+      'src/components/layout/useBackupIo.tsx', // 备份恢复后的补位点
+    ];
+    for (const rel of sites) {
+      const src = readFileSync(resolve(root, rel), 'utf-8');
+      expect(src, `${rel} 未传 execution 原因串`).toContain("t('execution.recovery.reason')");
+      expect(src, `${rel} 未传 attempt 原因串`).toContain("t('execution.recovery.attemptReason')");
+    }
+  });
+});

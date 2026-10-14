@@ -24,7 +24,11 @@ import {
   type TaskSource,
 } from '../types/enums';
 import type { IRepositoryBundle } from '../repositories/interfaces';
-import { recoverZombieExecutions } from '../execution/execution-recovery';
+import {
+  DEFAULT_RECOVERY_REASONS,
+  recoverZombieExecutions,
+  type RecoveryReasons,
+} from '../execution/execution-recovery';
 import { normalizeProjectRow, normalizeStageRow } from '../template/stage-fallback';
 
 /**
@@ -469,7 +473,17 @@ export function validateBackupJson(json: unknown): BackupPackage {
 /* --------------------------------- 服务本体 --------------------------------- */
 
 export class BackupService {
-  public constructor(private readonly bundle: IRepositoryBundle) {}
+  /**
+   * @param reasons 僵尸态收敛的两条审计原因串（见 `execution-recovery.RecoveryReasons`）。
+   *   **必须由调用方注入** —— 本文件属 `src/core/**`，`execution-recovery.ts` 又在服务端
+   *   tsconfig 的 include 面内，故这条链上不能 import i18n（`lang.ts` 引用了 `document`）。
+   *   渲染侧的构造点是 `useBackupIo`，它用 `() => t('execution.recovery.…')` 取词。
+   *   缺省 = 中文出厂值 ⇒ 不传时行为与改造前逐字节相同。
+   */
+  public constructor(
+    private readonly bundle: IRepositoryBundle,
+    private readonly reasons: RecoveryReasons = DEFAULT_RECOVERY_REASONS,
+  ) {}
 
   /** 并行读全部表组装 BackupPackage（admin.fullExport 含 append-only 流水整表） */
   public async exportAll(): Promise<BackupPackage> {
@@ -552,9 +566,11 @@ export class BackupService {
     //    非致命：收敛失败不得让一次成功的恢复变成「失败」（导入已落库，回滚不了），
     //    故吞掉异常 —— 下次启动仍会兜底，不存在永久漏网。
     try {
-      await recoverZombieExecutions(this.bundle.executions, {
-        projectIds: data.projects.map((p) => p.id),
-      });
+      await recoverZombieExecutions(
+        this.bundle.executions,
+        { projectIds: data.projects.map((p) => p.id) },
+        this.reasons,
+      );
     } catch {
       // 见上：兜底是**尽力而为**的补位，不承担数据完整性责任（那是 replaceAllImport 的事务责任）
     }

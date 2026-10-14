@@ -50,6 +50,49 @@ export const DEFAULT_ATTEMPT_RECOVERY_REASON =
   '随执行单一同收敛：该 attempt 所属进程已不存在（进程重启 / 备份恢复绕过状态校验），打断为 interrupted。';
 
 /**
+ * ★ 收敛时落进审计流水的**两条原因串**（可注入）—— 2026-10-14 i18n 笔 2.1。
+ *
+ * ── 为什么要注入，而不是在这里 `import` i18n ──
+ * 本文件在 `server/tsconfig.json` 的 include 面内（`../src/core/execution/` 下的全部 .ts），
+ * 而 `src/i18n/lang.ts` 引用了 `document` ⇒ **在这里 import i18n 会让服务端 typecheck
+ * 报 TS2584**（本仓 `src/lib/date.ts`、`src/constants/agentTerms.ts` 都栽过同一条）。
+ * （⚠️ 写这段注释时踩过一次现场：原先这里写了那条 include 通配路径，**它自带的
+ *   结束标记把本段块注释提前闭合了** —— 正是本仓 `cjk-locator-guard` 文档里
+ *   点过的「块注释里不能写结束标记」。故此处只写目录、不写通配。）
+ * ⇒ 取词发生在**写入点**：谁把这条 reason 写进去，谁用 `t()` 取（渲染侧的两个调用方），
+ *   本模块只**收**一个已算好的串。
+ *
+ * ── 缺陷原文（这条注入修的是什么）──
+ * `AgentExecutionConsolePage.tsx:662` 用 `t('agentConsole.blockedReason', { reason })`
+ * 把**存下来的** `blockedReason` 嵌进一句英文里渲染（`:379` 的 `terminalReason` 同款）。
+ * 存的是中文常量 ⇒ 英文态会看到「Blocked: …（一长串中文）」。
+ * ⚠️ **别去改 `agentConsole.blockedReason` 那句英文** —— 那句本来就是对的，
+ *   改它只会把问题变成「英文句子里硬编中文」，更难查（team-lead 点名的做反形态）。
+ *
+ * ── 已知后果（如实登记）──
+ * 注入之后**落库的审计文本随写入当时的语言** ⇒ 切语言后看到的是「写入那一刻那种语言」
+ * 的系统说明（用户手填的数据不受影响）。这与「落库值一律中文」的 C 组口径**不同**：
+ * 那批是**用户数据**（阶段预设名 / 色号名 / 日志分组键），这批是**系统生成的说明**，
+ * 而它唯一的消费面就是给人看的控制台。若将来要「落库值也语言中立」，形态是
+ * 「存原因码 + 显示层映射 + 旧数据回落原样」（本次未做，作为已知取舍登记）。
+ */
+export interface RecoveryReasons {
+  /** execution 层：`blockedReason` 与 `status_changed` 事件的 reason */
+  execution: string;
+  /** attempt 层：`terminalReason` 与 `attempt_finished` 事件的 reason */
+  attempt: string;
+}
+
+/**
+ * 出厂（中文）原因串组 —— 也是**默认值**。
+ * 渲染侧不传时行为与改造前**逐字节相同**（默认语言即中文，既有用例零变化）。
+ */
+export const DEFAULT_RECOVERY_REASONS: RecoveryReasons = {
+  execution: DEFAULT_RECOVERY_REASON,
+  attempt: DEFAULT_ATTEMPT_RECOVERY_REASON,
+};
+
+/**
  * ★ 兜底判据的**唯一出处**：哪些 execution 状态算「僵尸态」。
  *
  * 决策与理由（**刻意不是「全部非终态」**）：
@@ -233,6 +276,7 @@ function emptySummary(): RecoverySummary {
 async function recoverExecution(
   repo: IExecutionsRepository,
   execution: Execution,
+  reasons: RecoveryReasons,
 ): Promise<ExecutionRecoveryOutcome> {
   const outcome: ExecutionRecoveryOutcome = {
     executionId: execution.id,
@@ -296,7 +340,7 @@ async function recoverExecution(
         if (!isZombieAttemptStatus(attempt.status)) continue;
         const target = recoveryTargetForAttempt(attempt.status);
         if (!target) continue;
-        await asAttemptRecovery(repo, execution.id, attempt, target);
+        await asAttemptRecovery(repo, execution.id, attempt, target, reasons.attempt);
         outcome.attemptsRecovered += 1;
       }
     }
@@ -312,7 +356,7 @@ async function recoverExecution(
     const from = execution.status;
     await repo.updateExecutionStatus(execution.id, {
       status: ExecutionStatus.NeedsAttention,
-      blockedReason: DEFAULT_RECOVERY_REASON,
+      blockedReason: reasons.execution,
     });
     await repo.appendEvent({
       executionId: execution.id,
@@ -321,7 +365,7 @@ async function recoverExecution(
       actor: 'system',
       fromStatus: from,
       toStatus: ExecutionStatus.NeedsAttention,
-      reason: DEFAULT_RECOVERY_REASON,
+      reason: reasons.execution,
     });
     outcome.to = ExecutionStatus.NeedsAttention;
     return outcome;
@@ -343,12 +387,13 @@ async function asAttemptRecovery(
   executionId: string,
   attempt: ExecutionAttempt,
   target: AttemptStatus,
+  reason: string,
 ): Promise<void> {
   const now = new Date().toISOString();
   await repo.updateAttempt(attempt.id, {
     status: target,
     finishedAt: now,
-    terminalReason: DEFAULT_ATTEMPT_RECOVERY_REASON,
+    terminalReason: reason,
   });
   const events = await repo.listEvents(executionId);
   await repo.appendEvent({
@@ -359,7 +404,7 @@ async function asAttemptRecovery(
     actor: 'system',
     fromStatus: null,
     toStatus: null,
-    reason: DEFAULT_ATTEMPT_RECOVERY_REASON,
+    reason,
   });
 }
 
@@ -377,10 +422,15 @@ function nextSeqOf(events: readonly ExecutionEvent[]): number {
  *
  * 幂等：重复调用对已收敛数据零写入（`needs_attention` / `interrupted` 都不在僵尸集合里）。
  * 不抛错：单条失败只记进 `outcomes[].failed`，`skipped` 计数。
+ *
+ * @param reasons 两条审计原因串（缺省 = 中文出厂值）。**渲染侧应当传 `t()` 取好的串**
+ *   —— 见 `RecoveryReasons` 的说明：本模块不能 import i18n（服务端 tsconfig 会红），
+ *   故取词发生在**写入点**（`di/repository.provider.tsx` 与 `useBackupIo`）。
  */
 export async function recoverZombieExecutions(
   repo: IExecutionsRepository,
   scope: RecoveryScanScope,
+  reasons: RecoveryReasons = DEFAULT_RECOVERY_REASONS,
 ): Promise<RecoverySummary> {
   const summary = emptySummary();
   if (scope.projectIds.length === 0) return summary;
@@ -414,7 +464,7 @@ export async function recoverZombieExecutions(
         });
         continue;
       }
-      const outcome = await recoverExecution(repo, execution);
+      const outcome = await recoverExecution(repo, execution, reasons);
       summary.outcomes.push(outcome);
       summary.attemptsRecovered += outcome.attemptsRecovered;
       if (outcome.to) {

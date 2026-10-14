@@ -1266,4 +1266,10 @@ export const enMessages: Record<MessageKey, string> = {
   'sample.note.tail':
     ': it replaces all current data at once and cannot be undone. Back up first with “Save backup” if you have real data.',
   'sample.loading': 'Loading…',
+
+  /* ══════════ 笔 2.1：Execution · the two audit reason strings written by zombie recovery ══════════ */
+  'execution.recovery.reason':
+    'On startup this execution was found in the running state, but no execution can be running in the current process any more (the process restarted, or a backup restore bypassed status validation); it has been converged to needs attention. The confirmation credentials are unchanged — if the plan has not changed, the confirmation is still valid and the execution can enter running again without re-confirming.',
+  'execution.recovery.attemptReason':
+    'Converged together with its execution: the process this attempt belonged to no longer exists (the process restarted, or a backup restore bypassed status validation), so it was interrupted.',
 };

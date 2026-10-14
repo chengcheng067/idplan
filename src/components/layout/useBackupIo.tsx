@@ -163,7 +163,11 @@ export function useBackupIo(): BackupIo {
     setConfirmOpen(false);
     if (!pendingPkg) return;
     try {
-      await new BackupService(repos).importAndReplace(pendingPkg);
+      await new BackupService(repos, {
+        // i18n 笔 2.1：审计原因串在写入点取词（core 不能 import i18n，见 RecoveryReasons）
+        execution: t('execution.recovery.reason'),
+        attempt: t('execution.recovery.attemptReason'),
+      }).importAndReplace(pendingPkg);
       logUser('备份', '从备份恢复成功');
       window.location.reload();
     } catch (err) {

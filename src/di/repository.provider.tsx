@@ -7,6 +7,7 @@ import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { detectLocalDbVersion, isDbAheadOfApp, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
 import { recoverZombieExecutions } from '../core/execution/execution-recovery';
+import { t } from '../i18n';
 import { exportPreMigrationBackupToFile } from '../components/layout/useBackupIo';
 
 /**
@@ -68,9 +69,22 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
       //       —— 哪怕只闪一帧，用户已经看见了不该看见的东西。
       //   这里 await（而非 fire-and-forget）：失败也不能拦启动（内部已逐条隔离、不抛），
       //   但必须保证 children 拿到 bundle 时，库里已经没有僵尸态。
-      await recoverZombieExecutions(b.executions, {
-        projectIds: (await b.projects.list({ status: 'all' })).map((p) => p.id),
-      });
+      await recoverZombieExecutions(
+        b.executions,
+        { projectIds: (await b.projects.list({ status: 'all' })).map((p) => p.id) },
+        /*
+         * ★ i18n 笔 2.1：两条审计原因串在**写入点**取词。
+         * 为什么不把取词放进 `execution-recovery.ts`：那个文件在服务端 tsconfig 的
+         * include 面内，而 `src/i18n/lang.ts` 引用了 `document` ⇒ import 它会红 TS2584。
+         * 这里用**模块级 `t`**（不订阅）：本函数是「算一次就完」的启动期调用 ——
+         * 若改用 `useLang()` 的 `t`，它必须进 `useCallback` 的 deps，而 deps 一变
+         * 这个 effect 会**重建仓储**（代价远大于收益）。启动期读一次当前语言即正确。
+         */
+        {
+          execution: t('execution.recovery.reason'),
+          attempt: t('execution.recovery.attemptReason'),
+        },
+      );
       if (!cancelledRef.current) setBundle(b);
     } catch (err: unknown) {
       if (cancelledRef.current) return;
