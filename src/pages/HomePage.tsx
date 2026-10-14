@@ -29,7 +29,17 @@ import {
 } from '../core/template/stage-library';
 import type { Member, Project, Stage, Task } from '../core/types/entities';
 import { cn } from '../lib/cn';
-import { t, useLang } from '../i18n';
+/*
+ * ★ 模块级取词别名成 `translate`（**不许**写成 `import { t }`）：
+ *   本文件既在 `deriveColumns()`（顶层函数，无 hook）里用模块级取词，又在若干组件里用
+ *   `const { t } = useLang()`。两者同名会让 esbuild 把**组件 JSX 里**的取词改名成 `t2`
+ *   ⇒ `tests/helpers/i18n-jsx-space.ts` 按 `callee === 't'` 认取词，**整个文件当场
+ *   从守卫视野里消失**（实测：本文件别名前 runs=0、别名后 runs=11；同形的
+ *   `CreateAgentBoardDialog` 实测 0 → 6）。
+ *   ⇒ 即「守卫看不见它」不等于「它没问题」。同形写法见 `PluginsSection` /
+ *   `PrintLogoSection` / `repository.provider`。
+ */
+import { t as translate, useLang } from '../i18n';
 
 /**
  * 首页（严格对齐规格 §2.5 首页各块 + 画板 02「亮色首页」/ 画板 12「暗色首页」）：
@@ -506,7 +516,7 @@ function toneOf(tone: string): { dot: string; chip: string } {
  *      属**文案层**。证据：它是本函数里**唯一**的字面量列名；key 由
  *      `TODO_COLUMN = 'todo'`（第 431 行）给出，只有 `columnOf()` 里
  *      `status === 'not_started'` 一条路径（见文件下方 `columnOf`）能命中它。
- *      ⇒ 因此它走 i18n：`t('home.column.todo')`（英文 Not started）。
+ *      ⇒ 因此它走 i18n：`translate('home.column.todo')`（英文 Not started）。
  *
  *   ② `for (const [domainKey] of getDomains()) { … columns.push({ key: c.key, label: c.label }) }`
  *      —— 这些 label 来自**行业库内容层**（`templates/stage-library.json` 的
@@ -526,7 +536,9 @@ export function deriveColumns(projects: Project[]): KanbanColumn[] {
   if (used.size === 0) used.add('indoor');
 
   // ① 文案层（唯一字面量列名）：走 i18n；② 行业库列名见下方 push（内容层，本批不动）
-  const columns: KanbanColumn[] = [{ key: TODO_COLUMN, label: t('home.column.todo'), ...toneOf('mist') }];
+  const columns: KanbanColumn[] = [
+    { key: TODO_COLUMN, label: translate('home.column.todo'), ...toneOf('mist') },
+  ];
   const seen = new Set<string>([TODO_COLUMN]);
   for (const [domainKey] of getDomains()) {
     if (!used.has(domainKey)) continue;
@@ -595,7 +607,7 @@ function columnOf(
  * @param columnSource 列集合用（板级、**未过滤**的项目宇宙；须与 `projects` 同一板块口径）
  *
  * ⚠️ **语言依赖（2026-10-13 语言切换批 2a 新增，调用方必须遵守）**：
- *   `deriveColumns` 里那个 `todo` 列名走的是 `t('home.column.todo')` ⇒ **本函数读语言**。
+ *   `deriveColumns` 里那个 `todo` 列名走的是 `translate('home.column.todo')` ⇒ **本函数读语言**。
  *   因此调用方组件**必须**订阅语言变化（`useLang()`），否则切语言后列名不跟着变——
  *   而"列名变了但列集合没重算"这种半更新比"整块不动"更难查。当前调用方：
  *   `HomePage`（已订阅）、`MemberBoardPage`（已订阅）。
