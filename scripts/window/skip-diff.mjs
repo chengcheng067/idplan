@@ -7,9 +7,22 @@
  *   ② `skipped(过期态)` 的每一条，都落在**该轮**真机门内 —— 用**源码现场提取的门标题模式**判定，
  *      不是引用历史清单；
  *   ③ 过期态确实跳了（跳 0 条 ⇒ 没复现 ⇒ 不许声称「钉死」）；
- *   ④ 同一次跑的 **stdout 汇总**与 JSON 必须互相印证（防 json reporter 不吐被跳过用例）。
+ *   ④ 同一次跑的 **stdout 汇总**与 JSON 必须互相印证（防 json reporter 不吐被跳过用例）；
+ *   ⑤ **逐文件用例数两侧必须相等** —— 这条**完全与用例名字无关**，是用来一眼看穿
+ *      「名字随状态变」那类问题的基础判据。
  * 集合相等才算钉死。若 diff 出「过期态跳了、新鲜态也没跑」或「跳了但从源码看不出有门」
  * ⇒ **机制不是新鲜度门** ⇒ 停窗上报。
+ *
+ * ★★ 2026-10-14 窗口内修正（team-lead 批准）：**匹配键必须是状态不变量** ★★
+ *   原来的匹配键直接用「文件 :: 用例全名」，但**有 5 条用例的名字本身随被测状态变化** ——
+ *   它们的标题里插值了 `staleInputs()` 的判定结果（过期态是 `构建产物过期：<绝对路径清单> 比 build-dist 新`，
+ *   新鲜态是 `构建产物新鲜`），而那串文字**就是被测量的那个状态**。
+ *   ⇒ 同一个用例在两个状态下**有两个名字**，①b 便把它读成「过期态跳了、新鲜态不存在」的**误报**
+ *     （实测 5 条：3 条走「过期态/无标记」、2 条走「过期态/新鲜态」两个分支；真实机制是成立的）。
+ *   ⇒ 修法见下面的 `DYNAMIC_SEGMENTS`：比对前先把这些**动态段**剥掉再归一化空白。
+ *   ⚠️ **两个分支都要剔**：只剔「过期」那半边会剩 2 条误报（实测踩过）。
+ *   ⇒ 通用形态：**凡标题里插值了「被测状态」的用例都会踩这个坑**；将来再有新的插值段，
+ *     往 `DYNAMIC_SEGMENTS` 里加一条即可（不要散落在各处写死字面量）。
  *
  * ⚠️ **不许硬编码 148**：它来自另一个 HEAD，且推导输入（_frozen-run-r2.txt）已随 2026-10-14
  *    的 qa-scratch 清空永久丢失 ⇒ 它是**期望不是判据**。实测 ≠ 148 先归因再判（英文线在加用例是正常的），
@@ -77,32 +90,63 @@ for (const [k, p] of [
   }
 }
 
-/** 把 vitest json 报告摊平成「文件 :: 用例全名 → {status, ancestors, title, file}」 */
+/**
+ * ★ 需要从用例名字里**剔除的动态段**（匹配键必须是状态不变量）。
+ *
+ * 为什么要有这张表：`skipIf(!CAN_RUN_FRESH)` 的标题里如果插值了 `staleInputs()`
+ * （即「被测的那个状态」本身），同一个用例在过期态/新鲜态下就是**两个名字**。
+ * 不剔除 ⇒ 判据把「同名同一条」读成「两条不同的用例」⇒ ①b 误报。
+ *
+ * ⚠️ 别在别处再写死这一串字面量；新的插值段一律往这张表里加。
+ * ⚠️ 括号形态不止一种，实测至少两种（ASCII 一层、全角两层），故用「起始括号 +
+ *    `构建产物过期` + 任意内容 + `比 build-dist 新` + 连续的收括号」来吃，两种都覆盖。
+ */
+const DYNAMIC_SEGMENTS = [
+  {
+    why: '标题插值了 staleInputs() 的绝对路径清单（= 被测状态本身）—— 三元的「过期态」分支',
+    re: /[(（]\s*构建产物过期[\s\S]*?比\s*build-dist\s*新\s*[)）]+/g,
+  },
+  {
+    why: '同一个三元的「新鲜态」分支 —— 标题同样随状态变，只是取值不同（实测形态）',
+    re: /[(（]\s*构建产物新鲜\s*[)）]+/g,
+  },
+];
+
+/** 归一化：先剔掉全部动态段，再折叠空白 —— 结果才是「状态不变量」的匹配键。 */
+function normalizeKey(s) {
+  let out = String(s);
+  for (const seg of DYNAMIC_SEGMENTS) out = out.replace(seg.re, '');
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+/** 把 vitest json 报告摊平成「文件 :: 用例全名（已归一化） → {status, ancestors, title, file}」 */
 function flatten(path) {
   let rep;
   try {
     rep = JSON.parse(readFileSync(path, 'utf8'));
   } catch (e) {
-    return { m: new Map(), total: 0, files: 0, why: 'JSON 解析失败：' + String(e.message).slice(0, 80) };
+    return { m: new Map(), perFile: new Map(), total: 0, files: 0, why: 'JSON 解析失败：' + String(e.message).slice(0, 80) };
   }
   if (!Array.isArray(rep.testResults)) {
-    return { m: new Map(), total: 0, files: 0, why: '`testResults` 不是数组 ⇒ 报告形状不对' };
+    return { m: new Map(), perFile: new Map(), total: 0, files: 0, why: '`testResults` 不是数组 ⇒ 报告形状不对' };
   }
   const m = new Map();
+  const perFile = new Map(); // ★ 只数条数：与用例名字完全无关（判据⑤的输入）
   let total = 0;
   for (const file of rep.testResults) {
     const base = basename(String(file.name ?? ''));
     const arr = file.assertionResults;
     if (!Array.isArray(arr)) continue;
+    perFile.set(base, (perFile.get(base) ?? 0) + arr.length);
     for (const a of arr) {
       const ancestors = a.ancestorTitles ?? [];
       const title = String(a.title ?? '');
       const full = a.fullName || [...ancestors, title].join(' > ');
-      m.set(`${base} :: ${full}`, { status: String(a.status), ancestors, title, file: base });
+      m.set(`${base} :: ${normalizeKey(full)}`, { status: String(a.status), ancestors, title, file: base });
       total += 1;
     }
   }
-  return { m, total, files: rep.testResults.length, why: '' };
+  return { m, perFile, total, files: rep.testResults.length, why: '' };
 }
 
 /** 从**源码现场**提取该文件的真机门标题模式（`${...}` 插值 ⇒ `.*`；用于判据②） */
@@ -210,6 +254,22 @@ if (staleSkip.length === 0) {
   console.log('★ 检查③失败：过期态 skipped = 0 ⇒ 前提没复现（没跳就没有东西可钉）⇒ 不许下「钉死」结论。');
 }
 
+// ── 检查 ⑤：逐文件用例数两侧必须相等（**完全与用例名字无关**） ──────────────
+//   ★ 这条是本次误报最直接的「一眼看穿」判据：名字会随状态变，**条数不会**。
+const allFiles = [...new Set([...stale.perFile.keys(), ...fresh.perFile.keys()])].sort();
+const countMismatch = allFiles.filter(
+  (f) => (stale.perFile.get(f) ?? 0) !== (fresh.perFile.get(f) ?? 0),
+);
+if (stale.perFile.size === 0 || fresh.perFile.size === 0 || countMismatch.length > 0) {
+  bad += 1;
+  console.log('★ 检查⑤失败：逐文件用例数两侧不一致（或一侧为空）⇒ 用例集合变了，集合比对不成立 ⇒ 停窗上报。');
+  for (const f of countMismatch.slice(0, 10)) {
+    console.log('   -', f, '：过期态', stale.perFile.get(f) ?? 0, '条 / 新鲜态', fresh.perFile.get(f) ?? 0, '条');
+  }
+} else {
+  console.log(`检查⑤ ✔ 逐文件用例数两侧完全一致（${allFiles.length} 文件 / 各 ${stale.total} 条），该判据不依赖用例名字`);
+}
+
 // ── 检查 ①b：过期态跳过的，新鲜态都真跑了并通过 ───────────────────────────
 const notRunFresh = staleSkip.filter(([k]) => !freshPass.has(k));
 if (notRunFresh.length > 0) {
@@ -289,7 +349,7 @@ if (EXPECT && existsSync(EXPECT)) {
     }
   }
 } else {
-  console.log('（未提供 --expect 清单，跳过附加的逐文件计数对账；判据①②③④ 已独立成立）');
+  console.log('（未提供 --expect 清单，跳过附加的逐文件计数对账；判据①②③④⑤ 已独立成立）');
 }
 
 if (untrusted > 0) {

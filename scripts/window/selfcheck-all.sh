@@ -56,7 +56,7 @@ bash "$HERE/step-precheck.sh" 2.5 | sed 's/^/  /'
 echo "  （若出现「前提不成立」而当前树确实脏/陈旧 ⇒ 判对了；出现「未知」⇒ 按未知处理，不当 0）"
 
 echo
-echo "### 3 · skip-diff.mjs（5.6 判据①②③④；夹具用**真实文件名 + 真实门标题**）"
+echo "### 3 · skip-diff.mjs（5.6 判据①②③④⑤；夹具用**真实文件名 + 真实门标题**）"
 node --check "$HERE/skip-diff.mjs" && echo "  node --check ✔"
 GA='反馈 #7 · 月历卡与统计卡行共用左右锚点（真 Chromium）'          # calendar-anchor 的真门标题
 GB='出口接线 · 真 Chromium（不拦输入 / reduce / 兜底）跳过：产物过期' # motion-exits 的模板串门（带插值）
@@ -116,6 +116,65 @@ run_case 2 "D 读数不可信" node "$HERE/skip-diff.mjs" --stale="$D/stale.json
 echo "  -- E 判据②：跳了但源码现场看不出有门（期望 exit 1；会同时触发 ①b 与 ②，
        ——那是同一条发现的两条路，不是两个独立缺陷）--"
 run_case 1 "E 判据②无门" node "$HERE/skip-diff.mjs" --stale="$D/nogate.json" --stale-stdout="$D/nogate.txt" --fresh="$D/fresh_ok.json" --fresh-stdout="$D/fresh_ok.txt" --no-expect
+
+# ★ 匹配键必须**状态不变量**（2026-10-14 窗口内修正）：
+#   有些用例的标题里插值了「被测状态」本身（`staleInputs()` 的路径清单）⇒ 同一用例
+#   在两个状态下是**两个名字**。F/G 钉死「剔掉动态段后能不能对上」，H 钉死「计数判据」。
+#   ⚠️ 这两条覆盖两种括号形态：ASCII 一层 `(… )` 与全角两层 `（… ）`。
+GEX='出口接线 · 真 Chromium（不拦输入 / reduce / 兜底）'
+# ⚠️ 结构要照抄真实报告：`动效地基 · 真 Chromium` 是**独立的一段祖先**（真机门就在它上面），
+#    动态段在它**下面的用例标题**里。把两者并成一段会让判据②（源码现场找门）红 —— 那是夹具错，不是仪器错。
+GTOK_AN='动效地基 · 真 Chromium'
+GTOK_T='旧名 --liquid-ease 在真产物 CSS 上**求值**等于 cubic-bezier(0.4, 0, 0.2, 1)'
+cat > "$D/stale_dyn.json" <<EOF
+{"testResults":[
+ {"name":"E:/x/tests/motion-exits-browser.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GEX(构建产物过期：E:/x/src/a.ts 比 build-dist 新)"],"title":"T1","fullName":"$GEX(构建产物过期：E:/x/src/a.ts 比 build-dist 新) > T1","status":"skipped"}]},
+ {"name":"E:/x/tests/motion-tokens-preview.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GTOK_AN"],"title":"$GTOK_T（构建产物过期（E:/x/src/a.ts 比 build-dist 新））","fullName":"$GTOK_AN $GTOK_T（构建产物过期（E:/x/src/a.ts 比 build-dist 新））","status":"skipped"}]}]}
+EOF
+printf ' Test Files  0 passed | 2 skipped (2)\n      Tests  0 passed | 2 skipped (2)\n' > "$D/stale_dyn.txt"
+cat > "$D/fresh_dyn_ok.json" <<EOF
+{"testResults":[
+ {"name":"E:/x/tests/motion-exits-browser.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GEX"],"title":"T1","fullName":"$GEX > T1","status":"passed"}]},
+ {"name":"E:/x/tests/motion-tokens-preview.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GTOK_AN"],"title":"$GTOK_T（构建产物新鲜）","fullName":"$GTOK_AN $GTOK_T（构建产物新鲜）","status":"passed"}]}]}
+EOF
+printf ' Test Files  2 passed (2)\n      Tests  2 passed (2)\n' > "$D/fresh_dyn_ok.txt"
+cat > "$D/fresh_dyn_bad.json" <<EOF
+{"testResults":[
+ {"name":"E:/x/tests/motion-exits-browser.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GEX"],"title":"T2-真的不存在","fullName":"$GEX > T2-真的不存在","status":"passed"}]},
+ {"name":"E:/x/tests/motion-tokens-preview.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GTOK_AN"],"title":"$GTOK_T（构建产物新鲜）另一个用例","fullName":"$GTOK_AN $GTOK_T（构建产物新鲜）另一个用例","status":"passed"}]}]}
+EOF
+printf ' Test Files  2 passed (2)\n      Tests  2 passed (2)\n' > "$D/fresh_dyn_bad.txt"
+cat > "$D/fresh_count_bad.json" <<EOF
+{"testResults":[
+ {"name":"E:/x/tests/motion-exits-browser.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GEX"],"title":"T1","fullName":"$GEX > T1","status":"passed"}]},
+ {"name":"E:/x/tests/motion-tokens-preview.spec.ts","assertionResults":[
+   {"ancestorTitles":["$GTOK_AN"],"title":"$GTOK_T（构建产物新鲜）","fullName":"$GTOK_AN $GTOK_T（构建产物新鲜）","status":"passed"},
+   {"ancestorTitles":["$GTOK_AN"],"title":"多出来的一条","fullName":"$GTOK_AN 多出来的一条","status":"passed"}]}]}
+EOF
+printf ' Test Files  2 passed (2)\n      Tests  3 passed (3)\n' > "$D/fresh_count_bad.txt"
+
+echo "  -- F 匹配键：标题内嵌「动态段」，剔掉后两侧能对上（期望 exit 0）--"
+run_case 0 "F 动态段正例" node "$HERE/skip-diff.mjs" --stale="$D/stale_dyn.json" --stale-stdout="$D/stale_dyn.txt" --fresh="$D/fresh_dyn_ok.json" --fresh-stdout="$D/fresh_dyn_ok.txt" --no-expect
+echo "  -- G 剔掉动态段后**真的不存在**（期望 exit 1）--"
+run_case 1 "G 动态段反例" node "$HERE/skip-diff.mjs" --stale="$D/stale_dyn.json" --stale-stdout="$D/stale_dyn.txt" --fresh="$D/fresh_dyn_bad.json" --fresh-stdout="$D/fresh_dyn_bad.txt" --no-expect
+echo "  -- H 判据⑤：逐文件用例数两侧不等（期望 exit 1）--"
+run_case 1 "H 计数不符" node "$HERE/skip-diff.mjs" --stale="$D/stale_dyn.json" --stale-stdout="$D/stale_dyn.txt" --fresh="$D/fresh_count_bad.json" --fresh-stdout="$D/fresh_count_bad.txt" --no-expect
+echo "  -- I 「不误报」正例：本次窗口**真实两份 JSON**（缺件则只报「未跑」，不当失败）--"
+if [ -f "$READINGS/2.5-stale-r1.json" ] && [ -f "$READINGS/5.5-fresh-full.json" ]; then
+  run_case 0 "I 真读数正例" node "$HERE/skip-diff.mjs" \
+    --stale="$READINGS/2.5-stale-r1.json" --stale-stdout="$READINGS/2.5-stale-r1.stdout.txt" \
+    --fresh="$READINGS/5.5-fresh-full.json" --fresh-stdout="$READINGS/5.5-fresh-full.stdout.txt" \
+    --expect="$HERE/gate-expected-93dc987.txt"
+else
+  echo "    ▢ 未跑：本次窗口真实读数不在（窗口外属正常）—— 「不误报」的正例缺件，别读成已验过"
+fi
 
 echo
 echo "### 4 · frozen-run.mjs（读数器：--dry 三夹具，不跑批）"
