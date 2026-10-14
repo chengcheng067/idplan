@@ -369,7 +369,11 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       //      （`POST /api/projects`）和备份导入路径（`meta.routes.ts`）**同一份**。
       //      本行仍是 `domain` 在 PATCH 路径上的**唯一写入点**，但它现在只可能在「未传」
       //      （→ 取 existing）或「已过白名单」时才被求值到。
-      // ⚠️ 不要再写「两处规则必然漂移所以不校验」——那条理由的前提是「上游已拦」，不成立于此处。
+      // ⚠️ 订正（2026-10-15 夜批）：末行原写「不要再写『两处规则必然漂移所以不校验』——
+      //   那条理由的前提是『上游已拦』，不成立于此处」。那句话写在 domain 门落地**之前**；
+      //   门落地后该前提**已成立**（上游就是上面那道 `isProjectDomain` 门）——原句留着会把
+      //   读者导向「此处没有门」的反结论。现行口径：值域只在门上校验一份（单一出处），
+      //   本写入点不重复校验；但也别以「写入点自己会收」为由把门删掉。
       domain: b.domain !== undefined ? (b.domain as string | null) : existing.domain,
       // kind 走 String() 而非原样透传——归属侧只有 human/agent 两个合法值（上方门已判完值域）。
       kind: b.kind !== undefined ? String(b.kind) : existing.kind,
