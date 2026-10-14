@@ -35,6 +35,29 @@
  *   `src/print/adapters/**`、纸面构件、两个打印页的纸面正文）**恒中文，不在此列**
  *   —— 判据见 `src/pages/CalendarPrintPage.tsx` 的 `buildMonthMeta(m, 'zh', …)`
  *   与 `src/i18n/date.ts` 文件头。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * ★ 登记：**「标签表存键还是存值」两处形状不同，是有意的，不许去「统一」**
+ * ══════════════════════════════════════════════════════════════════════
+ * 本片对应的四张表 —— `print-templates.ts` 的 `PRINT_SKINS` / `PRINT_MODULES` /
+ * `PRINT_TEMPLATES`（含 `PrintNativePage`）、`print-units.ts` 的 `PRINT_BLOCKS` /
+ * `PRINT_TEMPLATE_UNITS`、`print-palette.ts` 的槽位名 / 预设名 / 配对名 ——
+ * 一律把 `label: string`（中文值）**换成** `labelKey: MessageKey`（只留键）。
+ *
+ * 为什么它**看起来**和 `src/core/types/enums.ts` 那五张表不一致、而**实际都正确**：
+ *   · `src/core/types/enums.ts` 的 `REST_POLICY_LABELS` 等五张表**必须保留中文值**，
+ *     因为它**有纸面消费方**（`SwissScheduleDocument` / `data-editorial/shared.ts` /
+ *     `editorial-index/shared.ts` / `print/adapters/project-print-adapter.ts` 直接
+ *     import 它）—— **纸面恒中文 ⇒ 值不能动**，只能在渲染层另开一张「值 → 键」表；
+ *   · 本片这四张表**没有任何纸面消费方**（消费点全在 `PrintPreviewDialog` /
+ *     `PaletteSection` 这两个屏幕侧组件里），也**不落库** ⇒ 值可以退场，只留键。
+ * ⇒ **两种形状都对，因为约束不同。**
+ *
+ * ⚠️ **不要**照本片的做法去改 `src/core/types/enums.ts` 那五张表 ——
+ *    它们有纸面消费方，把值换成键会**当场打红纸面**（印出键名）与
+ *    `tests/i18n.spec.tsx` 里逐键对照 enums 中文值的那条锁。
+ *    反向也**不要**把本片这四张表改成「值 + 键表」双份：那会凭空多一个漂移面
+ *    （同一句话两个出处），而本片没有需要留住中文值的理由。
  */
 export const zh = {
   // ─────────────────────── 模板 / 外表（print-templates.ts） ───────────────────────

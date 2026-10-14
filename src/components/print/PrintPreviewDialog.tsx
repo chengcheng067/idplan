@@ -358,7 +358,15 @@ export function PrintSelectorPanel({
         })}
         {/* `{' '}`：状态读数与「即时生效」明示是两句话，中间必须有真空白
             （只靠 ml-2 的视觉留白，文本流里会粘成 `pagesToggles…` / `页勾选…`）。
-            tests/i18n-jsx-space.spec.ts 的 `{' '}` 口径，两种语言都生效。 */}
+            tests/i18n-jsx-space.spec.ts 的 `{' '}` 口径，两种语言都生效。
+            ★ 与 ml-2 的关系（**实测**：真 Chromium + build-dist 真实 CSS，11px 字体）
+              原状 仅 ml-2            = 8.00px
+              现状 ml-2 + 空格        = 10.47px（+2.47px / +31%）
+              备选 去掉 ml-2 只剩空格 =  2.47px（−5.53px / −69%）
+            ⇒ 取「保留 ml-2」：+2.47px 是发丝级增量，而去 ml-2 会在**反方向**上
+              偏近两倍；「保持视觉间隙总量」的两个候选里这个是更近的那个。
+            ⚠️ 这是本批**唯一**一处有意的 zh 渲染变化（中文多一个空格字节），
+              已登记在提交信息里。 */}
         {' '}
         <span className="ml-2">{t('print.selector.effectNote')}</span>
       </div>
