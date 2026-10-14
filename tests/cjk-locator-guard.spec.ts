@@ -14,6 +14,11 @@ import { describe, it, expect } from 'vitest';
 
 import { scanCjkLocators, maskComments, scanRepo } from './helpers/cjk-locator-guard';
 
+/** 与 helper 内同口径的 CJK 判据（夹具自证用，独立写一份以免「用被测对象自证」） */
+const CJK = /[\u3400-\u4dbf\u4e00-\u9fff]/;
+/** 中文注释探针串：出现在夹具的**注释**里，剥完后必须看不见 */
+const CN_PROBE = '打开导航菜单';
+
 /** 正的夹具：**必须**命中（拿中文当定位契约） */
 const MUST_HIT: Array<{ why: string; code: string }> = [
   {
@@ -78,6 +83,161 @@ const MUST_NOT_HIT: Array<{ why: string; code: string }> = [
   },
 ];
 
+/* ══════════════════════════════════════════════════════════════════════
+ * maskComments · Token 形态夹具（2026-10-14 修两处「从某行起再也不剥注释」）
+ *
+ * ⚠️ 这组夹具的**形状**是刻意的，别简化：
+ *   每一例都是「一行会打乱旧状态机的**代码**」+「紧跟其后的一行中文注释」。
+ *   判据是**两个方向都要成立** ——
+ *     ① 那行代码必须**一字不动**（防「判错成注释、把活代码抹了」）；
+ *     ② 其后那行注释里的中文必须**一个都看不见**（防「引号状态卡死、从此不再剥注释」）。
+ *   只查一个方向都不够：旧实现在 `/\//` 那一例上恰好**方向①红、方向②绿**
+ *   （它把正则后面的**半行代码**当注释抹了，于是"注释也顺便被抹"）——
+ *   若只断言②，这条夹具会**假绿**。（第一版夹具就是这么写的，被自己证伪后改的。）
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('maskComments · Token 形态（正则字面量 / 模板替换段）', () => {
+  /** 每例：head 是那段「会打乱状态机」的代码；keep 是其中必须**原样保留**的片段 */
+  const TOKEN_CASES: Array<{ why: string; head: string; keep: readonly string[] }> = [
+    // ── 缺陷 A · 正则字面量（TaskDrawer.tsx 的真实形态）──
+    {
+      why: '正则里含双引号 /"/g（TaskDrawer.tsx 的真实形态）',
+      head: `const s = x.replace(/"/g, '&quot;');`,
+      keep: [`/"/g`, `'&quot;'`],
+    },
+    {
+      why: "正则里含单引号 /'/g",
+      head: `const s = x.replace(/'/g, '&#39;');`,
+      keep: [`/'/g`, `'&#39;'`],
+    },
+    {
+      why: '正则里的转义斜杠 /\\//（不得被当成行注释起点）',
+      head: `const p = x.split(/\\//).filter(Boolean);`,
+      keep: [`/\\//`, ').filter(Boolean);'],
+    },
+    {
+      why: '正则里的字符类含引号 /["\']/',
+      head: `const s = String(x).replace(/["']/g, '');`,
+      keep: [`/["']/g`, 'String(x).replace'],
+    },
+    {
+      why: '正则后紧跟多字符 flags /"/gimsy',
+      head: `const re = /"/gimsy;`,
+      keep: ['/"/gimsy;'],
+    },
+    {
+      why: '正则出现在 = 之后',
+      head: `const re = /"/g;`,
+      keep: ['/"/g;'],
+    },
+    {
+      why: '正则出现在 , 之后（数组 / 实参位）',
+      head: `const a = [/"/g, /'/g];`,
+      keep: ['[/"/g,', "/'/g];"],
+    },
+    {
+      why: '正则出现在 => 之后',
+      head: `const g = (x) => /"/g.test(x);`,
+      keep: ['=> /"/g.test(x);'],
+    },
+    {
+      why: '正则出现在 return 之后（关键字位）',
+      head: `function f(x) { return /"/g.test(x); }`,
+      keep: ['/"/g.test(x);'],
+    },
+    {
+      why: '正则出现在 typeof 之后（关键字位）',
+      head: `const b = typeof /"/g;`,
+      keep: ['typeof /"/g;'],
+    },
+    // ── 缺陷 B · 模板字面量的 `${ }` 替换段（Modal.tsx 的真实形态）──
+    {
+      why: '模板替换段里的注释必须被剥（Modal.tsx 的三元形态）',
+      head: 'const c = `a ${x ? // 这里的中文注释\n  1 : 2} b`;',
+      keep: ['`a ${x ?', '1 : 2} b`;'],
+    },
+    {
+      why: '模板替换段里嵌正则（嵌套不得把反引号认错）',
+      head: 'const t = `${x.replace(/"/g, "&quot;")}`;',
+      keep: ['`${x.replace(/"/g, "&quot;")}`;'],
+    },
+    {
+      why: '模板替换段里的对象字面量花括号必须配对（不得提前弹栈）',
+      head: 'const o = `a ${ f({ k: 1 }) } b`;',
+      keep: ['f({ k: 1 }) } b`;'],
+    },
+    // ── 不能误伤：字符串里的注释标记仍是普通字符 ──
+    {
+      why: '字符串里的 // 与 /* 不是注释起点',
+      head: `const u = 'http://a/*b'; const v = 1; // `,
+      keep: ["'http://a/*b'", 'const v = 1;'],
+    },
+  ];
+
+  it.each(TOKEN_CASES)('★ ① 活代码原样保留：$why', ({ head, keep }) => {
+    const masked = maskComments(`${head}\n// 中文注释占位\n`);
+    for (const k of keep) {
+      expect(masked, `活代码被误抹（判错成注释）：${k}`).toContain(k);
+    }
+    expect(masked.length, '长度恒等（保行号/列位的前提）').toBe(
+      `${head}\n// 中文注释占位\n`.length,
+    );
+  });
+
+  it.each(TOKEN_CASES)('★ ② 其后的中文注释必须被剥：$why', ({ head }) => {
+    const src = `${head}\n// 这行注释里的中文必须被剥：打开导航菜单\n`;
+    const masked = maskComments(src);
+    expect(masked, '漏剥注释 ⇒ 注释里的中文会污染守卫读数').not.toContain(CN_PROBE);
+    // 行级复核：注释那一行剥完后不许再有任何 CJK
+    expect(CJK.test(masked.split('\n')[1] ?? ''), '注释行仍含中文').toBe(false);
+  });
+
+  /**
+   * ★ 缺了这条本缺陷会复发 —— 它是 team-lead 点名的**必须红的反例**：
+   *   构造含 `.replace(/"/g, '&quot;')` 的源码，其后再写一行中文注释 ⇒ 剥完必须看不到那句中文。
+   * 这条与上面 ② 的区别：这里的 head 是**本仓真实文件里的原话**（TaskDrawer.tsx），
+   *   不是为夹具造的抽象形态 —— 缺陷正是从这个真实文件被发现的。
+   */
+  it('★ 必须红的反例：.replace(/"/g, \'&quot;\') 之后的中文注释不得残留', () => {
+    const src = [
+      `export function esc(s: string): string {`,
+      `  return s.replace(/"/g, '&quot;').replace(/'/g, '&#39;');`,
+      `}`,
+      `// 下面这段是说明性注释：打开导航菜单 的中文定位写法已换成 data 钩子`,
+      `await page.locator('[data-nav-trigger]').click();`,
+      ``,
+    ].join('\n');
+    const masked = maskComments(src);
+    // ① 活代码一字不动
+    expect(masked).toContain(`s.replace(/"/g, '&quot;')`);
+    expect(masked).toContain(`[data-nav-trigger]`);
+    // ② 注释里的中文必须消失（旧实现从这里开始就永久卡死）
+    expect(masked, '正则里的引号把状态机卡死了 ⇒ 注释没被剥').not.toContain('打开导航菜单');
+    expect(masked).not.toContain('说明性注释');
+    expect(CJK.test(masked.split('\n')[3] ?? ''), '第 4 行（注释行）仍含中文').toBe(false);
+  });
+
+  /**
+   * 同一反例的**模板形态**（缺陷 B 的必须红项）：Modal.tsx 的泄漏就长这样。
+   */
+  it('★ 必须红的反例：模板 ${ } 替换段里的中文注释不得残留', () => {
+    const src = [
+      'const cls = `base ${',
+      `  placement === 'center'`,
+      `    ? 'bg-a'`,
+      `    : placement === 'fullscreen'`,
+      `      ? // 0.8.4 打印预览：层级压过一切 Modal`,
+      `        'bg-b'`,
+      `      : 'bg-c'`,
+      '}`;',
+    ].join('\n');
+    const masked = maskComments(src);
+    expect(masked).toContain(`placement === 'center'`);
+    expect(masked).toContain(`'bg-b'`);
+    expect(masked, '模板替换段里的注释没被剥').not.toContain('打印预览');
+    expect(masked, '替换段里的引号状态串味了').not.toContain('层级压过');
+  });
+});
+
 describe('中文定位守卫 · 判别力夹具（零容差）', () => {
   it.each(MUST_HIT)('★ 正夹具必中：$why', ({ code }) => {
     expect(scanCjkLocators(code).length, `应当命中但漏了：${code}`).toBeGreaterThan(0);
@@ -124,6 +284,23 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  * `button[aria-label="返回上一页"]` **必须**换成 `button[data-member-board-back]`
  * （页面同笔加了该钩子）：中文 aria 当选择器在英文模式下会**静默失配**（找不到元素），
  * 正是守卫要防的那类哑雷。实测 110（member-board-back 贡献由 5 → 0）。 */
+/*
+ * ── 2026-10-14 · maskComments 修 Token 形态后**复核**：110 → 110（**不下调**） ──
+ * 预期落空，如实登记：修 `maskComments`（正则字面量 + 模板 `${}` 替换段）之前，
+ * 本守卫的输入是**漏剥注释**的源码 ⇒ 「注释里的中文会被算进来」（真实泄漏：
+ * 全仓含中文行 12837 → 12251，`tests/isolation-census.spec.ts` 283 → 136）——
+ * 由此**推出**「棘轮活值必然下降」。**实测否定**了这一步外推：
+ *   旧剥法 scanRepo = 110 行 / 110 处；新剥法 scanRepo = **110 行 / 110 处**，
+ *   且两次命中的 **`文件:行` 集合逐条相同**（只有旧/只有新 各 0 处）。
+ * ⇒ 结论：漏剥的中文**行**确实很多，但那些行里**没有一条**构成「中文定位契约」
+ *   （它们只是散文注释，不带 `locator(...)` / `getByRole(...)` 形态）；
+ *   反过来旧剥法误抹活代码的地方（如 `agent-takeover.spec.tsx` 里那两处**删除式剥法
+ *   自身**的正则字面量）也没有藏住任何一条命中。
+ * ⇒ 故基线**保持 110**：棘轮只许变小，但「没变小」时**不许**为了交付好看而硬改小 ——
+ *   凭空下调一格 = 凭空多出一格余量，正好够下一条新错溜过去（本文件上一段的原话）。
+ *   ⚠️ 这条记录的存在理由：下一个读到「修了剥注释、棘轮怎么没动」的人，
+ *     能在**三十秒内**看到「已实测、不是忘了改」。
+ */
 const BASELINE = 110;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {

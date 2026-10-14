@@ -90,30 +90,168 @@ const CJK = /[\u3400-\u4dbf\u4e00-\u9fff]/;
  *   该情形**目前只有一处**，且它**本就是自证**（原文确实有块注释 / 剥完后不该剩），
  *   配对的那条用的是删除式剥法 ⇒ **无需修改**；但**判定器**若以本剥法为准，需知道这个偏宽。
  *   判别力已由 `tests/cjk-locator-guard.spec.ts` 的「剥法边界」夹具钉住。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * ★★ 2026-10-14 修：**两处「从某行起再也不剥注释」的真缺陷** ★★
+ * ══════════════════════════════════════════════════════════════════════
+ * 旧状态机只认「字符串」与「注释」两种会吃掉后续 Token 的形态，另有两类 Token
+ * 它不认识 —— 认错的后果不是「那一行剥错」，而是**引号状态永久错位**：
+ * 从此往后的**每一行注释都不再被剥**（把注释当活代码 ⇒ 守卫读数被注释里的中文污染，
+ * `tests/demo-data.spec.ts` 那条「源码 contain 锁」也就可能被注释里的串蒙过去）。
+ *
+ * **缺陷 A · 正则字面量里的引号**（`src/components/agent/TaskDrawer.tsx` 的真实形态）
+ *
+ *     .replace(/"/g, '&quot;')
+ *
+ * 正则体里的 `"` 被当成**字符串起始** ⇒ `quote` 卡在 `"` 上直到下一次出现 `"`；
+ * 而下一个 `"` 又在一个正则 `/"/g` 里 ⇒ 状态**永久错位**。
+ *
+ * **缺陷 B · 模板字面量的 `${ }` 替换段**（`src/components/common/Modal.tsx` 的真实形态）
+ *
+ *     className={`fixed ... ${
+ *       placement === 'center'
+ *         ? 'bg-ink/45'
+ *         : placement === 'fullscreen'
+ *           ? // 0.8.4 打印预览：……   ← 这行注释在旧实现里被当成「字符串内容」，永不剥
+ *
+ * 旧实现把整个模板当**一个字符串**吞掉，`${ … }` 里明明是**真代码**（三元、注释、字符串）
+ * 却全被当成字符串内容 ⇒ 替换段里的注释一律漏剥。
+ *
+ * 实测（抹白后仍含中文的**行数**，`56→16` 等真值与交接包一致）：
+ *   `src/components/agent/TaskDrawer.tsx`  **56 → 16**（泄漏 31 行中文注释被当成活代码）
+ *   `src/components/common/Modal.tsx`      **19 → 1**
+ *   `src/lib/schedule-print.ts`            **67 → 2**
+ *   全仓「含中文行」合计 **12837 → 12251**
+ *
+ * 修法（两处，互不相干）：
+ *   **A** 在 `code` 态、`/` 既不是 `//` 也不是 `/*` 时，先按**上一个有意义 token**判断
+ *      它是不是**正则字面量的起点**（`reverse_lexer` 一类的标准启发式）：
+ *        · 正则**体内**的 `"` `'` 只是普通字符，不进入字符串态；
+ *        · 正则内的**转义斜杠** `\/` 被跳过，故 `/\//` 不会把 `//` 认成行注释起点；
+ *        · **字符类** `[...]` 内的 `/` 不结束正则，故 `/["']/` 不会提前收尾；
+ *        · 收尾后**吞掉 flags**（`/x/gimsy`）。
+ *      判定不了（如 `a / b`）时**原样退化成除号**，不改变旧行为。
+ *   **B** 模板字面量改成**有栈的正确解析**：`` ` `` 进「模板文本段」，`${` 压栈并切回
+ *      **代码态**（真剥注释、真识字符串/正则），裸 `{`/`}` 计数配对，配对满则弹栈
+ *      回到模板文本段，`` ` `` 收尾。模板文本段内的 `\` 转义与 `}` 仍是普通字符。
+ *
+ * 判别力由 `tests/cjk-locator-guard.spec.ts` 的「正则字面量」「模板替换段」两组夹具钉住 ——
+ * 其中**必须有会红的反例**：源码里写了 `.replace(/"/g, '&quot;')`（及 `${` 三元）之后
+ * 紧跟一行中文注释，剥完后**必须看不到那句中文**（少了这条，本缺陷会复发）。
  */
+
+/** 可以**紧邻**在正则字面量之前的字符（见到这些 ⇒ `/` 是正则起点而不是除号） */
+const REGEX_MAY_FOLLOW_CHAR = new Set([
+  '', '(', ',', '=', ':', '[', '!', '&', '|', '?', '{', '}', ';',
+  '+', '-', '*', '%', '^', '~', '<', '>',
+]);
+/**
+ * 同理的**关键字**：`return /re/.test(x)` 这种，前一个字符是字母 `n`，
+ * 但它不是**标识符**的结尾（`return` 之后只能是表达式或分号）⇒ 仍是正则起点。
+ */
+const REGEX_MAY_FOLLOW_KEYWORD = new Set([
+  'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
+  'do', 'else', 'yield', 'await', 'case', 'throw',
+]);
+
+/** `/` 处在上一个有意义 token 之后时，它是不是**正则字面量**的起点 */
+function canStartRegexLiteral(prevSignificant: string, prevWord: string): boolean {
+  if (REGEX_MAY_FOLLOW_CHAR.has(prevSignificant)) return true;
+  return REGEX_MAY_FOLLOW_KEYWORD.has(prevWord);
+}
+
 export function maskComments(source: string): string {
   const out = source.split('');
   let state: 'code' | 'line' | 'block' = 'code';
   let quote: string | null = null;
+  // 正则字面量判定用：上一个**有意义**（非空白、非注释、非字符串）的字符 / 词，及其下标
+  let prevSignificant = '';
+  let prevWord = '';
+  let lastSigIndex = -1;
+  /**
+   * 模板字面量（缺陷 B）：是否正处在**模板文本段**（`` ` `` 与 `${` 之间）。
+   * 为 false 时，若 `tpl` 栈非空，说明我们正处在某个 `${ … }` 的**代码段**里。
+   */
+  let inTemplateText = false;
+  /** `${ … }` 嵌套栈；每项记该层已开的**裸**花括号数（`{a:1}` 这类） */
+  const tpl: Array<{ braces: number }> = [];
   let i = 0;
   while (i < source.length) {
     const c = source[i]!;
     const d = source[i + 1];
     if (state === 'code') {
+      // ── 模板**文本**段：只认 `\` 转义、`` ` `` 收尾、`${` 开替换段 ──
+      if (inTemplateText) {
+        if (c === '\\') {
+          i += 2;
+          continue;
+        }
+        if (c === '`') {
+          inTemplateText = false;
+          prevSignificant = '`';
+          prevWord = '';
+          lastSigIndex = i;
+          i += 1;
+          continue;
+        }
+        if (c === '$' && d === '{') {
+          tpl.push({ braces: 0 });
+          inTemplateText = false;
+          i += 2;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
       if (quote !== null) {
         if (c === '\\') {
           i += 2;
           continue;
         }
-        if (c === quote) quote = null;
+        if (c === quote) {
+          quote = null;
+          // 整个字符串算**一个** token：故其后紧跟的 `/` 是除号（`'a' / 2`）
+          prevSignificant = c;
+          prevWord = '';
+          lastSigIndex = i;
+        }
         i += 1;
         continue;
       }
-      if (c === "'" || c === '"' || c === '`') {
+      if (c === "'" || c === '"') {
         quote = c;
         i += 1;
         continue;
       }
+      // 模板字面量起止：`${` 之前/之后的那对反引号
+      if (c === '`') {
+        inTemplateText = true;
+        i += 1;
+        continue;
+      }
+      // ── 在 `${ … }` 的**代码段**里：裸花括号计数配对，配对满则弹栈回到模板文本段 ──
+      if (tpl.length > 0) {
+        const top = tpl[tpl.length - 1]!;
+        if (c === '{') {
+          top.braces += 1;
+          i += 1;
+          continue;
+        }
+        if (c === '}') {
+          if (top.braces > 0) {
+            top.braces -= 1;
+          } else {
+            tpl.pop();
+            inTemplateText = true;
+            prevSignificant = '}';
+            prevWord = '';
+            lastSigIndex = i;
+          }
+          i += 1;
+          continue;
+        }
+      }
+      // ⚠️ 顺序要紧：`//` 与 `/*` 必须先判，否则 `/` 会被当成正则起点
       if (c === '/' && d === '/') {
         state = 'line';
         i += 2;
@@ -123,6 +261,44 @@ export function maskComments(source: string): string {
         state = 'block';
         i += 2;
         continue;
+      }
+      // ★ 正则字面量：整段（含体内的引号、`\/`、字符类、尾随 flags）一次跳过，
+      //   不产出任何注释态转移 —— 这就是「正则里的 `"` 不得改变字符串状态」的落点。
+      if (c === '/' && canStartRegexLiteral(prevSignificant, prevWord)) {
+        let j = i + 1;
+        let inClass = false;
+        let closed = false;
+        while (j < source.length) {
+          const ch = source[j]!;
+          if (ch === '\\') {
+            j += 2;
+            continue;
+          }
+          if (ch === '\n') break; // 正则不跨行 ⇒ 判定失败
+          if (ch === '[') inClass = true;
+          else if (ch === ']') inClass = false;
+          else if (ch === '/' && !inClass) {
+            closed = true;
+            j += 1;
+            break;
+          }
+          j += 1;
+        }
+        if (closed) {
+          while (j < source.length && /[a-z]/i.test(source[j]!)) j += 1; // flags
+          prevSignificant = source[j - 1] ?? '/';
+          prevWord = '';
+          lastSigIndex = j - 1;
+          i = j;
+          continue;
+        }
+        // 没闭合 ⇒ 判不了，当除号走下面（保持旧行为）
+      }
+      if (!/\s/.test(c)) {
+        if (/[A-Za-z0-9_$]/.test(c)) prevWord = lastSigIndex === i - 1 ? prevWord + c : c;
+        else prevWord = '';
+        prevSignificant = c;
+        lastSigIndex = i;
       }
       i += 1;
       continue;
