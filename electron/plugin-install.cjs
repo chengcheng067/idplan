@@ -87,44 +87,51 @@ function pluginDir(userDataDir, id) {
 }
 
 /**
- * manifest 形状门（来自磁盘的 JSON 原值 ⇒ 归一化 manifest 或拒绝理由）。
+ * 失败结果的**唯一构造点**（笔 4-b）：主进程**只传码与参数**，文案在渲染层取词。
+ * `code` 是稳定的机器码（渲染层按它查消息表），`params` 是插值用的数据。
+ * ⚠️ 参数里的 `detail` 一律是**原始错误串**（来自 fs / JSON.parse）——**原样透传**，
+ *    不许被码替掉（那会用一句通用文案把真因盖掉）。
+ */
+function failure(code, params) {
+  return { ok: false, code, params: params || {} };
+}
+
+/** 原始错误串（fs / JSON.parse 的 message）；透传用，绝不改写、绝不翻译 */
+function errorDetail(err) {
+  return err && err.message ? err.message : String(err);
+}
+
+/** manifest 形状门（来自磁盘的 JSON 原值 ⇒ 归一化 manifest 或拒绝码）。
  *
  * 与渲染侧 PluginManifest 的关系：这里是**磁盘侧**的收紧版——只认 v1 装机必需的字段，
  * capabilities 一律夹到 data.read，defaultEnabled 概念在磁盘侧不存在（合并时强制 false，
  * 见 src/core/plugin/installed.ts 的 mergeInstalledManifests）。
  *
- * @returns {{ ok: true, manifest: object } | { ok: false, reason: string }}
+ * @returns {{ ok: true, manifest: object } | { ok: false, code: string, params: object }}
+ *   （失败一律走 `failure(code, params)`；**没有 reason 字段** —— 文案不许有两份真相）
  */
 function validatePluginManifest(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { ok: false, reason: 'manifest.json 不是合法的 JSON 对象' };
+    return failure('manifest.notObject');
   }
   const id = raw.id;
   if (typeof id !== 'string' || !PLUGIN_ID_RE.test(id)) {
-    return {
-      ok: false,
-      reason: `manifest.id 不合法（"${String(id)}"）——只允许小写字母、数字与中划线，首字符不能是中划线，最长 64 位`,
-    };
+    return failure('manifest.badId', { id: String(id) });
   }
   if (typeof raw.name !== 'string' || raw.name.trim() === '') {
-    return { ok: false, reason: 'manifest.name 缺失或不是非空字符串（插件列表要显示它）' };
+    return failure('manifest.badName');
   }
   if (typeof raw.version !== 'string' || raw.version.trim() === '') {
-    return { ok: false, reason: 'manifest.version 缺失或不是非空字符串（用户要看得见装了哪版）' };
+    return failure('manifest.badVersion');
   }
   if (typeof raw.entry !== 'string' || !ENTRY_NAME_RE.test(raw.entry) || !ENTRY_EXT_RE.test(raw.entry)) {
-    return {
-      ok: false,
-      reason: `manifest.entry 缺失或不是合法入口文件名（"${String(
-        raw.entry,
-      )}"）——v1 只支持 .html/.htm/.js/.mjs 之一`,
-    };
+    return failure('manifest.badEntry', { entry: String(raw.entry) });
   }
   if (raw.installVersion !== undefined && typeof raw.installVersion !== 'string') {
-    return { ok: false, reason: 'manifest.installVersion 若填写必须是字符串' };
+    return failure('manifest.badInstallVersion');
   }
   if (raw.minHostVersion !== undefined && typeof raw.minHostVersion !== 'string') {
-    return { ok: false, reason: 'manifest.minHostVersion 若填写必须是字符串' };
+    return failure('manifest.badMinHostVersion');
   }
   const caps = Array.isArray(raw.capabilities) ? raw.capabilities : [];
   const capabilities = caps.filter((c) => ALLOWED_CAPABILITIES.includes(c));
@@ -202,17 +209,17 @@ function resolveSourceDir(manifestFilePath) {
  *
  * @param userDataDir userData 路径（主进程 app.getPath('userData') 传入，模块不依赖 Electron）
  * @param manifestFilePath 用户在文件选择器里选中的 manifest.json 路径（其所在目录即插件源目录）
- * @returns {{ ok: true, manifest: object, fileCount: number } | { ok: false, reason: string }}
+ * @returns {{ ok: true, manifest: object, fileCount: number } | { ok: false, code: string, params: object }}
  */
 function installPluginFromDirectory(userDataDir, manifestFilePath) {
   const srcDir = resolveSourceDir(manifestFilePath);
-  if (!srcDir) return { ok: false, reason: '文件路径无效' };
+  if (!srcDir) return failure('install.badPath');
 
   let raw;
   try {
     raw = JSON.parse(fs.readFileSync(manifestFilePath, 'utf8'));
   } catch (err) {
-    return { ok: false, reason: `manifest.json 读取或解析失败：${err && err.message ? err.message : String(err)}` };
+    return failure('install.readFailed', { detail: errorDetail(err) });
   }
 
   const gate = validatePluginManifest(raw);
@@ -221,36 +228,33 @@ function installPluginFromDirectory(userDataDir, manifestFilePath) {
 
   const root = path.resolve(pluginsRoot(userDataDir));
   const destDir = pluginDir(userDataDir, manifest.id);
-  if (!destDir) return { ok: false, reason: '插件 id 不合法（拒绝安装）' };
+  if (!destDir) return failure('install.badId');
   if (srcDir === destDir || destDir === root) {
-    return { ok: false, reason: '请选择插件**源目录**里的 manifest.json（不能直接重装已安装目录）' };
+    return failure('install.sourceIsInstalled');
   }
 
   // entry 文件必须真实存在于源目录（否则装上就是一个白框架）
   const entryPath = path.resolve(srcDir, manifest.entry);
   if (!entryPath.startsWith(srcDir + path.sep) || !fs.existsSync(entryPath) || !fs.statSync(entryPath).isFile()) {
-    return { ok: false, reason: `manifest.entry 声明的入口文件 "${manifest.entry}" 在所选目录里不存在` };
+    return failure('install.entryMissing', { entry: manifest.entry });
   }
 
   const bytes = dirTotalBytes(srcDir, MAX_PLUGIN_TOTAL_BYTES);
   if (bytes > MAX_PLUGIN_TOTAL_BYTES) {
-    return {
-      ok: false,
-      reason: `插件目录体积 ${(bytes / 1024 / 1024).toFixed(1)}MB 超过 v1 上限 5MB——请精简产物后重试`,
-    };
+    return failure('install.tooLarge', { mb: (bytes / 1024 / 1024).toFixed(1) });
   }
 
   try {
     fs.rmSync(destDir, { recursive: true, force: true });
     copyDir(srcDir, destDir);
   } catch (err) {
-    return { ok: false, reason: `写入失败：${err && err.message ? err.message : String(err)}` };
+    return failure('install.writeFailed', { detail: errorDetail(err) });
   }
 
   // 复制后复核：dest 里的 entry 必须可读（防 copy 中途出错留半套）
   const landed = path.join(destDir, manifest.entry);
   if (!fs.existsSync(landed)) {
-    return { ok: false, reason: '复制后入口文件缺失（安装未完成，目录已回滚）' };
+    return failure('install.copyVerifyFailed');
   }
 
   let fileCount = 0;
@@ -275,11 +279,11 @@ function installPluginFromDirectory(userDataDir, manifestFilePath) {
  */
 function uninstallPlugin(userDataDir, id) {
   const dir = pluginDir(userDataDir, id);
-  if (!dir) return { ok: false, reason: '插件 id 不合法（拒绝卸载）' };
+  if (!dir) return failure('uninstall.badId');
   try {
     fs.rmSync(dir, { recursive: true, force: true });
   } catch (err) {
-    return { ok: false, reason: `删除失败：${err && err.message ? err.message : String(err)}` };
+    return failure('uninstall.removeFailed', { detail: errorDetail(err) });
   }
   return { ok: true };
 }
@@ -287,7 +291,7 @@ function uninstallPlugin(userDataDir, id) {
 /**
  * 启动扫描（登记入口唯一）：读 plugins 下每个子目录的 manifest.json。
  * 坏 manifest / 版本不兼容一律 **fail-open 跳过**（一个坏插件不许拖垮整个插件系统），
- * 跳过原因随 skipped 返回，UI 展示计数而不是静默吞掉。
+ * 跳过**码**（+ 参数）随 skipped 返回，UI 展示计数而不是静默吞掉（笔 4-b：文案在渲染层取词）。
  */
 function scanInstalledPlugins(userDataDir, hostVersion) {
   const root = pluginsRoot(userDataDir);
@@ -307,7 +311,8 @@ function scanInstalledPlugins(userDataDir, hostVersion) {
       const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       const gate = validatePluginManifest(raw);
       if (!gate.ok) {
-        skipped.push({ dir: d.name, reason: gate.reason });
+        /* 透传 validate 那一支的码与参数（不是新文案） */
+        skipped.push({ dir: d.name, code: gate.code, params: gate.params });
         continue;
       }
       // 目录名与 manifest.id 必须一致（安装路径天然一致；手拷的目录对不上时，
@@ -315,14 +320,16 @@ function scanInstalledPlugins(userDataDir, hostVersion) {
       if (gate.manifest.id !== d.name) {
         skipped.push({
           dir: d.name,
-          reason: `manifest.id（${gate.manifest.id}）与目录名（${d.name}）不一致——请以目录名作为 id 重新安装`,
+          code: 'scan.dirIdMismatch',
+          params: { id: gate.manifest.id, dir: d.name },
         });
         continue;
       }
       if (gate.manifest.minHostVersion && !isHostAtLeast(hostVersion, gate.manifest.minHostVersion)) {
         skipped.push({
           dir: d.name,
-          reason: `需要 ID Plan ${gate.manifest.minHostVersion} 或更高（当前 ${hostVersion}）`,
+          code: 'scan.hostTooLow',
+          params: { min: gate.manifest.minHostVersion, host: hostVersion },
         });
         continue;
       }
@@ -330,7 +337,8 @@ function scanInstalledPlugins(userDataDir, hostVersion) {
     } catch (err) {
       skipped.push({
         dir: d.name,
-        reason: `manifest.json 无法读取：${err && err.message ? err.message : String(err)}`,
+        code: 'scan.readFailed',
+        params: { detail: errorDetail(err) },
       });
     }
   }
@@ -433,6 +441,7 @@ function manifestPickerOptions(labels) {
 
 module.exports = {
   MAX_PLUGIN_TOTAL_BYTES,
+  errorDetail,
   manifestPickerOptions,
   PLUGIN_ID_RE,
   pluginsRoot,

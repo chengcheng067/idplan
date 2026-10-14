@@ -164,6 +164,65 @@ export function cnHolidayNameLabel(name: string): string {
   return key === undefined ? name : t(key);
 }
 
+/* ═══════════ 主进程安装失败码 → 文案键（笔 4-b） ═══════════
+ *
+ * ── 为什么码住在主进程、键住在渲染层 ──
+ * `electron/plugin-install.cjs` 有自己的失败文案（20 条），但**主进程不该持有界面语言**
+ * （它没有语言状态，也不该有）。故那侧只产出**稳定机器码 + 插值参数**，文案在渲染层取词。
+ *
+ * ── 两个硬要求的落点 ──
+ * ① **「码 ↔ 键」集合必须双向相等**（K12 列举完备性 + K14 消费锁）：
+ *    码表 ⟺ 本表 ⟺ `zh` 表里 `plugin.fail.*` 的键集，三处**两两相等**，不一致即红
+ *    （少一个码 = 英文态会露中文；多一个键 = 死词条）。判据在
+ *    `tests/plugin-failure-codes.spec.ts`（码集**从主进程源码反推**，不是手抄清单）。
+ * ② **真因不许被码吃掉**：参数里的 `detail` 是来自 fs / JSON.parse 的**原始错误串**，
+ *    取词时**原样插进去**（`t()` 只做 `{detail}` 替换，不改写内容）。
+ *
+ * ⚠️ 未知码**原样回显码本身**（与 `writebackStatusLabel` / `termFor` 同口径）：
+ *    绝不在取词器里写死一句中文兜底 —— 那正是本笔要消灭的形态。
+ */
+
+/** 主进程返回的失败体（`electron/plugin-install.cjs` 的 `failure()` 形状） */
+export interface PluginFailure {
+  code: string;
+  params?: Record<string, string | number>;
+}
+
+/** 码 → 文案键（键名与码 1:1：`plugin.fail.<code>`，便于双向集合相等的断言） */
+export const PLUGIN_FAILURE_KEYS: Readonly<Record<string, MessageKey>> = {
+  'manifest.notObject': 'plugin.fail.manifest.notObject',
+  'manifest.badId': 'plugin.fail.manifest.badId',
+  'manifest.badName': 'plugin.fail.manifest.badName',
+  'manifest.badVersion': 'plugin.fail.manifest.badVersion',
+  'manifest.badEntry': 'plugin.fail.manifest.badEntry',
+  'manifest.badInstallVersion': 'plugin.fail.manifest.badInstallVersion',
+  'manifest.badMinHostVersion': 'plugin.fail.manifest.badMinHostVersion',
+  'install.badPath': 'plugin.fail.install.badPath',
+  'install.readFailed': 'plugin.fail.install.readFailed',
+  'install.badId': 'plugin.fail.install.badId',
+  'install.sourceIsInstalled': 'plugin.fail.install.sourceIsInstalled',
+  'install.entryMissing': 'plugin.fail.install.entryMissing',
+  'install.tooLarge': 'plugin.fail.install.tooLarge',
+  'install.writeFailed': 'plugin.fail.install.writeFailed',
+  'install.copyVerifyFailed': 'plugin.fail.install.copyVerifyFailed',
+  'uninstall.badId': 'plugin.fail.uninstall.badId',
+  'uninstall.removeFailed': 'plugin.fail.uninstall.removeFailed',
+  'scan.dirIdMismatch': 'plugin.fail.scan.dirIdMismatch',
+  'scan.hostTooLow': 'plugin.fail.scan.hostTooLow',
+  'scan.readFailed': 'plugin.fail.scan.readFailed',
+};
+
+/**
+ * 失败体 → 人话（**渲染侧唯一入口**）。
+ * 未知码原样回显码（可见即错 ⇒ 便于发现遗漏），**不写中文兜底**。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function pluginFailureText(failure: PluginFailure): string {
+  const key = PLUGIN_FAILURE_KEYS[failure.code];
+  if (key === undefined) return failure.code;
+  return t(key, failure.params);
+}
+
 /* ─────────────────── Agent 写回状态五态（AgentActivityStream） ─────────────────── */
 
 export const WRITEBACK_STATUS_KEYS: Record<string, MessageKey> = {

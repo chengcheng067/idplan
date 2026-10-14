@@ -36,10 +36,17 @@ export interface InstalledPluginManifest {
   capabilities?: PluginCapability[];
 }
 
-/** 一条「扫到但没登记」的记录（坏 manifest / 版本不兼容；UI 展示计数，不静默） */
+/**
+ * 一条「扫到但没登记」的记录（坏 manifest / 版本不兼容；UI 展示计数，不静默）。
+ *
+ * ⚠️ 笔 4-b：`reason`（中文长句）已改成**机器码 + 参数** —— 主进程不持有界面语言，
+ *    文案在渲染层用 `pluginFailureText()` 取词（码 → 键的表在 `src/i18n/labels.ts`）。
+ *    ⚠️ `params.detail` 是来自 fs / JSON.parse 的**原始错误串**，**原样透传**（不许被码替掉）。
+ */
 export interface SkippedPlugin {
   dir: string;
-  reason: string;
+  code: string;
+  params?: Record<string, string | number>;
 }
 
 /** 启动扫描结果（与 IPC `plugin:list` 返回值一致） */

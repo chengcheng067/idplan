@@ -128,17 +128,23 @@ interface IdPlanBridge {
       filePath?: string;
       reason?: string;
     }>;
-    /** 校验 + 整目录落盘；成功返回归一 manifest 与文件数，失败带中文 reason */
+    /**
+     * 校验 + 整目录落盘；成功返回归一 manifest 与文件数。
+     * 失败返回**机器码 + 参数**（笔 4-b：主进程不持有界面语言；文案在渲染层用
+     * `pluginFailureText()` 取词，码 → 键的表在 `src/i18n/labels.ts`）。
+     */
     installFromFile: (
       filePath: string,
     ) => Promise<
       | { ok: true; manifest: import('./core/plugin/installed').InstalledPluginManifest; fileCount: number }
-      | { ok: false; reason: string }
+      | { ok: false; code: string; params?: Record<string, string | number> }
     >;
     /** 启动扫描（登记入口唯一；坏 manifest fail-open 跳过并随 skipped 返回） */
     listInstalled: () => Promise<import('./core/plugin/installed').PluginScanResult>;
     /** 删除插件目录（幂等；KV 由渲染侧清） */
-    uninstall: (pluginId: string) => Promise<{ ok: boolean; reason?: string }>;
+    uninstall: (pluginId: string) => Promise<
+      { ok: true } | { ok: false; code: string; params?: Record<string, string | number> }
+    >;
   };
 }
 

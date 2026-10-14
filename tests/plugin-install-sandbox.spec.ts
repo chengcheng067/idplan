@@ -48,20 +48,34 @@ import type { PluginManifest } from '../src/core/plugin/types';
 const pluginInstall = require('../electron/plugin-install.cjs') as {
   MAX_PLUGIN_TOTAL_BYTES: number;
   pluginsRoot(userDataDir: string): string;
-  validatePluginManifest(raw: unknown): { ok: boolean; manifest?: Record<string, unknown>; reason?: string };
+  validatePluginManifest(raw: unknown): {
+    ok: boolean;
+    manifest?: Record<string, unknown>;
+    code?: string;
+    params?: Record<string, string | number>;
+  };
   isHostAtLeast(host: string, min: string): boolean;
   installPluginFromDirectory(
     userDataDir: string,
     manifestFilePath: string,
-  ): { ok: boolean; manifest?: Record<string, unknown>; fileCount?: number; reason?: string };
-  uninstallPlugin(userDataDir: string, id: unknown): { ok: boolean; reason?: string };
+  ): {
+    ok: boolean;
+    manifest?: Record<string, unknown>;
+    fileCount?: number;
+    code?: string;
+    params?: Record<string, string | number>;
+  };
+  uninstallPlugin(
+    userDataDir: string,
+    id: unknown,
+  ): { ok: boolean; code?: string; params?: Record<string, string | number> };
   scanInstalledPlugins(
     userDataDir: string,
     hostVersion: string,
   ): {
     ok: boolean;
     installed: Array<Record<string, unknown>>;
-    skipped: Array<{ dir: string; reason: string }>;
+    skipped: Array<{ dir: string; code: string; params?: Record<string, string | number> }>;
   };
   plugMimeFor(ext: string): string;
   resolvePlugFile(userDataDir: string, url: string): { status: number; filePath?: string; mime?: string };
@@ -311,7 +325,8 @@ describe('⑤ 安装 / 卸载文件语义', () => {
       const p = writePluginSrc(srcBase, { ...GOOD_MANIFEST, id });
       const res = pluginInstall.installPluginFromDirectory(userData, p);
       expect(res.ok, `id="${id}" 必须被拒`).toBe(false);
-      expect(res.reason, `id="${id} 要带中文理由`).toBeTruthy();
+      expect(res.code, `id="${id}" 必须带**码**（渲染层按码取词）`).toBe('manifest.badId');
+      expect(res.params?.id, `码要带上原值（否则渲染层无法说出「哪个 id 不合法」）`).toBe(id);
     }
     // plugins 根下什么都没落下
     const root = pluginInstall.pluginsRoot(userData);
@@ -328,20 +343,24 @@ describe('⑤ 安装 / 卸载文件语义', () => {
     expect(pluginInstall.installPluginFromDirectory(userData, missingFile).ok).toBe(false);
   });
 
-  it('manifest.json 不是合法 JSON ⇒ 拒且带中文理由', () => {
+  it('manifest.json 不是合法 JSON ⇒ 拒（码 = install.readFailed，且**真因原样透传**）', () => {
     const dir = join(srcBase, 'broken');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'manifest.json'), '{ not json');
     const res = pluginInstall.installPluginFromDirectory(userData, join(dir, 'manifest.json'));
     expect(res.ok).toBe(false);
-    expect(res.reason).toContain('manifest.json');
+    expect(res.code, '解析失败要走「读取或解析失败」那支').toBe('install.readFailed');
+    /* ★ 真因不许被码吃掉：JSON.parse 的原始 message 必须**原样**在 params.detail 里 */
+    expect(String(res.params?.detail ?? '').length, '原始错误串被吞了').toBeGreaterThan(0);
   });
 
   it('体积超 5MB ⇒ 拒（v1 粗限，防病态安装）', () => {
     const big = writePluginSrc(srcBase, GOOD_MANIFEST, { 'big.bin': 'x'.repeat(6 * 1024 * 1024) });
     const res = pluginInstall.installPluginFromDirectory(userData, big);
     expect(res.ok).toBe(false);
-    expect(res.reason).toContain('5MB');
+    expect(res.code).toBe('install.tooLarge');
+    /* 数值参数（MB，一位小数）随码一起传 —— 渲染层不自己算 */
+    expect(String(res.params?.mb ?? '')).toMatch(/^\d+\.\d$/);
   });
 
   it('从已安装目录里重装被拒（先 rm 再复制会连源一起删）', () => {
@@ -410,8 +429,12 @@ describe('⑥ 启动扫描（坏 manifest 不拖垮整个插件系统）', () =>
     expect(ids).toEqual(['compatible', 'evil', 'good', 'good-html']);
     const skippedDirs = scan.skipped.map((s) => s.dir).sort();
     expect(skippedDirs).toEqual(['bad-json', 'future', 'mismatched', 'no-manifest']);
-    expect(scan.skipped.find((s) => s.dir === 'future')?.reason).toContain('9.9.9.9');
-    expect(scan.skipped.find((s) => s.dir === 'mismatched')?.reason).toContain('不一致');
+    const future = scan.skipped.find((s) => s.dir === 'future');
+    expect(future?.code, '版本过低要走 hostTooLow 码').toBe('scan.hostTooLow');
+    expect(future?.params?.min, '最低版本号要随码传（渲染层不自己解析句子）').toBe('9.9.9.9');
+    const mismatched = scan.skipped.find((s) => s.dir === 'mismatched');
+    expect(mismatched?.code, '目录名与 id 不一致要走 dirIdMismatch 码').toBe('scan.dirIdMismatch');
+    expect(mismatched?.params?.dir, '目录名要随码传').toBe('mismatched');
   });
 
   it('扫描出来的 manifest：capabilities 已夹到 data.read（写能力 v1 不存在）', () => {

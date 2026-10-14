@@ -976,8 +976,6 @@ export const enMessages: Record<MessageKey, string> = {
   'plugin.installFromFile': 'Install from file',
   'plugin.pick.title': 'Choose the plugin manifest.json',
   'plugin.pick.filterName': 'Plugin manifest',
-  'plugin.install.unsupportedEnv':
-    'Installing from a file is not supported in this environment (desktop app only)',
   'plugin.skipped': '{count} local plugin folders were skipped (incomplete manifest or unsupported version).',
   'plugin.capLabel': 'Capabilities: ',
   'plugin.contribLabel': 'Contributes: ',
@@ -1060,6 +1058,49 @@ export const enMessages: Record<MessageKey, string> = {
   'plugin.notice.uninstalled': 'Uninstalled “{name}” — it disappears from the list after a restart',
   'plugin.toast.installed': 'Plugin “{name}” installed; takes effect after a restart',
   'plugin.toast.uninstalled': 'Plugin “{name}” uninstalled',
+
+
+  /* ══════════ Batch 4-b: the 20 main-process failure codes ══════════ */
+  'plugin.fail.manifest.notObject':
+    'manifest.json is not a valid JSON object',
+  'plugin.fail.manifest.badId':
+    'manifest.id is invalid ("{id}") — only lowercase letters, digits and hyphens are allowed; it cannot start with a hyphen and must be at most 64 characters',
+  'plugin.fail.manifest.badName':
+    'manifest.name is missing or not a non-empty string (the plugin list shows it)',
+  'plugin.fail.manifest.badVersion':
+    'manifest.version is missing or not a non-empty string (users need to see which version is installed)',
+  'plugin.fail.manifest.badEntry':
+    'manifest.entry is missing or not a valid entry file name ("{entry}") — v1 supports only .html/.htm/.js/.mjs',
+  'plugin.fail.manifest.badInstallVersion':
+    'manifest.installVersion must be a string when present',
+  'plugin.fail.manifest.badMinHostVersion':
+    'manifest.minHostVersion must be a string when present',
+  'plugin.fail.install.badPath':
+    'The file path is not valid',
+  'plugin.fail.install.readFailed':
+    'Failed to read or parse manifest.json: {detail}',
+  'plugin.fail.install.badId':
+    'Plugin id is invalid (install refused)',
+  'plugin.fail.install.sourceIsInstalled':
+    'Pick the manifest.json inside the plugin **source** directory (an installed directory cannot be reinstalled directly)',
+  'plugin.fail.install.entryMissing':
+    'The entry file "{entry}" declared by manifest.entry does not exist in the chosen directory',
+  'plugin.fail.install.tooLarge':
+    'The plugin directory is {mb}MB, over the v1 limit of 5MB — trim the output and retry',
+  'plugin.fail.install.writeFailed':
+    'Write failed: {detail}',
+  'plugin.fail.install.copyVerifyFailed':
+    'The entry file is missing after copying (install did not finish; the directory was rolled back)',
+  'plugin.fail.uninstall.badId':
+    'Plugin id is invalid (uninstall refused)',
+  'plugin.fail.uninstall.removeFailed':
+    'Delete failed: {detail}',
+  'plugin.fail.scan.dirIdMismatch':
+    'manifest.id ({id}) does not match the directory name ({dir}) — reinstall using the directory name as the id',
+  'plugin.fail.scan.hostTooLow':
+    'ID Plan {min} or later is required (current: {host})',
+  'plugin.fail.scan.readFailed':
+    'manifest.json cannot be read: {detail}',
 
   /* ══════════════ 笔 1-④：Settings ▸ Industry & Templates ▸ Custom industry library ══════════════ */
   /* ⚠️ `library.step.*` 三条的前导空格是**必需的**：它们紧跟在 JSX 里的硬编码序号

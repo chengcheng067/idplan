@@ -58,6 +58,8 @@ export {
   INGRESS_MODE_KEYS,
   MEMBER_ACTOR_KIND_KEYS,
   MEMBER_ROLE_KEYS,
+  PLUGIN_FAILURE_KEYS,
+  pluginFailureText,
   MODE_COLLAPSED_KEYS,
   memberActorKindLabel,
   memberRoleLabel,

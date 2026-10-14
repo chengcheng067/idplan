@@ -973,7 +973,6 @@ export const zhMessages = {
   /* 笔 4-a：原生「打开文件」对话框的两处文案（由渲染层取词后经 IPC 传给主进程） */
   'plugin.pick.title': '选择插件的 manifest.json',
   'plugin.pick.filterName': '插件清单',
-  'plugin.install.unsupportedEnv': '当前运行环境不支持从文件安装（仅桌面版可用）',
   'plugin.skipped': '有 {count} 个本地插件目录未加载（manifest 不完整或版本不兼容），已跳过。',
   'plugin.capLabel': '能力：',
   'plugin.contribLabel': '贡献：',
@@ -1046,6 +1045,53 @@ export const zhMessages = {
   'plugin.err.uninstallFailed': '卸载失败：{reason}',
   'plugin.err.uninstallNoResponse': '卸载失败：主进程未响应',
   'plugin.err.mainNoResponse': '主进程未响应',
+
+  /* ══════════ 笔 4-b：主进程安装失败的 **20 个机器码** → 渲染层取词 ══════════
+     ★ 键名 = `plugin.fail.<码>`（码与键 1:1，便于「码 ↔ 键」双向集合相等的断言）。
+     ★ zh 取值 = 原 `reason` 串的**渲染结果逐字**（含 `{detail}` 这类来自 fs/JSON 的**真因**占位）。
+     ⚠️ `install.sourceIsInstalled` 的 `**源目录**` 是**原样保留的字面星号**（原串就长这样）：
+        去掉它是「有意的 zh 变更」⇒ 要单独一笔，本笔只做结构搬迁 + 语言同步。 */
+  'plugin.fail.manifest.notObject':
+    'manifest.json 不是合法的 JSON 对象',
+  'plugin.fail.manifest.badId':
+    'manifest.id 不合法（"{id}"）——只允许小写字母、数字与中划线，首字符不能是中划线，最长 64 位',
+  'plugin.fail.manifest.badName':
+    'manifest.name 缺失或不是非空字符串（插件列表要显示它）',
+  'plugin.fail.manifest.badVersion':
+    'manifest.version 缺失或不是非空字符串（用户要看得见装了哪版）',
+  'plugin.fail.manifest.badEntry':
+    'manifest.entry 缺失或不是合法入口文件名（"{entry}"）——v1 只支持 .html/.htm/.js/.mjs 之一',
+  'plugin.fail.manifest.badInstallVersion':
+    'manifest.installVersion 若填写必须是字符串',
+  'plugin.fail.manifest.badMinHostVersion':
+    'manifest.minHostVersion 若填写必须是字符串',
+  'plugin.fail.install.badPath':
+    '文件路径无效',
+  'plugin.fail.install.readFailed':
+    'manifest.json 读取或解析失败：{detail}',
+  'plugin.fail.install.badId':
+    '插件 id 不合法（拒绝安装）',
+  'plugin.fail.install.sourceIsInstalled':
+    '请选择插件**源目录**里的 manifest.json（不能直接重装已安装目录）',
+  'plugin.fail.install.entryMissing':
+    'manifest.entry 声明的入口文件 "{entry}" 在所选目录里不存在',
+  'plugin.fail.install.tooLarge':
+    '插件目录体积 {mb}MB 超过 v1 上限 5MB——请精简产物后重试',
+  'plugin.fail.install.writeFailed':
+    '写入失败：{detail}',
+  'plugin.fail.install.copyVerifyFailed':
+    '复制后入口文件缺失（安装未完成，目录已回滚）',
+  'plugin.fail.uninstall.badId':
+    '插件 id 不合法（拒绝卸载）',
+  'plugin.fail.uninstall.removeFailed':
+    '删除失败：{detail}',
+  'plugin.fail.scan.dirIdMismatch':
+    'manifest.id（{id}）与目录名（{dir}）不一致——请以目录名作为 id 重新安装',
+  'plugin.fail.scan.hostTooLow':
+    '需要 ID Plan {min} 或更高（当前 {host}）',
+  'plugin.fail.scan.readFailed':
+    'manifest.json 无法读取：{detail}',
+
   'plugin.notice.installed': '已安装「{name}」v{version}（{count} 个文件）——重启后生效，默认关闭',
   'plugin.notice.uninstalled': '已卸载「{name}」——重启后从列表消失',
   'plugin.toast.installed': '插件「{name}」已安装，重启后生效',

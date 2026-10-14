@@ -47,7 +47,7 @@ import type { PluginManifest } from '../../core/plugin/types';
 import { isDesktop } from '../../lib/desktopBridge';
 import { cn } from '../../lib/cn';
 import { useProjectsStore } from '../../store/useProjectsStore';
-import { t as translate, useLang } from '../../i18n';
+import { pluginFailureText, t as translate, useLang } from '../../i18n';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 import { appEnv } from '../../config/env';
 import { API_TOKEN_KEY } from '../../core/repositories/remote/rest.client';
@@ -284,7 +284,7 @@ export function PluginsSection(): JSX.Element {
     setNotice(null);
     const bridge = isDesktop() ? window.idplan?.pluginInstall : undefined;
     if (!bridge) {
-      setError(t('plugin.install.unsupportedEnv'));
+      setError(t('plugin.err.notDesktop'));
       return;
     }
     /*
@@ -305,7 +305,7 @@ export function PluginsSection(): JSX.Element {
     if (!p) return;
     const bridge = window.idplan?.pluginInstall;
     if (!bridge) {
-      setError('当前运行环境不支持从文件安装（仅桌面版可用）');
+      setError(t('plugin.err.notDesktop'));
       return;
     }
     if (p.kind === 'install') {
@@ -313,7 +313,7 @@ export function PluginsSection(): JSX.Element {
       try {
         const res = await bridge.installFromFile(p.filePath);
         if (!res.ok) {
-          setError(t('plugin.err.installFailed', { reason: res.reason }));
+          setError(t('plugin.err.installFailed', { reason: pluginFailureText(res) }));
           return;
         }
         writeAck(res.manifest.id);
@@ -377,7 +377,11 @@ export function PluginsSection(): JSX.Element {
       }
       const res = await window.idplan?.pluginInstall?.uninstall(target.id);
       if (!res || !res.ok) {
-        setError(t('plugin.err.uninstallFailed', { reason: res?.reason ?? t('plugin.err.mainNoResponse') }));
+        setError(
+          t('plugin.err.uninstallFailed', {
+            reason: res ? pluginFailureText(res) : t('plugin.err.mainNoResponse'),
+          }),
+        );
         return;
       }
       setNotice(t('plugin.notice.uninstalled', { name: target.name }));
