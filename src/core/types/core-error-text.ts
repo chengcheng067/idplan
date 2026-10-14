@@ -169,6 +169,27 @@ export const CORE_ERROR_TEXT = {
   'coreErr.proposal.reasonTooLong': '提案 reason 超长（{length} > 200 字）：请压缩后再提交。',
   'coreErr.proposal.confidenceInvalid': '提案 confidence 必须是 0..1 的有限数（不夹取：越界值说明调用方算错了）。',
   'coreErr.payload.validationFailed': 'payload 校验失败：{detail}',
+
+  /* ── 段 4 之二：接管搬运（takeover.*）/ 建板与阶段草稿校验（project.*）── */
+  'coreErr.takeover.boardNotFound': '未找到该 Agent 看板，可能已被删除。',
+  'coreErr.takeover.notAgentBoard': '只能接管 Agent 看板：该项目已经是人类工作区的项目。',
+  'coreErr.takeover.sourceMustBeAgentBoard': '只能从 Agent 看板搬运任务。',
+  'coreErr.takeover.targetNotFound': '未找到目标项目，可能已被删除。',
+  'coreErr.takeover.targetMustBeHuman': '目标必须是人类工作区的项目：把任务搬进另一块 Agent 看板没有意义。',
+  'coreErr.takeover.stageNotInTarget': '落点阶段必须属于目标项目（请先在目标项目里选一个阶段）。',
+  'coreErr.takeover.noTasksSelected': '请至少选择一条要搬运的任务。',
+  'coreErr.takeover.taskNotInBoard': '有任务不在该看板下（可能已被删除），请刷新后重试。',
+  'coreErr.takeover.writeVerifyFailed': '任务「{title}」写入目标项目后验证失败，已中止（源看板数据未动）。',
+  'coreErr.takeover.stageVerifyFailed': '任务「{title}」落点阶段验证失败，已中止（源看板数据未动）。',
+  'coreErr.project.tooFewStages': '请至少选择 {count} 个阶段。',
+  'coreErr.project.tooManyStages': '单次项目最多 {max} 个阶段，当前 {count} 个。',
+  'coreErr.project.stageOrderGap': '阶段序号必须为 1..{count} 连续无空缺。',
+  'coreErr.project.duplicateStageNames': '阶段名不能重复：{names}。',
+  'coreErr.project.boardNameRequired': '请填写看板名称。',
+  'coreErr.project.boardDatesRequired': '请提供看板的开始日期与结束日期（不会自动填充默认日期）。',
+  'coreErr.project.presetOrNamesRequired': '请至少指定一个阶段套餐，或显式声明阶段名。',
+  'coreErr.project.domainNotUsable': '「{domain}」不是可用的主板块。',
+  'coreErr.project.presetNotFound': '未找到阶段套餐（presetKey={presetKey}）：套餐名不存在，请核对 stage-library 的 21 个套餐。',
 } as const;
 
 /** 机器可读的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */

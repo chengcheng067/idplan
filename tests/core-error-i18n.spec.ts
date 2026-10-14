@@ -190,6 +190,27 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   ['coreErr.proposal.reasonTooLong', ChangxiaErrorCode.Validation, '提案 reason 超长（201 > 200 字）：请压缩后再提交。'],
   ['coreErr.proposal.confidenceInvalid', ChangxiaErrorCode.Validation, '提案 confidence 必须是 0..1 的有限数（不夹取：越界值说明调用方算错了）。'],
   ['coreErr.payload.validationFailed', ChangxiaErrorCode.Validation, 'payload 校验失败：projects.0 不是合法的主板块'],
+
+  /* ── 段 4 之二（接管搬运 / 建板与阶段草稿校验）：参数化那几条 = PARAMS 渲染后的结果 ── */
+  ['coreErr.takeover.boardNotFound', ChangxiaErrorCode.NotFound, '未找到该 Agent 看板，可能已被删除。'],
+  ['coreErr.takeover.notAgentBoard', ChangxiaErrorCode.Validation, '只能接管 Agent 看板：该项目已经是人类工作区的项目。'],
+  ['coreErr.takeover.sourceMustBeAgentBoard', ChangxiaErrorCode.Validation, '只能从 Agent 看板搬运任务。'],
+  ['coreErr.takeover.targetNotFound', ChangxiaErrorCode.NotFound, '未找到目标项目，可能已被删除。'],
+  ['coreErr.takeover.targetMustBeHuman', ChangxiaErrorCode.Validation, '目标必须是人类工作区的项目：把任务搬进另一块 Agent 看板没有意义。'],
+  ['coreErr.takeover.stageNotInTarget', ChangxiaErrorCode.Validation, '落点阶段必须属于目标项目（请先在目标项目里选一个阶段）。'],
+  ['coreErr.takeover.noTasksSelected', ChangxiaErrorCode.Validation, '请至少选择一条要搬运的任务。'],
+  ['coreErr.takeover.taskNotInBoard', ChangxiaErrorCode.NotFound, '有任务不在该看板下（可能已被删除），请刷新后重试。'],
+  ['coreErr.takeover.writeVerifyFailed', ChangxiaErrorCode.Storage, '任务「任务甲」写入目标项目后验证失败，已中止（源看板数据未动）。'],
+  ['coreErr.takeover.stageVerifyFailed', ChangxiaErrorCode.Storage, '任务「任务甲」落点阶段验证失败，已中止（源看板数据未动）。'],
+  ['coreErr.project.tooFewStages', ChangxiaErrorCode.Validation, '请至少选择 1 个阶段。'],
+  ['coreErr.project.tooManyStages', ChangxiaErrorCode.Validation, '单次项目最多 20 个阶段，当前 21 个。'],
+  ['coreErr.project.stageOrderGap', ChangxiaErrorCode.Validation, '阶段序号必须为 1..9 连续无空缺。'],
+  ['coreErr.project.duplicateStageNames', ChangxiaErrorCode.Validation, '阶段名不能重复：方案、深化。'],
+  ['coreErr.project.boardNameRequired', ChangxiaErrorCode.Validation, '请填写看板名称。'],
+  ['coreErr.project.boardDatesRequired', ChangxiaErrorCode.Validation, '请提供看板的开始日期与结束日期（不会自动填充默认日期）。'],
+  ['coreErr.project.presetOrNamesRequired', ChangxiaErrorCode.Validation, '请至少指定一个阶段套餐，或显式声明阶段名。'],
+  ['coreErr.project.domainNotUsable', ChangxiaErrorCode.Validation, '「unknown」不是可用的主板块。'],
+  ['coreErr.project.presetNotFound', ChangxiaErrorCode.Validation, '未找到阶段套餐（presetKey=x_full）：套餐名不存在，请核对 stage-library 的 21 个套餐。'],
 ];
 
 /** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */
@@ -219,6 +240,14 @@ const PARAMS: Partial<Record<CoreErrorKey, Record<string, string | number>>> = {
   'coreErr.task.transitionNotAllowed': { from: '草稿', to: '已完成' },
   'coreErr.proposal.reasonTooLong': { length: 201 },
   'coreErr.payload.validationFailed': { detail: 'projects.0 不是合法的主板块' },
+  'coreErr.takeover.writeVerifyFailed': { title: '任务甲' },
+  'coreErr.takeover.stageVerifyFailed': { title: '任务甲' },
+  'coreErr.project.tooFewStages': { count: 1 },
+  'coreErr.project.tooManyStages': { max: 20, count: 21 },
+  'coreErr.project.stageOrderGap': { count: 9 },
+  'coreErr.project.duplicateStageNames': { names: '方案、深化' },
+  'coreErr.project.domainNotUsable': { domain: 'unknown' },
+  'coreErr.project.presetNotFound': { presetKey: 'x_full' },
 };
 
 

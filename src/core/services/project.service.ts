@@ -29,7 +29,7 @@ import type {
   ConfirmedContractPayload,
   CreateProjectCmd,
 } from '../types/dto';
-import { ChangxiaError, ChangxiaErrorCode, StageLogType, StageStatus, TaskStatus } from '../types/enums';
+import { coreError, ChangxiaErrorCode, StageLogType, StageStatus, TaskStatus } from '../types/enums';
 import { normalizeStageName } from '../lib/task-no';
 import {
   DEFAULT_SCHEDULE_BASIS,
@@ -276,31 +276,22 @@ export class ProjectService {
    */
   private assertDraftsValid(drafts: StageDraft[]): void {
     if (drafts.length < MIN_STAGE_COUNT) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `请至少选择 ${MIN_STAGE_COUNT} 个阶段。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.tooFewStages', { count: MIN_STAGE_COUNT });
     }
     if (drafts.length > MAX_STAGE_COUNT) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `单次项目最多 ${MAX_STAGE_COUNT} 个阶段，当前 ${drafts.length} 个。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.tooManyStages', {
+        max: MAX_STAGE_COUNT,
+        count: drafts.length,
+      });
     }
     for (let i = 0; i < drafts.length; i += 1) {
       if (drafts[i].orderIndex !== i + 1) {
-        throw new ChangxiaError(
-          ChangxiaErrorCode.Validation,
-          `阶段序号必须为 1..${drafts.length} 连续无空缺。`,
-        );
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.stageOrderGap', { count: drafts.length });
       }
     }
     const duplicated = findDuplicateStageNames(drafts.map((d) => d.name));
     if (duplicated.length > 0) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `阶段名不能重复：${duplicated.join('、')}。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.duplicateStageNames', { names: duplicated.join('、') });
     }
   }
 
@@ -339,16 +330,13 @@ export class ProjectService {
   public async createAgentBoard(cmd: CreateAgentBoardCmd): Promise<string> {
     const name = typeof cmd.name === 'string' ? cmd.name.trim() : '';
     if (!name) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '请填写看板名称。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.boardNameRequired');
     }
     // 必填且**不给默认值**：缺日期就说缺日期（TS-08 保持"必须显式给"）
     const plannedStartAt = typeof cmd.plannedStartAt === 'string' ? cmd.plannedStartAt.trim() : '';
     const plannedEndAt = typeof cmd.plannedEndAt === 'string' ? cmd.plannedEndAt.trim() : '';
     if (!plannedStartAt || !plannedEndAt) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        '请提供看板的开始日期与结束日期（不会自动填充默认日期）。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.boardDatesRequired');
     }
     const presetKey = typeof cmd.presetKey === 'string' && cmd.presetKey.trim() !== ''
       ? cmd.presetKey.trim()
@@ -356,10 +344,7 @@ export class ProjectService {
     // 同一次请求内**按名去重**（保序、trim、丢空串）：重名会让 orderIndex 语义歧义
     const declaredNames = dedupeAgentStageNames(cmd.stageNames ?? []);
     if (!presetKey && declaredNames.length === 0) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        '请至少指定一个阶段套餐，或显式声明阶段名。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.presetOrNamesRequired');
     }
 
     const stageItems = resolveAgentStageItems(presetKey, declaredNames);
@@ -478,10 +463,7 @@ export class ProjectService {
   ): Promise<Project> {
     const usable = getUsableDomains();
     if (!usable.includes(domain)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `「${String(domain)}」不是可用的主板块。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.domainNotUsable', { domain: String(domain) });
     }
     // ★ 唯一写点：入参字面量**只有** domain（见方法头注释，验收 9 拿它当断言）
     return this.deps.projects.update(id, { domain });
@@ -658,10 +640,7 @@ export function resolveAgentStageItems(
     //   旧版 getPresetItems 查无返回 []、若同传 stageNames 仍走完建板流程——
     //   调用方写错套餐名时「静默丢掉整个套餐骨架」比报错危险得多。
     if (!getPreset(presetKey)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `未找到阶段套餐（presetKey=${presetKey}）：套餐名不存在，请核对 stage-library 的 21 个套餐。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.presetNotFound', { presetKey: presetKey });
     }
     items.push(...getPresetItems(presetKey));
   }

@@ -46,7 +46,7 @@ import { createId } from '../../lib/id';
 import { visibleProjectsFor } from '../project/visibility';
 import type { IRepositoryBundle } from '../repositories/interfaces';
 import type { Project, Task } from '../types/entities';
-import { ChangxiaError, ChangxiaErrorCode, type ProjectKind } from '../types/enums';
+import { coreError, ChangxiaErrorCode, type ProjectKind } from '../types/enums';
 import type { UpdateTaskCmd } from '../types/dto';
 
 /* ══════════════════════════════ 计划（纯函数，可测） ══════════════════════════════ */
@@ -204,14 +204,11 @@ export class AgentTakeoverService {
     const bundle = this.deps.bundle;
     const board = await bundle.projects.get(boardId);
     if (!board) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该 Agent 看板，可能已被删除。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.takeover.boardNotFound');
     }
     // 只认字面量 'agent'（与 visibility.projectKindOf 同口径：老库/脏值按 human）
     if (board.kind !== 'agent') {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        '只能接管 Agent 看板：该项目已经是人类工作区的项目。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.takeover.notAgentBoard');
     }
     return bundle.projects.update(boardId, { kind: 'human' satisfies ProjectKind });
   }
@@ -236,30 +233,24 @@ export class AgentTakeoverService {
 
     const board = await bundle.projects.get(boardId);
     if (!board) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该 Agent 看板，可能已被删除。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.takeover.boardNotFound');
     }
     if (board.kind !== 'agent') {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '只能从 Agent 看板搬运任务。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.takeover.sourceMustBeAgentBoard');
     }
     const target = await bundle.projects.get(targetProjectId);
     if (!target) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到目标项目，可能已被删除。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.takeover.targetNotFound');
     }
     if (target.kind === 'agent') {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        '目标必须是人类工作区的项目：把任务搬进另一块 Agent 看板没有意义。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.takeover.targetMustBeHuman');
     }
     const targetStages = await bundle.stages.listByProject(targetProjectId);
     if (!targetStages.some((s) => s.id === stageId)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        '落点阶段必须属于目标项目（请先在目标项目里选一个阶段）。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.takeover.stageNotInTarget');
     }
     if (taskIds.length === 0) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '请至少选择一条要搬运的任务。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.takeover.noTasksSelected');
     }
 
     const [sourceTasks, targetTasks] = await Promise.all([
@@ -269,10 +260,7 @@ export class AgentTakeoverService {
     const selectedIds = new Set(taskIds);
     const selected = sourceTasks.filter((t) => selectedIds.has(t.id));
     if (selected.length !== taskIds.length) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.NotFound,
-        '有任务不在该看板下（可能已被删除），请刷新后重试。',
-      );
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.takeover.taskNotInBoard');
     }
 
     const plan = planTaskMove({ sourceTasks, targetTasks, taskIds, stageId, targetProjectId });
@@ -336,16 +324,10 @@ export class AgentTakeoverService {
     for (const m of plan.moves) {
       const row = writtenById.get(m.finalId);
       if (!row || row.projectId !== targetProjectId) {
-        throw new ChangxiaError(
-          ChangxiaErrorCode.Storage,
-          `任务「${m.title}」写入目标项目后验证失败，已中止（源看板数据未动）。`,
-        );
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.takeover.writeVerifyFailed', { title: m.title });
       }
       if (m.disposition === 'create' && row.stageId !== stageId) {
-        throw new ChangxiaError(
-          ChangxiaErrorCode.Storage,
-          `任务「${m.title}」落点阶段验证失败，已中止（源看板数据未动）。`,
-        );
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.takeover.stageVerifyFailed', { title: m.title });
       }
     }
 

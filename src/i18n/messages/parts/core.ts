@@ -169,6 +169,27 @@ export const zh = {
   'coreErr.proposal.reasonTooLong': '提案 reason 超长（{length} > 200 字）：请压缩后再提交。',
   'coreErr.proposal.confidenceInvalid': '提案 confidence 必须是 0..1 的有限数（不夹取：越界值说明调用方算错了）。',
   'coreErr.payload.validationFailed': 'payload 校验失败：{detail}',
+
+  /* ── 段 4 之二：接管搬运（takeover.*）/ 建板与阶段草稿校验（project.*）── */
+  'coreErr.takeover.boardNotFound': '未找到该 Agent 看板，可能已被删除。',
+  'coreErr.takeover.notAgentBoard': '只能接管 Agent 看板：该项目已经是人类工作区的项目。',
+  'coreErr.takeover.sourceMustBeAgentBoard': '只能从 Agent 看板搬运任务。',
+  'coreErr.takeover.targetNotFound': '未找到目标项目，可能已被删除。',
+  'coreErr.takeover.targetMustBeHuman': '目标必须是人类工作区的项目：把任务搬进另一块 Agent 看板没有意义。',
+  'coreErr.takeover.stageNotInTarget': '落点阶段必须属于目标项目（请先在目标项目里选一个阶段）。',
+  'coreErr.takeover.noTasksSelected': '请至少选择一条要搬运的任务。',
+  'coreErr.takeover.taskNotInBoard': '有任务不在该看板下（可能已被删除），请刷新后重试。',
+  'coreErr.takeover.writeVerifyFailed': '任务「{title}」写入目标项目后验证失败，已中止（源看板数据未动）。',
+  'coreErr.takeover.stageVerifyFailed': '任务「{title}」落点阶段验证失败，已中止（源看板数据未动）。',
+  'coreErr.project.tooFewStages': '请至少选择 {count} 个阶段。',
+  'coreErr.project.tooManyStages': '单次项目最多 {max} 个阶段，当前 {count} 个。',
+  'coreErr.project.stageOrderGap': '阶段序号必须为 1..{count} 连续无空缺。',
+  'coreErr.project.duplicateStageNames': '阶段名不能重复：{names}。',
+  'coreErr.project.boardNameRequired': '请填写看板名称。',
+  'coreErr.project.boardDatesRequired': '请提供看板的开始日期与结束日期（不会自动填充默认日期）。',
+  'coreErr.project.presetOrNamesRequired': '请至少指定一个阶段套餐，或显式声明阶段名。',
+  'coreErr.project.domainNotUsable': '「{domain}」不是可用的主板块。',
+  'coreErr.project.presetNotFound': '未找到阶段套餐（presetKey={presetKey}）：套餐名不存在，请核对 stage-library 的 21 个套餐。',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -299,4 +320,25 @@ export const en = {
   'coreErr.proposal.reasonTooLong': 'The proposal reason is too long ({length} > 200 characters); please shorten it and submit again.',
   'coreErr.proposal.confidenceInvalid': 'The proposal confidence must be a finite number between 0 and 1 (no clamping: an out-of-range value means the caller computed it wrong).',
   'coreErr.payload.validationFailed': 'Payload validation failed: {detail}',
+
+  /* ── 段 4 之二：接管搬运（takeover.*）/ 建板与阶段草稿校验（project.*）── */
+  'coreErr.takeover.boardNotFound': 'Agent board not found; it may have been deleted.',
+  'coreErr.takeover.notAgentBoard': 'Only Agent boards can be taken over: this project is already a human-workspace project.',
+  'coreErr.takeover.sourceMustBeAgentBoard': 'Tasks can only be moved out of an Agent board.',
+  'coreErr.takeover.targetNotFound': 'Target project not found; it may have been deleted.',
+  'coreErr.takeover.targetMustBeHuman': 'The target must be a human-workspace project: moving tasks into another Agent board is meaningless.',
+  'coreErr.takeover.stageNotInTarget': 'The destination stage must belong to the target project (pick a stage in the target project first).',
+  'coreErr.takeover.noTasksSelected': 'Select at least one task to move.',
+  'coreErr.takeover.taskNotInBoard': 'Some tasks are not under this board (they may have been deleted); please refresh and try again.',
+  'coreErr.takeover.writeVerifyFailed': 'Verification failed after writing task "{title}" into the target project; the operation was aborted (source board data untouched).',
+  'coreErr.takeover.stageVerifyFailed': 'Verification of the destination stage for task "{title}" failed; the operation was aborted (source board data untouched).',
+  'coreErr.project.tooFewStages': 'Select at least {count} stages.',
+  'coreErr.project.tooManyStages': 'A project can have at most {max} stages; there are currently {count}.',
+  'coreErr.project.stageOrderGap': 'Stage order indexes must run 1..{count} with no gaps.',
+  'coreErr.project.duplicateStageNames': 'Stage names must be unique: {names}.',
+  'coreErr.project.boardNameRequired': 'Enter a board name.',
+  'coreErr.project.boardDatesRequired': 'Provide the board start and end dates (no default dates are filled in).',
+  'coreErr.project.presetOrNamesRequired': 'Specify at least one stage preset, or declare the stage names explicitly.',
+  'coreErr.project.domainNotUsable': '"{domain}" is not an available domain.',
+  'coreErr.project.presetNotFound': 'Stage preset not found (presetKey={presetKey}): the preset name does not exist; check the 21 presets in stage-library.',
 } as const;
