@@ -88,6 +88,23 @@ import {
 } from '../src/core/types/enums';
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
 
+/* ────────────────────────── 定位锚点（2026-10-15 测试定位解耦批） ──────────────────────────
+ * 本文件原先拿**中文 aria-label** 当选择器（`[role="dialog"][aria-label="模板与模块"]` 等 7 处
+ * + 1 处 `getAttribute('aria-label') === '关闭模板与模块'`）——那是**活哑雷**：界面语言一切、
+ * 或文案一进消息表，这些定位当场全碎；而 `aria-label` 本身是**无障碍名**（服务于读屏），
+ * 从来不是给测试用的契约。⇒ 一律改走生产侧就有的 `data-*` 钩子。
+ * 生产侧钩子（都在 `src/components/print/PrintPreviewDialog.tsx`）：
+ *   `[data-print-selector-panel]` 选择器面板 · `[data-print-read-mode]` 阅读方式 radiogroup ·
+ *   `[data-print-selector-close]` ✕ 按钮 · `[data-print-preview]` 预览内容根。
+ * Modal 自身的 `role="dialog"` 是**组件库**语义（本批不许改 `components/common/Modal.tsx`），
+ * 故 dialog 元素一律由内容钩子 `.closest('[role="dialog"]')` 取到 —— 判据不变，只是不再靠中文。 */
+const selectorDialog = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('[data-print-selector-panel]')
+    ?.closest<HTMLElement>('[role="dialog"]') ?? null;
+const previewDialog = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('[data-print-preview]')
+    ?.closest<HTMLElement>('[role="dialog"]') ?? null;
+
 /* ====================================================================================
  * 夹具（最小可用：1 项目 + 2 阶段 + 2 任务 + 1 管理员；四版纸面都打得出来）
  * ==================================================================================== */
@@ -1088,7 +1105,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
 
     // Modal center 档的 dialog 语义（role/aria-modal 由 Modal 提供）。
     // 注意页面上有两个 dialog：外层 fullscreen 预览 + 本选择器弹窗——按 aria-label 取本弹窗
-    const dialog = document.querySelector('[role="dialog"][aria-label="模板与模块"]');
+    const dialog = selectorDialog();
     expect(dialog, '应是 Modal 居中被弹窗').not.toBeNull();
     expect(dialog!.getAttribute('aria-modal')).toBe('true');
     // 面板锚点属性保留（spec 锚点，期二起就在）
@@ -1097,7 +1114,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     expect(panel!.getAttribute('role')).toBe('group');
 
     // 左列模板 radiogroup：5 个单选卡（经典占位 + 四版真缩略图）
-    const group = document.querySelector('[role="radiogroup"][aria-label="阅读方式"]');
+    const group = document.querySelector('[data-print-read-mode]');
     expect(group, '左列模板列表应在').not.toBeNull();
     expect(group!.querySelectorAll('[data-print-template-option]')).toHaveLength(5);
 
@@ -1163,7 +1180,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
    * 再断言它退干净了 —— 只断言「最后没了」是分不清「关闭生效」与「压根没打开」的。
    */
   function settleExit(why: string): void {
-    const dialog = document.querySelector('[role="dialog"][aria-label="模板与模块"]');
+    const dialog = selectorDialog();
     // 出口动画落在 Modal 自己的锚点容器上（dialog 的首个子元素），不是面板本身
     const exitEl = dialog?.firstElementChild as HTMLElement | null;
     expect(exitEl?.classList.contains('dialog-pop-out'), `${why}：应进入出口期`).toBe(true);
@@ -1205,7 +1222,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
      * 「关对了」与「整摞一起塌了」的。
      */
     expect(
-      document.querySelector('[role="dialog"][aria-label="打印预览"]'),
+      previewDialog(),
       'Esc 只应关掉栈顶：下层的打印预览必须仍存活',
     ).not.toBeNull();
     expect(previewCloseCalls, '第一次 Esc 不该打到预览身上').toBe(0);
@@ -1238,7 +1255,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     renderDialog(true);
     openSelector();
     // Modal 的点击捕获层 = 本弹窗 dialog 内的 flex 容器（onMouseDown 判 target===currentTarget）
-    const catcher = document.querySelector('[role="dialog"][aria-label="模板与模块"] > div');
+    const catcher = selectorDialog()?.querySelector(':scope > div') ?? null;
     expect(catcher, '点击捕获层应在').not.toBeNull();
     act(() => {
       catcher!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -1251,7 +1268,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
     renderDialog(true);
     openSelector();
     const closeBtn = Array.from(document.querySelectorAll('button')).find(
-      (b) => b.getAttribute('aria-label') === '关闭模板与模块',
+      (b) => b.hasAttribute('data-print-selector-close'),
     );
     expect(closeBtn, '✕ 按钮应在').not.toBeUndefined();
     act(() => {
@@ -1280,7 +1297,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
         useLayoutStore.setState({ sidebarExpanded: true });
       });
       renderDialog(true);
-      const overlay = document.querySelector<HTMLElement>('[role="dialog"][aria-label="打印预览"]');
+      const overlay = previewDialog();
       expect(overlay, '打印预览遮罩应在').not.toBeNull();
       expect(overlay!.style.left, '≥xl 预览遮罩应从侧栏右缘起（让出 240）').toBe('240px');
       // 折叠侧栏 ⇒ 左缘随缘到 64（活的要件：预览打开期间侧栏仍可折叠）
@@ -1288,7 +1305,7 @@ describe('期六 · 选择器弹窗形态（真实对话框）', () => {
         useLayoutStore.setState({ sidebarExpanded: false });
       });
       expect(
-        document.querySelector<HTMLElement>('[role="dialog"][aria-label="打印预览"]')!.style.left,
+        previewDialog()!.style.left,
         '侧栏折叠后遮罩左缘随缘到 64',
       ).toBe('64px');
     } finally {

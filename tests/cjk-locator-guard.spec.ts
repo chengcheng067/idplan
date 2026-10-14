@@ -441,8 +441,45 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *     实测活代码 114 处。两者是「找人」与「上闸」两种用途，不是同一把尺。
  *   复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` 读测试名里的
  *     「当前 N / 基线 M」（或把 `BASELINE` 临时置 0，失败文案会直接印出**按文件分布**）⇒ 83
+ *
+ * ── 2026-10-15（i18n-EN 英文补齐批 · `i18n-print` 的打印族选择器笔）──
+ * **实测**：改前 83 → 改后 **76**（−7）。
+ *   · 逐条归因（**只有** `tests/print-selector-modules.spec.tsx` 变了，7 → **0**）：
+ *       `[role="dialog"][aria-label="模板与模块"]`（:1091 / :1166 / :1241）3 处、
+ *       `[role="dialog"][aria-label="打印预览"]`（:1208 / :1283 / :1291）3 处、
+ *       `[role="radiogroup"][aria-label="阅读方式"]`（:1100）1 处 —— 共 **7** 处。
+ *     ⇒ 换成生产侧钩子 + 两个取 dialog 的本地 helper：
+ *       `selectorDialog()` = `[data-print-selector-panel]`.closest('[role="dialog"]')、
+ *       `previewDialog()`  = `[data-print-preview]`.closest('[role="dialog"]')。
+ *       新钩子只有两个、都加在 `src/components/print/PrintPreviewDialog.tsx`（本片自有文件）：
+ *       `data-print-read-mode`（阅读方式组）与 `data-print-selector-close`（✕）。
+ *       **`components/common/Modal.tsx` 一个字没动**（跨片共享组件，本批不许改）——
+ *       故 dialog 元素一律由内容钩子 `.closest()` 取，而不是给 Modal 加钩子。
+ *   · 按文件分布**逐条核对**：`v07-dline-shell` 仍 17、`v07-board-acceptance` 仍 11、
+ *     `qa-batch-a-verify` 仍 7、`proposal-review-panel` 仍 5、`v08-*` 仍 0/1 …——
+ *     除 `print-selector-modules` 外**一份都没动**，所以这 −7 是「真转换」，不是「扫窄了」。
+ *   · ★ **同一笔里另有 1 处转换，不体现在这个数字里**（登记以免下次对不上账）：
+ *     `tests/print-selector-modules.spec.tsx:1254` 的 ✕ 按钮原先按
+ *     `b.getAttribute('aria-label') === '关闭模板与模块'` **按可见文案找** ——
+ *     这形态不在判据面内（守卫按 `locator / querySelector / waitForSelector / getBy*` 的
+ *     **调用形态**认，`Array.from(...).find(...)` 里的字符串比较它看不见）。
+ *     ⇒ 本次实测该文件是 **7 处在闸内 + 1 处在闸外 = 8 处**，换成
+ *     `b.hasAttribute('data-print-selector-close')`。这也再次印证上一条「数字 ≠ 工作量」。
+ *   · **判据一条没放宽**：`print-selector-modules.spec.tsx` 33 个用例改前改后**同数通过**
+ *     （含「Esc 只关栈顶」「点遮罩关」「✕ 关」三条出口判据、`style.left` 侧栏让位几何、
+ *     焦点入面板等），只是**取元素的方式**从中文 aria 换成 `data-*`。
+ *   · ★ **实收数字与「我这笔」的差额，如实分开记**（照上一条 96→86 的体例，免得对不上账）：
+ *       我动手前实测 **83 / 基线 83**；
+ *       我转换完立刻实测 **76** ⇒ **本笔 −7**，归因见上（逐条 7 处，全在
+ *       `tests/print-selector-modules.spec.tsx`）。
+ *       但**提交前最后一次实测已是 70** —— 那 **−6 不是本笔**：是并行同伴在我这两次测量
+ *       之间另做了锚点转换（`git rev-parse HEAD` 在这中间前进过）。
+ *       ⇒ 本笔把基线一律下调到**提交前实测值 70**（棘轮只许降；留 6 格余量等于让新错溜过去）。
+ *       下一笔若发现「70 不是它造成的」，按同一体例再记一次即可 —— **不要**把别人的额度算成自己的。
+ *   · 复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` ⇒ 测试名印
+ *     「当前 **70** / 基线 70」（此读数为**下调那一刻**的实测值；再跑若更小，是别人又转换了）。
  */
-const BASELINE = 83;
+const BASELINE = 70;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

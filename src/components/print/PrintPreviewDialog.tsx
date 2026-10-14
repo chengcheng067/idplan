@@ -228,6 +228,7 @@ export function PrintSelectorPanel({
           type="button"
           onClick={onClose}
           aria-label={t('print.selector.close')}
+          data-print-selector-close=""
           className="rounded-[8px] p-1.5 text-mist transition-colors hover:bg-sand hover:text-ink"
         >
           <X size={16} />
@@ -240,6 +241,10 @@ export function PrintSelectorPanel({
         <div
           role="radiogroup"
           aria-label={t('print.selector.readMode')}
+          // ★ 稳定定位钩子（2026-10-15 测试定位解耦批）：测试**不许**再拿中文 aria-label 当选择器
+          // （语言一切即碎，本批已有 4 处活哑雷）。aria-label 照旧保留 —— 它是**无障碍名**，
+          // 服务于读屏，不是给测试用的；锚点改用本属性。
+          data-print-read-mode=""
           className="flex gap-2 overflow-x-auto border-b border-line p-2 xl:flex-col xl:overflow-x-visible xl:border-b-0 xl:border-r"
         >
           {PRINT_TEMPLATES.map((tpl) => {
