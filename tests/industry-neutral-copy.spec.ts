@@ -67,6 +67,16 @@ function tsxFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+/** 消息表目录下的 .ts 全集（zh / en / 4 个分片；**新增文件自动进扫描面**） */
+function tsFiles(dir: string, acc: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) tsFiles(p, acc);
+    else if (name.endsWith('.ts')) acc.push(p);
+  }
+  return acc;
+}
+
 /** 显式豁免：内部史料/调研文档（诚实档案，非用户可见面） */
 const EXEMPT_FILES = ['docs/competitor-domestic.md'];
 
@@ -81,8 +91,10 @@ describe('行业中立化源码锁（v0.8.5 C4）', () => {
       ...tsxFiles(resolve(ROOT, 'src/pages')),
       // ★ 2026-10-13 中英切换批 1：用户可见文案整批搬进 i18n 消息表 ⇒
       //   扫描面**同步扩到消息表**（本锁「只能加严」，搬走文案不能顺带搬出扫描面）。
-      resolve(ROOT, 'src/i18n/messages/zh.ts'),
-      resolve(ROOT, 'src/i18n/messages/en.ts'),
+      // ★ 2026-10-15 消息表分片（英文补齐批）：扫描面从「两个文件」改成**整个 messages 目录** ——
+      //   分片 worker 把文案写进 `messages/parts/**` 时，不许顺势把文案搬出本锁的扫描面。
+      //   （本锁「只能加严」的既定口径，与上一轮「搬进消息表要同步扩面」同一条理由。）
+      ...tsFiles(resolve(ROOT, 'src/i18n/messages')),
       resolve(ROOT, 'index.html'),
       resolve(ROOT, 'package.json'),
       resolve(ROOT, 'README.md'),

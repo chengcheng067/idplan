@@ -31,6 +31,11 @@
  *   两张表的**中文一致性由 `tests/i18n.spec.ts` 逐键对照锁死**（防漂移）。
  *   后批动打印时，是把 enums 的表改成 key、消费方整体改指向。
  */
+import { zh as zhCore } from './parts/core';
+import { zh as zhMisc } from './parts/misc';
+import { zh as zhPrintUi } from './parts/print-ui';
+import { zh as zhUi } from './parts/ui';
+
 export const zhMessages = {
   /* ──────────────────────────── 通用 ──────────────────────────── */
   'common.unknown': '未知',
@@ -1561,6 +1566,20 @@ export const zhMessages = {
   'customLibrary.issue.danglingItemKey': '套餐「{name}」引用了不存在的阶段 key：{key}',
   'customLibrary.issue.duplicateItemKey': '阶段 key 在包内重复',
   'customLibrary.issue.duplicatePresetKey': '套餐 key 在包内重复',
+
+  /*
+   * ══════════ 分片（4 片，英文补齐批的并行写入口）══════════
+   * 每个分片 worker **只改自己的分片文件**，谁都不用碰本文件 ——
+   * 这就是「4 个人同时写消息表」不撞车的全部机制。
+   * spread 放在**表尾**：既有键的位置与顺序一位不动（`MESSAGE_KEYS` 的顺序即声明顺序）。
+   * ⚠️ 分片一律 `as const`（不许加 `Record<string, string>` 注解）—— 否则
+   *   `keyof typeof zhMessages` 会退化成 `string`，「漏一个 en 键 = 编译错」当场失效。
+   *   钉住它的编译期断言在本文件末尾（`_KeyofNotString`）。
+   */
+  ...zhUi,
+  ...zhPrintUi,
+  ...zhCore,
+  ...zhMisc,
 } as const;
 
 /**
@@ -1568,3 +1587,23 @@ export const zhMessages = {
  * `en.ts` 声明为 `Record<MessageKey, string>` ⇒ 缺键 / 多键都是编译错。
  */
 export type MessageKey = keyof typeof zhMessages;
+
+/**
+ * 分片**不许**被注解成宽类型（编译期断言，不是注释；**变异自证实测过它会红**）。
+ *
+ * ── 真实机理（我第一版猜错了，是变异自证纠正的，记在这里免得下一个人重踩）──
+ * 分片若写成 `export const zh: Record<string, string> = {…}`：
+ *   · `keyof typeof zhMessages` **不会**退化成 `string` —— TypeScript 在对象 spread 里会
+ *     **丢掉**下标签名 ⇒「断言 keyof 不是 string」那种写法**永远不响**，是个假锁；
+ *   · 真实后果是分片里的键被**静默吞掉**：既不在 `MessageKey` 里，`en.ts` 也**不会**
+ *     要求它们 ⇒「漏一个英文键 = 编译错」这条安全网对该分片**整体失效**。
+ * 下面的断言把这件事变成编译错：`string extends K` 为真时结果是 `never`，
+ * 而 `const x: never = true` 直接报错（正常形态结果是 `true`，赋 `true` 合法）。
+ * 变异 M2a（空表加注解）/ M2b（注解 + 有键）都实测报错，见提交说明。
+ */
+type _ShardKeysLiteral<T extends string> = string extends T ? never : true;
+const _shardKeysUi: _ShardKeysLiteral<keyof typeof zhUi> = true;
+const _shardKeysPrintUi: _ShardKeysLiteral<keyof typeof zhPrintUi> = true;
+const _shardKeysCore: _ShardKeysLiteral<keyof typeof zhCore> = true;
+const _shardKeysMisc: _ShardKeysLiteral<keyof typeof zhMisc> = true;
+

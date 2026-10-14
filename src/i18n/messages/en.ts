@@ -26,6 +26,12 @@
  */
 import type { MessageKey } from './zh';
 
+import { en as enCore } from './parts/core';
+import { en as enMisc } from './parts/misc';
+import { en as enPrintUi } from './parts/print-ui';
+import { en as enUi } from './parts/ui';
+
+
 export const enMessages: Record<MessageKey, string> = {
   /* ──────────────────────────── Common ──────────────────────────── */
   'common.unknown': 'Unknown',
@@ -1529,4 +1535,14 @@ export const enMessages: Record<MessageKey, string> = {
     'Preset "{name}" references a stage key that does not exist: {key}',
   'customLibrary.issue.duplicateItemKey': 'Duplicate stage key in this library',
   'customLibrary.issue.duplicatePresetKey': 'Duplicate preset key in this library',
+
+  /*
+   * ══════════ 分片（4 片，与 zh.ts 同序同名）══════════
+   * `Record<MessageKey, string>` 这条注解对 spread 进来的键**同样生效**：
+   * 分片里 zh 有、en 没有 ⇒ 本文件当场报缺键。
+   */
+  ...enUi,
+  ...enPrintUi,
+  ...enCore,
+  ...enMisc,
 };
