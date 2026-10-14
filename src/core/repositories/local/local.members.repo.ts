@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode, MemberActorKind, MemberRoleKind } from '../../types/enums';
+import { ChangxiaErrorCode, MemberActorKind, MemberRoleKind, coreError } from '../../types/enums';
 import type { Member } from '../../types/entities';
 import type { CreateMemberCmd, UpdateMemberCmd } from '../../types/dto';
 import type { IMembersRepository } from '../interfaces';
@@ -16,7 +16,7 @@ export class LocalMembersRepository implements IMembersRepository {
       const filtered = includeInactive ? rows : rows.filter((m) => m.active);
       return filtered.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '成员列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.member.listReadFailed', undefined, err);
     }
   }
 
@@ -24,13 +24,13 @@ export class LocalMembersRepository implements IMembersRepository {
     try {
       return (await this.db.members.get(id)) ?? null;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '成员读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.member.readFailed', undefined, err);
     }
   }
 
   async insert(cmd: CreateMemberCmd): Promise<Member> {
     if (!cmd.name?.trim()) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '成员姓名不能为空。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.member.nameRequired');
     }
     const now = new Date().toISOString();
     const row: Member = {
@@ -55,14 +55,14 @@ export class LocalMembersRepository implements IMembersRepository {
       await this.db.members.add(row);
       return row;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '成员创建失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.member.createFailed', undefined, err);
     }
   }
 
   async update(id: string, cmd: UpdateMemberCmd): Promise<Member> {
     const existing = await this.db.members.get(id);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该成员。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.member.notFound');
     }
     // password 语义：string → 设为明文密码（哈希入库）；null → 清除密码；
     // undefined → 不变（缺省，不进入 pickDefined 覆盖集合）。

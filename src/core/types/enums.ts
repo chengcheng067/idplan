@@ -2,6 +2,8 @@
  * 全局枚举与错误码定义（core/types 唯一出处）。
  */
 
+import { coreErrorText, type CoreErrorKey, type CoreErrorParams } from './core-error-text';
+
 /** 数据源模式：local=IndexedDB(Dexie)，remote=REST(Fastify 预留) */
 export type DataSourceMode = 'local' | 'remote';
 
@@ -315,14 +317,42 @@ export enum ChangxiaErrorCode {
 /** 统一业务异常：上层只需捕获此类型并向 toast 展示 userMessage */
 export class ChangxiaError extends Error {
   public readonly code: ChangxiaErrorCode;
-  /** 可直接展示给用户的中文文案（为空时 UI 回落到兜底文案） */
+  /**
+   * 可直接展示给用户的中文文案（为空时 UI 回落到兜底文案）。
+   *
+   * ⚠️ 它同时是 **`agent-loopback` 回给外部 Agent 的协议字段**
+   * （`useAgentLoopbackReceiver` 的 `error.userMessage`、`channels/agent-loopback.ts`
+   * 的读取端）⇒ **读者是对方的程序**，取值只能逐字不变。
+   * 界面英文**不从这里取**，走 `messageKey`（见下）。
+   */
   public readonly userMessage: string;
+  /**
+   * 载荷文案的**机器可读键**（`CORE_ERROR_TEXT` 的键；只有经 `coreError()` 抛出的
+   * 才非空）。渲染层据它取**界面口径**的本地化文案：
+   * `resolveErrorText(err, t)`。
+   *
+   * 为什么是「键 + 参数」而不是「就地把 userMessage 翻掉」：
+   * core 不许 import i18n（会把 `document` 拖进服务端 program，详见
+   * `./core-error-text.ts` 文件头），所以**取词只能发生在渲染层**；
+   * 换掉 `userMessage` 本身则等于**用界面文案盖住数据层事实**、并改掉对外协议。
+   */
+  public readonly messageKey?: CoreErrorKey;
+  /** `messageKey` 的插值参数（`userMessage` 与界面文案共用同一组取值） */
+  public readonly params?: CoreErrorParams;
 
-  constructor(code: ChangxiaErrorCode, userMessage: string, cause?: unknown) {
+  constructor(
+    code: ChangxiaErrorCode,
+    userMessage: string,
+    cause?: unknown,
+    /** 内部通道：`coreError()` 专用。手写 `new ChangxiaError(...)` 时留空。 */
+    machine?: { key: CoreErrorKey; params?: CoreErrorParams },
+  ) {
     super(`[changxia:${code}] ${userMessage}`);
     this.name = 'ChangxiaError';
     this.code = code;
     this.userMessage = userMessage;
+    this.messageKey = machine?.key;
+    this.params = machine?.params;
     if (cause !== undefined) {
       // 现代运行环境支持 cause 透传，兼容性不足时静默忽略
       try {
@@ -332,4 +362,44 @@ export class ChangxiaError extends Error {
       }
     }
   }
+}
+
+/**
+ * 携机器码抛错（英文补齐批的推荐形态 —— 新写的 core 错误一律用它）。
+ *
+ * `userMessage` 由 `CORE_ERROR_TEXT` 渲染 ⇒ 对外协议（`err.userMessage` /
+ * `err.message`）与改动前**逐字节一致**，只有「界面能取到英文」这一条是新增的。
+ * 手写 `new ChangxiaError(code, '中文…')` 仍然合法（真因不定型的那种，如 zod issue 拼接），
+ * 只是界面侧拿不到英文本 —— 那类留在 B（真因原样透传）。
+ */
+export function coreError(
+  code: ChangxiaErrorCode,
+  key: CoreErrorKey,
+  params?: CoreErrorParams,
+  cause?: unknown,
+): ChangxiaError {
+  return new ChangxiaError(code, coreErrorText(key, params), cause, { key, params });
+}
+
+/**
+ * 错误 → **界面文案**（渲染层专用；core 自己不调它）。
+ *
+ * `translate` 由调用方注入（渲染层传 `src/i18n` 的 `t`）—— 这正是 core 不必
+ * import i18n 的原因，也是 `resolveErrorText` 能住在 core 的原因。
+ *
+ * 三支口径（与团队判据一字不差）：
+ *   ① 有机器码 ⇒ 取本地化文案（**界面口径**）；
+ *   ② 无机器码但有 `userMessage` ⇒ **真因原样透传**（不拿兜底句盖掉它）；
+ *   ③ 都不是 ⇒ 用 `fallback`（只在「没有真因」的那一支给兜底句）。
+ */
+export function resolveErrorText<K extends string>(
+  err: unknown,
+  translate: (key: K, params?: CoreErrorParams) => string,
+  fallback = '',
+): string {
+  if (err instanceof ChangxiaError) {
+    if (err.messageKey !== undefined) return translate(err.messageKey as K, err.params);
+    if (err.userMessage) return err.userMessage;
+  }
+  return fallback;
 }

@@ -27,8 +27,64 @@
  *     （有编译期断言钉着这件事：`src/i18n/messages/zh.ts` 末尾的 `_KeyofNotString`。）
  */
 
+/*
+ * ══════════════════════════════════════════════════════════════════════
+ * 键名约定（core 片）
+ * ══════════════════════════════════════════════════════════════════════
+ * `coreErr.<名词>.<做什么>` —— 与 `src/core/types/core-error-text.ts` 的键
+ * **逐字同名**（那张表是**载荷口径**的唯一出处，这里是**界面口径**）。
+ * 三张表（core 表 / 本片 zh / 本片 en）的键集两两相等 + zh 取值逐字相等，
+ * 由 `tests/core-error-i18n.spec.ts` 直接读三份断言 —— 改任一侧都会红。
+ *
+ * ⚠️ zh 取值**逐字节等于改动前源码里那句字面量**（含标点与全角括号）；
+ *    原本是模板串的写成 `{name}` 占位，渲染结果与原文一字不差。
+ *    理由：`ChangxiaError.userMessage` 同时是回给**外部 Agent** 的协议字段。
+ */
+
 /** core 分片 · 中文（新键写在这里；取值必须与改动前源码逐字一致） */
-export const zh = {} as const;
+export const zh = {
+  /* ── 阶段仓储 / 阶段服务（coreErr.stage.*） ── */
+  'coreErr.stage.listReadFailed': '阶段列表读取失败。',
+  'coreErr.stage.readFailed': '阶段读取失败。',
+  'coreErr.stage.draftIncomplete': '阶段草稿字段不完整，无法入库。',
+  'coreErr.stage.rangeReversed': '「{name}」起止日期倒置。',
+  'coreErr.stage.bulkWriteFailed': '阶段批量写入失败。',
+  'coreErr.stage.notFound': '未找到该阶段。',
+  'coreErr.stage.badDate': '日期格式无效。',
+  'coreErr.stage.endBeforeStart': '新截止日早于开始日，已拒绝保存。',
+  'coreErr.stage.newRangeInvalid': '新起止日期无效。',
+  'coreErr.stage.newEndBeforeStart': '新的截止日早于开始日。',
+  'coreErr.stage.postponeReasonRequired': '截止日后移必须填写延期原因（PRD 硬规则），否则不予保存。',
+  'coreErr.stage.completedOnlyReopenInProgress': '已完成阶段仅允许重新开启为「进行中」。',
+
+  /* ── 成员仓储（coreErr.member.*） ── */
+  'coreErr.member.listReadFailed': '成员列表读取失败。',
+  'coreErr.member.readFailed': '成员读取失败。',
+  'coreErr.member.nameRequired': '成员姓名不能为空。',
+  'coreErr.member.createFailed': '成员创建失败。',
+  'coreErr.member.notFound': '未找到该成员。',
+} as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
-export const en = {} as const;
+export const en = {
+  /* ── 阶段仓储 / 阶段服务（coreErr.stage.*） ── */
+  'coreErr.stage.listReadFailed': 'Failed to read the stage list.',
+  'coreErr.stage.readFailed': 'Failed to read the stage.',
+  'coreErr.stage.draftIncomplete': 'The stage draft is incomplete and cannot be saved.',
+  'coreErr.stage.rangeReversed': '"{name}": the start date is after the end date.',
+  'coreErr.stage.bulkWriteFailed': 'Failed to write the stages.',
+  'coreErr.stage.notFound': 'Stage not found.',
+  'coreErr.stage.badDate': 'Invalid date format.',
+  'coreErr.stage.endBeforeStart': 'The new end date is before the start date; the change was rejected.',
+  'coreErr.stage.newRangeInvalid': 'The new start or end date is invalid.',
+  'coreErr.stage.newEndBeforeStart': 'The new end date is before the start date.',
+  'coreErr.stage.postponeReasonRequired': 'A reason is required when moving the end date later (PRD hard rule); nothing was saved.',
+  'coreErr.stage.completedOnlyReopenInProgress': 'A completed stage can only be reopened as "In progress".',
+
+  /* ── 成员仓储（coreErr.member.*） ── */
+  'coreErr.member.listReadFailed': 'Failed to read the member list.',
+  'coreErr.member.readFailed': 'Failed to read the member.',
+  'coreErr.member.nameRequired': 'Member name cannot be empty.',
+  'coreErr.member.createFailed': 'Failed to create the member.',
+  'coreErr.member.notFound': 'Member not found.',
+} as const;

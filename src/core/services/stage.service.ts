@@ -5,7 +5,7 @@
 
 import dayjs from 'dayjs';
 
-import { ChangxiaError, ChangxiaErrorCode, StageLogType, StageStatus } from '../types/enums';
+import { ChangxiaErrorCode, StageLogType, StageStatus, coreError } from '../types/enums';
 import type { Stage } from '../types/entities';
 import type { RescheduleStageCmd } from '../types/dto';
 import type { ILogsRepository, IStagesRepository } from '../repositories/interfaces';
@@ -31,16 +31,16 @@ export class StageService {
   public async reschedule(stageId: string, cmd: RescheduleStageCmd): Promise<Stage> {
     const existing = await this.deps.stages.get(stageId);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该阶段。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.stage.notFound');
     }
 
     const newStart = dayjs(cmd.newStartAt);
     const newEnd = dayjs(cmd.newEndAt);
     if (!newStart.isValid() || !newEnd.isValid()) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '新起止日期无效。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.stage.newRangeInvalid');
     }
     if (newEnd.isBefore(newStart)) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '新的截止日早于开始日。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.stage.newEndBeforeStart');
     }
 
     // ---- 硬闸门 ----
@@ -48,10 +48,7 @@ export class StageService {
     const newEndDay = newEnd.format('YYYY-MM-DD');
     const isPostponed = dayjs(newEndDay).isAfter(dayjs(oldEndDay));
     if (isPostponed && (!cmd.reason || cmd.reason.trim().length === 0)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        '截止日后移必须填写延期原因（PRD 硬规则），否则不予保存。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.stage.postponeReasonRequired');
     }
     const reason = isPostponed ? cmd.reason!.trim() : cmd.reason?.trim() || null;
 
@@ -97,16 +94,13 @@ export class StageService {
   ): Promise<{ stage: Stage; unlockHint: UnlockHintSignal }> {
     const existing = await this.deps.stages.get(stageId);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该阶段。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.stage.notFound');
     }
     if (existing.status === toStatus) {
       return { stage: existing, unlockHint: { nextStageId: null, nextStageName: null } };
     }
     if (existing.status === StageStatus.Completed && toStatus !== StageStatus.InProgress) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Conflict,
-        '已完成阶段仅允许重新开启为「进行中」。',
-      );
+      throw coreError(ChangxiaErrorCode.Conflict, 'coreErr.stage.completedOnlyReopenInProgress');
     }
 
     const updated = await this.deps.stages.update(stageId, {});

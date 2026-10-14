@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 
-import { ChangxiaError, ChangxiaErrorCode, StageStatus } from '../../types/enums';
+import { ChangxiaErrorCode, StageStatus, coreError } from '../../types/enums';
 import type { Stage } from '../../types/entities';
 import type { UpdateStageCmd } from '../../types/dto';
 import type { IStagesRepository } from '../interfaces';
@@ -16,7 +16,7 @@ export class LocalStagesRepository implements IStagesRepository {
       const rows = await this.db.stages.where('projectId').equals(projectId).toArray();
       return rows.sort((a, b) => a.orderIndex - b.orderIndex);
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '阶段列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.stage.listReadFailed', undefined, err);
     }
   }
 
@@ -24,7 +24,7 @@ export class LocalStagesRepository implements IStagesRepository {
     try {
       return (await this.db.stages.get(id)) ?? null;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '阶段读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.stage.readFailed', undefined, err);
     }
   }
 
@@ -32,23 +32,23 @@ export class LocalStagesRepository implements IStagesRepository {
     if (rows.length === 0) return;
     for (const r of rows) {
       if (!r.projectId || !r.id || typeof r.orderIndex !== 'number') {
-        throw new ChangxiaError(ChangxiaErrorCode.Validation, '阶段草稿字段不完整，无法入库。');
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.stage.draftIncomplete');
       }
       if (dayjs(r.endAt).isBefore(dayjs(r.startAt))) {
-        throw new ChangxiaError(ChangxiaErrorCode.Validation, `「${r.name}」起止日期倒置。`);
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.stage.rangeReversed', { name: r.name });
       }
     }
     try {
       await this.db.stages.bulkAdd(rows);
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '阶段批量写入失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.stage.bulkWriteFailed', undefined, err);
     }
   }
 
   async update(id: string, cmd: UpdateStageCmd): Promise<Stage> {
     const existing = await this.db.stages.get(id);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该阶段。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.stage.notFound');
     }
     const next: Stage = {
       ...existing,
@@ -69,15 +69,15 @@ export class LocalStagesRepository implements IStagesRepository {
   ): Promise<Stage> {
     const existing = await this.db.stages.get(id);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该阶段。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.stage.notFound');
     }
     const start = dayjs(startAt);
     const end = dayjs(endAt);
     if (!start.isValid() || !end.isValid()) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '日期格式无效。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.stage.badDate');
     }
     if (end.isBefore(start)) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '新截止日早于开始日，已拒绝保存。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.stage.endBeforeStart');
     }
     const next: Stage = {
       ...existing,
