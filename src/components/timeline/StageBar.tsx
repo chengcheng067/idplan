@@ -6,6 +6,18 @@ import { StageStatus } from '../../core/types/enums';
 import { stageBandColor, stageBandInkColor, stageBandOutline } from './stageColors';
 import { customStageColor } from './stageColorKey';
 import { STAGE_ACTIVE_STROKE, STAGE_GLOW_COLOR } from './timelineColors';
+import { useLang, type MessageKey } from '../../i18n';
+
+/**
+ * 交付阶段子刻度三标签（三等分浅色竖线上的「交底 / 中期 / 验收」）。
+ * ⚠️ 与下面那条 `stage.name.includes('交付')` **毫无关系**：那一条是**行为耦合**
+ *    （拿用户数据里的中文词当分支条件），不是文案 —— 翻不了、也不该翻，只登记不删。
+ */
+const STAGE_SEG_KEYS: readonly MessageKey[] = [
+  'timeline.stageSeg.handover',
+  'timeline.stageSeg.midterm',
+  'timeline.stageSeg.acceptance',
+];
 
 /**
  * 彩条本体：SVG rect + 左右手柄 + 激活发光 + 交付段子刻度。
@@ -37,6 +49,8 @@ export function StageBar({
   onHandleDown(e: ReactPointerEvent, stage: Stage, edge: 'start' | 'end'): void;
   onClick(): void;
 }): JSX.Element {
+  /* 取词 + 订阅语言变化（子刻度三标签 / 拖拽气泡随语言变） */
+  const { t } = useLang();
   const y = rowIndex * (rowH + rowGap);
   // 画板 04：跨度色带高 36（行高 44 - 上下各 4px 留白）；band 在行内垂直居中
   const barH = rowH - 8;
@@ -137,7 +151,15 @@ export function StageBar({
         pointerEvents="none"
       />
 
-      {/* 交付阶段子刻度（交底 / 中期 / 验收 三等分浅色竖线） */}
+      {/*
+        ★ 行为耦合登记（笔 3-C，**刻意不改**）：`stage.name.includes('交付')` 拿的是
+          **用户数据里**的中文词，用「阶段名里有没有『交付』」当分支条件。
+          后果（如实登记，交 team-lead 定夺是否另立项）：阶段名若用英文/别称
+          （如 `Delivery`），这条子刻度会**静默消失** —— 而它消失时没有任何东西会红。
+          为什么本笔不动它：删/改这个判据都是**改行为**（不是改文案），
+          且它属「产品要不要把『交付阶段』做成显式字段」的决策，不该由 i18n 笔顺手做。
+      */}
+      {/* 交付阶段子刻度（三等分浅色竖线；三标签文案见 STAGE_SEG_KEYS） */}
       {stage.name.includes('交付') && w > pxPerDay * 6 && (
         <>
           {[1, 2].map((i) => (
@@ -164,7 +186,7 @@ export function StageBar({
               fill={ink}
               opacity={0.85}
             >
-              {['交底', '中期', '验收'][i]}
+              {t(STAGE_SEG_KEYS[i] ?? STAGE_SEG_KEYS[0]!)}
             </text>
           ))}
         </>
@@ -245,7 +267,12 @@ function DateBubble({
   date: string;
   edge: 'start' | 'end';
 }): JSX.Element {
-  const label = edge === 'start' ? `开始 ${date}` : `截止 ${date}`;
+  /* 取词 + 订阅语言变化（气泡里那两个字随语言变；宽度按取值长度算 ⇒ 自动适配） */
+  const { t } = useLang();
+  const label =
+    edge === 'start'
+      ? t('timeline.dragBubble.start', { date })
+      : t('timeline.dragBubble.end', { date });
   const width = label.length * 6.5 + 10;
   const height = 18;
   const rx = 4;

@@ -5,6 +5,7 @@ import { StageStatus } from '../../core/types/enums';
 import { remainingDays } from '../../lib/date';
 import { stageSolidClass, stageSolidColor } from './stageColors';
 import { customStageColor } from './stageColorKey';
+import { useLang } from '../../i18n';
 
 /**
  * 左侧锁定列（sticky）：序号圆标 / 阶段名 / 负责人 / 距截止天数。
@@ -30,10 +31,19 @@ export function StageRowsColumn({
   memberView?: boolean;
   leftColW?: number;
 }): JSX.Element {
+  /* 取词 + 订阅语言变化（负责人两态词随语言变） */
+  const { t } = useLang();
   const ownerLabel = (stage: Stage): string => {
-    if (!stage.ownerId) return '未指派负责人';
+    if (!stage.ownerId) return t('stageRows.unassigned');
     const owner = members.find((m) => m.id === stage.ownerId);
-    if (!owner) return '未知负责人';
+    if (!owner) return t('stageRows.unknownOwner');
+    /*
+     * ⚠️ `'负责人'` **不翻**（B）：它落的是 `owner.role` 这个**数据槽**（角色值本身是落库值，
+     *    如「设计总监」，不随界面语言变）。把兜底词翻成英文会让同一个位置上
+     *    「数据是中文、兜底是英文」两种性质混排 —— 判据见接任包 §3.0-2：
+     *    **会被写进流水或落库的值不翻**（同族的 `'未署名'` / `'协作'` 已判 B）。
+     *    与上一行之上的 `'未指派负责人'` 不同：那两个是**纯界面状态词**，不进任何数据槽 ⇒ A。
+     */
     return memberView ? owner.role || '负责人' : owner.name;
   };
 
@@ -93,12 +103,18 @@ function IndexBadge({ stage }: { stage: Stage }): JSX.Element {
 }
 
 function DueChip({ stage, todayIso }: { stage: Stage; todayIso: string }): JSX.Element | null {
+  /* 取词 + 订阅语言变化（到期胶囊三态随语言变） */
+  const { t } = useLang();
   if (stage.status === StageStatus.Completed) return null;
   const days = remainingDays(stage.endAt.slice(0, 10), todayIso);
   const overdue = days < 0;
   const urgent = !overdue && days <= 3;
   const cls = overdue ? 'text-clay' : urgent ? 'text-amber-deep' : 'text-mist';
-  const label = overdue ? `逾期 ${Math.abs(days)} 天` : days === 0 ? '今日截止' : `${days} 天`;
+  const label = overdue
+    ? t('timeline.overdueDays', { n: Math.abs(days) })
+    : days === 0
+      ? t('timeline.dueToday')
+      : t('timeline.daysCount', { n: days });
   void dayjs; // 保持单一日期入口的注释位（剩余口径在 lib/date）
   return <span className={`shrink-0 text-[11px] tabular-nums ${cls}`}>{label}</span>;
 }

@@ -1317,4 +1317,31 @@ export const enMessages: Record<MessageKey, string> = {
   'holiday.cn.midAutumn': 'Mid-Autumn Festival',
   'holiday.cn.nationalDay': 'National Day',
   'holiday.cn.nationalDayMidAutumn': 'National Day · Mid-Autumn Festival',
+
+  /* ══════════ Batch 3-C: timeline (stage bar / mobile stage cards / reschedule dialog) ══════════ */
+  'timeline.daysCount': '{n} days',
+  'timeline.overdueDays': '{n} days overdue',
+  'timeline.dueToday': 'Due today',
+  'timeline.stageSeg.handover': 'Briefing',
+  'timeline.stageSeg.midterm': 'Mid-term',
+  'timeline.stageSeg.acceptance': 'Acceptance',
+  'timeline.dragBubble.start': 'Start {date}',
+  'timeline.dragBubble.end': 'End {date}',
+  'mobileStage.taskCount': '· {n} tasks',
+  'stageRows.unassigned': 'No owner assigned',
+  'stageRows.unknownOwner': 'Unknown owner',
+  'reschedule.title': 'Confirm reschedule',
+  'reschedule.titleStage': ' · {stage}',
+  'reschedule.titleMoreStages': ' and {n} stages',
+  'reschedule.cancelAria': 'Cancel reschedule',
+  'reschedule.reasonLabel': 'Reason for delay',
+  'reschedule.reasonRequired': '* (required when any stage end moves later)',
+  'reschedule.reasonPlaceholder': 'e.g. client confirmed a delay / approval queue…',
+  'reschedule.reasonMissing':
+    'A reason is required before saving (the history keeps a full record).',
+  'reschedule.noteLabel': 'Note (optional when pulled in or shifted)',
+  'reschedule.saveMany': 'Save {n} stages with a record',
+  'reschedule.saveOne': 'Save with a record',
+  'reschedule.saveFailed':
+    'Save rejected: {n} stages failed to reschedule. Check the delay reason and retry.',
 };

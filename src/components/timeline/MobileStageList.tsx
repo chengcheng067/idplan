@@ -5,6 +5,7 @@ import { customStageColor } from './stageColorKey';
 import { StatusPill } from '../common/StatusPill';
 import { cn } from '../../lib/cn';
 import { totalDaysInclusive } from '../../lib/date';
+import { useLang } from '../../i18n';
 
 /** 阶段序号符号（①-⑨，与横向时间轴一致） */
 const STAGE_NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'] as const;
@@ -34,6 +35,8 @@ export function MobileStageList({
   todayIso: string;
   onOpen(stageId: string): void;
 }): JSX.Element {
+  /* 取词 + 订阅语言变化（跨度天数 / 任务数两处文案随语言变） */
+  const { t } = useLang();
   return (
     <div className="flex flex-col gap-2">
       {stages.map((s) => {
@@ -84,7 +87,9 @@ export function MobileStageList({
               <span aria-hidden>→</span>
               <span className="tabular-nums">{s.endAt.slice(0, 10)}</span>
               <span className="ml-auto tabular-nums">
-                {totalDaysInclusive(s.startAt.slice(0, 10), s.endAt.slice(0, 10))} 天
+                {t('timeline.daysCount', {
+                  n: totalDaysInclusive(s.startAt.slice(0, 10), s.endAt.slice(0, 10)),
+                })}
               </span>
             </div>
 
@@ -109,7 +114,7 @@ export function MobileStageList({
                   {owner.name}
                 </span>
               )}
-              {taskCount > 0 && <span>· {taskCount} 项任务</span>}
+              {taskCount > 0 && <span>{t('mobileStage.taskCount', { n: taskCount })}</span>}
               <span className="ml-auto text-[10px] text-mist/70">{todayIso}</span>
             </div>
           </button>

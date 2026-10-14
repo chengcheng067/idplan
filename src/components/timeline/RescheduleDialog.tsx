@@ -9,6 +9,7 @@ import { createProjectActions } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import { Modal } from '../common/Modal';
 import { ImeInput, ImeTextarea } from '../common/ImeInput';
+import { useLang } from '../../i18n';
 
 /**
  * 延期原因弹窗（PRD 硬规则 1）：
@@ -23,6 +24,8 @@ export function RescheduleDialog({
   batch: BatchReschedule;
   onClose(): void;
 }): JSX.Element {
+  /* 取词 + 订阅语言变化（标题 / 标签 / 按钮 / 错误提示全部随语言变） */
+  const { t } = useLang();
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
@@ -62,22 +65,24 @@ export function RescheduleDialog({
     if (failed === 0) {
       onClose();
     } else {
-      setError(`保存被拒绝：${failed} 个阶段改期失败，请检查延期原因后重试。`);
+      setError(t('reschedule.saveFailed', { n: failed }));
     }
   };
 
   return (
-    <Modal open onClose={onClose} ariaLabel="改期确认">
+    <Modal open onClose={onClose} ariaLabel={t('reschedule.title')}>
       <div className="glass-strong iridescent-border dialog-pop w-full max-w-md rounded-2xl p-5 shadow-soft">
         <div className="mb-3 flex items-start justify-between">
           <h3 className="flex items-center gap-2 font-display text-display-md">
             {postponed && <AlertTriangle size={18} className="text-clay" />}
-            改期确认{shiftedCount > 1 ? ` · ${primary.stageName} 等 ${shiftedCount} 个阶段` : ` · ${primary.stageName}`}
+            {t('reschedule.title')}
+            {t('reschedule.titleStage', { stage: primary.stageName })}
+            {shiftedCount > 1 ? t('reschedule.titleMoreStages', { n: shiftedCount }) : null}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="取消改期"
+            aria-label={t('reschedule.cancelAria')}
             className="rounded-md p-1 text-mist hover:bg-sand"
           >
             <X size={16} />
@@ -106,24 +111,25 @@ export function RescheduleDialog({
           <>
             <label className="block text-sm">
               <span className="mb-1 block font-medium">
-                延期原因 <span className="text-clay">*（任一阶段截止日后移必填）</span>
+                {t('reschedule.reasonLabel')}{" "}
+                <span className="text-clay">{t('reschedule.reasonRequired')}</span>
               </span>
               <ImeTextarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
-                placeholder="如：甲方确认延迟 / 审批排队…"
+                placeholder={t('reschedule.reasonPlaceholder')}
                 className="w-full resize-y rounded-md border border-line p-2 text-sm leading-6 outline-none focus:border-pine"
                 autoFocus
               />
             </label>
             {!canSave && (
-              <p className="mt-1 text-xs text-clay">未填写延期原因前无法保存（历史将完整留痕）。</p>
+              <p className="mt-1 text-xs text-clay">{t('reschedule.reasonMissing')}</p>
             )}
           </>
         ) : (
           <label className="block text-sm">
-            <span className="mb-1 block font-medium">备注原因（提前/平移可留空）</span>
+            <span className="mb-1 block font-medium">{t('reschedule.noteLabel')}</span>
             <ImeInput
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -140,7 +146,7 @@ export function RescheduleDialog({
             onClick={onClose}
             className="rounded-md border border-line px-3 py-1.5 text-sm text-mist hover:bg-sand"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -148,7 +154,9 @@ export function RescheduleDialog({
             onClick={() => void submit()}
             className="rounded-md bg-pine px-4 py-1.5 text-sm text-white hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {shiftedCount > 1 ? `保存 ${shiftedCount} 个阶段并留痕` : '保存并留痕'}
+            {shiftedCount > 1
+              ? t('reschedule.saveMany', { n: shiftedCount })
+              : t('reschedule.saveOne')}
           </button>
         </div>
       </div>

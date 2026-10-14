@@ -1314,6 +1314,39 @@ export const zhMessages = {
   'holiday.cn.midAutumn': '中秋节',
   'holiday.cn.nationalDay': '国庆节',
   'holiday.cn.nationalDayMidAutumn': '国庆节·中秋节',
+
+  /* ══════════ 笔 3-C：时间轴（阶段条 / 移动端阶段卡 / 改期弹窗 / 左侧锁列） ══════════ */
+  /* 「N 天」只有这一个键：`StageRowsColumn` 的到期胶囊与 `MobileStageList` 的跨度**同一个词**，
+     拆成两个键迟早漂成 `3 天` / `3 days` 两种措辞。 */
+  'timeline.daysCount': '{n} 天',
+  'timeline.overdueDays': '逾期 {n} 天',
+  'timeline.dueToday': '今日截止',
+  /* 交付阶段的子刻度三标签（与 `StageBar` 的 `stage.name.includes('交付')` **无关**：
+     那一条是**行为耦合的分支条件**（拿用户数据里的中文词当判据），不是文案 —— 只登记，不许翻也不许删。 */
+  'timeline.stageSeg.handover': '交底',
+  'timeline.stageSeg.midterm': '中期',
+  'timeline.stageSeg.acceptance': '验收',
+  'timeline.dragBubble.start': '开始 {date}',
+  'timeline.dragBubble.end': '截止 {date}',
+  'mobileStage.taskCount': '· {n} 项任务',
+  'stageRows.unassigned': '未指派负责人',
+  'stageRows.unknownOwner': '未知负责人',
+  /* 改期弹窗。⚠️「改期确认」这个**词**只有 `reschedule.title` 一个键：
+     浮层 aria 与可见标题**共用它**；标题的后半截另成两个片段键
+     （`titleStage` / `titleMoreStages`）—— 拆片段而不是拆整句，是为了让
+     「同一个词一个键」成立，同时不把标点硬编进组件。 */
+  'reschedule.title': '改期确认',
+  'reschedule.titleStage': ' · {stage}',
+  'reschedule.titleMoreStages': ' 等 {n} 个阶段',
+  'reschedule.cancelAria': '取消改期',
+  'reschedule.reasonLabel': '延期原因',
+  'reschedule.reasonRequired': '*（任一阶段截止日后移必填）',
+  'reschedule.reasonPlaceholder': '如：甲方确认延迟 / 审批排队…',
+  'reschedule.reasonMissing': '未填写延期原因前无法保存（历史将完整留痕）。',
+  'reschedule.noteLabel': '备注原因（提前/平移可留空）',
+  'reschedule.saveMany': '保存 {n} 个阶段并留痕',
+  'reschedule.saveOne': '保存并留痕',
+  'reschedule.saveFailed': '保存被拒绝：{n} 个阶段改期失败，请检查延期原因后重试。',
 } as const;
 
 /**
