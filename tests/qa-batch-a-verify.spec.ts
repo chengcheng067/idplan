@@ -342,7 +342,14 @@ await page.click('[data-industry-select-option="indoor"]');
    */
   function probeSettingsDrawer(page: Page) {
     return page.evaluate(() => {
-      const dlg = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
+      /*
+       * ⚠️ 两个变量的**层级不同**，别合并（i18n-EN 批曾误合并过一次，被本文件用例当场咬出来）：
+       *   `dlg`   = **遮罩 / wrapper** 层（`data-settings-dialog`，挂在 `Modal` 底座上）
+       *   `panel` = **抽屉本体**（`data-settings-drawer`，挂在调用方的子面板上）
+       * 上面注释写的 DOM 层次 `[role="dialog"]（遮罩）→ 点击捕获层 → div[data-settings-drawer]（本体）`
+       * 就是这两者；`overlayTop` 量遮罩、其余几何量本体 —— 合成一个就变成自比。
+       */
+      const dlg = document.querySelector('[data-settings-dialog]') as HTMLElement | null;
       const panel = document.querySelector('[data-settings-drawer]') as HTMLElement | null;
       if (!dlg || !panel) return null;
       const dr = dlg.getBoundingClientRect();
@@ -1118,7 +1125,7 @@ await page.click('[data-industry-select-option="indoor"]');
       // 它是抽屉本体的父级；圈禁的起点在这个 wrapper 上，别把断言写成
       // 「焦点必须在抽屉本体内」，那是量错了层次）
       const inDrawer = await page.evaluate(() => {
-        const dlg = document.querySelector('[data-settings-drawer]');
+        const dlg = document.querySelector('[data-settings-dialog]');
         return !!dlg && dlg.contains(document.activeElement);
       });
       expect(inDrawer, '打开设置后焦点不在 dialog 子树内').toBe(true);
@@ -1126,7 +1133,7 @@ await page.click('[data-industry-select-option="indoor"]');
       // Esc 关（Modal 既有契约）
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
-      expect(await page.locator('[data-settings-drawer]').count()).toBe(0);
+      expect(await page.locator('[data-settings-dialog]').count()).toBe(0);
 
       // 关闭后焦点回触发钮（侧栏那个「设置」——Modal lastFocusRef 还原）
       const backToTrigger = await page.evaluate(() => {
@@ -1156,7 +1163,7 @@ await page.click('[data-industry-select-option="indoor"]');
       expect(await sidebarBtn.count()).toBeGreaterThanOrEqual(1);
       await sidebarBtn.first().click();
       await page.waitForTimeout(600);
-      expect(await page.locator('[data-settings-drawer]').count()).toBe(1);
+      expect(await page.locator('[data-settings-dialog]').count()).toBe(1);
     } finally {
       await ctx.close();
     }

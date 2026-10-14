@@ -349,10 +349,10 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
       await page.evaluate(() => {
         (document.querySelector('button[aria-label="关闭设置"]') as HTMLButtonElement | null)?.click();
       });
-      await page.waitForFunction(() => document.querySelector('[data-settings-drawer]') === null, undefined, {
+      await page.waitForFunction(() => document.querySelector('[data-settings-dialog]') === null, undefined, {
         timeout: 2000,
       });
-      expect(await page.evaluate(() => document.querySelector('[data-settings-drawer]'))).toBeNull();
+      expect(await page.evaluate(() => document.querySelector('[data-settings-dialog]'))).toBeNull();
     } finally {
       await ctx.close();
     }

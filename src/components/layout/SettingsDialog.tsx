@@ -388,6 +388,15 @@ export function SettingsDialog({
         placement="left-rail"
         railLeft={`${railLeftPx}px`}
         ariaLabel={t('settings.drawerAria')}
+        /*
+         * 语言无关定位钩子 —— **这是「遮罩 / wrapper」层**，与内层的 `data-settings-drawer`
+         * （抽屉**本体**）**不是同一个元素**。真机 spec 原先按
+         * `[role="dialog"][aria-label="设置"]` 定位，指的是**这一层**（见 `qa-batch-a-verify`
+         * 的 `probeSettingsDrawer`：它用 `dlg` 量遮罩 top、用 `panel` 量抽屉几何）。
+         * ⚠️ 因此**不能**把 dialog 级定位换成 `[data-settings-drawer]` —— 那是量错了层次
+         * （`v07-board-acceptance` 那份注释早就警告过同一件事）。
+         */
+        dataAttrs={{ 'data-settings-dialog': '' }}
       >
         {/*
           v0.8.6.0002 · 反馈 #1：贴侧栏右缘展开的全高抽屉（左缘 = 侧栏右缘，
