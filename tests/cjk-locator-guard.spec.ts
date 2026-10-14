@@ -301,7 +301,27 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *   ⚠️ 这条记录的存在理由：下一个读到「修了剥注释、棘轮怎么没动」的人，
  *     能在**三十秒内**看到「已实测、不是忘了改」。
  */
-const BASELINE = 110;
+/*
+ * ── 2026-10-14 · i18n 笔 1-④：110 → **108**（−2，归属清楚） ──
+ * 本笔把 `tests/custom-library-section.spec.tsx` 里 **2 处「拿中文 aria 当定位」**
+ * 换成与语言无关的 `data-testid`（组件同笔加了 `library-export-{name}` 等钩子）：
+ *   · `expect(container.querySelector('button[aria-label="导出行业包 新库"]')).toBeTruthy();`
+ *   · `const exportBtn = container.querySelector('button[aria-label="导出行业包 已有库X"]') …`
+ * ⇒ 这两处是**真哑雷**：`aria-label` 的取值已改走 `t('library.exportAria')`，
+ *   切英文即变 `Export industry library …`，选择器**静默失配**（失败会伪装成「按钮不存在」）。
+ *
+ * **实测（不是推算）**：
+ *   · 同一文件、同一扫描核：`2f417d3` = **2 处** → `8f66501` = **0 处**（`scanCjkLocators` 逐条印出，见提交信息）；
+ *   · 全仓 `scanRepo`：`2f417d3` 之后 = **108**，而基线当时是 110 ⇒ 差额恰好 −2，
+ *     与上面那两处**一一对应**（本批其余改动都没碰中文 aria 定位：笔 1-⑤ 动的是
+ *     `print-logo.spec.ts` 的 esbuild 调用与 `i18n-jsx-space.*` 的英文夹具，笔 1-⑥ 只动 src）。
+ *   · 与 `d0b60ef`（修 `maskComments`）的复核结论叠加**仍是净 −2** —— 那笔已实测「剥注释
+ *     前后命中的 `文件:行` 集合逐条相同」（见上方 110 → 110 那段），不是同一格。
+ *
+ * ⚠️ 口径复用本文件上一段：**棘轮只许变小，但「没变小」时不许硬改小** ——
+ *   这次是**真的转换了锚点**（−2 有逐条出处），才允许下调。
+ */
+const BASELINE = 108;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());
