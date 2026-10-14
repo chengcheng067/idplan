@@ -123,21 +123,60 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   ['coreErr.task.notFound', ChangxiaErrorCode.NotFound, '未找到该任务。'],
   ['coreErr.task.readFailed', ChangxiaErrorCode.Storage, '任务读取失败。'],
   ['coreErr.task.titleRequired', ChangxiaErrorCode.Validation, '任务标题不能为空。'],
+
+  /* ── 段 3（执行域仓储）· 基准值同样取自改动前的 `HEAD:` 源码；参数化那条 = 表里 PARAMS 渲染后的结果 ── */
+  ['coreErr.exec.projectNotFound', ChangxiaErrorCode.NotFound, '未找到项目 p1，不能为它创建执行域数据。'],
+  ['coreErr.exec.notAgentBoard', ChangxiaErrorCode.Validation, '执行域只属于 Agent 看板：项目 p1 的 kind="human"，不是 agent。 人工项目的排期不经由 Agent 执行通道。'],
+  ['coreErr.exec.badSource', ChangxiaErrorCode.Validation, '字段 source 非法：bogus；合法值为 project-task / natural-language / external / template。'],
+  ['coreErr.exec.createFailed', ChangxiaErrorCode.Storage, '执行单创建失败。'],
+  ['coreErr.exec.readFailed', ChangxiaErrorCode.Storage, '执行单读取失败。'],
+  ['coreErr.exec.listReadFailed', ChangxiaErrorCode.Storage, '执行单列表读取失败。'],
+  ['coreErr.exec.notFound', ChangxiaErrorCode.NotFound, '未找到该执行单。'],
+  ['coreErr.exec.statusUpdateFailed', ChangxiaErrorCode.Storage, '执行单状态更新失败。'],
+  ['coreErr.exec.eventTargetMissing', ChangxiaErrorCode.NotFound, '未找到执行单 ex1，不能追加事件。'],
+  ['coreErr.exec.eventSeqInvalid', ChangxiaErrorCode.Validation, '执行事件 seq 非法：调用方传入 3，期望 2（execution=ex1）。'],
+  ['coreErr.exec.eventWriteFailed', ChangxiaErrorCode.Storage, '执行事件写入失败。'],
+  ['coreErr.exec.eventListReadFailed', ChangxiaErrorCode.Storage, '执行事件列表读取失败。'],
+  ['coreErr.attempt.badStatus', ChangxiaErrorCode.Validation, 'attempt status 非法：bogus；合法值为 queued / running / succeeded / failed / cancelled / interrupted。'],
+  ['coreErr.attempt.executionMissing', ChangxiaErrorCode.NotFound, '未找到执行单 ex1，不能为其新建 attempt。'],
+  ['coreErr.attempt.openAttemptExists', ChangxiaErrorCode.Conflict, '执行单 ex1 已存在非终态 attempt，不能新开 attempt。'],
+  ['coreErr.attempt.noInvalid', ChangxiaErrorCode.Validation, 'attemptNo 非法：调用方传入 3，期望 2（execution=ex1）。'],
+  ['coreErr.attempt.createFailed', ChangxiaErrorCode.Storage, '执行尝试创建失败。'],
+  ['coreErr.attempt.notFound', ChangxiaErrorCode.NotFound, '未找到该执行尝试。'],
+  ['coreErr.attempt.updateFailed', ChangxiaErrorCode.Storage, '执行尝试更新失败。'],
+  ['coreErr.attempt.listReadFailed', ChangxiaErrorCode.Storage, '执行尝试列表读取失败。'],
+  ['coreErr.writeback.badStatus', ChangxiaErrorCode.Validation, '写回提案 status 非法：ghost；合法值为 draft / proposed / applied / rejected / conflict。'],
+  ['coreErr.writeback.createAsSettled', ChangxiaErrorCode.Validation, '写回提案不允许直接创建为 applied：提案须先创建（draft / proposed）再经由审批落定。'],
+  ['coreErr.writeback.executionMissing', ChangxiaErrorCode.NotFound, '未找到执行单 ex1，不能为其创建写回提案。'],
+  ['coreErr.writeback.createFailed', ChangxiaErrorCode.Storage, '写回提案创建失败。'],
+  ['coreErr.writeback.notFound', ChangxiaErrorCode.NotFound, '未找到该写回提案。'],
+  ['coreErr.writeback.alreadySettled', ChangxiaErrorCode.Conflict, '写回提案已落定为 applied，不可再变更（execution=ex1）。'],
+  ['coreErr.writeback.decidedByRequired', ChangxiaErrorCode.Validation, '写回提案落定为 applied 必须由人工决策：decidedBy 必填（execution=ex1）。'],
+  ['coreErr.writeback.updateFailed', ChangxiaErrorCode.Storage, '写回提案更新失败。'],
+  ['coreErr.writeback.listReadFailed', ChangxiaErrorCode.Storage, '写回提案列表读取失败。'],
 ];
 
 /** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */
-const PARAMS: Partial<Record<CoreErrorKey, Record<string, string>>> = {
+const PARAMS: Partial<Record<CoreErrorKey, Record<string, string | number>>> = {
   'coreErr.stage.rangeReversed': { name: 'S1' },
   'coreErr.setting.readFailed': { key: 'theme' },
   'coreErr.setting.writeFailed': { key: 'theme' },
+  'coreErr.exec.projectNotFound': { projectId: 'p1' },
+  'coreErr.exec.notAgentBoard': { projectId: 'p1', kind: 'human' },
+  'coreErr.exec.badSource': { source: 'bogus', allowed: 'project-task / natural-language / external / template' },
+  'coreErr.exec.eventTargetMissing': { executionId: 'ex1' },
+  'coreErr.exec.eventSeqInvalid': { actual: 3, expected: 2, executionId: 'ex1' },
+  'coreErr.attempt.badStatus': { status: 'bogus', allowed: 'queued / running / succeeded / failed / cancelled / interrupted' },
+  'coreErr.attempt.executionMissing': { executionId: 'ex1' },
+  'coreErr.attempt.openAttemptExists': { executionId: 'ex1' },
+  'coreErr.attempt.noInvalid': { actual: 3, expected: 2, executionId: 'ex1' },
+  'coreErr.writeback.badStatus': { status: 'ghost', allowed: 'draft / proposed / applied / rejected / conflict' },
+  'coreErr.writeback.createAsSettled': { status: 'applied' },
+  'coreErr.writeback.executionMissing': { executionId: 'ex1' },
+  'coreErr.writeback.alreadySettled': { status: 'applied', executionId: 'ex1' },
+  'coreErr.writeback.decidedByRequired': { status: 'applied', executionId: 'ex1' },
 };
 
-/** 参数名 → 该键的占位符（③ 的英文插值断言用；手写的期待，不是从实现反推） */
-const PLACEHOLDER_OF: Partial<Record<CoreErrorKey, string>> = {
-  'coreErr.stage.rangeReversed': 'name',
-  'coreErr.setting.readFailed': 'key',
-  'coreErr.setting.writeFailed': 'key',
-};
 
 const zhTable = coreZh as Record<string, string>;
 const enTable = coreEn as Record<string, string>;
@@ -234,10 +273,12 @@ describe('③ `resolveErrorText` 在两种语言下都给出正确取值', () =>
     if (vars === undefined) {
       expect(english).toBe(enTable[key]);
     } else {
-      // 有插值：英文取值必须**已被替换**（占位符原样端出去 = 界面露出 `{name}`）
-      const holder = PLACEHOLDER_OF[key]!;
-      expect(english, `${key} 把 {${holder}} 原样端出去了`).not.toContain(`{${holder}}`);
-      expect(english).toContain(vars[holder]!);
+      // 有插值：英文取值必须**已被替换**（占位符原样端出去 = 界面露出 `{name}`），
+      // 且每个实参都得真的出现在英文里（只断言「没有 {}」会漏掉「传错变量」）
+      expect(english, `${key} 的英文里还留着占位符`).not.toMatch(/\{\w+\}/);
+      for (const [name, value] of Object.entries(vars)) {
+        expect(english, `${key} 的英文里没出现参数 ${name}`).toContain(String(value));
+      }
     }
   });
 

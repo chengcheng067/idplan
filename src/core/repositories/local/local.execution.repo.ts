@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, coreError } from '../../types/enums';
 import type {
   Execution,
   ExecutionAttempt,
@@ -57,17 +57,13 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
   private async assertAgentOnlyProject(projectId: string): Promise<void> {
     const project = await this.db.projects.get(projectId);
     if (!project) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.NotFound,
-        `未找到项目 ${projectId}，不能为它创建执行域数据。`,
-      );
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.exec.projectNotFound', { projectId: projectId });
     }
     if (project.kind !== 'agent') {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `执行域只属于 Agent 看板：项目 ${projectId} 的 kind="${project.kind}"，不是 agent。` +
-          ' 人工项目的排期不经由 Agent 执行通道。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.exec.notAgentBoard', {
+        projectId: projectId,
+        kind: String(project.kind),
+      });
     }
   }
 
@@ -77,10 +73,10 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
     //   实测确认这是一处**两端分歧**：本地 `source='whatever'` 落库、远端 400。
     //   分歧比「两端一致地不完整」更坏，故在本地侧补上（**逐字同款**的判定与文案）。
     if (!EXECUTION_SOURCES.includes(cmd.source)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `字段 source 非法：${String(cmd.source)}；合法值为 ${EXECUTION_SOURCES.join(' / ')}。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.exec.badSource', {
+        source: String(cmd.source),
+        allowed: EXECUTION_SOURCES.join(' / '),
+      });
     }
     // 执行域归属关卡（先于任何写入）：只有 Agent 看板上能建执行单。
     await this.assertAgentOnlyProject(cmd.projectId);
@@ -109,7 +105,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       await this.db.executions.add(row);
       return row;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单创建失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.createFailed', undefined, err);
     }
   }
 
@@ -117,7 +113,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
     try {
       return (await this.db.executions.get(id)) ?? null;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.readFailed', undefined, err);
     }
   }
 
@@ -126,7 +122,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       const rows = await this.db.executions.where('projectId').equals(projectId).toArray();
       return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.listReadFailed', undefined, err);
     }
   }
 
@@ -142,7 +138,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         async () => {
         const existing = await this.db.executions.get(id);
         if (!existing) {
-          throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该执行单。');
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.exec.notFound');
         }
         // 存储边界强制状态机：读 current 后用同一事务内的提案集合校验 next。
         const proposals = await this.db.writebackProposals
@@ -197,7 +193,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       });
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单状态更新失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.statusUpdateFailed', undefined, err);
     }
   }
 
@@ -215,10 +211,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
           // 两端都必须在「入口」就把「父不存在」翻译成 NotFound，否则远端 500 → 客户端 Network，
           // 文案会指向「网络排查」而真因是父记录不存在。
           if (!(await this.db.executions.get(cmd.executionId))) {
-            throw new ChangxiaError(
-              ChangxiaErrorCode.NotFound,
-              `未找到执行单 ${cmd.executionId}，不能追加事件。`,
-            );
+            throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.exec.eventTargetMissing', { executionId: cmd.executionId });
           }
           const events = await this.db.executionEvents
             .where('executionId')
@@ -229,10 +222,11 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
           // 选严格相等而非「> max」：seq 是审计流水的规范排序键，任何缺口都会让
           // 迟到回执的去重 / 排序语义模糊；乱序写应被拒而非被静默重编号。
           if (cmd.seq !== expectedSeq) {
-            throw new ChangxiaError(
-              ChangxiaErrorCode.Validation,
-              `执行事件 seq 非法：调用方传入 ${cmd.seq}，期望 ${expectedSeq}（execution=${cmd.executionId}）。`,
-            );
+            throw coreError(ChangxiaErrorCode.Validation, 'coreErr.exec.eventSeqInvalid', {
+              actual: cmd.seq,
+              expected: expectedSeq,
+              executionId: cmd.executionId,
+            });
           }
           const now = new Date().toISOString();
           const row: ExecutionEvent = {
@@ -254,7 +248,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       );
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行事件写入失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.eventWriteFailed', undefined, err);
     }
   }
 
@@ -266,7 +260,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         .toArray();
       return rows.sort((a, b) => a.seq - b.seq || a.id.localeCompare(b.id));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行事件列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.eventListReadFailed', undefined, err);
     }
   }
 
@@ -277,10 +271,10 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
     // 「校验过了但库里已经动过」的错觉（虽然 Dexie 会回滚，但语义上校验属于入口）。
     // 与服务端 `sqlite.bundle.ts` 的 `createAttempt` 逐字同款（两端一致纪律）。
     if (cmd.status !== undefined && !ATTEMPT_STATUSES.includes(cmd.status)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `attempt status 非法：${String(cmd.status)}；合法值为 ${ATTEMPT_STATUSES.join(' / ')}。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.attempt.badStatus', {
+        status: String(cmd.status),
+        allowed: ATTEMPT_STATUSES.join(' / '),
+      });
     }
     try {
       // 读-校验-写在单 rw 事务内：父存在性 + canStartAttempt + attemptNo 单调在并发下闭合。
@@ -295,10 +289,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
           // 但那条错误对调用方毫无信息量；两端都把「父不存在」翻译成 NotFound（而不是 Storage）。
           // （本地 Dexie 没有外键，这条检查就是本地侧**唯一**的孤儿防线。）
           if (!(await this.db.executions.get(cmd.executionId))) {
-            throw new ChangxiaError(
-              ChangxiaErrorCode.NotFound,
-              `未找到执行单 ${cmd.executionId}，不能为其新建 attempt。`,
-            );
+            throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.attempt.executionMissing', { executionId: cmd.executionId });
           }
           const attempts = await this.db.executionAttempts
             .where('executionId')
@@ -306,19 +297,17 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
             .toArray();
           // 同一 execution 同时最多一个非终态 attempt（并发穿透 / 调用方重复开活都拦下）。
           if (!canStartAttempt(attempts)) {
-            throw new ChangxiaError(
-              ChangxiaErrorCode.Conflict,
-              `执行单 ${cmd.executionId} 已存在非终态 attempt，不能新开 attempt。`,
-            );
+            throw coreError(ChangxiaErrorCode.Conflict, 'coreErr.attempt.openAttemptExists', { executionId: cmd.executionId });
           }
           // attemptNo 由仓储统一计算（单调），调用方若显式传入则必须与计算值一致，
           // 否则抛错（防止调用方乱传导致号段错乱）。
           const computedNo = nextAttemptNo(attempts);
           if (cmd.attemptNo !== undefined && cmd.attemptNo !== computedNo) {
-            throw new ChangxiaError(
-              ChangxiaErrorCode.Validation,
-              `attemptNo 非法：调用方传入 ${cmd.attemptNo}，期望 ${computedNo}（execution=${cmd.executionId}）。`,
-            );
+            throw coreError(ChangxiaErrorCode.Validation, 'coreErr.attempt.noInvalid', {
+              actual: cmd.attemptNo,
+              expected: computedNo,
+              executionId: cmd.executionId,
+            });
           }
           const now = new Date().toISOString();
           const row: ExecutionAttempt = {
@@ -342,7 +331,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       );
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行尝试创建失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.attempt.createFailed', undefined, err);
     }
   }
 
@@ -352,7 +341,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       return await this.db.transaction('rw', this.db.executionAttempts, async () => {
         const existing = await this.db.executionAttempts.get(id);
         if (!existing) {
-          throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该执行尝试。');
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.attempt.notFound');
         }
         // attempt 状态机：未提供 status 时跳过校验；提供时校验合法邻接
         // （堵住把 failed / succeeded / interrupted 改回 running 从而绕过「单活 attempt」不变量）。
@@ -375,7 +364,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       });
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行尝试更新失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.attempt.updateFailed', undefined, err);
     }
   }
 
@@ -387,7 +376,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         .toArray();
       return rows.sort((a, b) => a.attemptNo - b.attemptNo || a.id.localeCompare(b.id));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行尝试列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.attempt.listReadFailed', undefined, err);
     }
   }
 
@@ -398,10 +387,10 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
     //   `updateProposal` 的两条检查（已落定不可变更 / 落定需 decidedBy）都**不是值域校验**，
     //   一个 `ghost` 提案两者都不触发 → 永久留存，界面按未知状态静默漏显。
     if (cmd.status !== undefined && !WRITEBACK_PROPOSAL_STATUSES.includes(cmd.status)) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `写回提案 status 非法：${String(cmd.status)}；合法值为 ${WRITEBACK_PROPOSAL_STATUSES.join(' / ')}。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.writeback.badStatus', {
+        status: String(cmd.status),
+        allowed: WRITEBACK_PROPOSAL_STATUSES.join(' / '),
+      });
     }
     // 提案不允许在创建时就落成终态（applied / rejected）：审批事实必须经由 updateProposal 落定，
     // 否则「未经人工批准不得写回」的 P0 只是形状校验——调用方可直接造一个 applied 提案。
@@ -409,10 +398,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       cmd.status === WritebackProposalStatus.Applied ||
       cmd.status === WritebackProposalStatus.Rejected
     ) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `写回提案不允许直接创建为 ${cmd.status}：提案须先创建（draft / proposed）再经由审批落定。`,
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.writeback.createAsSettled', { status: String(cmd.status) });
     }
     // 父存在性检查放在事务内（与 appendEvent / createAttempt 同款）：
     // 「查父 → 插子」必须在同一个事务里，否则查到之后父被删仍会留下孤儿提案。
@@ -428,10 +414,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
         this.db.projects, // 归属关卡要在事务内读项目 kind（只读不写，但必须同事务才够原子）
         async () => {
           if (!(await this.db.executions.get(cmd.executionId))) {
-            throw new ChangxiaError(
-              ChangxiaErrorCode.NotFound,
-              `未找到执行单 ${cmd.executionId}，不能为其创建写回提案。`,
-            );
+            throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.writeback.executionMissing', { executionId: cmd.executionId });
           }
           // 执行域归属关卡（与服务端同款、同位置）：提案的 projectId 是「写回目标」，
           // 同样只属于 Agent 看板；事务内读项目再写提案，与父存在性检查同一原子性。
@@ -460,7 +443,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       );
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案创建失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.writeback.createFailed', undefined, err);
     }
   }
 
@@ -470,17 +453,17 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       return await this.db.transaction('rw', this.db.writebackProposals, async () => {
         const existing = await this.db.writebackProposals.get(id);
         if (!existing) {
-          throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该写回提案。');
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.writeback.notFound');
         }
         // 已落定的提案（applied / rejected）不可再变更：堵住「审批后再换 operations」。
         if (
           existing.status === WritebackProposalStatus.Applied ||
           existing.status === WritebackProposalStatus.Rejected
         ) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Conflict,
-            `写回提案已落定为 ${existing.status}，不可再变更（execution=${existing.executionId}）。`,
-          );
+          throw coreError(ChangxiaErrorCode.Conflict, 'coreErr.writeback.alreadySettled', {
+            status: String(existing.status),
+            executionId: existing.executionId,
+          });
         }
         const targetStatus = cmd.status ?? existing.status;
         const toTerminal =
@@ -488,10 +471,10 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
           targetStatus === WritebackProposalStatus.Rejected;
         // 落定为终态（applied / rejected）时，审批事实必须成立：decidedBy 必填。
         if (toTerminal && !cmd.decidedBy) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Validation,
-            `写回提案落定为 ${targetStatus} 必须由人工决策：decidedBy 必填（execution=${existing.executionId}）。`,
-          );
+          throw coreError(ChangxiaErrorCode.Validation, 'coreErr.writeback.decidedByRequired', {
+            status: String(targetStatus),
+            executionId: existing.executionId,
+          });
         }
         const now = new Date().toISOString();
         const next: WritebackProposal = {
@@ -513,7 +496,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       });
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案更新失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.writeback.updateFailed', undefined, err);
     }
   }
 
@@ -525,7 +508,7 @@ export class LocalExecutionsRepository implements IExecutionsRepository {
       .toArray();
       return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.writeback.listReadFailed', undefined, err);
     }
   }
 }

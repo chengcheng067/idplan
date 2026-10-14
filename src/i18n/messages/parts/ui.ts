@@ -191,13 +191,9 @@ export const zh = {
   'ui.agentBoard.creating': '创建中…',
   'ui.agentBoard.createAction': '创建看板',
 
-  /* ── agent/ApplyPayloadPanel ── */
-  'ui.applyPayload.markdownAgentName': 'Markdown 清单导入',
-
   /* ── agent/PlanningWizardDialog ── */
   'ui.planning.errBadJson': '不是合法的 JSON——请把 AI 回传的整段内容原样粘进来',
   'ui.planning.errInvalidPayload': 'payload 校验未通过',
-  'ui.planning.defaultName': 'AI 规划 · {date}',
   'ui.planning.toastImported': '已建板并导入 {created} 条任务',
   'ui.planning.toastUpdated': '（更新 {updated}）',
   'ui.planning.errPersistFailed': '落库失败（看板可能已建，请检查）',
@@ -387,11 +383,8 @@ export const en = {
   'ui.agentBoard.creating': 'Creating…',
   'ui.agentBoard.createAction': 'Create board',
 
-  'ui.applyPayload.markdownAgentName': 'Markdown list import',
-
   'ui.planning.errBadJson': 'Not valid JSON — paste the whole reply from your AI exactly as it came',
   'ui.planning.errInvalidPayload': 'payload validation failed',
-  'ui.planning.defaultName': 'AI plan · {date}',
   'ui.planning.toastImported': 'Board created and {created} task(s) imported',
   'ui.planning.toastUpdated': ' ({updated} updated)',
   'ui.planning.errPersistFailed': 'Could not write to the database (the board may already exist — please check)',

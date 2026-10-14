@@ -124,8 +124,14 @@ export function PlanningWizardDialog({
     setBusy(true);
     try {
       // 建板（Agent 看板）+ 导入（共享核心：归属门/幂等/留痕全继承）
-      const name =
-        projectName.trim() || t('ui.planning.defaultName', { date: new Date().toLocaleDateString('zh-CN') });
+      /*
+       * ⚠️ 默认板名**有意保持中文**（B 类·落库值）：它作为 `Project.name` **写进库**，
+       *    判据是「这个值进不进数据槽」而不是「它长得像不像界面文案」。
+       *    清单 v2 §6 把这条判成 A（普查是启发式的，这是它最容易误判的一类），
+       *    team-lead 2026-10-15 复核后**收回该判定、改判 B，并批准本处不翻**。
+       *    台账：将来随「阶段预设名」那次（存 key + 显示取词 + 数据迁移）一起收拾。
+       */
+      const name = projectName.trim() || `AI 规划 · ${new Date().toLocaleDateString('zh-CN')}`;
       const preset = defaultPresetKeyForDomain(domain);
       const project = await createProjectActions(repos).createAgentBoard({
         name,

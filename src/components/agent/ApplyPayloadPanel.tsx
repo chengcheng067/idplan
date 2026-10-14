@@ -160,7 +160,12 @@ export function ApplyPayloadPanel({
           payloadJson = parseMarkdownTasks(trimmed, {
             actorKind: 'agent',
             agentKind: 'markdown',
-            agentName: t('ui.applyPayload.markdownAgentName'),
+            /*
+             * ⚠️ 这个展示名**有意保持中文**（B 类·落库值）：它随 payload 的 `producedBy.agentName`
+             *    一起**写进任务身份**（`task.agentId` 指向的成员名），判据是「值进不进数据槽」。
+             *    清单 v2 §6 判 A 是启发式误判；team-lead 2026-10-15 复核后收回、改判 B。
+             */
+            agentName: 'Markdown 清单导入',
             runId: `md-${Date.now()}`,
           });
         }
