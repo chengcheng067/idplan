@@ -10,14 +10,54 @@ import { useLang, type MessageKey } from '../../i18n';
 
 /**
  * 交付阶段子刻度三标签（三等分浅色竖线上的「交底 / 中期 / 验收」）。
- * ⚠️ 与下面那条 `stage.name.includes('交付')` **毫无关系**：那一条是**行为耦合**
- *    （拿用户数据里的中文词当分支条件），不是文案 —— 翻不了、也不该翻，只登记不删。
+ * ⚠️ 与下面 `isDeliveryStageName()` **毫无关系**：那一条是**行为耦合**
+ *    （拿用户数据里的阶段名当分支条件），不是文案 —— 翻不了、也不该翻，只登记不删。
  */
 const STAGE_SEG_KEYS: readonly MessageKey[] = [
   'timeline.stageSeg.handover',
   'timeline.stageSeg.midterm',
   'timeline.stageSeg.acceptance',
 ];
+
+/**
+ * 「交付阶段」判据 —— ⚠️ 这是**行为耦合**，不是文案，别当文案删 / 别「顺手重构」。
+ *
+ * ── 沿革 ──
+ * 原判据是 `stage.name.includes('交付')`（i18n 笔 3-C 登记「刻意不改」）。
+ * 2026-10-15 夜批（D1）把它放宽为「中英两种写法都认」：
+ *     name.includes('交付') || /delivery/i.test(name)
+ * 动因（用户可感知缺陷）：阶段名改成英文/别称（如 `Delivery`）后，子刻度会
+ * **静默消失**，且消失时没有任何东西会红。
+ *
+ * ── ★ 这是行为变更，待产品确认（不是等价重构，不许粉饰成顺手修的）──
+ * · 内置库全量数据（templates/stage-library.json 74 项 + templates/nine-stages.default.json
+ *   9 段，共 83 条阶段行，覆盖 9 个 domain）上逐条比对：放宽前后 **100% 一致** ——
+ *   内置阶段名没有任何一条含 'delivery'（不区分大小写）。
+ * · 会变的是**用户数据**：名字里带 'delivery'/'Delivery' 的阶段（即此前子刻度
+ *   静默消失的那批）现在显示子刻度；其余阶段行为不变。
+ * · 放宽面：子串匹配（与 '交付' 同款判据形态，不是新引入的性质），
+ *   'Delivery rehearsal' 这类名字也会命中。
+ * · **未覆盖**：'Handover' 拼写（室内段 templateKey 是 indoor.handover，中文名「交付」）。
+ *   产品若认为室内项目的英文惯例是 Handover，需再议——本次不擅自扩。
+ *
+ * ── 为什么不改成按结构判（templateKey / kanbanColumn / orderIndex）：证不出等价 ──
+ * 在内置库全量数据上逐条比对过「按名字判」与各结构判据，**没有一条 100% 一致**：
+ *   · kanbanColumn === 'delivery'：多命中 consulting.landing/close/train
+ *     （落地辅导/结项复盘/培训赋能），且漏掉 indoor.handover（它的列是 'build'）；
+ *   · templateKey === 'indoor.handover'：漏 film.deliver / wedding.deliver；
+ *   · templateKey ∈ {indoor.handover, film.deliver, wedding.deliver}：内置库上虽
+ *     100% 一致，但那是**从名字反推的集合**（循环论证）；且 templateKey 对
+ *     「用户自定义阶段 / Agent 建的阶段」恒为 null（custom-stage.service 与
+ *     stage-resolve.buildCreatedStage 明文落 null）⇒ 换成它会把这些阶段名里
+ *     带「交付」的子刻度**静默删掉** —— 正是本缺陷的同款失效模式，只是换了个方向
+ *     （tests/stage-color-wiring.spec.tsx 的夹具 `阶段N交付` + templateKey:null
+ *      就是活证据：它靠名字判据才能覆盖 ink 出口的子刻度消费点）。
+ * 根本原因：数据模型里没有「这是交付阶段」的结构化身份。正确的修法是产品把
+ * 「交付阶段」做成显式字段；在那之前只能拿名字判，故保留名字判并放宽写法。
+ */
+function isDeliveryStageName(name: string): boolean {
+  return name.includes('交付') || /delivery/i.test(name);
+}
 
 /**
  * 彩条本体：SVG rect + 左右手柄 + 激活发光 + 交付段子刻度。
@@ -152,15 +192,17 @@ export function StageBar({
       />
 
       {/*
-        ★ 行为耦合登记（笔 3-C，**刻意不改**）：`stage.name.includes('交付')` 拿的是
-          **用户数据里**的中文词，用「阶段名里有没有『交付』」当分支条件。
-          后果（如实登记，交 team-lead 定夺是否另立项）：阶段名若用英文/别称
-          （如 `Delivery`），这条子刻度会**静默消失** —— 而它消失时没有任何东西会红。
-          为什么本笔不动它：删/改这个判据都是**改行为**（不是改文案），
-          且它属「产品要不要把『交付阶段』做成显式字段」的决策，不该由 i18n 笔顺手做。
+        ★ 行为耦合登记（D1，2026-10-15 夜批）：判据在 `isDeliveryStageName()`（文件顶部），
+          拿**用户数据里**的阶段名（中文「交付」或英文 delivery，不区分大小写）当分支条件。
+          历史：原样 `stage.name.includes('交付')`，曾登记「刻意不改」（i18n 笔 3-C）；
+          现已放宽为兼容中英两种写法 —— **这是行为变更，待产品确认**，理由、比对数据、
+          未覆盖面（'Handover' 拼写）与「为什么不改结构判据」全部登记在函数注释里。
+          残留缺陷（与放宽前同款）：阶段名若改成第三种写法（如 `Handover`），子刻度
+          仍会**静默消失**，没有任何东西会红。
+        ⚠️ 这不是文案，别当文案删。
       */}
       {/* 交付阶段子刻度（三等分浅色竖线；三标签文案见 STAGE_SEG_KEYS） */}
-      {stage.name.includes('交付') && w > pxPerDay * 6 && (
+      {isDeliveryStageName(stage.name) && w > pxPerDay * 6 && (
         <>
           {[1, 2].map((i) => (
             <line
