@@ -10,13 +10,15 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0.0008-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-2742%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0010-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-3791%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
 
 > 🌐 English · [中文](./README.md)
+
+> ⚠️ **The English build is NOT finished yet and will keep iterating.** This release (`1.0.0.0010`) pushes the English pass a long way — 1824 message keys in exact zh/en parity, and the “needs translating” Chinese surface under `src/**` down from 783 to 35 — but **printed paper is still Chinese by design, server-side error messages are not in English yet, and nobody has done a human screen-by-screen pass in English.** Full list: [🌐 Language](#-language).
 
 > Covers **7 industry groups / 9 domains / 29 stage presets / 74 stage definitions** (software development, marketing campaigns, film production, wedding planning, consulting delivery, travel, architecture & interiors …). It turns a project's budget, type, stage milestones and members into one timeline — read progress as a board (kanban), a calendar or a gantt, and export the schedule as a delivery page you can send straight to a client.
 > **Statutory holidays built in** (2025 / 2026, make-up workdays included): the calendar shows holiday names, a schedule can skip them in one click, and changing the rest policy reflows projects you already built — see [📅 Scheduling & delivery](#-scheduling--delivery).
@@ -159,6 +161,36 @@ The Agent board is itself a plugin (turn it off under Settings → Plugins) — 
 
 ---
 
+## 🌐 Language
+
+The UI ships in **Chinese / English**, switchable under **Settings → Appearance → Language**. Chinese is the default; the language **follows your explicit choice only — it never follows the browser locale** (so an `Accept-Language: en` browser won't silently flip to English on first open).
+
+### ⚠️ English is not finished — it will keep iterating
+
+**What's done** (every number below is a re-runnable reading, not an impression):
+
+- **1824 message keys, with the Chinese and English tables in exact two-way parity.** `en.ts` is typed `Record<MessageKey, string>`, so **missing a single key fails the build**; a guard also compares the two key sets shard by shard.
+- The **only** Chinese value left inside the English table is the “中文” entry in the language picker itself — by design (a language names itself in its own language).
+- The Chinese surface classed as “needs translating” under `src/**` (UI + shared core): **783 → 35 (−96%)**, with 30 of the remaining ones individually registered with a reason to defer.
+- Test locators moved from **Chinese copy** to **language-neutral `data-*` hooks** (ratchet 102 → 42). Not fussiness: switching to English used to make a batch of tests **fail falsely** — the error looked like “element doesn't exist”, hiding the real cause (“it was looking for Chinese”).
+- A geometry acceptance pass was run **in English** (six-zone nav at the 767 breakpoint): **longer English strings do not break the layout** — all six nav items stay fully visible without horizontal scrolling.
+- **Printed paper really is untouched.** This release did touch high-traffic shared components (`ConfirmDialog` / `SegmentedControl`), so this had to be **measured, not reasoned about**: all 550 print visual credentials were compared **file by file** before and after the run — **331 of the 332 PNGs (the actual rendered paper) are byte-for-byte identical** (one differs by 2 bytes, likely non-deterministic rendering). 176 HTML snapshots differ, but the differences sit **entirely inside the embedded CSS block**: with styles stripped, the structural part is **byte-for-byte identical across 18,288 characters**, and on the CSS side it is 8 **purely additive** Tailwind utility classes, none of them a print-layout rule. A useful side conclusion: **print rendering is deterministic**.
+
+**What's still missing**:
+
+| Gap | Current state | How it hits you |
+|---|---|---|
+| **Printed paper stays Chinese** | A design trade-off: **screen follows the language, paper is pinned to Chinese** | PDFs / printouts exported by an English user are still Chinese — the **biggest** gap |
+| **Server-side error messages** | The whole of `server/**` (16 files) has **never been surveyed** | Under the NAS / browser form, English users still see Chinese errors |
+| **Persisted values / protocol payloads are not translated** | 318 items deliberately untranslated (stage preset names, domain names, log group names, Agent protocol payloads …) | Some of them **do reach the screen** ⇒ Chinese still appears inside the English UI |
+| **67 grey-zone items awaiting a product call** | Colour names 29 · industry-library prompt 24 · validation notes 7 · execution-convergence reasons 4 · export filenames 2 · one half-finished ternary 1 | Can't be touched until the product side decides |
+| **35 A-class items remain** | 30 of them have individually registered reasons (15 + 10 + 5 across `enums.ts` / `stage-library.ts` / `demoDataFactory.ts`) | — |
+| **No human screen-by-screen pass in English** | Only automated geometry / gate readings pass | Layout, wording and tone can only really be judged by a person |
+
+⇒ **English will keep iterating.** You may well hit any of the gaps above — **if you do, please open an Issue** with the screen and what you saw.
+
+---
+
 ## 🚀 Quick start
 
 ```bash
@@ -171,7 +203,7 @@ npm run electron:dev   # run the desktop form in development
 ```
 
 ```bash
-npm test               # full unit suite (2742 cases, vitest)
+npm test               # full unit suite (244 spec files / 3791 cases, vitest)
 npm run typecheck      # frontend type checking
 npm run build          # typecheck + build
 npm run electron:build # build + package the Windows NSIS installer
@@ -266,6 +298,7 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 | Custom industry library (copy prompt → generate → import back) | ✅ Available |
 | Agent loopback auto-import, proposal approval, execution records | ✅ Available |
 | Cross-template generic rendering (modules rendered under different layouts) | 🚧 Capability exists in code; not exposed in the picker yet |
+| UI languages (Chinese / English, 1824 message keys in parity) | 🟡 Chinese available · **English in progress** (see [🌐 Language](#-language)) |
 | Plugin write capability / remote marketplace / CSP egress control | 🚧 Roadmap (see below) |
 | NAS remote auto-write | 🔴 Not enabled (connectivity probe only) |
 
