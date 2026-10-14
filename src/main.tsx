@@ -14,7 +14,7 @@ import { PluginRegistryProvider, usePluginRegistry } from './core/plugin/PluginR
 //   外部写入」会走不到 loopback 通道。
 import './di/agent-loopback';
 import { initTheme } from './hooks/useTheme';
-import { initLang, t } from './i18n';
+import { initLang, initMetaDescription, t } from './i18n';
 import { initSidebarCollapsed } from './store/useLayoutStore';
 import { installGlobalLogCatchers, logInfo } from './core/services/log.service';
 import './styles/global.css';
@@ -139,6 +139,13 @@ initTheme();
  *   内联脚本被剥离 / 存储内容损坏时，保证 DOM 属性与内存状态严格一致。
  */
 initLang();
+
+/*
+ * `<meta name="description">` 的语言同步（笔 4-c）：静态中文**一字不动**（中文用户不该丢失中文，
+ * `tests/i18n.spec.tsx` 还有一条行业中立化锁钉着它），这里按当前语言写一次并订阅语言变化。
+ * 中文态 = 写回同一个串 ⇒ 渲染零变化。理由与「为什么不塞进 lang.ts（会成环）」见 `src/i18n/meta.ts`。
+ */
+initMetaDescription();
 
 // 侧栏折叠态同样必须在首帧前落到 <html data-sidebar-collapsed>（v0.7 R13）：
 // index.html 的同步内联脚本已先写过一次（保证 CSS 生效前就位），这里再跑一次是为了

@@ -1384,6 +1384,10 @@ export const enMessages: Record<MessageKey, string> = {
     'The browser does not allow opening a local folder directly. The path has been copied — paste it into the File Explorer address bar.',
   'common.confirm': 'OK',
 
+  /* ══════════ Batch 4-c: index.html meta description (runtime sync) ══════════ */
+  'meta.description':
+    'ID Plan — a cross-industry project scheduling tool: turn a contract into a stage timeline anyone can read.',
+
   /* ══════════ Batch 3-E: travel itinerary panel ══════════ */
   'travel.loading': 'Generating the daily itinerary…',
   'travel.title': 'Daily itinerary',

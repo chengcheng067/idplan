@@ -93,3 +93,10 @@ export {
   formatMonthYearLocalized,
   formatSelectedDateLocalized,
 } from './date';
+
+/*
+ * `index.html` 的 meta description 运行时同步（笔 4-c）。
+ * ⚠️ 它**独立成文件**、不放进 `lang.ts`：`translate.ts` → `lang.ts` 是单向的，
+ *    反向 import 会**成环**（理由见 `./meta.ts` 文件头）。
+ */
+export { applyMetaDescription, initMetaDescription } from './meta';
