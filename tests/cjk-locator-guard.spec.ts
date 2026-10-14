@@ -396,7 +396,27 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *    与「全页搜『点击进入』文本」的载荷，散在 16 个 spec 里）**本笔未转换**，已登记在交付报告；
  *    组件侧已同批补好 `data-identity-trigger` / `data-identity-enter` 两个钩子，换起来是机械活。
  */
-const BASELINE = 96;
+/*
+ * ── 2026-10-15 · i18n-EN 英文补齐批（同伴笔）：96 → **86** ──
+ * ⚠️ **这 −10 不是上一条（`ui` 分片）造成的** —— 如实归属，免得下次核对时对不上账：
+ *   · `ui` 分片那笔（`30553dd`）转换的是 `[role="menu"][aria-label="身份操作"]` 与
+ *     `button[title=…]` / 全页按文本找。**后两类不在判据面内** ⇒ 该笔只带来 −6（102→96），
+ *     「96 → 86」这十格是**之后**由同伴的锚点转换造成的。
+ *   · 差额逐文件核对（与 96 那次的按文件分布比对，只有这两个文件变了）：
+ *       `tests/v08-stage-wizard.spec.tsx`    7 → **0**（−7）
+ *       `tests/v08-intake-two-paths.spec.tsx` 4 → **1**（−3）
+ *     两处都随 `663b373`（建档向导 · `ManualFallbackForm` + `StageSelectPanel` 定位钩子）而来 ——
+ *     即 `contract-wizard/**` 那族的中文 `aria-label^="套餐 |行业 |关联板块 |选择阶段 "` 锚点换成了钩子。
+ *   · 其余 22 个文件的计数**一字未动**（`v07-dline-shell` 仍 17、`v07-board-acceptance` 仍 11、
+ *     `print-selector-modules` 仍 7 …），所以这 −10 逐条可归因、不是「扫宽了」。
+ * **实测**：改前 96 → 改后 **86**（team-lead 2026-10-15 复核时量到 86，本次下调即照此）。
+ *   复跑：`npx tsx -e "import('./tests/helpers/cjk-locator-guard.ts').then(m=>console.log(
+ *     m.scanRepo(process.cwd()).filter(h=>h.file!=='tests/i18n-browser.spec.ts').length))"` ⇒ 86
+ * 口径同前几段：**真的转换了锚点**才允许下调；「绿着不下调」= 凭空留出 N 格让新错溜过去。
+ * ⚠️ 本文件仍有一批**判据面看不见**的同族哑雷（`aria-label^=` 与跨行写法），
+ *    它们的规模与归属**不体现在这个数字里**，别把「数字降了」读成「都转换完了」。
+ */
+const BASELINE = 86;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());
