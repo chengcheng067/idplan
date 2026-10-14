@@ -266,6 +266,14 @@ export const zh = {
   'domain.wedding': '婚礼',
   'domain.consulting': '咨询',
   'domain.travel': '旅游',
+
+  /*
+   * ── 段 5 之六：两条「参数本身是 core 中文」的错误 —— `reason` 的中文句入表 ──
+   * ⚠️ 值与 core `canComplete()` 里那两句**逐字节相同**（有断言钉：zh 下合成结果 === `resolveErrorText`）。
+   * 键表与合成入口见 `src/i18n/labels.ts` 的 `COMPLETE_REASON_PATTERNS` / `resolveErrorTextForUi()`。
+   */
+  'execution.reason.notAwaitingReview': '完成要求 execution 处于 awaiting_review 态（当前为 {status}）',
+  'execution.reason.noAppliedProposal': '完成要求存在由人工决策（decidedBy 非空）的 applied 写回提案（执行成功不等于业务完成）',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -477,4 +485,10 @@ export const en = {
   'domain.wedding': 'Wedding',
   'domain.consulting': 'Consulting',
   'domain.travel': 'Travel',
+
+  /* ── 段 5 之六：两条「参数本身是 core 中文」的错误 —— `reason` 的英文句 ── */
+  'execution.reason.notAwaitingReview':
+    'Completing requires the execution to be in "awaiting_review" (currently {status})',
+  'execution.reason.noAppliedProposal':
+    'Completing requires an applied write-back proposal decided by a human (decidedBy non-empty); a successful run is not the same as completed work',
 } as const;

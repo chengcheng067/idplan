@@ -21,12 +21,15 @@
  *    否则切语言时该组件不会重渲染。见 `src/i18n/useLang.ts` 的纪律 ②。
  */
 import {
+  ChangxiaError,
   MemberActorKind,
   MemberRoleKind,
   RestPolicyKind,
   ScheduleBasis,
   StageStatus,
+  TASK_STATUS_LABELS,
   TaskStatus,
+  resolveErrorText,
 } from '../core/types/enums';
 import type { ProjectCalendarStatus } from '../core/types/enums';
 /*
@@ -695,4 +698,123 @@ export const DOMAIN_LABEL_KEYS: Record<StageTemplateDomain, MessageKey> = {
 export function domainLabelKey(domain: StageTemplateDomain): string {
   const key = DOMAIN_LABEL_KEYS[domain];
   return key === undefined ? String(domain) : t(key);
+}
+
+/* ═══════════════ 两条「参数本身就是 core 中文」的错误：整句在**本层**合成 ═══════════════
+ *
+ * ── 问题（这两条与其余 130 条键不一样在哪）──
+ * `resolveErrorText(err, t)` 只能把**模板**换成另一种语言；模板里的 `{参数}` 是 core 直接给的。
+ * 而这两条的参数**本身就是 core 写的中文**（core 拿不到界面语言）：
+ *   · `coreErr.task.transitionNotAllowed` —— `{from}` / `{to}` 取自 `TASK_STATUS_LABELS`（中文状态名）；
+ *   · `coreErr.execution.completeRejected` —— `{reason}` 取自 `canComplete()` 的**整句中文**。
+ * ⇒ 在英文界面上会印出「Illegal execution status transition: running → 已完成（完成要求…）」
+ *   这种**半中半英**——比全中文更像坏掉（与本批反复消灭的「一半一半」同族）。
+ *
+ * ── 形态：core **一个字不改**，参数在渲染层换语言 ──
+ * `userMessage`（协议/日志口径）**逐字节不变**；本层只把**送给 `t()` 的参数**换成本语言的取值。
+ * 落点必须是本层，不能是 `resolveErrorText` 自己：它在 core（`types/enums.ts`），
+ * 而 core 不许 import i18n ⇒ 它拿不到 `TASK_STATUS_LABELS` 也拿不到消息表。
+ *
+ * ── 不变量（有断言钉着，见 `tests/error-compose-i18n.spec.ts`）──
+ * **zh 下，本层合成的整句必须与 `resolveErrorText` 逐字节相同** —— 也就是说这两条
+ * 在中文界面上**一个字符都没变**，改的只是英文。
+ */
+
+/** 任务七态的**中文标签** → 枚举（**从 core 的 `TASK_STATUS_LABELS` 派生**，不手抄一份） */
+const TASK_STATUS_BY_LABEL: ReadonlyMap<string, TaskStatus> = new Map(
+  (Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((k) => [TASK_STATUS_LABELS[k], k] as const),
+);
+
+/**
+ * ① `coreErr.task.transitionNotAllowed` → 整句（两种语言都正确）。
+ *
+ * 认不出标签时返回 `null`（**交回默认路径**：宁可印出 core 的中文参数，也不编一个状态名）。
+ * 为什么这一支安全：`TASK_STATUS_LABELS` 的 7 个标签**两两不同**，且反向表是**从它派生**的
+ * ⇒ 只要值还是那 7 个，反查恒定命中；换了值也只是回落，不会错。
+ */
+export function taskTransitionText(err: ChangxiaError): string | null {
+  if (err.messageKey !== 'coreErr.task.transitionNotAllowed') return null;
+  const p = (err.params ?? {}) as { from?: unknown; to?: unknown };
+  const from = typeof p.from === 'string' ? TASK_STATUS_BY_LABEL.get(p.from) : undefined;
+  const to = typeof p.to === 'string' ? TASK_STATUS_BY_LABEL.get(p.to) : undefined;
+  if (from === undefined || to === undefined) return null;
+  return t('coreErr.task.transitionNotAllowed', {
+    from: t(TASK_STATUS_KEYS[from]),
+    to: t(TASK_STATUS_KEYS[to]),
+  });
+}
+
+/**
+ * ② `canComplete()` 的 `reason` 中文句 → 文案键。
+ *
+ * ⚠️ **这是本文件里唯一一处「按中文反查」**，之所以接受它：
+ *   core 的 `reason` 是 `string`（**没有机器码**），而本批**不许改 core** ⇒ 不反查就没有别的出口。
+ * ⚠️ 但**反查不许静默**（这是它与「界面层写 `=== 'marketing'`」的区别）：
+ *   `tests/error-compose-i18n.spec.ts` 直接调 `canComplete()` 走遍**每一条**真实分支，
+ *   断言每条返回的 reason 都被下表命中、且下表没有多余项。
+ *   ⇒ core 改了文案 ⇒ **守卫先红**，不会静默退回中文。
+ *
+ * `zh` 取值**逐字节等于 core 的那两句**（有断言钉）⇒ 中文界面零变化。
+ */
+const COMPLETE_REASON_PATTERNS: ReadonlyArray<{
+  /** 匹配 core 的 reason（第一条含一个动态段：当前状态） */
+  readonly re: RegExp;
+  readonly key: MessageKey;
+}> = [
+  {
+    re: /^完成要求 execution 处于 awaiting_review 态（当前为 (.+)）$/,
+    key: 'execution.reason.notAwaitingReview',
+  },
+  {
+    re: /^完成要求存在由人工决策（decidedBy 非空）的 applied 写回提案（执行成功不等于业务完成）$/,
+    key: 'execution.reason.noAppliedProposal',
+  },
+];
+
+/** ② `coreErr.execution.completeRejected` → 整句（`reason` 换成本语言）。认不出 ⇒ `null`（回落，不编）。 */
+export function executionCompleteRejectedText(err: ChangxiaError): string | null {
+  if (err.messageKey !== 'coreErr.execution.completeRejected') return null;
+  const p = (err.params ?? {}) as { from?: unknown; to?: unknown; reason?: unknown };
+  if (typeof p.reason !== 'string') return null;
+  const hit = COMPLETE_REASON_PATTERNS.map((x) => ({ x, m: x.re.exec(p.reason as string) })).find(
+    (y) => y.m !== null,
+  );
+  if (hit === undefined || hit.m === null) return null;
+  // 第一条有捕获组（当前状态，是 ASCII 枚举值）⇒ 当参数交给模板
+  const vars: Record<string, string | number> =
+    hit.m.length > 1 && hit.m[1] !== undefined ? { status: hit.m[1] } : {};
+  return t('coreErr.execution.completeRejected', {
+    from: String(p.from ?? ''),
+    to: String(p.to ?? ''),
+    reason: t(hit.x.key, vars),
+  });
+}
+
+/**
+ * ★ 界面的**统一错误取词入口**：先试上面两条「参数是 core 中文」的合成，再回落 `resolveErrorText`。
+ *
+ * ── 为什么要有这一层 ──
+ * 直接改 `resolveErrorText` 不行（它在 core）；改**全部** 30 处调用点也不必要
+ * —— 这两条错误**只从两个地方上屏**（见 `tests/error-compose-i18n.spec.ts` 的消费点断言）：
+ *   · `useAgentStore.transitionTask` 的 catch（任务非法流转 ⇒ 失败路径）
+ *   · `AgentExecutionConsolePage.message()`（执行单非法推进到完成 ⇒ 失败路径）
+ * ⇒ 只把这**两处**换成这个入口，改动面最小、且不会把别的错误卷进来。
+ *
+ * ⚠️ 同本文件其余取词函数：**不订阅语言** ⇒ 调用方必须已调 `useLang()`（那两处都已订阅）。
+ */
+export function resolveErrorTextForUi(
+  err: unknown,
+  translate: (key: MessageKey, vars?: InterpolationVars) => string,
+  fallback = '',
+): string {
+  if (err instanceof ChangxiaError) {
+    if (err.messageKey === 'coreErr.task.transitionNotAllowed') {
+      const composed = taskTransitionText(err);
+      if (composed !== null) return composed;
+    } else if (err.messageKey === 'coreErr.execution.completeRejected') {
+      const composed = executionCompleteRejectedText(err);
+      if (composed !== null) return composed;
+    }
+  }
+  return resolveErrorText(err, translate, fallback);
 }

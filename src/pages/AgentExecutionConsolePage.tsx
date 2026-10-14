@@ -26,7 +26,7 @@ import {
 
 import { useRepos } from '../hooks/useRepos';
 import { useUiStore } from '../store/useUiStore';
-import { resolveErrorText, ChangxiaErrorCode } from '../core/types/enums';
+import { ChangxiaErrorCode } from '../core/types/enums';
 import {
   AttemptStatus,
   ExecutionStatus,
@@ -44,7 +44,7 @@ import {
   type ContradictionKind,
 } from '../core/execution/execution-recovery';
 import { isTerminal } from '../core/execution/execution-state';
-import { useLang } from '../i18n';
+import { resolveErrorTextForUi, useLang } from '../i18n';
 import type { MessageKey } from '../i18n';
 
 /* ------------------------------------------------------------------ *
@@ -724,7 +724,8 @@ export function AgentExecutionConsolePage() {
    * 同族纪律：**默认值 / 空 deps 会让错的那一支看起来是对的**。
    */
   const message = useCallback(
-    (err: unknown, fallback: string): string => resolveErrorText(err, t, fallback),
+    // ★ 统一入口：`execution.completeRejected` 的 reason 是 core 的中文整句，需在本层换语言
+    (err: unknown, fallback: string): string => resolveErrorTextForUi(err, t, fallback),
     [t],
   );
 

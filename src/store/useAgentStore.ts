@@ -27,7 +27,7 @@ import {
   previewAgentPayload,
 } from '../core/agent/payload.apply';
 import { computeReadyTasks } from '../core/agent/dag';
-import { t } from '../i18n';
+import { resolveErrorTextForUi, t } from '../i18n';
 import { buildHandoffBundle } from '../core/agent/handoff';
 import { getAgentImportChannel } from '../core/agent/transport.contract';
 import type { AgentChannelKind } from '../core/agent/transport.contract';
@@ -205,7 +205,8 @@ export const useAgentStore = create<AgentState>((set) => ({
     } catch (err) {
       projectsStore.pushToast(
         'error',
-        resolveErrorText(err, t, t('toast.agentStatusTransitionFailed')),
+        // ★ 走统一入口：`task.transitionNotAllowed` 的两个参数是 core 的中文状态名，需在本层换语言
+        resolveErrorTextForUi(err, t, t('toast.agentStatusTransitionFailed')),
       );
     }
   },
