@@ -359,7 +359,9 @@ describe.skipIf(!CAN_RUN_FRESH)(
       await page.goto(server.url);
       await page.waitForSelector('header', { timeout: 20000 });
       await page.locator('input[type="file"][accept*="json"]').first().setInputFiles(fixtureFile);
-      const confirm = page.getByRole('button', { name: '确认恢复' });
+      /* 语言无关钩子（i18n-EN 批）：备份恢复二次确认钮（`data-confirm-ok`，对话框级
+         `data-backup-confirm="file"`）。原先按中文可访问名「确认恢复」定位 ⇒ 英文态失配。 */
+      const confirm = page.locator('[data-backup-confirm="file"] [data-confirm-ok]');
       await confirm.waitFor({ state: 'attached', timeout: 15000 });
       const reloaded = page.waitForEvent('load', { timeout: 20000 });
       await confirm.click({ force: true });

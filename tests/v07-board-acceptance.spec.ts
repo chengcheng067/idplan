@@ -251,6 +251,12 @@ const LANE_COUNTS: Record<string, number> = {
 };
 /** 加载屏障：这条任务在两种模式、两种主题下都可见 */
 const READY_BARRIER_TITLE = '确认材料清单';
+/**
+ * 夹具任务名（**fixture 数据**，不是生产文案）—— 语言切换只换生产侧消息表，
+ * 库里的任务名一个字节都不动 ⇒ 按它做内容断言与语言无关。
+ * 用作「内容断言」专用；定位一律走 `[data-agent-task-card]` 等内容无关钩子。
+ */
+const DRAFT_TITLE = '绘制平面初稿';
 
 /**
  * 从共享夹具**派生**一份 **agent-kind** 种子备份并落盘，返回其路径。
@@ -732,7 +738,10 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
       .first()
       .setInputFiles(fixture);
 
-    const confirm = page.getByRole('button', { name: '确认恢复' });
+    /* 语言无关钩子（i18n-EN 批）：备份恢复二次确认钮（ConfirmDialog 的 `data-confirm-ok`，
+       对话框级 `data-backup-confirm="file"`）。原先按中文可访问名「确认恢复」定位
+       ⇒ 英文态静默失配；可见名契约由 `confirm-dialog-i18n.spec.tsx` 锁着。 */
+    const confirm = page.locator('[data-backup-confirm="file"] [data-confirm-ok]');
     try {
       await confirm.waitFor({ state: 'attached', timeout: 15000 });
     } catch {
@@ -1060,7 +1069,24 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     const page = await openBoard({ resetMode: true });
 
     // 用「进行中」组的卡片开抽屉（in_progress，技术字段最全：startAt / claimedAt / status）
-    await page.getByRole('button', { name: '绘制平面初稿', exact: true }).click();
+    //
+    // 语言无关钩子（i18n-EN 批）：定位走**内容无关钩子** `[data-agent-task-card]`
+    // （人话行卡容器）+ 分组键 `doing`；组内按**夹具任务名**的标题按钮钉唯一一张
+    // （fixture 数据不随语言变，见 DRAFT_TITLE 注释）。
+    // ⚠️ 内容断言一并保留：点开的必须就是那条夹具任务 —— 钩子只证结构，
+    //    证不了「点对了任务」；少了它，本行会退化成「点了组里某张卡」。
+    // ⚠️ 生产侧缺**按任务 id** 的钩子（只登记不补）：建议在 AgentTaskCard 的标题钮上
+    //    补 `data-task-open={task.id}`，之后本段可收敛成纯钩子、不再依赖夹具名。
+    const draftCard = page
+      .locator('main section[data-board-section="doing"] [data-agent-task-card]')
+      .filter({ has: page.getByRole('button', { name: DRAFT_TITLE, exact: true }) });
+    await draftCard.first().waitFor({ state: 'attached', timeout: 10000 });
+    expect(
+      await draftCard.count(),
+      '「进行中」组里应恰有一张夹具任务「绘制平面初稿」的卡（内容断言：钩子只证结构，证不了点对了任务）',
+    ).toBe(1);
+    expect((await draftCard.locator('button').first().innerText()).trim()).toBe(DRAFT_TITLE);
+    await draftCard.locator('button').first().click();
     const drawer = page.locator('[data-task-drawer]');
     await drawer.waitFor({ state: 'visible', timeout: 10000 });
 
@@ -1119,10 +1145,18 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     await page.waitForTimeout(150);
     await shot(page, '10-drawer-tech-expanded.png');
 
-    await drawer.getByRole('button', { name: '关闭任务详情' }).click();
+    /* 语言无关钩子（i18n-EN 批）：任务抽屉的关闭钮挂 `data-task-drawer-close`
+       （TaskDrawer.tsx）。原先按中文可访问名「关闭任务详情」定位 —— 该名来自
+       `ui.taskDrawer.closeAria`，英文态静默失配。 */
+    await drawer.locator('[data-task-drawer-close]').click();
     await page.waitForTimeout(200);
 
     // ③ 人话模式认领按钮文案为「认领」（PRD 要隐藏英文 claim）
+    //
+    // ⚠️ 下面两行是**有意保留的中文定位**（i18n-EN 批明示不许换钩子）：它是一条
+    //    「中英对照断言」—— 「认领」存在 ∧ 「claim」不存在，正是「切英文后文案真的
+    //    换了」的直接证据；换成语言无关钩子会把这条证据一起削弱。`cjk-locator-guard`
+    //    的棘轮基线里为此**恒留 1 处**（v07-board-acceptance.spec.ts），属已知豁免。
     await page.getByRole('button', { name: READY_BARRIER_TITLE, exact: true }).click();
     await drawer.waitFor({ state: 'visible', timeout: 10000 });
     expect(await drawer.getByRole('button', { name: '认领', exact: true }).count()).toBe(1);

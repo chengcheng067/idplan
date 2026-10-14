@@ -56,12 +56,34 @@ import { startServer, CAN_RUN_FRESH, CHROMIUM_PATH } from './helpers/board-env';
 
 const HEAVY = 60000;
 
+/*
+ * ── 语言无关定位（i18n-EN 批）─────────────────────────────────────────────
+ * 原写法按 `[role="dialog"][aria-label="设置"]` + `button[aria-label="关闭设置"]`
+ * 定位 —— 两个 aria 名都已走消息表（`settings.title` / `settings.closeAria`），
+ * 英文态**静默失配**（失败伪装成「弹窗/按钮不存在」）。现全部改生产侧 data-* 钩子：
+ *   · 设置抽屉的遮罩层（role=dialog）⇒ `[role="dialog"]:has([data-settings-drawer])`
+ *     （Playwright/jsdom 查询器都支持 `:has()`；其 firstElementChild 即挂出口类的
+ *     锚点容器，与旧取法同一元素 ⇒ 逐帧判据的对象一字未变）；
+ *   · 清空日志二次确认框 ⇒ `[data-settings-log-confirm]`（ConfirmDialog 经 dataAttrs
+ *     透传，钩子就在 role=dialog 底座上）；
+ *   · 抽屉头部关闭钮 ⇒ `[data-settings-close]`。
+ * ⚠️ `passFirstRun` / `openClearLogConfirm` 里按**可见文案**点的几处（`我是管理员` /
+ *    `先四处看看` / `清空日志`）不在本批判据面内（getByText/hasText/textContent 形态，
+ *    守卫有意不锁），且生产侧暂缺对应钩子 ⇒ 本轮未动，已登记在交付报告。
+ */
+/** 设置抽屉（遮罩层，role=dialog）的语言无关钩子 */
+const SETTINGS_DIALOG = '[role="dialog"]:has([data-settings-drawer])';
+/** 设置抽屉头部的关闭钮（生产侧钩子） */
+const SETTINGS_CLOSE = '[data-settings-close]';
+/** 清空日志的二次确认框（ConfirmDialog 的 role=dialog 底座自带该钩子） */
+const LOG_CONFIRM_DIALOG = '[data-settings-log-confirm]';
+
 /** 页面内逐帧记录器：面板 + 遮罩两份读数、动画事件、几何 */
 const INSTALL = `
 window.__rec = { frames: [], events: [] };
 window.__now = function () { return performance.timeOrigin + performance.now(); };
-window.__pick = function (label) {
-  var dlg = document.querySelector('[role="dialog"][aria-label="' + label + '"]');
+window.__pick = function (sel) {
+  var dlg = document.querySelector(sel);
   if (!dlg) return { dlg: null, anchor: null };
   return { dlg: dlg, anchor: dlg.firstElementChild };
 };
@@ -81,9 +103,9 @@ window.__install = function () {
   document.addEventListener('animationend', onEv('end'), true);
   document.addEventListener('animationcancel', onEv('cancel'), true);
 };
-window.__start = function (label, outClass) {
+window.__start = function (sel, outClass) {
   window.__install();
-  window.__label = label;
+  window.__label = sel;
   window.__outClass = outClass;
   window.__rec = { frames: [], events: [] };
   window.__recording = true;
@@ -117,8 +139,8 @@ window.__start = function (label, outClass) {
   requestAnimationFrame(loop);
 };
 window.__stop = function () { window.__recording = false; return window.__rec; };
-window.__maskCorner = function (label) {
-  var p = window.__pick(label);
+window.__maskCorner = function (sel) {
+  var p = window.__pick(sel);
   if (!p.dlg) return null;
   var r = p.dlg.getBoundingClientRect();
   return { x: Math.round(r.right - 40), y: Math.round(r.top + 40) };
@@ -142,8 +164,10 @@ async function passFirstRun(page: Page): Promise<void> {
 }
 
 async function openSettings(page: Page): Promise<void> {
+  /* 语言无关钩子（i18n-EN 批）：侧栏「设置」钮挂 `data-sidebar-settings`（展开/收起
+     两态同值、互斥渲染）。原先按 aria-label 中文值「设置」找 ⇒ 英文态静默失配。 */
   await page.evaluate(() => {
-    Array.from(document.querySelectorAll('[data-app-sidebar] button')).find((x) => x.getAttribute('aria-label') === '设置')?.click();
+    (document.querySelector('[data-app-sidebar] [data-sidebar-settings]') as HTMLButtonElement | null)?.click();
   });
   await page.waitForSelector('[data-settings-drawer]', { timeout: 10000 });
   await page.waitForTimeout(600); // 入场动画（200ms）播完并停在 both 终态
@@ -237,27 +261,35 @@ function assertMaskFadedBeforeGone(seq: Frame[]): void {
   ).toBeLessThanOrEqual(0.05);
 }
 
+/**
+ * 关闭并全程逐帧记录（语言无关形态，i18n-EN 批）：
+ * @param dlgSel   对话框（遮罩层）的语言无关选择器（见文件顶部常量注释）
+ * @param closeSel 关闭钮的语言无关选择器；只有 `how === 'x'` 用得到，传 null = 本档不点 ✕
+ *
+ * ⚠️ 判据一字未改：`anchor` 仍是「对话框的 firstElementChild」（挂出口类的锚点容器），
+ *    `mask` 仍是对话框自身（挂 scrim-out 的遮罩）—— 换的只是**取对话框的方式**。
+ */
 async function closeAndRecord(
   page: Page,
-  label: string,
+  dlgSel: string,
   how: 'x' | 'esc' | 'mask',
-  closeLabel: string,
+  closeSel: string | null,
   outClass: string,
 ): Promise<Rec> {
   const coords = await page.evaluate(
-    ([l, cl]) => ({
+    ([ds, cs]) => ({
       close: ((): { x: number; y: number } | null => {
-        const dlg = document.querySelector(`[role="dialog"][aria-label="${l}"]`);
-        const b = dlg?.querySelector(`button[aria-label="${cl}"]`);
+        if (!cs) return null;
+        const b = document.querySelector(ds)?.querySelector(cs);
         if (!b) return null;
         const r = b.getBoundingClientRect();
         return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
       })(),
-      mask: (window as any).__maskCorner(l) as { x: number; y: number } | null,
+      mask: (window as any).__maskCorner(ds) as { x: number; y: number } | null,
     }),
-    [label, closeLabel] as const,
+    [dlgSel, closeSel] as const,
   );
-  await page.evaluate(([l, o]) => (window as any).__start(l, o), [label, outClass] as const);
+  await page.evaluate(([ds, o]) => (window as any).__start(ds, o), [dlgSel, outClass] as const);
   if (how === 'x') await page.mouse.click(coords.close!.x, coords.close!.y);
   else if (how === 'esc') await page.keyboard.press('Escape');
   else await page.mouse.click(coords.mask!.x, coords.mask!.y);
@@ -294,7 +326,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
     try {
       for (const how of ['x', 'esc', 'mask'] as const) {
         await openSettings(page);
-        const rec = await closeAndRecord(page, '设置', how, '关闭设置', 'drawer-out-left');
+        const rec = await closeAndRecord(page, SETTINGS_DIALOG, how, SETTINGS_CLOSE, 'drawer-out-left');
         const starts = rec.events.filter((e) => e.type === 'start').map((e) => e.name);
         console.log(`[${how}] 帧=${rec.frames.length} 出口起点=${JSON.stringify(starts)}`);
         expect(starts, `[${how}] 出口类从未挂上 ⇒ 出口路径没走`).toContain('drawer-out-left');
@@ -311,7 +343,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
     const { ctx, page } = await openApp();
     try {
       await openSettings(page);
-      const rec = await closeAndRecord(page, '设置', 'x', '关闭设置', 'drawer-out-left');
+      const rec = await closeAndRecord(page, SETTINGS_DIALOG, 'x', SETTINGS_CLOSE, 'drawer-out-left');
       assertSameFrameStart(rec.frames, 'drawer-out-left', 'scrim-out');
       const a = rec.events.filter((e) => e.type === 'start' && e.name === 'drawer-out-left' && e.onAnchor);
       const s = rec.events.filter((e) => e.type === 'start' && e.name === 'scrim-out' && e.onMask);
@@ -327,7 +359,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
     const { ctx, page } = await openApp();
     try {
       await openSettings(page);
-      const rec = await closeAndRecord(page, '设置', 'x', '关闭设置', 'drawer-out-left');
+      const rec = await closeAndRecord(page, SETTINGS_DIALOG, 'x', SETTINGS_CLOSE, 'drawer-out-left');
       const contentLefts = Array.from(new Set(rec.frames.map((f) => f.contentLeft)));
       const maskLefts = Array.from(new Set(rec.frames.filter((f) => f.maskRect).map((f) => f.maskRect!.left)));
       const maskWidths = Array.from(new Set(rec.frames.filter((f) => f.maskRect).map((f) => f.maskRect!.width)));
@@ -346,8 +378,10 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
     const { ctx, page } = await openApp();
     try {
       await openSettings(page);
+      /* 语言无关钩子（i18n-EN 批）：抽屉头部关闭钮挂 `data-settings-close`。
+         原先按 `button[aria-label="关闭设置"]` 定位 ⇒ 英文态静默失配。 */
       await page.evaluate(() => {
-        (document.querySelector('button[aria-label="关闭设置"]') as HTMLButtonElement | null)?.click();
+        (document.querySelector('[data-settings-close]') as HTMLButtonElement | null)?.click();
       });
       await page.waitForFunction(() => document.querySelector('[data-settings-dialog]') === null, undefined, {
         timeout: 2000,
@@ -362,7 +396,7 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
     const { ctx, page } = await openApp();
     try {
       await openSettings(page);
-      const rec = await closeAndRecord(page, '设置', 'esc', '关闭设置', 'drawer-out-left');
+      const rec = await closeAndRecord(page, SETTINGS_DIALOG, 'esc', SETTINGS_CLOSE, 'drawer-out-left');
       assertClassHeld(rec.frames, (f) => f.anchor, '面板 drawer-out-left');
       assertClassHeld(rec.frames, (f) => f.mask, '遮罩 scrim-out');
     } finally {
@@ -374,7 +408,8 @@ describe.skipIf(!CAN_RUN_FRESH)('浮层关闭频闪 · 真 Chromium 逐帧', () 
     const { ctx, page } = await openApp();
     try {
       await openClearLogConfirm(page);
-      const rec = await closeAndRecord(page, '清空日志', 'esc', '关闭', 'dialog-pop-out');
+      /* esc 路径不点 ✕ ⇒ closeSel 传 null（坐标不算，也就不需要关闭钮的选择器） */
+      const rec = await closeAndRecord(page, LOG_CONFIRM_DIALOG, 'esc', null, 'dialog-pop-out');
       const starts = rec.events.filter((e) => e.type === 'start').map((e) => e.name);
       console.log(`[center] 帧=${rec.frames.length} 出口起点=${JSON.stringify(starts)}`);
       expect(starts, '[center] 出口类没挂上 ⇒ 出口路径没走').toContain('dialog-pop-out');

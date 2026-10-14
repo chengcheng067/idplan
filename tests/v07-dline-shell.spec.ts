@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { catalogOf } from '../src/i18n';
 import { listenOnSafePort } from './helpers/safe-listen';
 import { warnStaleOnce } from './helpers/board-env';
 
@@ -87,6 +88,16 @@ const OUT_DIR = resolve(__dirname, '..', 'qa-scratch', 'v07-stageD');
 const MORE_BTN = '[data-mobile-more-trigger]';
 /** 成员看板视图切换（`MemberBoardPage.tsx` 的 SegmentedControl） */
 const MEMBER_VIEW_SWITCH = '[data-member-view-switch]';
+/**
+ * 成员看板视图切换的某一「段」——**语言无关钩子**（i18n-EN 批）。
+ *
+ * `SegmentedControl` 每段挂 `data-seg-option`（取值 = `opt.value`：kanban / calendar，
+ * ASCII 稳定），容器另有上面的 `data-member-view-switch`。原先按 tab 的中文可访问名
+ * （「看板」/「月历」）定位 ⇒ 英文态静默失配（失败会伪装成「控件不存在」）。
+ * `role="tab"` / `aria-selected` 的无障碍契约原样保留（钩子就挂在那颗钮上）。
+ */
+const memberViewTab = (page: Page, view: 'kanban' | 'calendar'): Locator =>
+  page.locator(`${MEMBER_VIEW_SWITCH} [data-seg-option="${view}"]`);
 /** 月历视图密度切换（`MonthlyCalendarView.tsx`）——「月历真的挂上来了」的稳定证据 */
 const DENSITY_SWITCH = '[data-calendar-density]';
 /** 更新红点（P0-17 配套：Sidebar 两态各一枚） */
@@ -483,7 +494,10 @@ describe.skipIf(!CAN_RUN_FRESH)(
         .first()
         .setInputFiles(fixture);
 
-      const confirm = page.getByRole('button', { name: '确认恢复' });
+      /* 语言无关钩子（i18n-EN 批）：备份恢复二次确认钮（ConfirmDialog 的 `data-confirm-ok`，
+         对话框级 `data-backup-confirm="file"`）。原先按中文可访问名「确认恢复」定位
+         ⇒ 英文态静默失配；可见名契约由 `confirm-dialog-i18n.spec.tsx` 锁着。 */
+      const confirm = page.locator('[data-backup-confirm="file"] [data-confirm-ok]');
       try {
         await confirm.waitFor({ state: 'attached', timeout: 15000 });
       } catch {
@@ -834,7 +848,9 @@ describe.skipIf(!CAN_RUN_FRESH)(
             expect(text, `admin：⋮ 的等价入口「${label}」必须仍在侧栏抽屉里`).toContain(label);
           }
           // 设置项在抽屉里恰有一个（防止「⋮ 与侧栏两份设置」在平板档同时出现）
-          expect(await drawer.getByRole('button', { name: '设置' }).count()).toBe(1);
+          // 语言无关钩子（i18n-EN 批）：侧栏「设置」钮挂 `data-sidebar-settings`
+          // （展开/收起两态同值、互斥渲染）。原先按中文可访问名「设置」定位 ⇒ 英文态失配。
+          expect(await drawer.locator('[data-sidebar-settings]').count()).toBe(1);
           await shot(page, '05-tablet-drawer-admin.png');
         } finally {
           await page.close();
@@ -950,19 +966,19 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await page.waitForSelector(MEMBER_VIEW_SWITCH, { timeout: 20000 });
 
         // 默认 = 看板（无存档时回落 kanban）
-        expect(await page.getByRole('tab', { name: '看板' }).getAttribute('aria-selected')).toBe(
+        expect(await memberViewTab(page, 'kanban').getAttribute('aria-selected')).toBe(
           'true',
         );
-        expect(await page.getByRole('tab', { name: '月历' }).getAttribute('aria-selected')).toBe(
+        expect(await memberViewTab(page, 'calendar').getAttribute('aria-selected')).toBe(
           'false',
         );
         // 看板档不挂月历
         expect(await page.locator(DENSITY_SWITCH).count()).toBe(0);
 
         // ── 切到月历 ──
-        await page.getByRole('tab', { name: '月历' }).click();
+        await memberViewTab(page, 'calendar').click();
         await page.waitForSelector(DENSITY_SWITCH, { timeout: 15000 });
-        expect(await page.getByRole('tab', { name: '月历' }).getAttribute('aria-selected')).toBe(
+        expect(await memberViewTab(page, 'calendar').getAttribute('aria-selected')).toBe(
           'true',
         );
 
@@ -986,7 +1002,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await shot(page, '08-member-calendar-empty.png');
 
         // ── 切回看板：偏好随之回写 ──
-        await page.getByRole('tab', { name: '看板' }).click();
+        await memberViewTab(page, 'kanban').click();
         await page.waitForSelector(MEMBER_VIEW_SWITCH, { timeout: 15000 });
         expect(await page.locator(DENSITY_SWITCH).count()).toBe(0);
         expect(await page.evaluate(() => localStorage.getItem('idplan.memberBoardView'))).toBe(
@@ -994,14 +1010,14 @@ describe.skipIf(!CAN_RUN_FRESH)(
         );
 
         // ── 再切月历并**重开页面**：视图不得丢（持久化的全部意义）──
-        await page.getByRole('tab', { name: '月历' }).click();
+        await memberViewTab(page, 'calendar').click();
         await page.waitForSelector(DENSITY_SWITCH, { timeout: 15000 });
 
         await page.goto(`${BASE}member-board`);
         await page.waitForSelector(MEMBER_VIEW_SWITCH, { timeout: 20000 });
         await page.waitForSelector(DENSITY_SWITCH, { timeout: 15000 });
         expect(
-          await page.getByRole('tab', { name: '月历' }).getAttribute('aria-selected'),
+          await memberViewTab(page, 'calendar').getAttribute('aria-selected'),
           '刷新后必须仍是月历（否则观感上等同于入口不存在）',
         ).toBe('true');
         await shot(page, '09-member-calendar-persisted.png');
@@ -1021,7 +1037,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         // ── 月历里点色带进项目详情（成员视角的完整入口路径）──
         await page.goto(`${BASE}member-board`);
         await page.waitForSelector(MEMBER_VIEW_SWITCH, { timeout: 20000 });
-        await page.getByRole('tab', { name: '月历' }).click();
+        await memberViewTab(page, 'calendar').click();
         await page.waitForSelector(DENSITY_SWITCH, { timeout: 15000 });
 
         const band = page.locator(`[data-entry-open][data-entry-name="${PROJECT_NAME}"]`).first();
@@ -1043,17 +1059,27 @@ describe.skipIf(!CAN_RUN_FRESH)(
         expect(text, '成员只读展示必须仍能看到路径文本').toContain(MEMBER_RESOURCE_PATH);
 
         // ① 成员管理员专属写入口被摘掉：不得存在「修改」按钮
+        //    语言无关钩子（i18n-EN 批）：ResourcePathButton 的三颗钮各挂 data-*
+        //    （`data-resource-path-edit` / `-open` / `-copy`），取值与语言无关。
         expect(
-          await drawer.getByRole('button', { name: '修改', exact: true }).count(),
+          await drawer.locator('[data-resource-path-edit]').count(),
           '成员视角不得出现「修改」按钮（阶段资料路径的唯一写入口）',
         ).toBe(0);
         // 反向：管理员的写入口**不得**在这里出现，也不得出现编辑态
-        expect(await drawer.getByRole('button', { name: '保存', exact: true }).count()).toBe(0);
+        //    ⚠️ 「保存」钮（编辑态分支）生产侧**缺钩子**（只登记不补：建议在
+        //    `ResourcePathButton.tsx` 编辑态那颗 `t('common.save')` 钮上补
+        //    `data-resource-path-save`）⇒ 这里按**消息表取值**定位（与语言解耦；
+        //    本 spec 的浏览器恒中文，`catalogOf('zh')` 与界面同语言）。
+        expect(
+          await drawer
+            .getByRole('button', { name: catalogOf('zh')['common.save'], exact: true })
+            .count(),
+        ).toBe(0);
         expect(text).not.toContain('登记本阶段资料文件夹路径');
 
         // ② 只读通道保留：打开 + 复制路径 都在、都可用
-        expect(await drawer.getByRole('button', { name: '打开' }).count()).toBe(1);
-        const copy = drawer.getByRole('button', { name: '复制路径' });
+        expect(await drawer.locator('[data-resource-path-open]').count()).toBe(1);
+        const copy = drawer.locator('[data-resource-path-copy]');
         expect(await copy.count()).toBe(1);
         expect(await copy.isEnabled()).toBe(true);
 
@@ -1105,7 +1131,8 @@ describe.skipIf(!CAN_RUN_FRESH)(
           .allInnerTexts()
           .then((xs) => xs.map((s) => s.trim()));
         expect(labels, '管理员必须仍有「修改」写入口').toContain('修改');
-        expect(await drawer.getByRole('button', { name: '复制路径' }).count()).toBe(1);
+        // 语言无关钩子（i18n-EN 批）：复制路径钮挂 `data-resource-path-copy`
+        expect(await drawer.locator('[data-resource-path-copy]').count()).toBe(1);
         await shot(page, '12-admin-stage-drawer-editable.png');
       } finally {
         await page.close();

@@ -40,6 +40,10 @@ function Harness({ onClosed }: { onClosed?: () => void }): JSX.Element {
         onChange={(e) => setName(e.target.value)}
         placeholder="你的姓名"
         aria-label="你的姓名"
+        /* 语言无关定位钩子（i18n-EN 批）：aria-label 保留（复刻 IdentityDialog 形态），
+           但**定位改走 data-*** —— 不拿中文当选择器（本文件的输入框是测试自有夹具，
+           中文串永不随语言变，但选择器形态要与全仓纪律一致）。 */
+        data-ime-harness-input=""
       />
     </Modal>
   );
@@ -89,7 +93,7 @@ describe('Modal 不得在输入过程中抢走输入框焦点（IME 吞字横切
 
   it('核心：连续输入全程输入框保持焦点，不被面板 DIV 抢走', () => {
     mount(<Harness />);
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="你的姓名"]');
+    const input = document.querySelector<HTMLInputElement>('input[data-ime-harness-input]');
     expect(input).toBeTruthy();
 
     act(() => input!.focus());
@@ -113,7 +117,7 @@ describe('Modal 不得在输入过程中抢走输入框焦点（IME 吞字横切
 
   it('核心：输入完成后焦点也不得停留在面板 DIV 上', () => {
     mount(<Harness />);
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="你的姓名"]');
+    const input = document.querySelector<HTMLInputElement>('input[data-ime-harness-input]');
     act(() => input!.focus());
     act(() => imeCommit(input!, 'z'));
 
@@ -126,7 +130,7 @@ describe('Modal 不得在输入过程中抢走输入框焦点（IME 吞字横切
   it('回归：Escape 仍能关闭，且调用的是最新的 onClose（ref 透传正确）', () => {
     let closed = 0;
     mount(<Harness onClosed={() => { closed += 1; }} />);
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="你的姓名"]');
+    const input = document.querySelector<HTMLInputElement>('input[data-ime-harness-input]');
 
     // 先输入，让父组件重渲染若干次，确保 onCloseRef 已被刷新到最新
     act(() => input!.focus());
@@ -148,13 +152,14 @@ describe('Modal 不得在输入过程中抢走输入框焦点（IME 吞字横切
     act(() => {
       r2.render(
         <Modal open onClose={() => {}} ariaLabel="圈禁测试">
-          <input aria-label="第一个" />
+          {/* 语言无关定位钩子（i18n-EN 批）：测试自有夹具的输入框，定位走 data-* */}
+          <input aria-label="第一个" data-focus-trap-first="" />
           <button type="button">最后一个</button>
         </Modal>,
       );
     });
 
-    const first = document.querySelector<HTMLInputElement>('input[aria-label="第一个"]')!;
+    const first = document.querySelector<HTMLInputElement>('input[data-focus-trap-first]')!;
     const last = document.querySelector<HTMLButtonElement>('button')!;
 
     act(() => last.focus());

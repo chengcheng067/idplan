@@ -175,7 +175,12 @@ async function seedAndEnterCalendar(page: Page, base: string, fixture: string): 
   await page.goto(`${base}index.html`);
   await page.waitForSelector('header', { timeout: 20000 });
   await page.locator('input[type="file"][accept*="json"]').first().setInputFiles(fixture);
-  const confirm = page.getByRole('button', { name: '确认恢复' });
+  /* 语言无关钩子（i18n-EN 批）：备份恢复二次确认钮。ConfirmDialog 的确认钮挂
+     `data-confirm-ok`，对话框级还有 `data-backup-confirm="file"`（useBackupIo）。
+     原先按 `getByRole('button', { name: '确认恢复' })` 定位 —— 该可访问名来自
+     `backup.dialog.confirmRestore`，英文态静默失配（失败伪装成「按钮不存在」）。
+     按钮可见名的契约由 `confirm-dialog-i18n.spec.tsx` 锁着，不因换钩子而放弃。 */
+  const confirm = page.locator('[data-backup-confirm="file"] [data-confirm-ok]');
   try {
     await confirm.waitFor({ state: 'attached', timeout: 15000 });
   } catch {
@@ -186,7 +191,10 @@ async function seedAndEnterCalendar(page: Page, base: string, fixture: string): 
   await confirm.click({ force: true });
   await reloaded;
   await page.waitForSelector('header', { timeout: 20000 });
-  await page.getByRole('tab', { name: '月历' }).click();
+  /* 语言无关钩子：首页视图切换的「月历」段。SegmentedControl 每段挂 `data-seg-option`
+     （取值 = opt.value，ASCII），容器另有 `data-home-view-switch`。原先按
+     `getByRole('tab', { name: '月历' })` 定位 ⇒ 英文态静默失配。 */
+  await page.locator('[data-home-view-switch] [data-seg-option="calendar"]').click();
   await page.waitForSelector('[data-day-cell]', { timeout: 15000 });
   await page.waitForTimeout(400);
 }
@@ -445,7 +453,10 @@ describe.skipIf(!CAN_RUN_FRESH)(
     /* ---------- 切到下个月：当月每天 ≥5 条，首列/末列/末行全有拥挤格 ---------- */
 
     it('P-03 · 默认右展：首列（周一）格的浮层精确贴格右缘 +8', async () => {
-      await page.getByRole('button', { name: '下个月' }).click();
+      /* 语言无关钩子：月历工具行的「下个月」箭（MonthlyCalendarView 的 MonthArrow，
+         取值 = 方向 prev/next，ASCII）。原先按 `getByRole('button', { name: '下个月' })`
+         定位 —— 该 aria 来自 `calendar.nextMonth`，英文态静默失配。 */
+      await page.locator('[data-calendar-nav="next"]').click();
       await page.waitForTimeout(500);
       const idx = await firstCrowdedInCol(page, 0);
       expect(idx, '首列（周一）应存在拥挤格').toBeGreaterThanOrEqual(0);

@@ -301,7 +301,12 @@ describe('路径甲（快速档）· 不展开折叠区直接提交 —— 反�
     await renderForm();
 
     // ① 正面断言：旧字段确实不存在了
-    expect(document.querySelector('select[aria-label="项目类型"]')).toBeNull();
+    //    语言无关形态（i18n-EN 批）：原写法按 `select[aria-label="项目类型"]` 判不存在 ——
+    //    那个 aria 已随字段删除，但**若将来有人把旧字段加回来**，英文态下它的可访问名会是
+    //    英文串，旧选择器静默失配（假绿）。本表单现在**一个原生 <select> 都不该有**
+    //    （主板块选择器是 IndustrySelect 自定义下拉，不是 select）⇒ 这条中英双语都盯得住，
+    //    且比原来更强（不限于某一个 aria 名）。
+    expect(document.querySelector('select')).toBeNull();
 
     // ② 等价语义：不展开折叠区也能提交，不被阻塞
     await pickDomain('indoor');

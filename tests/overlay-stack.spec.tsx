@@ -329,6 +329,10 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
             onClose={() => setContentOpen(false)}
             placement="fullscreen"
             ariaLabel="内容浮层"
+            /* 语言无关定位钩子（i18n-EN 批）：Modal 的 ariaLabel 走 prop（英文态会变），
+               而 Modal 是 20+ 弹窗共用的中心组件、刻意不开任意 props 洞 ⇒ 这里用测试
+               自有 Harness 的 dataAttrs 通道（值只在本用例内有效，与语言无关）。 */
+            dataAttrs={{ 'data-overlay-stack-content': '' }}
           >
             <div />
           </Modal>
@@ -337,7 +341,7 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
       );
     }
     mount(<Harness />);
-    expect(document.querySelector('[role="dialog"][aria-label="内容浮层"]')).not.toBeNull();
+    expect(document.querySelector('[data-overlay-stack-content]')).not.toBeNull();
 
     // 打开身份菜单（chrome 档，79 > 内容层 75）
     act(() => {
@@ -348,13 +352,13 @@ describe('浮层栈 · chrome 浮层接线（F2）', () => {
     pressEscape();
     expect(document.querySelector('[data-identity-menu]'), 'Esc 关掉 chrome 菜单').toBeNull();
     expect(
-      document.querySelector('[role="dialog"][aria-label="内容浮层"]'),
+      document.querySelector('[data-overlay-stack-content]'),
       '★ chrome 菜单开着时按 Esc 不该连坐底下的内容浮层',
     ).not.toBeNull();
 
     // 菜单已退场 ⇒ 内容浮层成为栈顶，这次才轮到它
     pressEscape();
-    expect(document.querySelector('[role="dialog"][aria-label="内容浮层"]')).toBeNull();
+    expect(document.querySelector('[data-overlay-stack-content]')).toBeNull();
   });
 
   it('同档两个 chrome 菜单同时在栈上时，Esc 只关**栈顶那一个**', () => {

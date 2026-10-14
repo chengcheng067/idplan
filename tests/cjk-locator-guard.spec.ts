@@ -517,7 +517,68 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *     13 份 browser 族**本机跑不了**（依赖 `build-dist`）⇒ 另在重建产物后单独跑，读数记在那一笔。
  *   · 复跑：同上一段的命令 ⇒ 测试名印「当前 **42** / 基线 42」。
  */
-const BASELINE = 42;
+/*
+ * ── 2026-10-15（夜间自主批 · `night-tests`：getByRole 31 处 + 同族 11 处换语言无关钩子）：42 → **1**（−41，逐文件归属） ──
+ * 本笔把 team-lead 交接的「按中文文案定位」清单一次做掉：**31 处 getByRole 中文 name** +
+ * **11 处同族 `input[aria-label]/[role=dialog][aria-label]` 选择器**，全部换成语言无关钩子
+ * （生产侧钩子由 i18n-EN 批先行落好，本笔只改 `tests/**`，`src/**` 一字未碰）。
+ *
+ * **−41 逐文件归因**（改前 42 → 改后 1；只有下列文件变了，其余文件计数一字未动）：
+ *   · `v07-dline-shell`              15 → **0**（−15）
+ *       `确认恢复`×1（:486）→ `[data-backup-confirm="file"] [data-confirm-ok]`；
+ *       `设置`（:837）→ `[data-sidebar-settings]`；`看板`×2 + `月历`×6 →
+ *       `[data-member-view-switch] [data-seg-option="kanban|calendar"]`；
+ *       `修改`/`打开`/`复制路径`×2 → `data-resource-path-edit/-open/-copy`；
+ *       `保存`（:1051）→ 按消息表取值 `catalogOf('zh')['common.save']`（生产侧缺钩子，见下）。
+ *   · `v07-board-acceptance`          4 → **1**（−3）
+ *       `确认恢复`（:735）→ 备份确认钩子；`关闭任务详情`（:1122）→ `[data-task-drawer-close]`；
+ *       `绘制平面初稿`（:1063）→ `[data-agent-task-card]` + 组键 `doing` 定位，
+ *       **内容断言保留**（`count()===1` ∧ 标题按钮文本 === 夹具任务名）；
+ *       ★ 留下 1 处是**有意的**：`:1158` 的「认领」是**中英对照断言**（认领存在 ∧ claim 不存在），
+ *         它是「切英文后文案真的换了」的直接证据，team-lead 明示不许换 ⇒ 棘轮恒留此 1 处。
+ *   · `calendar-popover-geometry`     3 → **0**（−3）：`确认恢复` → 备份确认钩子；
+ *       `月历` → `[data-home-view-switch] [data-seg-option="calendar"]`；
+ *       `下个月` → `[data-calendar-nav="next"]`。
+ *   · `isolation-browser`             3 → **0**（−3）：`确认恢复` → 备份确认钩子；
+ *       `月历` → 首页视图切换钩子；`日程表` → 按消息表取值 `catalogOf('zh')['project.schedule']`
+ *       （生产侧缺钩子，见下）。
+ *   · `modal-focus-ime`               4 → **0**（−4）：三处 `input[aria-label="你的姓名"]` 与一处
+ *       `input[aria-label="第一个"]` → 测试自有夹具输入框上的 `data-ime-harness-input` /
+ *       `data-focus-trap-first`（aria-label 保留复刻形态，只换定位）。
+ *   · `overlay-stack`                 3 → **0**（−3）：`[role="dialog"][aria-label="内容浮层"]` ×3
+ *       → Harness 的 Modal 经 `dataAttrs` 透传的 `[data-overlay-stack-content]`。
+ *   · `modal.bubble`                  2 → **0**（−2）：两处测试自有输入框 → `data-bubble-modal-input` /
+ *       `data-bubble-control-input`。
+ *   · `route-scroll-reset`            2 → **0**（−2）：首页/成员看板各一处「月历」段 → 各自视图切换钩子。
+ *   · `member-board-column-consistency` / `member-board-deeplink` / `member-board-narrow-card`
+ *     各 1 → **0**（−3 合计）：`确认恢复` → 备份确认钩子。
+ *   · `v07-t03b-ingress-geometry`     1 → **0**（−1）：`确认恢复` → 备份确认钩子。
+ *   · `settings-drawer-flicker`       1 → **0**（−1）：`button[aria-label="关闭设置"]` →
+ *       `[data-settings-close]`；同文件 `closeAndRecord`/`__pick`/`openSettings` 一族
+ *       （判据面外的参数形态）同笔换成 `[role="dialog"]:has([data-settings-drawer])` 等钩子。
+ *   · `v08-intake-two-paths`          1 → **0**（−1）：`select[aria-label="项目类型"]` 的**不存在**断言
+ *       → `select` 全不存在（本表单一个原生 select 都没有，中英双语都盯得住，比原来更强）。
+ *   合计 **−41**；`tests/i18n-browser.spec.ts`（零容忍区）改前改后均 0 处。
+ *
+ * ★ **生产侧缺钩子登记**（本批纪律：只登记、不补 `src/**`）——
+ *   ① `ProjectDetailPage.tsx` 的「日程表」打印入口钮（可见名 = `t('project.schedule')`）无 data-*
+ *      钩子 ⇒ 建议补 `data-project-schedule-print`；`isolation-browser.spec.ts` 的 L4-09 暂按
+ *      消息表取值定位（`catalogOf('zh')['project.schedule']`，与浏览器语言同语言）。
+ *   ② `ResourcePathButton.tsx` **编辑态**的「保存」钮（`t('common.save')`）无 data-* 钩子
+ *      ⇒ 建议补 `data-resource-path-save`；`v07-dline-shell.spec.ts` 的反向断言暂按
+ *      消息表取值定位（`catalogOf('zh')['common.save']`）。
+ *   ③ `AgentTaskCard.tsx` 的标题钮无**按任务 id** 的钩子 ⇒ 建议补 `data-task-open={task.id}`；
+ *      `v07-board-acceptance.spec.ts` 的 B-08 暂用卡容器钩子 + 夹具任务名钉唯一一张。
+ *   ④ `SettingsDialog.tsx` 的「清空日志」钮无 data-* 钩子 ⇒ 建议补 `data-settings-log-clear`
+ *      （`settings-drawer-flicker.spec.ts` 的 `openClearLogConfirm` 仍按可见文案点它，
+ *      属判据面外形态，本批未动）。
+ *
+ * **判据零放宽**：全部是「取元素的方式」变更；唯一加强的是 `v08-intake-two-paths` 那条
+ * （单一 aria 名 → 全表单无 select）。`:1158` 的中英对照断言**原样保留**。
+ * 复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` ⇒ 测试名印
+ * 「当前 **1** / 基线 1」（此读数为下调那一刻的实测值）。
+ */
+const BASELINE = 1;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

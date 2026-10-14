@@ -46,6 +46,9 @@ describe('Modal 合成冒泡拦截（bug #1）', () => {
             ariaLabel: '项目重命名',
             children: React.createElement('input', {
               'aria-label': '新的项目名称',
+              /* 语言无关定位钩子（i18n-EN 批）：测试自有夹具的输入框，定位走 data-*
+                 （aria-label 保留以复刻项目重命名弹窗形态，但不拿它当选择器） */
+              'data-bubble-modal-input': '',
               value: '测试',
               onChange: () => {},
             }),
@@ -54,7 +57,7 @@ describe('Modal 合成冒泡拦截（bug #1）', () => {
       ),
     );
 
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="新的项目名称"]');
+    const input = document.querySelector<HTMLInputElement>('input[data-bubble-modal-input]');
     expect(input).toBeTruthy();
     input!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 
@@ -75,13 +78,17 @@ describe('Modal 合成冒泡拦截（bug #1）', () => {
         { onClick: () => { outerClicked += 1; } },
         React.createElement('span', null, '对照组卡片'),
         createPortal(
-          React.createElement('input', { 'aria-label': '对照输入框' }),
+          React.createElement('input', {
+            'aria-label': '对照输入框',
+            /* 语言无关定位钩子（i18n-EN 批）：对照组输入框同样走 data-* 定位 */
+            'data-bubble-control-input': '',
+          }),
           document.body,
         ),
       ),
     );
 
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="对照输入框"]');
+    const input = document.querySelector<HTMLInputElement>('input[data-bubble-control-input]');
     expect(input).toBeTruthy();
     input!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 

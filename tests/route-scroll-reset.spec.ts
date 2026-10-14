@@ -146,7 +146,10 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug D · 路由切换回顶（真 Chromium）',
       // （y≈250），点击聚焦不会把它滚入视口 ⇒ 滚动位应原样保持。
       await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 120));
       await page.waitForTimeout(250);
-      await page.getByRole('tab', { name: '月历' }).click();
+      /* 语言无关钩子（i18n-EN 批）：首页视图切换的「月历」段（`data-seg-option`，
+         取值 = opt.value；容器 `data-home-view-switch`）。原先按 tab 的中文可访问名定位
+         ⇒ 英文态静默失配。 */
+      await page.locator('[data-home-view-switch] [data-seg-option="calendar"]').click();
       await page.waitForTimeout(700);
       expect(await mainScrollTop(page), '首页内切月历不应弹顶（视图切换 ≠ 路由切换）').toBe(120);
 
@@ -156,7 +159,9 @@ describe.skipIf(!CAN_RUN_FRESH)('Bug D · 路由切换回顶（真 Chromium）',
       // 标题行、点击聚焦被浏览器滚入视口的既有行为，用 DOM click 不聚焦实测保持
       // 120。该现象与本修复无关，且不属本轮四条反馈，故只钉路由不变、不钉滚动位。）
       await openBoardViaMemberRow(page);
-      await page.getByRole('tab', { name: '月历' }).click();
+      /* 语言无关钩子：成员看板视图切换的「月历」段（同一 SegmentedControl，容器钩子
+         `data-member-view-switch`）。原先按 tab 的中文可访问名定位 ⇒ 英文态静默失配。 */
+      await page.locator('[data-member-view-switch] [data-seg-option="calendar"]').click();
       await page.waitForTimeout(600);
       const afterSwitch = await page.evaluate(() => window.location.pathname);
       expect(afterSwitch, '视图切换不得改变路由（否则会被回顶 effect 误伤）').toBe('/member-board');

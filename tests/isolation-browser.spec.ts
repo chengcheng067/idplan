@@ -43,6 +43,7 @@ import {
 } from '../src/core/color/custom-color-registry';
 import { deriveStageColors } from '../src/core/color/derive-stage-colors';
 import { stageColorAttrs, stageColorKeyOf } from '../src/components/timeline/stageColorKey';
+import { catalogOf } from '../src/i18n';
 import { builtJs } from './helpers/built-css';
 import { listenOnSafePort } from './helpers/safe-listen';
 import { staleInputs } from './helpers/board-env';
@@ -789,7 +790,10 @@ describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真�
       .first()
       .setInputFiles(fixturePath, { force: true });
 
-    const confirm = seedPage.getByRole('button', { name: '确认恢复' });
+    /* 语言无关钩子（i18n-EN 批）：备份恢复二次确认钮（ConfirmDialog 的 `data-confirm-ok`，
+       对话框级 `data-backup-confirm="file"`）。原先按中文可访问名「确认恢复」定位
+       ⇒ 英文态静默失配；可见名契约由 `confirm-dialog-i18n.spec.tsx` 锁着。 */
+    const confirm = seedPage.locator('[data-backup-confirm="file"] [data-confirm-ok]');
     try {
       await confirm.waitFor({ state: 'attached', timeout: 15000 });
     } catch {
@@ -902,7 +906,10 @@ describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真�
   it('L4-02 · 月历视图（首页切「月历」）：Agent 看板名出现 0 次', async () => {
     const page = await openPage(mainEnv, '', { expectText: HUMAN_NAME });
     try {
-      await page.getByRole('tab', { name: '月历' }).click();
+      /* 语言无关钩子：首页视图切换的「月历」段（SegmentedControl 每段挂
+         `data-seg-option`，取值 = opt.value；容器另有 `data-home-view-switch`）。
+         原先按 `getByRole('tab', { name: '月历' })` 定位 ⇒ 英文态静默失配。 */
+      await page.locator('[data-home-view-switch] [data-seg-option="calendar"]').click();
       await page.waitForTimeout(400);
       const text = await bodyText(page);
       expect(countOccurrences(text, AGENT_NAME), '月历里出现了 Agent 看板（§7.2 #7）').toBe(0);
@@ -1070,7 +1077,16 @@ describe.skipIf(!CAN_RUN)('L4-BROWSER · Agent 隔离真 Chromium 验收（真�
   });
 
   it('L4-09 · 人类侧不给 Agent 看板任何打印入口（按钮消失；人类项目上仍在 ⇒ 判别力）', async () => {
-    const printEntry = (page: Page) => page.getByRole('button', { name: '日程表' });
+    /*
+     * ⚠️ 生产侧**缺钩子**（本批纪律：只登记、不补 src）—— `ProjectDetailPage.tsx` 的
+     *   「日程表」打印入口钮（可见名 = `t('project.schedule')`，aria/title 同样走消息表）
+     *   没有任何 `data-*` 钩子。建议生产侧在该钮上补 `data-project-schedule-print`，
+     *   之后本行可换成纯钩子形态。
+     * 眼下的语言无关做法：按**消息表取值**定位（`catalogOf('zh')` 与本 spec 的浏览器
+     * 语言一致 —— 本 spec 不切语言；中英文界面都会渲染各自语言的那句，选择器随行）。
+     */
+    const printEntry = (page: Page) =>
+      page.getByRole('button', { name: catalogOf('zh')['project.schedule'] });
 
     const agentPage = await openPage(mainEnv, `project/${AGENT_PROJECT_ID}`, {
       expectText: AGENT_NAME,
