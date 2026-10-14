@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode } from '../types/enums';
+import { ChangxiaError, ChangxiaErrorCode, coreError } from '../types/enums';
 import type { IRepositoryBundle, RepositoryFactoryConfig } from './interfaces';
 import { ChangxiaDatabase, openDatabase } from './local/dexie.database';
 import { LocalProjectsRepository } from './local/local.projects.repo';
@@ -40,7 +40,7 @@ export async function createRepositories(
     };
   } catch (err) {
     if (err instanceof ChangxiaError) throw err;
-    throw new ChangxiaError(ChangxiaErrorCode.Storage, '本地数据源初始化失败。', err);
+    throw coreError(ChangxiaErrorCode.Storage, 'coreErr.datasource.initFailed', undefined, err);
   }
 }
 

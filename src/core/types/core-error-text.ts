@@ -133,6 +133,23 @@ export const CORE_ERROR_TEXT = {
   'coreErr.writeback.decidedByRequired': '写回提案落定为 {status} 必须由人工决策：decidedBy 必填（execution={executionId}）。',
   'coreErr.writeback.updateFailed': '写回提案更新失败。',
   'coreErr.writeback.listReadFailed': '写回提案列表读取失败。',
+
+  /* ── 项目 / 合同 / 管理 / 数据库 / 数据源（段 3 之二）── */
+  'coreErr.project.listReadFailed': '项目列表读取失败。',
+  'coreErr.project.detailReadFailed': '项目详情读取失败。',
+  'coreErr.project.nameRequired': '项目名称不能为空。',
+  'coreErr.project.datesRequired': '项目计划起止日期不能为空。',
+  'coreErr.project.createFailed': '项目创建失败。',
+  'coreErr.project.notFound': '未找到该项目，可能已被删除。',
+  'coreErr.project.deleteFailedRolledBack': '项目删除失败，数据已回滚。',
+  'coreErr.contract.recognitionWriteFailed': '合同识别记录写入失败。',
+  'coreErr.contract.recognitionReadFailed': '合同识别记录读取失败。',
+  'coreErr.contract.listReadFailed': '合同记录列表读取失败。',
+  'coreErr.admin.exportFailed': '全量导出失败。',
+  'coreErr.admin.importFailedRolledBack': '备份导入失败：已整体回滚，本地数据未受影响。',
+  'coreErr.db.openFailed': '本地数据库打开失败，请检查浏览器隐私模式或存储空间。',
+  'coreErr.db.preMigrationBackupReadFailed': '迁移前备份读取失败。',
+  'coreErr.datasource.initFailed': '本地数据源初始化失败。',
 } as const;
 
 /** 机器可读的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */

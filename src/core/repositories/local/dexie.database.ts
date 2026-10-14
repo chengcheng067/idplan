@@ -16,7 +16,7 @@ import type {
   Task,
   WritebackProposal,
 } from '../../types/entities';
-import { ChangxiaError, ChangxiaErrorCode, MemberActorKind, TaskStatus } from '../../types/enums';
+import { coreError, ChangxiaErrorCode, MemberActorKind, TaskStatus } from '../../types/enums';
 import {
   ALL_STORE_NAMES,
   DB_NAME,
@@ -161,11 +161,7 @@ export async function openDatabase(): Promise<ChangxiaDatabase> {
     return db;
   } catch (err) {
     db.close();
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Storage,
-      '本地数据库打开失败，请检查浏览器隐私模式或存储空间。',
-      err,
-    );
+    throw coreError(ChangxiaErrorCode.Storage, 'coreErr.db.openFailed', undefined, err,);
   }
 }
 
@@ -365,7 +361,7 @@ export async function dumpLegacyTables(dbName: string = DB_NAME): Promise<Backup
       },
     };
   } catch (err) {
-    throw new ChangxiaError(ChangxiaErrorCode.Storage, '迁移前备份读取失败。', err);
+    throw coreError(ChangxiaErrorCode.Storage, 'coreErr.db.preMigrationBackupReadFailed', undefined, err);
   } finally {
     probe.close();
   }

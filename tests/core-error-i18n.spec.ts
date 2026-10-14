@@ -154,6 +154,23 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   ['coreErr.writeback.decidedByRequired', ChangxiaErrorCode.Validation, '写回提案落定为 applied 必须由人工决策：decidedBy 必填（execution=ex1）。'],
   ['coreErr.writeback.updateFailed', ChangxiaErrorCode.Storage, '写回提案更新失败。'],
   ['coreErr.writeback.listReadFailed', ChangxiaErrorCode.Storage, '写回提案列表读取失败。'],
+
+  /* ── 段 3 之二（项目/合同/管理/数据库/数据源）：基准值同样取自改动前的 `HEAD:` 源码 ── */
+  ['coreErr.project.listReadFailed', ChangxiaErrorCode.Storage, '项目列表读取失败。'],
+  ['coreErr.project.detailReadFailed', ChangxiaErrorCode.Storage, '项目详情读取失败。'],
+  ['coreErr.project.nameRequired', ChangxiaErrorCode.Validation, '项目名称不能为空。'],
+  ['coreErr.project.datesRequired', ChangxiaErrorCode.Validation, '项目计划起止日期不能为空。'],
+  ['coreErr.project.createFailed', ChangxiaErrorCode.Storage, '项目创建失败。'],
+  ['coreErr.project.notFound', ChangxiaErrorCode.NotFound, '未找到该项目，可能已被删除。'],
+  ['coreErr.project.deleteFailedRolledBack', ChangxiaErrorCode.Storage, '项目删除失败，数据已回滚。'],
+  ['coreErr.contract.recognitionWriteFailed', ChangxiaErrorCode.Storage, '合同识别记录写入失败。'],
+  ['coreErr.contract.recognitionReadFailed', ChangxiaErrorCode.Storage, '合同识别记录读取失败。'],
+  ['coreErr.contract.listReadFailed', ChangxiaErrorCode.Storage, '合同记录列表读取失败。'],
+  ['coreErr.admin.exportFailed', ChangxiaErrorCode.Storage, '全量导出失败。'],
+  ['coreErr.admin.importFailedRolledBack', ChangxiaErrorCode.Storage, '备份导入失败：已整体回滚，本地数据未受影响。'],
+  ['coreErr.db.openFailed', ChangxiaErrorCode.Storage, '本地数据库打开失败，请检查浏览器隐私模式或存储空间。'],
+  ['coreErr.db.preMigrationBackupReadFailed', ChangxiaErrorCode.Storage, '迁移前备份读取失败。'],
+  ['coreErr.datasource.initFailed', ChangxiaErrorCode.Storage, '本地数据源初始化失败。'],
 ];
 
 /** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */

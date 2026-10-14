@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode, DEFAULT_PROJECT_KIND, ProjectStatus } from '../../types/enums';
+import { coreError, ChangxiaErrorCode, DEFAULT_PROJECT_KIND, ProjectStatus } from '../../types/enums';
 import { DEFAULT_SCHEDULE_BASIS, type Project } from '../../types/entities';
 import type {
   CreateProjectCmd,
@@ -30,7 +30,7 @@ export class LocalProjectsRepository implements IProjectsRepository {
       }
       return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '项目列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.project.listReadFailed', undefined, err);
     }
   }
 
@@ -38,16 +38,16 @@ export class LocalProjectsRepository implements IProjectsRepository {
     try {
       return (await this.db.projects.get(id)) ?? null;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '项目详情读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.project.detailReadFailed', undefined, err);
     }
   }
 
   async insert(cmd: CreateProjectCmd & { id?: string }): Promise<Project> {
     if (!cmd.name?.trim()) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '项目名称不能为空。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.nameRequired');
     }
     if (!cmd.plannedStartAt || !cmd.plannedEndAt) {
-      throw new ChangxiaError(ChangxiaErrorCode.Validation, '项目计划起止日期不能为空。');
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.project.datesRequired');
     }
     const now = new Date().toISOString();
     const row: Project = {
@@ -86,14 +86,14 @@ export class LocalProjectsRepository implements IProjectsRepository {
       await this.db.projects.add(row);
       return row;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '项目创建失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.project.createFailed', undefined, err);
     }
   }
 
   async update(id: string, cmd: UpdateProjectCmd): Promise<Project> {
     const existing = await this.db.projects.get(id);
     if (!existing) {
-      throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该项目，可能已被删除。');
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.project.notFound');
     }
     const next: Project = {
       ...existing,
@@ -128,11 +128,7 @@ export class LocalProjectsRepository implements IProjectsRepository {
         await this.db.projects.delete(id);
       });
     } catch (err) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Storage,
-        '项目删除失败，数据已回滚。',
-        err,
-      );
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.project.deleteFailedRolledBack', undefined, err,);
     }
   }
 }

@@ -133,6 +133,23 @@ export const zh = {
   'coreErr.writeback.decidedByRequired': '写回提案落定为 {status} 必须由人工决策：decidedBy 必填（execution={executionId}）。',
   'coreErr.writeback.updateFailed': '写回提案更新失败。',
   'coreErr.writeback.listReadFailed': '写回提案列表读取失败。',
+
+  /* ── 项目 / 合同 / 管理 / 数据库 / 数据源（段 3 之二）── */
+  'coreErr.project.listReadFailed': '项目列表读取失败。',
+  'coreErr.project.detailReadFailed': '项目详情读取失败。',
+  'coreErr.project.nameRequired': '项目名称不能为空。',
+  'coreErr.project.datesRequired': '项目计划起止日期不能为空。',
+  'coreErr.project.createFailed': '项目创建失败。',
+  'coreErr.project.notFound': '未找到该项目，可能已被删除。',
+  'coreErr.project.deleteFailedRolledBack': '项目删除失败，数据已回滚。',
+  'coreErr.contract.recognitionWriteFailed': '合同识别记录写入失败。',
+  'coreErr.contract.recognitionReadFailed': '合同识别记录读取失败。',
+  'coreErr.contract.listReadFailed': '合同记录列表读取失败。',
+  'coreErr.admin.exportFailed': '全量导出失败。',
+  'coreErr.admin.importFailedRolledBack': '备份导入失败：已整体回滚，本地数据未受影响。',
+  'coreErr.db.openFailed': '本地数据库打开失败，请检查浏览器隐私模式或存储空间。',
+  'coreErr.db.preMigrationBackupReadFailed': '迁移前备份读取失败。',
+  'coreErr.datasource.initFailed': '本地数据源初始化失败。',
 } as const;
 
 /** core 分片 · 英文（每个 zh 键都必须有对应英文，漏一个 = 编译错） */
@@ -227,4 +244,21 @@ export const en = {
   'coreErr.writeback.decidedByRequired': 'Settling the write-back proposal as {status} requires a human decision: decidedBy is required (execution={executionId}).',
   'coreErr.writeback.updateFailed': 'Failed to update the write-back proposal.',
   'coreErr.writeback.listReadFailed': 'Failed to read the write-back proposal list.',
+
+  /* ── 项目 / 合同 / 管理 / 数据库 / 数据源（段 3 之二）── */
+  'coreErr.project.listReadFailed': 'Failed to read the project list.',
+  'coreErr.project.detailReadFailed': 'Failed to read the project details.',
+  'coreErr.project.nameRequired': 'Project name cannot be empty.',
+  'coreErr.project.datesRequired': 'The project planned start and end dates cannot be empty.',
+  'coreErr.project.createFailed': 'Failed to create the project.',
+  'coreErr.project.notFound': 'Project not found; it may have been deleted.',
+  'coreErr.project.deleteFailedRolledBack': 'Failed to delete the project; the data has been rolled back.',
+  'coreErr.contract.recognitionWriteFailed': 'Failed to write the contract recognition record.',
+  'coreErr.contract.recognitionReadFailed': 'Failed to read the contract recognition record.',
+  'coreErr.contract.listReadFailed': 'Failed to read the contract record list.',
+  'coreErr.admin.exportFailed': 'Full export failed.',
+  'coreErr.admin.importFailedRolledBack': 'Backup import failed: everything was rolled back; local data is unaffected.',
+  'coreErr.db.openFailed': 'Failed to open the local database; check private browsing mode or available storage.',
+  'coreErr.db.preMigrationBackupReadFailed': 'Failed to read the pre-migration backup.',
+  'coreErr.datasource.initFailed': 'Failed to initialize the local data source.',
 } as const;

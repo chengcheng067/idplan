@@ -14,7 +14,7 @@ import type {
   Task,
   WritebackProposal,
 } from '../../types/entities';
-import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
+import { coreError, ChangxiaErrorCode } from '../../types/enums';
 import { BACKUP_SCHEMA_VERSION } from '../../services/backup.service';
 import type { IAdminRepository } from '../interfaces';
 import { ALL_TABLE_NAMES, type AllTableName, type ChangxiaDatabase } from './dexie.database';
@@ -88,7 +88,7 @@ export class LocalAdminRepository implements IAdminRepository {
         },
       };
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '全量导出失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.admin.exportFailed', undefined, err);
     }
   }
 
@@ -213,11 +213,7 @@ export class LocalAdminRepository implements IAdminRepository {
         }
       });
     } catch (err) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Storage,
-        '备份导入失败：已整体回滚，本地数据未受影响。',
-        err,
-      );
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.admin.importFailedRolledBack', undefined, err,);
     }
     return { renumbered };
   }

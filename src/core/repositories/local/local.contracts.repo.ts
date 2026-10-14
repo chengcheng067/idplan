@@ -1,4 +1,4 @@
-import { ChangxiaError, ChangxiaErrorCode } from '../../types/enums';
+import { coreError, ChangxiaErrorCode } from '../../types/enums';
 import type { ContractRecord } from '../../types/entities';
 import type { IContractsRepository } from '../interfaces';
 import type { ChangxiaDatabase } from './dexie.database';
@@ -19,7 +19,7 @@ export class LocalContractsRepository implements IContractsRepository {
       await this.db.contracts.add(record);
       return record;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '合同识别记录写入失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.contract.recognitionWriteFailed', undefined, err);
     }
   }
 
@@ -27,7 +27,7 @@ export class LocalContractsRepository implements IContractsRepository {
     try {
       return (await this.db.contracts.get(id)) ?? null;
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '合同识别记录读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.contract.recognitionReadFailed', undefined, err);
     }
   }
 
@@ -45,7 +45,7 @@ export class LocalContractsRepository implements IContractsRepository {
       const rows = await this.db.contracts.toArray();
       return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     } catch (err) {
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '合同记录列表读取失败。', err);
+      throw coreError(ChangxiaErrorCode.Storage, 'coreErr.contract.listReadFailed', undefined, err);
     }
   }
 }
