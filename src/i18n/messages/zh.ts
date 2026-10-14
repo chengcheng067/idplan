@@ -1599,11 +1599,28 @@ export type MessageKey = keyof typeof zhMessages;
  * ── 真实机理（我第一版猜错了，是变异自证纠正的，记在这里免得下一个人重踩）──
  * 分片若写成 `export const zh: Record<string, string> = {…}`：
  *   · `keyof typeof zhMessages` **不会**退化成 `string` —— TypeScript 在对象 spread 里会
- *     **丢掉**下标签名 ⇒「断言 keyof 不是 string」那种写法**永远不响**，是个假锁；
+ *     **丢掉**下标签名 ⇒ **把断言挂在「合并表」`keyof typeof zhMessages` 上那种写法
+ *     永远不响，是个假锁**；
  *   · 真实后果是分片里的键被**静默吞掉**：既不在 `MessageKey` 里，`en.ts` 也**不会**
  *     要求它们 ⇒「漏一个英文键 = 编译错」这条安全网对该分片**整体失效**。
  * 下面的断言把这件事变成编译错：`string extends K` 为真时结果是 `never`，
  * 而 `const x: never = true` 直接报错（正常形态结果是 `true`，赋 `true` 合法）。
+ *
+ * ★ **订正（2026-10-15 · 分片独立复核实测）**：上一段那个「假锁」**只针对「挂到合并表」的写法**，
+ *   不要读成「本文件的断言没用」—— 本文件的断言挂在**每一片自己的 `keyof`** 上
+ *   （`_ShardKeysUi` / `_ShardKeysPrintUi` / `_ShardKeysCore` / `_ShardKeysMisc`），
+ *   **它会响**。实测（给 `parts/misc.ts` 的 `zh` 加 `: Record<string, string>`）：
+ *     · 该片的 `keyof typeof zhMisc` **确实**退化成 `string` ⇒ 断言当场报
+ *       `src/i18n/messages/zh.ts(1608,7): error TS2322: Type 'true' is not assignable to type 'never'.`；
+ *     · 同一次变异还连带 **117 条**调用点报错（键退出 `MessageKey`，`t('wizard.…')` 全红），
+ *       合计 **118 条**。
+ *   ⇒ 「注解加宽」这件事**既不静默、也不会毫无信号**。
+ *   ⚠️ 但**有一种组合是真静默**：**注解加宽 ∧ 同一片同时缺一个 en 键** ——
+ *      此时 `en.ts` 的「缺键」报错会**消失**（实测错误数 1 → 0）。那条是**独立**的一道网
+ *      （`en.ts` 的 `Record<MessageKey, string>`），验安全网必须**两条链分开验**。
+ *   ⚠️ 另：这一格的编译期断言**只在 `tsconfig.tests.json` / `tsconfig.json` 跑 tsc 时才生效**；
+ *      `tsconfig.json` 的 exclude 含 `tests`，而**本文件在 `src`** ⇒ 它在第一道门里能看见
+ *      （但**测试侧**的同类断言不在）。三部口径见本报告 `i18n-消息表分片-复核-B.md`。
  * 变异 M2a（空表加注解）/ M2b（注解 + 有键）都实测报错，见提交说明。
  */
 type _ShardKeysLiteral<T extends string> = string extends T ? never : true;
