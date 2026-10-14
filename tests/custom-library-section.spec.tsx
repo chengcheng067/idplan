@@ -33,6 +33,23 @@ vi.mock('../src/hooks/useRepos', () => ({
 }));
 
 import { CustomLibrarySection } from '../src/components/settings/CustomLibrarySection';
+import { catalogOf, setLang } from '../src/i18n';
+
+/**
+ * 恢复出厂中文。
+ * ⚠️ 本 spec 的 ⑦ 会切到英文 —— 语言是 `src/i18n/lang.ts` 的**模块级单例**，而
+ * `vite.config.ts` 配的是 `pool:'threads' + singleThread:true`（全部 spec 共用**一个
+ * 进程**）⇒ 不回收就会让**后面每一个文件**都跑在英文下（「单跑绿 / 全量红」的第三个根，
+ * 见 `tests/setup.ts` 顶部那段）。故 `beforeEach` + `afterEach` 双向复位。
+ */
+function resetLang(): void {
+  setLang('zh');
+  try {
+    localStorage.removeItem('idplan-lang');
+  } catch {
+    /* 忽略：存储不可用时仅本会话生效 */
+  }
+}
 
 const GOOD_LIB = {
   schema: 'idplan-custom-library/v1',
@@ -98,6 +115,11 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
   let clipboard: { writeText: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
+    // 复位也包 act：`renderInto` **不 unmount**（root 被丢弃、只把容器从 DOM 摘掉），
+    // 上一用例的组件树仍订阅着语言 store ⇒ 不包 act 就是「未包 act 的状态更新」告警。
+    act(() => {
+      resetLang();
+    });
     stored = [];
     settingsSet.mockClear();
     settingsGet.mockClear();
@@ -115,6 +137,10 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
     container.remove();
     vi.restoreAllMocks();
     Reflect.deleteProperty(navigator, 'clipboard');
+    // 同上：复位语言若把 store 从 en 切回 zh，会 emit 给**仍挂载**的组件 ⇒ 必须包 act
+    act(() => {
+      resetLang();
+    });
   });
 
   it('① 三步常驻条 + 主按钮形态：pine 主「复制提示词」/ 次「导入行业包」', async () => {
@@ -205,14 +231,27 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
     expect(written.map((l) => l.name).sort()).toEqual(['新库', '旧库']);
     // 列表行出现新包 + 导出按钮
     expect(btn(container, '新库') ?? container.textContent?.includes('新库')).toBeTruthy();
-    expect(container.querySelector('button[aria-label="导出行业包 新库"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="library-export-新库"]')).toBeTruthy();
   });
 
   it('⑤ 已导入行「导出」下载该包 JSON', async () => {
     stored = [{ ...GOOD_LIB, name: '已有库X', importedAt: '2026-10-01T00:00:00.000Z' }];
     await renderInto(container);
-    const exportBtn = container.querySelector('button[aria-label="导出行业包 已有库X"]') as HTMLButtonElement;
+    const exportBtn = container.querySelector(
+      '[data-testid="library-export-已有库X"]',
+    ) as HTMLButtonElement;
     expect(exportBtn).toBeTruthy();
+    /*
+     * ★ 升级锁（2026-10-14 语言切换批）：原断言是
+     *   `querySelector('button[aria-label="导出行业包 已有库X"]')` —— **拿中文 aria 当定位**。
+     *   那是哑雷：aria 取值已改走 `t('library.exportAria', { name })`，切英文即变
+     *   `Export industry library 已有库X` ⇒ 这条选择器在英文态永远找不到元素（且失败会
+     *   伪装成「按钮不存在」）。改成两层：① 用与语言无关的 data- 钩子定位；
+     *   ② 把「可见名」单独断言成**消息表里那句**（表里有这句 + 页面确实消费该键）。
+     */
+    expect(exportBtn.getAttribute('aria-label')).toBe(
+      catalogOf('zh')['library.exportAria'].replace('{name}', '已有库X'),
+    );
     await act(async () => {
       exportBtn.click();
     });
@@ -301,5 +340,57 @@ describe('CustomLibrarySection · 她反馈 #6.2 新流程', () => {
     expect(settingsSet).toHaveBeenCalledTimes(2);
     expect(text, '第二次成功：失败卡让位给成功确认卡').not.toContain('写入本地存储失败');
     expect(text).toContain('新库');
+  });
+
+  /*
+    ══════════════════════════════════════════════════════════════════════════
+    ★ ⑦ 切语言的**唯一**易漏点：`useCallback` 的 `t`-deps 陷阱（2026-10-14）
+    ══════════════════════════════════════════════════════════════════════════
+    病灶：`useLang()` 给的 `t` 是 `useCallback(..., [lang])` ⇒ **切语言时换新身份**。
+    组件里 `const onCopyPrompt = useCallback(..., [note, attachRef, libs])`
+    （漏了 `t`）会永久捕获**挂载那一刻的 t**（语言在闭包里定格）⇒ 切英文后
+    **界面是英文、toast 仍是中文**。
+
+    为什么必须单独一条：这种形状**在中文态下完全看不出来**（默认语言就是中文，
+    「捕获旧 t」与「每次取当下 t」在中文下给出同一个结果），只有「渲染后再切语言、
+    再触发回调」这一个序列能分辨。它是本仓最怕的那类假绿。
+    （第 5 条用例已经证明「渲染期正文」会跟着语言变 —— useLang 订阅正常工作；
+      它**证明不了**回调闭包里的 `t` 是新的。两条判据各管一段。）
+
+    判据：同一枚按钮点两次 —— ① 中文态点 ⇒ flash 是中文那句；② 切 en 再点
+    ⇒ flash 必须是**英文表里那句**（不是中文那句，也不是空的）。
+  */
+  it('⑦ 回调里取词必须跟随语言（守住 useCallback 的 t-deps 陷阱）', async () => {
+    await renderInto(container);
+    const zhCopy = catalogOf('zh')['library.flash.copied'];
+    const enCopy = catalogOf('en')['library.flash.copied'];
+    expect(zhCopy).not.toBe(enCopy);
+
+    // ① 中文态：flash = 中文那句
+    await act(async () => {
+      mustBtn(container, '复制提示词').click();
+    });
+    expect(container.textContent).toContain(zhCopy);
+
+    // ② 切英文（组件已挂载 ⇒ 走的是「重渲染 + 回调闭包」这条路，不是重新挂载）
+    await act(async () => {
+      setLang('en');
+    });
+    // 正文确实换了语言（useLang 订阅正常工作）
+    expect(container.textContent).toContain(catalogOf('en')['library.title']);
+    expect(container.textContent).not.toContain(catalogOf('zh')['library.title']);
+
+    // ③ 再点同一枚按钮（用与语言无关的钩子定位）：flash 必须是**英文**那句
+    const copyBtn = container.querySelector('[data-testid="library-copy-prompt"]') as HTMLButtonElement;
+    expect(copyBtn, '前置失效：找不到复制按钮').toBeTruthy();
+    await act(async () => {
+      copyBtn.click();
+    });
+    const text = container.textContent ?? '';
+    expect(
+      text,
+      '回调捕获了旧语言的 t（切英文后 toast 仍是中文 = 界面英文、反馈中文）',
+    ).toContain(enCopy);
+    expect(text, '旧语言那句不许还在').not.toContain(zhCopy);
   });
 });

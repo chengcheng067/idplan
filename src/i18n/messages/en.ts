@@ -1056,4 +1056,44 @@ export const enMessages: Record<MessageKey, string> = {
   'plugin.notice.uninstalled': 'Uninstalled “{name}” — it disappears from the list after a restart',
   'plugin.toast.installed': 'Plugin “{name}” installed; takes effect after a restart',
   'plugin.toast.uninstalled': 'Plugin “{name}” uninstalled',
+
+  /* ══════════════ 笔 1-④：Settings ▸ Industry & Templates ▸ Custom industry library ══════════════ */
+  /* ⚠️ `library.step.*` 三条的前导空格是**必需的**：它们紧跟在 JSX 里的硬编码序号
+     `<span>①</span>` 之后，而中文态那里不能有空格（`①复制提示词`）⇒ 空格只能放英文取值
+     （见本文件头 ⑤ 的「例外」）。`library.introPost` 同理由 `<code>usr.</code>` 引出。 */
+  'library.title': 'Custom industry library',
+  'library.step.copy': ' Copy the prompt',
+  'library.step.agent': ' Send it to your Agent and have it reply with a single JSON',
+  'library.step.back': ' Import it back here',
+  'library.introPre':
+    'Import a custom industry library (JSON ≤ {size}): your own stages and presets, shown under the chosen industry when creating a project. Stage keys must start with ',
+  'library.introPost': ' to be accepted.',
+  'library.noteLabel': 'Describe your industry in one sentence',
+  'library.notePlaceholder':
+    'Describe your industry in one sentence (optional; it is appended to the prompt)',
+  'library.copyPrompt': 'Copy prompt',
+  'library.import': 'Import library',
+  'library.importAria': 'Import industry library',
+  'library.attachRef': 'Attach my current libraries ({count}) as reference',
+  'library.flash.copied':
+    'Prompt copied — paste it to your Agent and have it reply with a single JSON',
+  'library.flash.copyFailed':
+    'Copy failed: the browser did not grant clipboard access. Select the text and copy it manually.',
+  'library.flash.errorsCopied':
+    'Error list copied — paste it back to your Agent to fix them one by one',
+  'library.err.tooLarge': 'The file exceeds the {max} limit (currently {size}KB)',
+  'library.err.notJson':
+    'This file is not valid JSON — your Agent probably printed explanation text around the JSON',
+  'library.err.persistFailed':
+    'Failed to write to local storage (possibly out of space). The library was not imported.',
+  'library.exported': 'Exported “{name}.json”',
+  'library.importedCard':
+    'Imported “{name}”: {items} stages · {presets} presets · filed under the “{domain}” domain — pick “{domain}” when creating a project to see it. Importing the same name again updates this pack.',
+  'library.closeSuccessAria': 'Dismiss the import success message',
+  'library.copyAllErrors': 'Copy all errors and paste them back to your Agent',
+  'library.rowMeta': '{items} stages · {presets} presets · {domain}',
+  'library.exportAria': 'Export industry library {name}',
+  'library.removeAria': 'Delete industry library {name}',
+  'library.empty':
+    'No industry library imported yet. Presets for the 9 built-in domains ship with the app.',
 };

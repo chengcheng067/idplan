@@ -17,6 +17,22 @@
  * 读侧一律 normalizeCustomLibraries（绝不抛错）——坏条静静跳过不白屏。
  * 落盘后，建档弹窗的套餐选择即可见自定义 preset（消费侧接线见
  * StageSelectPanel——自定义 preset 叠加在内置套餐后）。
+ *
+ * ── v1.0.0.0009 中英切换（笔 1-④）──
+ * 本文件所有**界面文案**改走 `t()`（键前缀 `library.`）。三条取词纪律：
+ *   ① ★ 5 个 `useCallback`（onCopyPrompt / onCopyErrors / onPick / onExport / onRemove）
+ *      里，**前四个都取词** —— `t` 是 `useCallback(…, [lang])` 的**新身份**，故取词的
+ *      那几个**必须把 `t` 加进 deps**。漏了它回调会捕获旧语言：切英文后 toast 仍是
+ *      中文、而界面看着是英文（本仓最怕的那类假绿）。`onRemove` 不取词（只写库 +
+ *      落中文日志）⇒ deps 不变。
+ *   ② `domainLabel()` 是 `core/template/stage-library` 的**模块级函数、不订阅语言**
+ *      ⇒ 它在英文态仍返回中文板块名。**这是有意的**：内置行业名（两套）属
+ *      team-lead 未拍板的 C 灰区，本笔一个字都不动。
+ *   ③ 三处**有意保留中文**（都不是界面文案，各自理由见就地注释）：
+ *      失败预告卡与逐条 issue（取值来自 `custom-library.prompt.ts`，属**提示词载荷**
+ *      模块，不在本笔范围）／发给 Agent 的失败回帖（同上，是载荷不是界面）／
+ *      4 条 `logUser(...)`（team-lead 已裁定：日志分组键与消息维持中文，
+ *      与阶段预设名同类——落库的、又被当显示用的值）。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -42,6 +58,7 @@ import {
   translateCustomLibraryIssue,
 } from '../../core/template/custom-library.prompt';
 import { domainLabel } from '../../core/template/stage-library';
+import { useLang } from '../../i18n';
 import { logUser } from '../../core/services/log.service';
 
 const MAX_MB_LABEL = `${Math.floor(CUSTOM_LIBRARY_MAX_BYTES / 1024)}KB`;
@@ -78,6 +95,7 @@ interface Flash {
 }
 
 export function CustomLibrarySection(): JSX.Element {
+  const { t } = useLang();
   const repos = useRepos();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [libs, setLibs] = useState<StoredCustomLibrary[]>([]);
@@ -113,26 +131,28 @@ export function CustomLibrarySection(): JSX.Element {
     const ok = await copyText(text);
     setFlash(
       ok
-        ? { tone: 'ok', text: '提示词已复制——去粘贴给你的 Agent，让它只回一个 JSON' }
-        : { tone: 'warn', text: '复制失败：浏览器未授权剪贴板，请手动选择文本复制' },
+        ? { tone: 'ok', text: t('library.flash.copied') }
+        : { tone: 'warn', text: t('library.flash.copyFailed') },
     );
+    // 有意不翻：logUser 的分组键与消息（team-lead 裁定，见文件头 ③）
     if (ok) logUser('行业库', `复制生成 prompt${attachRef ? `（附 ${libs.length} 个现有库作参照）` : ''}`);
-  }, [note, attachRef, libs]);
+  }, [note, attachRef, libs, t]);
 
   /** ⑥-3 一键复制全部错误，贴回给 Agent 修正——闭环回流程 ② */
   const onCopyErrors = useCallback(async () => {
     if (!failure) return;
     const text =
       failure.kind === 'file'
-        ? `我的行业包导入失败了：${failure.message}。请修复后重新只输出一个 JSON 代码块。`
+        ? // 有意不翻：这段是**发给用户自己 Agent 的载荷**（贴进剪贴板），不是界面文案
+          `我的行业包导入失败了：${failure.message}。请修复后重新只输出一个 JSON 代码块。`
         : buildAgentFeedbackText(failure.issues, failure.raw);
     const ok = await copyText(text);
     setFlash(
       ok
-        ? { tone: 'ok', text: '错误清单已复制——贴回给 Agent 让它按条修正' }
-        : { tone: 'warn', text: '复制失败：浏览器未授权剪贴板，请手动选择文本复制' },
+        ? { tone: 'ok', text: t('library.flash.errorsCopied') }
+        : { tone: 'warn', text: t('library.flash.copyFailed') },
     );
-  }, [failure]);
+  }, [failure, t]);
 
   /**
    * ③ 导回校验：文件级 / schema 级失败分流，成功落确认卡。
@@ -149,7 +169,10 @@ export function CustomLibrarySection(): JSX.Element {
         if (file.size > CUSTOM_LIBRARY_MAX_BYTES) {
           setFailure({
             kind: 'file',
-            message: `文件超过 ${MAX_MB_LABEL} 上限（当前 ${Math.ceil(file.size / 1024)}KB）`,
+            message: t('library.err.tooLarge', {
+              max: MAX_MB_LABEL,
+              size: Math.ceil(file.size / 1024),
+            }),
           });
           return;
         }
@@ -160,7 +183,7 @@ export function CustomLibrarySection(): JSX.Element {
         } catch {
           setFailure({
             kind: 'file',
-            message: '这个文件不是合法的 JSON——多半是 Agent 在 JSON 前后多输出了说明文字',
+            message: t('library.err.notJson'),
           });
           return;
         }
@@ -199,14 +222,14 @@ export function CustomLibrarySection(): JSX.Element {
         */
         setFailure({
           kind: 'file',
-          message: '写入本地存储失败（可能空间不足），行业包未导入。',
+          message: t('library.err.persistFailed'),
         });
       } finally {
         setBusy(false);
         if (fileRef.current) fileRef.current.value = '';
       }
     },
-    [repos],
+    [repos, t],
   );
 
   const onExport = useCallback((lib: StoredCustomLibrary) => {
@@ -221,6 +244,7 @@ export function CustomLibrarySection(): JSX.Element {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
+    // 有意不翻：这是**落盘的默认文件名**（数据侧），不是界面文案
     a.download = `${lib.name || '行业库'}.json`;
     a.style.display = 'none';
     document.body.appendChild(a);
@@ -228,9 +252,9 @@ export function CustomLibrarySection(): JSX.Element {
     document.body.removeChild(a);
     // ★ revoke 让出一拍：同步 revoke 与下载启动存在竞态（同 backup.service 手法）
     setTimeout(() => URL.revokeObjectURL(url), 0);
-    setFlash({ tone: 'ok', text: `已导出「${lib.name}.json」` });
+    setFlash({ tone: 'ok', text: t('library.exported', { name: lib.name }) });
     logUser('行业库', `导出「${lib.name}」`);
-  }, []);
+  }, [t]);
 
   const onRemove = useCallback(
     async (name: string) => {
@@ -257,48 +281,50 @@ export function CustomLibrarySection(): JSX.Element {
       <div className="mb-2 flex items-center gap-1.5">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
           <FileJson size={14} className="text-mist" aria-hidden />
-          行业库（自定义）
+          {t('library.title')}
         </h3>
       </div>
       <div className="rounded-[10px] border border-line bg-cream/50 px-3 py-2.5 text-xs leading-6">
         {/* ① 三步常驻条（她 #6.2：先教怎么生出文件，再谈导入） */}
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-mist">
           <li className="flex items-center gap-1">
-            <span className="text-mist/70">①</span>复制提示词
+            <span className="text-mist/70">①</span>{t('library.step.copy')}
           </li>
           <li aria-hidden className="text-mist/50">→</li>
           <li className="flex items-center gap-1">
-            <span className="text-mist/70">②</span>发给你的 Agent，让它只回一个 JSON
+            <span className="text-mist/70">②</span>{t('library.step.agent')}
           </li>
           <li aria-hidden className="text-mist/50">→</li>
           <li className="flex items-center gap-1">
-            <span className="text-mist/70">③</span>导回这里
+            <span className="text-mist/70">③</span>{t('library.step.back')}
           </li>
         </ol>
         <p className="mt-1 text-[11px] text-mist">
-          导入自定义行业包（JSON ≤ {MAX_MB_LABEL}）：自己的阶段项与套餐，建档时出现在所选行业下。
-          阶段 key 须以 <code className="rounded bg-line/60 px-1">usr.</code> 开头。
+          {t('library.introPre', { size: MAX_MB_LABEL })}
+          <code className="rounded bg-line/60 px-1">usr.</code>
+          {t('library.introPost')}
         </p>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="custom-library-note">
-            用一句话说你的行业
+            {t('library.noteLabel')}
           </label>
           <textarea
             id="custom-library-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}
-            placeholder="用一句话说你的行业（可选，会拼进提示词）"
+            placeholder={t('library.notePlaceholder')}
             className="soft-input min-w-[220px] flex-1 rounded-[10px] px-2.5 py-1.5 text-xs leading-5 text-ink outline-none placeholder:text-mist/70"
           />
           <button
             type="button"
+            data-testid="library-copy-prompt"
             onClick={() => void onCopyPrompt()}
             className="soft-btn-primary soft-press soft-focus-halo flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             <ClipboardCopy size={13} aria-hidden />
-            复制提示词
+            {t('library.copyPrompt')}
           </button>
           <button
             type="button"
@@ -307,14 +333,14 @@ export function CustomLibrarySection(): JSX.Element {
             className="soft-btn-ghost soft-focus-halo flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
           >
             {busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Plus size={13} aria-hidden />}
-            导入行业包
+            {t('library.import')}
           </button>
           <input
             ref={fileRef}
             type="file"
             accept="application/json,.json"
             className="hidden"
-            aria-label="导入行业包"
+            aria-label={t('library.importAria')}
             onChange={(e) => void onPick(e.target.files?.[0])}
           />
           <label className="flex items-center gap-1.5 text-[11px] text-mist">
@@ -324,7 +350,7 @@ export function CustomLibrarySection(): JSX.Element {
               onChange={(e) => setAttachRef(e.target.checked)}
               className="accent-pine"
             />
-            附上我当前的行业库（{libs.length} 个）作参照
+            {t('library.attachRef', { count: libs.length })}
           </label>
         </div>
 
@@ -346,14 +372,18 @@ export function CustomLibrarySection(): JSX.Element {
           <div className="mt-2 flex items-start gap-2 rounded-md border border-pine/40 bg-pine-soft px-2 py-1.5 text-[11px] text-ink">
             <Check size={13} className="mt-0.5 shrink-0 text-pine" aria-hidden />
             <p className="leading-5">
-              已导入「{success.name}」：{success.items} 个阶段 · {success.presets} 个套餐 · 挂在「
-              {domainLabel(success.domain)}」板块下——建档时选「
-              {domainLabel(success.domain)}」就能看到。同名再导入 = 更新这一包。
+              {t('library.importedCard', {
+                name: success.name,
+                items: success.items,
+                presets: success.presets,
+                // 有意不翻：domainLabel 是模块级、不订阅语言（内置行业名属未拍板的 C 灰区）
+                domain: domainLabel(success.domain),
+              })}
             </p>
             <button
               type="button"
               onClick={() => setSuccess(null)}
-              aria-label="关闭导入成功提示"
+              aria-label={t('library.closeSuccessAria')}
               className="ml-auto shrink-0 rounded-md p-0.5 text-mist transition-colors hover:bg-sand hover:text-ink"
             >
               <X size={12} aria-hidden />
@@ -364,6 +394,7 @@ export function CustomLibrarySection(): JSX.Element {
         {/* ⑥ 失败路径人话化：预告卡（最常见三种）→ 逐条错误 → 一键复制 */}
         {failure && (
           <div className="mt-2 space-y-1.5">
+            {/* 有意不翻：h.title / h.fix 的取值来自 custom-library.prompt.ts（提示词载荷模块，不在本笔范围） */}
             <ul className="space-y-0.5 rounded-md border border-amber/40 bg-amber-soft px-2 py-1.5 text-[11px] text-ink">
               {CUSTOM_LIBRARY_ERROR_HINTS.map((h) => (
                 <li key={h.id} className="leading-5">
@@ -382,7 +413,7 @@ export function CustomLibrarySection(): JSX.Element {
               className="soft-btn-ghost soft-focus-halo flex items-center gap-1.5 rounded-[10px] px-2 py-1 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
             >
               <Copy size={12} aria-hidden />
-              一键复制全部错误，贴回给 Agent
+              {t('library.copyAllErrors')}
             </button>
           </div>
         )}
@@ -393,20 +424,27 @@ export function CustomLibrarySection(): JSX.Element {
               <li key={lib.name} className="flex items-center gap-2 py-1.5">
                 <span className="truncate text-ink">{lib.name}</span>
                 <span className="shrink-0 text-[10px] text-mist">
-                  {lib.items.length} 阶段 · {lib.presets.length} 套餐 · {domainLabel(lib.domain)}
+                  {t('library.rowMeta', {
+                    items: lib.items.length,
+                    presets: lib.presets.length,
+                    // 有意不翻：同 success 卡（domainLabel 不订阅语言）
+                    domain: domainLabel(lib.domain),
+                  })}
                 </span>
                 <button
                   type="button"
+                  data-testid={`library-export-${lib.name}`}
                   onClick={() => onExport(lib)}
-                  aria-label={`导出行业包 ${lib.name}`}
+                  aria-label={t('library.exportAria', { name: lib.name })}
                   className="ml-auto shrink-0 rounded-md p-1 text-mist transition-colors hover:bg-sand hover:text-pine"
                 >
                   <Download size={13} aria-hidden />
                 </button>
                 <button
                   type="button"
+                  data-testid={`library-remove-${lib.name}`}
                   onClick={() => void onRemove(lib.name)}
-                  aria-label={`删除行业包 ${lib.name}`}
+                  aria-label={t('library.removeAria', { name: lib.name })}
                   className="shrink-0 rounded-md p-1 text-mist transition-colors hover:bg-sand hover:text-clay"
                 >
                   <Trash2 size={13} aria-hidden />
@@ -418,7 +456,7 @@ export function CustomLibrarySection(): JSX.Element {
 
         {libs.length === 0 && !failure && (
           <p className={cn('mt-2 text-[11px] text-mist')}>
-            还没有导入行业包。内置 9 个主板块的套餐随包分发。
+            {t('library.empty')}
           </p>
         )}
       </div>

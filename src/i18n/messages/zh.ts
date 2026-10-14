@@ -1046,6 +1046,36 @@ export const zhMessages = {
   'plugin.notice.uninstalled': '已卸载「{name}」——重启后从列表消失',
   'plugin.toast.installed': '插件「{name}」已安装，重启后生效',
   'plugin.toast.uninstalled': '插件「{name}」已卸载',
+
+  /* ══════════════ 笔 1-④：设置 ▸ 行业与模板 ▸ 行业库（自定义） ══════════════ */
+  'library.title': '行业库（自定义）',
+  'library.step.copy': '复制提示词',
+  'library.step.agent': '发给你的 Agent，让它只回一个 JSON',
+  'library.step.back': '导回这里',
+  'library.introPre':
+    '导入自定义行业包（JSON ≤ {size}）：自己的阶段项与套餐，建档时出现在所选行业下。 阶段 key 须以 ',
+  'library.introPost': ' 开头。',
+  'library.noteLabel': '用一句话说你的行业',
+  'library.notePlaceholder': '用一句话说你的行业（可选，会拼进提示词）',
+  'library.copyPrompt': '复制提示词',
+  'library.import': '导入行业包',
+  'library.importAria': '导入行业包',
+  'library.attachRef': '附上我当前的行业库（{count} 个）作参照',
+  'library.flash.copied': '提示词已复制——去粘贴给你的 Agent，让它只回一个 JSON',
+  'library.flash.copyFailed': '复制失败：浏览器未授权剪贴板，请手动选择文本复制',
+  'library.flash.errorsCopied': '错误清单已复制——贴回给 Agent 让它按条修正',
+  'library.err.tooLarge': '文件超过 {max} 上限（当前 {size}KB）',
+  'library.err.notJson': '这个文件不是合法的 JSON——多半是 Agent 在 JSON 前后多输出了说明文字',
+  'library.err.persistFailed': '写入本地存储失败（可能空间不足），行业包未导入。',
+  'library.exported': '已导出「{name}.json」',
+  'library.importedCard':
+    '已导入「{name}」：{items} 个阶段 · {presets} 个套餐 · 挂在「{domain}」板块下——建档时选「{domain}」就能看到。同名再导入 = 更新这一包。',
+  'library.closeSuccessAria': '关闭导入成功提示',
+  'library.copyAllErrors': '一键复制全部错误，贴回给 Agent',
+  'library.rowMeta': '{items} 阶段 · {presets} 套餐 · {domain}',
+  'library.exportAria': '导出行业包 {name}',
+  'library.removeAria': '删除行业包 {name}',
+  'library.empty': '还没有导入行业包。内置 9 个主板块的套餐随包分发。',
 } as const;
 
 /**
