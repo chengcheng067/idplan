@@ -793,7 +793,7 @@ describe('② 阶段卡 · 移动 MobileStageList 序号块与进度条', () => 
  *     MonthDayCell 折叠态色点 + 当日浮层（DayItemsPopover）清单色点 → 必须挂 data-stage-key
  * ══════════════════════════════════════════════════════════════════════════════ */
 
-const MONTH_META = buildMonthMeta('2026-06', '2026-06-10');
+const MONTH_META = buildMonthMeta('2026-06', 'zh', '2026-06-10');
 
 const CAL_DAY: GridDay = {
   date: '2026-06-10',

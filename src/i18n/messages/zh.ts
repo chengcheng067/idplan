@@ -1281,6 +1281,39 @@ export const zhMessages = {
   'calendar.legend.holidayHint': '节日名 = 法定节假日 · 班 = 调休补班日',
   'calendar.dayPopover.closeAria': '关闭当日清单',
   'calendar.dayPopover.footHint': 'Esc 或点击外部关闭',
+
+  /* ══════════ 笔 3-B：月历日期格 / 当日浮层头部 / 节假日徽章 ══════════ */
+  /* ⚠️ 本区块**刻意不含**日期格式串（`8 月 28 日` / `2026年9月`）——
+     日期拼接口径只有 `src/i18n/date.ts` 一处出处，塞进消息表就是本仓第三种日期格式。
+     故 `calendar.dayPopover.head` 的 `{date}` 由 `formatDayMonthLocalized` 填。 */
+  'calendar.dayPopover.head': '{date} · {n} 个项目',
+  /* 日期格 aria-label = `${日期}${今天?}${，N 个项目}${，节日/补班}` ——
+     三段各自成键（**分隔符也住在键里**）：英文用半角逗号、中文用全角，
+     代码里不出现任何硬编码标点。 */
+  'calendar.cell.todaySuffix': '（今天）',
+  'calendar.cell.countSuffix': '，{n} 个项目',
+  'calendar.cell.holidaySuffix': '，{label}',
+  'calendar.cell.mobileCount': '{n} 个',
+  'calendar.cell.openProject': '打开项目 {name}',
+  'calendar.cell.expandAria': '展开 {n} 个项目的当日清单',
+  'calendar.cell.overflow': '…+{n} 个项目',
+  /* ★ 调休补班徽章的那**一个字**：屏幕侧的唯一出处。
+     纸面（打印）另有出处 `core/holidays/holidayLabelOf`（打印稿恒中文，不走消息表）——
+     两边**逐字不漂**由 `tests/calendar-month-cell-i18n.spec.tsx` 的断言锁住。 */
+  'calendar.holiday.makeupBadge': '班',
+  'calendar.holiday.makeupAria': '调休补班日',
+
+  /* 内置节假日表（`src/core/holidays/cn-20xx.json`）里 8 个去重节日名。
+     键表在 `src/i18n/labels.ts` 的 `CN_HOLIDAY_NAME_KEYS`（枚举值 → 文案键的既定形态）；
+     zh 取值必须与 JSON 里的 `name` **逐字相同**（有 spec 锁）。 */
+  'holiday.cn.newYear': '元旦',
+  'holiday.cn.springFestival': '春节',
+  'holiday.cn.qingming': '清明节',
+  'holiday.cn.laborDay': '劳动节',
+  'holiday.cn.dragonBoat': '端午节',
+  'holiday.cn.midAutumn': '中秋节',
+  'holiday.cn.nationalDay': '国庆节',
+  'holiday.cn.nationalDayMidAutumn': '国庆节·中秋节',
 } as const;
 
 /**

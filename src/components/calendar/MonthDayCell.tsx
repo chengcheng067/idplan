@@ -22,6 +22,7 @@
 import { useRef, type KeyboardEvent } from 'react';
 
 import { cn } from '../../lib/cn';
+import { calendarStatusLabel, useLang } from '../../i18n';
 import {
   MOBILE_CELL_H,
   DESKTOP_CELL_H,
@@ -40,9 +41,26 @@ const COLLAPSE_LIMIT_MOBILE = 2;
 /** 清单行里的阶段名：激活阶段优先，否则按状态给一个可读词，绝不留空 */
 export function stageLabelOf(entry: CalendarEntry): string {
   if (entry.activeStage) return entry.activeStage.name;
-  if (entry.status === 'completed') return '已完成';
-  if (entry.status === 'not_started') return '未开始';
-  return '进行中';
+  if (entry.status === 'completed') return calendarStatusLabel('completed');
+  if (entry.status === 'not_started') return calendarStatusLabel('not_started');
+  return calendarStatusLabel('in_progress');
+}
+
+/**
+ * 日期格上的节假日徽章（**已取词**的两件事捆在一起传）。
+ *
+ * ⚠️ 为什么是「一个对象两个字段」而不是两个独立 prop：
+ *   `text`（显示字：节日名 / 「班」）与 `makeup`（aria 说的是「调休补班日」还是节日名）
+ *   来自**同一个事实**（`core/holidays` 的 `holidayMarkOf`）。拆成两个 prop 时，
+ *   调用方漏传/传错一个就会出现「显示『班』但读屏念节日名」——捆在一起则不可能失配。
+ * ⚠️ `text` 是**已按界面语言取好词**的字：本组件不碰 `core/holidays`，
+ *   也不做 `=== '班'` 这类**字符串比较**（那正是英文态会静默失效的哑雷形态）。
+ */
+export interface DayHolidayBadge {
+  /** 显示字（屏幕侧：`cnHolidayNameLabel(name)` 或 `t('calendar.holiday.makeupBadge')`） */
+  text: string;
+  /** 是否「调休补班」徽章（决定 aria 读「调休补班日」还是节日名） */
+  makeup: boolean;
 }
 
 /** 折叠态单条条目：色点 + 项目名（B 方案画布定稿形态） */
@@ -55,14 +73,28 @@ function EntryRow({
   isMobile: boolean;
   onOpen(projectId: string): void;
 }) {
+  /* 取词 + 订阅语言变化：`t()` 本身不订阅（见 src/i18n/useLang.ts 纪律 ②），
+     本组件没有别的订阅点，必须自己调一次，否则切语言后 aria-label 不更新。 */
+  const { t } = useLang();
   return (
     <button
       type="button"
+      /*
+       * ★ 语言无关定位钩子（笔 3-B）：`aria-label` 已改走消息表
+       * （`calendar.cell.openProject`），英文态会变成 `Open project X` ——
+       * 拿中文那半截当选择器的（`button[aria-label^="打开项目"]`）会**静默失配**，
+       * 且失败会伪装成「按钮不存在」。故另给两个不改语言、只承担事实的钩子：
+       *   `data-entry-open`  = 「这是一条打开项目的条目」（定位用）
+       *   `data-entry-name`  = 项目名（取名字用，免去从 aria 里正则剥前缀）
+       * aria 的无障碍契约仍在（下一行），只是不再当选择器。
+       */
+      data-entry-open=""
+      data-entry-name={entry.project.name}
       onClick={(ev) => {
         ev.stopPropagation();
         onOpen(entry.project.id);
       }}
-      aria-label={`打开项目 ${entry.project.name}`}
+      aria-label={t('calendar.cell.openProject', { name: entry.project.name })}
       title={`${entry.project.name} · ${stageLabelOf(entry)} · ${Math.round(entry.percent)}%`}
       className="flex min-w-0 items-center gap-[5px] text-left"
     >
@@ -89,7 +121,7 @@ export function MonthDayCell({
   items,
   isRest,
   isMobile,
-  holidayLabel,
+  holiday,
   tabStop,
   onCellFocus,
   onSelect,
@@ -102,11 +134,12 @@ export function MonthDayCell({
   isRest: boolean;
   isMobile: boolean;
   /**
-   * 节日名小字（法定节假日）或「班」（调休补班日）；null = 不显示。
-   * 由调用方从内置节假日表（core/holidays）按 skipHolidays 开关取——
+   * 节日名小字（法定节假日）或「班」徽章（调休补班日）；null/缺省 = 不显示。
+   * 由调用方从内置节假日表（core/holidays）按 skipHolidays 开关取**事实**，
+   * 再在渲染侧取词（笔 3-B：本组件不再做 `=== '班'` 比较，见 `DayHolidayBadge`）。
    * 与底纹同源：节假日 isRestDay 自动 true 落 bg-rest-day，补班日落 bg-paper。
    */
-  holidayLabel?: string | null;
+  holiday?: DayHolidayBadge | null;
   /**
    * ★ F7（键盘可达）：本格是不是整张网格里**唯一**的 Tab 停靠点（roving tabindex）。
    * 由调用方按「上次聚焦的日期 → 今天 → 本月第一天」派生，保证任何月份下恰有一格可 Tab 到。
@@ -127,10 +160,24 @@ export function MonthDayCell({
   onOpenDay(items: CalendarEntry[], anchorEl: HTMLElement): void;
 }): JSX.Element {
   const cellRef = useRef<HTMLDivElement>(null);
+  /* 取词 + 订阅语言变化（本格自己的 aria 与计数小字都要随语言变） */
+  const { t } = useLang();
 
   const limit = isMobile ? COLLAPSE_LIMIT_MOBILE : COLLAPSE_LIMIT_DESKTOP;
   const crowded = items.length > limit;
   const hiddenCount = Math.max(0, items.length - limit);
+
+  /**
+   * 格子的可访问名：`${日期}${（今天）}${，N 个项目}${，节日/补班}`。
+   * 三段都是消息表取值（**分隔符也住在键里**：中文全角、英文半角），
+   * 本文件里**不出现**任何硬编码标点或中文 —— 否则英文态会拼出半中半英的读音。
+   */
+  const holidayAria = holiday ? (holiday.makeup ? t('calendar.holiday.makeupAria') : holiday.text) : '';
+  const cellAriaLabel =
+    day.date +
+    (day.isToday ? t('calendar.cell.todaySuffix') : '') +
+    t('calendar.cell.countSuffix', { n: items.length }) +
+    (holidayAria ? t('calendar.cell.holidaySuffix', { label: holidayAria }) : '');
 
   /**
    * ★ F7 · 网格键盘导航（修前：日格是 `<div onClick>` —— 无 role/tabIndex/键处理，
@@ -195,6 +242,17 @@ export function MonthDayCell({
       data-day-cell=""
       data-day-date={day.date}
       /*
+       * ★ 语言无关的「格事实」钩子（笔 3-B）：`aria-label` 已整条走消息表，
+       * 英文态形如 `2026-10-01 (today), 9 projects` ——
+       * 凡是「从中文 aria 里正则抠出今天 / 条目数」的地方（`aria-label*="（今天）"`、
+       * `/，(\d+) 个项目/`）在英文态都会**静默抠不到**。故把这两件事实各给一个钩子：
+       *   `data-day-today`  = 该格是今天（属性存在即真，无值）
+       *   `data-day-count`  = 该格条目数（数字，取数不再依赖文案）
+       * aria 的无障碍契约仍在（下方 `aria-label={cellAriaLabel}`），只是不再当数据源。
+       */
+      data-day-today={day.isToday ? '' : undefined}
+      data-day-count={items.length}
+      /*
        * ★ F7：`aria-label` 此前挂在一个**不可聚焦**的 div 上（等于白写）；补 role+tabIndex
        * 之后它才真正被读屏播报。role 用 button（本仓既有范式）而非 gridcell：
        * 42 格无 row 包裹（`grid-cols-7` 要求格是容器的直接子元素），
@@ -239,9 +297,7 @@ export function MonthDayCell({
          用 height 而非 min-height —— 定稿铁律 1「格子高度恒定」：内容超限裁掉，
          任何交互（含「+N」浮层）都不允许把格子撑高。 */
       style={{ height: isMobile ? MOBILE_CELL_H : DESKTOP_CELL_H }}
-      aria-label={`${day.date}${day.isToday ? '（今天）' : ''}，${items.length} 个项目${
-        holidayLabel ? `，${holidayLabel === '班' ? '调休补班日' : holidayLabel}` : ''
-      }`}
+      aria-label={cellAriaLabel}
     >
       {/* 日号（今天 = 18×18 pine 圆点 + 白字）；色点轴线对齐日号字轴（§3.5.1）
           ⚠️ 2026-10-08 二次拍板：定稿当时把「今天」改成自然绿 #2F9E77（--cal-today），
@@ -259,15 +315,17 @@ export function MonthDayCell({
               {day.day}
             </span>
           )}
-          {holidayLabel && (
-            <span className="truncate text-[9px] leading-tight text-mist" title={holidayLabel}>
-              {holidayLabel}
+          {holiday && (
+            <span className="truncate text-[9px] leading-tight text-mist" title={holiday.text}>
+              {holiday.text}
             </span>
           )}
         </span>
         {/* 移动端双行小字（画板 19）：不拥挤时给一个计数，拥挤时由「+N」承担 */}
         {isMobile && items.length > 0 && !crowded && (
-          <span className="whitespace-nowrap text-[9px] leading-tight text-mist">{items.length} 个</span>
+          <span className="whitespace-nowrap text-[9px] leading-tight text-mist">
+            {t('calendar.cell.mobileCount', { n: items.length })}
+          </span>
         )}
       </div>
 
@@ -294,10 +352,15 @@ export function MonthDayCell({
                 const anchor = cellRef.current;
                 if (anchor) onOpenDay(items, anchor);
               }}
-              aria-label={`展开 ${hiddenCount} 个项目的当日清单`}
+              /* ★ 语言无关定位钩子（笔 3-B）：aria 已走消息表（`calendar.cell.expandAria`），
+                 英文态形如 `Expand the day list of 3 projects` —— 拿「展开」当选择器的
+                 （`button[aria-label^="展开"]`）会静默失配。取「+N」入口请用本钩子。 */
+              data-day-expand=""
+              aria-label={t('calendar.cell.expandAria', { n: hiddenCount })}
               className="min-w-0 truncate text-left text-[10px] text-mist transition-colors hover:text-ink md:text-[11px]"
             >
-              {isMobile ? `+${hiddenCount}` : `…+${hiddenCount} 个项目`}
+              {/* 窄窗是纯计数 `+N`（无单位字，不随语言变）；桌面带「…+N 个项目」 */}
+              {isMobile ? `+${hiddenCount}` : t('calendar.cell.overflow', { n: hiddenCount })}
             </button>
           )}
         </div>

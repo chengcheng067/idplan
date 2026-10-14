@@ -1295,4 +1295,26 @@ export const enMessages: Record<MessageKey, string> = {
   'calendar.legend.holidayHint': 'Holiday name = public holiday · Work = make-up workday',
   'calendar.dayPopover.closeAria': 'Close the day list',
   'calendar.dayPopover.footHint': 'Press Esc or click outside to close',
+
+  /* ══════════ Batch 3-B: month cell / day popover head / holiday badge ══════════ */
+  'calendar.dayPopover.head': '{date} · {n} projects',
+  'calendar.cell.todaySuffix': ' (today)',
+  'calendar.cell.countSuffix': ', {n} projects',
+  'calendar.cell.holidaySuffix': ', {label}',
+  'calendar.cell.mobileCount': '{n} items',
+  'calendar.cell.openProject': 'Open project {name}',
+  'calendar.cell.expandAria': 'Expand the day list of {n} projects',
+  'calendar.cell.overflow': '…+{n} more',
+  'calendar.holiday.makeupBadge': 'Work',
+  'calendar.holiday.makeupAria': 'make-up workday',
+
+  /* Chinese public-holiday names (8 distinct values across cn-2025/2026.json) */
+  'holiday.cn.newYear': "New Year's Day",
+  'holiday.cn.springFestival': 'Spring Festival',
+  'holiday.cn.qingming': 'Qingming Festival',
+  'holiday.cn.laborDay': 'Labour Day',
+  'holiday.cn.dragonBoat': 'Dragon Boat Festival',
+  'holiday.cn.midAutumn': 'Mid-Autumn Festival',
+  'holiday.cn.nationalDay': 'National Day',
+  'holiday.cn.nationalDayMidAutumn': 'National Day · Mid-Autumn Festival',
 };

@@ -338,7 +338,29 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  * 改后 = **107**，且该文件已从命中清单里消失 ⇒ 差额与上面那一条**一一对应**。
  * 口径同上一段：**真的转换了锚点**才允许下调。
  */
-const BASELINE = 107;
+/*
+ * ── 2026-10-14 · i18n 笔 3-B：107 → **106**（−1，归属清楚） ──
+ * 本笔把月历日期格整条 `aria-label` 改走消息表（`calendar.cell.*`），
+ * 因而 `MonthDayCell` 的条目钮 `aria-label` 由写死的 `` `打开项目 ${name}` ``
+ * 变成 `t('calendar.cell.openProject', { name })` ⇒ `tests/v07-dline-shell.spec.ts`
+ * 里那条 `page.locator(\`[aria-label="打开项目 ${PROJECT_NAME}"]\`)` **必须**换掉
+ * （英文态取值为 `Open project X`，选择器静默失配）。
+ *   · 定位改用钩子 `[data-entry-open][data-entry-name="…"]`（与语言无关）；
+ *   · 另在**新 spec** `tests/calendar-month-cell-i18n.spec.tsx` 里把
+ *     「aria 的人话 = 消息表那句」逐条断言回头（钩子只证结构，证明不了页面消费了哪个键）。
+ *
+ * **实测**：改前 `scanRepo` = 107（`v07-dline-shell.spec.ts:1027` 占 1 处），
+ * 改后 = **106**，两次命中的 `文件:行` 集合**逐条相同，只少了上面那一行**
+ * （该文件 20 → 19 处；仓内其余文件计数一字未动）⇒ 差额一一对应。
+ *
+ * ⚠️ 同笔还顺手拆掉了一批**不在本守卫判据面内**的中文 aria 依赖（`aria-label^="…"` /
+ *   从 aria 文案里正则抠数 —— 判据只认 `aria-label=` 精确形态，`^=` 一律看不见）：
+ *   共 20 处换成 `data-day-today` / `data-day-count` / `data-entry-open` /
+ *   `data-entry-name` / `data-day-expand`。它们**不影响本数字**（本来就没被算进来），
+ *   但同属「英文态静默失配」的哑雷 —— 登记在此，免得下一个人以为本笔只改了 1 处。
+ *   口径同上一段：**真的转换了锚点**才允许下调。
+ */
+const BASELINE = 106;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());

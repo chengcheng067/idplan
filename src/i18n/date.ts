@@ -75,3 +75,22 @@ export function formatSelectedDateLocalized(iso: string, lang: string): string {
   if (lang === 'en') return d.format('MMM D, dddd');
   return `${d.month() + 1}月${d.date()}日，${ZH_WEEKDAYS[d.day()]}`;
 }
+
+/**
+ * 「日 + 月」短标签（无星期、无年份）：zh `8 月 28 日` / en `Aug 28`。
+ *
+ * ── 为什么是**第三条**出口，而不是复用上面那条 ──
+ * `DayItemsPopover` 的头部取值是 **`8 月 28 日`（数字与「月/日」之间带空格）**，
+ * 而 `formatSelectedDateLocalized` 给的是 **`8月28日，星期五`（不带空格、带星期）**。
+ * 两者**不是同一个取值** ⇒ 直接复用会改 zh 渲染（zh 逐字不变是硬线）。
+ *
+ * ⚠️ 它属于**本模块**（`src/i18n/date.ts`）而不是消息表：日期拼接口径只能有一处出处，
+ *    塞进消息表就变成「本仓第三种月份/日期格式」（前两条见本文件头）。
+ * ⚠️ 与上面那条同样是**屏幕出口**：`lang` 必填、无缺省值（漏传即编译错）。
+ *    纸面（打印）不用它 —— 打印稿的日期走 `formatMonthYear` 那一支。
+ */
+export function formatDayMonthLocalized(iso: string, lang: string): string {
+  const d = dayjs(iso);
+  if (lang === 'en') return d.format('MMM D');
+  return `${d.month() + 1} 月 ${d.date()} 日`;
+}

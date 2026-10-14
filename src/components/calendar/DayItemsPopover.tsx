@@ -28,7 +28,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 import { cn } from '../../lib/cn';
-import { useLang } from '../../i18n';
+import { formatDayMonthLocalized, useLang } from '../../i18n';
 import type { GridDay } from './calendarGrid';
 import type { CalendarEntry } from './calendarMath';
 import { EntryDot } from './EntryDot';
@@ -88,9 +88,10 @@ export function DayItemsPopover({
   onClose(): void;
 }): JSX.Element {
   // i18n 笔 3-A：订阅语言变化 + 取词（本组件此前无 i18n）。
-  // ⚠️ 头部那行 `headLabel` 里的日期部分**本笔未动**（它要走既有的日期出口，
-  //    见 `src/i18n/date.ts` 与接任包 3.1 的「不许造第三份月份格式」）—— 单独一块处理。
-  const { t } = useLang();
+  // i18n 笔 3-B：头部那行日期也接上了 —— 日期部分走 `src/i18n/date.ts` 的屏幕出口
+  //   （**不在消息表里建日期格式串**：那会造出本仓第三份月份/日期格式，
+  //    见 `src/i18n/date.ts` 文件头与接任包 §3.1 的「日期格式不要新建消息键」）。
+  const { t, lang } = useLang();
   const panelRef = useRef<HTMLDivElement>(null);
   const sheet = useIsSheet();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -100,8 +101,18 @@ export function DayItemsPopover({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  const month = Number(day.date.slice(5, 7));
-  const headLabel = `${month} 月 ${day.day} 日 · ${items.length} 个项目`;
+  /**
+   * 头部：zh `8 月 28 日 · 5 个项目` / en `Aug 28 · 5 projects`。
+   *
+   * ⚠️ 日期**不是** `formatSelectedDateLocalized`（那条给的是 `8月28日，星期五`：
+   *    不带空格、带星期）—— 原实现的取值是 `8 月 28 日`，直接换会改 zh 渲染。
+   *    故本笔在同一个日期模块里补了同类出口 `formatDayMonthLocalized`（两条取值都保住）。
+   * ⚠️ 「· N 个项目」走消息表，**分隔符住在取值里**（英文用半角、中文用全角）。
+   */
+  const headLabel = t('calendar.dayPopover.head', {
+    date: formatDayMonthLocalized(day.date, lang),
+    n: items.length,
+  });
 
   /**
    * 焦点管理（规格 §5.3），两件事分成两个 effect——

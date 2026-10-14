@@ -52,7 +52,9 @@ export type { MessageKey } from './messages/zh';
 export {
   AGENT_TERM_KEYS,
   CALENDAR_STATUS_KEYS,
+  CN_HOLIDAY_NAME_KEYS,
   calendarStatusLabel,
+  cnHolidayNameLabel,
   INGRESS_MODE_KEYS,
   MEMBER_ACTOR_KIND_KEYS,
   MEMBER_ROLE_KEYS,
@@ -84,6 +86,7 @@ export {
  * 纸面/屏幕两条出口的结构性理由见 `./date.ts` 文件头。
  */
 export {
+  formatDayMonthLocalized,
   formatMonthPart,
   formatMonthPartLocalized,
   formatMonthYear,

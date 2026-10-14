@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { maskComments } from './helpers/cjk-locator-guard';
 
 import {
+  formatDayMonthLocalized,
   formatMonthPart,
   formatMonthPartLocalized,
   formatMonthYear,
@@ -43,6 +44,17 @@ describe('⑤e 日期出口 · 取值锁（zh 逐字 + en 稳定）', () => {
     expect(formatSelectedDateLocalized('2026-08-28', 'zh')).toBe('8月28日，星期五');
     expect(formatSelectedDateLocalized('2026-08-28', 'en')).toBe('Aug 28, Friday');
   });
+
+  it('日+月短标签（笔 3-B · 当日浮层头部）：zh「8 月 28 日」/ en「Aug 28」', () => {
+    /*
+     * ⚠️ 这三条取值**不是**上面那条的另一半：原实现是 `` `${month} 月 ${day} 日` ``
+     * ——数字与「月/日」之间**带空格、且无星期**。直接复用 `formatSelectedDateLocalized`
+     * 会把 zh 渲染改字（zh 逐字不变是硬线），故本笔补了这条同类出口并把两条取值都钉住。
+     */
+    expect(formatDayMonthLocalized('2026-08-28', 'zh'), 'zh 逐字（含两处空格）').toBe('8 月 28 日');
+    expect(formatDayMonthLocalized('2026-08-28', 'en')).toBe('Aug 28');
+    expect(formatDayMonthLocalized('2026-01-05', 'zh')).toBe('1 月 5 日');
+  });
 });
 
 describe('⑤e 日期出口 · 结构锁（两条出口不是一回事）', () => {
@@ -52,6 +64,8 @@ describe('⑤e 日期出口 · 结构锁（两条出口不是一回事）', () =
     expect(formatMonthYearLocalized.length, '屏幕月刻度必须显式接 lang').toBe(2);
     expect(formatMonthPartLocalized.length).toBe(3);
     expect(formatSelectedDateLocalized.length).toBe(2);
+    /* 笔 3-B 新增：同属屏幕出口 ⇒ 同样必须显式接 lang（无缺省值） */
+    expect(formatDayMonthLocalized.length, '屏幕日+月短标签必须显式接 lang').toBe(2);
   });
 
   it('★ 纸面调用点不碰 Localized 那一支（零豁免）', () => {

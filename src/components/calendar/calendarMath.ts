@@ -7,6 +7,13 @@ import {
   type ProjectCalendarStatus,
 } from '../../lib/progress';
 import { isWorkday } from '../../lib/workdays';
+/*
+ * ⚠️ 本文件仍**不持有文案、不读语言状态**（下面只有一条计算路径）——`lang` 是**入参**。
+ * 唯一的外部依赖是 `src/i18n/date.ts` 的**纯格式化出口**「日期拼接口径的单一份出处」
+ * （不在本文件手写 `YYYY年M月`：那样会造出第二份月份格式，见该文件头）。
+ * 该出口不订阅语言、不读 store，纯函数 ⇒ 本文件「零 DOM」的性质不受影响。
+ */
+import { formatMonthYearLocalized } from '../../i18n';
 import { COMPLETED_COLOR, NOT_STARTED_COLOR, OVERDUE_COLOR, stageColorOf } from './calendarColors';
 
 /**
@@ -23,14 +30,15 @@ export interface CalendarFilters {
   stage: Set<number>;
 }
 
-/** 当月元信息（列数、边界、今日位置） */
+/** 月份元信息（列数、边界、今日位置） */
 export interface CalendarMonthMeta {
   year: number;
   month: number; // 1-12
   monthStart: string; // 'YYYY-MM-01'
   monthEnd: string; // 'YYYY-MM-DD'（末日）
   daysInMonth: number; // 28~31
-  label: string; // '2026年9月'
+  /** 月刻度标签（**随语言**：zh `2026年9月` / en `Sep 2026`）——由入参 `lang` 决定 */
+  label: string;
   todayIso: string;
   todayInMonth: boolean;
   todayIdx: number; // 0-based 当日列序号；不在当月为 -1
@@ -76,8 +84,24 @@ export const CALENDAR_FILTER_STATUSES: readonly CalendarFilterStatus[] = [
   'not_started',
 ];
 
-/** 由 'YYYY-MM' 构建当月元信息（todayIso 可注入，测试幂等） */
-export function buildMonthMeta(calendarMonth: string, todayIso?: string): CalendarMonthMeta {
+/**
+ * 由 'YYYY-MM' 构建当月元信息（todayIso 可注入，测试幂等）。
+ *
+ * ── ★ `lang` **必填、插在第二位、绝不给缺省值** ──
+ * `meta.label` 被**两类要求相反的读者**消费：
+ *   · **屏幕**（`MonthlyCalendarView`）⇒ 必须跟随界面语言；
+ *   · **纸面**（`CalendarPrintPage`）⇒ 必须恒中文（打印稿语言不随界面语言变）。
+ * 若写成 `lang = 'zh'`，漏传会**静默退化成中文** —— 那正是「那条错的分支看起来是对的」
+ * 的形态（本仓已在 `src/i18n/date.ts` 的文件头为同一件事写过一次；上一笔给取词函数
+ * 加缺省值，把 `document` 拖进服务端 program，红了 2 条 TS2584）。
+ * ⇒ 参数必填后，「漏传」变成编译错；纸面调用点必须**显式**写出 `'zh'`，
+ *   那行 `'zh'` 就是产品规则在代码里的可见位置。
+ */
+export function buildMonthMeta(
+  calendarMonth: string,
+  lang: string,
+  todayIso?: string,
+): CalendarMonthMeta {
   const ym = /^(\d{4})-(\d{2})$/.exec(calendarMonth);
   const year = ym ? Number(ym[1]) : dayjs().year();
   const month = ym ? Number(ym[2]) : dayjs().month() + 1;
@@ -88,7 +112,8 @@ export function buildMonthMeta(calendarMonth: string, todayIso?: string): Calend
   const today = todayIso ?? dayjs().format('YYYY-MM-DD');
   const todayInMonth = today >= monthStart && today <= monthEnd;
   const todayIdx = todayInMonth ? totalDaysInclusive(monthStart, today) - 1 : -1;
-  const label = dayjs(monthStart).format('YYYY年M月');
+  /* 日期拼接口径**只有** `src/i18n/date.ts` 一处出处（不在本文件手写格式串） */
+  const label = formatMonthYearLocalized(monthStart, lang);
   return { year, month, monthStart, monthEnd, daysInMonth, label, todayIso: today, todayInMonth, todayIdx };
 }
 

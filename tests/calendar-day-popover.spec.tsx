@@ -229,16 +229,16 @@ afterEach(() => {
 
 /* ══════════════════════════════ 查询助手 ══════════════════════════════ */
 
-/** 今天格（aria-label 形如「YYYY-MM-DD（今天），9 个项目」） */
+/** 今天格（笔 3-B 起用语言无关钩子 `data-day-today`；aria 整条已走消息表） */
 function todayCell(): HTMLElement {
-  const el = document.querySelector<HTMLElement>('[data-day-cell][aria-label*="（今天）"]');
+  const el = document.querySelector<HTMLElement>('[data-day-cell][data-day-today]');
   if (el === null) throw new Error('未找到今天日期格（月历应渲染含今天的月份）');
   return el;
 }
 
-/** 今天格的「+N」入口（aria-label「展开 N 个项目的当日清单」，规格 §4） */
+/** 今天格的「+N」入口（笔 3-B 起用钩子 `data-day-expand`，规格 §4） */
 function moreBtn(): HTMLElement {
-  const b = todayCell().querySelector<HTMLElement>('button[aria-label^="展开"]');
+  const b = todayCell().querySelector<HTMLElement>('button[data-day-expand]');
   if (b === null) {
     throw new Error(`今天格未出现「+N」入口（应 ${CROWD} 条 > 桌面阈值 4）`);
   }

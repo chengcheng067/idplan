@@ -127,13 +127,39 @@ export function cnHolidayYears(): number[] {
 }
 
 /**
- * 月历小字标签（显示面唯一入口）：
+ * 显示面「徽章**事实**」：调休补班日 / 法定节假日 / 都不是。
+ *
+ * ── 为什么要有这一支（而不只用下面那个返回字符串的）──
+ * 屏幕侧（月历日期格）的徽章文案必须**跟随界面语言**，而本目录属共享内核面：
+ * 它不该 import i18n（会把 `src/i18n/lang.ts` 的 `document` 拖进服务端 tsc program），
+ * 也不该持有界面文案。故这里只交出**事实**，取词由**调用点**（渲染层）完成 ——
+ * 「取词在写入点 / 渲染侧」的既有形态（见 `src/core/execution/execution-recovery.ts`）。
+ * `kind: 'holiday'` 的 `name` 仍是数据（JSON 的节日名，两种语言下都要有出处）。
+ *
+ * ⚠️ 屏幕侧的「补班」徽章字住在消息表键 `calendar.holiday.makeupBadge`；
+ *    纸面（打印稿，恒中文）走下面的 `holidayLabelOf`。两处**逐字不漂**由
+ *    `tests/calendar-month-cell-i18n.spec.tsx` 的断言钉住（不是靠人记）。
+ */
+export type HolidayMark = { kind: 'holiday'; name: string } | { kind: 'makeupWorkday' };
+
+/** 显示面「徽章事实」唯一入口：节日名 / 调休补班 / 都不是（优先节日名，同一口径见下） */
+export function holidayMarkOf(index: CnHolidayIndex, date: string): HolidayMark | null {
+  const name = index.nameOf.get(date);
+  if (name !== undefined) return { kind: 'holiday', name };
+  if (index.workdays.has(date)) return { kind: 'makeupWorkday' };
+  return null;
+}
+
+/**
+ * 月历小字标签（**纸面出口**，恒中文）：
  * 法定节假日 ⇒ 节日名；调休补班日 ⇒ '班'；都不是 ⇒ null。
  * 与判定面解耦——用户手填覆盖时判定可能变、标签仍报全国客观安排。
+ *
+ * ⚠️ 屏幕侧**不要**用它（它拿不到界面语言）——那一路走 `holidayMarkOf` + 消息表。
+ *    本函数保留给打印稿（产品规则：打印稿语言不随界面语言变）与既有单测。
  */
 export function holidayLabelOf(index: CnHolidayIndex, date: string): string | null {
-  const name = index.nameOf.get(date);
-  if (name !== undefined) return name;
-  if (index.workdays.has(date)) return '班';
-  return null;
+  const mark = holidayMarkOf(index, date);
+  if (mark === null) return null;
+  return mark.kind === 'holiday' ? mark.name : '班';
 }

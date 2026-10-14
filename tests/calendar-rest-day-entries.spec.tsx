@@ -253,7 +253,7 @@ afterEach(() => {
 
 /* ══════════════════════════════ 查询助手 ══════════════════════════════ */
 
-/** 日期格（aria-label 形如「YYYY-MM-DD，N 个项目[, 国庆节]」） */
+/** 日期格（aria 以日期开头，两种语言下都是；取数请用 `data-day-*` 钩子） */
 function cellOf(date: string): HTMLElement {
   const el = [...document.querySelectorAll<HTMLElement>('[data-day-cell]')].find((c) =>
     (c.getAttribute('aria-label') ?? '').startsWith(date),
@@ -262,21 +262,21 @@ function cellOf(date: string): HTMLElement {
   return el;
 }
 
-/** 格内条目按钮（aria-label「打开项目 X」） */
+/** 格内条目按钮（笔 3-B 起用钩子 `data-entry-open` / `data-entry-name`） */
 function entryButtons(cell: HTMLElement): HTMLElement[] {
-  return [...cell.querySelectorAll<HTMLElement>('button[aria-label^="打开项目"]')];
+  return [...cell.querySelectorAll<HTMLElement>('button[data-entry-open]')];
 }
 
 /** 格内条目名清单 */
 function entryNames(cell: HTMLElement): string[] {
-  return entryButtons(cell).map((b) => (b.getAttribute('aria-label') ?? '').replace(/^打开项目\s*/, ''));
+  return entryButtons(cell).map((b) => b.getAttribute('data-entry-name') ?? '');
 }
 
-/** aria-label 里的条目数（「，N 个项目」） */
+/** 格内条目数（走 `data-day-count` 钩子；不再从 aria 文案里正则抠） */
 function entryCount(cell: HTMLElement): number {
-  const m = /，(\d+) 个项目/.exec(cell.getAttribute('aria-label') ?? '');
-  if (m === null) throw new Error(`aria-label 解析不出条目数：${cell.getAttribute('aria-label')}`);
-  return Number(m[1]);
+  const raw = cell.getAttribute('data-day-count');
+  if (raw === null) throw new Error(`日期格没有 data-day-count 钩子：${cell.getAttribute('aria-label')}`);
+  return Number(raw);
 }
 
 /** 切视图密度（点分段 ⇒ onChange ⇒ 重渲染） */
@@ -309,7 +309,7 @@ function agendaRows(): Element[] {
  * ═════════════════════════════════════════════════════════════════════════ */
 
 describe('① entryShowsOnDate：三种投影形态的纯函数判例', () => {
-  const meta = buildMonthMeta(MONTH, META_TODAY);
+  const meta = buildMonthMeta(MONTH, 'zh', META_TODAY);
   const entryOf = (projectId: string): CalendarEntry => {
     const { projects, stages } = buildFixture();
     const p = projects.find((x) => x.id === projectId);
@@ -378,7 +378,7 @@ describe('② 月历网格：国庆七天零条目（底纹/节日名照旧）�
       expect(cell.textContent, `${d} 应显示节日名小字`).toContain('国庆节');
       expect(entryCount(cell), `${d} 不得有工作条目（她的原话：「国庆节却被排满了」）`).toBe(0);
       expect(entryButtons(cell), `${d} 不得有条目按钮`).toHaveLength(0);
-      expect(cell.querySelector('button[aria-label^="展开"]'), `${d} 不得出现「+N」`).toBeNull();
+      expect(cell.querySelector('button[data-day-expand]'), `${d} 不得出现「+N」`).toBeNull();
     }
   });
 

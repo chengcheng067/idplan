@@ -127,6 +127,43 @@ export function calendarStatusLabel(status: ProjectCalendarStatus): string {
   return t(CALENDAR_STATUS_KEYS[status]);
 }
 
+/* ═══════════ 中国法定节假日名（内置表 cn-20xx.json 的 8 个去重取值） ═══════════
+ *
+ * ── 为什么是一张**表**而不是把键写进 JSON ──
+ * 节日名住在 `src/core/holidays/cn-2025.json` / `cn-2026.json` 的 `name` 字段里，
+ * 那份数据同时被**两个消费面**读：
+ *   · **纸面**（`CalendarPrintPage`）⇒ 打印稿恒中文，直接显示 `name`（本批不动）；
+ *   · **屏幕**（月历日期格小字）⇒ 必须跟随界面语言。
+ * ⇒ 与 `src/core/types/enums.ts` 那五张标签表**逐条同形**：数据侧保留中文原值，
+ *    React 层用一张「值 → 文案键」的表取词。理由也同款（见本文件头）：
+ *    数据文件在共享内核面内，不该 import 渲染层，也不该自己读语言状态。
+ *
+ * ── 键**故意**以中文原值为键（不是索引、不是日期）──
+ * 合并节（2025 的 `国庆节·中秋节`）与单节共用同一形态；将来新增年份若带来新节名，
+ * `tests/calendar-month-cell-i18n.spec.tsx` 的**覆盖率锁**会当场红（它遍历两个 JSON
+ * 的全部去重 `name`，逐个要求本表有条目），逼出「新增一条键」而不是静默漏翻。
+ * 未知值回落原文（与 `writebackStatusLabel` 同一口径：宁可显示中文，也不显示空）。
+ */
+export const CN_HOLIDAY_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
+  元旦: 'holiday.cn.newYear',
+  春节: 'holiday.cn.springFestival',
+  清明节: 'holiday.cn.qingming',
+  劳动节: 'holiday.cn.laborDay',
+  端午节: 'holiday.cn.dragonBoat',
+  中秋节: 'holiday.cn.midAutumn',
+  国庆节: 'holiday.cn.nationalDay',
+  '国庆节·中秋节': 'holiday.cn.nationalDayMidAutumn',
+};
+
+/**
+ * 节日名取词（**屏幕侧唯一入口**）。未知值原样回显。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function cnHolidayNameLabel(name: string): string {
+  const key = CN_HOLIDAY_NAME_KEYS[name];
+  return key === undefined ? name : t(key);
+}
+
 /* ─────────────────── Agent 写回状态五态（AgentActivityStream） ─────────────────── */
 
 export const WRITEBACK_STATUS_KEYS: Record<string, MessageKey> = {

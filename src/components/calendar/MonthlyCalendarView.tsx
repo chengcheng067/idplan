@@ -15,7 +15,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRoleGuard, isRestrictedView, computeRelatedStageIds } from '../../hooks/useRoleGuard';
 import { cn } from '../../lib/cn';
 import { isRestDay } from '../../lib/workdays';
-import { cnHolidayIndex, holidayLabelOf } from '../../core/holidays';
+import { cnHolidayIndex, holidayMarkOf } from '../../core/holidays';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import {
   buildMonthMeta,
@@ -39,10 +39,11 @@ import { weekendHeaderColor } from './calendarColors';
 import { CalendarLegend } from './CalendarLegend';
 import { CalendarFilters as CalendarFilterPanel } from './CalendarFilters';
 import { CalendarEmptyStates, type EmptyKind } from './CalendarEmptyStates';
-import { MonthDayCell, stageLabelOf } from './MonthDayCell';
+import { MonthDayCell, stageLabelOf, type DayHolidayBadge } from './MonthDayCell';
 import { EntryDot } from './EntryDot';
 import { DayItemsPopover, type PopoverAnchorRect } from './DayItemsPopover';
 import {
+  cnHolidayNameLabel,
   formatSelectedDateLocalized,
   useLang,
   weekdayShortLabel,
@@ -173,7 +174,13 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
 
   const [density, setDensity] = useState<CalendarDensity>('month');
 
-  const meta: CalendarMonthMeta = useMemo(() => buildMonthMeta(calendarMonth), [calendarMonth]);
+  /* ★ `lang` 必填（笔 3-B）：`meta.label` 屏幕/纸面两类读者语言要求相反，
+     故 `buildMonthMeta` 的第二参**没有缺省值** —— 漏传即编译错，
+     纸面那一侧（CalendarPrintPage）必须显式写出 'zh'。 */
+  const meta: CalendarMonthMeta = useMemo(
+    () => buildMonthMeta(calendarMonth, lang),
+    [calendarMonth, lang],
+  );
   const active = useMemo(() => projects.filter((p) => p.status === 'active'), [projects]);
 
   const currentMemberId = currentMember?.id ?? null;
@@ -306,15 +313,29 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
   ]);
 
   /**
-   * 节日名查表（显示面）。仅 skipHolidays 开启时启用——开关关着就不会有合并，
+   * 节日名查表（**显示面**）。仅 skipHolidays 开启时启用——开关关着就不会有合并，
    * 显示节日名会造成「这天明明要上班却写着国庆节」的假信息。
    * 内置表一次展开（~60 天），按开关布尔 memo，不在渲染路径里反复建 Set。
+   *
+   * ★ 笔 3-B：本函数取的是**事实**（`holidayMarkOf`），文案在**这里**取词 ——
+   *   节日名走 `cnHolidayNameLabel`（键表在 `src/i18n/labels.ts`），
+   *   补班徽章走 `t('calendar.holiday.makeupBadge')`。
+   *   为什么不在组件里比较 `'班'`：那串一旦随语言变，比较会**静默失效**
+   *   （显示「班」但 aria 念节日名）——本笔把比较换成了布尔字段 `makeup`。
+   * ⚠️ `t` 与 `lang` 都进 deps：`t` 是 `useCallback(..., [lang])`，漏了就会
+   *   切语言后仍渲染旧语言（本仓最怕的「界面英文、一处中文」假绿）。
    */
-  const holidayLabelFn = useMemo(() => {
+  const holidayBadgeFn = useMemo(() => {
     if (rawRestPolicy.skipHolidays !== true) return null;
     const index = cnHolidayIndex();
-    return (date: string): string | null => holidayLabelOf(index, date);
-  }, [rawRestPolicy.skipHolidays]);
+    return (date: string): DayHolidayBadge | null => {
+      const mark = holidayMarkOf(index, date);
+      if (mark === null) return null;
+      return mark.kind === 'holiday'
+        ? { text: cnHolidayNameLabel(mark.name), makeup: false }
+        : { text: t('calendar.holiday.makeupBadge'), makeup: true };
+    };
+  }, [rawRestPolicy.skipHolidays, t]);
 
   /**
    * 当日条目（0.8.6.0009 起叠加**休息日过滤**）：色带区间命中只是第一条件，
@@ -388,7 +409,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
                此处 restPolicy = effectiveRestPolicy：skipHolidays 开时节假日自动落休息底纹。 */
             isRest={isRestDay(day.date, restPolicy)}
             isMobile={isMobile}
-            holidayLabel={holidayLabelFn?.(day.date) ?? null}
+            holiday={holidayBadgeFn?.(day.date) ?? null}
             tabStop={day.date === tabStop}
             onCellFocus={() => setRovingDate(day.date)}
             onSelect={() => setSelectedDate(day.date)}
@@ -463,7 +484,7 @@ export function MonthlyCalendarView({ onManual }: { onManual?(): void }): JSX.El
       </div>
 
       {/* ② 图例行（节日名小字在场时补一条文字说明） */}
-      <CalendarLegend showHolidayHint={holidayLabelFn !== null} />
+      <CalendarLegend showHolidayHint={holidayBadgeFn !== null} />
 
       {/* ③ 筛选行 */}
       <CalendarFilterPanel

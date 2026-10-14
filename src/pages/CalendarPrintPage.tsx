@@ -216,7 +216,10 @@ export function CalendarPrintPage(): JSX.Element {
   const entries = useMemo(() => {
     if (!project) return [];
     return months.map((m) => {
-      const meta = buildMonthMeta(m, todayIso);
+      /* ★ 纸面（笔 3-B）：`buildMonthMeta` 的第二参是**必填**的 `lang`，此处显式写 'zh' ——
+         打印稿的语言**不随界面语言变**（产品规则，见 `src/i18n/date.ts` 文件头）。
+         这行 `'zh'` 就是那条规则在代码里的可见位置；给它默认值会让「错的那一支」看起来是对的。 */
+      const meta = buildMonthMeta(m, 'zh', todayIso);
       // 「当前阶段 / 进度 / 剩余天数」同样按收窄后的集合算（否则概览行会报出成员看不到的阶段）
       const entry = computeCalendarEntry(project, scopedStages, meta);
       const grid = buildCalendarGrid(meta, todayIso, visibleStages);

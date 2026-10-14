@@ -145,7 +145,7 @@ describe('progress.computeProjectStatus / computeProjectPercent', () => {
 
 describe('calendarMath.buildMonthMeta / shiftMonth / clampDate', () => {
   it('2026-09 → 30 天，边界正确', () => {
-    const m = buildMonthMeta('2026-09', '2026-09-15');
+    const m = buildMonthMeta('2026-09', 'zh', '2026-09-15');
     expect(m.daysInMonth).toBe(30);
     expect(m.monthStart).toBe('2026-09-01');
     expect(m.monthEnd).toBe('2026-09-30');
@@ -153,7 +153,7 @@ describe('calendarMath.buildMonthMeta / shiftMonth / clampDate', () => {
     expect(m.todayIdx).toBe(14);
   });
   it('today 不在当月 → todayInMonth=false, todayIdx=-1', () => {
-    const m = buildMonthMeta('2026-10', '2026-09-15');
+    const m = buildMonthMeta('2026-10', 'zh', '2026-09-15');
     expect(m.todayInMonth).toBe(false);
     expect(m.todayIdx).toBe(-1);
   });
@@ -168,7 +168,7 @@ describe('calendarMath.buildMonthMeta / shiftMonth / clampDate', () => {
     expect(clampDate('2026-09-15', '2026-09-01', '2026-09-30')).toBe('2026-09-15');
   });
   it('dayIndexInMonth 0-based 列序号', () => {
-    const m = buildMonthMeta('2026-09');
+    const m = buildMonthMeta('2026-09', 'zh');
     expect(dayIndexInMonth('2026-09-01', m)).toBe(0);
     expect(dayIndexInMonth('2026-09-30', m)).toBe(29);
     expect(dayIndexInMonth('2026-08-01', m)).toBe(0); // 越界裁切
@@ -177,7 +177,7 @@ describe('calendarMath.buildMonthMeta / shiftMonth / clampDate', () => {
 });
 
 describe('calendarMath.computeCalendarEntry（PRD §4.1 / §4.2）', () => {
-  const meta = buildMonthMeta('2026-09', '2026-09-15');
+  const meta = buildMonthMeta('2026-09', 'zh', '2026-09-15');
 
   it('进行中：色带起点=阶段实际首日（早于计划基线则取阶段首）、终点=clamp(今日,阶段首,阶段末)、颜色=阶段九色（宽面变体）', () => {
     const p = makeProject({ plannedStartAt: '2026-09-05', plannedEndAt: '2026-09-30' });
@@ -240,7 +240,7 @@ describe('calendarMath.filterEntries（PRD §3.4 组间 AND / 组内 OR）', () 
   function entry(status: CalendarEntry['status'], stageIndex: number): CalendarEntry {
     const p = makeProject({});
     const stages = nineStages('2026-09-15');
-    const base = computeCalendarEntry(p, stages, buildMonthMeta('2026-09', '2026-09-15'));
+    const base = computeCalendarEntry(p, stages, buildMonthMeta('2026-09', 'zh', '2026-09-15'));
     return { ...base, status, filterStageIndex: stageIndex };
   }
   const entries = [entry('in_progress', 3), entry('overdue', 5), entry('completed', 9), entry('in_progress', 7)];

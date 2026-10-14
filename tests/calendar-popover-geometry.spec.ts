@@ -196,9 +196,9 @@ async function seedAndEnterCalendar(page: Page, base: string, fixture: string): 
 interface Rect { left: number; top: number; right: number; bottom: number; w: number; h: number }
 interface OpenMetrics {
   cellIndex: number;
-  cellLabel: string;      // 「YYYY-MM-DD，N 个项目」
+  cellLabel: string;      // 「YYYY-MM-DD…」+ 计数（计数另走 data-day-count）
   entryCount: number;     // aria-label 里的 N
-  moreText: string;       // 「…+N 个项目」
+  moreText: string;       // 「…+N 个项目」/「…+N more」
   hiddenCount: number;    // +N 的 N
   panel: Rect;
   panelKind: 'panel' | 'sheet';
@@ -230,13 +230,13 @@ async function openPopoverAt(page: Page, cellIndex: number, scrollCellToBottom =
     await page.waitForTimeout(200);
     const box = await page.evaluate((idx) => {
       const cells = document.querySelectorAll('[data-day-cell]') as unknown as HTMLElement[];
-      const btn = cells[idx]!.querySelector('button[aria-label^="展开"]') as HTMLElement;
+      const btn = cells[idx]!.querySelector('button[data-day-expand]') as HTMLElement;
       const r = btn.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }, cellIndex);
     await page.mouse.click(box.x, box.y);
   } else {
-    await page.locator('[data-day-cell]').nth(cellIndex).locator('button[aria-label^="展开"]').click();
+    await page.locator('[data-day-cell]').nth(cellIndex).locator('button[data-day-expand]').click();
   }
   await page.waitForFunction(
     () => {
@@ -257,11 +257,11 @@ async function openPopoverAt(page: Page, cellIndex: number, scrollCellToBottom =
     const cr = cellEl.getBoundingClientRect();
     const rows = Array.from(panel.querySelectorAll('[data-day-popover-list] button')) as HTMLElement[];
     const label = cellEl.getAttribute('aria-label') ?? '';
-    const moreBtn = cellEl.querySelector('button[aria-label^="展开"]') as HTMLElement;
+    const moreBtn = cellEl.querySelector('button[data-day-expand]') as HTMLElement;
     return {
       cellIndex: idx,
       cellLabel: label,
-      entryCount: Number(/，(\d+) 个项目/.exec(label)?.[1] ?? -1),
+      entryCount: Number(cellEl.getAttribute('data-day-count') ?? -1),
       moreText: moreBtn?.textContent ?? '',
       hiddenCount: Number(/\+(\d+)/.exec(moreBtn?.textContent ?? '')?.[1] ?? -1),
       panel: { left: pr.left, top: pr.top, right: pr.right, bottom: pr.bottom, w: pr.width, h: pr.height },
@@ -275,8 +275,8 @@ async function openPopoverAt(page: Page, cellIndex: number, scrollCellToBottom =
         const s = r.querySelectorAll('span');
         return s[s.length - 1]?.textContent ?? '';
       }),
-      cellEntryNames: Array.from(cellEl.querySelectorAll('button[aria-label^="打开项目"]')).map(
-        (b) => (b.getAttribute('aria-label') ?? '').replace(/^打开项目\s*/, ''),
+      cellEntryNames: Array.from(cellEl.querySelectorAll('button[data-entry-open]')).map(
+        (b) => b.getAttribute('data-entry-name') ?? '',
       ),
       cellOverflow: getComputedStyle(cellEl).overflow,
     };
@@ -288,19 +288,19 @@ async function openPopoverAt(page: Page, cellIndex: number, scrollCellToBottom =
 function firstCrowdedIndex(page: Page): Promise<number> {
   return page.evaluate(() => {
     const cells = Array.from(document.querySelectorAll('[data-day-cell]')) as HTMLElement[];
-    return cells.findIndex((c) => !!c.querySelector('button[aria-label^="展开"]'));
+    return cells.findIndex((c) => !!c.querySelector('button[data-day-expand]'));
   });
 }
 function firstCrowdedInCol(page: Page, col: number): Promise<number> {
   return page.evaluate((c) => {
     const cells = Array.from(document.querySelectorAll('[data-day-cell]')) as HTMLElement[];
-    return cells.findIndex((el, i) => i % 7 === c && !!el.querySelector('button[aria-label^="展开"]'));
+    return cells.findIndex((el, i) => i % 7 === c && !!el.querySelector('button[data-day-expand]'));
   }, col);
 }
 function firstCrowdedInLastRow(page: Page): Promise<number> {
   return page.evaluate(() => {
     const cells = Array.from(document.querySelectorAll('[data-day-cell]')) as HTMLElement[];
-    return cells.findIndex((el, i) => i >= 35 && !!el.querySelector('button[aria-label^="展开"]'));
+    return cells.findIndex((el, i) => i >= 35 && !!el.querySelector('button[data-day-expand]'));
   });
 }
 
@@ -357,7 +357,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         const cells = Array.from(document.querySelectorAll('[data-day-cell]')) as HTMLElement[];
         let best = { el: cells[0]!, i: 0, n: -1 };
         cells.forEach((c, i) => {
-          const n = Number(/，(\d+) 个项目/.exec(c.getAttribute('aria-label') ?? '')?.[1] ?? 0);
+          const n = Number(c.getAttribute('data-day-count') ?? 0);
           if (n >= best.n) best = { el: c, i, n };
         });
         return {
@@ -528,7 +528,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
       expect(idx).toBeGreaterThanOrEqual(0);
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(200);
-      const moreBtn = page.locator('[data-day-cell]').nth(idx).locator('button[aria-label^="展开"]');
+      const moreBtn = page.locator('[data-day-cell]').nth(idx).locator('button[data-day-expand]');
       const triggerLabel = (await moreBtn.getAttribute('aria-label')) ?? '';
 
       // ── 打开即入面板（规格 §5.3；Bug A 修复前：挂载 effect 在面板 visibility:hidden

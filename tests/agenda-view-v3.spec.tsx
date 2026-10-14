@@ -310,16 +310,16 @@ function dotOf(row: ParentNode): HTMLElement {
   return dot;
 }
 
-/** 今天格（aria-label 形如「YYYY-MM-DD（今天），N 个项目」） */
+/** 今天格（笔 3-B 起用语言无关钩子 `data-day-today`；aria 整条已走消息表） */
 function todayCell(): HTMLElement {
-  const el = document.querySelector<HTMLElement>('[data-day-cell][aria-label*="（今天）"]');
+  const el = document.querySelector<HTMLElement>('[data-day-cell][data-day-today]');
   if (el === null) throw new Error('未找到今天日期格');
   return el;
 }
 
-/** 今天格的「+N」入口（aria-label「展开 N 个项目的当日清单」） */
+/** 今天格的「+N」入口（笔 3-B 起用钩子 `data-day-expand`） */
 function moreBtn(): HTMLElement {
-  const b = todayCell().querySelector<HTMLElement>('button[aria-label^="展开"]');
+  const b = todayCell().querySelector<HTMLElement>('button[data-day-expand]');
   if (b === null) throw new Error('今天格未出现「+N」入口');
   return b;
 }
@@ -339,12 +339,11 @@ function popoverRows(p: HTMLElement): HTMLElement[] {
   ) as HTMLElement[];
 }
 
-/** 从今天格 aria-label 解析当天条目数（用于「浮层全列不截断」的动态期望值） */
+/** 今天格的条目数（走 `data-day-count` 钩子；不再从 aria 文案里正则抠） */
 function todayEntryCount(): number {
-  const label = todayCell().getAttribute('aria-label') ?? '';
-  const m = /，(\d+) 个项目/.exec(label);
-  if (m === null) throw new Error(`今天格 aria-label 解析不出条目数：${label}`);
-  return Number(m[1]);
+  const raw = todayCell().getAttribute('data-day-count');
+  if (raw === null) throw new Error('今天格没有 data-day-count 钩子');
+  return Number(raw);
 }
 
 function readSrc(file: string): string {

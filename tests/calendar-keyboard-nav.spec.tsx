@@ -183,7 +183,7 @@ function tabStopCells(): HTMLElement[] {
 }
 
 function todayCell(): HTMLElement {
-  const el = document.querySelector<HTMLElement>('[data-day-cell][aria-label*="（今天）"]');
+  const el = document.querySelector<HTMLElement>('[data-day-cell][data-day-today]');
   if (el === null) throw new Error('未找到今天日期格');
   return el;
 }
@@ -193,8 +193,8 @@ function cellWithEntriesNotToday(): HTMLElement {
   const el = cells().find(
     (c) =>
       !c.hasAttribute('aria-label') === false &&
-      (c.getAttribute('aria-label') ?? '').includes('（今天）') === false &&
-      c.querySelector('button[aria-label^="打开项目"]') !== null,
+      c.hasAttribute('data-day-today') === false &&
+      c.querySelector('button[data-entry-open]') !== null,
   );
   if (el === undefined) throw new Error('未找到「带条目且非今天」的格子');
   return el;
@@ -289,7 +289,7 @@ describe('F7 · 月历网格键盘可达（roving tabindex）', () => {
     // 反向：焦点落到**格内条目按钮**上 ⇒ 停靠点不动（这是真机上「Tab 永远落不到日格」的根因）
     mountView(); // 重挂：停靠点回到今天
     const cell = cellWithEntriesNotToday();
-    const entry = cell.querySelector<HTMLElement>('button[aria-label^="打开项目"]');
+    const entry = cell.querySelector<HTMLElement>('button[data-entry-open]');
     if (entry === null) throw new Error('格内未找到条目按钮');
     focusEl(entry);
     expect(document.activeElement, '条目按钮拿到了焦点').toBe(entry);

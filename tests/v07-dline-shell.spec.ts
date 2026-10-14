@@ -1024,7 +1024,7 @@ describe.skipIf(!CAN_RUN_FRESH)(
         await page.getByRole('tab', { name: '月历' }).click();
         await page.waitForSelector(DENSITY_SWITCH, { timeout: 15000 });
 
-        const band = page.locator(`[aria-label="打开项目 ${PROJECT_NAME}"]`).first();
+        const band = page.locator(`[data-entry-open][data-entry-name="${PROJECT_NAME}"]`).first();
         await band.waitFor({ state: 'visible', timeout: 15000 });
         await shot(page, '10-member-calendar-filled.png');
         await band.click();
