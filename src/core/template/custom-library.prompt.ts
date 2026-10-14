@@ -185,8 +185,22 @@ ${JSON.stringify(CUSTOM_LIBRARY_MINIMAL_EXAMPLE, null, 2)}
 
 /* ---------- ⑥ 失败路径人话化：路径翻译 ---------- */
 
-/** zod 字段名 → 人话（字段名是 JSON 契约的一部分，本来就要给用户看） */
-const FIELD_LABELS: Record<string, string> = {
+/**
+ * zod 字段名 → 人话（字段名是 JSON 契约的一部分，本来就要给用户看）。
+ *
+ * ── ⚠️ 交换条件：为什么同一个词会有**两个物理位置**（team-lead 明确接受的代价）──
+ * 这张表是**载荷取值** —— 复制给 Agent 的修正单恒为中文，是指令契约的一部分。
+ * 界面侧那份在 `src/i18n/messages/zh.ts`（键 `customLibrary.label.*`）：因为
+ * **本模块在 `src/core/**`，不许 import i18n**（会把 `lang.ts` 的 `document` 拖进
+ * 无 DOM 的服务端 program ⇒ `typecheck:server` 红 TS2584；`src/lib/date.ts` 与
+ * `src/constants/agentTerms.ts` 都栽过）。载荷侧没有第二个选择，故这个代价被接受，
+ * 但**不许漂**：`tests/custom-library-path-i18n.spec.ts` 对**同一组位置**同时读两份、
+ * 在 zh 下逐字相等；且本表 ⟺ `src/i18n/labels.ts` 的 `CUSTOM_LIBRARY_FIELD_KEYS`
+ * **键集双向相等**（少一个 = 英文态露中文；多一个 = 死词条）。
+ *
+ * 导出**只为那条守卫断言**（K12 列举完备性 + K14 消费锁）；**界面代码不许读它**。
+ */
+export const CUSTOM_LIBRARY_FIELD_LABELS: Readonly<Record<string, string>> = {
   key: 'key',
   name: '名称',
   domain: '主板块',
@@ -203,8 +217,17 @@ const FIELD_LABELS: Record<string, string> = {
   presets: '套餐列表',
 };
 
-/** 根级字段的人话（与 FIELD_LABELS 分工：根上的 name 是「包名」，条目里的 name 是「名称」） */
-const ROOT_LABELS: Record<string, string> = {
+/**
+ * 根级字段的人话（与 `CUSTOM_LIBRARY_FIELD_LABELS` 分工：根上的 `name` 是「包名」，
+ * 条目里的 `name` 是「名称」）。
+ *
+ * ⚠️ `items` / `presets` 两条**在本模块里不可达**：单层的 `items` / `presets` 会被
+ *    `customLibraryPathLocation` 里 `listField` 那一支先接走。保留它们是为了「根级字段
+ *    人话」这张表**本身完整**（键集与界面侧 `CUSTOM_LIBRARY_ROOT_KEYS` 对称）。
+ *    取值与 FIELD 表同 ⇒ 界面侧两处**共用同一个键**（K10：同一个词只建一个键，
+ *    物理位置不同不构成第二份）。
+ */
+export const CUSTOM_LIBRARY_ROOT_LABELS: Readonly<Record<string, string>> = {
   name: '包名',
   domain: '主板块',
   schema: '版本标识',
@@ -231,48 +254,131 @@ function isIndex(s: string | undefined): boolean {
 }
 
 function labelOf(field: string): string {
-  return FIELD_LABELS[field] ?? field;
+  return CUSTOM_LIBRARY_FIELD_LABELS[field] ?? field;
 }
 
+/* ---------- 结构化位置（裁 3：core 只产出「位置」，人话由 UI 层拼） ---------- */
+
+/** 两个条目列表（取值就是载荷 JSON 里的数组名） */
+export type CustomLibraryListKind = 'items' | 'presets';
+
 /**
- * 路径 → 人话位置。返回 '' 表示「消息本身就自明，不需要加前缀」。
+ * 「这条错误在哪」的**结构化位置**。
+ *
+ * ── 为什么 core 只产出位置、不产出人话 ──
+ * 同一个位置有**两个读者**、且要求相反：
+ *   · **载荷**（复制给 Agent 的修正单）⇒ 恒中文，是指令契约的一部分；
+ *   · **界面**（设置页那一屏 `<li>`）⇒ 必须跟随界面语言。
+ * 而 `src/core/**` 不许 import i18n ⇒ 界面口径**不能在这里做**。
+ * 故这里只交位置；`describeCustomLibraryLocation` 是**载荷口径的唯一渲染器**，
+ * 界面口径在 `src/i18n/labels.ts` 的 `customLibraryPathText`。
+ * 「两边不漂」落成可执行断言（同一组位置，两侧在 zh 下逐字相等）。
+ */
+export type CustomLibraryPathLocation =
+  /** `(root)` / `''` ⇒ 整个文件 */
+  | { kind: 'wholeFile' }
+  /** 消息本身已自明（`presets.<key>` 的引用完整性错误）⇒ 不自加前缀（渲染成空串） */
+  | { kind: 'selfExplained' }
+  /** 只有列表名一层（`items` / `presets`）⇒ 阶段列表 / 套餐列表 */
+  | { kind: 'listField'; list: CustomLibraryListKind }
+  /** 条目本身：`第 n+1 个{阶段|套餐}（[它是谁]）` */
+  | { kind: 'entry'; list: CustomLibraryListKind; n: number; who: string | null }
+  /** 条目的某个字段：`{entry}的{X}` */
+  | { kind: 'entryField'; list: CustomLibraryListKind; n: number; who: string | null; field: string }
+  /** 条目的第 n+1 条默认任务 */
+  | { kind: 'entryTask'; list: CustomLibraryListKind; n: number; who: string | null; taskN: number }
+  /** 条目引用的第 n+1 个阶段 key */
+  | { kind: 'entryItemKey'; list: CustomLibraryListKind; n: number; who: string | null; keyN: number }
+  /** 根级字段（包名 / 主板块 / …） */
+  | { kind: 'rootField'; field: string }
+  /** 未知形状：原样给路径（宁可暴露路径，不许把位置吞了） */
+  | { kind: 'rawPath'; path: string };
+
+/**
+ * 路径 → 结构化位置（**全仓唯一**的解析处；`describeCustomLibraryPath` 也走它）。
  *
  * 覆盖三类：
  *   · `(root)` / ''        → 整个文件
  *   · `items.N[.field[.K]]` → 第 N+1 个阶段（的名字）的[第 M+1 条默认任务]
- *   · `presets.N[.field[.K]]` 同理；`presets.<key>`（引用完整性错误）自明 → ''
+ *   · `presets.N[.field[.K]]` 同理；`presets.<key>`（引用完整性错误）自明
  * 未知形状原样给出路径（宁可暴露路径，不许把位置吞了）。
  */
-export function describeCustomLibraryPath(path: string, raw?: unknown): string {
-  if (!path || path === '(root)') return '整个文件';
+export function customLibraryPathLocation(path: string, raw?: unknown): CustomLibraryPathLocation {
+  if (!path || path === '(root)') return { kind: 'wholeFile' };
   const t = path.split('.');
   const [head, idxRaw] = t;
 
   if (head === 'items' || head === 'presets') {
-    const human = head === 'items' ? '阶段' : '套餐';
-    if (t.length === 1) return labelOf(head);
+    const list: CustomLibraryListKind = head;
+    if (t.length === 1) return { kind: 'listField', list };
     if (!isIndex(idxRaw)) {
       // presets.<key> 形式的引用完整性错误：message 已带「套餐「X」引用了…」→ 不自加前缀
-      return '';
+      return { kind: 'selfExplained' };
     }
     const n = Number(idxRaw);
-    const who = entryLabelOf(raw, head, n);
-    const base = who ? `第 ${n + 1} 个${human}（${who}）` : `第 ${n + 1} 个${human}`;
+    const who = entryLabelOf(raw, list, n);
     const field = t[2];
-    if (t.length === 2 || !field) return base;
+    if (t.length === 2 || !field) return { kind: 'entry', list, n, who };
     if (field === 'defaultTasks' && isIndex(t[3])) {
-      return `${base}的第 ${Number(t[3]) + 1} 条默认任务`;
+      return { kind: 'entryTask', list, n, who, taskN: Number(t[3]) };
     }
     if (field === 'itemKeys' && isIndex(t[3])) {
-      return `${base}引用的第 ${Number(t[3]) + 1} 个阶段 key`;
+      return { kind: 'entryItemKey', list, n, who, keyN: Number(t[3]) };
     }
-    return `${base}的${labelOf(field)}`;
+    return { kind: 'entryField', list, n, who, field };
   }
 
-  if (t.length === 1) {
-    return ROOT_LABELS[head] ?? (labelOf(head) !== head ? labelOf(head) : head);
+  if (t.length === 1) return { kind: 'rootField', field: head };
+  return { kind: 'rawPath', path };
+}
+
+/** `第 N 个阶段（谁）` / `第 N 个阶段` —— 三个「带前缀」的位置共用的底座（载荷口径） */
+function payloadEntryBase(loc: {
+  list: CustomLibraryListKind;
+  n: number;
+  who: string | null;
+}): string {
+  const human = loc.list === 'items' ? '阶段' : '套餐';
+  return loc.who ? `第 ${loc.n + 1} 个${human}（${loc.who}）` : `第 ${loc.n + 1} 个${human}`;
+}
+
+/**
+ * 结构化位置 → **载荷口径**人话（恒中文）。
+ * ⚠️ 改这里的取值 = 改 Agent 收到的契约 ⇒ 改前/改后的**逐字基准**存在
+ *    `tests/custom-library-path-i18n.spec.ts`（改前抄下的原文，不是改后重算）。
+ * 返回 '' 表示「消息本身就自明，不需要加前缀」。
+ */
+export function describeCustomLibraryLocation(loc: CustomLibraryPathLocation): string {
+  switch (loc.kind) {
+    case 'wholeFile':
+      return '整个文件';
+    case 'selfExplained':
+      return '';
+    case 'listField':
+      return labelOf(loc.list);
+    case 'entry':
+      return payloadEntryBase(loc);
+    case 'entryField':
+      return `${payloadEntryBase(loc)}的${labelOf(loc.field)}`;
+    case 'entryTask':
+      return `${payloadEntryBase(loc)}的第 ${loc.taskN + 1} 条默认任务`;
+    case 'entryItemKey':
+      return `${payloadEntryBase(loc)}引用的第 ${loc.keyN + 1} 个阶段 key`;
+    case 'rootField':
+      return CUSTOM_LIBRARY_ROOT_LABELS[loc.field]
+        ?? (labelOf(loc.field) !== loc.field ? labelOf(loc.field) : loc.field);
+    case 'rawPath':
+      return loc.path;
   }
-  return path;
+}
+
+/**
+ * 路径 → 载荷口径人话（**对外契约，签名与语义与改造前一致**）。
+ * 实现已改为「先结构化、再按载荷口径渲染」——两条出口从此共用同一份解析，
+ * 载荷零变化由改前基准断言钉住。
+ */
+export function describeCustomLibraryPath(path: string, raw?: unknown): string {
+  return describeCustomLibraryLocation(customLibraryPathLocation(path, raw));
 }
 
 /**
@@ -329,4 +435,16 @@ export function buildAgentFeedbackText(issues: readonly CustomLibraryIssue[], ra
     '我的行业包导入失败了，请按下面每一条修正，然后重新只输出一个 JSON 代码块：',
     ...lines.map((l, i) => `${i + 1}. ${l}`),
   ].join('\n');
+}
+
+/**
+ * ⑥-3 的**文件级**分支（还没进 schema 校验就失败：超限 / 不是 JSON / 落库失败）。
+ * 与 `buildAgentFeedbackText` 是同一角色的**两个出处** —— team-lead 裁定
+ * （分界表 §零 · 裁 5）把它**收进本模块收成一处**，否则「以后改一处忘一处」。
+ * ⚠️ 恒中文：它也是**发给用户自己 Agent 的载荷**（贴进剪贴板），不是界面文案。
+ * 自证：收拢前后对同一输入**逐字相同**（改前基准，不是重算），两支覆盖见
+ * `tests/custom-library-path-i18n.spec.ts`。
+ */
+export function buildAgentFileFailureText(message: string): string {
+  return `我的行业包导入失败了：${message}。请修复后重新只输出一个 JSON 代码块。`;
 }

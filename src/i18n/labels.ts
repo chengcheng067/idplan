@@ -36,6 +36,20 @@ import type { ProjectCalendarStatus } from '../core/types/enums';
  *    而那份配置无 DOM —— 理由见下方 Agent 术语表区块）。
  */
 import type { AgentTermKey, AgentTermMode } from '../constants/agentTerms';
+/*
+ * 行业库错误的**结构化位置**与**机器码**（分界表 裁 3 / 裁 4）从 core 取。
+ * 方向是 `i18n → core`：**反向禁止**（`src/core/**` 不许 import i18n —— 会把 `lang.ts` 的
+ * `document` 拖进无 DOM 的服务端 program），故人话只能在**这里**拼，core 只交结构。
+ */
+import {
+  customLibraryPathLocation,
+  type CustomLibraryListKind,
+  type CustomLibraryPathLocation,
+} from '../core/template/custom-library.prompt';
+import type {
+  CustomLibraryIssue,
+  CustomLibraryIssueCode,
+} from '../core/template/custom-library.schema';
 import { t, type InterpolationVars } from './translate';
 import type { Lang } from './lang';
 import type { MessageKey } from './messages/zh';
@@ -269,6 +283,149 @@ export function customLibraryHintLabel(
   const keys = CUSTOM_LIBRARY_HINT_KEYS[id];
   if (keys === undefined) return id;
   return t(keys[part], vars);
+}
+
+/* ═══════════ 行业库错误位置 / 原因（笔·分界表 裁 3 / 裁 4）：码 → 文案键 ═══════════
+ *
+ * ── 形态：与上面 `CUSTOM_LIBRARY_HINT_KEYS` 逐条同形 ──
+ * core（`custom-library.prompt.ts` / `custom-library.schema.ts`）只产出**结构化位置**
+ * （`{ kind: 'entry', list: 'items', n: 3, who: '选址' }`）与**机器码**
+ * （`code: 'itemKeyPrefix'`），人话在**这里**拼 —— 理由：`src/core/**` 不许 import i18n
+ * （`lang.ts` 的 `document` 会进无 DOM 的服务端 program ⇒ TS2584）。
+ *
+ * ── ⚠️ 交换条件：为什么同一个词会有两个物理位置 ──
+ * 载荷（复制给 Agent 的修正单）**必须恒中文**（指令契约），而它不能引 i18n ⇒
+ * core 侧 `CUSTOM_LIBRARY_FIELD_LABELS` / `CUSTOM_LIBRARY_ROOT_LABELS` / `ISSUE_TEXT`
+ * **保留中文原值**，本文件的 zh 取值**由 spec 断言与它们逐字相等**。team-lead 明确
+ * 接受这个代价（载荷侧没有第二个选择），但要求「两边不漂」是**可执行断言**，
+ * 落在 `tests/custom-library-path-i18n.spec.ts`：
+ *   · **一条 spec 同时读两份**：同一组位置，`describeCustomLibraryLocation(...)` 与
+ *     本文件的 `customLibraryPathText(...)` 在 zh 下**逐字相等**；任一侧改动即红；
+ *   · **双向集合相等**（K12 + K14）：`CUSTOM_LIBRARY_FIELD_LABELS` 的键集 ⟺
+ *     `CUSTOM_LIBRARY_FIELD_KEYS` 的键集（ROOT / ISSUE 码同理）。少一个 ⇒ 英文态露中文；
+ *     多一个 ⇒ 死词条；
+ *   · **改前基准**（改前抄下的载荷输出原文，**不是改后重算**）钉住载荷零变化。
+ */
+
+/** 条目字段名 → 文案键（与载荷表 `CUSTOM_LIBRARY_FIELD_LABELS` 的键集**双向相等**） */
+export const CUSTOM_LIBRARY_FIELD_KEYS: Readonly<Record<string, MessageKey>> = {
+  key: 'customLibrary.label.key',
+  name: 'customLibrary.label.name',
+  domain: 'customLibrary.label.domain',
+  schema: 'customLibrary.label.schema',
+  ratioPercent: 'customLibrary.label.ratioPercent',
+  colorIndex: 'customLibrary.label.colorIndex',
+  kanbanColumn: 'customLibrary.label.kanbanColumn',
+  defaultResponsibility: 'customLibrary.label.defaultResponsibility',
+  defaultTasks: 'customLibrary.label.defaultTasks',
+  customColor: 'customLibrary.label.customColor',
+  description: 'customLibrary.label.description',
+  itemKeys: 'customLibrary.label.itemKeys',
+  items: 'customLibrary.label.items',
+  presets: 'customLibrary.label.presets',
+};
+
+/**
+ * 根级字段名 → 文案键（与载荷表 `CUSTOM_LIBRARY_ROOT_LABELS` 的键集**双向相等**）。
+ * ⚠️ 根上的 `name` 是「包名」、条目里的 `name` 是「名称」⇒ **两个键、两个取值**；
+ *    `domain` / `schema` / `items` / `presets` 两表取值相同 ⇒ **共用同一个键**
+ *    （K10：同一个词只建一个键，物理位置不同不构成第二份）。
+ */
+export const CUSTOM_LIBRARY_ROOT_KEYS: Readonly<Record<string, MessageKey>> = {
+  name: 'customLibrary.label.rootName',
+  domain: 'customLibrary.label.domain',
+  schema: 'customLibrary.label.schema',
+  items: 'customLibrary.label.items',
+  presets: 'customLibrary.label.presets',
+};
+
+/** 两个列表的**名词**（`第 4 个{阶段|套餐}`；与 `…列表` 是两个词，别合并） */
+export const CUSTOM_LIBRARY_KIND_KEYS: Readonly<Record<CustomLibraryListKind, MessageKey>> = {
+  items: 'customLibrary.noun.items',
+  presets: 'customLibrary.noun.presets',
+};
+
+/** 失败码 → 文案键（键名与码 1:1：`customLibrary.issue.<code>`，便于双向集合相等的断言） */
+export const CUSTOM_LIBRARY_ISSUE_KEYS: Readonly<Record<CustomLibraryIssueCode, MessageKey>> = {
+  tooLarge: 'customLibrary.issue.tooLarge',
+  customColorHex: 'customLibrary.issue.customColorHex',
+  itemKeyPrefix: 'customLibrary.issue.itemKeyPrefix',
+  presetKeyPrefix: 'customLibrary.issue.presetKeyPrefix',
+  danglingItemKey: 'customLibrary.issue.danglingItemKey',
+  duplicateItemKey: 'customLibrary.issue.duplicateItemKey',
+  duplicatePresetKey: 'customLibrary.issue.duplicatePresetKey',
+};
+
+/**
+ * `第 N 个阶段（谁）` —— 与载荷口径 `payloadEntryBase` 同形。
+ * 两侧在 zh 下逐字相等由 spec 锁（改任一侧即红）。
+ */
+function pathEntryBase(loc: { list: CustomLibraryListKind; n: number; who: string | null }): string {
+  const kind = t(CUSTOM_LIBRARY_KIND_KEYS[loc.list]);
+  return loc.who
+    ? t('customLibrary.path.entryNamed', { n: loc.n + 1, kind, who: loc.who })
+    : t('customLibrary.path.entry', { n: loc.n + 1, kind });
+}
+
+/** 字段名 → 人话；未知字段名回落字段名本身（与载荷 `labelOf` 同口径：宁可露字段名，不许吞位置） */
+function customLibraryFieldLabel(field: string): string {
+  const key: MessageKey | undefined = CUSTOM_LIBRARY_FIELD_KEYS[field];
+  return key === undefined ? field : t(key);
+}
+
+/**
+ * 根级字段名 → 人话；不在根表但在字段表里 ⇒ 用字段表那张（与载荷
+ * `ROOT_LABELS[f] ?? (labelOf(f) !== f ? labelOf(f) : f)` **同口径**）；
+ * 两处都没有 ⇒ 回落字段名本身。
+ */
+function customLibraryRootLabel(field: string): string {
+  const rootKey: MessageKey | undefined = CUSTOM_LIBRARY_ROOT_KEYS[field];
+  if (rootKey !== undefined) return t(rootKey);
+  return customLibraryFieldLabel(field);
+}
+
+/**
+ * 结构化位置 → 人话（**屏幕侧唯一入口**）。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function customLibraryPathText(loc: CustomLibraryPathLocation): string {
+  switch (loc.kind) {
+    case 'wholeFile':
+      return t('customLibrary.path.wholeFile');
+    case 'selfExplained':
+      return '';
+    case 'listField':
+      return t(CUSTOM_LIBRARY_FIELD_KEYS[loc.list]);
+    case 'entry':
+      return pathEntryBase(loc);
+    case 'entryField':
+      return t('customLibrary.path.fieldOf', {
+        base: pathEntryBase(loc),
+        field: customLibraryFieldLabel(loc.field),
+      });
+    case 'entryTask':
+      return t('customLibrary.path.taskOf', { base: pathEntryBase(loc), n: loc.taskN + 1 });
+    case 'entryItemKey':
+      return t('customLibrary.path.itemKeyOf', { base: pathEntryBase(loc), n: loc.keyN + 1 });
+    case 'rootField':
+      return customLibraryRootLabel(loc.field);
+    case 'rawPath':
+      return loc.path;
+  }
+}
+
+/**
+ * 一条 issue → 人话（**屏幕侧唯一入口**）：位置（按语言）+ 原因（按码取词）。
+ *
+ * 无码的 issue（zod 默认消息，本来就是英文，如 `Required`）**原样透传 `message`** ——
+ * 与改造前一致，**不留新的兜底语言**（K22：兜底句可翻、真因不许被码吃掉）。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function customLibraryIssueText(issue: CustomLibraryIssue, raw?: unknown): string {
+  const where = customLibraryPathText(customLibraryPathLocation(issue.path, raw));
+  const { code, params } = issue;
+  const detail = code === undefined ? issue.message : t(CUSTOM_LIBRARY_ISSUE_KEYS[code], params);
+  return where ? t('customLibrary.path.withDetail', { where, message: detail }) : detail;
 }
 
 /* ─────────────────── Agent 写回状态五态（AgentActivityStream） ─────────────────── */

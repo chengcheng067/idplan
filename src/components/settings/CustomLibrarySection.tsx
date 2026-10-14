@@ -28,11 +28,14 @@
  *   ② `domainLabel()` 是 `core/template/stage-library` 的**模块级函数、不订阅语言**
  *      ⇒ 它在英文态仍返回中文板块名。**这是有意的**：内置行业名（两套）属
  *      team-lead 未拍板的 C 灰区，本笔一个字都不动。
- *   ③ 三处**有意保留中文**（都不是界面文案，各自理由见就地注释）：
- *      失败预告卡与逐条 issue（取值来自 `custom-library.prompt.ts`，属**提示词载荷**
- *      模块，不在本笔范围）／发给 Agent 的失败回帖（同上，是载荷不是界面）／
- *      4 条 `logUser(...)`（team-lead 已裁定：日志分组键与消息维持中文，
- *      与阶段预设名同类——落库的、又被当显示用的值）。
+ *   ③ **有意保留中文**现在只剩两处（都不是界面文案，理由见就地注释）：
+ *      · 发给 Agent 的失败回帖（`buildAgentFeedbackText` / `buildAgentFileFailureText`）
+ *        —— 那是**载荷**不是界面 ⇒ 恒中文，是指令契约；
+ *      · 4 条 `logUser(...)`（team-lead 已裁定：日志分组键与消息维持中文，
+ *        与阶段预设名同类——落库的、又被当显示用的值）。
+ *      ⚠️ 原注里的「失败预告卡与逐条 issue」**已作废**：那两处已改走消息表
+ *      （分界表 裁 2 走 `customLibraryHintLabel`；裁 3 + 裁 4 走
+ *      `customLibraryIssueText`——位置按语言、原因按码取词）。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -54,12 +57,12 @@ import {
 } from '../../core/template/custom-library.service';
 import {
   buildAgentFeedbackText,
+  buildAgentFileFailureText,
   buildCustomLibraryPrompt,
   CUSTOM_LIBRARY_ERROR_HINTS,
-  translateCustomLibraryIssue,
 } from '../../core/template/custom-library.prompt';
 import { domainLabel } from '../../core/template/stage-library';
-import { customLibraryHintLabel, useLang } from '../../i18n';
+import { customLibraryHintLabel, customLibraryIssueText, useLang } from '../../i18n';
 import { logUser } from '../../core/services/log.service';
 
 const MAX_MB_LABEL = `${Math.floor(CUSTOM_LIBRARY_MAX_BYTES / 1024)}KB`;
@@ -151,8 +154,10 @@ export function CustomLibrarySection(): JSX.Element {
     if (!failure) return;
     const text =
       failure.kind === 'file'
-        ? // 有意不翻：这段是**发给用户自己 Agent 的载荷**（贴进剪贴板），不是界面文案
-          `我的行业包导入失败了：${failure.message}。请修复后重新只输出一个 JSON 代码块。`
+        ? // 有意不翻：这段是**发给用户自己 Agent 的载荷**（贴进剪贴板），不是界面文案。
+          // 原文已收进 core（分界表 裁 5：与 buildAgentFeedbackText 同角色、原来两个出处
+          // ⇒ 收成一处，避免「改一处忘一处」）。
+          buildAgentFileFailureText(failure.message)
         : buildAgentFeedbackText(failure.issues, failure.raw);
     const ok = await copyText(text);
     setFlash(
@@ -277,9 +282,14 @@ export function CustomLibrarySection(): JSX.Element {
     [repos],
   );
 
+  /*
+   * 分界表 裁 3 + 裁 4：位置按语言、原因按码 —— 都走 `customLibraryIssueText`。
+   * 它读**模块级**语言（不是 hook），本组件已调 `useLang()` 订阅 ⇒ 切语言会重算这几行。
+   * 载荷侧照旧走 `translateCustomLibraryIssue`（只服务剪贴板那份中文修正单）。
+   */
   const issueLines =
     failure?.kind === 'schema'
-      ? failure.issues.map((i) => translateCustomLibraryIssue(i, failure.raw))
+      ? failure.issues.map((i) => customLibraryIssueText(i, failure.raw))
       : failure && failure.kind === 'file'
         ? [failure.message]
         : [];

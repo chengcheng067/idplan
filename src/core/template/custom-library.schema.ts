@@ -63,6 +63,40 @@ export const KANBAN_COLUMN_ENUM = z.enum([
  */
 export const KANBAN_COLUMN_VALUES = KANBAN_COLUMN_ENUM.options;
 
+/* ---------- 失败消息：载荷中文模板（唯一出处）+ 界面机器码（裁 4） ---------- */
+
+/**
+ * 载荷侧中文模板（**唯一出处**）。每一条都对应英文态界面必须能跟语言走的那句 ——
+ * team-lead 裁定（分界表 §零 · 裁 4）：`issue.message` **既是界面 `<li>` 正文也是载荷正文**
+ * ⇒ 只翻 `custom-library.prompt.ts` 是假绿。
+ *
+ * ⚠️ 本表是**载荷取值**：复制给 Agent 的修正单必须恒为中文（指令契约，不随语言变）。
+ *    界面侧**不读这张表**，它按 `code` 去 `src/i18n/labels.ts` 的 `CUSTOM_LIBRARY_ISSUE_KEYS`
+ *    取词（`src/core/**` 不许 import i18n —— 见 `custom-library.prompt.ts` 的
+ *    `CustomLibraryErrorHint` 注释）。
+ *    「两边不漂」= 可执行断言：同一个 issue，界面 zh 串与本表渲染出的 `message`
+ *    **逐字相等**（`tests/custom-library-path-i18n.spec.ts`，一条 spec 同时读两份）。
+ *
+ * 形态纪律：**随数据变的写成函数**（形参就是插值取值），不随数据变的写成字符串 ——
+ * 后者是常量，写成 `() => '…'` 只会让「它没有参数」这件事变模糊。
+ */
+const ISSUE_TEXT = {
+  /** 整包字节超限（参数：上限 KB / 当前 KB） */
+  tooLarge: (maxKb: number, sizeKb: number) => `行业包超过 ${maxKb}KB 上限（当前 ${sizeKb}KB）`,
+  /** customColor 不是 #RRGGBB（无参数） */
+  customColorHex: 'customColor 必须是 #RRGGBB 十六进制',
+  /** 阶段 key 前缀不对（参数：前缀 —— 是 schema 常量，属数据不属文案） */
+  itemKeyPrefix: (prefix: string) => `阶段 key 必须以 ${prefix} 开头（小写字母/数字/连字符）`,
+  /** 套餐 key 前缀不对（参数：前缀） */
+  presetKeyPrefix: (prefix: string) => `套餐 key 必须以 ${prefix} 开头`,
+  /** 套餐引用了本包没有的阶段 key（参数：套餐名 / 悬空 key） */
+  danglingItemKey: (name: string, key: string) => `套餐「${name}」引用了不存在的阶段 key：${key}`,
+  /** 包内阶段 key 重复（无参数） */
+  duplicateItemKey: '阶段 key 在包内重复',
+  /** 包内套餐 key 重复（无参数） */
+  duplicatePresetKey: '套餐 key 在包内重复',
+} as const;
+
 /** ratioPercent：有限数、开区间 (0,100] */
 const ratioSchema = z
   .number()
@@ -73,7 +107,7 @@ const ratioSchema = z
 /** 自定义颜色：只认十六进制（normalizeHex 读侧再归一；这里禁任意字符串） */
 const hexSchema = z
   .string()
-  .regex(/^#[0-9a-fA-F]{6}$/, 'customColor 必须是 #RRGGBB 十六进制');
+  .regex(/^#[0-9a-fA-F]{6}$/, ISSUE_TEXT.customColorHex);
 
 const customItemSchema = z.object({
   /** key 强制 usr. 前缀（安全官 C.4-2）：与内置/单条自定义阶段三级区分 */
@@ -82,7 +116,7 @@ const customItemSchema = z.object({
     .min(4)
     .max(64)
     .regex(new RegExp(`^${CUSTOM_LIBRARY_KEY_PREFIX.replace('.', '\\.')}[a-z0-9][a-z0-9-]*$`),
-      `阶段 key 必须以 ${CUSTOM_LIBRARY_KEY_PREFIX} 开头（小写字母/数字/连字符）`),
+      ISSUE_TEXT.itemKeyPrefix(CUSTOM_LIBRARY_KEY_PREFIX)),
   name: z.string().min(1).max(50),
   ratioPercent: ratioSchema,
   /** 整数 1..9（内置 9 色；读侧再 clampColorIndex） */
@@ -101,7 +135,7 @@ const customPresetSchema = z.object({
     .min(4)
     .max(64)
     .regex(new RegExp(`^${CUSTOM_LIBRARY_KEY_PREFIX.replace('.', '\\.')}[a-z0-9][a-z0-9-]*$`),
-      `套餐 key 必须以 ${CUSTOM_LIBRARY_KEY_PREFIX} 开头`),
+      ISSUE_TEXT.presetKeyPrefix(CUSTOM_LIBRARY_KEY_PREFIX)),
   name: z.string().min(1).max(50),
   description: z.string().max(200).default(''),
   /** 引用本包 items 的 key（顺序即默认 orderIndex） */
@@ -136,10 +170,69 @@ export const customLibrarySchema = z.object({
 
 export type CustomLibraryFile = z.infer<typeof customLibrarySchema>;
 
-/** 拒绝原因（用户可读中文；逐条给，不只报第一条） */
+/**
+ * 失败消息的**机器码**（分界表 §零 · 裁 4）：界面按码取词，载荷仍用中文原文。
+ *
+ * ★ **列举完备性（K12）**：本文件里凡产出中文 `message` 的地方都必须有码 ——
+ *   漏一个 ⇒ 英文态那一行仍是中文（只修一半 = 假绿，与本裁的立意相反）。
+ *   判据在 `tests/custom-library-path-i18n.spec.ts`「七码逐一可复现」：每个码都用
+ *   一个**真的坏包**跑出 `validateCustomLibrary` 的失败 issue 来，不是手抄清单。
+ */
+export type CustomLibraryIssueCode =
+  | 'tooLarge'
+  | 'customColorHex'
+  | 'itemKeyPrefix'
+  | 'presetKeyPrefix'
+  | 'danglingItemKey'
+  | 'duplicateItemKey'
+  | 'duplicatePresetKey';
+
+/**
+ * zod 只回传 message **字符串** ⇒ 想在失败体上带码，只能拿「固定参数下的 message 原文」反查。
+ * 本表三个码恰好都**不随运行时数据变**（前缀是 schema 常量、十六进制提示无参数）
+ * ⇒ 反查是恒等的，不是模糊匹配。
+ * ⚠️ 将来若给某个 zod message 加了运行期插值，**它就不能走本表**（那会变成猜）——
+ *    要把它挪到「我们自己构造 issue」的那几处，显式带码带参数。
+ */
+const ZOD_MESSAGE_CODES: ReadonlyMap<
+  string,
+  { code: CustomLibraryIssueCode; params?: Record<string, string | number> }
+> = new Map([
+  [ISSUE_TEXT.customColorHex, { code: 'customColorHex' }],
+  [
+    ISSUE_TEXT.itemKeyPrefix(CUSTOM_LIBRARY_KEY_PREFIX),
+    { code: 'itemKeyPrefix', params: { prefix: CUSTOM_LIBRARY_KEY_PREFIX } },
+  ],
+  [
+    ISSUE_TEXT.presetKeyPrefix(CUSTOM_LIBRARY_KEY_PREFIX),
+    { code: 'presetKeyPrefix', params: { prefix: CUSTOM_LIBRARY_KEY_PREFIX } },
+  ],
+]);
+
+/** zod 的 message 反查码（查不到 = 无码 ⇒ 界面原样透传 message，与改造前一致） */
+function codedIssue(message: string): {
+  code?: CustomLibraryIssueCode;
+  params?: Record<string, string | number>;
+} {
+  const hit = ZOD_MESSAGE_CODES.get(message);
+  return hit === undefined ? {} : { code: hit.code, ...(hit.params ? { params: hit.params } : {}) };
+}
+
+/**
+ * 拒绝原因（用户可读中文；逐条给，不只报第一条）。
+ *
+ * ⚠️ `message` 是**载荷正文**（复制给 Agent 的修正单原样用它）：恒中文，不许按语言变。
+ *    `code` / `params` 只是**界面侧**的取词输入（英文态靠它们出英文）。
+ *    无码 = zod 默认消息（本来就是英文，如 `Required` / `Expected array, …`）
+ *    ⇒ 界面透传 `message`（与改造前一致，不新增任何兜底语言）。
+ */
 export interface CustomLibraryIssue {
   path: string;
   message: string;
+  /** 界面侧取词用的码（键 `customLibrary.issue.<code>`）；缺省 = 无码 */
+  code?: CustomLibraryIssueCode;
+  /** 界面侧插值参数（取值与 `message` 里已内联的那些**同源**） */
+  params?: Record<string, string | number>;
 }
 
 export type CustomLibraryParseResult =
@@ -154,12 +247,16 @@ export type CustomLibraryParseResult =
  */
 export function validateCustomLibrary(raw: unknown, rawBytes?: number): CustomLibraryParseResult {
   if (typeof rawBytes === 'number' && rawBytes > CUSTOM_LIBRARY_MAX_BYTES) {
+    const maxKb = Math.floor(CUSTOM_LIBRARY_MAX_BYTES / 1024);
+    const sizeKb = Math.ceil(rawBytes / 1024);
     return {
       ok: false,
       issues: [
         {
           path: '(root)',
-          message: `行业包超过 ${Math.floor(CUSTOM_LIBRARY_MAX_BYTES / 1024)}KB 上限（当前 ${Math.ceil(rawBytes / 1024)}KB）`,
+          message: ISSUE_TEXT.tooLarge(maxKb, sizeKb),
+          code: 'tooLarge',
+          params: { max: maxKb, size: sizeKb },
         },
       ],
     };
@@ -171,6 +268,7 @@ export function validateCustomLibrary(raw: unknown, rawBytes?: number): CustomLi
       issues: parsed.error.issues.map((i) => ({
         path: i.path.join('.') || '(root)',
         message: i.message,
+        ...codedIssue(i.message),
       })),
     };
   }
@@ -185,7 +283,9 @@ export function validateCustomLibrary(raw: unknown, rawBytes?: number): CustomLi
       if (!itemKeys.has(k)) {
         issues.push({
           path: `presets.${p.key}`,
-          message: `套餐「${p.name}」引用了不存在的阶段 key：${k}`,
+          message: ISSUE_TEXT.danglingItemKey(p.name, k),
+          code: 'danglingItemKey',
+          params: { name: p.name, key: k },
         });
       }
     }
@@ -194,12 +294,20 @@ export function validateCustomLibrary(raw: unknown, rawBytes?: number): CustomLi
 
   // ②-2 key 唯一性（包内 item key 不得重复——Set 已经过去重，长度对比即判据）
   if (itemKeys.size !== lib.items.length) {
-    return { ok: false, issues: [{ path: 'items', message: '阶段 key 在包内重复' }] };
+    return {
+      ok: false,
+      issues: [{ path: 'items', message: ISSUE_TEXT.duplicateItemKey, code: 'duplicateItemKey' }],
+    };
   }
   // preset key 同理
   const presetKeys = new Set(lib.presets.map((p) => p.key));
   if (presetKeys.size !== lib.presets.length) {
-    return { ok: false, issues: [{ path: 'presets', message: '套餐 key 在包内重复' }] };
+    return {
+      ok: false,
+      issues: [
+        { path: 'presets', message: ISSUE_TEXT.duplicatePresetKey, code: 'duplicatePresetKey' },
+      ],
+    };
   }
 
   return { ok: true, library: lib };

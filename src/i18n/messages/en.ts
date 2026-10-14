@@ -1492,4 +1492,41 @@ export const enMessages: Record<MessageKey, string> = {
   'travel.addDayFailed': 'Cannot add a day card for {date}.',
   'travel.dayHasTasks': 'That day still has tasks. Move or delete them first.',
   'travel.removeFailed': 'Failed to delete the day card. Please retry.',
+
+  /* ══════════ 笔·分界表 裁 3 / 裁 4：行业库错误位置与原因（见 zh.ts 同区块） ══════════
+     ⚠️ 占位符必须与 zh 侧**逐个一致**（`tests/i18n.spec.tsx` 有一条全局断言）。
+     ⚠️ 名词 `{kind}` 在英文里是句中小写（`stage 4`）；`label.items` 才是 `Stage list`。 */
+  'customLibrary.label.key': 'key',
+  'customLibrary.label.name': 'Name',
+  'customLibrary.label.rootName': 'Library name',
+  'customLibrary.label.domain': 'Main board',
+  'customLibrary.label.schema': 'Schema version',
+  'customLibrary.label.ratioPercent': 'Share',
+  'customLibrary.label.colorIndex': 'Color index',
+  'customLibrary.label.kanbanColumn': 'Kanban column',
+  'customLibrary.label.defaultResponsibility': 'Default owner',
+  'customLibrary.label.defaultTasks': 'Default tasks',
+  'customLibrary.label.customColor': 'Custom color',
+  'customLibrary.label.description': 'Description',
+  'customLibrary.label.itemKeys': 'Stage key list',
+  'customLibrary.label.items': 'Stage list',
+  'customLibrary.label.presets': 'Preset list',
+  'customLibrary.noun.items': 'stage',
+  'customLibrary.noun.presets': 'preset',
+  'customLibrary.path.wholeFile': 'the whole file',
+  'customLibrary.path.entry': '{kind} {n}',
+  'customLibrary.path.entryNamed': '{kind} {n} ({who})',
+  'customLibrary.path.fieldOf': '{base} · {field}',
+  'customLibrary.path.taskOf': '{base} · default task {n}',
+  'customLibrary.path.itemKeyOf': '{base} · referenced stage key {n}',
+  'customLibrary.path.withDetail': '{where}: {message}',
+  'customLibrary.issue.tooLarge': 'Library exceeds the {max}KB limit (currently {size}KB)',
+  'customLibrary.issue.customColorHex': 'customColor must be a #RRGGBB hex color',
+  'customLibrary.issue.itemKeyPrefix':
+    'Stage key must start with {prefix} (lowercase letters, digits, hyphens)',
+  'customLibrary.issue.presetKeyPrefix': 'Preset key must start with {prefix}',
+  'customLibrary.issue.danglingItemKey':
+    'Preset "{name}" references a stage key that does not exist: {key}',
+  'customLibrary.issue.duplicateItemKey': 'Duplicate stage key in this library',
+  'customLibrary.issue.duplicatePresetKey': 'Duplicate preset key in this library',
 };

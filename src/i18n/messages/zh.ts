@@ -1515,6 +1515,52 @@ export const zhMessages = {
   'travel.addDayFailed': '无法新增 {date} 的每日行程卡。',
   'travel.dayHasTasks': '该日还有任务，请先移走或删除任务。',
   'travel.removeFailed': '删除行程卡失败，请重试。',
+
+  /* ══════════ 笔·分界表 裁 3 / 裁 4：行业库错误位置与原因 ══════════
+     键：`customLibrary.label.*` / `.noun.*` / `.path.*` / `.issue.*`。
+
+     ★ **载荷零变化**：这些键只服务**界面**。复制给 Agent 的修正单仍走 core 的
+        `describeCustomLibraryLocation` / `ISSUE_TEXT` 的中文原值，逐字基准钉在
+        `tests/custom-library-path-i18n.spec.ts`（改前抄下的原文，不是改后重算）。
+     ⚠️ `customLibrary.label.*` 的 zh 取值必须与 core 的 `CUSTOM_LIBRARY_FIELD_LABELS` /
+        `CUSTOM_LIBRARY_ROOT_LABELS` **逐字相等**（spec 双向断言）——这是「同一个词两个
+        物理位置」的交换条件，理由见 `src/i18n/labels.ts` 对应区块。
+     ⚠️ `domain` / `schema` / `items` / `presets` 两处**共用同一个键**（K10）。
+     ⚠️ `customLibrary.noun.items` 只放**名词**「阶段」（`第 4 个阶段`），与
+        `customLibrary.label.items`（「阶段列表」）是两个词，别合并。 */
+  'customLibrary.label.key': 'key',
+  'customLibrary.label.name': '名称',
+  'customLibrary.label.rootName': '包名',
+  'customLibrary.label.domain': '主板块',
+  'customLibrary.label.schema': '版本标识',
+  'customLibrary.label.ratioPercent': '占比',
+  'customLibrary.label.colorIndex': '色号',
+  'customLibrary.label.kanbanColumn': '看板列',
+  'customLibrary.label.defaultResponsibility': '默认责任人',
+  'customLibrary.label.defaultTasks': '默认任务',
+  'customLibrary.label.customColor': '自定义主色',
+  'customLibrary.label.description': '说明',
+  'customLibrary.label.itemKeys': '阶段 key 列表',
+  'customLibrary.label.items': '阶段列表',
+  'customLibrary.label.presets': '套餐列表',
+  'customLibrary.noun.items': '阶段',
+  'customLibrary.noun.presets': '套餐',
+  /* 位置模板：`{kind}` 是名词（上两条），`{n}` 已是「第几个」（1 起） */
+  'customLibrary.path.wholeFile': '整个文件',
+  'customLibrary.path.entry': '第 {n} 个{kind}',
+  'customLibrary.path.entryNamed': '第 {n} 个{kind}（{who}）',
+  'customLibrary.path.fieldOf': '{base}的{field}',
+  'customLibrary.path.taskOf': '{base}的第 {n} 条默认任务',
+  'customLibrary.path.itemKeyOf': '{base}引用的第 {n} 个阶段 key',
+  'customLibrary.path.withDetail': '{where}：{message}',
+  /* 原因模板：`{prefix}` 是 schema 常量 `usr.`（数据，不是文案） */
+  'customLibrary.issue.tooLarge': '行业包超过 {max}KB 上限（当前 {size}KB）',
+  'customLibrary.issue.customColorHex': 'customColor 必须是 #RRGGBB 十六进制',
+  'customLibrary.issue.itemKeyPrefix': '阶段 key 必须以 {prefix} 开头（小写字母/数字/连字符）',
+  'customLibrary.issue.presetKeyPrefix': '套餐 key 必须以 {prefix} 开头',
+  'customLibrary.issue.danglingItemKey': '套餐「{name}」引用了不存在的阶段 key：{key}',
+  'customLibrary.issue.duplicateItemKey': '阶段 key 在包内重复',
+  'customLibrary.issue.duplicatePresetKey': '套餐 key 在包内重复',
 } as const;
 
 /**
