@@ -118,8 +118,15 @@ export function CustomLibrarySection(): JSX.Element {
   // 复制反馈 1.8s 后自灭（克制：不常驻、不弹窗）
   useEffect(() => {
     if (!flash) return;
-    const t = setTimeout(() => setFlash(null), 1800);
-    return () => clearTimeout(t);
+    /*
+     * ⚠️ 变量名是 `timer` 而**不是** `t`：本组件顶部有 i18n 的
+     * `const { t } = useLang()`，写成 `const t = setTimeout(...)` 会**遮蔽**它 ——
+     * 今天这个 effect 不取词所以能跑，但下一个人在这里加一句 `t('…')` 会拿到
+     * 一个 Timeout 对象（错误信息还指向别处）。这是接任包里点名过的坑（第 9 条），
+     * 本笔顺手改掉（纯改名，行为零变化）。
+     */
+    const timer = setTimeout(() => setFlash(null), 1800);
+    return () => clearTimeout(timer);
   }, [flash]);
 
   /** ① 复制提示词 = 代码生成的 prompt + 用户的一句话（+ 可选参照库） */
