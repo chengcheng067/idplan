@@ -7,7 +7,16 @@ import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { detectLocalDbVersion, isDbAheadOfApp, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
 import { recoverZombieExecutions } from '../core/execution/execution-recovery';
-import { t } from '../i18n';
+/*
+ * ★ i18n 笔 misc：本文件同时用**两种**取词形态，故 import 时先把模块级取词改名。
+ *   · `translate`（模块级 `t`，不订阅）：只给 `startRepositories` 那次「算一次就完」
+ *     的启动期调用用（理由见下方原注释）；
+ *   · `t`（`useLang()` 的）：本组件 render 期渲染的全部文案 —— 少了它，切语言时
+ *     这一页（升级闸门 / 降级安装 / 存储不可用三个致命面）不会重渲染。
+ *   ⚠️ 若不改名，组件内的 `const { t } = useLang()` 会**遮蔽**模块级 `t`，
+ *     上面那条「不订阅」的意图会被静默改掉。
+ */
+import { t as translate, useLang } from '../i18n';
 import { exportPreMigrationBackupToFile } from '../components/layout/useBackupIo';
 
 /**
@@ -47,6 +56,8 @@ type FatalState =
   | { kind: 'db-ahead'; dbVersion: number; appVersion: number };
 
 export function RepoProvider({ children }: { children: React.ReactNode }): JSX.Element {
+  /** 渲染期取词 + 语言变化订阅点（三个致命面/闸门的所有文案都走它） */
+  const { t } = useLang();
   const [bundle, setBundle] = useState<IRepositoryBundle | null>(null);
   const [fatal, setFatal] = useState<FatalState | null>(null);
   const [gate, setGate] = useState<GateState | null>(null);
@@ -81,8 +92,8 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
          * 这个 effect 会**重建仓储**（代价远大于收益）。启动期读一次当前语言即正确。
          */
         {
-          execution: t('execution.recovery.reason'),
-          attempt: t('execution.recovery.attemptReason'),
+          execution: translate('execution.recovery.reason'),
+          attempt: translate('execution.recovery.attemptReason'),
         },
       );
       if (!cancelledRef.current) setBundle(b);
@@ -91,7 +102,7 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
       const msg =
         err instanceof ChangxiaError
           ? err.userMessage
-          : '本地数据库初始化失败（可能是隐私模式禁用了存储）。';
+          : translate('di.repo.initFailed');
       setFatal({ kind: 'storage', message: msg });
     }
   }, []);
@@ -166,31 +177,37 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     return (
       <div className="flex min-h-screen items-center justify-center bg-cream p-8">
         <div className="max-w-md rounded-md border border-clay-soft bg-paper p-6 text-ink shadow-soft">
-          <h1 className="mb-2 font-display text-display-md">需要先导出升级前备份</h1>
+          <h1 className="mb-2 font-display text-display-md">{t('di.repo.gate.title')}</h1>
           {gate === 'failed' ? (
             <>
               <p className="text-sm leading-6 text-mist">
-                备份导出失败（请检查磁盘空间 / 下载权限）。为保护你的数据，本次
-                <strong>不执行升级</strong>，本地数据仍为旧格式、未受任何影响。
+                {t('di.repo.gate.failedBefore')}
+                <strong>{t('di.repo.gate.failedStrong')}</strong>
+                {t('di.repo.gate.failedAfter')}
               </p>
               <button
                 type="button"
                 className="mt-4 rounded-full bg-pine px-4 py-2 text-sm font-medium text-paper"
                 onClick={() => void confirmMigrationBackup()}
               >
-                重试导出
+                {t('di.repo.gate.retry')}
               </button>
             </>
           ) : (
             <>
               <p className="text-sm leading-6 text-mist">
-                检测到本地数据库是旧版本（v{gateFromVersion}），即将升级到 v
-                {SCHEMA_VERSION}。升级会
-                <strong>就地改写本地数据且不可逆</strong>，因此必须先导出一份备份——
-                这是升级后唯一的回滚凭据。
+                {t('di.repo.gate.detectedBefore', {
+                  from: gateFromVersion ?? '',
+                  to: SCHEMA_VERSION,
+                })}
+                <strong>{t('di.repo.gate.detectedStrong')}</strong>
+                {t('di.repo.gate.detectedAfter')}
               </p>
               <p className="mt-2 text-xs leading-5 text-mist">
-                点击按钮将下载 <code>id-plan-backup-*.json</code>，导出成功后自动继续升级。
+                {t('di.repo.gate.downloadBefore')}
+                {' '}
+                <code>id-plan-backup-*.json</code>
+                {t('di.repo.gate.downloadAfter')}
               </p>
               <button
                 type="button"
@@ -198,7 +215,9 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
                 disabled={gate === 'exporting'}
                 onClick={() => void confirmMigrationBackup()}
               >
-                {gate === 'exporting' ? '正在导出…' : '导出备份并继续'}
+                {gate === 'exporting'
+                  ? t('di.repo.gate.exporting')
+                  : t('di.repo.gate.exportAndContinue')}
               </button>
             </>
           )}
@@ -219,21 +238,25 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
       return (
         <div className="flex min-h-screen items-center justify-center bg-cream p-8">
           <div className="max-w-md rounded-md border border-clay-soft bg-paper p-6 text-ink shadow-soft">
-            <h1 className="mb-2 font-display text-display-md">本地数据比当前应用更新</h1>
+            <h1 className="mb-2 font-display text-display-md">{t('di.repo.ahead.title')}</h1>
             <p className="text-sm leading-6 text-mist">
-              这份数据是用更新版本的 ID Plan 打开过的：
-              <span className="mx-1 font-medium text-ink">数据 v{fatal.dbVersion}</span>
-              ，当前应用只支持到
-              <span className="mx-1 font-medium text-ink">v{fatal.appVersion}</span>
-              。为避免把新格式的数据改坏，本次<strong>没有打开它，也没有做任何修改</strong>。
+              {t('di.repo.ahead.intro')}
+              <span className="mx-1 font-medium text-ink">
+                {t('di.repo.ahead.dataVersion', { version: fatal.dbVersion })}
+              </span>
+              {t('di.repo.ahead.appOnlyTo')}
+              <span className="mx-1 font-medium text-ink">
+                {t('di.repo.ahead.appVersion', { version: fatal.appVersion })}
+              </span>
+              {t('di.repo.ahead.damageBefore')}
+              <strong>{t('di.repo.ahead.damageStrong')}</strong>
+              {t('di.repo.ahead.damageAfter')}
             </p>
-            <p className="mt-3 text-sm leading-6">
-              正确做法：更新到不低于数据版本的 ID Plan 再打开。如果你是刚刚从新版本
-              换回了旧版本，请换回新版本——数据一直都在，换回去就能看到。
-            </p>
+            <p className="mt-3 text-sm leading-6">{t('di.repo.ahead.advice')}</p>
             <p className="mt-3 rounded-2xl bg-cream px-4 py-3 text-[11px] leading-5 text-mist">
-              请<strong className="text-ink">不要</strong>删除浏览器/站点数据，也不要重装应用来
-              「修」它：那会真的把这份数据删掉，而它现在完好无损。
+              {t('di.repo.ahead.warnBefore')}
+              <strong className="text-ink">{t('di.repo.ahead.warnStrong')}</strong>
+              {t('di.repo.ahead.warnAfter')}
             </p>
           </div>
         </div>
@@ -242,11 +265,9 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     return (
       <div className="flex min-h-screen items-center justify-center bg-cream p-8">
         <div className="max-w-md rounded-md border border-clay-soft bg-paper p-6 text-ink shadow-soft">
-          <h1 className="mb-2 font-display text-display-md">无法访问本地数据</h1>
+          <h1 className="mb-2 font-display text-display-md">{t('di.repo.fatal.title')}</h1>
           <p className="text-sm leading-6 text-mist">{fatal.message}</p>
-          <p className="mt-3 text-sm leading-6">
-            请确认未处于浏览器无痕/隐私模式，或为站点启用站点数据后刷新重试。
-          </p>
+          <p className="mt-3 text-sm leading-6">{t('di.repo.fatal.hint')}</p>
         </div>
       </div>
     );
@@ -266,7 +287,7 @@ export function useRepoContext(): IRepositoryBundle {
   if (!ctx) {
     throw new ChangxiaError(
       ChangxiaErrorCode.Cancelled,
-      '仓储上下文缺失：RepoProvider 未挂载。',
+      translate('di.repo.noProvider'),
     );
   }
   return ctx;

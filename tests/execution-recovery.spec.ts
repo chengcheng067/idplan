@@ -798,6 +798,15 @@ describe('recoverZombieExecutions：原因串可注入（i18n 写入点取词）
      * 这是一条**源码接线锁**：注入形态下，`DEFAULT_RECOVERY_REASONS` 是中文出厂值，
      * 谁忘了在调用点传 `t(...)`，功能测试**全绿**而英文态照旧露中文（典型假绿）。
      * 判据 = 两个调用点都出现 `t('execution.recovery.reason')` 与 `…attemptReason`。
+     *
+     * ★ 2026-10-15 形态收窄（英文补齐批 · misc 分片，**不是放宽**）：
+     *   `src/di/repository.provider.tsx` 现在同时用**两种**取词形态 —— render 期走
+     *   `useLang()` 的 `t`（要订阅语言变化），而启动装配点刻意走**模块级**取词
+     *   （不订阅；理由见该文件内注释：进了 deps 会让 effect 重建仓储）。两种同名会
+     *   互相遮蔽，故模块级那份 import 时改名 `translate`（与 `PluginsSection.tsx` /
+     *   `PrintLogoSection.tsx` 同形）。**被锁的性质一字未变**：仍然要求这两个键
+     *   以「取词函数 + 该键字面量」的形态出现在调用点；放开的只是取词函数的**名字**
+     *   （`t` 或 `translate`），而「忘了传 ⇒ 英文态露中文」这条正是它要防的。
      */
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
@@ -808,8 +817,12 @@ describe('recoverZombieExecutions：原因串可注入（i18n 写入点取词）
     ];
     for (const rel of sites) {
       const src = readFileSync(resolve(root, rel), 'utf-8');
-      expect(src, `${rel} 未传 execution 原因串`).toContain("t('execution.recovery.reason')");
-      expect(src, `${rel} 未传 attempt 原因串`).toContain("t('execution.recovery.attemptReason')");
+      expect(src, `${rel} 未传 execution 原因串`).toMatch(
+        /(?<![\w.$])(?:t|translate)\('execution\.recovery\.reason'\)/,
+      );
+      expect(src, `${rel} 未传 attempt 原因串`).toMatch(
+        /(?<![\w.$])(?:t|translate)\('execution\.recovery\.attemptReason'\)/,
+      );
     }
   });
 });

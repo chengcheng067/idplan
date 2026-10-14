@@ -24,6 +24,9 @@
  */
 
 import { ChangxiaError, ChangxiaErrorCode } from '../core/types/enums';
+/* ★ i18n 笔 misc：兜底文案只在「拿不到真因」的那一支用（真因原样透传），
+   且发生在响应到达时 ⇒ 模块级 `t`（不订阅）就是正确形态。 */
+import { t } from '../i18n';
 import type { AgentChannelStatus, AgentImportChannel } from '../core/agent/transport.contract';
 import type { ApplyResult } from '../core/types/agent-payload';
 
@@ -51,7 +54,7 @@ function mapLoopbackError(status: number, body: unknown): ChangxiaError {
   const message =
     typeof parsed?.userMessage === 'string' && parsed.userMessage.length > 0
       ? parsed.userMessage
-      : `Agent loopback 请求失败（HTTP ${status}）。`;
+      : t('agentLoopback.httpFailed', { status });
   if (status === 401) return new ChangxiaError(ChangxiaErrorCode.Validation, message);
   if (status === 400) return new ChangxiaError(ChangxiaErrorCode.Validation, message);
   if (status === 404) return new ChangxiaError(ChangxiaErrorCode.NotFound, message);

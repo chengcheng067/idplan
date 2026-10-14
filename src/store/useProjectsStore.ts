@@ -254,7 +254,7 @@ export function createProjectActions(repos: import('../core/repositories/interfa
         store.putProject(updated);
         store.pushToast('success', t('toast.projectUpdated'));
       } catch (err) {
-        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : '更新失败');
+        store.pushToast('error', err instanceof ChangxiaError ? err.userMessage : t('toast.updateFailed'));
       }
     },
 

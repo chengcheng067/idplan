@@ -5,6 +5,9 @@ import { bootstrapAllStores, useRepos } from './useRepos';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { ChangxiaError } from '../core/types/enums';
+/* ★ i18n 笔 misc：三处文案都在「事件发生时算一次」的位置（成功/失败/toast），
+   故用模块级 `t`（不订阅）——与 `useLang.ts` 头注释第 ③ 条同口径。 */
+import { t } from '../i18n';
 
 /**
  * 应用启动引导：全量装载活跃数据进 stores（离线单机数据量小：
@@ -45,13 +48,13 @@ export function useProjectsBootstrap(): void {
 async function runBootstrap(repos: IRepositoryBundle): Promise<boolean> {
   try {
     await bootstrapAllStores(repos);
-    useProjectsStore.getState().pushToast('info', '数据装载完成');
+    useProjectsStore.getState().pushToast('info', t('bootstrap.loaded'));
     return true;
   } catch (err: unknown) {
     useSettingsStore.getState().failHydrate(describeFailure(err));
     // 瞬时通道保留（同一失败的第二条线索）；文案不再让人「刷新页面」——
     // 真正的重试入口是页面上的常驻错误面。
-    useProjectsStore.getState().pushToast('error', '本地数据装载失败，可在页面上点「重新装载」。');
+    useProjectsStore.getState().pushToast('error', t('bootstrap.loadFailed'));
     return false;
   }
 }
@@ -63,7 +66,7 @@ async function runBootstrap(repos: IRepositoryBundle): Promise<boolean> {
 function describeFailure(err: unknown): string {
   if (err instanceof ChangxiaError && err.userMessage) return err.userMessage;
   if (err instanceof Error && err.message) return err.message.slice(0, 200);
-  return '未捕获到错误信息（本机存储可能暂时不可用）。';
+  return t('bootstrap.unknownError');
 }
 
 /** Provider 未就绪时返回 null（组件树装配期调用安全） */

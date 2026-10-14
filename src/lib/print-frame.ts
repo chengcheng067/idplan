@@ -13,6 +13,7 @@
  * iframe `<html>` 不写 data-theme ⇒ `:root` 亮色令牌生效（第一道锁），克隆面
  * 自带 `.print-root`（第二道锁）；`.no-print` 元素克隆前剔除。
  */
+import { t } from '../i18n';
 
 /** 惰性单例 iframe（首次打印时创建、之后复用；不挂 React 树） */
 let frame: HTMLIFrameElement | null = null;
@@ -21,7 +22,12 @@ function ensureFrame(): HTMLIFrameElement {
   if (frame && document.body.contains(frame)) return frame;
   const el = document.createElement('iframe');
   el.setAttribute('data-print-frame', '');
-  el.title = '打印';
+  /*
+   * ★ i18n 笔 misc：iframe 文档标题会显示在系统打印对话框 / PDF 页眉 ⇒ 用户可见，
+   *   故走消息表。取词形态用模块级 `t`（不订阅）：本函数是**点击打印那一刻**
+   *   才算一次的事件路径，不是 render 期派生常量（`useLang()` 头注释第 ③ 条）。
+   */
+  el.title = t('print.frame.docTitle');
   el.setAttribute('aria-hidden', 'true');
   el.style.position = 'fixed';
   el.style.left = '-9999px';

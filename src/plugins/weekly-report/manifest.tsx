@@ -11,12 +11,22 @@
  */
 
 import type { PluginManifest } from '../../core/plugin/types';
+import { t } from '../../i18n';
 import { WeeklyReportPanel } from './WeeklyReportPanel';
 
+/*
+ * ★ i18n 笔 misc：三个展示字段走 **getter**，理由与形状同
+ * `plugins/agent-board/manifest.tsx`（模块顶层 `t()` 会被冻在 import 那一刻，
+ * 而 `PluginManifest` 的字段类型是 `string`、本批不许改共享内核契约）。
+ */
 export const weeklyReportManifest: PluginManifest = {
   id: 'weekly-report',
-  name: '项目周报',
-  summary: '一页看完本周全部项目的阶段/任务/逾期（只读）',
+  get name() {
+    return t('plugin.weeklyReport.name');
+  },
+  get summary() {
+    return t('plugin.weeklyReport.summary');
+  },
   version: '1.0.0',
   // ★ 这一行是它全部的特殊之处：非随包分发
   source: 'member',
@@ -24,5 +34,14 @@ export const weeklyReportManifest: PluginManifest = {
   capabilities: ['data.read'],
   defaultEnabled: false,
   routes: [{ path: 'weekly-report', element: <WeeklyReportPanel /> }],
-  nav: [{ to: '/weekly-report', label: '项目周报', icon: 'fileText', group: 'main' }],
+  nav: [
+    {
+      to: '/weekly-report',
+      get label() {
+        return t('plugin.weeklyReport.name');
+      },
+      icon: 'fileText',
+      group: 'main',
+    },
+  ],
 };

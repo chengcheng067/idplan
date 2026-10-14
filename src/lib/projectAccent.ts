@@ -17,6 +17,7 @@
  *   ⚠️ 故本文件的产物是**内联 style 值**，调用方写 `style={{ backgroundColor }}`；
  *      不要试图把它塞进 className。
  */
+import { t } from '../i18n';
 
 /**
  * 折叠态侧栏那枚 40×36 方块能显示的简称最大字数。
@@ -27,18 +28,65 @@ export const PROJECT_SHORT_LABEL_MAX_LENGTH = 2;
 /**
  * 可选的封面 token 白名单（= 写入侧的值域，同时驱动编辑器的色板顺序）。
  * `css` 为取色表达式，仅在渲染时使用；库里存的是 `key`。
+ *
+ * ⚠️ **`label` 是 getter，不是普通字面量**（i18n 笔 misc）：
+ *   色号名（靛蓝/琥珀/…）是**展示名**，落库的是 `key` ⇒ 该随语言走；但本表是
+ *   **模块级常量**，写成 `label: t('…')` 会把语言冻在 import 那一刻。
+ *   而本表的类型是 `readonly label: string`（消费者只用 `token.label` 上屏），
+ *   改成「键表 + 取词函数」要动 `ProjectAppearanceDialog`（不在本笔边界内）
+ *   ⇒ getter 是就地可用的等价形态：每次读都按当前语言重算。
+ *   ✅ 反应性已核：唯一消费方 `ProjectAppearanceDialog` 已 `useLang()` 订阅
+ *     （切语言即重渲染 ⇒ 重读 `token.label` ⇒ 拿到新语言）。**新增消费方时也必须
+ *     订阅**，否则色卡名会停在上一种语言。写入侧不读 `label`（只有 `key` / `css`）。
+ *   ⚠️ 另：本表**不可被浅拷贝**（`{...token}` 会把 getter 拍平）。
  */
 export const PROJECT_COVER_TOKENS: ReadonlyArray<{
   readonly key: string;
   readonly label: string;
   readonly css: string;
 }> = [
-  { key: 'pine', label: '靛蓝', css: 'rgb(var(--pine-rgb))' },
-  { key: 'amber', label: '琥珀', css: 'rgb(var(--amber-rgb))' },
-  { key: 'clay', label: '陶红', css: 'rgb(var(--clay-rgb))' },
-  { key: 'moss', label: '苔绿', css: 'rgb(var(--moss-rgb))' },
-  { key: 'mist', label: '雾灰', css: 'rgb(var(--mist-rgb))' },
-  { key: 'cream', label: '米白', css: 'rgb(var(--cream-rgb))' },
+  {
+    key: 'pine',
+    get label() {
+      return t('project.cover.pine');
+    },
+    css: 'rgb(var(--pine-rgb))',
+  },
+  {
+    key: 'amber',
+    get label() {
+      return t('project.cover.amber');
+    },
+    css: 'rgb(var(--amber-rgb))',
+  },
+  {
+    key: 'clay',
+    get label() {
+      return t('project.cover.clay');
+    },
+    css: 'rgb(var(--clay-rgb))',
+  },
+  {
+    key: 'moss',
+    get label() {
+      return t('project.cover.moss');
+    },
+    css: 'rgb(var(--moss-rgb))',
+  },
+  {
+    key: 'mist',
+    get label() {
+      return t('project.cover.mist');
+    },
+    css: 'rgb(var(--mist-rgb))',
+  },
+  {
+    key: 'cream',
+    get label() {
+      return t('project.cover.cream');
+    },
+    css: 'rgb(var(--cream-rgb))',
+  },
 ];
 
 /** token 名 → 取色表达式（由上表派生，保持单一事实源，禁止再抄一份） */

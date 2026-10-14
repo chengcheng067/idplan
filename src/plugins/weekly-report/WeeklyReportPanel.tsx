@@ -25,6 +25,7 @@ import { Link } from 'react-router-dom';
 import { CalendarRange, FileText } from 'lucide-react';
 
 import { useHumanProjects, useHumanStages, useVisibleTasks } from '../../core/project/visibility';
+import { useLang } from '../../i18n';
 import { cn } from '../../lib/cn';
 
 /** 本周（自然周）的起止 ISO date——纯函数，无 IO（便于单测/复现） */
@@ -49,6 +50,8 @@ function overdue(tasks: ReturnType<typeof useVisibleTasks>): number {
  * 	data来自三个已收窄的 hook（kind + 归属），没有别的入口。
  */
 export function WeeklyReportPanel(): JSX.Element {
+  /** 取词 + 语言变化订阅点 */
+  const { t } = useLang();
   const projects = useHumanProjects();
   const stages = useHumanStages();
   const tasks = useVisibleTasks('human');
@@ -60,8 +63,10 @@ export function WeeklyReportPanel(): JSX.Element {
       projects
         .map((p) => {
           const pStages = stages.filter((s) => s.projectId === p.id);
-          const pTasks = tasks.filter((t) => t.projectId === p.id);
-          const done = pTasks.filter((t) => t.status === 'done').length;
+          /* ⚠️ 回调参数**不叫 `t`**：它会遮蔽 `useLang()` 的取词函数（`t`），
+             将来在这个闭包里加一句取词就会静默往任务对象上取词、当场类型错。 */
+          const pTasks = tasks.filter((task) => task.projectId === p.id);
+          const done = pTasks.filter((task) => task.status === 'done').length;
           return {
             id: p.id,
             name: p.name,
@@ -82,12 +87,18 @@ export function WeeklyReportPanel(): JSX.Element {
         <div>
           <div className="flex items-center gap-2">
             <FileText size={16} className="text-pine" aria-hidden />
-            <h1 className="text-[20px] font-semibold tracking-tight text-ink">项目周报</h1>
+            <h1 className="text-[20px] font-semibold tracking-tight text-ink">
+              {t('plugin.weeklyReport.name')}
+            </h1>
             <span className="font-mono text-[10px] text-mist">member plugin · read-only</span>
           </div>
           <p className="mt-1 text-[13px] text-mist">
-            本周 {week.from} → {week.to} · 共 {projects.length} 个进行中项目 ·
-            逾期任务 {rows.reduce((n, r) => n + r.overdue, 0)} 条
+            {t('plugin.weeklyReport.rangeSummary', {
+              from: week.from,
+              to: week.to,
+              projects: projects.length,
+              overdue: rows.reduce((n, r) => n + r.overdue, 0),
+            })}
           </p>
         </div>
         <button
@@ -95,28 +106,32 @@ export function WeeklyReportPanel(): JSX.Element {
           onClick={() => setOpen((v) => !v)}
           className="h-8 shrink-0 rounded-md border border-line bg-paper px-3 text-[12px] text-ink outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40"
         >
-          {open ? '收起明细' : '展开明细'}
+          {open ? t('plugin.weeklyReport.collapse') : t('plugin.weeklyReport.expand')}
         </button>
       </div>
 
       {!open ? (
         <div className="rounded-lg border border-line bg-paper px-4 py-8 text-center text-[13px] text-mist">
-          明细已收起。
+          {t('plugin.weeklyReport.collapsed')}
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-line bg-paper px-4 py-8 text-center text-[13px] text-mist">
-          本周还没有进行中的项目。
+          {t('plugin.weeklyReport.empty')}
         </div>
       ) : (
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-mist">
-              <th className="py-2 pr-4 font-medium">项目</th>
-              <th className="py-2 pr-4 font-medium">客户</th>
-              <th className="py-2 pr-4 text-right font-medium">阶段</th>
-              <th className="py-2 pr-4 text-right font-medium">任务</th>
-              <th className="py-2 pr-4 text-right font-medium">已完成</th>
-              <th className="py-2 text-right font-medium">逾期</th>
+              <th className="py-2 pr-4 font-medium">{t('plugin.weeklyReport.th.project')}</th>
+              <th className="py-2 pr-4 font-medium">{t('plugin.weeklyReport.th.client')}</th>
+              <th className="py-2 pr-4 text-right font-medium">
+                {t('plugin.weeklyReport.th.stages')}
+              </th>
+              <th className="py-2 pr-4 text-right font-medium">
+                {t('plugin.weeklyReport.th.tasks')}
+              </th>
+              <th className="py-2 pr-4 text-right font-medium">{t('plugin.weeklyReport.th.done')}</th>
+              <th className="py-2 text-right font-medium">{t('plugin.weeklyReport.th.overdue')}</th>
             </tr>
           </thead>
           <tbody>
@@ -150,7 +165,7 @@ export function WeeklyReportPanel(): JSX.Element {
 
       <p className="mt-6 flex items-center gap-1.5 text-[11px] text-mist">
         <CalendarRange size={12} aria-hidden />
-        本面板只读项目数据，不写入、不修改任何内容。
+        {t('plugin.weeklyReport.readOnlyNote')}
       </p>
     </div>
   );

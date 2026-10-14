@@ -53,6 +53,12 @@ import type { CreateAgentBoardCmd } from '../core/services/project.service';
 // token 存储键的**唯一出处**（宿主中立常量：本 hook 常驻 AppShell，
 // 不许 import 归 agent-board 插件所有的 `pages/**` / `components/agent/**`）
 import { AGENT_TOKEN_STORAGE_KEY } from '../constants/agentTerms';
+/*
+ * ★ i18n 笔 misc：本文件是**纯函数层 + 一个只做桥接的 hook**，四处兜底文案都在
+ *   「事件发生时算一次」的位置（catch 分支），故用**模块级 `t`**（不订阅）——
+ *   与 `useLang.ts` 头注释第 ③ 条同口径；这里没有 render 期求值的派生常量。
+ */
+import { t } from '../i18n';
 import { useRepos } from './useRepos';
 
 /** 主进程经 IPC 转来的 ping（仅确认监听器活着，不携带业务数据） */
@@ -128,7 +134,7 @@ export async function runAgentImport(
       : await applyAgentPayload(repos, validated, applyOpts);
     return { requestId: req.requestId, result };
   } catch (err) {
-    const message = err instanceof ChangxiaError ? err.userMessage : '写入失败。';
+    const message = err instanceof ChangxiaError ? err.userMessage : t('agentLoopback.writeFailed');
     const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
     const httpStatus =
       err instanceof ChangxiaError && err.code === ChangxiaErrorCode.NotFound ? 404 : 400;
@@ -185,7 +191,7 @@ export async function runAgentCreateBoard(
       },
     };
   } catch (err) {
-    const message = err instanceof ChangxiaError ? err.userMessage : '建板失败。';
+    const message = err instanceof ChangxiaError ? err.userMessage : t('agentLoopback.createBoardFailed');
     // ★ 契约码映射（2026-09-28 走查 #11）：throw 的是内部枚举（validation），服务端
     //   同场景回 invalid_field——按码分支的写入方必须拿到同一个码，否则两通道
     //   同一错误两种 code。映射只此一处（翻转点：上游改码只动这张表）。
@@ -221,7 +227,7 @@ export async function runAgentListTasks(
           error: {
             code: ChangxiaErrorCode.ProjectUnresolved,
             httpStatus: 400,
-            userMessage: `目标项目（id=${req.projectId}）不是 Agent 看板，Agent 通道读不到它的任务。`,
+            userMessage: t('agentLoopback.notAgentBoard', { id: req.projectId }),
           },
         };
       }
@@ -265,7 +271,7 @@ export async function runAgentListTasks(
       },
     };
   } catch (err) {
-    const message = err instanceof ChangxiaError ? err.userMessage : '读取任务失败。';
+    const message = err instanceof ChangxiaError ? err.userMessage : t('agentLoopback.listTasksFailed');
     const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
     return { requestId: req.requestId, error: { code, httpStatus: 400, userMessage: message } };
   }
@@ -298,7 +304,7 @@ export async function runAgentCommand(
     );
     return { requestId: req.requestId, result };
   } catch (err) {
-    const message = err instanceof ChangxiaError ? err.userMessage : '命令执行失败。';
+    const message = err instanceof ChangxiaError ? err.userMessage : t('agentLoopback.commandFailed');
     const code = err instanceof ChangxiaError ? err.code : ChangxiaErrorCode.Storage;
     return { requestId: req.requestId, error: { code, httpStatus: 400, userMessage: message } };
   }
