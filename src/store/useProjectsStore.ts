@@ -26,6 +26,7 @@ import {
   resolveErrorText,
 } from '../core/types/enums';
 import { taskIsDone, withStatus } from '../core/types/entities';
+import { OPERATOR_SENTINELS } from '../core/types/operator-sentinel';
 import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../core/template/stage-fallback';
 import type { TaskQuery } from '../core/repositories/interfaces';
 import { previewSplit } from '../core/template/split';
@@ -523,7 +524,7 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
           projectId: task.projectId,
           memberId: task.assigneeId,
           action: AssignmentAction.Assign,
-          operatorName: operatorName || '未知',
+          operatorName: operatorName || OPERATOR_SENTINELS.unknown,
         });
         store.putTask(updated);
       } catch (err) {
@@ -636,7 +637,7 @@ export function createTaskActions(repos: import('../core/repositories/interfaces
 }
 
 function useMemberName(memberId: string | null): string {
-  if (!memberId) return '未知';
+  if (!memberId) return OPERATOR_SENTINELS.unknown;
   const m = findMemberCached(memberId);
   return m?.name ?? memberId;
 }

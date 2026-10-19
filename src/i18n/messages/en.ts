@@ -1424,6 +1424,12 @@ export const enMessages: Record<MessageKey, string> = {
     'No reschedules yet. Drag a bar edge, or change the dates and confirm, and an immutable record is appended here.',
   'delayHistory.operator': ' · by {name}',
   'delayHistory.shifted': ' · pulled in / shifted',
+  /* ── Display text for the operator sentinel values (the stored value stays the
+   * Chinese original; see src/core/types/operator-sentinel.ts). Consumed only
+   * through `operatorNameLabel()`; `未知` reuses `common.unknown` above. ── */
+  'operator.currentUser': 'current user',
+  'operator.me': 'me',
+  'operator.agentChannel': 'Agent channel',
   'taskChecklist.markDone': 'Mark as done',
   'taskChecklist.markUndone': 'Mark as not done',
   'taskChecklist.unassigned': 'Unassigned',

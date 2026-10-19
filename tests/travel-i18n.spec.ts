@@ -106,9 +106,20 @@ describe('② 钩子背后有人话 + 禁区（B）不许被翻', () => {
     );
   });
 
-  it('★ 禁区登记：`assignTask` 的 operatorName 必须**还是** `\'我\'`（B · 落库值）', () => {
-    // 反面：有人「顺手把它翻掉」⇒ 库里会开始出现英文操作人，历史留痕随语言分叉
+  it('★ 禁区登记：`assignTask` 的 operatorName 必须**还是**落库原值 `我`（B · 落库值）', () => {
+    /*
+     * 反面：有人「顺手把它翻掉」⇒ 库里会开始出现英文操作人，历史留痕随语言分叉。
+     *
+     * ⚠️ **换载体、不放松口径**（operator_name 收口批）：字面量 `'我'` 已收敛进数据面
+     *   常量表 `OPERATOR_SENTINELS.me` —— **取值仍是 `我`，逐字节不变**（值锁见
+     *   `tests/data-sentinel-i18n.spec.ts` 的「值逐字节等于改造前」）。故本条从
+     *   「锁裸字面量」升级成「锁常量出处」**并额外加一条反向断言**（不许退回裸字面量，
+     *   否则它又脱离唯一出处、守卫扫不到）：口径比原来更硬，不是更松。
+     */
     expect(src, 'operatorName 被改成消息表取值了 —— 这是落库值（B），翻它会污染流水').toMatch(
+      /assignTask[\s\S]{0,400}?updateTask\(taskId, \{ itineraryDate: date \}, OPERATOR_SENTINELS\.me\)/,
+    );
+    expect(src, '退回裸字面量了 —— 值会脱离唯一出处，守卫扫不到').not.toMatch(
       /assignTask[\s\S]{0,400}?updateTask\(taskId, \{ itineraryDate: date \}, '我'\)/,
     );
   });

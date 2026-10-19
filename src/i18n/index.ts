@@ -78,6 +78,8 @@ export {
   pluginDisplaySummary,
   pluginFailureText,
   MODE_COLLAPSED_KEYS,
+  OPERATOR_NAME_KEYS,
+  operatorNameLabel,
   memberActorKindLabel,
   memberRoleLabel,
   REST_POLICY_KEYS,

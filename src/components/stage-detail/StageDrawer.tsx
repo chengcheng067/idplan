@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 
 import type { Member, Stage, Task } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
+import { OPERATOR_SENTINELS } from '../../core/types/operator-sentinel';
 import { useProjectsStore, createProjectActions } from '../../store/useProjectsStore';
 import { useProjectById, useProjectStages, useProjectTasks } from '../../core/project/visibility';
 import { useMembersStore } from '../../store/useMembersStore';
@@ -191,7 +192,7 @@ function StatusRow({ stage }: { stage: Stage; projectId: string }): JSX.Element 
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
-  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
+  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? OPERATOR_SENTINELS.currentUser;
 
   const set = async (next: StageStatus): Promise<void> => {
     const actions = createProjectActions(repos);
@@ -226,7 +227,7 @@ function DateRow({ stage }: { stage: Stage }): JSX.Element {
   const repos = useRepos();
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
-  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
+  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? OPERATOR_SENTINELS.currentUser;
 
   const applyRange = async (newStart: string, newEnd: string): Promise<void> => {
     const postponed =

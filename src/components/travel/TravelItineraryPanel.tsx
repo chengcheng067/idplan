@@ -5,6 +5,7 @@ import { Bus, BedDouble, Coins, Plus, Trash2, CalendarPlus, X } from 'lucide-rea
 import type { ItineraryDay, Project, Task } from '../../core/types/entities';
 import { resolveErrorText } from '../../core/types/enums';
 import { taskIsDone } from '../../core/types/entities';
+import { OPERATOR_SENTINELS } from '../../core/types/operator-sentinel';
 import { useRepos } from '../../hooks/useRepos';
 import { createTaskActions, useProjectsStore } from '../../store/useProjectsStore';
 import { dayjs } from '../../lib/date';
@@ -116,8 +117,10 @@ export function TravelItineraryPanel({ project }: { project: Project }): JSX.Ele
      * ⚠️ `'我'` **不翻**（B）：它是 `actions.updateTask(..., operatorName)` 的
      *    **operatorName ⇒ 会被写进任务流水**（与 `'当前用户'` / `'负责人'` 同族的落库值）。
      *    翻它 = 往库里写英文操作人，历史留痕会随界面语言分叉 —— 这是本笔最容易误翻的一处。
+     *    ⇒ 取值一律走 `OPERATOR_SENTINELS`（数据面唯一出处），显示层再由
+     *      `operatorNameLabel()` 取词。
      */
-    await actions.updateTask(taskId, { itineraryDate: date }, '我');
+    await actions.updateTask(taskId, { itineraryDate: date }, OPERATOR_SENTINELS.me);
   };
 
   const addManualDay = async (): Promise<void> => {

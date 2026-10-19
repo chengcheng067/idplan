@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 import type { BatchReschedule } from './TimelineView';
+import { OPERATOR_SENTINELS } from '../../core/types/operator-sentinel';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useMembersStore } from '../../store/useMembersStore';
 import { createProjectActions } from '../../store/useProjectsStore';
@@ -30,7 +31,7 @@ export function RescheduleDialog({
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const members = useMembersStore((s) => s.members);
   const operatorName =
-    members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
+    members.find((m) => m.id === currentMemberId)?.name ?? OPERATOR_SENTINELS.currentUser;
 
   const primary = batch.items[batch.primaryIndex];
   const postponed = useMemo(

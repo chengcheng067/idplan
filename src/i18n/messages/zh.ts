@@ -1428,6 +1428,12 @@ export const zhMessages = {
     '暂无改期记录。拖拽彩条边缘或修改日期并确认后，将在此追加一条不可篡改的档案。',
   'delayHistory.operator': ' · 操作人 {name}',
   'delayHistory.shifted': ' · 平移/提前',
+  /* ── 操作人哨兵值的**显示**文案（落库值是中文原值，见 src/core/types/operator-sentinel.ts）──
+   * 只在显示层经 `operatorNameLabel()` 取词；写入点不许经 `t()`，否则英文态会把
+   * 英文写进库、历史留痕按语言分叉。`未知` 复用上面的 `common.unknown`（同词一键）。 */
+  'operator.currentUser': '当前用户',
+  'operator.me': '我',
+  'operator.agentChannel': 'Agent 通道',
   'taskChecklist.markDone': '标记完成',
   'taskChecklist.markUndone': '标记未完成',
   'taskChecklist.unassigned': '未指派',

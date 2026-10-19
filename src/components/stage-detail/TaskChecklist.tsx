@@ -5,6 +5,7 @@ import { Check, Plus, Trash2, Users, X } from 'lucide-react';
 
 import type { Member, Stage, Task } from '../../core/types/entities';
 import { taskIsDone } from '../../core/types/entities';
+import { OPERATOR_SENTINELS } from '../../core/types/operator-sentinel';
 import { createTaskActions } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import {
@@ -64,7 +65,7 @@ export function TaskChecklist({
    */
   const isRestricted = isRestrictedView(role);
   const meId = currentMember?.id ?? null;
-  const operatorName = currentMember?.name ?? '当前用户';
+  const operatorName = currentMember?.name ?? OPERATOR_SENTINELS.currentUser;
 
   const actions = createTaskActions(repos);
   const [newTitle, setNewTitle] = useState('');

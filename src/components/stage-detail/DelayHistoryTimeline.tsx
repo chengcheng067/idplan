@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 
 import type { StageLog } from '../../core/types/entities';
 import { StageLogType } from '../../core/types/enums';
-import { useLang } from '../../i18n';
+import { operatorNameLabel, useLang } from '../../i18n';
 
 /** 延期档案时间线（append-only 渲染：只增不改） */
 export function DelayHistoryTimeline({ logs }: { logs: StageLog[] }): JSX.Element {
@@ -39,7 +39,7 @@ export function DelayHistoryTimeline({ logs }: { logs: StageLog[] }): JSX.Elemen
             </p>
             <p className="text-xs text-mist">
               {dayjs(l.createdAt).format('YYYY-MM-DD HH:mm')}
-              {t('delayHistory.operator', { name: l.operatorName })}
+              {t('delayHistory.operator', { name: operatorNameLabel(l.operatorName) })}
               {!postponed && t('delayHistory.shifted')}
             </p>
           </li>

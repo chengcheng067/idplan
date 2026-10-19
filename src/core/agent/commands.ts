@@ -35,6 +35,7 @@ import { z } from 'zod';
 import { coreError, ChangxiaErrorCode, StageStatus } from '../types/enums';
 import type { IRepositoryBundle, ISettingsRepository } from '../repositories/interfaces';
 import type { Stage } from '../types/entities';
+import { OPERATOR_SENTINELS } from '../types/operator-sentinel';
 import { assertAgentWritableProject } from './payload.apply';
 import { isIsoDate } from '../../lib/date';
 
@@ -224,7 +225,7 @@ export async function runRescheduleStages(
       newStartAt: item.to.startAt,
       newEndAt: item.to.endAt,
       reason: c.reason,
-      operatorName: deps.operatorName ?? 'Agent 通道',
+      operatorName: deps.operatorName ?? OPERATOR_SENTINELS.agentChannel,
     });
   }
   const applied: RescheduleApplied = {

@@ -15,6 +15,7 @@ import {
   useHumanTasks,
 } from '../core/project/visibility';
 import { taskAssigneeIds } from '../hooks/useRoleGuard';
+import { OPERATOR_SENTINELS } from '../core/types/operator-sentinel';
 import { cn } from '../lib/cn';
 import { remainingDays } from '../lib/date';
 import { StatCard } from '../components/project/StatCard';
@@ -67,7 +68,12 @@ export function MyTasksPage(): JSX.Element {
   const me = members.find((m) => m.id === currentMemberId) ?? null;
   const todayIso = new Date().toISOString().slice(0, 10);
   const actions = createTaskActions(repos);
-  const operatorName = me?.name ?? t('common.unknown');
+  /*
+   * ⚠️ 这是**写入点**（该值会随 `toggleDone` 落进 assignments 留痕）⇒ 必须取
+   *    `OPERATOR_SENTINELS` 的中文原值，**不许经 `t()`**。此前这里写的是
+   *    `t('common.unknown')`：英文态会把 `Unknown` 写进库，历史留痕按语言分叉。
+   */
+  const operatorName = me?.name ?? OPERATOR_SENTINELS.unknown;
 
   // 参与人包含语义（taskAssigneeIds 回落旧数据 assigneeId）
   const allMyTasks = useMemo(

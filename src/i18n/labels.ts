@@ -59,6 +59,13 @@ import type {
  * 不该因为一张取词表被拖进 i18n 的模块图）。
  */
 import type { StageTemplateDomain } from '../core/types/dto';
+/*
+ * 操作人哨兵值从 **core**（数据面）取。方向 `i18n → core` 是唯一合法方向；
+ * 反向禁止（`src/core/**` 不许 import i18n —— 会把 `lang.ts` 的 `document`
+ * 拖进无 DOM 的服务端 program）。所以「写入钉死中文原值」与「显示层取词」
+ * 分别住在两个文件：值表在 `core/types/operator-sentinel.ts`，取词在本文件。
+ */
+import { OPERATOR_SENTINELS } from '../core/types/operator-sentinel';
 import { t, type InterpolationVars } from './translate';
 import type { Lang } from './lang';
 import type { MessageKey } from './messages/zh';
@@ -184,6 +191,41 @@ export const CN_HOLIDAY_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
  */
 export function cnHolidayNameLabel(name: string): string {
   const key = CN_HOLIDAY_NAME_KEYS[name];
+  return key === undefined ? name : t(key);
+}
+
+/* ═══════════ 操作人哨兵值 → 文案键（落库值 vs 显示文案分离） ═══════════
+ *
+ * `assignments.operator_name` / `stage_logs.operator_name` 是**落库数据值**。
+ * 写入点若经 `t()` 取词，同一条哨兵值会随界面语言分叉（英文态写进 `Unknown`）⇒
+ * 历史留痕按语言分裂、无法回溯当时是谁写的。故**写入侧钉死中文原值**（值表见
+ * `src/core/types/operator-sentinel.ts` 的 `OPERATOR_SENTINELS`），显示侧在这里取词。
+ *
+ * ── 键**故意**以中文原值为键（不是索引）──
+ * 与上一张 `CN_HOLIDAY_NAME_KEYS` 逐条同形：老行里已经存着 `未知` / `当前用户` /
+ * `我` / `Agent 通道`，以原值为键 ⇒ **零迁移、不动 DDL**，老行天然可映射。
+ *
+ * ── `未知` 复用既有 `common.unknown` ──
+ * 同一个词只建一个键（K10）。`common.unknown` 的中文取值本来就是 `未知`，
+ * 英文是 `Unknown`，语义与这里完全一致 ⇒ 不再新建 `operator.unknown` 造死词条。
+ *
+ * ⚠️ 未知值**回落原文**（与 `cnHolidayNameLabel` / `pluginFailureText` 同口径）：
+ *    这里的「未知值」是**成员真名**或将来新增的哨兵 —— 成员真名当然要原样显示；
+ *    将来新增哨兵而忘了建键，覆盖率锁 `tests/data-sentinel-i18n.spec.ts` 会当场红。
+ */
+export const OPERATOR_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
+  [OPERATOR_SENTINELS.unknown]: 'common.unknown',
+  [OPERATOR_SENTINELS.currentUser]: 'operator.currentUser',
+  [OPERATOR_SENTINELS.me]: 'operator.me',
+  [OPERATOR_SENTINELS.agentChannel]: 'operator.agentChannel',
+};
+
+/**
+ * 操作人名取词（**屏幕侧唯一入口**）。成员真名 / 未知值原样回显。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function operatorNameLabel(name: string): string {
+  const key = OPERATOR_NAME_KEYS[name];
   return key === undefined ? name : t(key);
 }
 

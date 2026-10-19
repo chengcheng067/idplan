@@ -29,6 +29,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, Save, X } from 'lucide-react';
 
 import { RestPolicyKind, ScheduleBasis, StageStatus } from '../../core/types/enums';
+import { OPERATOR_SENTINELS } from '../../core/types/operator-sentinel';
 import type { Project, RestPolicyConfig, Stage, Task } from '../../core/types/entities';
 import { StageService } from '../../core/services/stage.service';
 import { useHumanProjects } from '../../core/project/visibility';
@@ -254,7 +255,7 @@ export function RestPolicyRecalcDialog({
   // ⚠️ 有意不翻（笔 1-⑤）：`当前用户` 是**落库的操作人字段**（写进 StageLog.operatorName，
   // 随重算流水落盘、日后按显示用读）——与阶段预设名同类，team-lead 已裁定维持中文。
   // 它在本弹窗里**从不渲染**（只作为参数交给 applyRestPolicyRecalc）。
-  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? '当前用户';
+  const operatorName = members.find((m) => m.id === currentMemberId)?.name ?? OPERATOR_SENTINELS.currentUser;
 
   /** 工期模式：keep=工期不变（默认）；custom=调整工期（每阶段天数覆盖） */
   const [mode, setMode] = useState<'keep' | 'custom'>('keep');
