@@ -18,7 +18,7 @@
   
   <img src="https://img.shields.io/badge/version-1.0.0.0011-blue.svg" alt="version" />
   
-  <img src="https://img.shields.io/badge/tests-3791%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-3912%20passing-brightgreen.svg" alt="tests" />
   
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   
@@ -233,7 +233,7 @@ npm run electron:dev   # 桌面形态开发运行
 ```
 
 ```bash
-npm test               # 全量单测（244 份 spec / 3791 用例，vitest）
+npm test               # 全量单测（245 份 spec / 3912 用例，vitest）
 npm run typecheck      # 前端类型检查
 npm run build          # 类型检查 + 构建
 npm run electron:build # 构建 + 打 Windows NSIS 安装包
