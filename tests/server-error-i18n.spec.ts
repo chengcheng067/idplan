@@ -382,7 +382,13 @@ describe('③ 无死键：载荷表里每个键都在 server 源码里被引用'
  *     与 `agent.routes.ts` 的实际注册清单逐字对应，见该文件注释）。
  * D 类 · 机器输入/技术契约：
  *   · `nl-llm.ts` 的 **LLM system prompt**（中文用户输入的解析指令，读者是模型）；
- *   · `nl-llm.ts` 顶部的数据出境明示（随 prompt 同批展示给模型侧）；
+ *   · `nl-llm.ts` 顶部的数据出境明示（`NL_DATA_DISCLOSURE`）。
+ *     ⚠️ 10-19 复核订正：本条原写的理由「随 prompt 同批展示给模型侧」是**错的** ——
+ *     实测 system prompt 里不含它（prompt 是 `NL_SYSTEM_PROMPT` 那 14 条），它是
+ *     `agent.routes.ts:657` 原样放进响应体的 `dataDisclosure` 字段，且 `api-contract.md`
+ *     §NL 段把它记为契约字段、要求「调用方必须让用户知道」。⇒ 正确分类是 **B-协议**
+ *     （读者是接入方），不是 D-模型输入；今天 src 侧无 UI 消费点，故**不翻**的结论不变，
+ *     但一旦 UI 开始显示它，它就要走取词。此点待雯丞裁决（2026-10-19）。
  *   · `db.ts` 的 schema.sql 分段标记缺失（纯 Error，消息**永不外溢**到用户 ——
  *     错误处理器只取 `userMessage` 或兜底句）；
  *   · `schema.sql` 的 `--` 注释。
