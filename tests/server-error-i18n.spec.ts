@@ -40,6 +40,9 @@
  *      的 `ChangxiaError(code, '中文', err)` 改成 `coreError/ServerTextError(code,
  *      key, params, err)` 后，「复用 `coreErr.*` 键」与「进 `serverErr.*` 新表」
  *      各处的载荷必须与**改动前那句字面量**逐字节相等 —— 同不了文的就不许复用。
+ *   ⑧ **两表不漂**：载荷表（`server/lib/server-error-text.ts`）⟺ 消息表 core 分片
+ *      （`src/i18n/messages/parts/core.ts`）的 `serverErr.*` 段 —— 与
+ *      `core-error-i18n.spec.ts` ① 同款纪律（同一句子两个物理位置，靠断言防漂）。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
@@ -71,6 +74,7 @@ import {
   type ServerMessageKey,
 } from '../server/lib/server-error-text';
 import { ChangxiaError, ChangxiaErrorCode, coreError } from '../src/core/types/enums';
+import { en as corePartEn, zh as corePartZh } from '../src/i18n/messages/parts/core';
 import { maskComments } from './helpers/cjk-locator-guard';
 import { emptyPackage } from './helpers/backup-fixture';
 
@@ -952,5 +956,34 @@ describe('⑦ bundle 26 处抛出错转换：载荷与改动前那句逐字节�
     expect(new Set(keys).size).toBe(keys.length);
     expect(keys.filter((k) => k.startsWith('coreErr.')).length).toBe(22);
     expect(keys.filter((k) => k.startsWith('serverErr.')).length).toBe(4);
+  });
+});
+
+/* ══════════════════════════════ ⑧ 两表不漂 ══════════════════════════════ */
+
+describe('⑧ 两表不漂：载荷表 ⟺ 消息表 core 分片（serverErr.* 段）', () => {
+  const zhTable = corePartZh as Record<string, string>;
+  const enTable = corePartEn as Record<string, string>;
+  const table = SERVER_ERROR_TEXT as Record<string, string>;
+
+  it('★ 每个 serverErr.* 键都注册进了消息表（core 分片）', () => {
+    const missing = Object.keys(table).filter((k) => !(k in zhTable) || !(k in enTable));
+    expect(missing, '载荷表有键而消息表没有 —— 前端 t() 会取空').toEqual([]);
+  });
+
+  it('★ 分片 zh 与载荷表逐字节相等（同一句子两个物理位置，不许漂）', () => {
+    for (const key of Object.keys(table)) {
+      expect(zhTable[key], `${key} 的两处中文不一致`).toBe(table[key]);
+    }
+  });
+
+  it('★ 分片 en 非空、不含汉字、占位符与 zh 一致（英文界面不许漏中文）', () => {
+    const holders = (s: string): string[] => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).sort();
+    for (const key of Object.keys(table)) {
+      const en = enTable[key] ?? '';
+      expect(en.length, `${key} 的英文为空`).toBeGreaterThan(0);
+      expect(en, `${key} 的英文里还有汉字`).not.toMatch(/[\u3400-\u4dbf\u4e00-\u9fff]/);
+      expect(holders(en), `${key} 的占位符两侧不一致`).toEqual(holders(table[key]!));
+    }
   });
 });
