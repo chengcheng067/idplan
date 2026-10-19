@@ -1151,16 +1151,22 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 B · T06–T08 人话/技术双模�
     await drawer.locator('[data-task-drawer-close]').click();
     await page.waitForTimeout(200);
 
-    // ③ 人话模式认领按钮文案为「认领」（PRD 要隐藏英文 claim）
+    // ③ 人话模式认领按钮文案 = 消息表 `agentQueue.claim`（zh 认领 / en Claim）
     //
-    // ⚠️ 下面两行是**有意保留的中文定位**（i18n-EN 批明示不许换钩子）：它是一条
-    //    「中英对照断言」—— 「认领」存在 ∧ 「claim」不存在，正是「切英文后文案真的
-    //    换了」的直接证据；换成语言无关钩子会把这条证据一起削弱。`cjk-locator-guard`
-    //    的棘轮基线里为此**恒留 1 处**（v07-board-acceptance.spec.ts），属已知豁免。
+    // ⚠️ **2026-10-20 订正**：这里原先按中文可访问名「认领」定位，并在注释里把
+    //    `human ? '认领' : 'claim'` 读成「中英对照断言」——**读错了**。`human` 是
+    //    **术语模式**（`termMode === 'human'`，TaskDrawer.tsx:227），与界面语言无关：
+    //    英文界面 + 人话模式下它照样渲染中文「认领」。所以那处「已知豁免」的理由不成立，
+    //    生产侧已改成 `t('agentQueue.claim')`，定位也换成语言无关钩子 `[data-task-claim]`。
+    //    判据比原来**更硬**：不再证明「某个中文词在不在」，而是证明
+    //    「人话模式显示的是消息表那句话、且不露机器词 `claim`」。
     await page.getByRole('button', { name: READY_BARRIER_TITLE, exact: true }).click();
     await drawer.waitFor({ state: 'visible', timeout: 10000 });
-    expect(await drawer.getByRole('button', { name: '认领', exact: true }).count()).toBe(1);
-    expect(await drawer.getByRole('button', { name: 'claim', exact: true }).count()).toBe(0);
+    const claimBtn = drawer.locator('[data-task-claim]');
+    expect(await claimBtn.count()).toBe(1);
+    // 出厂语言是中文 ⇒ 消息表取值就是「认领」（en 列由 tests/i18n.spec.tsx ② 保证非空无汉字）
+    expect((await claimBtn.innerText()).trim()).toBe('认领');
+    expect((await claimBtn.innerText()).trim()).not.toBe('claim'); // 人话模式不许露机器词
 
     await page.close();
   });

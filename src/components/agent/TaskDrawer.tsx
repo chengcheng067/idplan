@@ -310,11 +310,21 @@ export function TaskDrawer({
             {canClaim && (
               <button
                 type="button"
+                data-task-claim=""
                 onClick={() => claimTask(repos, task.id, currentMember?.id ?? task.assigneeId ?? '')}
                 className="ml-auto rounded-[8px] border border-pine px-2.5 py-1 text-xs text-pine transition-colors hover:bg-pine-soft"
               >
-                {/* 人话模式去掉英文 claim（PRD §4.1.3 :339 明列要隐藏的英文按钮） */}
-                {human ? '认领' : 'claim'}
+                {/*
+                 * 人话模式说人话、技术模式露机器词（PRD §4.1.3 :339 明列技术模式要显英文 claim）。
+                 *
+                 * ⚠️ **订正（2026-10-20）**：这里原先写死 `'认领'`，注释把「human ? '认领' : 'claim'」
+                 *    读成了「中英对照」——**读错了**：`human` 是**术语模式**（`termMode === 'human'`，
+                 *    见本文件 :227），与界面语言无关。于是英文界面里人话模式仍然显示中文 `认领`，
+                 *    而那个「恒留 1 处」的中文定位豁免给的理由（「切英文后文案真的换了」）也随之失效。
+                 *    现值走消息表 `agentQueue.claim`（与 Agent 队列的「认领」同词一键，K10）：
+                 *    zh = 认领 / en = Claim；技术模式仍显机器词 `claim`（这是**术语**，不翻）。
+                 */}
+                {human ? t('agentQueue.claim') : 'claim'}
               </button>
             )}
           </div>

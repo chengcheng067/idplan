@@ -534,8 +534,8 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *       `确认恢复`（:735）→ 备份确认钩子；`关闭任务详情`（:1122）→ `[data-task-drawer-close]`；
  *       `绘制平面初稿`（:1063）→ `[data-agent-task-card]` + 组键 `doing` 定位，
  *       **内容断言保留**（`count()===1` ∧ 标题按钮文本 === 夹具任务名）；
- *       ★ 留下 1 处是**有意的**：`:1158` 的「认领」是**中英对照断言**（认领存在 ∧ claim 不存在），
- *         它是「切英文后文案真的换了」的直接证据，team-lead 明示不许换 ⇒ 棘轮恒留此 1 处。
+ *       ★ 当时留下 1 处（`:1158` 的「认领」），理由写的是「中英对照断言、不许换 ⇒ 棘轮恒留此 1 处」。
+ *         **该理由已被证伪**（见下方 2026-10-20 那段），那一处已于英文收尾批换成 `[data-task-claim]`。
  *   · `calendar-popover-geometry`     3 → **0**（−3）：`确认恢复` → 备份确认钩子；
  *       `月历` → `[data-home-view-switch] [data-seg-option="calendar"]`；
  *       `下个月` → `[data-calendar-nav="next"]`。
@@ -575,10 +575,21 @@ const ZERO_TOLERANCE_ZONE = ['tests/i18n-browser.spec.ts'];
  *
  * **判据零放宽**：全部是「取元素的方式」变更；唯一加强的是 `v08-intake-two-paths` 那条
  * （单一 aria 名 → 全表单无 select）。`:1158` 的中英对照断言**原样保留**。
- * 复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` ⇒ 测试名印
- * 「当前 **1** / 基线 1」（此读数为下调那一刻的实测值）。
+ *
+ * ── 2026-10-20（英文收尾 · **1 → 0**，棘轮归零）──
+ * 最后那一处（`v07-board-acceptance.spec.ts` 的「认领」）**不是真豁免，是一条登记错的豁免**：
+ * 它的理由是「中英对照断言 —— 认领存在 ∧ claim 不存在 = 切英文后文案真的换了」，但生产侧那行是
+ *   `{human ? '认领' : 'claim'}`（TaskDrawer.tsx:317），而 `human` 是**术语模式**
+ *（`termMode === 'human'`，同文件 :227），**与界面语言无关**。
+ * ⇒ 实际后果是「英文界面 + 人话模式」照样渲染中文「认领」（真漏翻），而那条豁免把这个漏翻
+ *   伪装成了证据。已订正：
+ *   · 生产侧：`t('agentQueue.claim')`（与 Agent 队列同词一键，K10）+ 新钩子 `data-task-claim`；
+ *   · 该 spec：定位改钩子，断言改成「人话模式 = 消息表那句话 ∧ 不露机器词 `claim`」（比原来更硬）；
+ *   · 本棘轮基线 **1 → 0**，全仓中文定位清零。
+ * 复跑：`npx vitest run tests/cjk-locator-guard.spec.ts --reporter=verbose` ⇒
+ *   测试名印「当前 **0** / 基线 0」。
  */
-const BASELINE = 1;
+const BASELINE = 0;
 
 describe('中文定位守卫 · 接通（零容忍区 + 棘轮）', () => {
   const hits = scanRepo(process.cwd());
