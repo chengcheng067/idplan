@@ -2,7 +2,8 @@
 
 > remote 适配器与服务端必须逐一对齐本契约。约定先行：前端 remote adapter（T05）与本 server/ 实现同源开发。
 > 统一前缀 `/api`；除标注外均为 JSON `Content-Type`。
-> 错误响应统一形状：`{ "error": { "code": string, "userMessage": string } }`，HTTP 状态码仅用于网络层语义。
+> 错误响应统一形状：`{ "error": { "code": string, "userMessage": string, "messageKey"?: string, "params"?: Record<string, string | number> } }`，HTTP 状态码仅用于网络层语义。
+> `messageKey` / `params` 为英文补齐批（甲案）新增的**可选增量字段**：服务端没有「当前语言」的概念，只产机器码 + 参数，界面英文由渲染层按 `messageKey` 取词（`serverErr.*` / `coreErr.*` 同住一张消息表）；`userMessage` 仍是回给外部 Agent 的协议字段，逐字节不变。只读 `code` / `userMessage` 的老客户端（含旧版前端与 NAS→NAS 迁移脚本）行为零变化。
 
 ## 资源命名与 ID
 
