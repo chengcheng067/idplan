@@ -10,6 +10,7 @@ import { matchActiveMemberByName } from '../../hooks/useRoleGuard';
 import { createMemberActions } from '../../store/useMembersStore';
 import { resolveErrorText, MemberRoleKind } from '../../core/types/enums';
 import { memberHasPassword, type Member } from '../../core/types/entities';
+import { ROLE_SENTINELS } from '../../core/types/role-sentinel';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
 import { useLang } from '../../i18n';
@@ -113,7 +114,12 @@ export function IdentityDialog(): JSX.Element | null {
         } else {
           const created = await repos.members.insert({
             name: trimmed,
-            role: '负责人',
+            /*
+             * ⚠️ **写入点**：`role` 是落库数据值 ⇒ 取数据面常量表的中文原值，
+             *    不许经 `t()`（英文态会把 `Owner` 写进库，成员表按语言分裂）。
+             *    显示层由 `roleLabel()` 取词，见 `src/i18n/labels.ts`。
+             */
+            role: ROLE_SENTINELS.owner,
             contact: null,
             avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
             roleKind: MemberRoleKind.Admin,

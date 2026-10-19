@@ -6,6 +6,7 @@ import { Check, Plus, Trash2, Users, X } from 'lucide-react';
 import type { Member, Stage, Task } from '../../core/types/entities';
 import { taskIsDone } from '../../core/types/entities';
 import { OPERATOR_SENTINELS } from '../../core/types/operator-sentinel';
+import { ROLE_SENTINELS } from '../../core/types/role-sentinel';
 import { createTaskActions } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import {
@@ -15,7 +16,7 @@ import {
   taskAssigneeIds,
 } from '../../hooks/useRoleGuard';
 import { ImeInput } from '../common/ImeInput';
-import { useLang } from '../../i18n';
+import { roleLabel, useLang } from '../../i18n';
 
 /**
  * checkbox 清单：增删改 / 多选指派（多人参与）/ 截止日 / 勾选完成（勾选写指派流水留痕）。
@@ -94,7 +95,7 @@ export function TaskChecklist({
       .map((id) => {
         const m = memberOf(id);
         if (!m) return t('common.unknown');
-        return isRestricted ? m.role || '负责人' : m.name;
+        return isRestricted ? roleLabel(m.role || ROLE_SENTINELS.owner) : m.name;
       })
       .join('、');
   };

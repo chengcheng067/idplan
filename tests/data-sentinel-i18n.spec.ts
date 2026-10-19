@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 /**
- * 操作人哨兵值（`operator_name`）：**落库值 vs 显示文案**的分离。
+ * **落库值哨兵**（`operator_name` / `Member.role`）：落库值 vs 显示文案的分离。
+ *
+ * 覆盖两族：① `operator_name`（四个哨兵值）；② `Member.role`（一个兜底值）。
+ * 两族口径完全相同，差别只在 ② 是用户自由文本 ⇒ 只翻兜底值、用户填的一律回落原文。
  *
  * ══════════════════════ 这个文件锁的是什么 ══════════════════════
  * 裁决（雯丞 2026-10-19）：`operator_name` 是**落库数据值** ⇒
@@ -37,10 +40,13 @@ import {
   OPERATOR_SENTINELS,
   ALL_OPERATOR_SENTINELS,
 } from '../src/core/types/operator-sentinel';
+import { ROLE_SENTINELS, ALL_ROLE_SENTINELS } from '../src/core/types/role-sentinel';
 import {
   OPERATOR_NAME_KEYS,
+  ROLE_NAME_KEYS,
   catalogOf,
   operatorNameLabel,
+  roleLabel,
   setLang,
   t,
 } from '../src/i18n';
@@ -246,6 +252,121 @@ describe('显示侧 · 取词边界', () => {
       if (/operatorNameLabel/.test(src)) offenders.push(rel);
     }
     expect(offenders, `纸面不该取词：${offenders.join(', ')}`).toEqual([]);
+  });
+});
+
+/* ══════════════════════════ ⑤ 角色数据槽（Member.role 的兜底值） ══════════════════════════
+ *
+ * 同一套口径（裁决 2026-10-19）：`Member.role` 是落库数据值 ⇒ 兜底值 `负责人`
+ * 写入钉死中文原值 + 显示层取词。
+ *
+ * ⚠️ 与 operator 那一族的**关键差别**：`role` 是用户自由文本（能填「主案设计师」
+ *   「Lighting Designer」）⇒ 本族只覆盖**兜底值**，其余取值必须回落原文。
+ *   所以这里多一条「自由文本在两个语言下都逐字不变」的反向断言 —— 防的是
+ *   「好心把角色名也翻译掉」这个更严重的错误（那会篡改用户数据）。
+ */
+const ROLE_ORIGINAL_VALUES = ['负责人'] as const;
+
+/** 角色兜底值的写入点 / 显示点（各 1 个文件 + 3 个显示文件） */
+const ROLE_WRITE_FILE = 'src/components/layout/IdentityDialog.tsx';
+const ROLE_DISPLAY_FILES = [
+  'src/components/common/AvatarStack.tsx',
+  'src/components/timeline/StageRowsColumn.tsx',
+  'src/components/stage-detail/TaskChecklist.tsx',
+] as const;
+
+describe('角色数据槽 · 值表与映射表', () => {
+  it('值逐字节等于改造前（零迁移、不动 DDL 的前提）', () => {
+    expect([...ALL_ROLE_SENTINELS]).toEqual([...ROLE_ORIGINAL_VALUES]);
+    expect(ROLE_SENTINELS.owner).toBe('负责人');
+  });
+
+  it('值表 ⟷ 映射表 集合双向相等', () => {
+    expect(Object.keys(ROLE_NAME_KEYS).sort()).toEqual([...ALL_ROLE_SENTINELS].sort());
+  });
+
+  it('每个值的 zh 取值逐字等于原值；en 非空、无汉字、且与 zh 不同', () => {
+    const zh = catalogOf('zh');
+    const en = catalogOf('en');
+    for (const value of ALL_ROLE_SENTINELS) {
+      const key = ROLE_NAME_KEYS[value]!;
+      expect(zh[key], `${value} 的 zh 取值被改动了`).toBe(value);
+      expect(en[key].length, `${key} 的英文为空`).toBeGreaterThan(0);
+      expect(CJK.test(en[key]), `${key} 的英文里还有汉字：${en[key]}`).toBe(false);
+      expect(en[key], `${key} 中英同值`).not.toBe(zh[key]);
+    }
+  });
+});
+
+describe('roleLabel · 显示层取词', () => {
+  it('中文态：兜底值逐字回显', () => {
+    setLang('zh');
+    expect(roleLabel('负责人')).toBe('负责人');
+  });
+
+  it('英文态：兜底值变英文', () => {
+    setLang('en');
+    expect(roleLabel('负责人')).toBe('Owner');
+  });
+
+  it('★ 用户自填的角色名**永不翻译**（两种语言都逐字不变）', () => {
+    for (const lang of ['zh', 'en'] as const) {
+      setLang(lang);
+      expect(roleLabel('主案设计师')).toBe('主案设计师');
+      expect(roleLabel('Lighting Designer')).toBe('Lighting Designer');
+      expect(roleLabel('')).toBe('');
+    }
+  });
+});
+
+describe('角色数据槽 · 写入侧与显示侧', () => {
+  it('src/** 剥注释后不再有 `负责人` 引号串（i18n / 值表 / demo 夹具除外）', () => {
+    const hits: string[] = [];
+    for (const rel of walk('src')) {
+      if (rel.startsWith('src/i18n/')) continue; // 文案表里当然有
+      if (rel === 'src/core/types/role-sentinel.ts') continue; // 值表本身
+      // `src/core/demo/**` 是**演示数据内容**（某个演示成员就叫「负责人甲」、角色填「负责人」），
+      // 与用户自己填的角色名同性质 ⇒ 不许翻译、也不算兜底值出处。
+      if (rel.startsWith('src/core/demo/')) continue;
+      const src = masked(rel);
+      for (const value of ROLE_ORIGINAL_VALUES) {
+        const quoted = new RegExp(`['"\`]${escapeRegExp(value)}['"\`]`, 'g');
+        for (const m of src.matchAll(quoted)) {
+          const line = src.slice(0, m.index).split(/\r?\n/).length;
+          hits.push(`${rel}:${line} 仍把 '${value}' 写成字面量`);
+        }
+      }
+    }
+    expect(hits, hits.join('\n')).toEqual([]);
+  });
+
+  it('写入点 IdentityDialog 取 ROLE_SENTINELS.owner（棘轮计数 = 1），且不经 t()', () => {
+    const src = masked(ROLE_WRITE_FILE);
+    expect(src.match(/ROLE_SENTINELS\.[A-Za-z]+/g)?.length ?? 0).toBe(1);
+    const offenders = src
+      .split(/\r?\n/)
+      .map((line, i) => [i + 1, line] as const)
+      .filter(([, line]) => line.includes('role:') && /\bt\(/.test(line));
+    expect(
+      offenders.map(([n, l]) => `${ROLE_WRITE_FILE}:${n} ${l.trim()}`),
+      'role 的写入点经 t() ⇒ 英文态把 Owner 写进库',
+    ).toEqual([]);
+    expect(src).toMatch(
+      /import\s*\{[^}]*ROLE_SENTINELS[^}]*\}\s*from\s*'[^']*role-sentinel'/,
+    );
+  });
+
+  it.each(ROLE_DISPLAY_FILES)('%s 的角色渲染走 roleLabel()', (rel) => {
+    const src = masked(rel);
+    expect(src, `${rel} 仍在原样透传 role（英文界面显示中文兜底值）`).toMatch(
+      /roleLabel\(/,
+    );
+    // 反向：不许再出现 `m.role || '...'` 这种「取词之外还自带字面量」的形态
+    expect(src).not.toMatch(/\.role\s*\|\|\s*'/);
+  });
+
+  it('AvatarStack 补了 useLang() 订阅（roleLabel 不是 hook，不订阅就不会重渲染）', () => {
+    expect(masked('src/components/common/AvatarStack.tsx')).toMatch(/useLang\(\)/);
   });
 });
 

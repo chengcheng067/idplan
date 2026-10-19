@@ -80,6 +80,8 @@ export {
   MODE_COLLAPSED_KEYS,
   OPERATOR_NAME_KEYS,
   operatorNameLabel,
+  ROLE_NAME_KEYS,
+  roleLabel,
   memberActorKindLabel,
   memberRoleLabel,
   REST_POLICY_KEYS,

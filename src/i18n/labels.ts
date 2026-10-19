@@ -66,6 +66,7 @@ import type { StageTemplateDomain } from '../core/types/dto';
  * 分别住在两个文件：值表在 `core/types/operator-sentinel.ts`，取词在本文件。
  */
 import { OPERATOR_SENTINELS } from '../core/types/operator-sentinel';
+import { ROLE_SENTINELS } from '../core/types/role-sentinel';
 import { t, type InterpolationVars } from './translate';
 import type { Lang } from './lang';
 import type { MessageKey } from './messages/zh';
@@ -227,6 +228,34 @@ export const OPERATOR_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
 export function operatorNameLabel(name: string): string {
   const key = OPERATOR_NAME_KEYS[name];
   return key === undefined ? name : t(key);
+}
+
+/* ═══════════ 角色数据槽（`Member.role`）的兜底值 → 文案键 ═══════════
+ *
+ * 与上一张表**同一口径**（裁决 2026-10-19）：兜底值 `负责人` 是落库值 ⇒
+ * 写入点钉死中文原值（`ROLE_SENTINELS`，`src/core/types/role-sentinel.ts`），
+ * 显示层在这里取词。
+ *
+ * ⚠️ 与 operator 那张表的关键差别：`Member.role` 是**用户自由文本**
+ *    （能填「主案设计师」「Lighting Designer」）⇒ 本表**只覆盖兜底值**，
+ *    其余取值一律**回落原文**。绝不把用户的角色名「翻译」掉。
+ *
+ * 复用 `agentTerm.claimedBy.human` 的理由（K10 同一个词只建一个键）：
+ * 该键的中文取值逐字就是 `负责人`、英文逐字就是 `Owner` —— 与本表要的词
+ * 完全同形。另建一个 `role.owner` 只会得到一对重复取值，将来改词要改两处、
+ * 且漏改时两处会漂成不一致。
+ */
+export const ROLE_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
+  [ROLE_SENTINELS.owner]: 'agentTerm.claimedBy.human',
+};
+
+/**
+ * 角色取词（**屏幕侧唯一入口**）。用户自填的角色名 / 未登记值原样回显。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function roleLabel(role: string): string {
+  const key = ROLE_NAME_KEYS[role];
+  return key === undefined ? role : t(key);
 }
 
 /* ═══════════ 主进程安装失败码 → 文案键（笔 4-b） ═══════════

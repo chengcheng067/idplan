@@ -5,7 +5,8 @@ import { StageStatus } from '../../core/types/enums';
 import { remainingDays } from '../../lib/date';
 import { stageSolidClass, stageSolidColor } from './stageColors';
 import { customStageColor } from './stageColorKey';
-import { useLang } from '../../i18n';
+import { roleLabel, useLang } from '../../i18n';
+import { ROLE_SENTINELS } from '../../core/types/role-sentinel';
 
 /**
  * 左侧锁定列（sticky）：序号圆标 / 阶段名 / 负责人 / 距截止天数。
@@ -38,13 +39,16 @@ export function StageRowsColumn({
     const owner = members.find((m) => m.id === stage.ownerId);
     if (!owner) return t('stageRows.unknownOwner');
     /*
-     * ⚠️ `'负责人'` **不翻**（B）：它落的是 `owner.role` 这个**数据槽**（角色值本身是落库值，
-     *    如「设计总监」，不随界面语言变）。把兜底词翻成英文会让同一个位置上
-     *    「数据是中文、兜底是英文」两种性质混排 —— 判据见接任包 §3.0-2：
-     *    **会被写进流水或落库的值不翻**（同族的 `'未署名'` / `'协作'` 已判 B）。
-     *    与上一行之上的 `'未指派负责人'` 不同：那两个是**纯界面状态词**，不进任何数据槽 ⇒ A。
+     * ⚠️ `'负责人'` 是 `owner.role` 这个**数据槽的兜底值**（角色值本身是落库值，
+     *    如用户自填的「设计总监」，不随界面语言变）⇒ 口径是
+     *    **写入/落库钉死中文原值 + 显示层取词**（裁决 2026-10-19，
+     *    同 `operator_name` 一族）：值取 `ROLE_SENTINELS.owner`，
+     *    显示经 `roleLabel()` 取词 —— 英文界面显示 `Owner`，库里仍是 `负责人`。
+     *    ⚠️ 与上一行之上的 `'未指派负责人'` 不同：那个是**纯界面状态词**，
+     *    不进任何数据槽 ⇒ 直接走消息表，不需要「钉死」。
+     *    （同族的 `'未署名'` / `'协作'` 判 B 的结论不变：它们只出现在**载荷/协议**面。）
      */
-    return memberView ? owner.role || '负责人' : owner.name;
+    return memberView ? roleLabel(owner.role || ROLE_SENTINELS.owner) : owner.name;
   };
 
   return (

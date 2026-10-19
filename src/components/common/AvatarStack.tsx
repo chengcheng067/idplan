@@ -1,4 +1,6 @@
 import type { Member } from '../../core/types/entities';
+import { ROLE_SENTINELS } from '../../core/types/role-sentinel';
+import { roleLabel, useLang } from '../../i18n';
 
 /**
  * 负责人头像叠放组：首字圆形 + 角色色底。
@@ -16,6 +18,8 @@ export function AvatarStack({
   max?: number;
   maskMemberNames?: boolean;
 }): JSX.Element {
+  /* 取词 + 订阅语言变化（角色标签随语言变；`roleLabel` 不是 hook，订阅靠这里） */
+  useLang();
   const visible = members.slice(0, max);
   const rest = members.length - visible.length;
 
@@ -26,7 +30,14 @@ export function AvatarStack({
           <span
             key={m.id}
             title={
-              maskMemberNames ? (m.role || '负责人') : `${m.name} · ${m.role}`
+              /*
+               * 角色值的两处都是**展示**（title 提示），走 `roleLabel()` 取词：
+               * 兜底值 `负责人` 落库是中文原值，英文界面要显示 `Owner`；
+               * 用户自填的角色名（「主案设计师」）回落原文，绝不翻译。
+               */
+              maskMemberNames
+                ? roleLabel(m.role || ROLE_SENTINELS.owner)
+                : `${m.name} · ${roleLabel(m.role)}`
             }
             className="inline-block h-6 w-6 rounded-full border border-white/40 text-center text-[10px] leading-[22px] text-white"
             style={{ backgroundColor: m.avatarColor }}
