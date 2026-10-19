@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0.0011-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-3912%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0012-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-3953%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
@@ -172,7 +172,7 @@ The UI ships in **Chinese / English**, switchable under **Settings → Appearanc
 - **1824 message keys, with the Chinese and English tables in exact two-way parity.** `en.ts` is typed `Record<MessageKey, string>`, so **missing a single key fails the build**; a guard also compares the two key sets shard by shard.
 - The **only** Chinese value left inside the English table is the “中文” entry in the language picker itself — by design (a language names itself in its own language).
 - The Chinese surface classed as “needs translating” under `src/**` (UI + shared core): **783 → 35 (−96%)**, with 30 of the remaining ones individually registered with a reason to defer.
-- Test locators moved from **Chinese copy** to **language-neutral `data-*` hooks** (ratchet 102 → 42). Not fussiness: switching to English used to make a batch of tests **fail falsely** — the error looked like “element doesn't exist”, hiding the real cause (“it was looking for Chinese”).
+- Test locators moved from **Chinese copy** to **language-neutral `data-*` hooks** (ratchet 102 → 0 — no Chinese locators left in the repo). Not fussiness: switching to English used to make a batch of tests **fail falsely** — the error looked like “element doesn't exist”, hiding the real cause (“it was looking for Chinese”).
 - A geometry acceptance pass was run **in English** (six-zone nav at the 767 breakpoint): **longer English strings do not break the layout** — all six nav items stay fully visible without horizontal scrolling.
 - **Printed paper really is untouched.** This release did touch high-traffic shared components (`ConfirmDialog` / `SegmentedControl`), so this had to be **measured, not reasoned about**: all 550 print visual credentials were compared **file by file** before and after the run — **331 of the 332 PNGs (the actual rendered paper) are byte-for-byte identical** (one differs by 2 bytes, likely non-deterministic rendering). 176 HTML snapshots differ, but the differences sit **entirely inside the embedded CSS block**: with styles stripped, the structural part is **byte-for-byte identical across 18,288 characters**, and on the CSS side it is 8 **purely additive** Tailwind utility classes, none of them a print-layout rule. A useful side conclusion: **print rendering is deterministic**.
 
@@ -203,7 +203,7 @@ npm run electron:dev   # run the desktop form in development
 ```
 
 ```bash
-npm test               # full unit suite (245 spec files / 3912 cases, vitest)
+npm test               # full unit suite (246 spec files / 3953 cases, vitest)
 npm run typecheck      # frontend type checking
 npm run build          # typecheck + build
 npm run electron:build # build + package the Windows NSIS installer

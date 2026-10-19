@@ -16,9 +16,9 @@
   
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   
-  <img src="https://img.shields.io/badge/version-1.0.0.0011-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0012-blue.svg" alt="version" />
   
-  <img src="https://img.shields.io/badge/tests-3912%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-3953%20passing-brightgreen.svg" alt="tests" />
   
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   
@@ -202,7 +202,7 @@ Agent 看板本身也是一个插件（设置 → 插件可关）——**它证�
 - **消息表 1824 个键，中文表与英文表双向零缺。** `en.ts` 声明为 `Record<MessageKey, string>` —— 少写一个键就**编译不过**；另有守卫逐分片比对两表键集。
 - 英文表里**唯一含中文的值**是语言选择器里的「中文」那一项 —— 那是按设计（语言名用它自己的语言写）。
 - `src/**`（界面 + 共享核心层）里判定「该翻」的中文面：**783 → 35 条（−96%）**，其中 30 条有逐条登记的延后理由。
-- 测试侧的定位锚点从**中文文案**换成**语言无关的 `data-*` 钩子**（棘轮 102 → 42）。这条不是洁癖：以前切英文会让一批用例**假失败**——报出来的错像「元素不存在」，很难看出真正原因是「它在找中文」。
+- 测试侧的定位锚点从**中文文案**换成**语言无关的 `data-*` 钩子**（棘轮 102 → 0，全仓中文定位已清零）。这条不是洁癖：以前切英文会让一批用例**假失败**——报出来的错像「元素不存在」，很难看出真正原因是「它在找中文」。
 - 英文态下真跑过一遍几何验收（767 档六区导航）：**英文变长没有把界面压坏**——六个导航项同屏完整可见、不横滑。
 - **打印纸面确实没被动过。** 本版动过 `ConfirmDialog` / `SegmentedControl` 这类高频共享组件，所以这条**必须实测、不能推理**：把 550 份打印视觉凭据在跑批前后**逐文件比对**——**332 份 PNG（真正的纸面渲染）里 331 份逐字节相同**（仅 1 份差 2 字节，疑似非确定性渲染）；176 份 HTML 有差异，但差异**全部落在内嵌 CSS 块**里，剥掉样式后**结构部分 18288 字符逐字节相同**，CSS 侧是**只增不减**的 8 条 Tailwind 工具类，没有一条是打印版式规则。顺带得到一个独立结论：**打印渲染是确定性的**。
 
@@ -233,7 +233,7 @@ npm run electron:dev   # 桌面形态开发运行
 ```
 
 ```bash
-npm test               # 全量单测（245 份 spec / 3912 用例，vitest）
+npm test               # 全量单测（246 份 spec / 3953 用例，vitest）
 npm run typecheck      # 前端类型检查
 npm run build          # 类型检查 + 构建
 npm run electron:build # 构建 + 打 Windows NSIS 安装包
