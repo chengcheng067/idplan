@@ -57,7 +57,8 @@
 
 import type Database from 'better-sqlite3';
 
-import { ChangxiaError, ChangxiaErrorCode } from '../../src/core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, coreError } from '../../src/core/types/enums';
+import { ServerTextError } from '../lib/server-error-text';
 import type {
   AppendExecutionEventCmd,
   CreateAttemptCmd,
@@ -453,10 +454,9 @@ function pickDefined<T extends object>(src: T): Partial<T> {
 }
 
 function notImplemented(what: string): never {
-  throw new ChangxiaError(
-    ChangxiaErrorCode.Storage,
-    `[not-implemented] sqlite.bundle 未实现 ${what}：本适配器只覆盖 payload.apply 调用到的方法（§3.7）。`,
-  );
+  throw new ServerTextError(ChangxiaErrorCode.Storage, 'serverErr.bundle.notImplemented', {
+    what,
+  });
 }
 
 /**
@@ -475,10 +475,12 @@ async function delegateJson<T>(
 ): Promise<T> {
   const res = await delegate.inject({ method, url, payload });
   if (res.statusCode < 200 || res.statusCode >= 300) {
-    throw new ChangxiaError(
-      ChangxiaErrorCode.Storage,
-      `[sqlite.bundle] 委托 ${method} ${url} 失败（HTTP ${res.statusCode}）：${res.body}`,
-    );
+    throw new ServerTextError(ChangxiaErrorCode.Storage, 'serverErr.bundle.delegateFailed', {
+      method,
+      url,
+      statusCode: res.statusCode,
+      body: String(res.body),
+    });
   }
   return res.json<T>();
 }
@@ -549,9 +551,9 @@ export function createSqliteBundle(
       // §3.7 纪律 3：自写 SQL 无法像仓储那样回填 id，缺 id 会在 DB 层静默写出空主键
       for (const s of rows) {
         if (!s || typeof s.id !== 'string' || s.id.length === 0) {
-          throw new ChangxiaError(
+          throw new ServerTextError(
             ChangxiaErrorCode.Validation,
-            '[sqlite.bundle] stages.bulkInsert 的行必须自带非空 id（自动建阶段侧用 crypto.randomUUID() 生成）。',
+            'serverErr.bundle.stageIdRequired',
           );
         }
       }
@@ -758,7 +760,12 @@ export function createSqliteBundle(
       return db.transaction(fn).immediate();
     } catch (err) {
       if (err instanceof ChangxiaError) throw err;
-      throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行域数据写入失败。', err);
+      throw new ServerTextError(
+        ChangxiaErrorCode.Storage,
+        'serverErr.exec.dataWriteFailed',
+        undefined,
+        err,
+      );
     }
   }
 
@@ -788,17 +795,15 @@ export function createSqliteBundle(
       | { kind: string }
       | undefined;
     if (!row) {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.NotFound,
-        `未找到项目 ${projectId}，不能为它创建执行域数据。`,
-      );
+      throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.exec.projectNotFound', {
+        projectId,
+      });
     }
     if (row.kind !== 'agent') {
-      throw new ChangxiaError(
-        ChangxiaErrorCode.Validation,
-        `执行域只属于 Agent 看板：项目 ${projectId} 的 kind="${row.kind}"，不是 agent。` +
-          ' 人工项目的排期不经由 Agent 执行通道。',
-      );
+      throw coreError(ChangxiaErrorCode.Validation, 'coreErr.exec.notAgentBoard', {
+        projectId,
+        kind: row.kind,
+      });
     }
   };
 
@@ -862,7 +867,7 @@ export function createSqliteBundle(
         return row;
       } catch (err) {
         if (err instanceof ChangxiaError) throw err;
-        throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单创建失败。', err);
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.createFailed', undefined, err);
       }
     },
 
@@ -889,7 +894,7 @@ export function createSqliteBundle(
         });
         return read(id);
       } catch (err) {
-        throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单读取失败。', err);
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.readFailed', undefined, err);
       }
     },
 
@@ -908,7 +913,7 @@ export function createSqliteBundle(
         });
         return read(projectId);
       } catch (err) {
-        throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行单列表读取失败。', err);
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.listReadFailed', undefined, err);
       }
     },
 
@@ -939,7 +944,7 @@ export function createSqliteBundle(
       return inImmediateTx(() => {
         const existingRow = selectExecution(id);
         if (!existingRow) {
-          throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该执行单。');
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.exec.notFound');
         }
         const attempts = selectAttempts(id);
         const existing = withDerivedAttemptNo(existingRow, attempts);
@@ -1019,17 +1024,17 @@ export function createSqliteBundle(
         // → 经 `RestClient` 映射成 Network → 客户端文案指向「网络排查」，
         // 而真因是「父执行单不存在」。显式查一次把它翻译成 NotFound/404。
         if (!selectExecution(cmd.executionId)) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.NotFound,
-            `未找到执行单 ${cmd.executionId}，不能追加事件。`,
-          );
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.exec.eventTargetMissing', {
+            executionId: cmd.executionId,
+          });
         }
         const expectedSeq = nextSeq(selectEvents(cmd.executionId));
         if (cmd.seq !== expectedSeq) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Validation,
-            `执行事件 seq 非法：调用方传入 ${cmd.seq}，期望 ${expectedSeq}（execution=${cmd.executionId}）。`,
-          );
+          throw coreError(ChangxiaErrorCode.Validation, 'coreErr.exec.eventSeqInvalid', {
+            actual: cmd.seq,
+            expected: expectedSeq,
+            executionId: cmd.executionId,
+          });
         }
         const now = new Date().toISOString();
         const row: ExecutionEvent = {
@@ -1071,7 +1076,7 @@ export function createSqliteBundle(
       try {
         return selectEvents(executionId);
       } catch (err) {
-        throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行事件列表读取失败。', err);
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.exec.eventListReadFailed', undefined, err);
       }
     },
 
@@ -1100,31 +1105,30 @@ export function createSqliteBundle(
       // 也保证「拒了就是库里一行没动」（测试直接查库断言这一点）。
       // 与本地 `local.execution.repo.ts` 的 `createAttempt` 逐字同款（两端一致纪律）。
       if (cmd.status !== undefined && !ATTEMPT_STATUSES.includes(cmd.status)) {
-        throw new ChangxiaError(
-          ChangxiaErrorCode.Validation,
-          `attempt status 非法：${String(cmd.status)}；合法值为 ${ATTEMPT_STATUSES.join(' / ')}。`,
-        );
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.attempt.badStatus', {
+          status: String(cmd.status),
+          allowed: ATTEMPT_STATUSES.join(' / '),
+        });
       }
       return inImmediateTx(() => {
         if (!selectExecution(cmd.executionId)) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.NotFound,
-            `未找到执行单 ${cmd.executionId}，不能为其新建 attempt。`,
-          );
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.attempt.executionMissing', {
+            executionId: cmd.executionId,
+          });
         }
         const attempts = selectAttempts(cmd.executionId);
         if (!canStartAttempt(attempts)) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Conflict,
-            `执行单 ${cmd.executionId} 已存在非终态 attempt，不能新开 attempt。`,
-          );
+          throw coreError(ChangxiaErrorCode.Conflict, 'coreErr.attempt.openAttemptExists', {
+            executionId: cmd.executionId,
+          });
         }
         const computedNo = nextAttemptNo(attempts);
         if (cmd.attemptNo !== undefined && cmd.attemptNo !== computedNo) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Validation,
-            `attemptNo 非法：调用方传入 ${cmd.attemptNo}，期望 ${computedNo}（execution=${cmd.executionId}）。`,
-          );
+          throw coreError(ChangxiaErrorCode.Validation, 'coreErr.attempt.noInvalid', {
+            actual: cmd.attemptNo,
+            expected: computedNo,
+            executionId: cmd.executionId,
+          });
         }
         const now = new Date().toISOString();
         const row: ExecutionAttempt = {
@@ -1185,7 +1189,7 @@ export function createSqliteBundle(
           | AttemptRow
           | undefined;
         if (!existingRow) {
-          throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该执行尝试。');
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.attempt.notFound');
         }
         const existing = rowToAttempt(existingRow);
         if (cmd.status !== undefined) {
@@ -1228,7 +1232,7 @@ export function createSqliteBundle(
       try {
         return selectAttempts(executionId);
       } catch (err) {
-        throw new ChangxiaError(ChangxiaErrorCode.Storage, '执行尝试列表读取失败。', err);
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.attempt.listReadFailed', undefined, err);
       }
     },
 
@@ -1258,17 +1262,15 @@ export function createSqliteBundle(
         cmd.status === WritebackProposalStatus.Applied ||
         cmd.status === WritebackProposalStatus.Rejected
       ) {
-        throw new ChangxiaError(
-          ChangxiaErrorCode.Validation,
-          `写回提案不允许直接创建为 ${cmd.status}：提案须先创建（draft / proposed）再经由审批落定。`,
-        );
+        throw coreError(ChangxiaErrorCode.Validation, 'coreErr.writeback.createAsSettled', {
+          status: cmd.status,
+        });
       }
       return inImmediateTx(() => {
         if (!selectExecution(cmd.executionId)) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.NotFound,
-            `未找到执行单 ${cmd.executionId}，不能为其创建写回提案。`,
-          );
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.writeback.executionMissing', {
+            executionId: cmd.executionId,
+          });
         }
         // 执行域归属关卡：提案的 projectId 是「写回目标」——它同样只属于 Agent 看板。
         // 少了这一条，调用方可以给 Agent 看板上的执行单建一个指向**人类项目**的提案，
@@ -1317,7 +1319,7 @@ export function createSqliteBundle(
           return row;
         } catch (err) {
           if (err instanceof ChangxiaError) throw err;
-          throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案创建失败。', err);
+          throw coreError(ChangxiaErrorCode.Storage, 'coreErr.writeback.createFailed', undefined, err);
         }
       });
     },
@@ -1336,27 +1338,27 @@ export function createSqliteBundle(
           | ProposalRow
           | undefined;
         if (!existingRow) {
-          throw new ChangxiaError(ChangxiaErrorCode.NotFound, '未找到该写回提案。');
+          throw coreError(ChangxiaErrorCode.NotFound, 'coreErr.writeback.notFound');
         }
         const existing = rowToProposal(existingRow);
         if (
           existing.status === WritebackProposalStatus.Applied ||
           existing.status === WritebackProposalStatus.Rejected
         ) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Conflict,
-            `写回提案已落定为 ${existing.status}，不可再变更（execution=${existing.executionId}）。`,
-          );
+          throw coreError(ChangxiaErrorCode.Conflict, 'coreErr.writeback.alreadySettled', {
+            status: existing.status,
+            executionId: existing.executionId,
+          });
         }
         const targetStatus = cmd.status ?? existing.status;
         const toTerminal =
           targetStatus === WritebackProposalStatus.Applied ||
           targetStatus === WritebackProposalStatus.Rejected;
         if (toTerminal && !cmd.decidedBy) {
-          throw new ChangxiaError(
-            ChangxiaErrorCode.Validation,
-            `写回提案落定为 ${targetStatus} 必须由人工决策：decidedBy 必填（execution=${existing.executionId}）。`,
-          );
+          throw coreError(ChangxiaErrorCode.Validation, 'coreErr.writeback.decidedByRequired', {
+            status: targetStatus,
+            executionId: existing.executionId,
+          });
         }
         const now = new Date().toISOString();
         const next: WritebackProposal = {
@@ -1396,7 +1398,7 @@ export function createSqliteBundle(
       try {
         return selectProposals(executionId);
       } catch (err) {
-        throw new ChangxiaError(ChangxiaErrorCode.Storage, '写回提案列表读取失败。', err);
+        throw coreError(ChangxiaErrorCode.Storage, 'coreErr.writeback.listReadFailed', undefined, err);
       }
     },
   };

@@ -63,6 +63,14 @@ import {
   readExecutionDetail,
   type AgentRouteDelegate,
 } from '../adapters/sqlite.bundle';
+import {
+  errorBody,
+  messageKeyFieldsOf,
+  serverMessageText,
+  type ServerErrorBody,
+  type ServerErrorParams,
+  type ServerMessageKey,
+} from '../lib/server-error-text';
 
 /* ------------------------------ 错误 → HTTP 映射 ------------------------------ */
 
@@ -99,13 +107,19 @@ const CODE_TO_STATUS: Record<ChangxiaErrorCode, number> = {
 async function call<T>(
   reply: { status: (code: number) => unknown },
   fn: () => Promise<T>,
-): Promise<{ ok: true; value: T } | { ok: false; body: { error: { code: string; userMessage: string } } }> {
+): Promise<{ ok: true; value: T } | { ok: false; body: ServerErrorBody }> {
   try {
     return { ok: true, value: await fn() };
   } catch (err) {
     if (!(err instanceof ChangxiaError)) throw err;
     void reply.status(CODE_TO_STATUS[err.code] ?? 500);
-    return { ok: false, body: { error: { code: err.code, userMessage: err.userMessage } } };
+    // 甲案：userMessage 逐字节不动（协议字段），取词键三件套随错误体透出 ——
+    // coreError 的 messageKey / ServerTextError 的 serverKey 由 messageKeyFieldsOf 取出；
+    // 没有键 ⇒ 原样透传真因（不建键）。
+    return {
+      ok: false,
+      body: { error: { code: err.code, userMessage: err.userMessage, ...messageKeyFieldsOf(err) } },
+    };
   }
 }
 
@@ -115,11 +129,12 @@ async function call<T>(
  * 契约的 400 错误体（与既有路由逐字同形）。
  * 刻意不走 `ChangxiaError`：这些是「进入仓储之前」的形状错误，
  * 文案需指名是哪个字段，而仓储的校验文案描述的是状态机语义，两者受众不同。
+ *
+ * 甲案（server 片）后：调用点只传**取词键 + 参数**，`userMessage` 由载荷表渲染
+ * （不再手抄字面量 ⇒ 漂移面归零），并随错误体挂 `messageKey` 供前端本地化。
  */
-function invalidField(userMessage: string): {
-  error: { code: string; userMessage: string };
-} {
-  return { error: { code: ChangxiaErrorCode.Validation, userMessage } };
+function invalidField(key: ServerMessageKey, params?: ServerErrorParams): ServerErrorBody {
+  return errorBody(ChangxiaErrorCode.Validation, key, params);
 }
 
 /**
@@ -129,11 +144,11 @@ function invalidField(userMessage: string): {
  * `code` 也不同（`not_found` vs `validation`）。用同一支错误体构造器会得到一个
  * 「状态码 404 但 code=validation」的自相矛盾响应 —— 调用方按 code 分支时
  * 会把它当成参数错误去重试。已在实现过程中实际踩到一次（测试抓到）。
+ *
+ * 甲案后同 invalidField：传键不传字面量。
  */
-function notFoundBody(userMessage: string): {
-  error: { code: string; userMessage: string };
-} {
-  return { error: { code: ChangxiaErrorCode.NotFound, userMessage } };
+function notFoundBody(key: ServerMessageKey, params?: ServerErrorParams): ServerErrorBody {
+  return errorBody(ChangxiaErrorCode.NotFound, key, params);
 }
 
 /** 非空字符串判定（拒绝空串与纯空白，与 agent.routes 的 isNonBlank 同义） */
@@ -143,7 +158,7 @@ const isNonBlank = (v: unknown): v is string => typeof v === 'string' && v.trim(
 function requireString(body: Record<string, unknown>, field: string): string {
   const v = body[field];
   if (!isNonBlank(v)) {
-    throw new ShapeError(`字段 ${field} 必填且必须是非空字符串。`);
+    throw new ShapeError('serverErr.exec.fieldRequiredNonEmpty', { field });
   }
   return v;
 }
@@ -154,7 +169,7 @@ function optionalString(body: Record<string, unknown>, field: string): string | 
   if (v === undefined) return undefined;
   if (v === null) return null;
   if (typeof v !== 'string') {
-    throw new ShapeError(`字段 ${field} 必须是字符串或 null。`);
+    throw new ShapeError('serverErr.exec.fieldStringOrNull', { field });
   }
   return v;
 }
@@ -164,7 +179,7 @@ function optionalNumber(body: Record<string, unknown>, field: string): number | 
   const v = body[field];
   if (v === undefined) return undefined;
   if (typeof v !== 'number' || !Number.isFinite(v)) {
-    throw new ShapeError(`字段 ${field} 必须是有限数字。`);
+    throw new ShapeError('serverErr.exec.fieldFiniteNumber', { field });
   }
   return v;
 }
@@ -184,7 +199,7 @@ function optionalEnum<T extends string>(
   const v = body[field];
   if (v === undefined) return undefined;
   if (typeof v !== 'string' || v.length === 0) {
-    throw new ShapeError(`字段 ${field} 必须是非空字符串。`);
+    throw new ShapeError('serverErr.exec.fieldNonEmptyString', { field });
   }
   return v as T;
 }
@@ -212,20 +227,36 @@ function optionalEnumOf<T extends string>(
   const v = optionalEnum<T>(body, field);
   if (v === undefined) return undefined;
   if (!allowed.includes(v)) {
-    throw new ShapeError(`字段 ${field} 非法：${v}；合法值为 ${allowed.join(' / ')}。`);
+    throw new ShapeError('serverErr.exec.fieldNotAllowed', {
+      field,
+      value: v,
+      allowed: allowed.join(' / '),
+    });
   }
   return v;
 }
 
-/** 纯形状错误（本文件内部使用；handler 统一捕获转 400） */
-class ShapeError extends Error {}
+/**
+ * 纯形状错误（本文件内部使用；handler 统一捕获转 400）。
+ *
+ * 甲案后携带取词键：`message` 仍由载荷表渲染（日志/堆栈可读），键与参数随
+ * `guardShape` 进错误体。句子与载荷表**同一处**渲染 ⇒ 不存在两份字面量。
+ */
+class ShapeError extends Error {
+  public constructor(
+    public readonly key: ServerMessageKey,
+    public readonly params?: ServerErrorParams,
+  ) {
+    super(serverMessageText(key, params));
+  }
+}
 
 /** 把 handler body 包一层：`ShapeError` → 400 契约错误体，其余原样抛 */
-function guardShape<T>(fn: () => T): T | { error: { code: string; userMessage: string } } {
+function guardShape<T>(fn: () => T): T | ServerErrorBody {
   try {
     return fn();
   } catch (err) {
-    if (err instanceof ShapeError) return invalidField(err.message);
+    if (err instanceof ShapeError) return invalidField(err.key, err.params);
     throw err;
   }
 }
@@ -262,7 +293,7 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
     const row = await executions.getExecution(id);
     if (!row) {
       void reply.status(404);
-      return notFoundBody('未找到该执行单。');
+      return notFoundBody('coreErr.exec.notFound');
     }
     return row;
   });
@@ -285,7 +316,7 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
     const detail = readExecutionDetail(db, id);
     if (!detail) {
       void reply.status(404);
-      return notFoundBody('未找到该执行单。');
+      return notFoundBody('coreErr.exec.notFound');
     }
     return detail;
   });
@@ -317,9 +348,11 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
       // 放进 Schema 的 source 合法值约束在这条通道上也要成立，否则一条
       // source='whatever' 的执行单会落库，前端按来源分组时静默漏掉。
       if (!EXECUTION_SOURCES.includes(source)) {
-        throw new ShapeError(
-          `字段 source 非法：${source}；合法值为 ${EXECUTION_SOURCES.join(' / ')}。`,
-        );
+        throw new ShapeError('serverErr.exec.fieldNotAllowed', {
+          field: 'source',
+          value: source,
+          allowed: EXECUTION_SOURCES.join(' / '),
+        });
       }
       return {
         projectId,
@@ -393,11 +426,11 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
       // 与 source 同理：事件类型没有任何下游校验（它只被写进流水），
       // 打错字会变成一条永远查不到的审计记录，故在入口拒掉。
       if (!EXECUTION_EVENT_TYPES.includes(type)) {
-        throw new ShapeError(`字段 type 非法：${type}。`);
+        throw new ShapeError('serverErr.exec.fieldInvalid', { field: 'type', value: type });
       }
       const seq = optionalNumber(body, 'seq');
       if (seq === undefined) {
-        throw new ShapeError('字段 seq 必填：seq 由调用方经 nextSeq 计算并传入（仓储拒绝乱序/跳号）。');
+        throw new ShapeError('serverErr.exec.seqRequired');
       }
       return {
         executionId: id,
@@ -484,7 +517,7 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
       // 读回时 parseJsonArray 恰好也能解析成功 —— 于是一个「本该报错」的输入
       // 变成一条看不见问题的数据。在这里拒掉，别让它有机会蒙混。
       if (!Array.isArray(ops)) {
-        throw new ShapeError('字段 operations 必填且必须是数组（WritebackOperation[]）。');
+        throw new ShapeError('serverErr.exec.operationsRequired');
       }
       return {
         executionId: id,
@@ -513,7 +546,7 @@ export function registerExecutionRoutes(app: FastifyInstance, db: Database.Datab
     const parsed = guardShape((): UpdateProposalCmd => {
       const ops = body.operations;
       if (ops !== undefined && !Array.isArray(ops)) {
-        throw new ShapeError('字段 operations 必须是数组（WritebackOperation[]）。');
+        throw new ShapeError('serverErr.exec.operationsNotArray');
       }
       return {
         operations: ops as WritebackOperation[] | undefined,

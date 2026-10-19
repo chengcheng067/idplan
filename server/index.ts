@@ -10,6 +10,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 
 import { createDb, openDb } from './db';
+import { errorBodyFrom } from './lib/server-error-text';
 import { registerProjectRoutes } from './routes/projects.routes';
 import { registerStageRoutes } from './routes/stages.routes';
 import { registerTaskRoutes } from './routes/tasks.routes';
@@ -37,12 +38,14 @@ async function main(): Promise<void> {
 
   app.setErrorHandler((err, _req, reply) => {
     app.log.error(err);
-    void reply.status(err.statusCode ?? 500).send({
-      error: {
-        code: String((err as { code?: string }).code ?? 'internal'),
-        userMessage: (err as { userMessage?: string }).userMessage ?? '服务器内部错误',
-      },
-    });
+    // 三支口径（与 core 的 resolveErrorText 同构，理由见 errorBodyFrom 的文件头）：
+    //   ① 抛出处带取词键（coreError 的 messageKey / ServerTextError 的 serverKey）
+    //      ⇒ userMessage + messageKey + params 三件齐出，前端可本地化；
+    //   ② 无键但有 userMessage ⇒ 原样透传（真因支，不建键）；
+    //   ③ 都没有 ⇒ 兜底句「服务器内部错误」（只有这一支建键）。
+    // ⚠️ 不退 `err.message`：那是 agent scope 处理器的历史行为（委托失败的真因只有
+    //    那里看得到），两个处理器各按原样，不做「统一」= 不改行为。
+    void reply.status(err.statusCode ?? 500).send(errorBodyFrom(err, 'serverErr.internal'));
   });
 
   registerProjectRoutes(app, db);
