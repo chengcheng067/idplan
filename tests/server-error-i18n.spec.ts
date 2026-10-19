@@ -36,6 +36,10 @@
  *      坏结果：拿兜底句盖住真因（本仓明令禁止）。
  *   ⑥ **端到端带键**：代表性端点的错误体真的带 `messageKey`（防「机制在、
  *      没人用」）。
+ *   ⑦ **bundle 26 处抛出错转换逐条同文**（team-lead 硬要求②）：`sqlite.bundle.ts`
+ *      的 `ChangxiaError(code, '中文', err)` 改成 `coreError/ServerTextError(code,
+ *      key, params, err)` 后，「复用 `coreErr.*` 键」与「进 `serverErr.*` 新表」
+ *      各处的载荷必须与**改动前那句字面量**逐字节相等 —— 同不了文的就不许复用。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
@@ -61,8 +65,10 @@ import {
   errorBodyFrom,
   messageKeyFieldsOf,
   serverErrorText,
+  serverMessageText,
   type ServerErrorKey,
   type ServerErrorParams,
+  type ServerMessageKey,
 } from '../server/lib/server-error-text';
 import { ChangxiaError, ChangxiaErrorCode, coreError } from '../src/core/types/enums';
 import { maskComments } from './helpers/cjk-locator-guard';
@@ -560,23 +566,25 @@ describe('⑤ 三支口径（与 core 的 resolveErrorText 同构）', () => {
 let savedBackupToken: string | undefined;
 let savedAgentToken: string | undefined;
 let db: Db;
+let app: App | null = null;
 
 async function buildServer(): Promise<App> {
-  const app = Fastify({ logger: false });
+  const built = Fastify({ logger: false });
   // 与 server/index.ts 同一个构造器（三支口径见 errorBodyFrom 文件头）
-  app.setErrorHandler((err, _req, reply) => {
+  built.setErrorHandler((err, _req, reply) => {
     void reply.status(err.statusCode ?? 500).send(errorBodyFrom(err, 'serverErr.internal'));
   });
-  registerProjectRoutes(app, db);
-  registerStageRoutes(app, db);
-  registerTaskRoutes(app, db);
-  registerMemberRoutes(app, db);
-  registerItineraryRoutes(app, db);
-  registerMetaRoutes(app, db);
-  registerExecutionRoutes(app, db);
-  registerAgentRoutes(app, db);
-  await app.ready();
-  return app;
+  registerProjectRoutes(built, db);
+  registerStageRoutes(built, db);
+  registerTaskRoutes(built, db);
+  registerMemberRoutes(built, db);
+  registerItineraryRoutes(built, db);
+  registerMetaRoutes(built, db);
+  registerExecutionRoutes(built, db);
+  registerAgentRoutes(built, db);
+  await built.ready();
+  app = built;
+  return built;
 }
 
 beforeEach(() => {
@@ -590,7 +598,13 @@ beforeEach(() => {
   createDb(db);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Fastify 实例必须显式关闭：否则 teardown 阶段 node 会段错误（本 spec 实测复现，
+  // 只跑部分路由族的既有 spec 不复现 —— 与注册面大小相关，根因未深究）。
+  if (app !== null) {
+    await app.close();
+    app = null;
+  }
   if (savedBackupToken === undefined) delete process.env[AGENT_TOKEN_ENV];
   else process.env[AGENT_TOKEN_ENV] = savedBackupToken;
   if (savedAgentToken === undefined) delete process.env[AGENT_API_TOKEN_ENV];
@@ -753,5 +767,190 @@ describe('⑥ 端到端：代表性端点的错误体真的带 messageKey', () =
     const body = (res.json() as ErrBody).error;
     expect(body.messageKey).toBe('serverErr.auth.backupTokenRequired');
     expect(body.userMessage).toContain('IDPLAN_AGENT_TOKEN');
+  });
+});
+
+/* ══════════════════════════════ ⑦ bundle 转换逐条同文 ══════════════════════════════ */
+
+/**
+ * ★ team-lead 硬要求②的自证表：`sqlite.bundle.ts` 26 处抛出错转换后，
+ * 载荷必须与**改动前（`6d4f85b`）那句字面量**逐字节相等。
+ *
+ * `before` 列的来路（不是手抄记忆）：迁移脚本的 from 串在应用时被断言「在旧文件里
+ * 恰好出现一次」；本表由一次性脚本从那些串 + 载荷表**机器产出**（见交付报告）。
+ * 22 处复用 `coreErr.*` 键（文案同文 ⇒ 不建新键），4 处服务端自有句进 `serverErr.*`。
+ */
+const BUNDLE_CONVERSIONS: ReadonlyArray<
+  readonly [string, ServerMessageKey, ServerErrorParams | undefined, string]
+> = [
+  [
+    'createExecution · 项目不存在',
+    'coreErr.exec.projectNotFound',
+    { projectId: 'p-1' },
+    '未找到项目 p-1，不能为它创建执行域数据。',
+  ],
+  [
+    'createExecution · 非 Agent 看板',
+    'coreErr.exec.notAgentBoard',
+    { projectId: 'p-1', kind: 'landscape' },
+    '执行域只属于 Agent 看板：项目 p-1 的 kind="landscape"，不是 agent。 人工项目的排期不经由 Agent 执行通道。',
+  ],
+  [
+    'createExecution · 创建失败',
+    'coreErr.exec.createFailed',
+    undefined,
+    '执行单创建失败。',
+  ],
+  [
+    'read · 读取失败',
+    'coreErr.exec.readFailed',
+    undefined,
+    '执行单读取失败。',
+  ],
+  [
+    'list · 列表读取失败',
+    'coreErr.exec.listReadFailed',
+    undefined,
+    '执行单列表读取失败。',
+  ],
+  [
+    'updateExecutionStatus · 未找到',
+    'coreErr.exec.notFound',
+    undefined,
+    '未找到该执行单。',
+  ],
+  [
+    'appendEvent · 父执行单不存在',
+    'coreErr.exec.eventTargetMissing',
+    { executionId: 'e-1' },
+    '未找到执行单 e-1，不能追加事件。',
+  ],
+  [
+    'appendEvent · seq 非法',
+    'coreErr.exec.eventSeqInvalid',
+    { actual: '7', expected: '8', executionId: 'e-1' },
+    '执行事件 seq 非法：调用方传入 7，期望 8（execution=e-1）。',
+  ],
+  [
+    'listEvents · 读取失败',
+    'coreErr.exec.eventListReadFailed',
+    undefined,
+    '执行事件列表读取失败。',
+  ],
+  [
+    'createAttempt · status 非法',
+    'coreErr.attempt.badStatus',
+    { status: 'ghost', allowed: 'queued / running' },
+    'attempt status 非法：ghost；合法值为 queued / running。',
+  ],
+  [
+    'createAttempt · 父执行单不存在',
+    'coreErr.attempt.executionMissing',
+    { executionId: 'e-1' },
+    '未找到执行单 e-1，不能为其新建 attempt。',
+  ],
+  [
+    'createAttempt · 已有非终态 attempt',
+    'coreErr.attempt.openAttemptExists',
+    { executionId: 'e-1' },
+    '执行单 e-1 已存在非终态 attempt，不能新开 attempt。',
+  ],
+  [
+    'createAttempt · attemptNo 非法',
+    'coreErr.attempt.noInvalid',
+    { actual: '2', expected: '3', executionId: 'e-1' },
+    'attemptNo 非法：调用方传入 2，期望 3（execution=e-1）。',
+  ],
+  [
+    'updateAttempt · 未找到',
+    'coreErr.attempt.notFound',
+    undefined,
+    '未找到该执行尝试。',
+  ],
+  [
+    'listAttempts · 读取失败',
+    'coreErr.attempt.listReadFailed',
+    undefined,
+    '执行尝试列表读取失败。',
+  ],
+  [
+    'createProposal · 直接建终态',
+    'coreErr.writeback.createAsSettled',
+    { status: 'applied' },
+    '写回提案不允许直接创建为 applied：提案须先创建（draft / proposed）再经由审批落定。',
+  ],
+  [
+    'createProposal · 父执行单不存在',
+    'coreErr.writeback.executionMissing',
+    { executionId: 'e-1' },
+    '未找到执行单 e-1，不能为其创建写回提案。',
+  ],
+  [
+    'createProposal · 创建失败',
+    'coreErr.writeback.createFailed',
+    undefined,
+    '写回提案创建失败。',
+  ],
+  [
+    'updateProposal · 未找到',
+    'coreErr.writeback.notFound',
+    undefined,
+    '未找到该写回提案。',
+  ],
+  [
+    'updateProposal · 已落定',
+    'coreErr.writeback.alreadySettled',
+    { status: 'applied', executionId: 'e-1' },
+    '写回提案已落定为 applied，不可再变更（execution=e-1）。',
+  ],
+  [
+    'updateProposal · 缺 decidedBy',
+    'coreErr.writeback.decidedByRequired',
+    { status: 'applied', executionId: 'e-1' },
+    '写回提案落定为 applied 必须由人工决策：decidedBy 必填（execution=e-1）。',
+  ],
+  [
+    'listProposals · 读取失败',
+    'coreErr.writeback.listReadFailed',
+    undefined,
+    '写回提案列表读取失败。',
+  ],
+  [
+    'notImplemented',
+    'serverErr.bundle.notImplemented',
+    { what: 'projects.insert' },
+    '[not-implemented] sqlite.bundle 未实现 projects.insert：本适配器只覆盖 payload.apply 调用到的方法（§3.7）。',
+  ],
+  [
+    'delegateJson · 委托失败',
+    'serverErr.bundle.delegateFailed',
+    { method: 'POST', url: '/api/tasks/upsert', statusCode: '400', body: '{"error":{}}' },
+    '[sqlite.bundle] 委托 POST /api/tasks/upsert 失败（HTTP 400）：{"error":{}}',
+  ],
+  [
+    'stages.bulkInsert · 缺 id',
+    'serverErr.bundle.stageIdRequired',
+    undefined,
+    '[sqlite.bundle] stages.bulkInsert 的行必须自带非空 id（自动建阶段侧用 crypto.randomUUID() 生成）。',
+  ],
+  [
+    'inImmediateTx · 写入失败',
+    'serverErr.exec.dataWriteFailed',
+    undefined,
+    '执行域数据写入失败。',
+  ],
+];
+
+describe('⑦ bundle 26 处抛出错转换：载荷与改动前那句逐字节相等', () => {
+  it.each(BUNDLE_CONVERSIONS)('★ %s → %s', (site, key, params, before) => {
+    expect(serverMessageText(key, params), `${site} 的载荷与改动前不同文`).toBe(before);
+  });
+
+  it('★ 26 处覆盖 bundle 全部转换点（漏一条 = 该处没被证明）', () => {
+    // 22 处 coreErr 复用 + 4 处 serverErr 自有句；键互不重复
+    const keys = BUNDLE_CONVERSIONS.map(([, k]) => k);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys.filter((k) => k.startsWith('coreErr.')).length).toBe(22);
+    expect(keys.filter((k) => k.startsWith('serverErr.')).length).toBe(4);
   });
 });
