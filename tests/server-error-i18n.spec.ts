@@ -44,8 +44,8 @@
  *      （`src/i18n/messages/parts/core.ts`）的 `serverErr.*` 段 —— 与
  *      `core-error-i18n.spec.ts` ① 同款纪律（同一句子两个物理位置，靠断言防漂）。
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import Fastify, { type FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, sep } from 'node:path';
@@ -73,7 +73,9 @@ import {
   type ServerErrorParams,
   type ServerMessageKey,
 } from '../server/lib/server-error-text';
-import { ChangxiaError, ChangxiaErrorCode, coreError } from '../src/core/types/enums';
+import { ChangxiaError, ChangxiaErrorCode, coreError, resolveErrorText } from '../src/core/types/enums';
+import { RestClient } from '../src/core/repositories/remote/rest.client';
+import { t, type InterpolationVars, type MessageKey } from '../src/i18n';
 import { en as corePartEn, zh as corePartZh } from '../src/i18n/messages/parts/core';
 import { maskComments } from './helpers/cjk-locator-guard';
 import { emptyPackage } from './helpers/backup-fixture';
@@ -985,5 +987,141 @@ describe('⑧ 两表不漂：载荷表 ⟺ 消息表 core 分片（serverErr.* �
       expect(en, `${key} 的英文里还有汉字`).not.toMatch(/[\u3400-\u4dbf\u4e00-\u9fff]/);
       expect(holders(en), `${key} 的占位符两侧不一致`).toEqual(holders(table[key]!));
     }
+  });
+});
+
+/* ══════════════════════════════ ⑨ rest.client 消费键（甲案最后一环） ══════════════════════════════ */
+
+/**
+ * 显式语言的取词包装器：`t(key, vars, lang)` 传了 lang 就不读模块级语言状态
+ * ⇒ 本 spec 保持 node 环境（不引 jsdom），也不必 setLang / 还原。
+ */
+const tZh = (key: MessageKey, params?: InterpolationVars): string => t(key, params, 'zh');
+const tEn = (key: MessageKey, params?: InterpolationVars): string => t(key, params, 'en');
+
+/**
+ * `vi.stubGlobal('fetch', …)` 的替身：把 RestClient 的请求转成 `app.inject`。
+ * 只做 URL 拆解与 Response 构造 —— **不做任何路径改写 / 容错重试**
+ * （否则「路径写错」这类缺陷会被替身抹平，测试就成了假绿）。范式同
+ * `remote-executions.e2e.spec.ts`。
+ */
+function installInjectFetch(app: FastifyInstance): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const full =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const u = new URL(full);
+      const res = await app.inject({
+        method: (init?.method ?? 'GET') as 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+        url: `${u.pathname}${u.search}`,
+        payload: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
+      });
+      return new Response(res.statusCode === 204 ? null : res.body, {
+        status: res.statusCode,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }),
+  );
+}
+
+/** 只回 userMessage（无键）的服务端替身 —— ② 真因透传支 */
+function installBareMessageFetch(userMessage: string, status = 400): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async (): Promise<Response> =>
+        new Response(JSON.stringify({ error: { code: 'validation', userMessage } }), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    ),
+  );
+}
+
+/** 非 JSON 错误体替身 —— ③ 默认句支 */
+function installNonJsonFetch(status = 502): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (): Promise<Response> => new Response('<html>gateway</html>', { status })),
+  );
+}
+
+/**
+ * 真服务端（本文件的 harness）喂给真 `RestClient`。
+ * 证明的正是**用户可感知的那件事**：服务端带键的错误，在英文界面渲染出英文。
+ */
+describe('⑨ rest.client：三支口径 + 中英渲染端到端', () => {
+  it('① 有键 ⇒ ChangxiaError 带 messageKey/params/userMessage，英文界面渲染英文', async () => {
+    const built = await buildServer();
+    installInjectFetch(built);
+    const api = new RestClient('http://nas.local/api');
+    let caught: unknown;
+    try {
+      await api.get('/stages/does-not-exist');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ChangxiaError);
+    const err = caught as ChangxiaError;
+    expect(err.code).toBe(ChangxiaErrorCode.NotFound);
+    expect(err.userMessage).toBe('阶段不存在');
+    expect(err.messageKey).toBe('serverErr.stage.notFound');
+    // 渲染层：中文态取载荷、英文态取消息表（这条就是用户可感知的效果）
+    expect(resolveErrorText(err, tZh, '兜底')).toBe('阶段不存在');
+    expect(resolveErrorText(err, tEn, 'fallback')).toBe('Stage not found');
+  });
+
+  it('①-b 参数化键：params 一路带到渲染层（英文插值生效）', async () => {
+    const built = await buildServer();
+    installInjectFetch(built);
+    const api = new RestClient('http://nas.local/api');
+    let caught: unknown;
+    try {
+      await api.post('/projects', { name: '脏值项目', domain: 'exhibition' });
+    } catch (err) {
+      caught = err;
+    }
+    const err = caught as ChangxiaError;
+    expect(err.messageKey).toBe('serverErr.project.domainRejected');
+    expect(err.params).toMatchObject({ value: 'exhibition' });
+    // 英文态：占位符真的被 params 填上（不是原样留着 {value}）
+    const en = resolveErrorText(err, tEn, 'fallback');
+    expect(en).toContain('exhibition');
+    expect(en).not.toContain('{value}');
+    expect(en).not.toContain('{count}');
+  });
+
+  it('② 无键有 userMessage ⇒ 原样透传（真因支，不许建键、不拿兜底盖）', async () => {
+    installBareMessageFetch('服务端说的真因');
+    const api = new RestClient('http://nas.local/api');
+    let caught: unknown;
+    try {
+      await api.get('/anything');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ChangxiaError);
+    const err = caught as ChangxiaError;
+    expect(err.userMessage).toBe('服务端说的真因');
+    expect(err.messageKey).toBeUndefined();
+    // 无码 ⇒ 中文态/英文态都透传真因（不拿兜底句盖）
+    expect(resolveErrorText(err, tZh, '兜底')).toBe('服务端说的真因');
+    expect(resolveErrorText(err, tEn, 'fallback')).toBe('服务端说的真因');
+  });
+
+  it('③ 非 JSON 错误体 ⇒ 走本仓默认句（那一句才建键）', async () => {
+    installNonJsonFetch(502);
+    const api = new RestClient('http://nas.local/api');
+    let caught: unknown;
+    try {
+      await api.get('/anything');
+    } catch (err) {
+      caught = err;
+    }
+    const err = caught as ChangxiaError;
+    expect(err.messageKey).toBe('coreErr.remote.httpError');
+    expect(resolveErrorText(err, tZh, '兜底')).toBe('服务端错误（HTTP 502）');
+    expect(resolveErrorText(err, tEn, 'fallback')).toBe('Server error (HTTP 502)');
   });
 });

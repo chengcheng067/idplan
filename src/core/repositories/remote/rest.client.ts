@@ -46,6 +46,7 @@ import type {
   WritebackProposal,
 } from '../../types/entities';
 import { ChangxiaError, ChangxiaErrorCode, StageStatus, coreError } from '../../types/enums';
+import type { CoreErrorKey } from '../../types/core-error-text';
 import type { ProjectQuery, TaskQuery, TaskUpsertRow } from '../interfaces';
 import type {
   AppendExecutionEventCmd,
@@ -93,13 +94,28 @@ export class RestClient {
 
     if (!res.ok) {
       /*
-       * ⚠️ 两分支读者不同：服务端给了权威 `userMessage` ⇒ **原样透传**（真因，不建键）；
-       * 没给 ⇒ 用本仓自己的默认句「服务端错误（HTTP n）」，那一句才进载荷文案表。
+       * ⚠️ 三支读者不同（甲案 · server 片，2026-10 英文收尾批）：
+       *   ① 服务端给了权威 `userMessage` **和** `messageKey` ⇒ 键 + 参数 + 载荷三件透出
+       *      （界面英文走 `resolveErrorText` 的 `t(messageKey)`，不再吃中文载荷）；
+       *   ② 只有 `userMessage` ⇒ **原样透传**（真因，不建键 —— 拿兜底句盖住真因是禁项）；
+       *   ③ 都没有 ⇒ 用本仓自己的默认句「服务端错误（HTTP n）」，那一句才进载荷文案表。
+       * `messageKey` 是 server 片载荷表的键（`serverErr.*` / `coreErr.*`，同一张消息表），
+       * 下面的 cast 只为过 `ChangxiaError` 的既有签名（`MessageKey ⊇ CoreErrorKey`）。
        */
       let serverMessage: string | null = null;
+      let serverKey: string | null = null;
+      let serverParams: Record<string, string | number> | undefined;
       try {
-        const payload = (await res.json()) as { error?: { userMessage?: string } };
+        const payload = (await res.json()) as {
+          error?: {
+            userMessage?: string;
+            messageKey?: string;
+            params?: Record<string, string | number>;
+          };
+        };
         if (payload?.error?.userMessage) serverMessage = payload.error.userMessage;
+        if (payload?.error?.messageKey) serverKey = payload.error.messageKey;
+        serverParams = payload?.error?.params;
       } catch {
         /* 非 JSON 错误体保持默认文案 */
       }
@@ -124,9 +140,14 @@ export class RestClient {
             : res.status === 400 || res.status === 422
               ? ChangxiaErrorCode.Validation
               : ChangxiaErrorCode.Network;
-      throw serverMessage !== null
-        ? new ChangxiaError(code, serverMessage)
-        : coreError(code, 'coreErr.remote.httpError', { status: res.status });
+      throw serverKey !== null
+        ? new ChangxiaError(code, serverMessage ?? '', undefined, {
+            key: serverKey as CoreErrorKey,
+            params: serverParams,
+          })
+        : serverMessage !== null
+          ? new ChangxiaError(code, serverMessage)
+          : coreError(code, 'coreErr.remote.httpError', { status: res.status });
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
