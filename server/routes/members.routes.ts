@@ -19,6 +19,7 @@
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { errorBody } from '../lib/server-error-text';
 
 interface MemberRow {
   id: string;
@@ -105,7 +106,7 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
     const row = db.prepare('SELECT * FROM members WHERE id = ?').get(id) as MemberRow | undefined;
     if (!row) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '成员不存在' } };
+      return errorBody('not_found', 'serverErr.member.notFound');
     }
     return rowToMember(row);
   });
@@ -116,7 +117,7 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
     const name = String(b.name ?? '').trim();
     if (!name) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '成员姓名不能为空' } };
+      return errorBody('validation', 'serverErr.member.nameRequired');
     }
     const id = crypto.randomUUID();
     const pw = b.password as string | undefined;
@@ -148,7 +149,7 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
     const existing = db.prepare('SELECT * FROM members WHERE id = ?').get(id) as MemberRow | undefined;
     if (!existing) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '成员不存在' } };
+      return errorBody('not_found', 'serverErr.member.notFound');
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
     // password 语义：string → 设为明文密码（scrypt 哈希入库）；null → 清除密码；undefined → 不变
@@ -203,7 +204,7 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
     // 无此成员 / 已停用 / 密码为空 → 401（统一模糊提示，避免枚举成员）
     if (!row || row.active !== 1 || verifyPassword(password, row.password_hash) === false) {
       void reply.status(401);
-      return { error: { code: 'unauthorized', userMessage: '密码错误' } };
+      return errorBody('unauthorized', 'serverErr.member.badPassword');
     }
     return { ok: true, memberId };
   });

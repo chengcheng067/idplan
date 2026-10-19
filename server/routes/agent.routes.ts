@@ -93,6 +93,15 @@ import type { AgentRouteDelegate } from '../adapters/sqlite.bundle';
 import { createSqliteBundle } from '../adapters/sqlite.bundle';
 import { agentUnauthorizedBody, requireAgentToken } from '../lib/agent-auth';
 import { nlLlmConfig, parseNlToCommandJson, NL_TEXT_MAX_CHARS, NL_DATA_DISCLOSURE } from '../lib/nl-llm';
+import {
+  errorBody,
+  errorBodyFrom,
+  messageKeyFieldsOf,
+  serverErrorText,
+  ServerTextError,
+  type ServerErrorParams,
+  type ServerMessageKey,
+} from '../lib/server-error-text';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -223,10 +232,33 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
     return all.find((p) => p.name.trim().toLowerCase() === wanted)?.id ?? null;
   };
 
-  /** `invalid_field` 的统一出口（§3.1 新增错误码） */
-  const invalidField = (userMessage: string): { error: { code: string; userMessage: string } } => ({
-    error: { code: 'invalid_field', userMessage },
-  });
+  /**
+   * `invalid_field` 的统一出口（§3.1 新增错误码）。
+   *
+   * 甲案后传**取词键 + 参数**，不传字面量：`userMessage` 由载荷表渲染（漂移面归零），
+   * 并随错误体挂 `messageKey` 供前端本地化。
+   */
+  const invalidField = (key: ServerMessageKey, params?: ServerErrorParams) =>
+    errorBody('invalid_field', key, params);
+
+  /**
+   * NL 解析失败的三支口径（与 `errorBodyFrom()` 同构）：
+   *   ① `ServerTextError`（nl-llm 的自有句子）⇒ userMessage + 取词键 + 参数；
+   *   ② 其它 `Error` 的 message ⇒ **真因原样透传**（不建键）；
+   *   ③ 都没有 ⇒ 兜底句（只有它建键）。
+   */
+  const nlFailureFields = (
+    err: unknown,
+  ): { userMessage: string; messageKey?: ServerMessageKey; params?: ServerErrorParams } => {
+    if (err instanceof ServerTextError) {
+      return { userMessage: err.userMessage, ...messageKeyFieldsOf(err) };
+    }
+    if (err instanceof Error && err.message) return { userMessage: err.message };
+    return {
+      userMessage: serverErrorText('serverErr.agent.nlParseFailed'),
+      messageKey: 'serverErr.agent.nlParseFailed',
+    };
+  };
 
   // 本作用域独占的错误形状映射：只影响 /api/agent/*，既有路由不受任何影响
   void app.register(async (scope) => {
@@ -235,16 +267,15 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       // §3.1 的 400 `too_large`：由 Fastify 的 bodyLimit 在**进入 handler 之前**抛出，
       // 因此不可能在 handler 里 try/catch 到，只能在这里映射（HTTP 413 → 契约的 400）。
       if (code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
-        void reply.status(400).send({
-          error: { code: 'too_large', userMessage: '导入内容过大，请拆分后分批同步。' },
-        });
+        void reply.status(400).send(errorBody('too_large', 'serverErr.agent.tooLarge'));
         return;
       }
-      const userMessage =
-        (err as { userMessage?: string }).userMessage ?? err.message ?? '服务器内部错误';
-      void reply.status(err.statusCode ?? 500).send({
-        error: { code: code === 'internal' ? 'internal' : code, userMessage },
-      });
+      // 三支口径见 errorBodyFrom()：① 带键三件齐出；② 无键有 userMessage ⇒ 透传真因；
+      // ③ 都没有 ⇒ 兜底句（只有它建键）。withMessageFallback 保留本处理器的**历史行为**：
+      // ② 之后再退 err.message（bundle 委托失败的真因只有这里看得到）。
+      void reply
+        .status(err.statusCode ?? 500)
+        .send(errorBodyFrom(err, 'serverErr.internal', true));
     });
 
     /* ======================================================================================
@@ -266,7 +297,10 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         if (err instanceof ChangxiaError) {
           void reply.status(400);
           // 契约里的机器码是 `Validation`（§3.1 Responses 块逐字），不是内部枚举值 'validation'
-          return { error: { code: 'Validation', userMessage: err.userMessage } };
+          // 甲案：core 侧抛错的 messageKey 随错误体透出（userMessage 一字不动）。
+          return {
+            error: { code: 'Validation', userMessage: err.userMessage, ...messageKeyFieldsOf(err) },
+          };
         }
         throw err;
       }
@@ -281,22 +315,16 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       //    为「未声明」：那样会把调用方的 bug 掩盖成「任务落到了别的阶段」，坑 C7）
       if (hasMain && !isNonBlank(mainRaw)) {
         void reply.status(400);
-        return invalidField(
-          'query 参数 stageName 出现但值为空/仅空白；显式声明落点阶段名时不能给空名称（系统不会把它当作「未声明」）。',
-        );
+        return invalidField('serverErr.agent.stageNameBlank');
       }
       if (hasAlias && !isNonBlank(aliasRaw)) {
         void reply.status(400);
-        return invalidField(
-          'query 参数 createStageIfMissing 出现但值为空/仅空白；显式声明落点阶段名时不能给空名称（系统不会把它当作「未声明」）。',
-        );
+        return invalidField('serverErr.agent.createStageIfMissingBlank');
       }
       // 同义别名：同传且**值不同** → invalid_field；值相同 → 接受（§4.5 失败矩阵的两行）
       if (hasMain && hasAlias && mainRaw !== aliasRaw) {
         void reply.status(400);
-        return invalidField(
-          'query 参数 stageName 与 createStageIfMissing 同传但取值不同：两者是同义别名，取值必须一致。',
-        );
+        return invalidField('serverErr.agent.stageNameAliasMismatch');
       }
       const declaredName: string | undefined = hasMain
         ? (mainRaw as string)
@@ -309,10 +337,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       const bodyStageId = optionalString(payload.stageId);
       if (declaredName !== undefined && (queryStageId !== undefined || bodyStageId !== undefined)) {
         void reply.status(400);
-        return invalidField(
-          `落点阶段名与 stageId 互斥（${queryStageId !== undefined ? '?stageId' : 'body.stageId'} 与落点名同传）：` +
-            '语义重叠说明调用方对落点不确定，系统报错而不是猜测。',
-        );
+        return invalidField('serverErr.agent.stageNameStageIdExclusive', {
+          where: queryStageId !== undefined ? '?stageId' : 'body.stageId',
+        });
       }
 
       /* ── 项目解析：**只放开阶段，绝不放开项目**（§4.5 第一行） ── */
@@ -331,7 +358,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       } catch (err) {
         if (err instanceof ChangxiaError && err.code === ChangxiaErrorCode.Validation) {
           void reply.status(400);
-          return { error: { code: 'Validation', userMessage: err.userMessage } };
+          return {
+            error: { code: 'Validation', userMessage: err.userMessage, ...messageKeyFieldsOf(err) },
+          };
         }
         throw err;
       }
@@ -341,8 +370,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           void reply.status(400);
           return {
             error: {
-              code: 'project_unresolved',
-              userMessage: `未找到名为「${queryProjectName}」的项目，请先在 ID Plan 中确认项目名称。`,
+              ...errorBody('project_unresolved', 'serverErr.agent.projectNameNotFound', {
+                name: queryProjectName,
+              }).error,
               projects: listProjectCandidates(),
             },
           };
@@ -352,9 +382,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         void reply.status(400);
         return {
           error: {
-            code: 'project_unresolved',
-            userMessage:
-              '未指定目标项目（body.projectId / ?projectId / ?projectName 均为空），无法导入。',
+            ...errorBody('project_unresolved', 'serverErr.agent.projectUnspecified').error,
             projects: listProjectCandidates(),
           },
         };
@@ -401,7 +429,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         if (err instanceof ChangxiaError) {
           if (err.code === ChangxiaErrorCode.Validation) {
             void reply.status(400);
-            return { error: { code: 'Validation', userMessage: err.userMessage } };
+            return {
+              error: { code: 'Validation', userMessage: err.userMessage, ...messageKeyFieldsOf(err) },
+            };
           }
           // ★ 共享核心的归属/存在性门（resolve()）：对外契约码 + 候选清单（合法落点集）
           if (err.code === ChangxiaErrorCode.ProjectUnresolved) {
@@ -411,6 +441,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
                 code: 'project_unresolved',
                 userMessage: err.userMessage,
                 projects: listProjectCandidates(),
+                ...messageKeyFieldsOf(err),
               },
             };
           }
@@ -421,11 +452,14 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
                 code: 'project_unresolved',
                 userMessage: err.userMessage,
                 projects: listProjectCandidates(),
+                ...messageKeyFieldsOf(err),
               },
             };
           }
           void reply.status(500);
-          return { error: { code: 'internal', userMessage: err.userMessage } };
+          return {
+            error: { code: 'internal', userMessage: err.userMessage, ...messageKeyFieldsOf(err) },
+          };
         }
         throw err; // 交给本作用域的错误处理器（500 {error:{code,userMessage}}）
       }
@@ -484,7 +518,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       } catch (err) {
         if (err instanceof ChangxiaError && err.code === ChangxiaErrorCode.Validation) {
           void reply.status(400);
-          return { error: { code: 'Validation', userMessage: err.userMessage } };
+          return {
+            error: { code: 'Validation', userMessage: err.userMessage, ...messageKeyFieldsOf(err) },
+          };
         }
         throw err;
       }
@@ -511,7 +547,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         if (err instanceof ChangxiaError) {
           if (err.code === ChangxiaErrorCode.Validation) {
             void reply.status(400);
-            return { error: { code: 'Validation', userMessage: err.userMessage } };
+            return {
+              error: { code: 'Validation', userMessage: err.userMessage, ...messageKeyFieldsOf(err) },
+            };
           }
           if (err.code === ChangxiaErrorCode.ProjectUnresolved) {
             void reply.status(400);
@@ -520,6 +558,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
                 code: 'project_unresolved',
                 userMessage: err.userMessage,
                 projects: listProjectCandidates(),
+                ...messageKeyFieldsOf(err),
               },
             };
           }
@@ -556,27 +595,17 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       const cfg = nlLlmConfig();
       if (!cfg) {
         void reply.status(403);
-        return {
-          error: {
-            code: 'nl_not_configured',
-            userMessage:
-              '自然语言通道未配置（fail-closed）：请在服务端设置 IDPLAN_NL_LLM_BASE_URL / ' +
-              'IDPLAN_NL_LLM_API_KEY / IDPLAN_NL_LLM_MODEL 三个环境变量（OpenAI 兼容端点，' +
-              '可指向你自己的 Ollama），重启后生效。未配置时本通道不可用——这是安全设计，不是故障。',
-          },
-        };
+        return errorBody('nl_not_configured', 'serverErr.agent.nlNotConfigured');
       }
       const body = (req.body ?? {}) as Record<string, unknown>;
       const text = typeof body.text === 'string' ? body.text.trim() : '';
       if (!text) {
         void reply.status(400);
-        return invalidField('请提供自然语言文本（body.text，非空）。');
+        return invalidField('serverErr.agent.nlTextRequired');
       }
       if (text.length > NL_TEXT_MAX_CHARS) {
         void reply.status(400);
-        return invalidField(
-          `自然语言文本超长（> ${NL_TEXT_MAX_CHARS} 字）：请只说这一条排期调整，别把整份合同粘进来。`,
-        );
+        return invalidField('serverErr.agent.nlTextTooLong', { max: NL_TEXT_MAX_CHARS });
       }
 
       let parsed;
@@ -584,13 +613,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         parsed = await parseNlToCommandJson(cfg, text);
       } catch (err) {
         void reply.status(502);
-        return {
-          error: {
-            code: 'nl_parse_failed',
-            userMessage:
-              err instanceof Error && err.message ? err.message : 'LLM 解析失败（未进入执行链）。',
-          },
-        };
+        return { error: { code: 'nl_parse_failed', ...nlFailureFields(err) } };
       }
 
       let cmd;
@@ -598,21 +621,21 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         cmd = validateAgentCommand(parsed.json);
       } catch (err) {
         void reply.status(400);
-        return {
-          error: {
-            code: 'nl_shape_rejected',
-            userMessage:
-              (err instanceof ChangxiaError ? err.userMessage : 'LLM 输出形状不符') +
-              '（原始输出：' + parsed.raw.slice(0, 120) + '）',
-          },
-        };
+        // {detail} 是 validateAgentCommand 透出的真因（core 内部中文，同族登记豁免）；
+        // 非 ChangxiaError 那一支的兜底句也进载荷表（serverErr.agent.nlShapeUnknown）。
+        const detail =
+          err instanceof ChangxiaError
+            ? err.userMessage
+            : serverErrorText('serverErr.agent.nlShapeUnknown');
+        return errorBody('nl_shape_rejected', 'serverErr.agent.nlShapeRejected', {
+          detail,
+          raw: parsed.raw.slice(0, 120),
+        });
       }
       // 用户没提项目 → 明确拒绝（系统提示已要求模型此时输出空 projectId；这里兜底）
       if (!cmd.projectId || !cmd.projectId.trim()) {
         void reply.status(400);
-        return invalidField(
-          '没能从这句话里解析出目标项目：请带上项目名或项目 id（Agent 看板）再说一次。',
-        );
+        return invalidField('serverErr.agent.nlProjectUnresolved');
       }
 
       const q = (req.query ?? {}) as Record<string, unknown>;
@@ -636,7 +659,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         if (err instanceof ChangxiaError) {
           if (err.code === ChangxiaErrorCode.Validation) {
             void reply.status(400);
-            return { error: { code: 'Validation', userMessage: err.userMessage } };
+            return {
+              error: { code: 'Validation', userMessage: err.userMessage, ...messageKeyFieldsOf(err) },
+            };
           }
           if (err.code === ChangxiaErrorCode.ProjectUnresolved) {
             void reply.status(400);
@@ -645,6 +670,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
                 code: 'project_unresolved',
                 userMessage: err.userMessage,
                 projects: listProjectCandidates(),
+                ...messageKeyFieldsOf(err),
               },
             };
           }
@@ -689,8 +715,9 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
           void reply.status(400);
           return {
             error: {
-              code: 'project_unresolved',
-              userMessage: `目标项目（id=${projectId}）不是 Agent 看板，Agent 通道读不到它的任务。`,
+              ...errorBody('project_unresolved', 'serverErr.agent.projectNotAgentBoard', {
+                projectId,
+              }).error,
               projects: listProjectCandidates(),
             },
           };
@@ -707,12 +734,10 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       const res = await delegate.inject({ method: 'GET', url: `/api/tasks${qs ? `?${qs}` : ''}` });
       if (res.statusCode < 200 || res.statusCode >= 300) {
         void reply.status(500);
-        return {
-          error: {
-            code: 'internal',
-            userMessage: `读取任务清单失败（HTTP ${res.statusCode}）：${res.body}`,
-          },
-        };
+        return errorBody('internal', 'serverErr.agent.taskListReadFailed', {
+          status: res.statusCode,
+          body: String(res.body),
+        });
       }
       let rows = res.json<AgentTaskListRow[]>();
       // 默认范围（未指定 projectId）= Agent 看板：隔离边界在读侧也成立 ——
@@ -802,19 +827,14 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       /* ── 0. 只新建：显式拒收落点解析参数（结构说明见段首注释） ── */
       if (hasOwn(body, 'projectId') || hasOwn(body, 'projectName')) {
         void reply.status(400);
-        return invalidField(
-          '建板通道**只新建**看板，不接受 projectId / projectName（那是导入通道的落点解析参数）。' +
-            '要往已有项目写任务，请用 POST /api/agent/import。',
-        );
+        return invalidField('serverErr.agent.boardNoTargetParams');
       }
 
       /* ── ① name：必填、非空白 ── */
       const rawName = body.name;
       if (!isNonBlank(rawName)) {
         void reply.status(400);
-        return invalidField(
-          '建板必须显式声明看板名称（body.name 缺失 / 为空 / 仅空白）：系统不会替你取一个默认名字。',
-        );
+        return invalidField('serverErr.agent.boardNameRequired');
       }
       const name = rawName.trim();
 
@@ -822,19 +842,12 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       const rawStart = body.plannedStartAt;
       if (!isNonBlank(rawStart)) {
         void reply.status(400);
-        return invalidField(
-          '建板必须显式声明计划开始日期（body.plannedStartAt 缺失 / 为空 / 仅空白）。' +
-            '系统**不会替你猜一个日期**：默认日期会静默造出一条错误的排期，' +
-            '而错误的排期比一条明确的报错危险得多。',
-        );
+        return invalidField('serverErr.agent.boardStartRequired');
       }
       const rawEnd = body.plannedEndAt;
       if (!isNonBlank(rawEnd)) {
         void reply.status(400);
-        return invalidField(
-          '建板必须显式声明计划结束日期（body.plannedEndAt 缺失 / 为空 / 仅空白）。' +
-            '系统**不会替你猜一个日期**（同 plannedStartAt）。',
-        );
+        return invalidField('serverErr.agent.boardEndRequired');
       }
       const plannedStartAt = rawStart.trim();
       const plannedEndAt = rawEnd.trim();
@@ -843,10 +856,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       const rawPreset = body.presetKey;
       if (hasOwn(body, 'presetKey') && !isNonBlank(rawPreset)) {
         void reply.status(400);
-        return invalidField(
-          'body.presetKey 出现但值为空/仅空白；不指定套餐时请**完全不要传**该参数' +
-            '（系统不会把它当作「没给」，因为那会把调用方的 bug 掩盖成「用了另一个阶段来源」）。',
-        );
+        return invalidField('serverErr.agent.boardPresetKeyBlank');
       }
       const presetKey: string | undefined = isNonBlank(rawPreset) ? rawPreset.trim() : undefined;
 
@@ -855,25 +865,19 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         const rawNames = body.stageNames;
         if (!Array.isArray(rawNames)) {
           void reply.status(400);
-          return invalidField('body.stageNames 必须是字符串数组（显式声明的阶段名列表）。');
+          return invalidField('serverErr.agent.boardStageNamesNotArray');
         }
         for (const entry of rawNames) {
           if (!isNonBlank(entry)) {
             void reply.status(400);
-            return invalidField(
-              'body.stageNames 里出现空/仅空白/非字符串的条目：显式声明阶段名时不能给空名称' +
-                '（系统不会把它当作「没声明过这个阶段」）。',
-            );
+            return invalidField('serverErr.agent.boardStageNamesBlankEntry');
           }
           declaredNames.push(entry.trim());
         }
       }
       if (presetKey === undefined && declaredNames.length === 0) {
         void reply.status(400);
-        return invalidField(
-          '建板必须显式声明阶段集合：body.presetKey（内置套餐）或 body.stageNames（阶段名数组）' +
-            '至少要给一个（两者可以同时给：先展开套餐骨架，再追加声明的名字）。',
-        );
+        return invalidField('serverErr.agent.boardStagesRequired');
       }
 
       /* ── 阶段集合展开（**唯一数据源**：stage-library）──
@@ -900,9 +904,7 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
         const preset = getPreset(presetKey);
         if (!preset) {
           void reply.status(400);
-          return invalidField(
-            `未找到 key 为「${presetKey}」的阶段套餐（阶段库只认 templates/stage-library.json 里的套餐 key）。`,
-          );
+          return invalidField('serverErr.agent.boardPresetNotFound', { presetKey });
         }
         // 主板块 = 套餐声明的 domain（PRD B8 的「套餐骨架」自带行业归属）
         domain = preset.domain;
@@ -924,13 +926,14 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
 
       if (seeds.length === 0) {
         void reply.status(400);
-        return invalidField('建板请求展开后没有任何阶段：阶段集合不能是空的。');
+        return invalidField('serverErr.agent.boardNoStages');
       }
       if (seeds.length > MAX_STAGE_COUNT) {
         void reply.status(400);
-        return invalidField(
-          `单次建板最多 ${MAX_STAGE_COUNT} 个阶段，本次展开后为 ${seeds.length} 个。`,
-        );
+        return invalidField('serverErr.agent.boardTooManyStages', {
+          max: MAX_STAGE_COUNT,
+          actual: seeds.length,
+        });
       }
 
       /* ── 写 1/2：建项目（**委托既有 `POST /api/projects`**，不另写一份 INSERT）──
@@ -977,12 +980,10 @@ export function registerAgentRoutes(app: FastifyInstance, db: Database.Database)
       });
       if (created.statusCode < 200 || created.statusCode >= 300) {
         void reply.status(500);
-        return {
-          error: {
-            code: 'internal',
-            userMessage: `建板失败：创建项目时被既有端点拒绝（HTTP ${created.statusCode}）：${created.body}`,
-          },
-        };
+        return errorBody('internal', 'serverErr.agent.boardCreateFailed', {
+          status: created.statusCode,
+          body: String(created.body),
+        });
       }
       // 委托端点的响应就是 `rowToProject()` 的产物（与 `Project` 实体同键同形），故可直接当 Project 用
       const project = created.json<Project>();

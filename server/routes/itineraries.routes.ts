@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 
 import { dayjs, isIsoDate } from '../../src/lib/date';
+import { errorBody } from '../lib/server-error-text';
 
 interface ItineraryRow {
   id: string;
@@ -59,7 +60,7 @@ export function registerItineraryRoutes(app: FastifyInstance, db: Database.Datab
     const endDate = body.endDate ?? '';
     if (!isIsoDate(startDate) || !isIsoDate(endDate) || startDate > endDate) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '旅游项目的起止日期无效，无法生成每日行程。' } };
+      return errorBody('validation', 'coreErr.itinerary.rangeInvalid');
     }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO itineraries
@@ -84,11 +85,11 @@ export function registerItineraryRoutes(app: FastifyInstance, db: Database.Datab
     const date = String(b.date ?? '');
     if (!isIsoDate(date)) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '每日行程日期必须是 YYYY-MM-DD。' } };
+      return errorBody('validation', 'serverErr.itinerary.badDate');
     }
     if (invalidAmount(b.budgetAmount) || invalidAmount(b.actualAmount)) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '预算和实际金额必须是有效数字或空值。' } };
+      return errorBody('validation', 'serverErr.itinerary.badAmount');
     }
     const id = crypto.randomUUID();
     const now = nowIso();
@@ -103,7 +104,7 @@ export function registerItineraryRoutes(app: FastifyInstance, db: Database.Datab
       );
     } catch {
       void reply.status(409);
-      return { error: { code: 'conflict', userMessage: '该日期已有每日行程卡。' } };
+      return errorBody('conflict', 'serverErr.itinerary.duplicateDate');
     }
     return rowToItinerary(db.prepare('SELECT * FROM itineraries WHERE id = ?').get(id) as ItineraryRow);
   });
@@ -113,12 +114,12 @@ export function registerItineraryRoutes(app: FastifyInstance, db: Database.Datab
     const existing = db.prepare('SELECT * FROM itineraries WHERE id = ?').get(id) as ItineraryRow | undefined;
     if (!existing) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '未找到该每日行程。' } };
+      return errorBody('not_found', 'coreErr.itinerary.notFound');
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
     if (invalidAmount(b.budgetAmount) || invalidAmount(b.actualAmount)) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '预算和实际金额必须是有效数字或空值。' } };
+      return errorBody('validation', 'serverErr.itinerary.badAmount');
     }
     const next: ItineraryRow = {
       ...existing,

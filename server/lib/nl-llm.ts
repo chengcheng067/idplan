@@ -30,6 +30,9 @@ export const NL_LLM_ENV = {
   model: 'IDPLAN_NL_LLM_MODEL',
 } as const;
 
+import { ChangxiaErrorCode } from '../../src/core/types/enums';
+import { ServerTextError } from './server-error-text';
+
 /** 自然语言输入长度上限（防 token 爆炸 + 防把整本合同粘进来） */
 export const NL_TEXT_MAX_CHARS = 500;
 
@@ -131,7 +134,11 @@ export async function parseNlToCommandJson(
       signal: ac.signal,
     });
     if (!res.ok) {
-      throw new Error(`LLM 服务返回 ${res.status}`);
+      // 甲案：自有句子改挂取词键（ServerTextError）。userMessage 逐字节不变；
+      // agent.routes.ts 的 502 支按三支口径透出（有键带键 / 真因透传 / 兜底句建键）。
+      throw new ServerTextError(ChangxiaErrorCode.Storage, 'serverErr.nl.llmHttp', {
+        status: res.status,
+      });
     }
     const data = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
@@ -142,7 +149,7 @@ export async function parseNlToCommandJson(
     try {
       json = JSON.parse(raw);
     } catch {
-      throw new Error('LLM 输出不是合法 JSON（已被拒绝，未进入执行链）');
+      throw new ServerTextError(ChangxiaErrorCode.ParseFailed, 'serverErr.nl.badJson');
     }
     return { raw, json };
   } finally {

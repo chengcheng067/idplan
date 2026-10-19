@@ -21,8 +21,9 @@ import { LEGACY_PROJECT_TYPE_PLACEHOLDER } from '../lib/legacy-project-type';
 import {
   describeDomainOffenders,
   findDomainOffenders,
-  usableProjectDomainsText,
+  usableProjectDomains,
 } from '../lib/project-domain';
+import { errorBody } from '../lib/server-error-text';
 
 // ★ v0.7（T01-b）：备份导入的号段归一走**前后端共享的同一份纯函数** —— 与 local
 //   适配器的 `local.admin.repo.replaceAllImport` **逐字同义**（硬约束见 interfaces.ts）。
@@ -273,7 +274,7 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     const row = db.prepare('SELECT * FROM contracts WHERE id = ?').get(id) as ContractRow | undefined;
     if (!row) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '合同记录不存在' } };
+      return errorBody('not_found', 'serverErr.contract.notFound');
     }
     return contractToDto(row);
   });
@@ -544,15 +545,16 @@ export function registerMetaRoutes(app: FastifyInstance, db: Database.Database):
     const domainOffenders = findDomainOffenders(pkg.data?.projects ?? []);
     if (domainOffenders.length > 0) {
       void reply.status(400);
-      return {
-        error: {
-          code: 'invalid_field',
-          userMessage:
-            '备份导入被拒绝（库未做任何改动）。' +
-            `${describeDomainOffenders(domainOffenders)}。` +
-            `主板块 domain 只接受 ${usableProjectDomainsText()}，或显式 null（= 清除，回到读时回落）。`,
-        },
-      };
+      // 甲案：拒收文案键化。{offenders} 是 describeDomainOffenders() 的中文定位串
+      // （第几条 / id / 实际值），与 core 表 coreErr.backup.domainRejected 的 {offenders}
+      // 完全同族 —— 那一侧早已登记为「实参自带汉字」的豁免（core-error-i18n.spec.ts ③）。
+      // userMessage 逐字节不变由 tests/server-error-i18n.spec.ts 的 BASELINE 钉着。
+      const all = usableProjectDomains();
+      return errorBody('invalid_field', 'serverErr.backup.domainRejected', {
+        offenders: describeDomainOffenders(domainOffenders),
+        allowed: all.join(' / '),
+        count: all.length,
+      });
     }
     // T14：脱敏备份回导支持——hasPassword 是导出侧派生字段（非表列），
     // 服务端导出 → 再导入的闭环必须剔除，否则 INSERT has_password 报 no such column。

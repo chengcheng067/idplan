@@ -34,6 +34,8 @@
 
 import { getUsableDomains } from '../../src/core/template/stage-library';
 
+import { errorBody, type ServerErrorBody } from './server-error-text';
+
 /** 合法主板块取值（顺序 = `getUsableDomains()` 声明序；来源见文件头） */
 export function usableProjectDomains(): readonly string[] {
   // 放宽为 `readonly string[]`：`getUsableDomains()` 返回窄的 `StageTemplateDomain[]`，
@@ -47,21 +49,23 @@ export function isProjectDomain(value: string): boolean {
   return usableProjectDomains().includes(value);
 }
 
-/** 合法值的可读清单（错误文案里给用户照抄） */
-export function usableProjectDomainsText(): string {
-  const all = usableProjectDomains();
-  return `${all.join(' / ')}（共 ${all.length} 个）`;
-}
-
 /**
- * 单条拒收理由（PATCH / 建档共用）。`prefix` 用于把上下文写进同一句话，例如
- * `'备份导入被拒绝（库未改动）。'`。
+ * 单条拒收理由的**错误体**（PATCH / 建档共用）：`invalid_field` + 载荷中文 +
+ * 取词键三件一套。`prefix` 用于把上下文写进同一句话，例如
+ * `'备份导入被拒绝（库未改动）。'`（现存调用方都不传，保留参数是为了不动既有签名）。
+ *
+ * 甲案：句子由载荷表渲染。`（共 N 个）` 从「可读清单函数里」挪进模板的
+ * `{allowed}`/`{count}` 两个占位（英文模板才插得进值），渲染结果与改动前
+ * **逐字节相同**（`tests/server-error-i18n.spec.ts` 的 BASELINE 钉着）。
  */
-export function projectDomainRejection(value: unknown, prefix = ''): string {
-  return (
-    `${prefix}主板块 domain 只接受 ${usableProjectDomainsText()}，` +
-    `或显式 null（= 清除，回到读时回落）；收到「${String(value)}」。`
-  );
+export function projectDomainRejectionBody(value: unknown, prefix = ''): ServerErrorBody {
+  const all = usableProjectDomains();
+  return errorBody('invalid_field', 'serverErr.project.domainRejected', {
+    prefix,
+    allowed: all.join(' / '),
+    count: all.length,
+    value: String(value),
+  });
 }
 
 /** 备份包内的一条越界记录（定位用：1 基序号 + 项目 id + 实际值） */

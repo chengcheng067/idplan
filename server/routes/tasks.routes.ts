@@ -30,6 +30,8 @@ import {
   serializeAssigneeIds,
   serializeJson,
 } from '../lib/json-columns';
+import { errorBody } from '../lib/server-error-text';
+import { coreErrorText } from '../../src/core/types/core-error-text';
 
 interface TaskRow {
   id: string;
@@ -266,12 +268,7 @@ export function runTaskUpsert(
   for (const t of batch) {
     const projectId = t.projectId;
     if (typeof projectId !== 'string' || projectId.length === 0) {
-      return {
-        error: {
-          code: 'validation',
-          userMessage: '任务行缺少 projectId，无法确定幂等键的项目作用域。',
-        },
-      };
+      return errorBody('validation', 'serverErr.task.rowProjectIdRequired');
     }
   }
 
@@ -417,7 +414,11 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
     const { id } = req.params as { id: string };
     const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
     if (!row) {
-      void reply.status(404).send({ error: { userMessage: '未找到该任务。' } });
+      // ★ 本处历史形状**没有 code 字段**（全仓唯一一处）——刻意原样保留，
+      //   只把载荷中文换成 core 表渲染 + 挂取词键（甲案），不顺手「修形状」。
+      void reply.status(404).send({
+        error: { userMessage: coreErrorText('coreErr.task.notFound'), messageKey: 'coreErr.task.notFound' },
+      });
       return;
     }
     return rowToTask(row);
@@ -486,7 +487,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
     const title = String(b.title ?? '').trim();
     if (!title) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '任务标题不能为空' } };
+      return errorBody('validation', 'serverErr.task.titleRequired');
     }
     const id = crypto.randomUUID();
     const status = deriveStatus(b);
@@ -574,12 +575,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
       .run(actorMemberId ?? null, nowIso(), nowIso(), id);
     if (result.changes === 0) {
       void reply.status(409);
-      return {
-        error: {
-          code: 'conflict',
-          userMessage: '该任务已被认领或不处于就绪状态。',
-        },
-      };
+      return errorBody('conflict', 'coreErr.task.notClaimable');
     }
     const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow;
     return rowToTask(row);
@@ -591,7 +587,7 @@ export function registerTaskRoutes(app: FastifyInstance, db: Database.Database):
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
     if (!existing) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '任务不存在' } };
+      return errorBody('not_found', 'serverErr.task.notFound');
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
     // 参与人全集变更时，主负责人同步为 assigneeIds[0]（与前端 UI 保存语义一致）

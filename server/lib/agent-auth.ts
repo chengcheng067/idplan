@@ -15,6 +15,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 
+import { errorBody, type ServerErrorBody } from './server-error-text';
+
 /** env 变量名（单一出处，.env.example 与 docs/api-contract.md 同名引用） */
 export const AGENT_TOKEN_ENV = 'IDPLAN_AGENT_TOKEN';
 
@@ -100,16 +102,14 @@ export function requireWriteToken(req: FastifyRequest): boolean {
 export const WRITE_AUTH_OPEN_HEADER = 'x-idplan-write-auth';
 export const WRITE_AUTH_OPEN_VALUE = 'open';
 
-/** 统一 401 错误体（与全局 {error:{code,userMessage}} 形状一致） */
-export function unauthorizedBody(): {
-  error: { code: string; userMessage: string };
-} {
-  return {
-    error: {
-      code: 'Unauthorized',
-      userMessage: '备份通道需要鉴权：请在服务端配置 IDPLAN_AGENT_TOKEN，并在请求头携带 X-Agent-Token。',
-    },
-  };
+/**
+ * 统一 401 错误体（与全局 {error:{code,userMessage}} 形状一致）。
+ *
+ * 甲案：`userMessage` 由载荷表渲染（逐字节不变）+ 挂 `messageKey` 供前端本地化。
+ * 机器读者（外部 Agent / 迁移脚本）照旧只读 `userMessage` ⇒ 协议字段不动。
+ */
+export function unauthorizedBody(): ServerErrorBody {
+  return errorBody('Unauthorized', 'serverErr.auth.backupTokenRequired');
 }
 
 /* ============================================================================================
@@ -184,13 +184,8 @@ export function requireAgentToken(req: FastifyRequest): boolean {
  *
  * `code` 保持 `'Unauthorized'`（与备份通道同一机器码，形状恒定）。
  */
-export function agentUnauthorizedBody(): {
-  error: { code: string; userMessage: string };
-} {
-  return {
-    error: {
-      code: 'Unauthorized',
-      userMessage: `Agent 通道需要鉴权：请在服务端配置 ${AGENT_API_TOKEN_ENV}，并在请求头携带 X-Agent-Token（或 Authorization: Bearer）。`,
-    },
-  };
+export function agentUnauthorizedBody(): ServerErrorBody {
+  return errorBody('Unauthorized', 'serverErr.auth.agentTokenRequired', {
+    env: AGENT_API_TOKEN_ENV,
+  });
 }

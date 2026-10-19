@@ -4,6 +4,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
+import { errorBody } from '../lib/server-error-text';
 
 interface StageRow {
   id: string;
@@ -65,7 +66,7 @@ export function registerStageRoutes(app: FastifyInstance, db: Database.Database)
     const row = db.prepare('SELECT * FROM stages WHERE id = ?').get(id) as StageRow | undefined;
     if (!row) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '阶段不存在' } };
+      return errorBody('not_found', 'serverErr.stage.notFound');
     }
     return rowToStage(row);
   });
@@ -112,7 +113,7 @@ export function registerStageRoutes(app: FastifyInstance, db: Database.Database)
     const existing = db.prepare('SELECT * FROM stages WHERE id = ?').get(id) as StageRow | undefined;
     if (!existing) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '阶段不存在' } };
+      return errorBody('not_found', 'serverErr.stage.notFound');
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
     const merged: StageRow = {
@@ -160,14 +161,14 @@ export function registerStageRoutes(app: FastifyInstance, db: Database.Database)
     const existing = db.prepare('SELECT * FROM stages WHERE id = ?').get(id) as StageRow | undefined;
     if (!existing) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '阶段不存在' } };
+      return errorBody('not_found', 'serverErr.stage.notFound');
     }
     const b = req.body as { startAt?: string; endAt?: string; status?: string };
     const startAt = b.startAt ?? existing.start_at;
     const endAt = b.endAt ?? existing.end_at;
     if (new Date(endAt).getTime() < new Date(startAt).getTime()) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '截止日早于开始日，已拒绝保存' } };
+      return errorBody('validation', 'serverErr.stage.endBeforeStart');
     }
     db.prepare(
       'UPDATE stages SET start_at=?, end_at=?, status=?, revision=revision+1, updated_at=? WHERE id=?',

@@ -14,7 +14,8 @@ import { DEFAULT_PROJECT_DOMAIN, resolveProjectDomain } from '../../src/core/tem
 import { LEGACY_PROJECT_TYPE_PLACEHOLDER } from '../lib/legacy-project-type';
 // v0.8 主板块（domain）的值域判定（**单一出处**：转发 `stage-library.getUsableDomains()`；
 // 与备份导入路由 `meta.routes.ts` 共用同一份白名单与同一份错误文案）
-import { isProjectDomain, projectDomainRejection } from '../lib/project-domain';
+import { isProjectDomain, projectDomainRejectionBody } from '../lib/project-domain';
+import { errorBody, type ServerErrorParams, type ServerMessageKey } from '../lib/server-error-text';
 
 interface ProjectRow {
   id: string;
@@ -79,10 +80,14 @@ export function rowToProject(r: ProjectRow): Record<string, unknown> {
 
 const nowIso = (): string => new Date().toISOString();
 
-/** `invalid_field` 的统一出口（与 `/api/agent/*` 的机器码同形，见设计 §3.1） */
-const invalidField = (userMessage: string): { error: { code: string; userMessage: string } } => ({
-  error: { code: 'invalid_field', userMessage },
-});
+/**
+ * `invalid_field` 的统一出口（与 `/api/agent/*` 的机器码同形，见设计 §3.1）。
+ *
+ * 甲案后传**取词键 + 参数**，不传字面量：`userMessage` 由载荷表渲染（漂移面归零），
+ * 并随错误体挂 `messageKey` 供前端本地化。
+ */
+const invalidField = (key: ServerMessageKey, params?: ServerErrorParams) =>
+  errorBody('invalid_field', key, params);
 
 /**
  * 归属侧（`Project.kind`）的合法取值白名单。
@@ -132,7 +137,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined;
     if (!row) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '项目不存在' } };
+      return errorBody('not_found', 'serverErr.project.notFound');
     }
     return rowToProject(row);
   });
@@ -145,7 +150,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     const name = String(body.name ?? '').trim();
     if (!name) {
       void reply.status(400);
-      return { error: { code: 'validation', userMessage: '项目名称不能为空' } };
+      return errorBody('validation', 'serverErr.project.nameRequired');
     }
 
     /* ======================================================================================
@@ -178,11 +183,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
      * ==================================================================================== */
     if (body.kind !== undefined && !isProjectKind(String(body.kind))) {
       void reply.status(400);
-      return invalidField(
-        `归属侧 kind 只接受 'human' / 'agent' 两个取值，收到「${String(body.kind)}」。` +
-          '（归属侧是隔离谓词的判据，脏值会让前端与服务端对同一条项目判断不一致：' +
-          '前端按人类侧显示它，服务端候选清单却把它排除。）',
-      );
+      return invalidField('serverErr.project.badKindCreate', { value: String(body.kind) });
     }
 
     /* ======================================================================================
@@ -201,7 +202,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     if (body.domain !== undefined && body.domain !== null) {
       if (typeof body.domain !== 'string' || !isProjectDomain(body.domain)) {
         void reply.status(400);
-        return invalidField(projectDomainRejection(body.domain));
+        return projectDomainRejectionBody(body.domain);
       }
     }
     // ⚠️ 列清单与占位符个数必须逐一对齐（v0.8 起 17 个 ?）。加列时三处同改：
@@ -251,7 +252,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined;
     if (!existing) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '项目不存在' } };
+      return errorBody('not_found', 'serverErr.project.notFound');
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
 
@@ -284,18 +285,11 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       if (nextKind !== existing.kind) {
         if (!isProjectKind(nextKind)) {
           void reply.status(400);
-          return invalidField(
-            `归属侧 kind 只接受 'human' / 'agent' 两个取值，收到「${nextKind}」。` +
-              '（现状是原样透传，会把脏值写进库 —— 归属侧是隔离谓词的判据，脏值等于把数据放进一个谁也看不见的桶。）',
-          );
+          return invalidField('serverErr.project.badKindPatch', { value: nextKind });
         }
         if (b.takeover !== true) {
           void reply.status(400);
-          return invalidField(
-            '变更项目归属侧（kind）属于「接管」动作，必须显式声明接管意图（body.takeover === true）。' +
-              '本服务端当前**没有角色模型**，因此这道门校验的是「显式意图」而不是「请求者身份」——' +
-              '它能挡住误操作（顺手带上 kind 的字段级更新），但挡不住本来就拥有本机文件访问权的调用方。',
-          );
+          return invalidField('serverErr.project.takeoverRequired');
         }
       }
     }
@@ -325,7 +319,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
     if (b.domain !== undefined && b.domain !== null) {
       if (typeof b.domain !== 'string' || !isProjectDomain(b.domain)) {
         void reply.status(400);
-        return invalidField(projectDomainRejection(b.domain));
+        return projectDomainRejectionBody(b.domain);
       }
     }
 
@@ -387,7 +381,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       merged.planned_start_at.slice(0, 10) > merged.planned_end_at.slice(0, 10)
     ) {
       void reply.status(400);
-      return invalidField('项目计划开始日期不能晚于结束日期。');
+      return invalidField('serverErr.project.startAfterEnd');
     }
 
     const datesChanged =
@@ -459,7 +453,7 @@ export function registerProjectRoutes(app: FastifyInstance, db: Database.Databas
       | undefined;
     if (!exists) {
       void reply.status(404);
-      return { error: { code: 'not_found', userMessage: '项目不存在或已删除' } };
+      return errorBody('not_found', 'serverErr.project.notFoundOrDeleted');
     }
     const stageIds = (
       db.prepare('SELECT id FROM stages WHERE project_id = ?').all(id) as Array<{ id: string }>
