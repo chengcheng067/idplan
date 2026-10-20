@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0.0012-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-3953%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0013-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-3983%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
@@ -203,7 +203,7 @@ npm run electron:dev   # run the desktop form in development
 ```
 
 ```bash
-npm test               # full unit suite (246 spec files / 3953 cases, vitest)
+npm test               # full unit suite (248 spec files / 3983 cases, vitest)
 npm run typecheck      # frontend type checking
 npm run build          # typecheck + build
 npm run electron:build # build + package the Windows NSIS installer

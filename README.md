@@ -16,9 +16,9 @@
   
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   
-  <img src="https://img.shields.io/badge/version-1.0.0.0012-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0013-blue.svg" alt="version" />
   
-  <img src="https://img.shields.io/badge/tests-3953%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-3983%20passing-brightgreen.svg" alt="tests" />
   
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   
@@ -233,7 +233,7 @@ npm run electron:dev   # 桌面形态开发运行
 ```
 
 ```bash
-npm test               # 全量单测（246 份 spec / 3953 用例，vitest）
+npm test               # 全量单测（248 份 spec / 3983 用例，vitest）
 npm run typecheck      # 前端类型检查
 npm run build          # 类型检查 + 构建
 npm run electron:build # 构建 + 打 Windows NSIS 安装包
