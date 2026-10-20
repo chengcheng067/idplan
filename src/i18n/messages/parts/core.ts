@@ -267,6 +267,19 @@ export const zh = {
   'domain.consulting': '咨询',
   'domain.travel': '旅游',
 
+  /* ── 行业**大类**显示名（`templates/stage-library.json` 的 7 个 `industryGroups[].name`）──
+   * 与上一段 `domain.*` 是两层不同的东西：`domain.*` 是第 2 层「主板块」，
+   * 本段是第 1 层「行业大类」（伞形的「建筑设计行业」+ 6 个一级平铺板块）。
+   * ⚠️ zh 取值与那份 JSON 的 `name` **逐字节相同**（默认中文零变化，由
+   *    `tests/industry-group-i18n.spec.ts` 的覆盖锁遍历 JSON 逐条比对）。 */
+  'industryGroup.space': '建筑设计行业',
+  'industryGroup.software': '软件开发',
+  'industryGroup.marketing': '市场活动',
+  'industryGroup.film': '影视制作',
+  'industryGroup.wedding': '婚礼策划',
+  'industryGroup.consulting': '咨询交付',
+  'industryGroup.travel': '旅游出行',
+
   /*
    * ── 段 5 之六：两条「参数本身是 core 中文」的错误 —— `reason` 的中文句入表 ──
    * ⚠️ 值与 core `canComplete()` 里那两句**逐字节相同**（有断言钉：zh 下合成结果 === `resolveErrorText`）。
@@ -558,6 +571,20 @@ export const en = {
   'domain.wedding': 'Wedding',
   'domain.consulting': 'Consulting',
   'domain.travel': 'Travel',
+
+  /*
+   * 行业**大类**（第 1 层）译名。刻意与 `domain.*`（第 2 层主板块）**选词不同**：
+   * 大类是「行业/生意」，不是单一专业。`space` 覆盖 建筑/景观/室内 ⇒ 用
+   * Built Environment（业内标准说法），译成 "Architecture" 会与第 2 层的
+   * Architecture 撞名 —— 同一个下拉里出现两个同名词，用户分不清哪个是伞。
+   */
+  'industryGroup.space': 'Built Environment',
+  'industryGroup.software': 'Software Development',
+  'industryGroup.marketing': 'Marketing & Events',
+  'industryGroup.film': 'Film & Video',
+  'industryGroup.wedding': 'Wedding Planning',
+  'industryGroup.consulting': 'Consulting & Delivery',
+  'industryGroup.travel': 'Travel',
 
   /* ── 段 5 之六：两条「参数本身是 core 中文」的错误 —— `reason` 的英文句 ── */
   'execution.reason.notAwaitingReview':

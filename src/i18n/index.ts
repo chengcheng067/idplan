@@ -65,6 +65,8 @@ export {
   cnHolidayNameLabel,
   DOMAIN_LABEL_KEYS,
   domainLabelKey,
+  INDUSTRY_GROUP_KEYS,
+  industryGroupLabel,
   executionCompleteRejectedText,
   resolveErrorTextForUi,
   taskTransitionText,

@@ -34,7 +34,7 @@ import type { StageTemplateDomain } from '../../core/types/dto';
    ⚠️ 板块**显示名**（室内/景观/…）由 `domainLabelKey()` 提供（键表在 `src/i18n/labels.ts`），
    它自己不订阅 ——
    重渲染由本组件的 `useLang()` 负责（纪律见 `src/i18n/labels.ts` 头注释）。 */
-import { domainLabelKey, useLang } from '../../i18n';
+import { domainLabelKey, industryGroupLabel, useLang } from '../../i18n';
 
 /** 板块中文标签（UI 文案唯一出处；阶段池分组标题也从这里取，避免两处各写一份） */
 
@@ -172,7 +172,7 @@ export function DomainCascade({
               <button
                 key={g.key}
                 type="button"
-                aria-label={t('wizard.industryAria', { name: g.name })}
+                aria-label={t('wizard.industryAria', { name: industryGroupLabel(g.key, g.name) })}
                 // ★ 语言无关定位钩子（i18n 笔 misc）：aria 已走消息表 ⇒
                 //   `aria-label^="行业 "` 这类前缀选择器在英文态会静默失配。
                 data-industry-chip={g.key}
@@ -185,7 +185,13 @@ export function DomainCascade({
                     : 'border-line bg-cream text-ink hover:bg-sand'
                 }`}
               >
-                {g.name}
+                {/*
+                  ⚠️ 显示名走 `industryGroupLabel()`（2026-10-20 补）：`g.name` 是
+                  `templates/stage-library.json` 里的**中文原名**，直渲染会让英文界面里
+                  这一排 7 个行业大类一直是中文（用户 0012 截图就是这个）。
+                  `data-industry-chip-name` 仍用 `g.name` 原值 —— 那是测试锚点，不是文案。
+                */}
+                {industryGroupLabel(g.key, g.name)}
                 {umbrellaGroup && <ChevronDown size={12} aria-hidden className="text-mist" />}
               </button>
             );

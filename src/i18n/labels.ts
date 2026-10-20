@@ -771,6 +771,40 @@ export function domainLabelKey(domain: StageTemplateDomain): string {
   return key === undefined ? String(domain) : t(key);
 }
 
+/* ═══════════ 行业**大类**显示名（JSON 的 7 个 industryGroups[].name） ═══════════
+ *
+ * ── 与上一张 `DOMAIN_LABEL_KEYS` 不是一个层级（别混）──
+ *   ① 第 1 层「行业大类」= 本表（伞形 `建筑设计行业` + 6 个一级平铺板块）；
+ *   ② 第 2 层「主板块」  = 上一张表（室内 / 景观 / 建筑 / …）。
+ * 两张表的**英文选词刻意不同**：大类 `space` 译 Built Environment，而第 2 层的
+ * `architecture` 译 Architecture —— 若两层同译，同一个下拉里会出现两个同名项，
+ * 用户分不清哪个是伞形、哪个是具体板块。
+ *
+ * ── 为什么按 **group.key**（ASCII）建键，而不像 `CN_HOLIDAY_NAME_KEYS` 那样按中文原值 ──
+ * 这里的调用方手里同时有 `key` 与 `name`（`getIndustryGroups()` 的返回项、`IndustrySelect`
+ * 的 group row），键随数据走更稳：JSON 里将来把名字改一个字，映射不会断。
+ * 未知 key **回落 JSON 的 name**（宁可显示中文也不显示空/键名），覆盖率锁
+ * `tests/industry-group-i18n.spec.ts` 会逼出新键。
+ */
+export const INDUSTRY_GROUP_KEYS: Readonly<Record<string, MessageKey>> = {
+  space: 'industryGroup.space',
+  software: 'industryGroup.software',
+  marketing: 'industryGroup.marketing',
+  film: 'industryGroup.film',
+  wedding: 'industryGroup.wedding',
+  consulting: 'industryGroup.consulting',
+  travel: 'industryGroup.travel',
+};
+
+/**
+ * 行业大类取词（**屏幕侧唯一入口**）。未知 key 回落到 JSON 里的原名。
+ * ⚠️ 同本文件其余取词函数：不是 hook、不订阅语言变化 ⇒ 调用它的组件必须调 `useLang()`。
+ */
+export function industryGroupLabel(groupKey: string, fallbackName: string): string {
+  const key = INDUSTRY_GROUP_KEYS[groupKey];
+  return key === undefined ? fallbackName : t(key);
+}
+
 /* ═══════════════ 两条「参数本身就是 core 中文」的错误：整句在**本层**合成 ═══════════════
  *
  * ── 问题（这两条与其余 130 条键不一样在哪）──

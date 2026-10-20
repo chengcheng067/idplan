@@ -49,7 +49,7 @@ import { cn } from '../../lib/cn';
    ⚠️ 本文件里那个 `const t = window.setTimeout(...)` 已改名 `timer` ——
    它会**遮蔽**取词函数（同名 block 作用域），将来在那段 effect 里加一句取词
    就会静默取到数字、当场类型错。 */
-import { domainLabelKey, useLang } from '../../i18n';
+import { domainLabelKey, industryGroupLabel, useLang } from '../../i18n';
 import { getIndustryGroups, getUsableDomains } from '../../core/template/stage-library';
 import type { StageTemplateDomain } from '../../core/types/dto';
 
@@ -344,7 +344,8 @@ export function IndustrySelect({
                   className="sticky top-0 z-10 mt-1 flex h-7 items-center gap-1.5 bg-paper px-2 text-[11px] font-medium text-mist"
                 >
                   <GIcon size={12} aria-hidden />
-                  {row.name}
+                  {/* 组头 = 行业**大类**名，走取词（`row.name` 是 JSON 里的中文原名） */}
+                  {industryGroupLabel(row.key, row.name)}
                 </div>
               );
             }
