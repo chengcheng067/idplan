@@ -805,6 +805,138 @@ export function industryGroupLabel(groupKey: string, fallbackName: string): stri
   return key === undefined ? fallbackName : t(key);
 }
 
+/* ═══════════ 阶段名 / 快捷套餐名（随包 JSON 的数据名 → 屏幕文案） ═══════════
+ *
+ * ── 两张表为什么这么建键 ──
+ *   · `STAGE_NAME_KEYS` 按**中文原值**建键（同 `CN_HOLIDAY_NAME_KEYS`）：项目里已经落库的
+ *     `stage.name` 就是中文原名 ⇒ **老数据天然可映射、零迁移**；用户改名后查不到 ⇒ 回落原文。
+ *   · `PRESET_NAME_KEYS` 按 **preset key** 建键：套餐只出现在向导里、不落库，键随数据走更稳。
+ *
+ * ── 同名共用一条键 ──
+ * JSON 里有 3 组同名阶段（概念方案 ×2 / 方案设计 ×2 / 现场执行 ×2），语义相同 ⇒ 共用
+ * 首次出现那一项的键（如 `stageName.architecture.schematic`），少建 3 条同值键。
+ *
+ * ⚠️ **纸面不取词**：`src/print/**` 一律显示落库原值（打印稿恒中文）。
+ *    守卫 `tests/stage-name-i18n.spec.tsx` 有一条反向断言盯这个。
+ */
+export const STAGE_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
+  '提案': 'stageName.indoor.proposal',
+  '测量': 'stageName.indoor.measure',
+  '平面方案': 'stageName.indoor.concept_plan',
+  'SU 建模': 'stageName.indoor.su_model',
+  '效果图': 'stageName.indoor.rendering',
+  '施工图深化': 'stageName.indoor.construction_drawing',
+  '材料表': 'stageName.indoor.material_list',
+  '交付': 'stageName.indoor.handover',
+  '实景': 'stageName.indoor.photography',
+  '场地踏勘与测绘': 'stageName.landscape.survey',
+  '概念方案': 'stageName.landscape.concept',
+  '方案深化（总平与竖向）': 'stageName.landscape.schematic',
+  '种植设计': 'stageName.landscape.planting',
+  '水电与照明设计': 'stageName.landscape.mep_lighting',
+  '施工图（硬质与节点大样）': 'stageName.landscape.construction_drawing',
+  '现场服务与竣工验收': 'stageName.landscape.site_service',
+  '方案设计': 'stageName.architecture.schematic',
+  '初步设计（扩初）': 'stageName.architecture.development',
+  '施工图设计': 'stageName.architecture.construction_doc',
+  '报规报建配合': 'stageName.architecture.permit_support',
+  '施工配合与竣工验收': 'stageName.architecture.site_service',
+  '需求调研': 'stageName.software.discovery',
+  '产品方案': 'stageName.software.prd',
+  'UI 设计': 'stageName.software.uidesign',
+  '开发实现': 'stageName.software.dev',
+  '测试修复': 'stageName.software.qa',
+  '验收上线': 'stageName.software.launch',
+  '运维交接': 'stageName.software.handover',
+  '需求立项': 'stageName.marketing.brief',
+  '策略创意': 'stageName.marketing.strategy',
+  '物料设计': 'stageName.marketing.asset',
+  '供应商与场地': 'stageName.marketing.vendor',
+  '预热推广': 'stageName.marketing.promo',
+  '现场执行': 'stageName.marketing.onsite',
+  '复盘结案': 'stageName.marketing.review',
+  '剧本与分镜': 'stageName.film.script',
+  '勘景选角': 'stageName.film.casting',
+  '前期筹备': 'stageName.film.prep',
+  '拍摄': 'stageName.film.shoot',
+  '初剪': 'stageName.film.edit1',
+  '精剪调色': 'stageName.film.edit2',
+  '混音交付': 'stageName.film.deliver',
+  '需求与场地': 'stageName.wedding.brief',
+  '主题方案': 'stageName.wedding.concept',
+  '供应商确认': 'stageName.wedding.vendor',
+  '物料制作': 'stageName.wedding.asset',
+  '流程彩排': 'stageName.wedding.rehearsal',
+  '影像交付': 'stageName.wedding.deliver',
+  '立项启动': 'stageName.consulting.kickoff',
+  '现状诊断': 'stageName.consulting.research',
+  '评审修订': 'stageName.consulting.review',
+  '落地辅导': 'stageName.consulting.landing',
+  '结项复盘': 'stageName.consulting.close',
+  '需求规划': 'stageName.travel.plan',
+  '行程设计': 'stageName.travel.itinerary',
+  '资源预订': 'stageName.travel.booking',
+  '行前确认': 'stageName.travel.confirm',
+  '行程执行': 'stageName.travel.execution',
+  '费用结算': 'stageName.travel.settle',
+  '复盘归档': 'stageName.travel.review',
+  '外包范围与报价': 'stageName.software.outsource_scope',
+  '第三方对接': 'stageName.software.api_integration',
+  '移动端适配': 'stageName.software.mobile_adapt',
+  '发布会执行': 'stageName.marketing.launch_run',
+  '展位设计': 'stageName.marketing.expo_design',
+  '媒介投放计划': 'stageName.marketing.media_plan',
+  '动态分镜': 'stageName.film.storyboard_anim',
+  '系列选题与脚本': 'stageName.film.series_script',
+  '目的地统筹': 'stageName.wedding.destination_plan',
+  '宾客统筹': 'stageName.wedding.guest_manage',
+  '培训赋能': 'stageName.consulting.train',
+};
+
+/** 阶段名取词（**屏幕侧唯一入口**）。用户自改名 / 未登记值原样回显。 */
+export function stageNameLabel(name: string): string {
+  const key = STAGE_NAME_KEYS[name];
+  return key === undefined ? name : t(key);
+}
+
+export const PRESET_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
+  indoor_full: 'presetName.indoor_full',
+  indoor_concept: 'presetName.indoor_concept',
+  indoor_ff: 'presetName.indoor_ff',
+  indoor_deepen_only: 'presetName.indoor_deepen_only',
+  landscape_full: 'presetName.landscape_full',
+  landscape_concept: 'presetName.landscape_concept',
+  architecture_full: 'presetName.architecture_full',
+  architecture_cd: 'presetName.architecture_cd',
+  software_full: 'presetName.software_full',
+  software_design_only: 'presetName.software_design_only',
+  marketing_full: 'presetName.marketing_full',
+  marketing_creative_only: 'presetName.marketing_creative_only',
+  film_full: 'presetName.film_full',
+  film_post_only: 'presetName.film_post_only',
+  wedding_full: 'presetName.wedding_full',
+  wedding_design_only: 'presetName.wedding_design_only',
+  consulting_full: 'presetName.consulting_full',
+  consulting_diagnosis_only: 'presetName.consulting_diagnosis_only',
+  travel_fit: 'presetName.travel_fit',
+  travel_group: 'presetName.travel_group',
+  travel_business: 'presetName.travel_business',
+  software_outsource_full: 'presetName.software_outsource_full',
+  software_mobile_full: 'presetName.software_mobile_full',
+  marketing_launch_full: 'presetName.marketing_launch_full',
+  marketing_expo_full: 'presetName.marketing_expo_full',
+  film_promo_full: 'presetName.film_promo_full',
+  film_series_full: 'presetName.film_series_full',
+  wedding_destination_full: 'presetName.wedding_destination_full',
+  consulting_resident_full: 'presetName.consulting_resident_full',
+};
+
+/** 快捷套餐名取词（屏幕侧唯一入口）。自定义库的套餐（不在这张表里）原样回显。 */
+export function presetNameLabel(presetKey: string, fallbackName: string): string {
+  const key = PRESET_NAME_KEYS[presetKey];
+  return key === undefined ? fallbackName : t(key);
+}
+
 /* ═══════════════ 两条「参数本身就是 core 中文」的错误：整句在**本层**合成 ═══════════════
  *
  * ── 问题（这两条与其余 130 条键不一样在哪）──

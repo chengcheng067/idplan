@@ -6,7 +6,7 @@ import { Check } from 'lucide-react';
 
 import { createTaskActions } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
-import { useLang, type MessageKey } from '../i18n';
+import { stageNameLabel, useLang, type MessageKey } from '../i18n';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useRepos } from '../hooks/useRepos';
 import {
@@ -386,7 +386,7 @@ function TaskCard({
           {project && <span className="truncate">{project.name}</span>}
           {stage && (
             <span className="shrink-0">
-              {['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'][stage.orderIndex - 1]} {stage.name}
+              {['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'][stage.orderIndex - 1]} {stageNameLabel(stage.name)}
             </span>
           )}
         </span>

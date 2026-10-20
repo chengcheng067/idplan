@@ -5,7 +5,7 @@ import { StageStatus } from '../../core/types/enums';
 import { remainingDays } from '../../lib/date';
 import { stageSolidClass, stageSolidColor } from './stageColors';
 import { customStageColor } from './stageColorKey';
-import { roleLabel, useLang } from '../../i18n';
+import { roleLabel, stageNameLabel, useLang } from '../../i18n';
 import { ROLE_SENTINELS } from '../../core/types/role-sentinel';
 
 /**
@@ -68,7 +68,7 @@ export function StageRowsColumn({
         >
           <IndexBadge stage={s} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm text-ink">{s.name}</span>
+            <span className="block truncate text-sm text-ink">{stageNameLabel(s.name)}</span>
             <span className="block truncate text-[11px] leading-4 text-mist">
               {ownerLabel(s)}
             </span>

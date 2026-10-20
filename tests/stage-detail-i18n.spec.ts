@@ -100,8 +100,18 @@ describe('② 钩子换掉后的那半边：可见名确实取自消息表', () 
     expect(src, '抽屉 aria 没走消息表 ⇒ 与 data-stage-drawer 钩子脱钩').toMatch(
       /ariaLabel=\{t\('stageDrawer\.ariaWithName'/,
     );
-    // 同一次调用里必须把阶段名传进去（漏传会渲染成 `{name}` 字面量）
-    expect(src).toMatch(/ariaLabel=\{t\('stageDrawer\.ariaWithName'[\s\S]{0,80}?name:\s*stage\.name/);
+    /*
+     * ⚠️ **换载体、不放松口径**（阶段名取词批，2026-10-20）：
+     * 阶段名本身也要随语言变（`提案` → `Proposal`），所以传参从裸 `stage.name` 升级成
+     * `stageNameLabel(stage.name)`。正判据改成锁**取词签名**，并**加一条反向断言**
+     * 不许退回裸 `stage.name` —— 口径比原来更硬（原来只证明「传了个东西」）。
+     */
+    expect(src, '阶段名没走 stageNameLabel ⇒ 英文界面读屏名仍是中文阶段名').toMatch(
+      /ariaLabel=\{t\('stageDrawer\.ariaWithName'[\s\S]{0,90}?name:\s*stageNameLabel\(stage\.name\)/,
+    );
+    expect(src, '退回裸 stage.name 了 —— 阶段名不再随语言变').not.toMatch(
+      /ariaLabel=\{t\('stageDrawer\.ariaWithName'[\s\S]{0,90}?name:\s*stage\.name\s*\}/,
+    );
   });
 
   it('★ 删除条目钮：`data-task-remove` 钩子与 aria 必须成对（钩子背后有人话）', () => {

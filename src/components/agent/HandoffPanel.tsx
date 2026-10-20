@@ -17,7 +17,7 @@ import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { buildHandoffBundle } from '../../core/agent/handoff';
 import { computeReadyTasks } from '../../core/agent/dag';
-import { termFor, useLang } from '../../i18n';
+import { stageNameLabel, termFor, useLang } from '../../i18n';
 import { useLayoutStore } from '../../store/useLayoutStore';
 import { cn } from '../../lib/cn';
 
@@ -171,7 +171,7 @@ export function HandoffPanel({
           >
             {stages.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {stageNameLabel(s.name)}
               </option>
             ))}
           </select>

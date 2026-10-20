@@ -24,7 +24,7 @@ import {
   useHumanTasks,
 } from '../core/project/visibility';
 import { computeProjectStatus } from '../lib/progress';
-import { useLang } from '../i18n';
+import { stageNameLabel, useLang } from '../i18n';
 import { groupByColumn } from './HomePage';
 import type { ColumnKey } from './HomePage';
 import type { Member, Project, Stage, Task } from '../core/types/entities';
@@ -880,7 +880,7 @@ function TaskGroup({
                     {stage && (
                       <>
                         <span aria-hidden>·</span>
-                        <span className="truncate">{stage.name}</span>
+                        <span className="truncate">{stageNameLabel(stage.name)}</span>
                       </>
                     )}
                     {due && (

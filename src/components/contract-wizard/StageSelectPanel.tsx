@@ -24,7 +24,13 @@ import { useProjectsStore } from '../../store/useProjectsStore';
      靠本组件的 `useLang()` 提供重渲染，纪律见 `src/i18n/labels.ts` 头注释）。
    `SCHEDULE_BASIS_LABELS`（enums 里的中文表）**不再直接上屏** —— 它保留给打印族与
    服务端（`src/core/**` 不许 import i18n），屏幕侧一律走取词小函数。 */
-import { domainLabelKey, scheduleBasisLabel, useLang } from '../../i18n';
+import {
+  domainLabelKey,
+  presetNameLabel,
+  scheduleBasisLabel,
+  stageNameLabel,
+  useLang,
+} from '../../i18n';
 import { CustomStageDialog, type CustomStageDraft } from './CustomStageDialog';
 import { stageColorPaint } from './stage-color-bridge';
 
@@ -284,8 +290,9 @@ export function StageSelectPanel({
               <button
                 key={p.key}
                 type="button"
-                aria-label={t('wizard.presetAria', { name: p.name })}
+                aria-label={t('wizard.presetAria', { name: presetNameLabel(p.key, p.name) })}
                 data-preset={p.key}
+                /* 锚点用 JSON 原名（不是文案） */
                 data-preset-name={p.name}
                 onClick={() => applyPreset(p.key)}
                 className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
@@ -294,7 +301,7 @@ export function StageSelectPanel({
                     : 'border-line bg-paper text-mist hover:bg-sand'
                 }`}
               >
-                {p.name}（{p.itemKeys.length}）
+                {presetNameLabel(p.key, p.name)}（{p.itemKeys.length}）
               </button>
             );
           })}
@@ -463,7 +470,7 @@ export function StageSelectPanel({
                   />
                   {/* 名称（可收缩截断） */}
                   <span className="flex h-6 min-w-0 items-center truncate leading-none text-ink">
-                    {item.name}
+                    {stageNameLabel(item.name)}
                   </span>
                   {/* 时长（可选） */}
                   {durations !== undefined && onDurationChange !== undefined && (
@@ -566,7 +573,7 @@ function StageChip({
       type="button"
       aria-label={t('wizard.chipToggleAria', {
         action: checked ? t('wizard.deselect') : t('wizard.select'),
-        name: item.name,
+        name: stageNameLabel(item.name),
       })}
       // ★ 语言无关定位钩子（i18n 笔 misc 同批落地）：`aria-label` 已走消息表 ⇒
       //   英文态取值变了，任何 `aria-label="选择阶段 X"` 的选择器会**静默失配**
@@ -584,7 +591,7 @@ function StageChip({
       } ${blocked ? 'cursor-not-allowed opacity-40' : ''}`}
     >
       <span aria-hidden {...paint.attrs} className="h-2.5 w-2.5 rounded-full" style={paint.style} />
-      {item.name}
+      {stageNameLabel(item.name)}
     </button>
   );
 }

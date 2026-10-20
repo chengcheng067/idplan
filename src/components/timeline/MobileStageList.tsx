@@ -5,7 +5,7 @@ import { customStageColor } from './stageColorKey';
 import { StatusPill } from '../common/StatusPill';
 import { cn } from '../../lib/cn';
 import { totalDaysInclusive } from '../../lib/date';
-import { useLang } from '../../i18n';
+import { stageNameLabel, useLang } from '../../i18n';
 
 /** 阶段序号符号（①-⑨，与横向时间轴一致） */
 const STAGE_NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'] as const;
@@ -77,7 +77,7 @@ export function MobileStageList({
               >
                 {STAGE_NUM[s.orderIndex - 1] ?? s.orderIndex}
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{s.name}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{stageNameLabel(s.name)}</span>
               <StatusPill status={s.status} size="sm" />
             </div>
 

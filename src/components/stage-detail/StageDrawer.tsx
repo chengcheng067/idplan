@@ -17,7 +17,7 @@ import { Modal } from '../common/Modal';
 import { TaskChecklist } from './TaskChecklist';
 import { DelayHistoryTimeline } from './DelayHistoryTimeline';
 import { ResourcePathButton } from './ResourcePathButton';
-import { stageStatusLabel, useLang } from '../../i18n';
+import { stageNameLabel, stageStatusLabel, useLang } from '../../i18n';
 
 /**
  * 阶段详情侧滑抽屉壳：
@@ -111,7 +111,7 @@ export function StageDrawer({
       open
       onClose={close}
       placement="right"
-      ariaLabel={t('stageDrawer.ariaWithName', { name: stage.name })}
+      ariaLabel={t('stageDrawer.ariaWithName', { name: stageNameLabel(stage.name) })}
       /*
        * ★ 语言无关定位钩子 · **dialog 层**（i18n-EN 批 · team-lead 裁定②）。
        * 与下面 `<aside data-stage-drawer>` 那枚**不是同一个元素**，差一层：
@@ -140,7 +140,7 @@ export function StageDrawer({
           <div className="min-w-0">
             <h2 className="font-display text-display-md">
               <span className="mr-2 text-mist">{stage.orderIndex}.</span>
-              {stage.name}
+              {stageNameLabel(stage.name)}
             </h2>
             <p className="mt-1 text-[13px] text-mist">
               {t('stageDrawer.subtitle', {

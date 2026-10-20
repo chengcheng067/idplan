@@ -10,7 +10,7 @@ import { createProjectActions } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import { Modal } from '../common/Modal';
 import { ImeInput, ImeTextarea } from '../common/ImeInput';
-import { useLang } from '../../i18n';
+import { stageNameLabel, useLang } from '../../i18n';
 
 /**
  * 延期原因弹窗（PRD 硬规则 1）：
@@ -77,7 +77,7 @@ export function RescheduleDialog({
           <h3 className="flex items-center gap-2 font-display text-display-md">
             {postponed && <AlertTriangle size={18} className="text-clay" />}
             {t('reschedule.title')}
-            {t('reschedule.titleStage', { stage: primary.stageName })}
+            {t('reschedule.titleStage', { stage: stageNameLabel(primary.stageName) })}
             {shiftedCount > 1 ? t('reschedule.titleMoreStages', { n: shiftedCount }) : null}
           </h3>
           <button
@@ -99,7 +99,7 @@ export function RescheduleDialog({
                 key={it.stageId}
                 className="grid grid-cols-[1fr_auto] gap-x-3 border-b border-line/40 py-1.5 last:border-b-0"
               >
-                <span className="truncate text-ink">{it.stageName}</span>
+                <span className="truncate text-ink">{stageNameLabel(it.stageName)}</span>
                 <span className="tabular-nums text-mist">
                   {it.oldEndAt} → <b className={isPostponed ? 'text-clay' : 'text-pine-deep'}>{it.newEndAt}</b>
                 </span>

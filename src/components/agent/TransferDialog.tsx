@@ -64,7 +64,7 @@ import type { Project, Stage, Task } from '../../core/types/entities';
 import { resolveErrorText } from '../../core/types/enums';
 import { planTaskMove, previewMove } from '../../core/services/agent-takeover.service';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
-import { useLang } from '../../i18n';
+import { stageNameLabel, useLang } from '../../i18n';
 import { Modal } from '../common/Modal';
 import { cn } from '../../lib/cn';
 
@@ -383,7 +383,7 @@ export function TransferDialog({
                   <option value="">{t('agentTransfer.stagePlaceholder')}</option>
                   {stageOptions.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.orderIndex}. {s.name}
+                      {s.orderIndex}. {stageNameLabel(s.name)}
                     </option>
                   ))}
                 </select>
