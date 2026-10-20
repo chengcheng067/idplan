@@ -112,6 +112,7 @@ import { useRoleGuard } from '../src/hooks/useRoleGuard';
 import { MobileMoreMenu } from '../src/components/layout/MobileMoreMenu';
 import { Sidebar } from '../src/components/layout/Sidebar';
 import { ProjectDetailPage } from '../src/pages/ProjectDetailPage';
+import { MembersPageSection } from '../src/components/member/MembersPageSection';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useMembersStore } from '../src/store/useMembersStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
@@ -574,6 +575,105 @@ describe('D · Sidebar 的 Agent 看板列表显式受插件开关管', () => {
     const h = renderSidebarAtAgent();
     await flushRegistry();
     expect(h.textContent, '人类项目必须照常显示').toContain(HUMAN_PROJECT.name);
+  });
+});
+
+/* ====================================================================================
+ * H · 首页成员区的 **Agent 面**受 `agent-board` 管（2026-10-20 补）
+ *
+ * ── 为什么补这一组（它不是假想风险，是实机现象）──
+ * 用户 NAS 上 `plugin.enabled.agent-board = false`（服务端读到的确实是 false，
+ * 不是「UI 关 / 服务端开」那个老 bug），侧栏的 Agent 看板也已按 D 组门控消失，
+ * 但首页成员区仍显示「显示 Agent（1/3）」筛选 + 新建成员的「🤖 Agent」类型切换。
+ *
+ * 根因是**条件取错了**：那几块 UI 的显示条件是 `agentSeatUsed > 0`（**数据里有 Agent 成员**），
+ * 与插件开关毫无关系 ⇒ 关掉插件后，只要数据里还留着一条 Agent 成员（这是设计上允许的：
+ * 「停用插件时界面入口消失、数据面留宿主」），入口就永远还在。
+ *
+ * ── 判据要点（照本文件既有纪律）──
+ *   · 前提断言：成员区主体（`member.sectionTitle`）与人类成员行**必须**渲染 ——
+ *     否则「Agent 面不在」可能只是整区没挂；
+ *   · on 用例：默认态（无 KV ⇒ `defaultEnabled=true`）下「显示 Agent」「🤖 Agent」都在
+ *     —— 若有人把门控写成恒 false，这一条会红；
+ *   · off 用例：显式 `agent-board=false` 后两者都不在，而人类成员照常在。
+ * ==================================================================================== */
+
+/** Agent 成员夹具：它是「显示 Agent」开关的**唯一**显示条件（`agentSeatUsed > 0`） */
+const AGENT_MEMBER_ID = 'm-gate-agent';
+const AGENT_MEMBER: Member = {
+  ...makeMember(AGENT_MEMBER_ID, 'Agent 甲', MemberRoleKind.Member),
+  actorKind: MemberActorKind.Agent,
+  agentKind: 'workbuddy',
+};
+
+describe('H · 首页成员区的 Agent 面受 agent-board 管', () => {
+  /** 装管理员身份 + **一条 Agent 成员**（否则 off 用例的「不在」会因数据为空而空过） */
+  function seedWithAgent(): void {
+    seed({ actor: 'admin' });
+    act(() => {
+      useMembersStore.getState().setAll([ADMIN, MEMBER, AGENT_MEMBER]);
+    });
+  }
+
+  const renderMembers = (): HTMLDivElement =>
+    mount(
+      <MemoryRouter>
+        <MembersPageSection />
+      </MemoryRouter>,
+    );
+
+  /** 点开「添加成员」表单（类型切换只在表单里） */
+  function openAddForm(h: HTMLDivElement): void {
+    const btn = Array.from(h.querySelectorAll('button')).find((b) =>
+      (b.textContent ?? '').includes(t('member.addMember')),
+    );
+    expect(btn, '前提：成员区里必须有「添加成员」按钮').toBeDefined();
+    act(() => {
+      btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  }
+
+  it('前提：Agent 成员在数据里时，成员区主体与人类成员都渲染（且默认态 Agent 面在）', async () => {
+    seedWithAgent();
+    setPluginKv({}); // 无记录 ⇒ defaultEnabled（agent-board = true）
+    const h = renderMembers();
+    await flushRegistry();
+
+    expect(h.textContent, '前提：成员区必须真的渲染').toContain(t('member.sectionTitle'));
+    expect(h.textContent, '前提：人类成员必须在').toContain(MEMBER.name);
+    expect(
+      h.textContent,
+      '默认态（插件开）下「显示 Agent」筛选必须在 —— 否则本组 off 用例是空过',
+    ).toContain('显示 Agent');
+
+    openAddForm(h);
+    expect(h.textContent, '默认态下「🤖 Agent」类型切换必须在').toContain('🤖 Agent');
+  });
+
+  it('★ 插件停用 → 「显示 Agent」筛选与「🤖 Agent」类型切换都不在（人类成员照常）', async () => {
+    seedWithAgent();
+    setPluginKv({ 'agent-board': false });
+    const h = renderMembers();
+    await flushRegistry();
+
+    expect(h.textContent, '前提：成员区仍要渲染（门控只撤销 Agent 面，不撤销整区）').toContain(
+      t('member.sectionTitle'),
+    );
+    expect(h.textContent, '人类成员必须照常显示').toContain(MEMBER.name);
+    expect(
+      h.textContent,
+      '插件停用后仍出现「显示 Agent」—— 它的条件取的是数据（agentSeatUsed>0），不是插件开关',
+    ).not.toContain('显示 Agent');
+
+    openAddForm(h);
+    expect(
+      h.textContent,
+      '插件停用后仍能选「🤖 Agent」建 Agent 成员 —— 门控没覆盖新建表单',
+    ).not.toContain('🤖 Agent');
+    // 前提：表单本体确实开着（姓名输入框的 placeholder 在）。
+    // ⚠️ 不能拿 `member.typeLabel` 当这个锚 —— 它就在被门控的那块里，停用时本来就不该有。
+    const nameInput = h.querySelector(`input[placeholder="${t('member.namePlaceholder')}"]`);
+    expect(nameInput, '前提：新建表单必须真的打开（否则上一条是空过）').not.toBeNull();
   });
 });
 

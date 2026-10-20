@@ -11,6 +11,7 @@ import { createMemberActions } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
 import { memberBoardHref, useRoleGuard, countActiveAdmins } from '../../hooks/useRoleGuard';
+import { usePluginEnabled } from '../../core/plugin/PluginRegistryProvider';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
@@ -40,6 +41,30 @@ export function MembersPageSection(): JSX.Element | null {
   const [agentKind, setAgentKind] = useState('');
   // PRD IN-03：成员列表默认隐藏 Agent，显式开关才展示（既有指派逻辑零回归）
   const [showAgents, setShowAgents] = useState(false);
+  /*
+   * 插件门控（2026-10-20 补）：Agent 相关的**界面入口**归 `agent-board` 插件所有。
+   *
+   * ── 为什么这一处必须门控 ──
+   * 本区之前有 4 个 Agent 面**零门控**（「显示 Agent」筛选、新建成员的「人 / 🤖 Agent」
+   * 类型切换、席位提示、agentKind 输入）。它们的存在条件是 `agentSeatUsed > 0`（**数据**），
+   * 与插件开关**毫无关系** ⇒ 关掉 agent-board 后界面入口还在，正是「UI 关 / 数据在」
+   * 被读成「UI 没关」的那种遗留缺陷（NAS 上实测：服务端 `plugin.enabled.agent-board=false`，
+   * 而首页成员区仍显示「显示 Agent (1/3)」）。
+   *
+   * ── 口径边界（别越界）──
+   * 只撤**入口**，不动**数据面**：已有 Agent 成员的记录照旧留在库里/备份里（`manifest.tsx` 头注
+   * 自述的「停用插件时界面入口消失、数据面留宿主」）。故这里不删成员、不改 store，只决定
+   * 「这几块 UI 渲不渲染」。
+   */
+  const agentBoardOn = usePluginEnabled('agent-board').enabled;
+  /*
+   * 门控只藏 UI，**藏不住 state**：插件开着时用户可能已把类型选成 Agent，随后插件被关
+   * （设置里关、或另一端改完这里不会重挂）—— 残留的 `actorKind='agent'` 仍会让 `submit()`
+   * 走 Agent 分支，等于绕过门控建出 Agent 成员。故停用时把类型主动回收成「人」。
+   */
+  useEffect(() => {
+    if (!agentBoardOn) setActorKind('human');
+  }, [agentBoardOn]);
   const [demoteTarget, setDemoteTarget] = useState<Member | null>(null);
   /** v0.6 密码系统：正在设/清密码的成员（弹 PasswordDialog） */
   const [passwordMember, setPasswordMember] = useState<Member | null>(null);
@@ -129,7 +154,7 @@ export function MembersPageSection(): JSX.Element | null {
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-display text-display-md">{t('member.sectionTitle')}</h2>
         <div className="flex items-center gap-2">
-          {agentSeatUsed > 0 && (
+          {agentBoardOn && agentSeatUsed > 0 && (
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-mist">
               <input
                 type="checkbox"
@@ -154,31 +179,35 @@ export function MembersPageSection(): JSX.Element | null {
 
       {adding && (
         <div className="mb-4 grid grid-cols-1 gap-2 rounded-lg border border-pine/40 bg-cream p-3 md:grid-cols-[1fr_120px_160px_auto]">
-          {/* 类型切换（v0.6 · T13 要点 6）：人 / Agent */}
-          <div className="flex items-center gap-1.5 md:col-span-4">
-            <span className="text-xs text-mist">{t('member.typeLabel')}</span>
-            {(['human', 'agent'] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setActorKind(k)}
-                aria-pressed={actorKind === k}
-                className={
-                  'rounded-md border px-2.5 py-1 text-xs transition-colors ' +
-                  (actorKind === k
-                    ? 'border-pine bg-pine text-white'
-                    : 'border-line text-mist hover:bg-sand hover:text-ink')
-                }
-              >
-                {k === 'human' ? t('member.typeHuman') : '🤖 Agent'}
-              </button>
-            ))}
-            {actorKind === 'agent' && (
-              <span className="ml-2 text-[11px] text-amber">
-                {t('member.seatHint', { count: agentSeatUsed })}
-              </span>
-            )}
-          </div>
+          {/* 类型切换（v0.6 · T13 要点 6）：人 / Agent
+              ⚠️ 整块受 `agent-board` 门控：插件停用 ⇒ 只能建人类成员（`actorKind` 由下方
+              effect 强制回落 'human'，避免残留状态绕过门控建出 Agent 成员）。 */}
+          {agentBoardOn && (
+            <div className="flex items-center gap-1.5 md:col-span-4">
+              <span className="text-xs text-mist">{t('member.typeLabel')}</span>
+              {(['human', 'agent'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setActorKind(k)}
+                  aria-pressed={actorKind === k}
+                  className={
+                    'rounded-md border px-2.5 py-1 text-xs transition-colors ' +
+                    (actorKind === k
+                      ? 'border-pine bg-pine text-white'
+                      : 'border-line text-mist hover:bg-sand hover:text-ink')
+                  }
+                >
+                  {k === 'human' ? t('member.typeHuman') : '🤖 Agent'}
+                </button>
+              ))}
+              {actorKind === 'agent' && (
+                <span className="ml-2 text-[11px] text-amber">
+                  {t('member.seatHint', { count: agentSeatUsed })}
+                </span>
+              )}
+            </div>
+          )}
           <ImeInput
             autoFocus
             value={name}
@@ -198,7 +227,7 @@ export function MembersPageSection(): JSX.Element | null {
             placeholder={t('member.contactPlaceholder')}
             className="rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine"
           />
-          {actorKind === 'agent' && (
+          {agentBoardOn && actorKind === 'agent' && (
             <>
               <ImeInput
                 value={agentKind}
