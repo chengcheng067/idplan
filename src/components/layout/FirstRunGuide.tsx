@@ -34,7 +34,7 @@ import { useBackupIo } from './useBackupIo';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 // 身份键名的**单一出处**（不要在别处手打字面量：历史上本文件与 useRepos 各手写过一份）
 import { CURRENT_MEMBER_ID_KEY } from '../../store/useSettingsStore';
-import { useHumanProjects } from '../../core/project/visibility';
+import { useHasHumanProjects } from '../../core/project/visibility';
 import { logUser } from '../../core/services/log.service';
 import { cn } from '../../lib/cn';
 import { useLang, type MessageKey } from '../../i18n';
@@ -109,7 +109,14 @@ const GUIDE_CARDS: ReadonlyArray<{
 ];
 
 export function FirstRunGuide(): JSX.Element | null {
-  const projects = useHumanProjects();
+  /*
+   * ★ 2026-10-27 · 用 `useHasHumanProjects()`（库里有不有数据）而不是
+   * `useHumanProjects().length`（我能看到什么）：后者自本轮起在「未进入身份」时返回空，
+   * 而「未进入身份」正是新库首启的常态 ⇒ 拿着 5 个项目的库会被判成空库、弹出欢迎卡。
+   * 回归实测：tests/plugin-state-demo-browser.spec.ts ④b「同样身份形态但库非空 ⇒
+   * 欢迎卡不出现」。判据仍是漏斗文件里的唯一出口，不是本组件自己数 store。
+   */
+  const hasProjects = useHasHumanProjects();
   /** 取词 + 语言变化订阅点（引导卡文案在渲染期取） */
   const { t } = useLang();
   const { loadDemo, fileInput, confirmDialog } = useBackupIo();
@@ -167,7 +174,7 @@ export function FirstRunGuide(): JSX.Element | null {
   }, []);
 
   // 有项目（老用户 / 已载入示例）或已看过 → 不出现
-  if (projects.length > 0 || dismissed || !identityDone) {
+  if (hasProjects || dismissed || !identityDone) {
     return (
       <>
         {fileInput}

@@ -14,6 +14,14 @@ import { act } from 'react';
 const projectsState = { value: [] as unknown[] };
 vi.mock('../src/core/project/visibility', () => ({
   useHumanProjects: () => projectsState.value,
+  /*
+   * 2026-10-27：组件改用「**库里有没有数据**」的出口（`useHasHumanProjects`）——
+   * `useHumanProjects()` 自本轮起在"未进入身份"时返回空，而"未进入身份"正是新库首启的
+   * 常态，拿它判空库会把"有项目的库"判成空库、弹出欢迎卡（真机回归：
+   * tests/plugin-state-demo-browser.spec.ts ④b）。
+   * 这里按**同一个夹具**派生（有项目 ⇔ 非空），本 spec 各用例的语义与判据一字未动。
+   */
+  useHasHumanProjects: () => projectsState.value.length > 0,
 }));
 
 import { FirstRunGuide } from '../src/components/layout/FirstRunGuide';

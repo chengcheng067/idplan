@@ -47,7 +47,9 @@
  *   周报插件列出全部 5 个项目（含客户名与逾期数），成员看板统计卡报出「本周到期 3」
  *   而项目列表同时说「还没有与你相关的项目」（自相矛盾）。
  *
- *   **新口径**：`kind === 'human'` 时再叠一层「**未进入身份 ⇒ 空**」。
+ *   **新口径**：在 kind 之上再叠一层「**未进入身份 ⇒ 空**」——**人类侧与 Agent 侧都收**
+ *   （2026-10-27 team-lead 裁决 1：`useAgentProjects` 未进入时返回全部 agent 看板，
+ *   同一族泄漏；原先「Agent 侧不动」的口径已作废，见 `useAgentProjects` 注释）。
  *     · 数据仍完整躺在 store 里（本文件一行都不删），进入身份后**同一份 store 立即恢复**
  *       ——不需要重新装载、不需要刷新；
  *     · 判据来自 `deriveRoleGuardState().isEntered`（= `currentMemberId` 指向一条
@@ -205,16 +207,20 @@ const pickProjects = (s: { projects: Project[] }): Project[] => s.projects;
 const pickStages = (s: { stages: Stage[] }): Stage[] => s.stages;
 const pickTasks = (s: { tasks: Task[] }): Task[] => s.tasks;
 
-/* ══════════════ 未进入态 · 人类侧零可见（唯一判决，见文件头 §未进入态） ══════════════
+/* ══════════ 未进入态 · 两侧零可见（**唯一判决**，见文件头 §未进入态） ══════════
  *
- * ⚠️ 本段是**唯一**允许回答「有没有人该看人类侧数据」的地方。页面/组件/插件不得自己写
+ * ⚠️ 本段是**唯一**允许回答「有没有人该看库里的项目」的地方。页面/组件/插件不得自己写
  * `currentMemberId == null && …` 之类的第二套推导（那正是本文件 §纪律 3 要防的漂移）。
+ *
+ * ⚠️ **两个 kind 共用这一个判决**（team-lead 裁决 1：不要写成两个 if）：
+ *   人类侧的抱怨照旧，Agent 侧同理 —— 未进入身份时 `useAgentProjects()` 此前只按 kind
+ *   过滤 ⇒ 侧栏 Agent 段与 Agent 页照样列出全部「无主」agent 看板名。
  *
  * ── 三档语义（与 `useDataReadiness()` 的三态一一对应，别混）──
  *   `hydrated === false`            → **不下判决**，本函数返回 false（= 此刻不可见），
  *                                     但这不是「未进入」：页面侧由 `<DataGate>` 渲染
  *                                     装载占位，**不得**据此渲染「请先选择身份」引导。
- *   `hydrated && !isEntered`        → 真判决：未进入 ⇒ 人类侧零可见 + 引导态。
+ *   `hydrated && !isEntered`        → 真判决：未进入 ⇒ 两侧零可见（+ 页面给引导态）。
  *   `hydrated && isEntered`         → 放行（原有 kind/归属收窄不变）。
  *
  * ── 为什么装载中也返回空（而不是先放行、等 hydrated 再收窄）──
@@ -228,7 +234,7 @@ const pickTasks = (s: { tasks: Task[] }): Task[] => s.tasks;
  *   **不把整个 RoleGuardState 对象引进来**：本文件只需要一个布尔，多订阅 `hasAdmin`
  *   之类的派生没有意义。判据仍是那个纯函数，一行都没重写。
  */
-function useHumanSideVisible(): boolean {
+function useViewerGate(): boolean {
   const members = useMembersStore((s) => s.members);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
   const hydrated = useSettingsStore((s) => s.hydrated);
@@ -252,20 +258,18 @@ const NO_TASKS: Task[] = [];
  * ⚠️ 内部用：`kind` 参数的泛型版。页面请优先用下面语义化的那几个 hooks
  * （`useHumanProjects` / `useAgentProjects` …），让"这一处喂给谁"在调用点一眼可见。
  *
- * 2026-10-27：`kind === 'human'` 时叠「未进入 ⇒ 空」（见文件头 §未进入态）。
- * **Agent 侧刻意不收这一层**：`useAgentProjects` 走自己的归属收窄（第三个参数），
- * 其「未进入 ⇒ 只按 kind」是既有契约（`visibleProjectsFor` 的 `null` 分支），
- * 本轮不动 —— 改了会反向影响 Agent 看板的既有观感，另批评估。
+ * 2026-10-27：叠「未进入 ⇒ 空」（见文件头 §未进入态）——**两个 kind 同一判决**。
+ * ⚠️ 这一层与 `visibleProjectsFor` 的 `undefined`/`null` 语义是**两件事**，别混：
+ *   后者回答「按不按归属收窄」（Agent 侧消费方依赖它，本轮一行未改）；
+ *   本层回答「有没有人该看」。`useAgentProjects` 仍是「归属收窄」的消费方，
+ *   只是它现在多了一个前置：未进入 ⇒ 空。
  */
 export function useProjectsOfKind(kind: ProjectKind): Project[] {
   const projects = useProjectsStore(pickProjects);
-  const humanVisible = useHumanSideVisible();
+  const visible = useViewerGate();
   return useMemo(
-    () =>
-      kind === 'human' && !humanVisible
-        ? NO_PROJECTS
-        : visibleProjectsFor(kind, projects),
-    [kind, projects, humanVisible],
+    () => (visible ? visibleProjectsFor(kind, projects) : NO_PROJECTS),
+    [kind, projects, visible],
   );
 }
 
@@ -288,17 +292,25 @@ export function useHumanProjects(): Project[] {
  *
  * 未登录 ⇒ `currentMemberId` 为空 ⇒ 谓词回落纯 kind（与改造前观感逐字一致）。
  *
- * ⚠️ 2026-10-27 · 为什么**没有**跟着人类侧一起收「未进入 ⇒ 空」：
- *   她的两条抱怨都指人类侧（项目周报 / 成员看板）。Agent 工作区是另一个面，
- *   同一批改动会让「未进入时还能看自己的 Agent 看板」这条既有观感变成"全没了"，
- *   属**产品口径变更**而不是修 bug ⇒ 按本轮禁区留给产品拍板，本 hook 保持原样。
+ * ★ 2026-10-27 · **口径变更（team-lead 裁决 1，此处是与人类侧同一族的泄漏）**：
+ *   修前本 hook 只按 kind 收窄（`currentMemberId || null` ⇒ `visibleProjectsFor` 的
+ *   `null` 分支「只按 kind」）⇒ **未进入身份时返回全部 agent 看板**（含 `ownerMemberId`
+ *   为 null 的公共板与别人名下的板），侧栏 Agent 段与 `/agent` 页照名字列出来。
+ *   与她的两条抱怨同族（"没有身份还能看到东西"），故一并收口：
+ *   **未进入 ⇒ `[]`**，判据复用 `useViewerGate()`（与人类侧**同一个**判决，不是第二个 if）。
+ *
+ *   ⚠️ 注意这一层加在**谓词之上**，`visibleProjectsFor(kind, all, null)` 的既有语义
+ *   （「未登录只看 kind」）**一行未改** —— 它在 Agent 侧还有别的消费方（如
+ *   `AgentBoardPage` 内部的归属判定），改它才是反向变更。
  */
 export function useAgentProjects(): Project[] {
   const projects = useProjectsStore(pickProjects);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
+  const visible = useViewerGate();
   return useMemo(
-    () => visibleProjectsFor('agent', projects, currentMemberId || null),
-    [projects, currentMemberId],
+    () =>
+      visible ? visibleProjectsFor('agent', projects, currentMemberId || null) : NO_PROJECTS,
+    [projects, currentMemberId, visible],
   );
 }
 
@@ -310,24 +322,43 @@ export function useAgentProjects(): Project[] {
 export function useVisibleStages(kind: ProjectKind): Stage[] {
   const projects = useProjectsStore(pickProjects);
   const stages = useProjectsStore(pickStages);
-  const humanVisible = useHumanSideVisible();
+  const visible = useViewerGate();
   return useMemo(() => {
-    if (kind === 'human' && !humanVisible) return NO_STAGES;
+    if (!visible) return NO_STAGES;
     const ids = visibleProjectIds(kind, projects);
     return filterByProjectKind(stages, ids);
-  }, [kind, projects, stages, humanVisible]);
+  }, [kind, projects, stages, visible]);
 }
 
 /** `kind` 侧可见的**任务**（#14 我的任务页 / #15 成员看板）。 */
 export function useVisibleTasks(kind: ProjectKind): Task[] {
   const projects = useProjectsStore(pickProjects);
   const tasks = useProjectsStore(pickTasks);
-  const humanVisible = useHumanSideVisible();
+  const visible = useViewerGate();
   return useMemo(() => {
-    if (kind === 'human' && !humanVisible) return NO_TASKS;
+    if (!visible) return NO_TASKS;
     const ids = visibleProjectIds(kind, projects);
     return filterByProjectKind(tasks, ids);
-  }, [kind, projects, tasks, humanVisible]);
+  }, [kind, projects, tasks, visible]);
+}
+
+/**
+ * **库里有没有人类项目** —— 只回答「有没有数据」，**不回答「我能看到什么」**。
+ *
+ * 为什么必须与 `useHumanProjects()` 分开：后者 2026-10-27 起在「未进入身份」时返回空
+ * （见文件头 §未进入态），于是「拿 `projects.length === 0` 判断空库」的消费方会误判。
+ *
+ * 已知消费方（唯一）：`FirstRunGuide` 的显示条件 = 「库为空 ∧ 没看过欢迎卡 ∧ 身份流已走完」。
+ * 未进入身份恰恰是**常见的首启形态**（新库、还没点「点击进入」）⇒ 那条判据必须落在
+ * **不带身份门**的口径上，否则「库里有 5 个项目、只是还没进入身份」会被渲染成首次欢迎卡
+ * （实测回归点：`tests/plugin-state-demo-browser.spec.ts` ④b「库非空 ⇒ 欢迎卡不出现」）。
+ *
+ * ⚠️ 使用边界：**不得**用它来渲染任何列表/计数/搜索——那等于绕过 §未进入态
+ * （守卫层面它仍在白名单文件内，是漏斗自己的一个**非可见性**出口）。
+ */
+export function useHasHumanProjects(): boolean {
+  const projects = useProjectsStore(pickProjects);
+  return useMemo(() => visibleProjectIds('human', projects).size > 0, [projects]);
 }
 
 /** 人类侧阶段（`useVisibleStages('human')` 的语义化别名）。 */
