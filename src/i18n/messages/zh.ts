@@ -410,6 +410,12 @@ export const zhMessages = {
   'member.board.emptyTitle': '还没有与你相关的项目',
   'member.board.emptyBody':
     '当管理员把阶段负责人或参与任务分派给你后，相关项目会出现在这里。',
+  /* 未进入身份（role=null / 停用 / 悬挂 id）时的引导态 —— 与 emptyTitle 是**两件事**：
+     前者是"还没说明我是谁"，后者是"说明了但确实没有相关项目"。混用会让用户在
+     「退出身份后看到还没有与你相关的项目」这句假话里以为管理员没给自己派活。 */
+  'member.board.noIdentityTitle': '请先选择身份',
+  'member.board.noIdentityBody':
+    '请到左侧导航最下方点击「点击进入」，输入你的姓名；进入后这里会显示与你相关的项目与任务。',
   'member.board.columnEmpty': '暂无项目',
   'member.board.unknownProject': '未知项目',
   'member.board.openProjectTitle': '打开项目：{name}',

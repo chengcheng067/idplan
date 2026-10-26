@@ -413,6 +413,11 @@ export const enMessages: Record<MessageKey, string> = {
   'member.board.emptyTitle': 'No projects related to you yet',
   'member.board.emptyBody':
     'Once an admin assigns you as a stage owner or adds you to a task, the related projects show up here.',
+  /* No identity (role=null / deactivated / dangling id) — deliberately a different
+     message from emptyTitle: "I have not said who I am" ≠ "I am in, but nothing is assigned to me". */
+  'member.board.noIdentityTitle': 'Choose an identity first',
+  'member.board.noIdentityBody':
+    'Click "Enter" at the bottom of the left navigation and type your name. Once you are in, this page shows the projects and tasks related to you.',
   'member.board.columnEmpty': 'No projects',
   'member.board.unknownProject': 'Unknown project',
   'member.board.openProjectTitle': 'Open project: {name}',

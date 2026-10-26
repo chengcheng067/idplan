@@ -94,7 +94,7 @@ export function MemberBoardPage(): JSX.Element {
   const tasks = useHumanTasks();
   const members = useMembersStore((s) => s.members);
   const currentMemberId = useSettingsStore((s) => s.currentMemberId);
-  const { isAdmin, isMember } = useRoleGuard();
+  const { isAdmin, isMember, isEntered } = useRoleGuard();
   // 数据就绪态（唯一出口）：下方「就绪门」用它决定**能否**下 denied/missing 判决
   const readiness = useDataReadiness();
   const selectedProjectId = useUiStore((s) => s.selectedProjectId);
@@ -190,7 +190,34 @@ export function MemberBoardPage(): JSX.Element {
   const weekStart = startOfWeekIso(today);
   const weekEnd = endOfWeekIso(today);
   const monthPrefix = todayIso.slice(0, 7);
-  const visibleStages = stages.filter((s) => s.visible !== false);
+  /*
+    ★★ 2026-10-27 · 统计卡「与我在看谁同口径」—— 她原话：
+      「我退出了以后项目看板居然能显示本周到期任务，什么本周到期任务跟我有什么关系？」
+
+    修前（病灶，逐个点名）：
+      · `dueThisWeek`  = `stages.filter(...)`        ← **全库阶段**
+      · `doneThisMonth`= `stages.filter(...)`        ← **全库阶段**
+      · `overdueCount` = `active.filter(...)`        ← 已收窄（`active` = 观看对象的相关项目）
+      · `active.length`= `active.length`             ← 已收窄
+    ⇒ 四个数里有**两个**是全库数，而项目列表与 `active` 是收窄的 ⇒ 自相矛盾：
+      未进入身份时 `active = []`（「还没有与你相关的项目」）却同时显示「本周到期 3」。
+      **同一个 bug 对普通成员也成立**（他看到的是全公司的到期数，不是自己的）。
+
+    新口径（唯一派生源）：四个数全部只由 `viewedStages` 派生，而
+      `viewedStages` = **观看对象的相关项目**（`active`）名下的阶段。
+      · 「相关」的定义与 `myRelatedProjects` 同一个集合，不另立第二套；
+      · 项目一旦与他相关，该项目**其它阶段**（别人负责的）也计入 —— 与
+        `overdueCount` 用 `stagesOf(p)`（整个项目算逾期）同一粒度，四个数彼此可比；
+      · 未进入身份 ⇒ `stages` 已被漏斗清空（visibility.ts §未进入态）⇒ 四个数全 0，
+        且下方渲染「请先选择身份」引导态，不再出现 0/3/0/0 这种组合。
+  */
+  const viewedStages = useMemo(() => {
+    if (!viewedMemberId) return [];
+    const ids = new Set(active.map((p) => p.id));
+    return stages.filter((s) => ids.has(s.projectId));
+  }, [active, stages, viewedMemberId]);
+
+  const visibleStages = viewedStages.filter((s) => s.visible !== false);
   const dueThisWeek = visibleStages.filter(
     (s) =>
       s.status !== StageStatus.Completed &&
@@ -407,7 +434,41 @@ export function MemberBoardPage(): JSX.Element {
         0.9.x 那版「两处共用同一个 340/360 常量」已被取代，因为看板列要 4 列就必须更窄。
         ⚠️ 两处都不与首页共用任何几何：首页不渲染看板（见两个常量注释）。
       */}
-      {!isCalendar && (
+      {/*
+        ★★ 2026-10-27 · 未进入身份 ⇒ 引导态（不出现 0/3/0/0 那种自相矛盾的组合）。
+
+        判据是 `useRoleGuard().isEntered`（= currentMemberId 指向一条 **active** 成员），
+        **不是** `viewedMemberId != null`：后者在「当前成员被停用」「currentMemberId 指向
+        已被删除的 id」两种悬挂态下仍非空，而那两态按 `deriveRoleGuardState` 就是未进入。
+        用 `viewedMemberId` 判会把这两条最容易被漏的边界放过去。
+
+        形态（与 `MyTasksPage.tsx:204-227` 的未进入引导同一形状）：统计行照常渲染
+        （四个数按上一条新口径必然是 0/0/0/0），引导块**替换**任务三块 / 看板 / 月历。
+        为什么不保留空态文案「还没有与你相关的项目」：未进入时那句话是**假话** ——
+        他不是"没有相关项目"，是"还没说明自己是谁"；而 P0-18 的 E1 空态里还挂着
+        「直接手动建档」的上下文，未进入的人更不该走到那里。
+        统计卡保留而非整块收掉的理由：它们不是"假话"（没有观看对象 ⇒ 相关数为 0 是真的），
+        且与本仓「我的任务」页的未进入态一致（统计行 + 引导块），两页不至于各长一副样子。
+
+        ⚠️ 引导块位于 `<DataGate>` **之内** ⇒ 装载中/装载失败时 DataGate 只渲染占位/错误面，
+        引导语不会出现。这正是「装载中不得下未进入判决」的落点（本块不需要再自己拼
+        `readiness`，那会变成第二套就绪判据）。
+      */}
+      {!isEntered && (
+        <div
+          data-member-board-no-identity=""
+          className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center"
+        >
+          <p className="font-display text-display-md text-mist">
+            {t('member.board.noIdentityTitle')}
+          </p>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
+            {t('member.board.noIdentityBody')}
+          </p>
+        </div>
+      )}
+
+      {isEntered && !isCalendar && (
         <MemberTaskTriage
           tasks={tasks}
           projects={projects}
@@ -423,17 +484,20 @@ export function MemberBoardPage(): JSX.Element {
              `{onManual && …}` 条件渲染的：undefined ⇒ 按钮**整体不画**（成员既看不到、
              也点不到，不是「画出来但失效」）；
              **不传任何项目/阶段/任务数据**，过滤在 MonthlyCalendarView 内部完成。 */}
-      {isCalendar ? (
-        <MonthlyCalendarView onManual={undefined} />
-      ) : active.length === 0 ? (
-        <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
-          <p className="font-display text-display-md text-mist">{t('member.board.emptyTitle')}</p>
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
-            {t('member.board.emptyBody')}
-          </p>
-        </div>
-      ) : (
-        <section
+      {isEntered &&
+        (isCalendar ? (
+          <MonthlyCalendarView onManual={undefined} />
+        ) : active.length === 0 ? (
+          <div className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center">
+            <p className="font-display text-display-md text-mist">
+              {t('member.board.emptyTitle')}
+            </p>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
+              {t('member.board.emptyBody')}
+            </p>
+          </div>
+        ) : (
+          <section
           /* 列数与 HomePage 同源（项目所属行业派生），不能写死 grid-cols-4。
              注释放属性位：三元括号内直接写花括号注释是表达式位，会编译错。
 
@@ -514,7 +578,7 @@ export function MemberBoardPage(): JSX.Element {
             );
           })}
         </section>
-      )}
+        ))}
       </DataGate>
     </div>
   );
