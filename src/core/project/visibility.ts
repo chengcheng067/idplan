@@ -36,6 +36,29 @@
  *   ❌ `const projects = useProjectsStore(s => s.projects);`  // 守卫会红
  *   ❌ `visibleProjectsFor('human', useProjectsStore.getState().projects)` // 同上
  *
+ * ── §未进入态（2026-10-27 · 本次新增的**第二层**收窄）──
+ *   她的原话：「我退出了以后项目看板居然能显示本周到期任务，什么本周到期任务跟我有什么
+ *   关系？」「项目周报在没有任何身份的情况下居然能看到项目周报，这个也是不合理完全不合
+ *   理的地方」。
+ *
+ *   **修前口径**：本文件只回答「这是人类侧还是 Agent 侧」（kind），**不回答「有没有人
+ *   该看」**。于是 `role = null`（未进入身份 / 停用成员 / 指向不存在的 id）时，
+ *   `useHumanProjects()` 照样吐全库项目、`useHumanStages()` 照样吐全库阶段 ——
+ *   周报插件列出全部 5 个项目（含客户名与逾期数），成员看板统计卡报出「本周到期 3」
+ *   而项目列表同时说「还没有与你相关的项目」（自相矛盾）。
+ *
+ *   **新口径**：`kind === 'human'` 时再叠一层「**未进入身份 ⇒ 空**」。
+ *     · 数据仍完整躺在 store 里（本文件一行都不删），进入身份后**同一份 store 立即恢复**
+ *       ——不需要重新装载、不需要刷新；
+ *     · 判据来自 `deriveRoleGuardState().isEntered`（= `currentMemberId` 指向一条
+ *       **active** 成员），故 **停用成员**与**指向已被删除的 id** 都算未进入
+ *       ——这正是最容易漏的边界（只判 `currentMemberId != null` 会把这两种漏过去）；
+ *     · **`hydrated === false` 期间一律返回空**，但那不是「未进入」的判决（见下个注释块）。
+ *
+ *   为什么落在本文件而不是各页面：周报插件、成员看板、首页、月历、打印、侧栏都吃这三个
+ *   hook ⇒ 漏斗改一处，**插件页一行不改也自动变空**。若在各页面各加一份 filter，明天加
+ *   第 28 个消费方就又漏一次，而且漏的表现依旧是静默的（不报错、tsc 不管）。
+ *
  * ── 与 `Project.kind` 的关系 ──
  *   `kind` 是 v0.8 T01 新增的字段（`'human' | 'agent'`）。老库没有这列 ⇒
  *   归一函数落 `DEFAULT_PROJECT_KIND`（'human'），本文件的 `projectKindOf`
@@ -46,6 +69,14 @@ import { useMemo } from 'react';
 
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+/*
+ * 身份判据**不**在本文件重新推导（见文件头 §未进入态）：`deriveRoleGuardState` 是
+ * 「谁算已进入」的唯一出处（`active` 且 id 命中），本文件只是它的**消费者**。
+ * 导入方向 core/project → hooks 是**单向**的（useRoleGuard 不 import 本文件，
+ * 它只 import 两个 store 与 core/types）⇒ 不构成循环依赖。
+ */
+import { deriveRoleGuardState } from '../../hooks/useRoleGuard';
+import { useMembersStore } from '../../store/useMembersStore';
 import type { Project, Stage, Task } from '../types/entities';
 import { DEFAULT_PROJECT_KIND, projectKindOf, type ProjectKind } from '../types/enums';
 
@@ -174,16 +205,76 @@ const pickProjects = (s: { projects: Project[] }): Project[] => s.projects;
 const pickStages = (s: { stages: Stage[] }): Stage[] => s.stages;
 const pickTasks = (s: { tasks: Task[] }): Task[] => s.tasks;
 
+/* ══════════════ 未进入态 · 人类侧零可见（唯一判决，见文件头 §未进入态） ══════════════
+ *
+ * ⚠️ 本段是**唯一**允许回答「有没有人该看人类侧数据」的地方。页面/组件/插件不得自己写
+ * `currentMemberId == null && …` 之类的第二套推导（那正是本文件 §纪律 3 要防的漂移）。
+ *
+ * ── 三档语义（与 `useDataReadiness()` 的三态一一对应，别混）──
+ *   `hydrated === false`            → **不下判决**，本函数返回 false（= 此刻不可见），
+ *                                     但这不是「未进入」：页面侧由 `<DataGate>` 渲染
+ *                                     装载占位，**不得**据此渲染「请先选择身份」引导。
+ *   `hydrated && !isEntered`        → 真判决：未进入 ⇒ 人类侧零可见 + 引导态。
+ *   `hydrated && isEntered`         → 放行（原有 kind/归属收窄不变）。
+ *
+ * ── 为什么装载中也返回空（而不是先放行、等 hydrated 再收窄）──
+ *   `bootstrapAllStores` 是 `replaceAll(projects/stages/tasks)` → `setAll(members)` →
+ *   `hydrate()` **同一同步块**（`useRepos.ts`），也就是说 `hydrated === false` 期间
+ *   store 里**已经可能有全量数据**。放行就等于承认「这段时间谁也不收窄」，
+ *   而它恰好是「刷新后首帧」这个最容易被截图抓到的时刻。宁可变空、由 DataGate 兜渲染。
+ *
+ * ── 为什么读三个 slice 而不是直接 `useRoleGuard()` ──
+ *   等价（`useRoleGuard` 内部就是这三行 + `deriveRoleGuardState`），差别只在于
+ *   **不把整个 RoleGuardState 对象引进来**：本文件只需要一个布尔，多订阅 `hasAdmin`
+ *   之类的派生没有意义。判据仍是那个纯函数，一行都没重写。
+ */
+function useHumanSideVisible(): boolean {
+  const members = useMembersStore((s) => s.members);
+  const currentMemberId = useSettingsStore((s) => s.currentMemberId);
+  const hydrated = useSettingsStore((s) => s.hydrated);
+  // 未装载完成 ⇒ 不下「未进入」的判决（见上方三档语义），但也不放行数据
+  if (!hydrated) return false;
+  return deriveRoleGuardState(members, currentMemberId, hydrated).isEntered;
+}
+
+/**
+ * 空集合的**模块级常量**：未进入态返回它而不是 `[]`。
+ *
+ * 为什么不每次 `[]`：zustand + `useSyncExternalStore` 的快照比较依赖**引用稳定**，
+ * 每次渲染一个新的空数组会让下游 `useMemo(…, [projects])` 每帧失效
+ * （这正是文件头 §React hooks 里"selector 返回新数组 ⇒ 无限重渲染"同一条坑）。
+ */
+const NO_PROJECTS: Project[] = [];
+const NO_STAGES: Stage[] = [];
+const NO_TASKS: Task[] = [];
+
 /**
  * ⚠️ 内部用：`kind` 参数的泛型版。页面请优先用下面语义化的那几个 hooks
  * （`useHumanProjects` / `useAgentProjects` …），让"这一处喂给谁"在调用点一眼可见。
+ *
+ * 2026-10-27：`kind === 'human'` 时叠「未进入 ⇒ 空」（见文件头 §未进入态）。
+ * **Agent 侧刻意不收这一层**：`useAgentProjects` 走自己的归属收窄（第三个参数），
+ * 其「未进入 ⇒ 只按 kind」是既有契约（`visibleProjectsFor` 的 `null` 分支），
+ * 本轮不动 —— 改了会反向影响 Agent 看板的既有观感，另批评估。
  */
 export function useProjectsOfKind(kind: ProjectKind): Project[] {
   const projects = useProjectsStore(pickProjects);
-  return useMemo(() => visibleProjectsFor(kind, projects), [kind, projects]);
+  const humanVisible = useHumanSideVisible();
+  return useMemo(
+    () =>
+      kind === 'human' && !humanVisible
+        ? NO_PROJECTS
+        : visibleProjectsFor(kind, projects),
+    [kind, projects, humanVisible],
+  );
 }
 
-/** 人类侧项目列表。首页（#1/#2/#3/#5/#9/#10/#16）、侧栏（#11）、顶栏搜索（#13）等。 */
+/**
+ * 人类侧项目列表。首页（#1/#2/#3/#5/#9/#10/#16）、侧栏（#11）、顶栏搜索（#13）等。
+ *
+ * 2026-10-27：**未进入身份 ⇒ `[]`**（文件头 §未进入态）。侧栏/首页/插件页因此自动为空，
+ * 不需要也不允许它们各写一份身份判断。
+ */
 export function useHumanProjects(): Project[] {
   return useProjectsOfKind('human');
 }
@@ -196,6 +287,11 @@ export function useHumanProjects(): Project[] {
  * 两边口径**不可能不一致**（若在各页面各收一份，漂移是必然的）。
  *
  * 未登录 ⇒ `currentMemberId` 为空 ⇒ 谓词回落纯 kind（与改造前观感逐字一致）。
+ *
+ * ⚠️ 2026-10-27 · 为什么**没有**跟着人类侧一起收「未进入 ⇒ 空」：
+ *   她的两条抱怨都指人类侧（项目周报 / 成员看板）。Agent 工作区是另一个面，
+ *   同一批改动会让「未进入时还能看自己的 Agent 看板」这条既有观感变成"全没了"，
+ *   属**产品口径变更**而不是修 bug ⇒ 按本轮禁区留给产品拍板，本 hook 保持原样。
  */
 export function useAgentProjects(): Project[] {
   const projects = useProjectsStore(pickProjects);
@@ -214,20 +310,24 @@ export function useAgentProjects(): Project[] {
 export function useVisibleStages(kind: ProjectKind): Stage[] {
   const projects = useProjectsStore(pickProjects);
   const stages = useProjectsStore(pickStages);
+  const humanVisible = useHumanSideVisible();
   return useMemo(() => {
+    if (kind === 'human' && !humanVisible) return NO_STAGES;
     const ids = visibleProjectIds(kind, projects);
     return filterByProjectKind(stages, ids);
-  }, [kind, projects, stages]);
+  }, [kind, projects, stages, humanVisible]);
 }
 
 /** `kind` 侧可见的**任务**（#14 我的任务页 / #15 成员看板）。 */
 export function useVisibleTasks(kind: ProjectKind): Task[] {
   const projects = useProjectsStore(pickProjects);
   const tasks = useProjectsStore(pickTasks);
+  const humanVisible = useHumanSideVisible();
   return useMemo(() => {
+    if (kind === 'human' && !humanVisible) return NO_TASKS;
     const ids = visibleProjectIds(kind, projects);
     return filterByProjectKind(tasks, ids);
-  }, [kind, projects, tasks]);
+  }, [kind, projects, tasks, humanVisible]);
 }
 
 /** 人类侧阶段（`useVisibleStages('human')` 的语义化别名）。 */

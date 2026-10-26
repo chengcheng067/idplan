@@ -295,6 +295,16 @@ beforeEach(() => {
       restPolicy: DEFAULT_REST_POLICY,
       effectiveRestPolicy: DEFAULT_REST_POLICY,
       currentMemberId: 'mem_dlg_admin',
+      /*
+       * 2026-10-27：补 `hydrated: true` —— 与 `currentMemberId` 同一个真实态。
+       *
+       * 本夹具描述的是「装载完成 + 管理员已进入」的活应用（否则 recalc 弹窗根本无从打开）。
+       * 漏写 `hydrated` 时它描述的是**装载中**，而装载中按新口径不下「未进入」判决、
+       * 也不放行人类侧数据（`visibility.ts` §未进入态：`!hydrated ⇒ 空`），于是
+       * `useHumanProjects()` 变空 ⇒ 弹窗里没有项目可点。
+       * ⇒ 这不是放宽断言，是把夹具补成它本来想描述的那一态。
+       */
+      hydrated: true,
     });
     useMembersStore.setState({
       members: [
@@ -635,6 +645,8 @@ describe('确认应用：制度落库 + 逐阶段留痕（预览与应用同一�
         useSettingsStore.setState({
           restPolicy: DEFAULT_REST_POLICY,
           effectiveRestPolicy: DEFAULT_REST_POLICY,
+          /* 同 setup 夹具：本块复用同一个「已装载 + 管理员已进入」的世界（见上处注释） */
+          hydrated: true,
         });
       });
       container = document.createElement('div');
