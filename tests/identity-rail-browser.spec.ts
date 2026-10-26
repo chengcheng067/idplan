@@ -644,10 +644,33 @@ describe.skipIf(!CAN_RUN_FRESH)('身份去重 · 真 Chromium（身份控件只�
           await page.waitForTimeout(600);
         }
 
-        // 去「我的任务」——它带着那句「请到左侧导航最下方进入身份」
+        /*
+         * ★★ 2026-10-27 · 断言升级（未进入身份 ⇒ 导航里不再有「我的任务」）。
+         *
+         * 原写法：退出身份后**点侧栏的「我的任务」**进去，断言该入口存在、落在 /my-tasks、
+         *   页面显示引导语。它锁的是旧口径 —— 而旧口径正是本轮要修的缺陷：
+         *   一个"按 currentMemberId 取数"的入口，在没有身份时仍在导航里承诺"这里有你的活"，
+         *   点进去只看得到一句"请先进入身份"（她的抱怨：没有任何身份还能看项目周报/到期任务）。
+         *
+         * 升级后的两条（**保留原意 + 反向钉死旧行为消失**）：
+         *   ① 反向：未进入身份时导航里**不该有**「我的任务」这一项；
+         *   ② 原意不变：`/my-tasks` 页在未进入时给的那句引导语仍指向身份入口
+         *      （这句话是本仓"没身份时唯一的指路"，不能因为入口收了就失效）——
+         *      故改为**深链直达**再断言语义，而不是"点导航项直达"。
+         *   ⇒ 原断言不是被放宽，而是被拆成"入口不存在"+"页面话仍在"两条，判据更硬。
+         */
         await openNavIfHidden(page); // 点导航项可能把抽屉关掉，这里再开一次
-        expect(await clickSidebarLink(page, '我的任务'), `@${width} 应有「我的任务」导航`).toBe(true);
-        expect(await pathname(page)).toBe('/my-tasks');
+        expect(
+          await clickSidebarLink(page, '我的任务'),
+          `@${width} 未进入身份时「我的任务」不该还在导航里（它是按身份取数的入口）`,
+        ).toBe(false);
+        // 深链直达（SPA 内导航：pushState + popstate，与浏览器前进/后退同一条链路）
+        await page.evaluate(() => {
+          window.history.pushState({}, '', '/my-tasks');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page.waitForTimeout(800);
+        expect(await pathname(page), `@${width} 深链应落在 /my-tasks`).toBe('/my-tasks');
         const hasCopy = await page.evaluate(() =>
           (document.body.textContent ?? '').includes('请到左侧导航最下方进入身份'),
         );

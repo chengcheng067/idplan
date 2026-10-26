@@ -536,6 +536,41 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 阶段 A · L-01~L-08 布局验收（真�
     //      同时验证面包屑逻辑本身——这正是顶栏新增功能）
     {
       const { ctx, page } = await openAt(1600, 900);
+
+      /*
+       * ★ 2026-10-27：本段**必须先进入身份**再进项目路由（改动原因见下）。
+       *
+       * 原写法是裸空身份直接 `goto` 项目页 —— 那时成立，因为「未进入身份也能打开
+       * 项目详情」正是当时的实现。本轮起 `ProjectDetailPage` 有了**路由级身份门**
+       * （未进入 ⇒ `<Navigate to="/" replace />`，形态与 `CalendarPrintPage.tsx` /
+       * `ItineraryPrintPage.tsx` 同源），空身份 goto 会被弹回首页、面包屑随之消失。
+       * 实测失败形态：`header [data-topbar-back]` count 0 ≠ 1。
+       *
+       * ⇒ 判据没变松，反而更严格：面包屑是「真能站在这一页的人」才看得到的顶栏特征。
+       *   所以这里补的是**前置条件**，不是放宽断言。
+       *
+       * 身份走**真实 UI 流程**（与用户同一条路），不偷写 localStorage：
+       * 本文件每个用例都是独立空 context，成员库为空 ⇒ 只写 `currentMemberId` 不成立
+       * （`deriveRoleGuardState().isEntered` 要求它指向一条 **active** 成员）。
+       * 钩子全部语言无关（`data-identity-*`），英文态同样可用。
+       */
+      const adminRoleBtn = page.locator('[data-identity-role="admin"]');
+      if ((await adminRoleBtn.count()) === 0) {
+        // 空库冷启动时 `useFirstRunGate` 一般已自己弹出 admin_prompt；
+        // 没弹就点侧栏身份行把它叫出来（收起/展开两态都有该钩子）。
+        const enter = page.locator('[data-identity-enter]').first();
+        if ((await enter.count()) > 0) await enter.click();
+      }
+      await adminRoleBtn.click({ timeout: 10000 });
+      await page.locator('[data-identity-name-input]').fill('走查管理员');
+      await page.locator('[data-identity-submit="confirm-admin"]').click();
+      await page.waitForTimeout(400);
+      // 身份真的生效了才继续：未生效就往下走，后面只会报一句看不懂的「找不到返回箭头」
+      expect(
+        await page.locator('[data-identity-trigger]').count(),
+        '面包屑用例前置：必须先进入管理员身份（否则项目页会被路由身份门弹回首页）',
+      ).toBeGreaterThan(0);
+
       await page.goto(`${base}project/__walkthrough_breadcrumb__`);
       await page.waitForSelector('header', { timeout: 15000 });
       await page.waitForTimeout(300);
