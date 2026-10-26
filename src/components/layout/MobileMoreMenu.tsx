@@ -100,7 +100,7 @@ function Divider(): JSX.Element {
  */
 export function MobileMoreMenu(): JSX.Element {
   const location = useLocation();
-  const { isAdmin } = useRoleGuard();
+  const { isAdmin, isEntered } = useRoleGuard();
   /** 取词 + 语言变化订阅点（菜单项与 aria 在渲染期取） */
   const { t } = useLang();
   const openManualForm = useUiStore((s) => s.openManualForm);
@@ -258,15 +258,24 @@ export function MobileMoreMenu(): JSX.Element {
               </span>
             </Link>
           )}
-          <Link to="/my-tasks" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
-            <CalendarRange
-              size={15}
-              className={cn(ITEM_ICON, location.pathname === '/my-tasks' && 'text-pine')}
-            />
-            <span className={cn(location.pathname === '/my-tasks' ? 'text-pine' : 'text-ink')}>
-              {t('nav.myTasks')}
-            </span>
-          </Link>
+          {/*
+            ★ 2026-10-27 · 未进入身份 ⇒ 不渲染「我的任务」（与 `SidebarNav` 同一口径）。
+            手机档的 ⋮ 菜单是同一套导航的第二形态（<768 的侧栏收在抽屉里，本菜单是
+            "就近入口"）；只收桌面侧栏会让同一条抱怨在手机上原样复现。
+            判据用 `isEntered`（currentMemberId 指向 active 成员）而非 `isAdmin`：
+            未进入时 `isAdmin===false`，用角色判会把"未进入"误当"成员"。
+          */}
+          {isEntered && (
+            <Link to="/my-tasks" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
+              <CalendarRange
+                size={15}
+                className={cn(ITEM_ICON, location.pathname === '/my-tasks' && 'text-pine')}
+              />
+              <span className={cn(location.pathname === '/my-tasks' ? 'text-pine' : 'text-ink')}>
+                {t('nav.myTasks')}
+              </span>
+            </Link>
+          )}
           {/*
             v0.6：Agent Board（所有角色可见，与桌面 TopBar 一致）。
 
@@ -281,7 +290,9 @@ export function MobileMoreMenu(): JSX.Element {
                 `registry.navItems`，本就只含启用中的插件；本项是宿主硬编码的
                 文案与目标，必须自己问开关。
           */}
-          {agentBoardOn && (
+          {/* ★ 2026-10-27：`isEntered` 与侧栏同一判据（`useAgentProjects()` 未进入时已收成空，
+              入口留着只会"点了什么都没有"）。与上方「我的任务」用同一个 `isEntered`。 */}
+          {agentBoardOn && isEntered && (
             <Link to="/agent" role="menuitem" className={ITEM} onClick={() => setMenuOpen(false)}>
               <Bot
                 size={15}

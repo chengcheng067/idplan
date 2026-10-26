@@ -88,7 +88,7 @@ export function SidebarNav({
   /** 抽屉态（<xl 的 Modal 抽屉）：导航项放大到 h44 / pad16 / 圆角 8（画板 10） */
   drawer?: boolean;
 }): JSX.Element {
-  const { isAdmin } = useRoleGuard();
+  const { isAdmin, isEntered } = useRoleGuard();
   /** 取词 + **语言变化订阅点**（少了它，切语言时侧栏不会重渲染） */
   const { t } = useLang();
   const { pathname } = useLocation();
@@ -109,6 +109,15 @@ export function SidebarNav({
    */
   const agentNav = usePluginRegistry().navItems.filter((n) => n.group === 'agent');
   const agentNavActive = agentNav.length > 0;
+  /*
+   * ★ 2026-10-27 · **两段入口共用这一条判据**（team-lead 裁决 1：不要写成两个 if）。
+   * 它同时管三处：插件 main 组、Agent 段、我的任务 —— 它们的共同点是
+   * 「按身份取数的入口」，未进入身份时出现只会承诺一个空的去处。
+   * Agent 段此前只受插件开关管（`agentNavActive`），而 `useAgentProjects()` 未进入时
+   * 返回全部 agent 看板 ⇒ 同一族泄漏。数据面已由 `visibility.ts` 收成空，
+   * 这里把**入口**也收掉，两者用同一个 `isEntered`（不是各判一次）。
+   */
+  const showIdentityEntries = isEntered;
   /**
    * v0.8.6.0002 · 补 main 组 nav 的渲染（产品官 10-07 走查发现的**真缺口**）。
    *
@@ -123,7 +132,34 @@ export function SidebarNav({
    * 声明数据、也避免 `import * as icons` 把整个图标库打进 bundle。
    */
   const mainNav = usePluginRegistry().navItems.filter((n) => n.group === 'main');
-  const pluginNavEntries: NavEntry[] = mainNav.map((n) => ({
+
+  /*
+   * ★★ 2026-10-27 · 未进入身份 ⇒ 不出现「要身份才有意义」的入口。
+   *
+   * 她的原话：「我退出了以后项目看板居然能显示本周到期任务」「项目周报在没有任何身份的
+   * 情况下居然能看到项目周报，这个也是不合理完全不合理的地方」。
+   *
+   * 病灶（修前）：`mainNav` 只受「插件启用」约束，`/my-tasks` 则**零门控**无条件渲染。
+   * 于是未进入身份时侧栏仍列「项目周报 插件」「我的任务」—— 点进去就是全库数据
+   * （数据面本身已由 `visibility.ts` §未进入态 收成空，但**入口还在**，用户点进去只看到
+   * 一个空页面，同样是"说不通"的状态：入口的存在在承诺"这里有你的东西"）。
+   *
+   * 新口径（只收窄「要有身份」的两类，**不动**下面三项）：
+   *   · 插件 main 组导航项 → `isEntered` 才渲染；
+   *   · 「我的任务」（`/my-tasks`，按 currentMemberId 取数）→ `isEntered` 才渲染；
+   *   · **保留**首个导航项（管理员=项目 / 其余=看板）：未进入的人得有个地方落地，
+   *     而「看板」正是他点进去看到「请先选择身份」引导态的那一页（MemberBoardPage）；
+   *   · **保留**「点击进入」身份入口：它在 `Sidebar` 底部的身份行里
+   *     （`MemberIdentityPicker` 未进入态），不属本列表，本文件管不到也不需要管；
+   *   · Agent 段（`group: 'agent'`）**同一判据**（team-lead 裁决 1，见 `showIdentityEntries`
+   *     注释）：`useAgentProjects()` 未进入时已收成空，入口若还在就是"点了什么都没有"。
+   *     ⚠️ 旧口径「不碰 Agent 段」已作废（当时理由：Agent 侧漏斗未收 ⇒ 藏入口会与数据面
+   *     分叉；现在数据面一起收了，理由消失）。
+   *
+   * 判据用 `isEntered`（currentMemberId 指向 active 成员）而非 `isAdmin`：
+   * 未进入时 `isAdmin === false` 会被误当成「成员」，那正是本 bug 的形状之一。
+   */
+  const pluginNavEntries: NavEntry[] = (showIdentityEntries ? mainNav : []).map((n) => ({
     to: n.to,
     label: n.label,
     Icon: fileNavIcon(n.icon),
@@ -146,16 +182,23 @@ export function SidebarNav({
           Icon: LayoutGrid,
           match: (p) => p === '/member-board',
         },
-    {
-      to: '/my-tasks',
-      label: t('nav.myTasks'),
-      Icon: CalendarRange,
-      match: (p) => p === '/my-tasks',
-    },
-    // 插件贡献的普通导航项（停用插件 ⇒ 这里为空 ⇒ 入口消失）
+    // 「我的任务」按 currentMemberId 取数 ⇒ 没有身份时它只会渲染一句「请到左侧导航最下方
+    // 进入身份」（MyTasksPage 的未进入态）—— 那正说明这个入口自己就是"要有身份"的一项，
+    // 未进入时不该在导航里出现第二个指向同一句提示的入口。
+    ...(showIdentityEntries
+      ? [
+          {
+            to: '/my-tasks',
+            label: t('nav.myTasks'),
+            Icon: CalendarRange,
+            match: (p: string) => p === '/my-tasks',
+          },
+        ]
+      : []),
+    // 插件贡献的普通导航项（停用插件 ⇒ 这里为空 ⇒ 入口消失；未进入身份 ⇒ 同上）
     ...pluginNavEntries,
     // 插件停用 ⇒ 不占位 ⇒ Agent 段不渲染（与路由摘除同一个开关）
-    ...(agentNavActive ? ([{ group: 'agent' }] as const) : []),
+    ...(showIdentityEntries && agentNavActive ? ([{ group: 'agent' }] as const) : []),
   ];
 
   return (
