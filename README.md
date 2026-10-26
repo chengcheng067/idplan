@@ -16,9 +16,9 @@
   
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   
-  <img src="https://img.shields.io/badge/version-1.0.0.0013-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0014-blue.svg" alt="version" />
   
-  <img src="https://img.shields.io/badge/tests-3983%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-4008%20passing-brightgreen.svg" alt="tests" />
   
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   
