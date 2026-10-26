@@ -6,12 +6,13 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
 import { useRepos } from '../../hooks/useRepos';
-import { matchActiveMemberByName } from '../../hooks/useRoleGuard';
+import { matchActiveMemberByName, useRoleGuard } from '../../hooks/useRoleGuard';
 import { createMemberActions } from '../../store/useMembersStore';
 import { resolveErrorText, MemberRoleKind } from '../../core/types/enums';
 import { memberHasPassword, type Member } from '../../core/types/entities';
 import { ROLE_SENTINELS } from '../../core/types/role-sentinel';
 import { Modal } from '../common/Modal';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ImeInput } from '../common/ImeInput';
 import { useLang } from '../../i18n';
 import { logError, logUser } from '../../core/services/log.service';
@@ -49,12 +50,16 @@ export function IdentityDialog(): JSX.Element | null {
   const setPendingMember = useSettingsStore((s) => s.setPendingMember);
   const pendingMemberId = useSettingsStore((s) => s.pendingMemberId);
   const members = useMembersStore((s) => s.members);
+  /* 只在「成员入口未命中」时需要：库里已有管理员 ⇒ 新建必须先告知 + 二次确认 */
+  const { hasAdmin } = useRoleGuard();
 
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [mismatchKind, setMismatchKind] = useState<MismatchKind>(null);
   const [busy, setBusy] = useState(false);
+  /** 「以管理员身份新建」的二次确认是否打开（见文件头 §新建管理员） */
+  const [askCreateAdmin, setAskCreateAdmin] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,6 +68,7 @@ export function IdentityDialog(): JSX.Element | null {
       setPassword('');
       setNotice(null);
       setBusy(false);
+      setAskCreateAdmin(false);
       // 对话框面板渲染后聚焦输入框
       const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
       return () => window.clearTimeout(timer);
@@ -94,6 +100,64 @@ export function IdentityDialog(): JSX.Element | null {
     useProjectsStore.getState().pushToast(kind, message);
   };
 
+  /**
+   * 「以管理员身份新建」的**唯一实现**（两个调用点共用，不许各写一份）：
+   *   · `adminIntent === true` 且姓名未命中（首启 / 库里还没有管理员）；
+   *   · 成员入口（`adminIntent === false`）姓名未命中（本轮新增，见文件头 §新建管理员）。
+   *
+   * 抛错交给调用方的 catch —— 两条调用点对失败的处置（toast + logError）完全一致，
+   * 在各自那里再写一遍就是第三份孪生实现。
+   */
+  const createAdminAndEnter = async (trimmed: string): Promise<void> => {
+    const created = await repos.members.insert({
+      name: trimmed,
+      /*
+       * ⚠️ **写入点**：`role` 是落库数据值 ⇒ 取数据面常量表的中文原值，
+       *    不许经 `t()`（英文态会把 `Owner` 写进库，成员表按语言分裂）。
+       *    显示层由 `roleLabel()` 取词，见 `src/i18n/labels.ts`。
+       */
+      role: ROLE_SENTINELS.owner,
+      contact: null,
+      avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
+      roleKind: MemberRoleKind.Admin,
+    });
+    useMembersStore.getState().upsert(created);
+    setCurrentMember(created.id);
+    toast('success', t('ui.identity.toastAdminEstablished', { name: trimmed }));
+    logUser('身份', `身份切换：管理员「${trimmed}」确立`);
+    closeIdentityFlow();
+  };
+
+  /**
+   * 二次确认里的「已有管理员姓名」——她选的形态是**告知**，不是密码验证
+   * （原话：就算这台电脑上出现过管理员，我也想能新建一个身份进去）。
+   * 列前 3 位，其余折成「等 N 位」：这是告知，不是名单展示，不把成员表摊开。
+   */
+  const activeAdminNames = members
+    .filter((m) => m.active && m.roleKind === MemberRoleKind.Admin)
+    .map((m) => m.name);
+  const adminsText =
+    activeAdminNames.length <= 3
+      ? activeAdminNames.join('、')
+      : `${activeAdminNames.slice(0, 3).join('、')} 等 ${activeAdminNames.length} 位`;
+
+  /** 二次确认的「确认」：真正建号并进入 */
+  const confirmCreateAdmin = async (): Promise<void> => {
+    if (busy) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    try {
+      await createAdminAndEnter(trimmed);
+      setAskCreateAdmin(false);
+    } catch (err) {
+      toast('error', resolveErrorText(err, t, t('ui.identity.setFailed')));
+      logError('身份', `新建管理员失败：「${trimmed}」`, err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** 姓名提交：管理员确立 / 成员进入 共用 */
   const submit = async (): Promise<void> => {
     if (busy) return;
@@ -111,25 +175,12 @@ export function IdentityDialog(): JSX.Element | null {
             roleKind: MemberRoleKind.Admin,
           });
           setCurrentMember(matched.id);
+          toast('success', t('ui.identity.toastAdminEstablished', { name: trimmed }));
+          logUser('身份', `身份切换：管理员「${trimmed}」确立`);
+          closeIdentityFlow();
         } else {
-          const created = await repos.members.insert({
-            name: trimmed,
-            /*
-             * ⚠️ **写入点**：`role` 是落库数据值 ⇒ 取数据面常量表的中文原值，
-             *    不许经 `t()`（英文态会把 `Owner` 写进库，成员表按语言分裂）。
-             *    显示层由 `roleLabel()` 取词，见 `src/i18n/labels.ts`。
-             */
-            role: ROLE_SENTINELS.owner,
-            contact: null,
-            avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
-            roleKind: MemberRoleKind.Admin,
-          });
-          useMembersStore.getState().upsert(created);
-          setCurrentMember(created.id);
+          await createAdminAndEnter(trimmed);
         }
-        toast('success', t('ui.identity.toastAdminEstablished', { name: trimmed }));
-        logUser('身份', `身份切换：管理员「${trimmed}」确立`);
-        closeIdentityFlow();
         return;
       }
 
@@ -147,9 +198,26 @@ export function IdentityDialog(): JSX.Element | null {
         closeIdentityFlow();
         return;
       }
-      setMismatchKind('name_miss');
-      setNotice(t('ui.identity.nameMiss'));
-      setIdentityFlow('mismatch');
+
+      /*
+       * ★ 未命中 —— 修前是**死胡同**（`mismatch` + 「名单中没有找到你的名字，请联系管理员」），
+       *   而「联系管理员」在一台只有他自己的电脑上是个走不出去的建议：
+       *   `MemberIdentityPicker` 只在 `hasAdmin === false` 时才会把人送进能建管理员的
+       *   `adminIntent === true` 那条路。她的原话：
+       *     「就算哪怕这台电脑上已经出现过管理员，那我可不可以新建一个身份进去呢？」
+       *
+       * 新口径（已拍板）：
+       *   · 库里有管理员 ⇒ **先弹告知 + 二次确认**（列出已有管理员姓名与后果），确认才建；
+       *   · 库里没有管理员 ⇒ 直接确立（与首启 `adminIntent` 那条完全同一条实现）。
+       *
+       * ⚠️ `mismatch` 状态**保留**：`admin_prompt` 里选「我不是管理员」的 `no_admin` 支还在用。
+       *    只是 `name_miss` 不再把人送进去。
+       */
+      if (hasAdmin) {
+        setAskCreateAdmin(true);
+        return;
+      }
+      await createAdminAndEnter(trimmed);
     } catch (err) {
       toast('error', resolveErrorText(err, t, t('ui.identity.setFailed')));
       logError('身份', `身份切换失败：${trimmed ? `「${trimmed}」` : ''}`, err);
@@ -258,6 +326,30 @@ export function IdentityDialog(): JSX.Element | null {
             spellCheck={false}
             className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
           />
+          {/*
+            ★ 2026-10-27 · 未进入态的第二条出路：**以管理员身份新建**（见文件头 §新建管理员）。
+
+            为什么它常驻而不是「提交未命中后才出现」：本屏要回答的问题是"我是谁"，
+            而用户**本来就可能不在名单里**（新同事 / 换了台电脑 / 当初填的不是这个名字）。
+            把出路藏在一次失败的提交之后，等于让他先撞一次墙；且 `hasAdmin === false` 时
+            首启那条路（`adminIntent === true`）根本不会走到这里，所以本按钮只出现在
+            "有管理员 + 成员入口"这一态 —— 恰好就是原来那个死胡同。
+
+            ⚠️ **不渲染 `adminIntent` 那一态**：那条路的主按钮本身就会新建管理员，
+               再给一枚同义按钮只会让人分不清哪个才会真的建号。
+          */}
+          {!adminIntent && (
+            <button
+              type="button"
+              onClick={() => setAskCreateAdmin(true)}
+              disabled={busy || !name.trim()}
+              /* 语言无关定位钩子：英文态文案是另一串，真机/单测按本钩子定位 */
+              data-identity-create-admin=""
+              className="w-full rounded-md border border-dashed border-line px-3 py-2 text-[12px] leading-5 text-mist outline-none transition-colors hover:bg-sand focus-visible:ring-2 focus-visible:ring-pine/40 disabled:opacity-50"
+            >
+              {t('ui.identity.createAdminAction')}
+            </button>
+          )}
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -349,7 +441,12 @@ export function IdentityDialog(): JSX.Element | null {
     );
   };
 
-  return (
+  /*
+   * 身份对话框本体。抽成变量是为了让「以管理员身份新建」的二次确认成为它的**兄弟**浮层
+   * —— 不能渲染进本 Modal 的子树：确认框要能盖在它上面，而取消后它必须原样还在
+   * （渲染进子树会让两套遮罩＋焦点圈禁相互打架）。
+   */
+  const identityDialog = (
     <Modal
       open
       onClose={handleClose}
@@ -391,6 +488,36 @@ export function IdentityDialog(): JSX.Element | null {
         {renderBody()}
       </div>
     </Modal>
+  );
+
+  return (
+    <>
+      {identityDialog}
+      {/*
+        ★ 2026-10-27 · 「以管理员身份新建」的告知 + 二次确认（她选定的形态：不设密码、
+        不多一步输入，只让人明确知道自己在做什么）。
+
+        文案里必须出现**已有管理员的姓名**与**后果**：这台机器上已经有人是管理员，
+        新建一个管理员等于再开一把通往全部项目 / 成员 / 备份的钥匙。只写「确定吗」
+        是没告知；写成密码验证又违反她「别加一道没用的门」的取向。
+
+        ⚠️ 取消只关确认框（`onCancel` 里只置 false）：身份对话框保持原样、姓名还在输入框里，
+        用户可以改用已有成员的名字重试。这是「取消不能把人送回死胡同」的落点。
+      */}
+      <ConfirmDialog
+        open={askCreateAdmin}
+        title={t('ui.identity.createAdminConfirmTitle')}
+        confirmText={t('ui.identity.confirmAdmin')}
+        dataAttrs={{ 'data-identity-create-admin-confirm': '' }}
+        onCancel={() => setAskCreateAdmin(false)}
+        onConfirm={() => void confirmCreateAdmin()}
+      >
+        {t('ui.identity.createAdminConfirmBody', {
+          admins: adminsText,
+          name: name.trim(),
+        })}
+      </ConfirmDialog>
+    </>
   );
 }
 

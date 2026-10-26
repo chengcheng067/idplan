@@ -91,6 +91,13 @@ export const zh = {
   'ui.identity.memberNameHint': '请输入你的姓名（仅在本机匹配，不会展示其他成员名单）。',
   'ui.identity.namePlaceholder': '你的姓名',
   'ui.identity.confirmAdmin': '确认为管理员',
+  /* 2026-10-27 · 未进入态「新建管理员」出口（她：退出所有身份后无法新建身份）。
+     按钮文案**不带姓名插值**：空输入框时它也在，插值会渲染成一句读不通的话。
+     键入的姓名在二次确认的正文里出现。 */
+  'ui.identity.createAdminAction': '名单里没有我的名字 —— 以管理员身份新建',
+  'ui.identity.createAdminConfirmTitle': '以管理员身份新建？',
+  'ui.identity.createAdminConfirmBody':
+    '这台电脑上已有管理员：{admins}。新建后，「{name}」可以看到全部项目、成员与备份。请确认这是你本人要做的操作。',
   'ui.identity.passwordLead': '请输入 ',
   'ui.identity.passwordMid': ' 的登录密码 （由管理员设置；无密码成员无需此步）。',
   'ui.identity.thisMember': '该成员',
@@ -289,6 +296,10 @@ export const en = {
   'ui.identity.memberNameHint': 'Enter your name (matched on this machine only; other members are never listed).',
   'ui.identity.namePlaceholder': 'Your name',
   'ui.identity.confirmAdmin': 'Confirm as administrator',
+  'ui.identity.createAdminAction': 'My name is not listed — create a new administrator',
+  'ui.identity.createAdminConfirmTitle': 'Create a new administrator?',
+  'ui.identity.createAdminConfirmBody':
+    'This machine already has an administrator: {admins}. Once created, "{name}" can see every project, every member and all backups. Please confirm this is what you intend.',
   'ui.identity.passwordLead': 'Enter the login password for ',
   'ui.identity.passwordMid': ' (set by an administrator; members without a password skip this step).',
   'ui.identity.thisMember': 'this member',
