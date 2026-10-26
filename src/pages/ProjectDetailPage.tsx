@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 
 import { ArrowLeft, Archive, ArrowRightLeft, Bot, CalendarRange } from 'lucide-react';
 
@@ -21,6 +21,7 @@ import {
   useHumanStages,
   useHumanTasks,
 } from '../core/project/visibility';
+import { DataGate } from '../components/layout/DataGate';
 import { PrintPreviewDialog } from '../components/print/PrintPreviewDialog';
 import { TravelItineraryPanel } from '../components/travel/TravelItineraryPanel';
 import { ProjectSourceBadge } from '../components/project/ProjectSourceBadge';
@@ -99,7 +100,7 @@ export function ProjectDetailPage(): JSX.Element {
   const stages = useProjectStages(id);
   const tasks = useProjectTasks(id);
   const members = useMembersStore((s) => s.members);
-  const { role, currentMember } = useRoleGuard();
+  const { role, currentMember, hydrated } = useRoleGuard();
   const memberView = isRestrictedView(role);
   /*
    * ★ v0.8.6 阶段 2：agent-board 插件的启用态。
@@ -167,6 +168,41 @@ export function ProjectDetailPage(): JSX.Element {
   const visibleStages = relatedStageIds
     ? stages.filter((s) => relatedStageIds.has(s.id))
     : stages;
+
+  /*
+   * ★★ 2026-10-27 · 路由级身份门（team-lead 裁决 2）：**未进入身份 ⇒ 回首页**。
+   *
+   * 她的抱怨是「没有任何身份还能看到东西」。本页此前对未进入只走到下方
+   * `memberView && visibleStages.length === 0` 的**受限空态**——那句话是
+   * 「该项目的阶段与你无关」，等于承认"这个项目存在、只是跟你没关系"，
+   * 而真相是**他还没说明自己是谁**。两件事混用会让"退出身份后深链直达项目详情"
+   * 变成一个可用的浏览通道（面包屑、项目名、计划工期都在）。
+   *
+   * 形态与既有那一批**逐字同源**（不要在这里发明第三种表现）：
+   *   · `CalendarPrintPage.tsx`「未进入身份（role === null）→ 仍重定向回首页
+   *     （无身份即无可见范围，保持现状）」；
+   *   · `ItineraryPrintPage.tsx` 同一条守卫口径。
+   *   即 `if (role === null) return <Navigate to="/" replace />;`。
+   *
+   * ⚠️ 两道顺序不能颠倒（与 `MemberBoardPage` 的就绪门同一个教训）：
+   *   冷载首帧 `hydrated === false` 且 role 必然为 null ⇒ 先判 role 会把**管理员的
+   *   深链/刷新**一起弹回首页（表现为"链接打不开"，且不报错）。所以：
+   *     ① 未装载 ⇒ 渲染 <DataGate> 占位（本仓就绪态唯一出口，不自己拼 hydrated）；
+   *     ② 已装载且 role === null ⇒ 才下这条判决。
+   *
+   * ⚠️ 「成员受限」不在本门内：成员（role==='member'）照样能进本页，只是按
+   *   `computeRelatedStageIds` 收窄阶段、隐藏敏感字段 —— 下方既有逻辑一行未改。
+   */
+  if (!hydrated) {
+    return (
+      <div className="px-8 py-16">
+        <DataGate>{null}</DataGate>
+      </div>
+    );
+  }
+  if (role === null) {
+    return <Navigate to="/" replace />;
+  }
 
   if (!project) {
     return (
