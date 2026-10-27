@@ -375,6 +375,13 @@ export const enMessages: Record<MessageKey, string> = {
   'home.empty.privacy':
     'Your data is saved automatically in this browser and survives closing it. To move machines or keep an archive, use “Save backup” at the bottom of the sidebar — you can restore it any time.',
   'home.openManual': 'Create a project manually',
+  /* No-identity full-page guide (hydrated && !isEntered) — same family as
+     member.board.noIdentity*: the way out is "enter an identity" (opens the
+     identity dialog), not a create-project CTA. See HomePage header note. */
+  'home.noIdentity.title': 'Enter your identity first',
+  'home.noIdentity.body':
+    'Projects and schedules appear once you are in: create an admin, pick an existing identity, or import a backup first.',
+  'home.noIdentity.action': 'Enter identity',
   /* ───────────────────── My Tasks ───────────────────── */
   'myTasks.subtitle': 'Only what concerns you',
   'myTasks.groupAria': 'Task grouping',

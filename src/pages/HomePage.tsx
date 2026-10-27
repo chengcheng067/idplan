@@ -12,6 +12,7 @@ import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView'
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { DataGate, useDataReadiness } from '../components/layout/DataGate';
 import { useMembersStore } from '../store/useMembersStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { useUiStore, type HomeViewMode } from '../store/useUiStore';
 import { memberBoardHref, searchMemberHits, useRoleGuard } from '../hooks/useRoleGuard';
 import {
@@ -61,13 +62,17 @@ import { t as translate, useLang } from '../i18n';
  *   `isAdmin && onProjectPage` 门槛：侧栏底部展开态（Sidebar.tsx）、侧栏底部收起态、
  *   手机档 ⋮ 更多菜单（MobileMoreMenu.tsx）。
  *
- *   ⚠️⚠️ 本页仍有两条**无身份门槛**的建档触发点，这是**有意保留**，不是漏洞，勿「修」：
- *     ① 空态的「直接手动建档」（EmptyState）
- *     ② 月历视图的 `onManual`（MonthlyCalendarView）
- *   决策口径（team-lead 已拍板）：**未进入身份可走引导，member 不可建档**。
- *   能到达这两处的用户恰好是「首启、还没进入身份」的人 —— 那就是「第一个项目怎么建」
- *   的唯一引导路径；给它们加 `isAdmin` 门会把首次使用彻底堵死。
- *   成员到不了：`HomeRouteGuard` 判 `isMember` 后整页重定向到 `/member-board`。
+ *   ⚠️⚠️ 建档 CTA 的可达性（2026-10-27 收口，team-lead 已拍板的新口径）：
+ *     **未进入身份（hydrated && !isEntered）时整页只渲染引导态**（组件内
+ *     `data-home-no-identity` 块）——统计卡、视图切换、项目网格、月历、归档区、
+ *     成员管理区一概不渲染，于是空态的「直接手动建档」（EmptyState）与月历的
+ *     `onManual`（MonthlyCalendarView）**不再可达**，「未进入身份也能插入
+ *     `ownerMemberId: null` 公共项目」的洞就此堵死。
+ *     旧口径「未进入可走引导、两条无门槛建档点是首启唯一路径」作废：引导态给出的
+ *     出路是「进入身份」（打开身份弹层，调用方式与 `useFirstRunGate` 同款），建档
+ *     这件事回到已进入的世界里再谈。EmptyState / onManual 代码保留 —— 已进入用户
+ *     仍会用它们（空库管理员 / 月历手动建档）。
+ *     成员到不了：`HomeRouteGuard` 判 `isMember` 后整页重定向到 `/member-board`。
  */
 export function HomePage(): JSX.Element {
   const navigate = useNavigate();
@@ -91,7 +96,9 @@ export function HomePage(): JSX.Element {
   const stages = useHumanStages();
   const tasks = useHumanTasks();
   const members = useMembersStore((s) => s.members);
-  const { isAdmin } = useRoleGuard();
+  const { isAdmin, isEntered, hydrated } = useRoleGuard();
+  // 未进入身份引导态的「进入身份」按钮（打开身份弹层；与 useFirstRunGate 同款调用）
+  const openIdentityFlow = useSettingsStore((s) => s.openIdentityFlow);
   const homeViewMode = useUiStore((s) => s.homeViewMode);
   const setHomeViewMode = useUiStore((s) => s.setHomeViewMode);
   const searchQuery = useUiStore((s) => s.searchQuery);
@@ -166,6 +173,36 @@ export function HomePage(): JSX.Element {
     setSelectedProjectId(id);
     navigate(`/project/${id}`);
   };
+
+  /*
+   * ★ 2026-10-27 · 未进入身份 ⇒ 整页引导态（决策口径见文件头 ⚠️⚠️ 段）。
+   *   判据与 MemberBoardPage 的 `data-member-board-no-identity` 引导态同源
+   *   （`useRoleGuard().isEntered` = currentMemberId 指向一条 active 成员）。
+   *   ⚠️ `hydrated === false` 期间**不判**——装载中归 <DataGate> 管（见
+   *   tests/no-identity-visibility.spec.tsx 的 A-05/B-01 口径），本页维持原渲染路径。
+   *   ⚠️ 本 return 必须在**全部 hook 之后**（含上方 memberHits 的 useMemo）：
+   *   身份切换不会重挂本组件，两个渲染路径的 hooks 序若不同，React 当场报错。
+   */
+  if (hydrated && !isEntered) {
+    return (
+      <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
+        <div
+          data-home-no-identity=""
+          className="glass-light rounded-[16px] border border-dashed border-line p-10 text-center"
+        >
+          <p className="font-display text-display-md text-mist">
+            {t('home.noIdentity.title')}
+          </p>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-mist">
+            {t('home.noIdentity.body')}
+          </p>
+          <Button className="mt-6" onClick={() => openIdentityFlow('admin_prompt')}>
+            {t('home.noIdentity.action')}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">

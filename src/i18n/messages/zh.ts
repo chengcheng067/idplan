@@ -368,6 +368,13 @@ export const zhMessages = {
   'home.empty.privacy':
     '你的数据自动保存在本机浏览器中，关闭浏览器不会丢失；如需换电脑或留档，点击侧栏底部的「保存备份」导出文件，随时可再恢复。',
   'home.openManual': '直接手动建档',
+  /* 未进入身份（hydrated && !isEntered）的整页引导态 —— 与 member.board.noIdentity*
+     同族：这里给的是「进入身份」的出路（按钮打开身份弹层），不是建档 CTA。
+     新口径下 EmptyState / 月历 onManual 在未进入时不可达，见 HomePage 文件头 ⚠️⚠️ 段。 */
+  'home.noIdentity.title': '请先进入身份',
+  'home.noIdentity.body':
+    '进入身份后才能看到项目与排期：可以新建管理员、选择已有身份，或先导入备份。',
+  'home.noIdentity.action': '进入身份',
   /* ───────────────────── 我的任务（MyTasksPage）───────────────────── */
   'myTasks.subtitle': '只显示与我相关的内容',
   'myTasks.groupAria': '任务分组方式',
