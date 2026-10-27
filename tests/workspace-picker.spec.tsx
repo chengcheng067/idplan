@@ -46,6 +46,13 @@
  *       P7-5 当前区没设过闸密 ⇒ 同样先设密码，设好后回身份引导（不重载）
  *   · 【变异 C】HomePage firstScreen 判据改回 `listWorkspaces().length > 1 || …`
  *     ⇒ 红 1 条：P1 只有一个默认区 ⇒ 首屏仍是工作区选择列表（先选公司，再选身份）
+ *   · 【变异 D】注掉 `useSettingsStore.setCurrentMember(null)` 里的
+ *     `clearWorkspaceEntryStarted()` ⇒ 红 2 条：
+ *       P8-1 进过区 + 已进入身份 ⇒ 退出身份后标记清除，首屏回到工作区列表
+ *       P8-2 清除是**落盘**的：退出后重新挂载（模拟 reload）首屏仍是区列表
+ *   · 【变异 E】把 HomePage 里「退出身份后重判首屏」的 `useEffect` 判据短路成 false
+ *     ⇒ 红 1 条（P8-1；P8-2 走重挂载，本来就不依赖它）：
+ *       P8-1 进过区 + 已进入身份 ⇒ 退出身份后标记清除，首屏回到工作区列表
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -343,6 +350,72 @@ describe('P1–P3 · HomePage 未进入身份的首屏二选一', () => {
 
     expect(el.querySelector('[data-home-no-identity]'), '进入流程已开始 ⇒ 给身份引导').not.toBeNull();
     expect(el.querySelector('[data-workspace-picker]')).toBeNull();
+  });
+});
+
+/*
+ * ★ P8 = 0018：标记只置位、从不清除的那个 bug。
+ *   产品口径：「切换工作区」应该在**没有任何身份**的时候显示 ⇒ 退出身份 = 没有任何
+ *   身份 = 首屏必须回到工作区列表（而不是永远卡在「请先进入身份」引导块）。
+ *   清除点收在 `useSettingsStore.setCurrentMember(null)`（身份的唯一写入口），
+ *   故这两条用例都通过 store action 触发退出，与线上任一退出路径同形。
+ */
+describe('P8 · 退出身份 ⇒ 清「进入流程」标记 + 首屏回到工作区列表', () => {
+  it('P8-1 进过区 + 已进入身份 ⇒ 退出身份后标记清除，首屏回到工作区列表', async () => {
+    seedTwoWorkspaces();
+    markWorkspaceEntryStarted(); // 进过区（选区/建区置位）
+    seedHomeStores(); // 未进入身份 + 库里有 mem_admin
+    act(() => {
+      useSettingsStore.setState({ currentMemberId: 'mem_admin' }); // 进入身份
+    });
+    const el = renderHome();
+
+    expect(
+      el.querySelector('[data-home-no-identity]'),
+      '已进入身份 ⇒ 不是“未进入”引导态',
+    ).toBeNull();
+    expect(hasWorkspaceEntryStarted(), '退出前标记还在（P3 那一屏）').toBe(true);
+
+    await act(async () => {
+      useSettingsStore.getState().setCurrentMember(null); // 退出身份
+      await Promise.resolve();
+    });
+
+    expect(
+      hasWorkspaceEntryStarted(),
+      '退出身份必须清掉“进入某区的流程已开始”标记',
+    ).toBe(false);
+    expect(
+      el.querySelector('[data-workspace-picker]'),
+      '退出身份后首屏必须回到工作区列表（她要的“选公司”那一屏）',
+    ).not.toBeNull();
+    expect(
+      el.querySelector('[data-workspace-list]'),
+      '回的是**列表态**，不是建区/验密表单',
+    ).not.toBeNull();
+    expect(
+      el.querySelector('[data-home-no-identity]'),
+      '不再卡在“请先进入身份”引导块',
+    ).toBeNull();
+  });
+
+  it('P8-2 清除是**落盘**的：退出后重新挂载（模拟 reload）首屏仍是区列表', () => {
+    seedTwoWorkspaces();
+    markWorkspaceEntryStarted();
+    seedHomeStores();
+    act(() => {
+      useSettingsStore.getState().setCurrentMember(null); // 退出身份（清标记）
+    });
+
+    // 重新挂载 = reload 回来的第一帧：本地没有存活组件替它记住 firstScreen
+    const el = renderHome();
+
+    expect(localStorage.getItem('idplan.workspaceEntryStarted')).toBeNull();
+    expect(
+      el.querySelector('[data-workspace-picker]'),
+      'reload 回来也必须是工作区列表（证明清除真落盘，不只是内存里翻了页）',
+    ).not.toBeNull();
+    expect(el.querySelector('[data-home-no-identity]')).toBeNull();
   });
 });
 

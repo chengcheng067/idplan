@@ -3,7 +3,10 @@ import { create } from 'zustand';
 import { DEFAULT_REST_POLICY } from '../core/types/entities';
 import type { RestPolicyConfig } from '../core/types/entities';
 import { withCnHolidays } from '../core/holidays/policy';
-import { currentWorkspaceIdSync } from '../lib/workspace-registry';
+import {
+  clearWorkspaceEntryStarted,
+  currentWorkspaceIdSync,
+} from '../lib/workspace-registry';
 
 /**
  * 本机设置与身份。
@@ -190,7 +193,22 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     })),
 
   setCurrentMember: (memberId) => {
-    // ★ 0016：写区级键（`changxia.currentMemberId.<wsId>`），切区后身份各自记忆
+    /*
+     * ★ 0016：写区级键（`changxia.currentMemberId.<wsId>`），切区后身份各自记忆。
+     *
+     * ★ 0018：`null`（= 回到**未进入身份**）时一并清掉「进入某区的流程已开始」标记。
+     *   本 action 是身份的**唯一写入口** ⇒ 所有「退出身份 / 切换到未进入」的路径
+     *   都在这里汇合，清一次即全覆盖，不会出现某条路漏清（标记只置位不清除的旧账
+     *   就是这么来的：退出身份后永远看不到工作区列表）。
+     *   覆盖的路径（逐条，均经本出口）：
+     *     · `MemberIdentityPicker` 菜单「退出身份」（:461 的 setCurrentMember(null)）；
+     *     · `MemberIdentityPicker` 菜单「切换身份」（:447 先 null 再开身份流）；
+     *     · `useRepos.ts:110` 悬挂身份清除（导入换掉成员表 / 异机备份 id 查无此人）。
+     *   ⚠️ 只在 `null` 时清：进入另一个身份（`setCurrentMember(id)`）不该动这个标记
+     *      —— 标记只在「未进入身份」时被首屏消费，进了人就不读它，清了反而会让
+     *      切身份途中的 reload 弹回区列表。
+     */
+    if (memberId === null) clearWorkspaceEntryStarted();
     writeStoredMemberId(memberId);
     set({ currentMemberId: memberId });
   },

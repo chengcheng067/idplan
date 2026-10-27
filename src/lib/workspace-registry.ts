@@ -205,8 +205,26 @@ export function markWorkspaceEntryStarted(): void {
   safeSet(ENTRY_STARTED_KEY, '1');
 }
 
+/** 读「进入某区的流程已开始」标记 */
 export function hasWorkspaceEntryStarted(): boolean {
   return safeGet(ENTRY_STARTED_KEY) === '1';
+}
+
+/**
+ * 清除「进入某区的流程已开始」（与 `markWorkspaceEntryStarted()` 对称）。
+ *
+ * ── 为什么必须能清 ──
+ * 标记原先**只置位、从不清除** ⇒ 用户进过一次区之后它永远为 true ⇒ 之后**退出身份
+ * 也再也看不到工作区列表**，直接落到「请先进入身份」引导块（产品负责人连着两次反馈
+ * 「看不到选公司的首屏」）。产品口径：「切换工作区」应该在**没有任何身份**的时候
+ * 显示 ⇒ **退出身份 = 没有任何身份 = 回到工作区列表首屏**。
+ *
+ * 清除点只有一个：`useSettingsStore.setCurrentMember(null)`（身份的**唯一写入口**，
+ * 见该文件里的注释）——任何「回到未进入身份」的路径都必经它，不在此处另开出口，
+ * 免得将来新加一条退出路径又漏掉清除。
+ */
+export function clearWorkspaceEntryStarted(): void {
+  safeRemove(ENTRY_STARTED_KEY);
 }
 
 /**

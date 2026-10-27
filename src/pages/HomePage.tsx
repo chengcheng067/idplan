@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 
@@ -126,13 +126,33 @@ export function HomePage(): JSX.Element {
    *   ⚠️ `hasWorkspaceEntryStarted()` 这一条**必须留**：选区/建区成功后置位，
    *   防止切完区 reload 回来又看到区列表（否则每次 reload 都要重选一次，死循环）。
    *   ⚠️ 惰性初始化只判一次：本组件挂载即读 localStorage，选区/建区动作本身
-   *   会整页 reload，无存活的组件需要响应标记变化。
+   *   会整页 reload，无存活的组件需要响应标记变化。**退出身份不 reload**，那一跃迁
+   *   由下方 `useEffect`（判 `isEntered`）补判一次，别把这条旧理由当成"永远只判一次"。
    */
   const [firstScreen, setFirstScreen] = useState<'workspace-list' | 'identity-guide'>(() =>
     appEnv.dataSource === 'local' && !hasWorkspaceEntryStarted()
       ? 'workspace-list'
       : 'identity-guide',
   );
+
+  /*
+   * ★ 0018：退出身份后**重新判一次**首屏（标记已在 `setCurrentMember(null)` 里清掉）。
+   *
+   * 为什么还需要这一条：`firstScreen` 是惰性初始化的，理由原本成立——选区/建区都会
+   * 整页 reload，没有活着的组件需要响应标记变化。但**退出身份不 reload**，它就发生在
+   * 当前这一屏：标记清掉之后，还活着的本组件必须跟着回到区列表，否则用户退出身份后
+   * 仍旧卡在「请先进入身份」引导块里（这正是产品负责人两次反馈的那个观感）。
+   * 产品口径：没有任何身份 ⇒ 应该看到工作区列表。
+   *
+   * ⚠️ 只在 local 下判：remote 无分库概念、标记永不置位，一律走身份引导。
+   * ⚠️ 依赖只放 `isEntered`：进入身份时标记是 false 也不该翻回列表（那时本屏根本
+   *    不渲染 firstScreen 这两支），只有「从已进入 → 未进入」这一次跃迁才需要重判。
+   */
+  useEffect(() => {
+    if (!isEntered && appEnv.dataSource === 'local' && !hasWorkspaceEntryStarted()) {
+      setFirstScreen('workspace-list');
+    }
+  }, [isEntered]);
 
   const today = new Date();
   const todayIso = localIso(today);
