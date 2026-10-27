@@ -190,6 +190,20 @@ describe.skipIf(!CAN_RUN_FRESH)('v0.7 批次 A · A4 首页视图切换真几何
     // 而不是让后面的断言抛「null 取属性」这种无信息错误。
     try {
       await page.waitForSelector('header', { timeout: 20000 });
+      /*
+       * 2026-10-27 权限修复 1：未进入身份 ⇒ 首页整页引导态（视图切换不渲染）。
+       * 本 spec 全部用例测的是首页视图切换几何 ⇒ 打开首页后先确立管理员（首启空库
+       * 直建路径，不触密码闸），再等视图切换控件出现。
+       */
+      await page.locator('button[data-identity-role="admin"]').click();
+      await page.locator('input[data-identity-name-input]').fill('严过关');
+      await page.evaluate(() => {
+        const b = Array.from(document.querySelectorAll('button')).find((x) =>
+          (x.textContent ?? '').includes('确认为管理员'),
+        );
+        b?.click();
+      });
+      await page.waitForTimeout(1000);
       await page.waitForSelector(VIEW_SWITCH, { timeout: 20000 });
     } catch {
       const bodyText = await page.locator('body').innerText().catch(() => '');

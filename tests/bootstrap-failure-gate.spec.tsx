@@ -54,7 +54,22 @@ vi.mock('../src/hooks/useRepos', () => ({
   bootstrapAllStores: async (): Promise<void> => {
     await hoisted.bootstrap();
     useProjectsStore.getState().replaceAll({ projects: [], stages: [], tasks: [] });
-    useMembersStore.getState().setAll([]);
+    /*
+     * ⚠️ 2026-10-27 起 HomePage 在「未进入身份」时整页渲染引导态（DataGate 不再出现在
+     * 未进入路径上）——本 spec 测的是 DataGate 三态，故装载成功时成员表放一个 active
+     * 成员（真实库装载完也必有成员行），配合用例里的 memberId 让页面处于「已进入」态。
+     * currentMemberId=null 的用例不受影响（isEntered 由 currentMemberId 决定）。
+     */
+    useMembersStore.getState().setAll([
+      {
+        id: 'mem_a',
+        name: '小美',
+        role: '设计',
+        roleKind: 'member',
+        active: true,
+        avatarColor: '#123456',
+      } as never,
+    ]);
     useSettingsStore.getState().hydrate(null);
   },
 }));
@@ -169,6 +184,9 @@ describe('F1-① 数据就绪三态（首页）', () => {
   });
 
   it('已装载且真的没有项目：才渲染「还没有进行中的项目」空态（空态没被删）', async () => {
+    /* 已进入身份：2026-10-27 起未进入态整页渲染引导态，空态文案只在已进入路径可达。
+       本用例测的是 DataGate 三态里的「已装载」档，与身份无关 ⇒ 摆成已进入。 */
+    resetStores({ memberId: 'mem_a' });
     mount('home');
     await flush();
 
@@ -219,6 +237,8 @@ describe('F1-① 数据就绪三态（首页）', () => {
 
 describe('F1-① 「重新装载」按钮', () => {
   it('点击 → 重跑 bootstrap（计数 1→2），成功后错误面消失、渲染出真空态', async () => {
+    /* 已进入身份（理由同上一条用例）：空态文案只在已进入路径可达 */
+    resetStores({ memberId: 'mem_a' });
     hoisted.bootstrap.mockRejectedValueOnce(new Error('boom'));
     mount('home');
     await flush();

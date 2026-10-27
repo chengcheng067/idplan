@@ -1199,6 +1199,8 @@ await page.click('[data-industry-select-option="indoor"]');
   it('Q-A4-1 · lg 档真几何：容器 r16/pad4/gap4/高36；项 84×28', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
+      /* 2026-10-27 起未进入身份 ⇒ 首页整页引导态（视图切换不渲染），先确立管理员 */
+      await becomeAdmin(page);
       const m = await page.evaluate(() => {
         const tl = document.querySelector('[role="tablist"]');
         if (!tl) return null;
@@ -1248,6 +1250,8 @@ await page.click('[data-industry-select-option="indoor"]');
   it('Q-A4-2 · lg 档选中项圆角必须为规格 r12（本仓库 rounded-xl = 16px，类名断言看不出来）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
+      /* 2026-10-27 起未进入身份 ⇒ 首页整页引导态（同 Q-A4-1） */
+      await becomeAdmin(page);
       const radii = await page.evaluate(() => {
         const tl = document.querySelector('[role="tablist"]');
         const tabs = Array.from(tl?.querySelectorAll('[role="tab"]') ?? []);
@@ -1264,6 +1268,8 @@ await page.click('[data-industry-select-option="indoor"]');
   it('Q-A4-3 · 切到月历后刷新仍为月历（idplan.homeView 持久化，真浏览器）', async () => {
     const { ctx, page } = await open(1600, 900);
     try {
+      /* 2026-10-27 起未进入身份 ⇒ 首页整页引导态（同 Q-A4-1） */
+      await becomeAdmin(page);
       const initial = await page.evaluate(() => localStorage.getItem('idplan.homeView'));
       expect(initial === null || initial === 'kanban').toBe(true);
 
