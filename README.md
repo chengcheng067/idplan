@@ -18,7 +18,7 @@
   
   <img src="https://img.shields.io/badge/version-1.0.0.0014-blue.svg" alt="version" />
   
-  <img src="https://img.shields.io/badge/tests-4008%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-4018%20passing-brightgreen.svg" alt="tests" />
   
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   
