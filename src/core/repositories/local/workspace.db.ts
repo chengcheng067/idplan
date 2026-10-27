@@ -1,5 +1,6 @@
 import { MemberRoleKind } from '../../types/enums';
 import { ROLE_SENTINELS } from '../../types/role-sentinel';
+import { hashPassword } from '../../../lib/password';
 /* Dexie 只在 gatekeeper 文件 import（arch-boundary）；此处经其再导出取 exists */
 import { ChangxiaDatabase, Dexie, openDatabase } from './dexie.database';
 import { LocalMembersRepository } from './local.members.repo';
@@ -109,6 +110,80 @@ export async function readWorkspaceGateHash(dbName: string): Promise<string | nu
     if (typeof m.passwordHash === 'string' && m.passwordHash) return m.passwordHash;
   }
   return null;
+}
+
+/**
+ * 给**已存在但还没设过闸密码**的工作区补一个管理员密码哈希（多工作区 0017）。
+ *
+ * 场景：老区（0016 之前建的库，或管理员当初没设密码的库）在首屏列表被选中时，
+ * `readWorkspaceGateHash` 返回 null —— 0016 的做法是「无可验之物，直接进」，
+ * 0017 订正为「先让它设一个再进」（产品口径：从列表进入任何区都必须验密码）。
+ *
+ * 落点：把哈希写到该区**每一条** active + `roleKind==='admin'` 的成员行
+ * （与 `readWorkspaceGateHash` 的选取判据同源，保证写进去一定读得出来）。
+ * 进入本函数的前提是「读出来是 null」，即这些行当前都没有 passwordHash，
+ * 故全量写同一个哈希不会覆盖任何既有密码。
+ *
+ * ⚠️ 与读路径同一约束：必须走**不带版本**的 `indexedDB.open`（带 schema 声明
+ * 打开会把老版本库升级，绕过 RepoProvider 的迁移前备份闸门——那是 L1 回滚
+ * 凭据的硬前提）。不带版本打开不升级、只改数据。
+ *
+ * @returns true = 至少写了一条；false = 库不存在 / 读写出错 / 该区没有 active
+ *          管理员（调用方据此给错误提示，不静默放行）。
+ */
+export async function writeWorkspaceGateHash(dbName: string, password: string): Promise<boolean> {
+  const exists = await Dexie.exists(dbName);
+  if (!exists) return false;
+  const hash = await hashPassword(password);
+
+  return new Promise<boolean>((resolve) => {
+    try {
+      const req = globalThis.indexedDB.open(dbName);
+      req.onsuccess = () => {
+        const db = req.result;
+        try {
+          const tx = db.transaction('members', 'readwrite');
+          const store = tx.objectStore('members');
+          const getAll = store.getAll();
+          getAll.onsuccess = () => {
+            const rows = getAll.result as unknown[];
+            let wrote = 0;
+            for (const row of rows) {
+              if (typeof row !== 'object' || row === null) continue;
+              const m = row as Record<string, unknown>;
+              if (m.active === false) continue;
+              if (m.roleKind !== MemberRoleKind.Admin) continue;
+              store.put({ ...m, passwordHash: hash });
+              wrote += 1;
+            }
+            tx.oncomplete = () => {
+              db.close();
+              resolve(wrote > 0);
+            };
+            tx.onerror = () => {
+              db.close();
+              resolve(false);
+            };
+            tx.onabort = () => {
+              db.close();
+              resolve(false);
+            };
+          };
+          getAll.onerror = () => {
+            db.close();
+            resolve(false);
+          };
+        } catch {
+          db.close();
+          resolve(false);
+        }
+      };
+      req.onerror = () => resolve(false);
+      req.onblocked = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 /** 类型引用保持（供外部扩展） */

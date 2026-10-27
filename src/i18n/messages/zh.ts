@@ -404,6 +404,12 @@ export const zhMessages = {
   'workspace.gate.inputPlaceholder': '工作区密码',
   'workspace.gate.wrong': '密码不对，无法进入这个工作区。',
   'workspace.gate.submit': '进入',
+  'workspace.setpw.title': '给这个工作区设一个密码',
+  'workspace.setpw.lead':
+    '「{name}」还没有工作区密码。先设一个再进入——今后进入这个工作区都要用它。',
+  'workspace.setpw.submit': '设好并进入',
+  'workspace.setpw.submitting': '正在设置…',
+  'workspace.setpw.failed': '设置工作区密码失败，请重试。',
   /* ───────────────────── 我的任务（MyTasksPage）───────────────────── */
   'myTasks.subtitle': '只显示与我相关的内容',
   'myTasks.groupAria': '任务分组方式',

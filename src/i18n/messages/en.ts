@@ -414,6 +414,12 @@ export const enMessages: Record<MessageKey, string> = {
   'workspace.gate.inputPlaceholder': 'Workspace password',
   'workspace.gate.wrong': 'Wrong password — cannot enter this workspace.',
   'workspace.gate.submit': 'Enter',
+  'workspace.setpw.title': 'Set a password for this workspace',
+  'workspace.setpw.lead':
+    '“{name}” has no workspace password yet. Set one to enter — you will need it every time you enter this workspace.',
+  'workspace.setpw.submit': 'Set and enter',
+  'workspace.setpw.submitting': 'Setting…',
+  'workspace.setpw.failed': 'Could not set the workspace password. Please try again.',
   /* ───────────────────── My Tasks ───────────────────── */
   'myTasks.subtitle': 'Only what concerns you',
   'myTasks.groupAria': 'Task grouping',

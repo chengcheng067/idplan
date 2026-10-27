@@ -18,7 +18,11 @@ import {
   writeMemberIdForWorkspace,
   type WorkspaceEntry,
 } from '../../lib/workspace-registry';
-import { createWorkspaceOwnerDb, readWorkspaceGateHash } from '../../core/repositories/local/workspace.db';
+import {
+  createWorkspaceOwnerDb,
+  readWorkspaceGateHash,
+  writeWorkspaceGateHash,
+} from '../../core/repositories/local/workspace.db';
 
 /**
  * 工作区选择器（多工作区 0016 · 首屏与切换的共用 UI）。
@@ -35,8 +39,16 @@ import { createWorkspaceOwnerDb, readWorkspaceGateHash } from '../../core/reposi
  *            src/lib/password，建库/Owner 入库经 core 的 createWorkspaceOwnerDb），
  *            成功后直接以 Owner 身份进入空白新区（落区级身份键 → reload）；
  *   password 目标区设过管理员密码 ⇒ 切入前验密（verifyPassword 对该区 Owner/
- *            管理员的 passwordHash；区没设过密码 ⇒ 不验直接进）。
- *   同区（= 当前区）选中不验密不重载：回调 onEnterCurrentWorkspace 回身份引导。
+ *            管理员的 passwordHash）。
+ *   setpw    目标区**还没设过**闸密码 ⇒ 不直接进，先让它设一个（密码+确认，
+ *            ≥4 位；写库用 core 的 writeWorkspaceGateHash）再进入。
+ *
+ * ── ★ 0017 订正：从列表进入任何区都要验密码 ──
+ *   0016 有两处免密放行，都已被产品负责人否掉：
+ *     ① 同区（= 当前区）短路不验 —— 删。哪怕它就是当前区，从列表进入也要验；
+ *     ② 区没设过密码就「无可验之物直接进」 —— 改成先设密码（见 setpw 视图）。
+ *   验密通过后：非当前区走 enterWorkspace（切库 + reload）；**当前区**不重载，
+ *   回调 onEnterCurrentWorkspace 回身份引导。
  *
  * ── 为什么切换走整页 reload ──
  * 分库后仓储 bundle 绑定的是「启动那一刻」的库；区切换 = 换库名 = 从 RepoProvider
@@ -44,7 +56,7 @@ import { createWorkspaceOwnerDb, readWorkspaceGateHash } from '../../core/reposi
  * 本应用是 Electron 壳没有地址栏，reload 对用户就是一次正常的启动。
  */
 
-type View = 'list' | 'create' | 'password';
+type View = 'list' | 'create' | 'password' | 'setpw';
 
 export function WorkspacePicker({
   onEnterCurrentWorkspace,
@@ -60,6 +72,11 @@ export function WorkspacePicker({
   const [gateTarget, setGateTarget] = useState<{ ws: WorkspaceEntry; hash: string } | null>(null);
   const [gatePw, setGatePw] = useState('');
   const [gateNotice, setGateNotice] = useState<string | null>(null);
+  /** setpw 态：目标区（还没设过闸密码的老区） */
+  const [setPwTarget, setSetPwTarget] = useState<WorkspaceEntry | null>(null);
+  const [setPw, setSetPw] = useState('');
+  const [setPwConfirm, setSetPwConfirm] = useState('');
+  const [setPwNotice, setSetPwNotice] = useState<string | null>(null);
 
   // 建区表单
   const [wsName, setWsName] = useState('');
@@ -76,6 +93,10 @@ export function WorkspacePicker({
     setGateTarget(null);
     setGatePw('');
     setGateNotice(null);
+    setSetPwTarget(null);
+    setSetPw('');
+    setSetPwConfirm('');
+    setSetPwNotice(null);
     setWsName('');
     setOwnerName('');
     setCreatePw('');
@@ -92,17 +113,23 @@ export function WorkspacePicker({
     reloadApp();
   };
 
+  /*
+   * ★ 0017：从列表进入**任何**工作区都要过密码这一关（含当前区）。
+   *   ① 同区不再短路——删掉 0016 的 `ws.id === currentId` 免密分支；
+   *   ② 目标区还没设过闸密码 ⇒ 不直接进，先给它设一个（setpw 视图）。
+   */
   const pick = async (ws: WorkspaceEntry): Promise<void> => {
     if (busy) return;
-    if (ws.id === currentId) {
-      onEnterCurrentWorkspace?.();
-      return;
-    }
     setBusy(true);
     try {
       const hash = await readWorkspaceGateHash(ws.dbName);
       if (!hash) {
-        enterWorkspace(ws);
+        // 该区没设过任何管理员密码（老区/未设密码的区）⇒ 先设一个再进
+        setSetPwTarget(ws);
+        setSetPw('');
+        setSetPwConfirm('');
+        setSetPwNotice(null);
+        setView('setpw');
         return;
       }
       setGateTarget({ ws, hash });
@@ -123,12 +150,48 @@ export function WorkspacePicker({
         setGateNotice(t('workspace.gate.wrong'));
         return;
       }
+      // 当前区：库已经装好了，不必 reload，回身份引导即可；跨区才换库 reload。
+      if (gateTarget.ws.id === currentId) {
+        onEnterCurrentWorkspace?.();
+        return;
+      }
       enterWorkspace(gateTarget.ws);
     } finally {
       setBusy(false);
     }
   };
 
+  /** 给「还没设过闸密码」的目标区设密码：校验 → 写哈希（core）→ 进入 */
+  const submitSetPw = async (): Promise<void> => {
+    if (busy || !setPwTarget) return;
+    if (setPw.length < 4) {
+      setSetPwNotice(t('ui.identity.pw.tooShort'));
+      return;
+    }
+    if (setPw !== setPwConfirm) {
+      setSetPwNotice(t('ui.identity.pw.mismatch'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const ok = await writeWorkspaceGateHash(setPwTarget.dbName, setPw);
+      if (!ok) {
+        setSetPwNotice(t('workspace.setpw.failed'));
+        return;
+      }
+      logUser('工作区', `set gate password for "${setPwTarget.name}" (${setPwTarget.id})`);
+      if (setPwTarget.id === currentId) {
+        onEnterCurrentWorkspace?.();
+        return;
+      }
+      enterWorkspace(setPwTarget);
+    } catch (err) {
+      setSetPwNotice(t('workspace.setpw.failed'));
+      logError('工作区', `set gate password failed: "${setPwTarget.name}"`, err);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   /** 建区：校验 → 建库+Owner（core）→ 注册表 → 区级身份键 → 切区 → reload */
   const submitCreate = async (): Promise<void> => {
@@ -204,7 +267,9 @@ export function WorkspacePicker({
             ? t('workspace.picker.title')
             : view === 'create'
               ? t('workspace.create.title')
-              : t('workspace.gate.title')}
+              : view === 'setpw'
+                ? t('workspace.setpw.title')
+                : t('workspace.gate.title')}
         </h2>
       </div>
 
@@ -384,6 +449,75 @@ export function WorkspacePicker({
               className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
             >
               {t('workspace.gate.submit')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {view === 'setpw' && setPwTarget && (
+        <div className="space-y-3">
+          <p className="text-[13px] leading-5 text-mist">
+            {t('workspace.setpw.lead', { name: setPwTarget.name })}
+          </p>
+          <label className="block space-y-1">
+            <span className="text-[12px] text-mist">{t('workspace.create.pwLabel')}</span>
+            <ImeInput
+              type="password"
+              value={setPw}
+              onChange={(e) => {
+                setSetPw(e.target.value);
+                setSetPwNotice(null);
+              }}
+              placeholder={t('workspace.create.pwPlaceholder')}
+              data-workspace-setpw-input=""
+              disabled={busy}
+              autoComplete="new-password"
+              className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+            />
+          </label>
+          <ImeInput
+            type="password"
+            value={setPwConfirm}
+            onChange={(e) => {
+              setSetPwConfirm(e.target.value);
+              setSetPwNotice(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void submitSetPw();
+              }
+            }}
+            placeholder={t('workspace.create.pwConfirmPlaceholder')}
+            data-workspace-setpw-confirm=""
+            disabled={busy}
+            autoComplete="new-password"
+            className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+          />
+          {setPwNotice && <p className="text-xs text-clay">{setPwNotice}</p>}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={backToList}
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void submitSetPw()}
+              disabled={busy || !setPw || !setPwConfirm}
+              data-workspace-setpw-submit=""
+              className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
+            >
+              {busy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin" aria-hidden />
+                  {t('workspace.setpw.submitting')}
+                </span>
+              ) : (
+                t('workspace.setpw.submit')
+              )}
             </button>
           </div>
         </div>
