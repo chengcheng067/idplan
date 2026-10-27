@@ -382,6 +382,41 @@ export const enMessages: Record<MessageKey, string> = {
   'home.noIdentity.body':
     'Projects and schedules appear once you are in: create an admin, pick an existing identity, or import a backup first.',
   'home.noIdentity.action': 'Enter identity',
+  /* ───────────────────── Multi-workspace · picker / create / switch gate (0016) ─────────────────────
+     Mounted in two places: the HomePage no-identity full page (multiple workspaces or
+     after a manual switch) and the sidebar "Switch workspace" overlay. Locators use
+     data-workspace-* hooks (language-independent). */
+  'workspace.picker.title': 'Choose a workspace',
+  'workspace.picker.lead':
+    'This computer has multiple workspaces (each team’s data is fully separated). Pick the one to enter.',
+  'workspace.picker.aria': 'Workspace picker',
+  'workspace.picker.newAction': 'New workspace',
+  'workspace.currentTag': 'Current',
+  'workspace.ownerLine': 'Owner: {name}',
+  'workspace.backAria': 'Back to workspace list',
+  'workspace.create.title': 'New workspace',
+  'workspace.create.lead':
+    'A new workspace starts completely empty: its projects, members and backups are invisible to other workspaces.',
+  'workspace.create.nameLabel': 'Workspace name',
+  'workspace.create.namePlaceholder': 'e.g. Cheng Studio',
+  'workspace.create.ownerLabel': 'Owner (admin) name',
+  'workspace.create.ownerPlaceholder': 'The creator becomes the Owner (top admin)',
+  'workspace.create.pwLabel': 'Workspace password',
+  'workspace.create.pwPlaceholder': 'Set a password (at least 4 characters)',
+  'workspace.create.pwConfirmPlaceholder': 'Repeat the password',
+  'workspace.create.nameRequired': 'Please enter a workspace name.',
+  'workspace.create.ownerRequired': 'Please enter the Owner (admin) name.',
+  'workspace.create.submit': 'Create and enter',
+  'workspace.create.submitting': 'Creating…',
+  'workspace.create.failed': 'Could not create the workspace. Please try again.',
+  'workspace.gate.title': 'Enter the workspace password',
+  'workspace.gate.lead': '“{name}” is protected by a workspace password. Verify to enter.',
+  'workspace.gate.inputPlaceholder': 'Workspace password',
+  'workspace.gate.wrong': 'Wrong password — cannot enter this workspace.',
+  'workspace.gate.submit': 'Enter',
+  'workspace.sidebar.action': 'Switch workspace',
+  'workspace.sidebar.actionTitle':
+    'Switch to another workspace on this computer (entering a different workspace requires its password)',
   /* ───────────────────── My Tasks ───────────────────── */
   'myTasks.subtitle': 'Only what concerns you',
   'myTasks.groupAria': 'Task grouping',

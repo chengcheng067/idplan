@@ -11,6 +11,13 @@ import { MembersPageSection } from '../components/member/MembersPageSection';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { DataGate, useDataReadiness } from '../components/layout/DataGate';
+import { WorkspacePicker } from '../components/workspace/WorkspacePicker';
+import { appEnv } from '../config/env';
+import {
+  hasWorkspaceEntryStarted,
+  hasWorkspaceManuallySwitched,
+  listWorkspaces,
+} from '../lib/workspace-registry';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUiStore, type HomeViewMode } from '../store/useUiStore';
@@ -114,6 +121,24 @@ export function HomePage(): JSX.Element {
   */
   const readiness = useDataReadiness();
 
+  /*
+   * ★ 多工作区 0016：未进入身份的首屏在「区列表」与「身份引导」之间二选一。
+   *   判据（只在 local 数据源下成立；remote 无分库概念，永远走身份引导）：
+   *     区数量 > 1 或用户手动切换过工作区（建过第二个区再回来的用户），
+   *     且本次「进入某区的流程」尚未开始（选区/建区成功后置位，防止
+   *     切完区 reload 回来又看到区列表、以及退身份后列表抢走身份引导）。
+   *   单区且从未手动切过 ⇒ 维持 0015 的引导态原样（老用户零多余步骤）。
+   *   ⚠️ 惰性初始化只判一次：本组件挂载即读 localStorage，选区/建区动作本身
+   *   会整页 reload，无存活的组件需要响应标记变化。
+   */
+  const [firstScreen, setFirstScreen] = useState<'workspace-list' | 'identity-guide'>(() =>
+    appEnv.dataSource === 'local' &&
+    (listWorkspaces().length > 1 || hasWorkspaceManuallySwitched()) &&
+    !hasWorkspaceEntryStarted()
+      ? 'workspace-list'
+      : 'identity-guide',
+  );
+
   const today = new Date();
   const todayIso = localIso(today);
   const active = projects.filter((p) => p.status === 'active');
@@ -184,6 +209,23 @@ export function HomePage(): JSX.Element {
    *   身份切换不会重挂本组件，两个渲染路径的 hooks 序若不同，React 当场报错。
    */
   if (hydrated && !isEntered) {
+    /*
+     * ★ 多工作区 0016：首屏第一幕 = 工作区选择列表（仅多区/手动切过时，见上方
+     *   firstScreen 注释）。同区选中（不验密不重载）→ 回身份引导；跨区/建区
+     *   由 WorkspacePicker 落标记后整页 reload。
+     */
+    if (firstScreen === 'workspace-list') {
+      return (
+        <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
+          <div className="flex justify-center">
+            <WorkspacePicker
+              variant="page"
+              onEnterCurrentWorkspace={() => setFirstScreen('identity-guide')}
+            />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
         <div

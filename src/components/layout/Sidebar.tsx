@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bot, ChevronDown, FolderKanban, PenLine, Save, Settings, Sparkles, Upload } from 'lucide-react';
+import { Bot, ChevronDown, FolderKanban, PenLine, Repeat, Save, Settings, Sparkles, Upload } from 'lucide-react';
 
 import { Modal } from '../common/Modal';
 import { SettingsDialog } from './SettingsDialog';
 import { MemberIdentityPicker } from './MemberIdentityPicker';
+import { WorkspacePicker } from '../workspace/WorkspacePicker';
+import { appEnv } from '../../config/env';
 import { useBackupIo } from './useBackupIo';
 import { SidebarCollapseToggle } from './SidebarCollapseToggle';
 import { navItemClass, SidebarNav } from './SidebarNav';
@@ -123,6 +125,12 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
   /** 取词 + 语言变化订阅点（底部区与项目列表文案在渲染期取） */
   const { t } = useLang();
   const openManualForm = useUiStore((s) => s.openManualForm);
+  /*
+   * ★ 多工作区 0016：「切换工作区」浮层开关。
+   *   入口只对「已进入身份 + local 数据源」可见（remote 无分库概念；未进入时
+   *   首屏本身就是工作区选择，不需要第二个入口）。
+   */
+  const [wsSwitchOpen, setWsSwitchOpen] = useState(false);
 
   const sidebarExpanded = useLayoutStore((s) => s.sidebarExpanded);
   const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
@@ -601,6 +609,26 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
           )}
 
           {/*
+            ★ 多工作区 0016 · 侧栏底部「切换工作区」入口（已进入身份 + local 模式可见）。
+            点击弹出 WorkspacePicker（modal 态）：同区选中直接关浮层（不验密不重载，
+            「同区退出重进不验」口径）；跨区选中验目标区密码后整页 reload 换库。
+            放身份行正上方：语义同属「我是谁 / 我在哪个团队」。
+          */}
+          {hasIdentity && appEnv.dataSource === 'local' && (
+            <button
+              type="button"
+              onClick={() => setWsSwitchOpen(true)}
+              aria-label={t('workspace.sidebar.action')}
+              title={t('workspace.sidebar.actionTitle')}
+              data-sidebar-switch-workspace=""
+              className={cn(navItemClass(false, false, inDrawer))}
+            >
+              <Repeat size={18} className="shrink-0 text-mist" aria-hidden />
+              <span className="truncate text-[13px] text-ink">{t('workspace.sidebar.action')}</span>
+            </button>
+          )}
+
+          {/*
             身份行（§2.2：高 52、sunken 底、圆角 12、头像 28 + 姓名/角色 13）。
 
             ★ 2026-10-12 身份去重：这里现在是全站**唯一**的身份控件（显示 + 切换/退出），
@@ -846,6 +874,15 @@ function SidebarBody({ pathname }: { pathname: string }): JSX.Element {
 
       {/* 设置抽屉（侧栏底部入口；v0.8.6.0002 反馈 #1：贴侧栏右缘滑出，侧栏保持可见可点） */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/*
+        ★ 多工作区 0016 · 「切换工作区」浮层（侧栏底部入口的承载面）。
+        与设置抽屉同为兄弟浮层：取消（遮罩/Esc/×）只关浮层，身份与数据原样；
+        跨区验密成功后组件内部落标记并整页 reload（换库装配新工作区）。
+      */}
+      {wsSwitchOpen && (
+        <WorkspacePicker variant="modal" onClose={() => setWsSwitchOpen(false)} />
+      )}
 
       {/* 备份 IO 的隐藏 file input + 确认对话框（与 useBackupIo 同一份逻辑） */}
       {fileInput}
