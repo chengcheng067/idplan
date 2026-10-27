@@ -32,7 +32,7 @@ import { BackupService } from '../src/core/services/backup.service';
 import { buildDemoBackup } from '../src/core/demo/demoDataFactory';
 import { emptyPackage } from './helpers/backup-fixture';
 import { bootstrapAllStores } from '../src/hooks/useRepos';
-import { useSettingsStore } from '../src/store/useSettingsStore';
+import { CURRENT_MEMBER_ID_KEY, useSettingsStore } from '../src/store/useSettingsStore';
 import { useMembersStore } from '../src/store/useMembersStore';
 import { deriveRoleGuardState } from '../src/hooks/useRoleGuard';
 import { MemberActorKind, MemberRoleKind } from '../src/core/types/enums';
@@ -40,10 +40,21 @@ import { MemberActorKind, MemberRoleKind } from '../src/core/types/enums';
 let bundle: IRepositoryBundle;
 
 /**
- * 本 spec 只写**一枚** localStorage 键（身份）⇒ 用「键数」判它是否被清掉即可，
- * 无需在测试里手写键名（键名的唯一出处在 `useSettingsStore.ts` 的 `LS_KEY`）。
+ * 本 spec 只关心**身份键**的写入与清除 ⇒ 计「身份键」的数量即可，无需手写键名
+ * （键名前缀的唯一出处在 `useSettingsStore.ts` 的 `CURRENT_MEMBER_ID_KEY`；
+ * 多工作区 0016 起身份键带区后缀 `changxia.currentMemberId.<wsId>`，同一前缀覆盖）。
+ *
+ * ⚠️ 不能再用 `localStorage.length`：0016 的工作区注册表（`idplan.workspaces` 等）
+ * 也会合法地写 localStorage，但它们不是身份键、不该参与「悬挂是否被清」的判定。
  */
-const lsKeyCount = (): number => localStorage.length;
+const lsKeyCount = (): number => {
+  let n = 0;
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const k = localStorage.key(i);
+    if (k !== null && k.startsWith(CURRENT_MEMBER_ID_KEY)) n += 1;
+  }
+  return n;
+};
 
 /** 本机旧身份：模拟「上个成员集里选过的人」 */
 const OLD_ID = 'm_local_old';
