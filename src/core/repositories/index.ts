@@ -25,7 +25,7 @@ export async function createRepositories(
     return createRemoteRepositories(cfg.apiBaseUrl ?? '');
   }
   try {
-    const db = await openDatabase();
+    const db = await openDatabase(cfg.dbName);
     return {
       projects: new LocalProjectsRepository(db),
       stages: new LocalStagesRepository(db),

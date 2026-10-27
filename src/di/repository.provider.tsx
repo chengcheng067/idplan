@@ -7,6 +7,7 @@ import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { detectLocalDbVersion, isDbAheadOfApp, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
 import { recoverZombieExecutions } from '../core/execution/execution-recovery';
+import { currentWorkspaceDbName } from '../lib/workspace-registry';
 /*
  * ★ i18n 笔 misc：本文件同时用**两种**取词形态，故 import 时先把模块级取词改名。
  *   · `translate`（模块级 `t`，不订阅）：只给 `startRepositories` 那次「算一次就完」
@@ -70,9 +71,9 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
   const [gateFromVersion, setGateFromVersion] = useState<number | null>(null);
   const cancelledRef = useRef(false);
 
-  const startRepositories = useCallback(async (): Promise<void> => {
+  const startRepositories = useCallback(async (dbName?: string): Promise<void> => {
     try {
-      const b = await createRepositories({ dataSource: appEnv.dataSource, apiBaseUrl: appEnv.apiBaseUrl });
+      const b = await createRepositories({ dataSource: appEnv.dataSource, apiBaseUrl: appEnv.apiBaseUrl, dbName });
       // ★ 僵尸态兜底（规格 §12 L223 第 1 条）：仓储刚装配完、**首屏数据装载之前**收敛。
       //   时序是硬要求，不是风格选择：
       //     - 早于 `createRepositories` 不可能（那时还没有仓储可写）；
@@ -122,12 +123,20 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     cancelledRef.current = false;
     void (async () => {
       if (appEnv.dataSource === 'local') {
+        /*
+         * ★ 多工作区 0016：local 模式下所有库级动作都对准**当前工作区**的库。
+         *   ensureEntries（首次读取）在注册表缺席时把存量库绑定成 ws-default
+         *   （数据零迁移，见 workspace-registry.ts）——此后「当前库名」是
+         *   探测 / 闸门 / 建仓储的唯一库名来源；单区用户拿到的是老库名
+         *   `changxia`，行为与 0015 逐字节一致。
+         */
+        const dbName = currentWorkspaceDbName();
         // 探测不到（全新环境）或已是当前版本 → 直接建库，不弹闸门。
         // ★ 判据取自唯一出处 needsPreMigrationBackup（BUG-02）：
         //   detectLocalDbVersion 返回的是**归一后的 Dexie verno**；此前它返回原始
         //   IDB 版本（×10），使这里的 `verno < SCHEMA_VERSION` 恒为 false ——
         //   闸门从不弹出、老库静默升级、没有任何回滚凭据。
-        const verno = await detectLocalDbVersion();
+        const verno = await detectLocalDbVersion(dbName);
         if (cancelledRef.current) return;
         /*
           ★ 降级安装分支（审计 F1-②）：**优先于**备份闸门与隐私模式归因。
@@ -146,6 +155,8 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
           setGate('pending');
           return;
         }
+        await startRepositories(dbName);
+        return;
       }
       await startRepositories();
     })();
@@ -154,10 +165,11 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     };
   }, [startRepositories, repoEpoch]);
 
-  /** 闸门唯一出口：导出成功才允许升级（无「跳过」选项） */
+  /** 闸门唯一出口：导出成功才允许升级（无「跳过」选项）。
+   *  导出的必须是**当前工作区**那份老库的快照（0016 分库后闸门按区触发）。 */
   const confirmMigrationBackup = useCallback(async (): Promise<void> => {
     setGate('exporting');
-    const ok = await exportPreMigrationBackupToFile();
+    const ok = await exportPreMigrationBackupToFile(currentWorkspaceDbName());
     if (cancelledRef.current) return;
     if (!ok) {
       setGate('failed');

@@ -360,4 +360,10 @@ export interface IRepositoryBundle {
 export interface RepositoryFactoryConfig {
   dataSource: import('../types/enums').DataSourceMode;
   apiBaseUrl?: string;
+  /**
+   * local 模式的 Dexie 库名（多工作区 0016：按工作区分库）。
+   * 缺省 = 存量主库 `changxia`（= ws-default 绑定的库，行为零变化）。
+   * remote 模式忽略本字段。
+   */
+  dbName?: string;
 }

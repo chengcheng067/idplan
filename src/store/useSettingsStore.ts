@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { DEFAULT_REST_POLICY } from '../core/types/entities';
 import type { RestPolicyConfig } from '../core/types/entities';
 import { withCnHolidays } from '../core/holidays/policy';
+import { currentWorkspaceIdSync } from '../lib/workspace-registry';
 
 /**
  * 本机设置与身份。
@@ -31,14 +32,61 @@ import { withCnHolidays } from '../core/holidays/policy';
 /**
  * 「我的身份」在 localStorage 里的键 —— **本常量是它的唯一出处**。
  *
- * 为什么要导出：宿主层要读同一枚键才能实现身份候选阶梯
- * （`useRepos.bootstrapAllStores` 的 `localStorage ?? settings`，见其注释）。
- * 历史上 `useRepos.ts` 与 `FirstRunGuide.tsx` 各自**手打**过一份同样的字面量 ⇒
- * 键名一旦改动就会静默各说各话（一边写、另一边读不到），而这类失效**不报错**。
- *
- * ⚠️ 调用方请**引用本常量**，不要手打字面量。
+ * ⚠️ 多工作区 0016 起，身份记忆**按工作区分键**：实际读写的是
+ * `changxia.currentMemberId.<wsId>`（见 `identityKey` 下方）。本常量保留为
+ * ① 区级键的前缀（拼装出处）、② 升级前旧数据的兼容回落键（读档最后一级）。
+ * 历史注（键名单一出处的由来）：`useRepos.ts` 与 `FirstRunGuide.tsx` 曾各自
+ * **手打**过一份同样的字面量 ⇒ 键名一旦改动就会静默各说各话（一边写、另一边
+ * 读不到），而这类失效**不报错**。调用方请引用常量/封装函数，不要手打字面量。
  */
 export const CURRENT_MEMBER_ID_KEY = 'changxia.currentMemberId';
+
+/*
+ * 身份键的**读写唯一出口**（多工作区 0016）。
+ *
+ * 读：区级键 `changxia.currentMemberId.<当前区>` → 无则回落旧库级键
+ * `changxia.currentMemberId`（0016 升级前的存量记忆；注册表懒迁移会把旧值抄到
+ * ws-default 区级键，这里再兜一层是为了「注册表尚未迁移就先读」的时序）。
+ * 写：一律写区级键（旧键只在显式清除时一并移除，见 writeStoredMemberId）。
+ *
+ * ⚠️ 区级键随 currentWorkspaceId 变：切区后各自记忆，互不串味。旧键回落指到
+ * 别区成员 id 时，`bootstrapAllStores` 的存在性校验会把它当悬挂身份清掉
+ * （成员 id 是 UUID，跨库同名概率≈0），不会真的串进别的区。
+ */
+function identityKey(): string {
+  return `${CURRENT_MEMBER_ID_KEY}.${currentWorkspaceIdSync()}`;
+}
+
+/** 读「我的身份」记忆（区级键 → 旧键回落；node 环境/隐私模式静默得 null） */
+export function readStoredMemberId(): string | null {
+  try {
+    return localStorage.getItem(identityKey()) ?? localStorage.getItem(CURRENT_MEMBER_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 写「我的身份」记忆（null = 退出/清除：区级键与旧键**一起**清，见下） */
+function writeStoredMemberId(memberId: string | null): void {
+  const key = identityKey();
+  try {
+    if (memberId === null) {
+      localStorage.removeItem(key);
+      /*
+       * 旧键随显式清除一并移除。为什么不留：迁移已把旧值抄进区级键
+       * （workspace-registry.migrateLegacyIdentityKey），此后「区级键空而旧键有值」
+       * 只会是「用户刚刚显式退出/身份被判悬挂」——若旧键还在，上面的回落读会把
+       * 刚退出的身份**复活**（退出 → 读回落 → 又是它）。回滚到 0015 的老版本
+       * 仍可从 settings 表的 currentMemberId 兜底恢复身份，不依赖这枚键。
+       */
+      localStorage.removeItem(CURRENT_MEMBER_ID_KEY);
+    } else {
+      localStorage.setItem(key, memberId);
+    }
+  } catch {
+    /* 隐私模式下静默降级为内存态 */
+  }
+}
 
 export type IdentityFlowState = 'closed' | 'admin_prompt' | 'name_input' | 'mismatch' | 'password_input';
 
@@ -101,11 +149,7 @@ export interface SettingsState {
 }
 
 function readLocalStorageId(): string | null {
-  try {
-    return localStorage.getItem(CURRENT_MEMBER_ID_KEY);
-  } catch {
-    return null;
-  }
+  return readStoredMemberId();
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -146,12 +190,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     })),
 
   setCurrentMember: (memberId) => {
-    try {
-      if (memberId === null) localStorage.removeItem(CURRENT_MEMBER_ID_KEY);
-      else localStorage.setItem(CURRENT_MEMBER_ID_KEY, memberId);
-    } catch {
-      /* 隐私模式下静默降级为内存态 */
-    }
+    // ★ 0016：写区级键（`changxia.currentMemberId.<wsId>`），切区后身份各自记忆
+    writeStoredMemberId(memberId);
     set({ currentMemberId: memberId });
   },
 

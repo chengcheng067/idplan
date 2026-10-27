@@ -32,8 +32,9 @@ import type { LucideIcon } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useBackupIo } from './useBackupIo';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
-// 身份键名的**单一出处**（不要在别处手打字面量：历史上本文件与 useRepos 各手写过一份）
-import { CURRENT_MEMBER_ID_KEY } from '../../store/useSettingsStore';
+// 身份读档的唯一出口（★ 0016 起为区级键 `changxia.currentMemberId.<wsId>`，
+// 内部含旧键回落——不要再手打 CURRENT_MEMBER_ID_KEY 字面量读档）
+import { readStoredMemberId } from '../../store/useSettingsStore';
 import { useHasHumanProjects } from '../../core/project/visibility';
 import { logUser } from '../../core/services/log.service';
 import { cn } from '../../lib/cn';
@@ -148,14 +149,12 @@ export function FirstRunGuide(): JSX.Element | null {
    *   核心机制与读数（含 A/B 两代产物对照）：`tests/plugin-state-demo-browser.spec.ts` 的 ④a。
    */
   const [identityDone, setIdentityDone] = useState(
-    () =>
-      typeof localStorage !== 'undefined' &&
-      localStorage.getItem(CURRENT_MEMBER_ID_KEY) !== null,
+    () => typeof localStorage !== 'undefined' && readStoredMemberId() !== null,
   );
   useEffect(() => {
     if (identityDone) return;
     const t = window.setInterval(() => {
-      if (localStorage.getItem(CURRENT_MEMBER_ID_KEY) !== null) {
+      if (readStoredMemberId() !== null) {
         setIdentityDone(true);
         window.clearInterval(t);
       }

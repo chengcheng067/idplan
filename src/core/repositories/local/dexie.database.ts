@@ -1,5 +1,12 @@
 import Dexie, { Table } from 'dexie';
 
+/*
+ * 再导出 Dexie 本体（只取 `Dexie.exists` 这类静态工具用）：
+ * workspace.db.ts 等本目录文件被 arch-boundary 禁止直接 import dexie 包，
+ * 一切经本 gatekeeper 文件中转。业务代码依旧禁止 import 本导出（铁律 4）。
+ */
+export { Dexie };
+
 import type { BackupPackage } from '../../types/dto';
 import type {
   AssignmentLog,
@@ -153,9 +160,9 @@ export function migrateMemberV2Row(m: Record<string, unknown>): void {
   m.agentKind = m.agentKind ?? null;
 }
 
-/** 打开失败时的统一错误归一 */
-export async function openDatabase(): Promise<ChangxiaDatabase> {
-  const db = new ChangxiaDatabase();
+/** 打开失败时的统一错误归一（多工作区 0016： dbName 可指定分库名，缺省 = 存量主库） */
+export async function openDatabase(dbName: string = DB_NAME): Promise<ChangxiaDatabase> {
+  const db = new ChangxiaDatabase(dbName);
   try {
     await db.open();
     return db;

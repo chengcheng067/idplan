@@ -8,8 +8,9 @@ import { normalizeRestPolicy } from '../core/holidays/policy';
 import { useRepoContext } from '../di/repository.provider';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
-import { CURRENT_MEMBER_ID_KEY, useSettingsStore } from '../store/useSettingsStore';
+import { readStoredMemberId, useSettingsStore } from '../store/useSettingsStore';
 import { normalizeLegacyMemberRoles } from './useRoleGuard';
+import { currentWorkspaceIdSync, setWorkspaceOwnerName } from '../lib/workspace-registry';
 
 /**
  * 业务代码唯一取数入口（铁律 4）。
@@ -95,7 +96,8 @@ export async function bootstrapAllStores(repos: IRepositoryBundle): Promise<void
     candidates.find((id): id is string => id !== null && memberIds.has(id)) ?? null;
   // 候选阶梯与 v0.8.6 口径逐字一致（个人选择优先、共享 KV 兜底），只是每一档要**命中**当前成员
   // 键名引用单一出处，不手打字面量（历史上本文件与 FirstRunGuide 各手写过一份）。
-  const lsCandidate = localStorage.getItem(CURRENT_MEMBER_ID_KEY);
+  // ★ 0016：改走区级身份键读档（readStoredMemberId：区级键 → 旧键回落），切区后各自记忆。
+  const lsCandidate = readStoredMemberId();
   const currentMemberId = pickValidId(lsCandidate, readCurrentMemberFromSettings(settings));
   if (currentMemberId === null || currentMemberId !== lsCandidate) {
     /*
@@ -127,6 +129,15 @@ export async function bootstrapAllStores(repos: IRepositoryBundle): Promise<void
   // 先注入休息制度再置 hydrated，保证消费方看到 hydrated=true 时口径已就绪
   useSettingsStore.getState().setRestPolicy(restPolicy);
   useSettingsStore.getState().hydrate(currentMemberId);
+
+  /*
+   * ★ 0016：回填当前工作区的 Owner 名（注册表选择列表显示用）。
+   * 口径 =「现有管理员即 Owner」（规格 §2）：取首个 active 管理员的名字；
+   * ws-default 升级时注册表里 Owner 名为空，正是这里补上。幂等，失败静默
+   * （注册表读不出来不该拦首屏——与 restPolicy 同一宽口径）。
+   */
+  const ownerName = memberList.find((m) => m.active && m.roleKind === MemberRoleKind.Admin)?.name;
+  if (ownerName) setWorkspaceOwnerName(currentWorkspaceIdSync(), ownerName);
 }
 
 async function loadAllStages(
