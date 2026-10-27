@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Check, ChevronLeft, Loader2, X } from 'lucide-react';
+import { Check, ChevronLeft, Loader2 } from 'lucide-react';
 
-import { Modal } from '../common/Modal';
 import { ImeInput } from '../common/ImeInput';
 import { Button } from '../ui/Button';
 import { useLang } from '../../i18n';
@@ -13,10 +12,8 @@ import { logError, logUser } from '../../core/services/log.service';
 import {
   addWorkspace,
   currentWorkspaceIdSync,
-  hasWorkspaceManuallySwitched,
   listWorkspaces,
   markWorkspaceEntryStarted,
-  markWorkspaceManuallySwitched,
   setCurrentWorkspaceId,
   writeMemberIdForWorkspace,
   type WorkspaceEntry,
@@ -26,10 +23,11 @@ import { createWorkspaceOwnerDb, readWorkspaceGateHash } from '../../core/reposi
 /**
  * 工作区选择器（多工作区 0016 · 首屏与切换的共用 UI）。
  *
- * ── 两个挂载点 ──
- *   · `variant="page"`  —— HomePage 未进入身份时的整页首屏（区数量 > 1 或用户
- *     手动切过时替代「请先进入身份」引导块，判据在调用方，见 HomePage）；
- *   · `variant="modal"` —— 侧栏底部「切换工作区」入口的浮层（已进入身份时可见）。
+ * ── 唯一挂载点 ──
+ *   HomePage 未进入身份时的整页首屏（判据在调用方，见 HomePage）。
+ *   ⚠️ 0017 订正：原先还有侧栏「切换工作区」浮层挂载点（variant="modal"），
+ *   但产品口径是「切换工作区」只在**没有任何身份**时给入口，而那时首屏本身就是
+ *   本列表 ⇒ 侧栏入口是重复入口，已连同 modal 变体一并删除。
  *
  * ── 三态视图 ──
  *   list     区列表（名 + Owner 名）+「新建工作区」；
@@ -38,8 +36,7 @@ import { createWorkspaceOwnerDb, readWorkspaceGateHash } from '../../core/reposi
  *            成功后直接以 Owner 身份进入空白新区（落区级身份键 → reload）；
  *   password 目标区设过管理员密码 ⇒ 切入前验密（verifyPassword 对该区 Owner/
  *            管理员的 passwordHash；区没设过密码 ⇒ 不验直接进）。
- *   同区（= 当前区）选中不验密不重载：page 态回调 onEnterCurrentWorkspace 回
- *   身份引导，modal 态直接关闭。
+ *   同区（= 当前区）选中不验密不重载：回调 onEnterCurrentWorkspace 回身份引导。
  *
  * ── 为什么切换走整页 reload ──
  * 分库后仓储 bundle 绑定的是「启动那一刻」的库；区切换 = 换库名 = 从 RepoProvider
@@ -50,14 +47,9 @@ import { createWorkspaceOwnerDb, readWorkspaceGateHash } from '../../core/reposi
 type View = 'list' | 'create' | 'password';
 
 export function WorkspacePicker({
-  variant,
-  onClose,
   onEnterCurrentWorkspace,
 }: {
-  variant: 'page' | 'modal';
-  /** modal 态：关闭浮层 */
-  onClose?: () => void;
-  /** page 态：选中了「当前区」（同区不验密不重载）→ 回身份引导 */
+  /** 选中了「当前区」且验密通过 ⇒ 回身份引导（不 reload） */
   onEnterCurrentWorkspace?: () => void;
 }): JSX.Element {
   const { t } = useLang();
@@ -94,27 +86,22 @@ export function WorkspacePicker({
   /** 进入目标区（验密通过 / 无需验密的共同出口）：落标记 → reload 换库 */
   const enterWorkspace = (ws: WorkspaceEntry): void => {
     setCurrentWorkspaceId(ws.id);
-    // 「进入某区的流程已开始」：reload 后首屏给身份引导而不是区列表；
-    // 「手动切过」：此后即使只剩一个区，首屏也保留选择列表（用户已表达多区意图）。
+    // 「进入某区的流程已开始」：reload 后首屏给身份引导而不是区列表。
     markWorkspaceEntryStarted();
-    markWorkspaceManuallySwitched();
     logUser('工作区', `switch: enter "${ws.name}" (${ws.id})`);
     reloadApp();
   };
 
   const pick = async (ws: WorkspaceEntry): Promise<void> => {
     if (busy) return;
-    // 同区：不验密、不重载（拍板口径「同区退出重进不验」）
     if (ws.id === currentId) {
-      if (variant === 'modal') onClose?.();
-      else onEnterCurrentWorkspace?.();
+      onEnterCurrentWorkspace?.();
       return;
     }
     setBusy(true);
     try {
       const hash = await readWorkspaceGateHash(ws.dbName);
       if (!hash) {
-        // 该区没设过任何管理员密码（新区 Owner 一定有）⇒ 无可验之物，直接进
         enterWorkspace(ws);
         return;
       }
@@ -141,6 +128,7 @@ export function WorkspacePicker({
       setBusy(false);
     }
   };
+
 
   /** 建区：校验 → 建库+Owner（core）→ 注册表 → 区级身份键 → 切区 → reload */
   const submitCreate = async (): Promise<void> => {
@@ -173,7 +161,6 @@ export function WorkspacePicker({
       writeMemberIdForWorkspace(id, ownerId);
       setCurrentWorkspaceId(id);
       markWorkspaceEntryStarted();
-      markWorkspaceManuallySwitched();
       logUser('工作区', `create: "${name}" (${id})`);
       reloadApp();
     } catch (err) {
@@ -198,9 +185,7 @@ export function WorkspacePicker({
       data-workspace-picker=""
       className={cn(
         'space-y-4 rounded-2xl p-5',
-        variant === 'page'
-          ? 'glass-strong iridescent-border w-[440px] max-w-[92vw] shadow-soft'
-          : 'w-full',
+        'glass-strong iridescent-border w-[440px] max-w-[92vw] shadow-soft',
       )}
     >
       <div className="flex items-center gap-2">
@@ -221,16 +206,6 @@ export function WorkspacePicker({
               ? t('workspace.create.title')
               : t('workspace.gate.title')}
         </h2>
-        {variant === 'modal' && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('common.close')}
-            className="ml-auto rounded-md p-1 text-mist hover:bg-sand"
-          >
-            <X size={16} />
-          </button>
-        )}
       </div>
 
       {view === 'list' && (
@@ -416,13 +391,5 @@ export function WorkspacePicker({
     </div>
   );
 
-  if (variant === 'page') {
-    return <div className="flex min-h-[50vh] items-start justify-center pt-6">{body}</div>;
-  }
-
-  return (
-    <Modal open onClose={onClose ?? (() => undefined)} ariaLabel={t('workspace.picker.aria')}>
-      {body}
-    </Modal>
-  );
+  return <div className="flex min-h-[50vh] items-start justify-center pt-6">{body}</div>;
 }

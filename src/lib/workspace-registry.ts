@@ -34,8 +34,6 @@ const WORKSPACES_KEY = 'idplan.workspaces';
 const CURRENT_WS_KEY = 'idplan.currentWorkspaceId';
 /** 「进入某个区的流程已开始」标记（首屏选择列表 vs 身份引导的判据之一） */
 const ENTRY_STARTED_KEY = 'idplan.workspaceEntryStarted';
-/** 「用户手动切换过工作区」标记（单区老用户不显选择列表的判据之一） */
-const SWITCHED_KEY = 'idplan.workspaceManuallySwitched';
 
 /** 第一个工作区 id（固定值：存量库绑定目标，测试与迁移都依赖它恒定） */
 export const DEFAULT_WORKSPACE_ID = 'ws-default';
@@ -209,15 +207,6 @@ export function markWorkspaceEntryStarted(): void {
 
 export function hasWorkspaceEntryStarted(): boolean {
   return safeGet(ENTRY_STARTED_KEY) === '1';
-}
-
-/** 标记「用户手动切换过工作区」（置位后即使只有一个区也显选择列表） */
-export function markWorkspaceManuallySwitched(): void {
-  safeSet(SWITCHED_KEY, '1');
-}
-
-export function hasWorkspaceManuallySwitched(): boolean {
-  return safeGet(SWITCHED_KEY) === '1';
 }
 
 /**

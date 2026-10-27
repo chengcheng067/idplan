@@ -414,9 +414,6 @@ export const enMessages: Record<MessageKey, string> = {
   'workspace.gate.inputPlaceholder': 'Workspace password',
   'workspace.gate.wrong': 'Wrong password — cannot enter this workspace.',
   'workspace.gate.submit': 'Enter',
-  'workspace.sidebar.action': 'Switch workspace',
-  'workspace.sidebar.actionTitle':
-    'Switch to another workspace on this computer (entering a different workspace requires its password)',
   /* ───────────────────── My Tasks ───────────────────── */
   'myTasks.subtitle': 'Only what concerns you',
   'myTasks.groupAria': 'Task grouping',

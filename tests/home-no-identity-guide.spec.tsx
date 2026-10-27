@@ -100,6 +100,7 @@ import { useSettingsStore } from '../src/store/useSettingsStore';
 import { useUiStore } from '../src/store/useUiStore';
 import { MemberActorKind, MemberRoleKind, ProjectStatus, ScheduleBasis, StageStatus, TaskStatus } from '../src/core/types/enums';
 import type { Member, Project, Stage, Task } from '../src/core/types/entities';
+import { markWorkspaceEntryStarted } from '../src/lib/workspace-registry';
 
 const ADMIN_ID = 'mem_admin';
 
@@ -292,6 +293,12 @@ afterEach(() => {
 
 describe('首页 · 未进入身份 ⇒ 整页引导态', () => {
   it('G-1 未进入（库里有 1 个项目）⇒ 引导块在、建档 CTA 与全部数据块都不在', () => {
+    /*
+     * ★ 0017 口径：未进入身份的第一屏是**工作区列表**（先选公司，再选身份），
+     *   身份引导块出现在「已选完工作区、还没选身份」这一步。本文件锁的是后者，
+     *   故夹具要显式落 entryStarted 标记，把 HomePage 推进到引导块那一屏。
+     */
+    markWorkspaceEntryStarted();
     seedStores({ currentMemberId: null });
     const h = renderHome();
 
@@ -338,6 +345,7 @@ describe('首页 · 未进入身份 ⇒ 整页引导态', () => {
   });
 
   it('G-4 引导块按钮 ⇒ 打开身份流（admin_prompt，与首启闸同款调用）', async () => {
+    markWorkspaceEntryStarted(); // 同 G-1：引导块在「已选区 + 未选身份」这一屏
     seedStores({ currentMemberId: null });
     const h = renderHome();
     expect(useSettingsStore.getState().identityFlow).toBe('closed');

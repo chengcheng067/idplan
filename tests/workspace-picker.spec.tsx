@@ -3,14 +3,18 @@
  * 工作区选择器 UI（多工作区 0016 · 版本 1.0.0.0016 第二切片）。
  *
  * ═══════════════════════ 本文件锁什么 ═══════════════════════
- *   P1 单区（且未手动切过）⇒ HomePage 未进入身份维持 0015 引导态原样，
- *      不出现工作区列表（老用户零多余步骤——本批最大的回归红线）；
+ *   ★ 0017 订正（产品负责人验收 0016 的取舍 ①）：
+ *     「切换工作区」入口只在**没有任何身份**时出现 ⇒ 侧栏入口连同
+ *     WorkspacePicker 的 modal 变体一并删除（唯一挂载点是首屏列表）。
+ *   P1 未进入身份 ⇒ 首屏**一律**是工作区选择列表——**只有一个默认区时也要显示**
+ *       （列表里就一项，且必须能「新建工作区」）。产品心智是「先选公司，再选身份」，
+ *       不再退回 0015 的「请先进入身份」引导块；
  *   P2 多区 ⇒ 首屏是工作区选择列表（区名 + Owner 名），引导块让位；
- *   P3 「进入流程已开始」（选区/建区后 reload 回来）⇒ 身份引导而不是区列表；
- *   P4 切区验密：目标区设过管理员密码 ⇒ 先出密码表单；输错不切、可重试；
- *      输对 ⇒ 当前区 id 落注册表 + 进入/手动切换标记落盘 + 整页 reload；
- *   P5 同区选中 ⇒ 不验密、不重载（拍板口径「同区退出重进不验」），page 态
- *      回调 onEnterCurrentWorkspace 回身份引导；
+ *   P3 「进入流程已开始」（选区/建区后 reload 回来）⇒ 身份引导而不是区列表
+ *       （这一条必须留，否则每次 reload 都要重选一次，死循环）；
+ *   P4 跨区验密：目标区设过管理员密码 ⇒ 先出密码表单；输错不切、可重试；
+ *      输对 ⇒ 当前区 id 落注册表 + 进入标记落盘 + 整页 reload；
+ *   P5 同区（= 当前区）选中 ⇒ 不验密不重载，回调 onEnterCurrentWorkspace 回身份引导；
  *   P6 新建工作区：表单校验（区名/Owner 名/密码 ≥4/两次一致）→ 建库+Owner
  *      入库（core 调用入参断言）→ 注册表登记 → 区级身份键落 Owner → 切区 reload。
  *
@@ -22,11 +26,8 @@
  *   · reload mock 成 spy：真实 reload 在 jsdom 会抛 Not implemented。
  *
  * ═══════════════════════ 变异自证（本仓纪律） ═══════════════════════
- *   · 把 HomePage firstScreen 判据里的 `listWorkspaces().length > 1` 注释掉 ⇒ P2 红；
- *   · 把 WorkspacePicker pick() 里 `ws.id === currentId` 的同区分支删掉 ⇒ P5 红
- *     （同区也去探测闸密，密码表单出现、onEnterCurrentWorkspace 不被调用）；
- *   · 把 submitGate 成功分支里的 enterWorkspace 调用删掉 ⇒ P4-3 红；
- *   · 把 submitCreate 里 writeMemberIdForWorkspace 删掉 ⇒ P6-4 红。
+ *   · 把 HomePage firstScreen 判据改回 `listWorkspaces().length > 1 || …` ⇒ P1 红；
+ *   · 把 submitGate 成功分支里的 enterWorkspace 调用删掉 ⇒ P4-3 红。
  *   以上均已实测变红并恢复。
  */
 
@@ -140,7 +141,6 @@ import {
   addWorkspace,
   currentWorkspaceIdSync,
   hasWorkspaceEntryStarted,
-  hasWorkspaceManuallySwitched,
   identityKeyFor,
   listWorkspaces,
   markWorkspaceEntryStarted,
@@ -275,13 +275,18 @@ afterEach(() => {
 });
 
 describe('P1–P3 · HomePage 未进入身份的首屏二选一', () => {
-  it('P1 单区且未手动切过 ⇒ 维持 0015 引导态，不出现工作区列表', () => {
+  it('P1 只有一个默认区 ⇒ 首屏仍是工作区选择列表（先选公司，再选身份）', () => {
     listWorkspaces(); // 只有默认一个区
     seedHomeStores();
     const el = renderHome();
 
-    expect(el.querySelector('[data-home-no-identity]'), '单区老用户看到的必须还是身份引导').not.toBeNull();
-    expect(el.querySelector('[data-workspace-picker]'), '单区不显工作区列表').toBeNull();
+    expect(
+      el.querySelector('[data-workspace-picker]'),
+      '单区也必须显工作区列表——产品口径「先选公司，再选身份」',
+    ).not.toBeNull();
+    expect(el.querySelector('[data-home-no-identity]'), '列表态不再先渲染身份引导').toBeNull();
+    expect(el.querySelectorAll('[data-workspace-item]'), '列表里就一项').toHaveLength(1);
+    expect(el.querySelector('[data-workspace-new]'), '列表里必须能新建工作区').not.toBeNull();
   });
 
   it('P2 多区 ⇒ 首屏是工作区选择列表（区名 + Owner 名），引导块让位', () => {
@@ -311,14 +316,12 @@ describe('P1–P3 · HomePage 未进入身份的首屏二选一', () => {
   });
 });
 
-describe('P4–P5 · 切区验密 / 同区不验', () => {
+describe('P4 · 跨区验密', () => {
   it('P4-1 目标区设过密码 ⇒ 先出密码表单，不直接切', async () => {
     const wsB = seedTwoWorkspaces();
     h.gateHashes['idplan-ws-b'] = await hashPassword('6666');
     const onEnterCurrent = vi.fn();
-    const el = renderUi(
-      <WorkspacePicker variant="page" onEnterCurrentWorkspace={onEnterCurrent} />,
-    );
+    const el = renderUi(<WorkspacePicker onEnterCurrentWorkspace={onEnterCurrent} />);
 
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
@@ -331,7 +334,7 @@ describe('P4–P5 · 切区验密 / 同区不验', () => {
   it('P4-2 密码输错 ⇒ 报错留在表单，不切区不重载', async () => {
     seedTwoWorkspaces();
     h.gateHashes['idplan-ws-b'] = await hashPassword('6666');
-    const el = renderUi(<WorkspacePicker variant="page" />);
+    const el = renderUi(<WorkspacePicker />);
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
     const input = el.querySelector<HTMLInputElement>('[data-workspace-gate-input]');
@@ -344,10 +347,10 @@ describe('P4–P5 · 切区验密 / 同区不验', () => {
     expect(currentWorkspaceIdSync()).toBe('ws-default');
   });
 
-  it('P4-3 密码输对 ⇒ 当前区切换 + 进入/手动切换标记落盘 + 整页 reload', async () => {
+  it('P4-3 密码输对 ⇒ 当前区切换 + 进入标记落盘 + 整页 reload', async () => {
     const wsB = seedTwoWorkspaces();
     h.gateHashes['idplan-ws-b'] = await hashPassword('6666');
-    const el = renderUi(<WorkspacePicker variant="page" />);
+    const el = renderUi(<WorkspacePicker />);
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
     const input = el.querySelector<HTMLInputElement>('[data-workspace-gate-input]');
@@ -357,16 +360,13 @@ describe('P4–P5 · 切区验密 / 同区不验', () => {
 
     expect(currentWorkspaceIdSync(), '验密通过后当前区必须切过去').toBe(wsB);
     expect(hasWorkspaceEntryStarted(), '进入流程标记必须落盘').toBe(true);
-    expect(hasWorkspaceManuallySwitched(), '手动切换标记必须落盘').toBe(true);
     expect(h.reloads, '换库必须整页 reload').toBe(1);
   });
 
-  it('P5 同区选中 ⇒ 不验密不重载，page 态回调回身份引导', async () => {
+  it('P5 同区选中 ⇒ 不验密不重载，回调回身份引导', async () => {
     listWorkspaces();
     const onEnterCurrent = vi.fn();
-    const el = renderUi(
-      <WorkspacePicker variant="page" onEnterCurrentWorkspace={onEnterCurrent} />,
-    );
+    const el = renderUi(<WorkspacePicker onEnterCurrentWorkspace={onEnterCurrent} />);
 
     await click(el.querySelector('[data-workspace-item="ws-default"]'));
 
@@ -380,7 +380,7 @@ describe('P4–P5 · 切区验密 / 同区不验', () => {
 describe('P6 · 新建工作区（表单 → 建库 → 以 Owner 进入）', () => {
   it('P6-1 校验：缺区名 / 缺 Owner 名 / 密码过短 / 两次不一致都不提交', async () => {
     listWorkspaces();
-    const el = renderUi(<WorkspacePicker variant="page" />);
+    const el = renderUi(<WorkspacePicker />);
     await click(el.querySelector('[data-workspace-new]'));
 
     // 什么都没填
@@ -411,7 +411,7 @@ describe('P6 · 新建工作区（表单 → 建库 → 以 Owner 进入）', ()
 
   it('P6-2 合法提交 ⇒ 建库入库 + 注册表登记 + 区级身份键落 Owner + 切区 reload', async () => {
     listWorkspaces();
-    const el = renderUi(<WorkspacePicker variant="page" />);
+    const el = renderUi(<WorkspacePicker />);
     await click(el.querySelector('[data-workspace-new]'));
 
     setInputValue(el.querySelector<HTMLInputElement>('[data-workspace-name-input]')!, '新工作室');
@@ -438,27 +438,14 @@ describe('P6 · 新建工作区（表单 → 建库 → 以 Owner 进入）', ()
     expect(currentWorkspaceIdSync()).toBe(created.id);
     expect(localStorage.getItem(identityKeyFor(created.id))).toBe('mem_new_owner');
     expect(hasWorkspaceEntryStarted()).toBe(true);
-    expect(hasWorkspaceManuallySwitched()).toBe(true);
     expect(h.reloads, '建区后整页 reload 换库').toBe(1);
   });
 
-  it('P6-3 侧栏入口（modal 态）⇒ 同区选中直接关浮层', async () => {
-    listWorkspaces();
-    const onClose = vi.fn();
-    const el = renderUi(<WorkspacePicker variant="modal" onClose={onClose} />);
-
-    // ⚠️ modal 走 Modal 的 createPortal 到 body —— 不能从宿主容器里找元素
-    await click(document.querySelector('[data-workspace-item="ws-default"]'));
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(h.reloads).toBe(0);
-    void el;
-  });
-
-  it('P6-4 注册表当前区切换在 reload 前落盘（setCurrentWorkspaceId 直接写注册表）', () => {
+  it('P6-3 注册表当前区切换在 reload 前落盘（setCurrentWorkspaceId 直接写注册表）', () => {
     const wsB = seedTwoWorkspaces();
     expect(currentWorkspaceIdSync()).toBe('ws-default');
     setCurrentWorkspaceId(wsB);
     expect(currentWorkspaceIdSync()).toBe(wsB);
   });
 });
+

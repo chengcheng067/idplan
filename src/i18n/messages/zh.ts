@@ -404,8 +404,6 @@ export const zhMessages = {
   'workspace.gate.inputPlaceholder': '工作区密码',
   'workspace.gate.wrong': '密码不对，无法进入这个工作区。',
   'workspace.gate.submit': '进入',
-  'workspace.sidebar.action': '切换工作区',
-  'workspace.sidebar.actionTitle': '切换到这台电脑上的其他工作区（切到别的区要输那个区的密码）',
   /* ───────────────────── 我的任务（MyTasksPage）───────────────────── */
   'myTasks.subtitle': '只显示与我相关的内容',
   'myTasks.groupAria': '任务分组方式',
