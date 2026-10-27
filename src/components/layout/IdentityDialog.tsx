@@ -10,6 +10,7 @@ import { matchActiveMemberByName, useRoleGuard } from '../../hooks/useRoleGuard'
 import { createMemberActions } from '../../store/useMembersStore';
 import { resolveErrorText, MemberRoleKind } from '../../core/types/enums';
 import { memberHasPassword, type Member } from '../../core/types/entities';
+import { verifyPassword } from '../../lib/password';
 import { ROLE_SENTINELS } from '../../core/types/role-sentinel';
 import { Modal } from '../common/Modal';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -29,11 +30,28 @@ import { logError, logUser } from '../../core/services/log.service';
  *   'no_admin'  （admin_prompt 选「我不是管理员」）→ 关闭时置 firstRunDismissed，
  *                 防首启闸门无限重弹；
  *   'name_miss' （姓名未命中）→ 关闭仅关闭，不置位（闸门条件此时不成立）。
+ *
+ * §新建管理员 + 密码闸（2026-10-27）：
+ *   成员入口未命中 / 「以管理员身份新建」按钮 → 告知 + 二次确认 → **管理员密码闸**：
+ *     · 库里所有管理员都没有 passwordHash（老库首次）→「设置管理员密码」表单
+ *       （≥4 位 + 确认一致），同一密码写到现有管理员们与新建者身上（库级闸）；
+ *     · 任一管理员已设密码 →「输入管理员密码」表单，验证失败不插库、可重试。
+ *   成员通道（命中进入 / password_input）与 adminIntent 既有 flow 行为不变。
  */
 
 const AVATAR_COLORS = ['#3D6B5B', '#D9A441', '#C4553B', '#7E97A8', '#A99BB5', '#2C3E50'];
 
 type MismatchKind = 'no_admin' | 'name_miss' | null;
+
+/**
+ * 管理员密码闸（2026-10-27 · 权限修复 2 · 过渡方案，B 多工作区另立版本）：
+ *   setup  —— 老库首次：库里所有管理员都没有 passwordHash ⇒ 先给管理员设一个密码
+ *            （≥4 位 + 确认一致），同一密码写到现有管理员们与新建的这个身上（库级闸）；
+ *   verify —— 已有管理员设了密码 ⇒ 输入闸密码，验证失败不插库（可重试，不锁定）。
+ * 只挂在「以管理员身份新建」的确认框之后（askCreateAdmin 那条路径）；
+ * 成员通道（命中进入 / password_input）与 adminIntent 既有 flow 的行为不变。
+ */
+type PwGateKind = 'setup' | 'verify' | null;
 
 export function IdentityDialog(): JSX.Element | null {
   /* 取词函数必须在**任何提前 return 之前**取（下面 `if (flow === 'closed') return null` 之后
@@ -60,6 +78,11 @@ export function IdentityDialog(): JSX.Element | null {
   const [busy, setBusy] = useState(false);
   /** 「以管理员身份新建」的二次确认是否打开（见文件头 §新建管理员） */
   const [askCreateAdmin, setAskCreateAdmin] = useState(false);
+  /** 管理员密码闸（见 PwGateKind 注释）：确认框通过后进入 setup / verify 表单 */
+  const [pwGate, setPwGate] = useState<PwGateKind>(null);
+  /** 密码闸表单输入（setup 用 adminPw + adminPwConfirm，verify 只用 adminPw） */
+  const [adminPw, setAdminPw] = useState('');
+  const [adminPwConfirm, setAdminPwConfirm] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,6 +92,9 @@ export function IdentityDialog(): JSX.Element | null {
       setNotice(null);
       setBusy(false);
       setAskCreateAdmin(false);
+      setPwGate(null);
+      setAdminPw('');
+      setAdminPwConfirm('');
       // 对话框面板渲染后聚焦输入框
       const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
       return () => window.clearTimeout(timer);
@@ -85,6 +111,9 @@ export function IdentityDialog(): JSX.Element | null {
       setMismatchKind(null);
       setBusy(false);
       setPassword('');
+      setPwGate(null);
+      setAdminPw('');
+      setAdminPwConfirm('');
     }
     return undefined;
   }, [flow]);
@@ -105,10 +134,13 @@ export function IdentityDialog(): JSX.Element | null {
    *   · `adminIntent === true` 且姓名未命中（首启 / 库里还没有管理员）；
    *   · 成员入口（`adminIntent === false`）姓名未命中（本轮新增，见文件头 §新建管理员）。
    *
+   * `password`：管理员密码闸（2026-10-27）通过后传入的**明文**——交给 repo 哈希
+   * （`CreateMemberCmd.password` 既有契约，local 走 PBKDF2），绝不在此落明文于库。
+   *
    * 抛错交给调用方的 catch —— 两条调用点对失败的处置（toast + logError）完全一致，
    * 在各自那里再写一遍就是第三份孪生实现。
    */
-  const createAdminAndEnter = async (trimmed: string): Promise<void> => {
+  const createAdminAndEnter = async (trimmed: string, password?: string): Promise<void> => {
     const created = await repos.members.insert({
       name: trimmed,
       /*
@@ -120,6 +152,7 @@ export function IdentityDialog(): JSX.Element | null {
       contact: null,
       avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
       roleKind: MemberRoleKind.Admin,
+      password,
     });
     useMembersStore.getState().upsert(created);
     setCurrentMember(created.id);
@@ -141,15 +174,81 @@ export function IdentityDialog(): JSX.Element | null {
       ? activeAdminNames.join('、')
       : `${activeAdminNames.slice(0, 3).join('、')} 等 ${activeAdminNames.length} 位`;
 
-  /** 二次确认的「确认」：真正建号并进入 */
-  const confirmCreateAdmin = async (): Promise<void> => {
+  /**
+   * 二次确认的「确认」：**不再直接建号**（2026-10-27 密码闸），转入密码表单：
+   *   · 库里任一现有管理员已设密码 ⇒ verify（输入闸密码，错则不插库）；
+   *   · 所有管理员都没设（老库首次）⇒ setup（先给管理员设密码，同一密码写到
+   *     现有管理员们与新建者身上——闸是库级的）。
+   * 判据读 `passwordHash`（local 概念；remote 模式服务端不下发哈希，见 entities.ts）。
+   */
+  const confirmCreateAdmin = (): void => {
     if (busy) return;
+    if (!name.trim()) return;
+    const anyAdminHasPw = members.some(
+      (m) => m.active && m.roleKind === MemberRoleKind.Admin && m.passwordHash,
+    );
+    setAskCreateAdmin(false);
+    setAdminPw('');
+    setAdminPwConfirm('');
+    setNotice(null);
+    setPwGate(anyAdminHasPw ? 'verify' : 'setup');
+  };
+
+  /** 取任一已设密码管理员的哈希（verify 分支的比对基准；库级闸 ⇒ 任一份都等价） */
+  const anyAdminHash = (): string | null =>
+    members.find((m) => m.active && m.roleKind === MemberRoleKind.Admin && m.passwordHash)
+      ?.passwordHash ?? null;
+
+  /** 关闭密码闸表单（取消：回到身份对话框原样，姓名还在，可改名重试） */
+  const closePwGate = (): void => {
+    setPwGate(null);
+    setAdminPw('');
+    setAdminPwConfirm('');
+    setNotice(null);
+  };
+
+  /**
+   * 密码闸表单提交（setup / verify 共用入口，分支内各自校验）：
+   *   · setup：≥4 位 + 两次一致 → 同一明文 update 到所有未设密码的现有管理员
+   *     （repo 各自 PBKDF2 哈希），再带同一明文建号进入；
+   *   · verify：对任一现有管理员的哈希比对（src/lib/password.ts，前端本地比对），
+   *     失败只报错不插库、可重试（不做锁定）。
+   */
+  const submitAdminGate = async (): Promise<void> => {
+    if (busy || !pwGate) return;
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || !adminPw) return;
+
+    if (pwGate === 'setup') {
+      if (adminPw.length < 4) {
+        setNotice(t('ui.identity.pw.tooShort'));
+        return;
+      }
+      if (adminPw !== adminPwConfirm) {
+        setNotice(t('ui.identity.pw.mismatch'));
+        return;
+      }
+    }
+
     setBusy(true);
     try {
-      await createAdminAndEnter(trimmed);
-      setAskCreateAdmin(false);
+      if (pwGate === 'verify') {
+        const ok = await verifyPassword(adminPw, anyAdminHash());
+        if (!ok) {
+          setNotice(t('ui.identity.pw.wrong'));
+          return;
+        }
+      } else {
+        /* 库级闸升级：同一密码写到「这台机器上现有的管理员们」身上 */
+        for (const m of members) {
+          if (m.active && m.roleKind === MemberRoleKind.Admin && !m.passwordHash) {
+            const updated = await repos.members.update(m.id, { password: adminPw });
+            useMembersStore.getState().upsert(updated);
+          }
+        }
+      }
+      await createAdminAndEnter(trimmed, adminPw);
+      setPwGate(null);
     } catch (err) {
       toast('error', resolveErrorText(err, t, t('ui.identity.setFailed')));
       logError('身份', `新建管理员失败：「${trimmed}」`, err);
@@ -494,12 +593,12 @@ export function IdentityDialog(): JSX.Element | null {
     <>
       {identityDialog}
       {/*
-        ★ 2026-10-27 · 「以管理员身份新建」的告知 + 二次确认（她选定的形态：不设密码、
-        不多一步输入，只让人明确知道自己在做什么）。
+        ★ 2026-10-27 · 「以管理员身份新建」的告知 + 二次确认。
 
         文案里必须出现**已有管理员的姓名**与**后果**：这台机器上已经有人是管理员，
         新建一个管理员等于再开一把通往全部项目 / 成员 / 备份的钥匙。只写「确定吗」
-        是没告知；写成密码验证又违反她「别加一道没用的门」的取向。
+        是没告知。确认后**不再直接建号** —— 进入管理员密码闸（`pwGateDialog`，
+        setup / verify 两态，见 PwGateKind 注释）。
 
         ⚠️ 取消只关确认框（`onCancel` 里只置 false）：身份对话框保持原样、姓名还在输入框里，
         用户可以改用已有成员的名字重试。这是「取消不能把人送回死胡同」的落点。
@@ -510,13 +609,140 @@ export function IdentityDialog(): JSX.Element | null {
         confirmText={t('ui.identity.confirmAdmin')}
         dataAttrs={{ 'data-identity-create-admin-confirm': '' }}
         onCancel={() => setAskCreateAdmin(false)}
-        onConfirm={() => void confirmCreateAdmin()}
+        onConfirm={confirmCreateAdmin}
       >
         {t('ui.identity.createAdminConfirmBody', {
           admins: adminsText,
           name: name.trim(),
         })}
       </ConfirmDialog>
+
+      {/*
+        ★ 2026-10-27 · 管理员密码闸浮层（ConfirmDialog 的**兄弟**浮层，与上方
+        identityDialog 同一模式：不渲染进彼此子树，遮罩 / 焦点圈禁互不打架）。
+        setup = 老库首次设密码；verify = 已有密码要验。取消回到身份对话框原样。
+      */}
+      {(pwGate === 'setup' || pwGate === 'verify') && (
+        <Modal
+          open
+          onClose={closePwGate}
+          ariaLabel={
+            pwGate === 'setup' ? t('ui.identity.pw.setupTitle') : t('ui.identity.pw.verifyTitle')
+          }
+        >
+          <div
+            tabIndex={-1}
+            data-identity-pw-gate={pwGate}
+            className="glass-strong iridescent-border dialog-pop w-full max-w-md rounded-2xl p-5 shadow-soft outline-none"
+          >
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <h2 className="font-display text-display-md">
+                {pwGate === 'setup'
+                  ? t('ui.identity.pw.setupTitle')
+                  : t('ui.identity.pw.verifyTitle')}
+              </h2>
+              <button
+                type="button"
+                onClick={closePwGate}
+                aria-label={t('common.close')}
+                className="rounded-md p-1 text-mist hover:bg-sand"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <p className="text-sm leading-6 text-ink/80">
+                {pwGate === 'setup'
+                  ? t('ui.identity.pw.setupLead')
+                  : t('ui.identity.pw.verifyLead')}
+              </p>
+              {pwGate === 'setup' ? (
+                <>
+                  <ImeInput
+                    type="password"
+                    value={adminPw}
+                    onChange={(e) => {
+                      setAdminPw(e.target.value);
+                      setNotice(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        void submitAdminGate();
+                      }
+                    }}
+                    placeholder={t('ui.identity.pw.newPlaceholder')}
+                    data-identity-pw-input=""
+                    disabled={busy}
+                    autoComplete="new-password"
+                    className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+                  />
+                  <ImeInput
+                    type="password"
+                    value={adminPwConfirm}
+                    onChange={(e) => {
+                      setAdminPwConfirm(e.target.value);
+                      setNotice(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        void submitAdminGate();
+                      }
+                    }}
+                    placeholder={t('ui.identity.pw.confirmPlaceholder')}
+                    data-identity-pw-confirm=""
+                    disabled={busy}
+                    autoComplete="new-password"
+                    className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+                  />
+                </>
+              ) : (
+                <ImeInput
+                  type="password"
+                  value={adminPw}
+                  onChange={(e) => {
+                    setAdminPw(e.target.value);
+                    setNotice(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void submitAdminGate();
+                    }
+                  }}
+                  placeholder={t('ui.identity.pw.inputPlaceholder')}
+                  data-identity-pw-input=""
+                  disabled={busy}
+                  autoComplete="current-password"
+                  className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-pine"
+                />
+              )}
+              {notice && <p className="text-xs text-clay">{notice}</p>}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closePwGate}
+                  className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitAdminGate()}
+                  disabled={busy || !adminPw}
+                  data-identity-pw-submit=""
+                  className="rounded-md bg-pine px-4 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:opacity-50"
+                >
+                  {pwGate === 'setup'
+                    ? t('ui.identity.pw.submitSetup')
+                    : t('ui.identity.pw.submitVerify')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

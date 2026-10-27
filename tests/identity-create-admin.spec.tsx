@@ -204,22 +204,24 @@ describe('未进入身份 · 新建管理员出口', () => {
     ).toBe(true);
   });
 
-  it('④ 确认 ⇒ 新增一条 admin、currentMemberId 指向它、身份流关闭', async () => {
+  it('④ 确认 ⇒ 出现管理员密码闸表单（2026-10-27 起不再一键建号；完整 setup 流程锁在 identity-admin-password-gate.spec.tsx）', async () => {
     setInputValue(q<HTMLInputElement>('[data-identity-name-input]')!, '新来的同事');
     await click(q('[data-identity-create-admin]'));
     await click(q('[data-identity-create-admin-confirm] [data-confirm-ok]'));
 
-    expect(h.inserted, '确认后必须真的建号').toHaveLength(1);
-    expect(h.inserted[0].roleKind, '新建的必须是管理员').toBe(MemberRoleKind.Admin);
-
-    const members = useMembersStore.getState().members;
-    expect(members).toHaveLength(2);
-    const created = members.find((m) => m.name === '新来的同事');
-    expect(created, '成员表里应有新管理员').toBeTruthy();
-    expect(created!.roleKind).toBe(MemberRoleKind.Admin);
-
-    expect(useSettingsStore.getState().currentMemberId).toBe(created!.id);
-    expect(useSettingsStore.getState().identityFlow, '建号成功后身份流应关闭').toBe('closed');
+    /*
+     * ⚠️ 2026-10-27 权限修复 2：确认后不再直接建号，而是进入管理员密码闸
+     * （老库无密码 ⇒ setup 态）。此文件只锁「确认 → 出表单、未插库」这一段——
+     * setup 的完整正向流程（哈希落库、现有管理员同步、verify 通过）在
+     * tests/identity-admin-password-gate.spec.tsx 的 G 段。
+     */
+    expect(
+      q('[data-identity-pw-gate="setup"]'),
+      '老库无密码 ⇒ 确认后必须出现设置密码表单',
+    ).not.toBeNull();
+    expect(h.inserted, '密码表单提交前绝不该建号').toHaveLength(0);
+    expect(useSettingsStore.getState().currentMemberId).toBeNull();
+    expect(useSettingsStore.getState().identityFlow).toBe('name_input');
   });
 
   it('R1 命中已有成员 ⇒ 仍直接进入，且不调用 insert（原路径不许被带坏）', async () => {

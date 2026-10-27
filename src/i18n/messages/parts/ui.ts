@@ -112,6 +112,22 @@ export const zh = {
   'ui.identity.setAdminTitle': '设置管理员身份',
   'ui.identity.nameInputTitle': '输入你的姓名',
   'ui.identity.cannotEnterTitle': '暂时无法进入',
+  /* 2026-10-27 · 管理员密码闸（权限修复 2 · 过渡方案）：
+     「以管理员身份新建」确认后的两态表单——setup=老库首次设密码（同一密码写到
+     现有管理员们与新建者身上，库级闸）；verify=已有密码要验（失败不插库可重试）。 */
+  'ui.identity.pw.setupTitle': '设置管理员密码',
+  'ui.identity.pw.setupLead':
+    '为保护这台电脑上的项目，先给管理员设一个密码。今后在这台电脑上新建管理员，都需要先输入它。',
+  'ui.identity.pw.verifyTitle': '输入管理员密码',
+  'ui.identity.pw.verifyLead': '这台电脑的管理员已设密码，输入后才能新建管理员。',
+  'ui.identity.pw.newPlaceholder': '设置密码（至少 4 位）',
+  'ui.identity.pw.confirmPlaceholder': '再输一遍密码',
+  'ui.identity.pw.inputPlaceholder': '管理员密码',
+  'ui.identity.pw.tooShort': '密码至少 4 位。',
+  'ui.identity.pw.mismatch': '两次输入的密码不一样，请再看一眼。',
+  'ui.identity.pw.wrong': '密码不对，无法新建管理员。',
+  'ui.identity.pw.submitSetup': '保存并新建',
+  'ui.identity.pw.submitVerify': '确认',
 
   /* ── layout/MemberIdentityPicker ── */
   'ui.identity.enterTitle': '点击进入身份（我的任务按此身份过滤）',
@@ -314,6 +330,24 @@ export const en = {
   'ui.identity.setAdminTitle': 'Set administrator identity',
   'ui.identity.nameInputTitle': 'Enter your name',
   'ui.identity.cannotEnterTitle': 'Temporarily unavailable',
+  /* Admin password gate (2026-10-27, transitional): the two form states after the
+     "create as admin" confirmation — setup = first-time password for a legacy library
+     (same password written to existing admins and the new one, library-level gate);
+     verify = a password already exists (wrong password ⇒ nothing is inserted, retryable). */
+  'ui.identity.pw.setupTitle': 'Set the admin password',
+  'ui.identity.pw.setupLead':
+    'To protect the projects on this computer, set a password for admins first. Creating another admin on this machine will require it from now on.',
+  'ui.identity.pw.verifyTitle': 'Enter the admin password',
+  'ui.identity.pw.verifyLead':
+    'Admins on this computer are password-protected. Enter the password to create a new admin.',
+  'ui.identity.pw.newPlaceholder': 'Set a password (at least 4 characters)',
+  'ui.identity.pw.confirmPlaceholder': 'Repeat the password',
+  'ui.identity.pw.inputPlaceholder': 'Admin password',
+  'ui.identity.pw.tooShort': 'The password needs at least 4 characters.',
+  'ui.identity.pw.mismatch': 'The two passwords do not match. Please check them.',
+  'ui.identity.pw.wrong': 'Wrong password — the new admin was not created.',
+  'ui.identity.pw.submitSetup': 'Save and create',
+  'ui.identity.pw.submitVerify': 'Confirm',
 
   'ui.identity.enterTitle': 'Enter your identity (My tasks are filtered by it)',
   'ui.identity.enter': 'Enter',
