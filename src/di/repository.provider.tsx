@@ -7,7 +7,10 @@ import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { detectLocalDbVersion, isDbAheadOfApp, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
 import { recoverZombieExecutions } from '../core/execution/execution-recovery';
-import { currentWorkspaceDbName, currentWorkspaceIdSync, listWorkspaces } from '../lib/workspace-registry';
+import { currentWorkspaceDbName, currentWorkspaceIdSync, listWorkspaces, selectedWorkspaceIdSync } from '../lib/workspace-registry';
+import type { IWorkspaceRepository } from '../core/repositories/interfaces';
+import { API_TOKEN_KEY, RemoteWorkspacesRepo, RestClient } from '../core/repositories/remote/rest.client';
+import { WorkspacePicker } from '../components/workspace/WorkspacePicker';
 /*
  * ★ i18n 笔 misc：本文件同时用**两种**取词形态，故 import 时先把模块级取词改名。
  *   · `translate`（模块级 `t`，不订阅）：只给 `startRepositories` 那次「算一次就完」
@@ -38,6 +41,57 @@ export const API_TOKEN_EVENT = 'idplan:api-token-changed';
  */
 
 const RepoContext = createContext<IRepositoryBundle | null>(null);
+
+/**
+ * remote 形态下「还没有当前区」时用的**轻量工作区仓储**（只含五个工作区能力）。
+ *
+ * ── 为什么需要它，以及为什么走这套构造 ──
+ * NAS 版（remote）**没有本地分库**：`X-Workspace-Id` 是在建 bundle 那一刻注入的。
+ * 于是「先建 bundle 再让用户选区」这个顺序在 NAS 上是错的 —— 第一批数据请求会不带
+ * 该头（或被灌上桌面版遗产 `ws-default`），用户选完 A 公司后看到的是 ws-default 的
+ * 数据。⇒ 无区时**不建 bundle**，先让用户把公司选出来。
+ *
+ * 而选公司这一步本身就得读/写那五个端点，于是需要一个 repo。三条路径的取舍：
+ *   (a) 让 `RepoProvider` 造一个「只有 workspaces 的轻量 bundle」并塞进 Context ——
+ *       会把「Context 里一定是一个完整 bundle」这条不变量撕开，全仓 `useRepos()`
+ *       的每个消费方都得重新怀疑自己拿到的东西，代价远大于收益；
+ *   (b) **在本文件里就地 `new` 一个 `RemoteWorkspacesRepo`**，只交给这个选择器用，
+ *       **不进 Context、不进 DI 树** —— 选完区必 reload，reload 后
+ *       `selectedWorkspaceIdSync()` 有值 ⇒ 走正常 bundle 路径，两条通路不会并存。
+ *   ⇒ 取 (b)。可行性核实（三处，缺一就要退回 (a)）：
+ *     ① `RemoteWorkspacesRepo` 构造函数只收一个 `RestClient`（rest.client.ts:672）；
+ *     ② `RestClient` 的四个构造参数全是本文件已有/可算的：`baseUrl`（`appEnv`）、
+ *        token（三级取值）、timeout（缺省）、`workspaceId`（**此处刻意留空**——
+ *        `list`/`create` 不需要它，服务端按路径里的 id 定位，且空值时客户端根本不发
+ *        这个头，见 RestClient 构造注释）；
+ *     ③ `rest.client` 本来就已进主包（设置里的「NAS 服务」区与插件区都**静态** import
+ *        它），故这里静态 import 不增加任何体积；反过来说「动态 import 能把它挪出
+ *        主包」在本仓本来就不成立（`npm run build` 的 rollup 警告逐字说了这件事）。
+ */
+function buildWorkspaceOnlyRepo(): IWorkspaceRepository {
+  /*
+   * ⚠️ token 三级取值与 `createRemoteRepositories` 内部那段**必须同口径**：
+   *   ① localStorage `idplan.apiToken`（设置 → NAS 服务里手填，最高优先）
+   *   ② 构建期 `VITE_API_TOKEN`
+   *   ③ 空串
+   *   键名共用 `API_TOKEN_KEY`（不是手打字面量），只有「降级顺序」这三行是复刻。
+   *   为什么不干脆把那段抽成导出函数：那要改 rest.client.ts 的公共面，而本批的
+   *   所有权只在 `src/di/`；三行的复刻风险低于一次跨文件契约变更。
+   */
+  const env = import.meta.env as Record<string, string | undefined>;
+  const stored =
+    typeof localStorage !== 'undefined' ? (localStorage.getItem(API_TOKEN_KEY) ?? '').trim() : '';
+  const apiToken = stored || (env.VITE_API_TOKEN ?? '').trim();
+  const baseUrl = appEnv.apiBaseUrl.replace(/\/+$/, '');
+  /*
+   * 空基址必须在这里就抛（而不是让请求打到当前 origin 的 `/workspaces`）：
+   * `createRemoteRepositories` 也有同一道校验（`coreErr.remote.baseUrlRequired`），
+   * 但本函数**没有走它**（只 new 了一个 RestClient），漏建这道守卫的症状是
+   * 「NAS 地址没填时，界面卡在『正在读取工作区…』很久才超时」——失败原因被时间吞掉。
+   */
+  if (!baseUrl) throw new Error('remote apiBaseUrl is empty');
+  return new RemoteWorkspacesRepo(new RestClient(baseUrl, apiToken));
+}
 
 /** 闸门状态：pending=等待用户导出；exporting=导出中；failed=导出失败（可重试） */
 type GateState = 'pending' | 'exporting' | 'failed';
@@ -142,6 +196,48 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
     return () => window.removeEventListener(API_TOKEN_EVENT, onTokenChanged);
   }, []);
 
+  /**
+   * ★ 多工作区 · 批 5（NAS 首屏选公司）：remote 且本浏览器**没选过区**时的闸。
+   *
+   * `null` = 还没判定（首帧）；`true` = 需要先选公司（**不建 bundle**）；
+   * `false` = 有当前区，走原启动序列。
+   *
+   * 为什么判据是 `selectedWorkspaceIdSync()`（显式选过）而不是
+   * `currentWorkspaceIdSync()`（注册表首项兜底）：后者在 NAS 上永远有值——
+   * 注册表是**桌面版分库方案的载体**，它那条 `ws-default` 是懒迁移播下的遗产，
+   * 与服务器上有哪些区毫无关系。拿它当判据等于「NAS 版永远认为用户选好了区」，
+   * 首批请求全部落到 ws-default。见 `workspace-registry.selectedWorkspaceIdSync`。
+   */
+  const [needsWorkspacePick, setNeedsWorkspacePick] = useState<boolean | null>(null);
+  /** 无区闸用的轻量 repo（只到「选完 reload」为止，不进 Context） */
+  const [pickRepo, setPickRepo] = useState<IWorkspaceRepository | null>(null);
+  /** 轻量 repo 构造失败（NAS 地址没填 / 动态 import 失败）——不许白屏 */
+  const [pickRepoError, setPickRepoError] = useState(false);
+  const [pickRepoNonce, setPickRepoNonce] = useState(0);
+
+  /*
+   * 无区闸的构造：只在 remote 且没选过区时跑。
+   * ⚠️ 与 `repoEpoch` 无关：这一支**不建 bundle**，令牌改了也不影响（选完就 reload）。
+   */
+  useEffect(() => {
+    if (appEnv.dataSource !== 'remote') {
+      setNeedsWorkspacePick(false);
+      return;
+    }
+    if (selectedWorkspaceIdSync() !== null) {
+      setNeedsWorkspacePick(false);
+      return;
+    }
+    setNeedsWorkspacePick(true);
+    setPickRepoError(false);
+    try {
+      setPickRepo(buildWorkspaceOnlyRepo());
+    } catch {
+      // NAS 地址没填（`RestClient` 构造前置校验）等装配失败 ⇒ 给可重试的失败面
+      setPickRepoError(true);
+    }
+  }, [pickRepoNonce]);
+
   useEffect(() => {
     cancelledRef.current = false;
     void (async () => {
@@ -181,6 +277,13 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
         await startRepositories(dbName);
         return;
       }
+      /*
+       * ★ 批 5：remote 且本浏览器**没选过区** ⇒ **不建 bundle**（否则第一批请求没有
+       *   `X-Workspace-Id`，会落到 ws-default 上）。下方渲染段改为先给选公司界面。
+       *   判据是**同步**读的（不用 `needsWorkspacePick` 那个 state）：本 effect 与
+       *   上面构造轻量 repo 的 effect 在同一次 commit 里跑，靠 state 会有一帧竞态。
+       */
+      if (selectedWorkspaceIdSync() === null) return;
       await startRepositories();
     })();
     return () => {
@@ -203,6 +306,52 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
   }, [startRepositories]);
 
   const value = useMemo(() => bundle, [bundle]);
+
+  /*
+   * ★ 批 5 · 无区闸（NAS 首屏选公司）：**在 gate/fatal/bundle 三档之前**判。
+   *
+   * 顺序为什么必须最前：这一屏的意义是「还没有 bundle」，而 gate（迁移前备份）与
+   * fatal（存储/版本不可用）两支描述的**都是本地 Dexie 的病情** —— NAS 形态下
+   * 它们本就不执行（见下方 effect 的 `dataSource === 'local'` 分支），state 恒为
+   * null，所以放前面不会误挡任何既有分支。
+   *
+   * 只 return 选公司界面、**不渲染 children**：children 里第一个消费 `useRepos()` 的
+   * 组件（AppShell → useProjectsBootstrap）会当场抛「仓储上下文缺失」。
+   */
+  if (needsWorkspacePick === true) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-cream px-6 py-10">
+        {pickRepoError ? (
+          <div className="w-[440px] max-w-[92vw] rounded-2xl border border-clay-soft bg-paper p-5 text-center shadow-soft">
+            <h1 className="font-display text-display-md text-ink">
+              {t('workspace.picker.title')}
+            </h1>
+            <p className="mt-2 text-[13px] leading-5 text-mist">
+              {t('workspace.pick.unreachable')}
+            </p>
+            <button
+              type="button"
+              data-workspace-pick-retry=""
+              onClick={() => setPickRepoNonce((n) => n + 1)}
+              className="mt-4 rounded-full bg-pine px-4 py-2 text-sm font-medium text-paper"
+            >
+              {t('workspace.picker.retry')}
+            </button>
+          </div>
+        ) : pickRepo === null ? (
+          <div
+            data-workspace-picker=""
+            className="w-[440px] max-w-[92vw] rounded-2xl border border-line bg-paper p-5 shadow-soft"
+          >
+            <h1 className="font-display text-display-md text-ink">{t('workspace.picker.title')}</h1>
+            <p className="mt-2 text-[13px] leading-5 text-mist">{t('workspace.picker.loading')}</p>
+          </div>
+        ) : (
+          <WorkspacePicker repo={pickRepo} />
+        )}
+      </div>
+    );
+  }
 
   if (gate) {
     // ★ 阻塞式闸门：不渲染 children（数据尚未就绪），也不提供任何跳过路径

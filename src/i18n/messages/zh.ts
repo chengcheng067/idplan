@@ -381,6 +381,17 @@ export const zhMessages = {
   'workspace.picker.title': '选择工作区',
   'workspace.picker.lead': '这台电脑上有多个工作区（每家的数据完全分开），选择要进入的一个。',
   'workspace.picker.aria': '工作区选择',
+  /* 批 5（NAS 首屏选公司）：列表的「读取中 / 读取失败 / 重试」三句。
+     ⚠️ 失败那句**不能**说成「没有工作区」——空数组 ≠ 读取失败（本仓审计纪律）。 */
+  'workspace.picker.loading': '正在读取工作区…',
+  'workspace.picker.loadFailed': '工作区读取失败，请重试。',
+  'workspace.picker.loadFailedHint': '这不代表没有工作区，只是这次没读到。',
+  'workspace.picker.retry': '重试',
+  /* 批 5：NAS 形态下「连工作区列表都还没连上」（NAS 地址未配置 / 客户端装配失败）。
+     与 `workspace.picker.loadFailed` 分开是因为下一步动作不同：那句是「再试一次」，
+     这句是「去设置里填 NAS 地址」。 */
+  'workspace.pick.unreachable':
+    '连不上这台 NAS 的工作区列表。请确认 NAS 地址与服务是否正常，然后再试。',
   'workspace.picker.newAction': '新建工作区',
   'workspace.currentTag': '当前所在',
   'workspace.ownerLine': 'Owner：{name}',
@@ -403,6 +414,10 @@ export const zhMessages = {
   'workspace.gate.lead': '「{name}」已设置工作区密码，验证通过后进入。',
   'workspace.gate.inputPlaceholder': '工作区密码',
   'workspace.gate.wrong': '密码不对，无法进入这个工作区。',
+  /* 批 5：验密**抛错**（NAS 连不上 / 服务端 5xx）与「密码不对」必须分开说。
+     `RemoteWorkspacesRepo.verifyGate` 只把 401 吞成 false，其余照抛 —— 把网络故障
+     说成「密码不对」会让人一直重输密码，而问题在 NAS。 */
+  'workspace.gate.verifyFailed': '没能验证工作区密码（连接 NAS 失败），请重试。',
   'workspace.gate.submit': '进入',
   'workspace.setpw.title': '给这个工作区设一个密码',
   'workspace.setpw.lead':

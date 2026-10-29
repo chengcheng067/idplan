@@ -390,6 +390,15 @@ export const enMessages: Record<MessageKey, string> = {
   'workspace.picker.lead':
     'This computer has multiple workspaces (each team’s data is fully separated). Pick the one to enter.',
   'workspace.picker.aria': 'Workspace picker',
+  /* Batch 5 (NAS first screen · pick a company): reading / read-failed / retry.
+     ⚠️ The failure line must NOT read as "there are no workspaces" — an empty array
+     is not a failed read (repo-wide audit rule). */
+  'workspace.picker.loading': 'Reading workspaces…',
+  'workspace.picker.loadFailed': 'Could not read the workspace list. Please try again.',
+  'workspace.picker.loadFailedHint': 'This does not mean there are no workspaces — this read failed.',
+  'workspace.picker.retry': 'Retry',
+  'workspace.pick.unreachable':
+    'Cannot reach this NAS workspace list. Check the NAS address and service, then try again.',
   'workspace.picker.newAction': 'New workspace',
   'workspace.currentTag': 'Current',
   'workspace.ownerLine': 'Owner: {name}',
@@ -413,6 +422,9 @@ export const enMessages: Record<MessageKey, string> = {
   'workspace.gate.lead': '“{name}” is protected by a workspace password. Verify to enter.',
   'workspace.gate.inputPlaceholder': 'Workspace password',
   'workspace.gate.wrong': 'Wrong password — cannot enter this workspace.',
+  /* Batch 5: a throwing verify (NAS unreachable / 5xx) must read differently from
+     a wrong password — RemoteWorkspacesRepo.verifyGate only swallows 401. */
+  'workspace.gate.verifyFailed': 'Could not verify the workspace password (NAS unreachable). Please try again.',
   'workspace.gate.submit': 'Enter',
   'workspace.setpw.title': 'Set a password for this workspace',
   'workspace.setpw.lead':

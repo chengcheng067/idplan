@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 
@@ -11,9 +11,20 @@ import { MembersPageSection } from '../components/member/MembersPageSection';
 import { MonthlyCalendarView } from '../components/calendar/MonthlyCalendarView';
 import { DomainConfirmPrompt } from '../components/project/DomainConfirmPrompt';
 import { DataGate, useDataReadiness } from '../components/layout/DataGate';
-import { WorkspacePicker } from '../components/workspace/WorkspacePicker';
+import {
+  WorkspaceListError,
+  WorkspaceListLoading,
+  WorkspacePicker,
+} from '../components/workspace/WorkspacePicker';
 import { appEnv } from '../config/env';
-import { hasWorkspaceEntryStarted } from '../lib/workspace-registry';
+import {
+  currentWorkspaceIdSync,
+  hasWorkspaceEntryStarted,
+  listWorkspaces,
+  selectedWorkspaceIdSync,
+} from '../lib/workspace-registry';
+import { useRepos } from '../hooks/useRepos';
+import type { IWorkspaceRepository, WorkspaceSummary } from '../core/repositories/interfaces';
 import { useMembersStore } from '../store/useMembersStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUiStore, type HomeViewMode } from '../store/useUiStore';
@@ -118,25 +129,121 @@ export function HomePage(): JSX.Element {
   const readiness = useDataReadiness();
 
   /*
-   * ★ 多工作区 0016（0017 订正）：未进入身份的首屏在「区列表」与「身份引导」之间二选一。
-   *   判据（只在 local 数据源下成立；remote 无分库概念，永远走身份引导）：
-   *     只要「进入某区的流程」尚未开始，就**一律**先给工作区列表——不看区数量、
-   *     不看用户是否手动切过。产品口径是「先选公司，再选身份」：只有一个默认区
-   *     时也要显示这张卡片（列表里就一项），不再退回「请先进入身份」引导块。
-   *   ⚠️ `hasWorkspaceEntryStarted()` 这一条**必须留**：选区/建区成功后置位，
-   *   防止切完区 reload 回来又看到区列表（否则每次 reload 都要重选一次，死循环）。
-   *   ⚠️ 惰性初始化只判一次：本组件挂载即读 localStorage，选区/建区动作本身
-   *   会整页 reload，无存活的组件需要响应标记变化。**退出身份不 reload**，那一跃迁
-   *   由下方 `useEffect`（判 `isEntered`）补判一次，别把这条旧理由当成"永远只判一次"。
+   * ★ 多工作区 0016（0017 订正；批 5 放开到 NAS）
+   *   未进入身份的首屏在「区列表」与「身份引导」之间二选一。
+   *
+   * ── 判据按数据源分两支（这是本批的核心改动）──
+   *   · **local（桌面版）**：`hasWorkspaceEntryStarted()` 为假 ⇒ 一律先给工作区列表，
+   *     不看区数量（0017 口径「先选公司，再选身份」，只有一个默认区时也要显示）。
+   *     同步读 localStorage ⇒ 首帧就能定档，不需要 loading 档。
+   *   · **remote（NAS 版）**：判据是「**本浏览器有没有选过公司**」+「列表取没取到」。
+   *     `hasWorkspaceEntryStarted()` 在这里**不参与判定** —— 它是浏览器本地标记，
+   *     NAS 多人多端场景下 A 的进入动作不该影响 B 看到的界面（B 第一次打开有自己的
+   *     localStorage，本来就看不到 A 的标记；但同一个浏览器里「A 进过区」而「B 想
+   *     换公司」时，那条标记会挡住列表 —— 所以判据换成「有没有当前区」）。
+   *     ⚠️ 异步取列表 ⇒ 首屏多一个 `'loading'` 档（不闪空列表）。
+   *
+   * ── 为什么 remote 的失败**不许**退回身份引导 ──
+   *   `GET /api/workspaces` 抛错（NAS 断了 / 服务端 500）时退回引导，用户会以为
+   *   「这台 NAS 上没有公司」，于是去建一个重名的新区 —— 那比一次明确的失败糟得多。
+   *   本仓纪律「空数组 ≠ 读取失败」正是这一条：失败要给 `data-workspace-list-error`
+   *   的常驻可重试面。
    */
-  const [firstScreen, setFirstScreen] = useState<'workspace-list' | 'identity-guide'>(() =>
-    appEnv.dataSource === 'local' && !hasWorkspaceEntryStarted()
-      ? 'workspace-list'
-      : 'identity-guide',
-  );
+  const workspacesRepo: IWorkspaceRepository | undefined = useRepos().workspaces;
+  const remoteMode = appEnv.dataSource === 'remote';
 
   /*
-   * ★ 0018：退出身份后**重新判一次**首屏（标记已在 `setCurrentMember(null)` 里清掉）。
+   * ★ local（桌面版）的区列表**同步**取一次：注册表在 localStorage 里，首帧就有。
+   *   为什么不交给 `WorkspacePicker` 自取：`IWorkspaceRepository.list()` 是 Promise，
+   *   哪怕 local 实现内部同步读注册表，组件也只能在下一拍拿到 ⇒ 桌面版首屏会闪一帧
+   *   「正在读取工作区…」。0017 定的口径是「未进入身份 ⇒ 首屏**就是**区列表」，
+   *   这一帧闪烁是纯观感退化，且没有换来任何好处（数据本来就在手边）。
+   *   ⇒ 桌面版由本页同步取、作为 prop 传下去；只有 NAS 版才需要 loading 档。
+   *   ⚠️ 惰性 useState 而不是每次 render 重算：`listWorkspaces()` 会解析 JSON，
+   *     没必要跟着身份/搜索词的变化重跑。
+   */
+  const [localWorkspaces] = useState<WorkspaceSummary[]>(() =>
+    remoteMode
+      ? []
+      : listWorkspaces().map((w) => ({
+          id: w.id,
+          name: w.name,
+          ownerMemberName: w.ownerMemberName,
+          createdAt: w.createdAt,
+        })),
+  );
+
+  /** remote 的区列表（null = 还没取到；`listError` 区分「取失败」与「正在取」） */
+  const [remoteList, setRemoteList] = useState<WorkspaceSummary[] | null>(null);
+  const [listError, setListError] = useState(false);
+  /** remote 取列表的触发计数（「重试」按钮与退出身份后重取共用） */
+  const [listNonce, setListNonce] = useState(0);
+
+  const [firstScreen, setFirstScreen] = useState<'loading' | 'workspace-list' | 'identity-guide'>(
+    () => {
+      if (!remoteMode) {
+        return hasWorkspaceEntryStarted() ? 'identity-guide' : 'workspace-list';
+      }
+      /*
+       * remote 的同步部分：**本浏览器选过区** ⇒ 不必等列表，直接身份引导
+       * （此时 `RepoProvider` 已按该区建好 bundle）。没选过 ⇒ 先 loading。
+       * 判据用 `selectedWorkspaceIdSync()`（显式选过的那个）：在 NAS 上
+       * `currentWorkspaceIdSync()` 已改成「没选过 ⇒ 空串」，两者等价，但这里要的是
+       * 语义明确的那个（见 workspace-registry 的同名注释）。
+       */
+      return selectedWorkspaceIdSync() !== null ? 'identity-guide' : 'loading';
+    },
+  );
+
+  /** remote：取一次区列表（挂载时 & `listNonce` 变时；建区成功/退出身份后重取） */
+  useEffect(() => {
+    if (!remoteMode || !workspacesRepo) return;
+    /*
+     * 已经在「身份引导」档且没有失败时**不取**：那一屏不渲染列表，取一次是白发一个
+     * 跨网请求。退出身份时下方的 effect 会先把档位改成 loading/list 再让本 effect 重跑。
+     */
+    if (firstScreen === 'identity-guide') return;
+    let cancelled = false;
+    setListError(false);
+    void (async () => {
+      try {
+        const rows = await workspacesRepo.list();
+        if (cancelled) return;
+        setRemoteList(rows);
+        // ★ 哪怕只有 1 个区也进列表档：产品口径「先选公司，再选身份」（与 local 同）。
+        setFirstScreen((cur) => (cur === 'loading' ? 'workspace-list' : cur));
+      } catch {
+        if (cancelled) return;
+        /*
+         * ★ 不退回 identity-guide（理由见上方注释）。这里刻意**不**记 `hydrateError`：
+         *   那是 bootstrap 的失败态（语义「数据装载失败」），而本处是「区列表读不到」；
+         *   混用会让 DataGate 在用户还停在选公司这一屏时报「本地数据装载失败」，指错方向。
+         * ★ 档位照样推进到 `workspace-list`（**不是**停在 loading）：失败面住在列表档里
+         *   （`data-workspace-list-error` + 重试按钮），停在 loading 会让用户对着
+         *   「正在读取工作区…」永远等下去 —— 那是最糟的一种假活态。
+         */
+        setListError(true);
+        setFirstScreen((cur) => (cur === 'loading' ? 'workspace-list' : cur));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // `firstScreen` 只作守卫读：把它放进 deps 会让「列表回来后置档」再触发一次请求。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteMode, workspacesRepo, listNonce]);
+
+  /** 「重试」＝ 重取列表（调用方是 WorkspaceListError） */
+  const retryWorkspaceList = useCallback((): void => {
+    setRemoteList(null);
+    setListError(false);
+    setFirstScreen('loading');
+    setListNonce((n) => n + 1);
+  }, []);
+
+  /*
+   * ★ 0018（批 5：放开到 NAS）：退出身份后**重新判一次**首屏
+   *   （标记已在 `setCurrentMember(null)` 里清掉）。
    *
    * 为什么还需要这一条：`firstScreen` 是惰性初始化的，理由原本成立——选区/建区都会
    * 整页 reload，没有活着的组件需要响应标记变化。但**退出身份不 reload**，它就发生在
@@ -144,15 +251,27 @@ export function HomePage(): JSX.Element {
    * 仍旧卡在「请先进入身份」引导块里（这正是产品负责人两次反馈的那个观感）。
    * 产品口径：没有任何身份 ⇒ 应该看到工作区列表。
    *
-   * ⚠️ 只在 local 下判：remote 无分库概念、标记永不置位，一律走身份引导。
-   * ⚠️ 依赖只放 `isEntered`：进入身份时标记是 false 也不该翻回列表（那时本屏根本
-   *    不渲染 firstScreen 这两支），只有「从已进入 → 未进入」这一次跃迁才需要重判。
+   * ⚠️ 两种形态都要判。批 5 之前条件里写着 `dataSource === 'local'` ⇒ **NAS 上退出
+   *    身份根本回不到区列表**，那正是本批要修的第二处（与首屏判据同源）。
+   * ⚠️ 依赖只放 `isEntered`，且**必须是「从已进入 → 未进入」这一次跃迁**：
+   *    首帧 `isEntered === false` 也会跑本 effect，若无条件地改档 + 堆 `listNonce`，
+   *    remote 会把 `GET /api/workspaces` 发两遍（实测：`list` 被调 2 次）。
+   *    故用 `prevEntered` 记上一态，只有 `true → false` 才动手。
    */
+  const prevEnteredRef = useRef(isEntered);
   useEffect(() => {
-    if (!isEntered && appEnv.dataSource === 'local' && !hasWorkspaceEntryStarted()) {
-      setFirstScreen('workspace-list');
+    const was = prevEnteredRef.current;
+    prevEnteredRef.current = isEntered;
+    if (was === isEntered) return;
+    if (isEntered) return;
+    if (remoteMode) {
+      // remote：本浏览器选过区 ⇒ 立刻回列表（列表数据没有就由上面的 effect 取）
+      setFirstScreen(selectedWorkspaceIdSync() !== null ? 'workspace-list' : 'loading');
+      setListNonce((n) => n + 1);
+      return;
     }
-  }, [isEntered]);
+    if (!hasWorkspaceEntryStarted()) setFirstScreen('workspace-list');
+  }, [isEntered, remoteMode]);
 
   const today = new Date();
   const todayIso = localIso(today);
@@ -225,19 +344,79 @@ export function HomePage(): JSX.Element {
    */
   if (hydrated && !isEntered) {
     /*
-     * ★ 多工作区 0016（0017 订正）：首屏第一幕 = 工作区选择列表（一律，见上方
-     *   firstScreen 注释）。列表里既能选已有区进入、也能「新建工作区」；
-     *   由 WorkspacePicker 落标记后整页 reload。
+     * ★ 多工作区 0016（0017 订正；批 5 三态）：首屏第一幕 = 工作区选择列表。
+     *   列表里既能选已有区进入、也能「新建工作区」；由 WorkspacePicker 落标记后
+     *   整页 reload。
      *   选中当前区 ⇒ 回调 onEnterCurrentWorkspace 回到身份引导（选区仍要验密，
      *   验密由 WorkspacePicker 内部完成后再走本回调）。
+     *
+     * ── 三档 ──
+     *   loading         remote 专属：列表还在路上。给轻量占位，**不**渲染空列表，
+     *                   也**不**抢跑身份引导（那会让 NAS 用户以为没有公司）。
+     *   workspace-list  列表档。remote 由本页取数并作为 prop 传入（组件不再取第二遍）。
+     *   identity-guide  身份引导档。
+     *
+     * ⚠️ `workspaces` 与 `listError` 只在 remote 下有意义；local 下传 undefined，
+     *    WorkspacePicker 自己走 `repo.list()`（同步注册表，一帧就有结果）。
+     * ⚠️ remote 而 `workspacesRepo` 缺失（装配 bug）时不能白屏：按「读取失败」处理。
      */
+    if (firstScreen === 'loading') {
+      return (
+        <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
+          <div className="flex justify-center">
+            <div
+              data-workspace-picker=""
+              className="glass-strong iridescent-border w-[440px] max-w-[92vw] rounded-2xl p-5 shadow-soft"
+            >
+              <h2 className="font-display text-display-md text-ink">
+                {t('workspace.picker.title')}
+              </h2>
+              <WorkspaceListLoading />
+            </div>
+          </div>
+        </div>
+      );
+    }
     if (firstScreen === 'workspace-list') {
       return (
         <div className="flex flex-col gap-6 px-8 py-6 dark:gap-4 dark:px-6 dark:py-4">
           <div className="flex justify-center">
-            <WorkspacePicker
-              onEnterCurrentWorkspace={() => setFirstScreen('identity-guide')}
-            />
+            {/*
+             * ★ remote 的三条硬约束（缺一就是白屏 / 假空态 / 双请求）：
+             *   ① `repo` 必须有：`IRepositoryBundle.workspaces` 类型上可选，
+             *      运行期由 tests/workspace-repository.spec.ts 的 A1/A2 钉住；
+             *      缺了按「读取失败」处理（不是白屏）；
+             *   ② 列表已经取到才渲染列表本体 —— remote 下 `workspaces` 传 undefined
+             *      会让组件**自己再取一遍**（两次 `GET /api/workspaces`）；
+             *   ③ 取失败给 `data-workspace-list-error`，**不**退回身份引导。
+             */}
+            {remoteMode && (listError || !workspacesRepo) ? (
+              <div
+                data-workspace-picker=""
+                className="glass-strong iridescent-border w-[440px] max-w-[92vw] space-y-4 rounded-2xl p-5 shadow-soft"
+              >
+                <h2 className="font-display text-display-md text-ink">
+                  {t('workspace.picker.title')}
+                </h2>
+                <WorkspaceListError onRetry={retryWorkspaceList} />
+              </div>
+            ) : remoteMode && remoteList === null ? (
+              <div
+                data-workspace-picker=""
+                className="glass-strong iridescent-border w-[440px] max-w-[92vw] rounded-2xl p-5 shadow-soft"
+              >
+                <h2 className="font-display text-display-md text-ink">
+                  {t('workspace.picker.title')}
+                </h2>
+                <WorkspaceListLoading />
+              </div>
+            ) : (
+              <WorkspacePicker
+                repo={workspacesRepo!}
+                workspaces={remoteMode ? remoteList! : localWorkspaces}
+                onEnterCurrentWorkspace={() => setFirstScreen('identity-guide')}
+              />
+            )}
           </div>
         </div>
       );

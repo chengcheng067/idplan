@@ -28,6 +28,8 @@
  * 全部静默回落「单区 ws-default」内存态（与 useSettingsStore 既有口径一致）。
  */
 
+import { appEnv } from '../config/env';
+
 /** 注册表在 localStorage 的键（本常量是它的唯一出处） */
 const WORKSPACES_KEY = 'idplan.workspaces';
 /** 当前工作区 id 在 localStorage 的键 */
@@ -150,12 +152,50 @@ export function listWorkspaces(): WorkspaceEntry[] {
   return ensureEntries();
 }
 
-/** 当前工作区 id（注册表损坏/无记录 → ws-default） */
+/**
+ * 当前工作区 id。
+ *
+ * ── ★ remote（NAS）形态：只认「本浏览器显式选过的那个」──
+ * 为什么**不能**走下面的注册表回落（这是批 5 修掉的一个静默数据串味）：
+ *   注册表（`idplan.workspaces` + `dbName`）是**桌面版分库方案的载体**，NAS 版的区
+ *   列表在服务端；`WorkspacePicker` 在 remote 下也**不**回写注册表（Owner 名由服务端
+ *   `ownerMemberName` 派生）。于是 NAS 服务端上那些区 id（`ws-jia` …）在本地注册表里
+ *   **根本不存在** ⇒ 走回落会得到 lazily 播种的 `ws-default` ⇒ `RepoProvider` 把它当
+ *   `X-Workspace-Id` 发出去 ⇒ **用户明明选了甲公司，请求全落到 ws-default**。
+ *   （更早的隐患是另一头：`currentWorkspaceIdSync()` 曾被改成「没选过就返回空串」，
+ *   那会让 `useSettingsStore` 的身份键变成 `changxia.currentMemberId.`，所有 NAS 区共用
+ *   一份「我的身份」记忆 —— 所以这里只做「选过就照用、没选过才空串」，不引入第三种口径。）
+ * 没有选择时返回空串（语义 = 「还不知道是哪个区」），调用方据此**先不建 bundle**。
+ */
 export function currentWorkspaceIdSync(): string {
+  if (appEnv.dataSource === 'remote') return selectedWorkspaceIdSync() ?? '';
   const id = safeGet(CURRENT_WS_KEY);
   const entries = ensureEntries();
   if (id !== null && entries.some((e) => e.id === id)) return id;
   return entries[0]?.id ?? DEFAULT_WORKSPACE_ID;
+}
+
+/**
+ * **用户显式选过**的区 id（没选过 ⇒ `null`）。
+ *
+ * ── 与 `currentWorkspaceIdSync()` 的区别（两者不可互换）──
+ * `currentWorkspaceIdSync()` 是「**当前该用哪个库**」的口径：没选过时它回落注册表
+ * 首项（`ws-default`），永不为空 —— 桌面版建库必须要有个库名。
+ * 本函数是「**这台机器上有没有做过选择**」的口径：没选过就是 `null`。
+ *
+ * ── 谁需要它（remote 形态 · NAS 版首屏）──
+ * NAS 版没有本地分库，注册表里那条 `ws-default` 是桌面版的遗产（懒迁移播种的），
+ * 与服务器上有哪些区毫无关系。于是「远程首屏该不该先给选公司列表」这件事**不能**
+ * 用 `currentWorkspaceIdSync()` 判（它永远有值），必须用「本浏览器有没有显式选过」
+ * —— 这是浏览器本地记忆（与 `hasWorkspaceEntryStarted` 的区别见下方注意）。
+ *
+ * ⚠️ 为什么不复用 `hasWorkspaceEntryStarted()`：那是「进入某区的流程已开始」的
+ *   **跨端共享语义不成立**的标记（NAS 多人多端下，A 的进入动作不该影响 B 看到的
+ *   界面）。而「本浏览器选过哪个区」是**必须**按浏览器隔离的记忆，正是本函数。
+ */
+export function selectedWorkspaceIdSync(): string | null {
+  const id = safeGet(CURRENT_WS_KEY);
+  return id === null || id === '' ? null : id;
 }
 
 /** 当前工作区条目 */

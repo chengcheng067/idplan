@@ -102,8 +102,19 @@ vi.mock('../src/core/repositories/local/workspace.db', async () => {
 });
 
 /* HomePage 链读仓库（bootstrap/侧栏等），本文件判据只看 store —— 模块边界顶掉 */
-vi.mock('../src/hooks/useRepos', () => {
+vi.mock('../src/hooks/useRepos', async () => {
   const ok = async (): Promise<void> => undefined;
+  /*
+   * ★ 批 5：`HomePage` 现在要从 bundle 里拿 `workspaces` 传给 `WorkspacePicker`
+   *   （组件不再自己 import 实现）。运行期装配完备性由
+   *   `tests/workspace-repository.spec.ts` 的 A1/A2 钉住，本文件按同一形状给出
+   *   **真的** `LocalWorkspacesRepo`（内部只走本文件已 mock 掉的 workspace.db 出口
+   *   + 注册表回调），于是 P1/P2/P8 的断言仍在测真行为。
+   */
+  const [{ LocalWorkspacesRepo }, reg] = await Promise.all([
+    import('../src/core/repositories/local/local.workspaces.repo'),
+    import('../src/lib/workspace-registry'),
+  ]);
   const bundle = {
     projects: {
       list: async () => [],
@@ -154,6 +165,17 @@ vi.mock('../src/hooks/useRepos', () => {
       list: async () => [],
     },
     settings: { get: async () => null, set: ok, all: async () => [], replaceAll: ok },
+    workspaces: new LocalWorkspacesRepo({
+      listRegistry: () =>
+        reg.listWorkspaces().map((w) => ({
+          id: w.id,
+          name: w.name,
+          ownerMemberName: w.ownerMemberName,
+          createdAt: w.createdAt,
+        })),
+      dbNameOf: (id: string) =>
+        reg.listWorkspaces().find((w) => w.id === id)?.dbName ?? `idplan-${id}`,
+    }),
   };
   return { useRepos: (): unknown => bundle };
 });
@@ -166,6 +188,7 @@ vi.mock('../src/core/services/log.service', () => ({
 
 import { HomePage } from '../src/pages/HomePage';
 import { WorkspacePicker } from '../src/components/workspace/WorkspacePicker';
+import { LocalWorkspacesRepo } from '../src/core/repositories/local/local.workspaces.repo';
 import { useMembersStore } from '../src/store/useMembersStore';
 import { useProjectsStore } from '../src/store/useProjectsStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
@@ -211,6 +234,44 @@ function renderUi(node: React.ReactNode): HTMLDivElement {
 }
 
 const renderHome = (): HTMLDivElement => renderUi(<HomePage />);
+
+/**
+ * ★ 批 5：`WorkspacePicker` 不再直接 import 实现，改为吃注入的 `IWorkspaceRepository`。
+ *
+ * 本文件的判据全部是 **local（桌面版）** 行为，故注入**真的** `LocalWorkspacesRepo`：
+ * 它内部只走三个已在文件头 mock 掉的 `workspace.db` 出口 + 注入的注册表回调，
+ * 于是 P4–P7 的「core 入参断言」原样成立（不是用假 repo 陪跑）。
+ * 断言一个字都没放松 —— 只是把「组件自己 import」换成「调用方传进去」。
+ */
+function localRepo(): LocalWorkspacesRepo {
+  return new LocalWorkspacesRepo({
+    listRegistry: () => localSummaries(),
+    dbNameOf: (id) => listWorkspaces().find((w) => w.id === id)?.dbName ?? `idplan-${id}`,
+  });
+}
+
+/**
+ * 桌面版的区列表（= `HomePage` 首屏同步取的那份形状）。
+ *
+ * ⚠️ 本文件的 P4–P7 用例直接挂 `<WorkspacePicker>`（不经 HomePage），所以必须显式
+ * 传 `workspaces`：不传的话组件走**异步**自取（`repo.list()` 是 Promise），首帧是
+ * 「正在读取工作区…」占位 ⇒ 那些用例在挂载后立刻点 `[data-workspace-item]` 会
+ * 点空。**这不是断言放松**：线上 local 路径由 HomePage 同步取一次再传下来（见
+ * `HomePage` 的 `localWorkspaces`），此处复刻的正是同一条路径。
+ */
+function localSummaries(): Array<{
+  id: string;
+  name: string;
+  ownerMemberName: string | null;
+  createdAt: string;
+}> {
+  return listWorkspaces().map((w) => ({
+    id: w.id,
+    name: w.name,
+    ownerMemberName: w.ownerMemberName,
+    createdAt: w.createdAt,
+  }));
+}
 
 /** jsdom 缺 matchMedia / ResizeObserver（ProjectCard 链会碰），补最小桩 */
 function installEnvStubs(): void {
@@ -424,7 +485,7 @@ describe('P4–P5 · 从列表进入必须验密（跨区 / 同区都要）', ()
     const wsB = seedTwoWorkspaces();
     h.gateHashes['idplan-ws-b'] = await hashPassword('6666');
     const onEnterCurrent = vi.fn();
-    const el = renderUi(<WorkspacePicker onEnterCurrentWorkspace={onEnterCurrent} />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} onEnterCurrentWorkspace={onEnterCurrent} />);
 
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
@@ -437,7 +498,7 @@ describe('P4–P5 · 从列表进入必须验密（跨区 / 同区都要）', ()
   it('P4-2 密码输错 ⇒ 报错留在表单，不切区不重载', async () => {
     seedTwoWorkspaces();
     h.gateHashes['idplan-ws-b'] = await hashPassword('6666');
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
     const input = el.querySelector<HTMLInputElement>('[data-workspace-gate-input]');
@@ -453,7 +514,7 @@ describe('P4–P5 · 从列表进入必须验密（跨区 / 同区都要）', ()
   it('P4-3 密码输对 ⇒ 当前区切换 + 进入标记落盘 + 整页 reload', async () => {
     const wsB = seedTwoWorkspaces();
     h.gateHashes['idplan-ws-b'] = await hashPassword('6666');
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
     const input = el.querySelector<HTMLInputElement>('[data-workspace-gate-input]');
@@ -474,7 +535,7 @@ describe('P4–P5 · 从列表进入必须验密（跨区 / 同区都要）', ()
     listWorkspaces();
     h.gateHashes['changxia'] = await hashPassword('1111'); // 默认区（dbName = changxia）
     const onEnterCurrent = vi.fn();
-    const el = renderUi(<WorkspacePicker onEnterCurrentWorkspace={onEnterCurrent} />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} onEnterCurrentWorkspace={onEnterCurrent} />);
 
     await click(el.querySelector('[data-workspace-item="ws-default"]'));
 
@@ -490,7 +551,7 @@ describe('P4–P5 · 从列表进入必须验密（跨区 / 同区都要）', ()
     listWorkspaces();
     h.gateHashes['changxia'] = await hashPassword('1111');
     const onEnterCurrent = vi.fn();
-    const el = renderUi(<WorkspacePicker onEnterCurrentWorkspace={onEnterCurrent} />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} onEnterCurrentWorkspace={onEnterCurrent} />);
     await click(el.querySelector('[data-workspace-item="ws-default"]'));
 
     const input = el.querySelector<HTMLInputElement>('[data-workspace-gate-input]');
@@ -507,7 +568,7 @@ describe('P4–P5 · 从列表进入必须验密（跨区 / 同区都要）', ()
     listWorkspaces();
     h.gateHashes['changxia'] = await hashPassword('1111');
     const onEnterCurrent = vi.fn();
-    const el = renderUi(<WorkspacePicker onEnterCurrentWorkspace={onEnterCurrent} />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} onEnterCurrentWorkspace={onEnterCurrent} />);
     await click(el.querySelector('[data-workspace-item="ws-default"]'));
 
     const input = el.querySelector<HTMLInputElement>('[data-workspace-gate-input]');
@@ -524,7 +585,7 @@ describe('P4–P5 · 从列表进入必须验密（跨区 / 同区都要）', ()
 describe('P6 · 新建工作区（表单 → 建库 → 以 Owner 进入）', () => {
   it('P6-1 校验：缺区名 / 缺 Owner 名 / 密码过短 / 两次不一致都不提交', async () => {
     listWorkspaces();
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
     await click(el.querySelector('[data-workspace-new]'));
 
     // 什么都没填
@@ -555,7 +616,7 @@ describe('P6 · 新建工作区（表单 → 建库 → 以 Owner 进入）', ()
 
   it('P6-2 合法提交 ⇒ 建库入库 + 注册表登记 + 区级身份键落 Owner + 切区 reload', async () => {
     listWorkspaces();
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
     await click(el.querySelector('[data-workspace-new]'));
 
     setInputValue(el.querySelector<HTMLInputElement>('[data-workspace-name-input]')!, '新工作室');
@@ -602,7 +663,7 @@ describe('P7 · 目标区没设过闸密码 ⇒ 先设密码再进（不是直�
   it('P7-1 无闸密的区被选中 ⇒ 出「设密码」表单，不直接进', async () => {
     const wsB = seedTwoWorkspaces();
     // 故意不给 idplan-ws-b 设闸密（h.gateHashes 里没有它 ⇒ readWorkspaceGateHash 返回 null）
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
 
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
@@ -619,7 +680,7 @@ describe('P7 · 目标区没设过闸密码 ⇒ 先设密码再进（不是直�
 
   it('P7-2 校验：密码过短 / 两次不一致都不提交', async () => {
     seedTwoWorkspaces();
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
     // 过短
@@ -641,7 +702,7 @@ describe('P7 · 目标区没设过闸密码 ⇒ 先设密码再进（不是直�
 
   it('P7-3 设好 ⇒ 哈希写到该区（core 入参断言）+ 进入该区 + reload', async () => {
     const wsB = seedTwoWorkspaces();
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
     setInputValue(el.querySelector<HTMLInputElement>('[data-workspace-setpw-input]')!, '8899');
@@ -664,7 +725,7 @@ describe('P7 · 目标区没设过闸密码 ⇒ 先设密码再进（不是直�
   it('P7-4 写哈希失败 ⇒ 报错留在表单，不进区不 reload', async () => {
     seedTwoWorkspaces();
     h.setPwFails = true;
-    const el = renderUi(<WorkspacePicker />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} />);
     await click(el.querySelector('[data-workspace-item="ws-b"]'));
 
     setInputValue(el.querySelector<HTMLInputElement>('[data-workspace-setpw-input]')!, '8899');
@@ -681,7 +742,7 @@ describe('P7 · 目标区没设过闸密码 ⇒ 先设密码再进（不是直�
     listWorkspaces();
     // 默认区也没设过密码
     const onEnterCurrent = vi.fn();
-    const el = renderUi(<WorkspacePicker onEnterCurrentWorkspace={onEnterCurrent} />);
+    const el = renderUi(<WorkspacePicker repo={localRepo()} workspaces={localSummaries()} onEnterCurrentWorkspace={onEnterCurrent} />);
 
     await click(el.querySelector('[data-workspace-item="ws-default"]'));
     expect(el.querySelector('[data-workspace-setpw-input]'), '当前区也要先设密码').not.toBeNull();
