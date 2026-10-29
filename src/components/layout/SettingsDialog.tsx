@@ -41,6 +41,7 @@ import {
   SIDEBAR_W_EXPANDED,
 } from '../../store/useLayoutStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { useXlViewport } from '../../hooks/useXlViewport';
 import { appEnv } from '../../config/env';
 import { useBackupIo } from './useBackupIo';
@@ -863,6 +864,26 @@ export function SettingsDialog({
                         {REPO_URL}
                       </a>
                     </p>
+
+                    {/*
+                      重新查看新手引导（设计稿 §二/§七：引导看完后唯一的重看入口）。
+                      打开走 store（AppShell 常驻的 OnboardingOverlay 订阅它）；
+                      覆盖层 z-[79] 会盖在本抽屉（z-60）上，关闭后自然回到这里。
+                      ｜ 语言无关定位钩子：spec 按 data-onboarding-replay 找这枚按钮。
+                    */}
+                    <div className="mt-3 border-t border-line pt-3">
+                      <button
+                        type="button"
+                        onClick={() => useOnboardingStore.getState().openOverlay()}
+                        data-onboarding-replay=""
+                        className="rounded-md border border-line bg-paper px-3 py-1.5 text-xs text-ink transition-colors hover:border-pine hover:bg-pine-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/40"
+                      >
+                        {t('settings.onboarding.replay')}
+                      </button>
+                      <p className="mt-1.5 text-[11px] text-mist">
+                        {t('settings.onboarding.replayDesc')}
+                      </p>
+                    </div>
                   </section>
 
                   {/*

@@ -5,11 +5,13 @@ import { TopBar } from './TopBar';
 import { Sidebar } from './Sidebar';
 import { IdentityDialog } from './IdentityDialog';
 import { FirstRunGuide } from './FirstRunGuide';
+import { OnboardingOverlay } from '../onboarding/OnboardingOverlay';
 import { ManualFallbackForm } from '../contract-wizard/ManualFallbackForm';
 import { ToastItem } from '../common/Toast';
 import { PluginFrameHost, useActiveInstalledPlugin } from '../../core/plugin/PluginSandboxFrame';
 import { useProjectsBootstrap } from '../../hooks/useProjectsBootstrap';
 import { useFirstRunGate } from '../../hooks/useFirstRunGate';
+import { useOnboardingGate } from '../../hooks/useOnboardingGate';
 import { useAgentLoopbackReceiver } from '../../hooks/useAgentLoopbackReceiver';
 import { useExitRetained } from '../../hooks/useExitRetained';
 import { useProjectsStore } from '../../store/useProjectsStore';
@@ -65,6 +67,13 @@ import { useUiStore } from '../../store/useUiStore';
 export function AppShell(): JSX.Element {
   useProjectsBootstrap();
   useFirstRunGate();
+  /*
+   * 新手引导自动弹出闸门（设计稿 §二）：身份选定后检查 onboarding.done，
+   * 全新数据库（有显式 false 标记）首次自动弹；老库无记录视为已看过不弹。
+   * 挂在壳层一次，与 useFirstRunGate 同款——自动弹的判定依赖
+   * 「身份落定」与「bootstrap 读到的 done」两条线在此汇合。
+   */
+  useOnboardingGate();
   /*
    * 本机 Agent loopback 的**渲染侧落库接收器**：常驻监听主进程转来的导入 / ping。
    * 必须挂在这里（而不是某个页面）—— 见 `useAgentLoopbackReceiver` 文件头：
@@ -180,6 +189,11 @@ export function AppShell(): JSX.Element {
       <IdentityDialog />
       {/* 首启三幕·第二幕（0.8.3）：空库欢迎卡 + 示例项目可选（身份确立后出现） */}
       <FirstRunGuide />
+      {/*
+        新手引导覆盖层（设计稿 2026-10-30）：全屏覆盖层挂在身份选定之后。
+        z-[79] 盖住一切内容浮层（含打开它的设置抽屉），toast（z-80）仍在其上。
+      */}
+      <OnboardingOverlay />
       {/* 手动建档兜底：全局挂载，「新建项目」直接打开（v0.3 移除导入合同建档入口后） */}
       <ManualFallbackForm open={manualFormOpen} onClose={closeManualForm} />
       {/*
