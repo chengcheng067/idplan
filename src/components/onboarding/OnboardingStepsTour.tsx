@@ -2,23 +2,54 @@ import { useState } from 'react';
 
 import { useLang } from '../../i18n';
 import { Button } from '../ui';
-import { BoardArt, StepArtPlaceholder } from './OnboardingArt';
+import {
+  AgentArt,
+  BackupArt,
+  BoardArt,
+  CalendarArt,
+  MembersArt,
+  PluginsArt,
+  PrintArt,
+  TimelineArt,
+} from './OnboardingArt';
 
 /**
  * 分步引导线（设计稿 §五）：步骤条 + 上一步/下一步 + 跳过 + 步骤内容区。
- *
- * ★ 竖切样板（第一批）：8 步的**顺序与标题**已按设计稿 §五清单全部注册
- * （步骤条/进度按 8 步计），但**只有第 1 步「看板」有完整内容**；
- * 第 2~8 步暂渲染中性占位（明确说「正在准备中」，不假装有内容）——
- * 这是本批的已知缺口，第二批补齐内容后把占位分支换掉即可，壳不动。
+ * 8 步全部按 §五清单落地（第二批）：标题 + lead + 2~3 条亮点 + 内联 SVG 配图，
+ * 文案全走消息表（parts/onboarding.ts，zh+en 成对）。
  *
  * 步进切换动画（设计稿 §八-5）：内容区按 `key={stepId}` 重挂，文案块走
  * `.onb-in-copy`（120ms 先入），插画元素 `.onb-in` + 60ms 递增延迟错峰进场，
  * 总长 ≤400ms；`prefers-reduced-motion` 由 global.css 关停。
  */
+
 /** 步骤顺序（设计稿 §八-2 拍板：按使用频率走，顺序 A） */
 const STEP_IDS = ['board', 'calendar', 'timeline', 'print', 'members', 'backup', 'agent', 'plugins'] as const;
 type StepId = (typeof STEP_IDS)[number];
+
+/** 各步插画注册表（id → 组件；与 STEP_IDS 对齐） */
+const STEP_ART: Record<StepId, () => JSX.Element> = {
+  board: BoardArt,
+  calendar: CalendarArt,
+  timeline: TimelineArt,
+  print: PrintArt,
+  members: MembersArt,
+  backup: BackupArt,
+  agent: AgentArt,
+  plugins: PluginsArt,
+};
+
+/** 各步亮点键（§五：2~3 条；8 步均为 3 条）。字面量元组保证模板串可推导出精确键型 */
+const HIGHLIGHT_KEYS: Record<StepId, readonly ['h1', 'h2', 'h3']> = {
+  board: ['h1', 'h2', 'h3'],
+  calendar: ['h1', 'h2', 'h3'],
+  timeline: ['h1', 'h2', 'h3'],
+  print: ['h1', 'h2', 'h3'],
+  members: ['h1', 'h2', 'h3'],
+  backup: ['h1', 'h2', 'h3'],
+  agent: ['h1', 'h2', 'h3'],
+  plugins: ['h1', 'h2', 'h3'],
+};
 
 export interface OnboardingStepsTourProps {
   onFinish: () => void;
@@ -32,6 +63,7 @@ export function OnboardingStepsTour({ onFinish, onSkip }: OnboardingStepsTourPro
   const total = STEP_IDS.length;
   const isFirst = index === 0;
   const isLast = index === total - 1;
+  const Art = STEP_ART[stepId];
 
   const goNext = (): void => {
     if (isLast) onFinish();
@@ -77,35 +109,28 @@ export function OnboardingStepsTour({ onFinish, onSkip }: OnboardingStepsTourPro
             <h2 className="onb-in-copy onb-in font-display text-xl font-medium text-ink">
               {t(`onboarding.step.${stepId}.title` as const)}
             </h2>
-            {stepId === 'board' ? (
-              <>
-                <p className="onb-in onb-in-copy mt-3 max-w-[400px] text-sm leading-7 text-mist" style={{ animationDelay: '40ms' }}>
-                  {t('onboarding.step.board.lead')}
-                </p>
-                <ul className="mt-6 space-y-2.5">
-                  {(['h1', 'h2', 'h3'] as const).map((k, i) => (
-                    <li
-                      key={k}
-                      className="onb-in onb-in-copy flex items-start gap-2.5 text-[13px] leading-6 text-ink"
-                      style={{ animationDelay: `${80 + i * 40}ms` }}
-                    >
-                      <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-pine" aria-hidden="true" />
-                      {t(`onboarding.step.board.${k}` as const)}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p className="onb-in onb-in-copy mt-3 max-w-[400px] text-sm leading-7 text-mist" style={{ animationDelay: '40ms' }}>
-                {t('onboarding.step.placeholder.lead')}
-                <br />
-                {t('onboarding.step.placeholder.tail')}
-              </p>
-            )}
+            <p
+              className="onb-in onb-in-copy mt-3 max-w-[400px] text-sm leading-7 text-mist"
+              style={{ animationDelay: '40ms' }}
+            >
+              {t(`onboarding.step.${stepId}.lead` as const)}
+            </p>
+            <ul className="mt-6 space-y-2.5" data-onboarding-step-highlights={stepId}>
+              {HIGHLIGHT_KEYS[stepId].map((hKey, i) => (
+                <li
+                  key={hKey}
+                  className="onb-in onb-in-copy flex items-start gap-2.5 text-[13px] leading-6 text-ink"
+                  style={{ animationDelay: `${80 + i * 40}ms` }}
+                >
+                  <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-pine" aria-hidden="true" />
+                  {t(`onboarding.step.${stepId}.${hKey}` as const)}
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="hidden justify-center xl:flex">
-            {stepId === 'board' ? <BoardArt /> : <StepArtPlaceholder />}
+            <Art />
           </div>
         </div>
       </div>

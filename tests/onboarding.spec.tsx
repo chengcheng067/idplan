@@ -7,8 +7,8 @@
  *      老库无记录（done=null）→ 绝不自动弹（§二拍板）；
  *   ② 第一屏选模式：两卡对等 + 选线写 onboarding.mode；
  *   ③ 简单介绍线：6 卡 + 开始使用写 done；
- *   ④ 分步线：壳（步骤条/上下步/跳过）+ 第 1 步「看板」内容 + 2~8 步占位；
- *      跳过写 done；
+ *   ④ 分步线：壳（步骤条/上下步/跳过）+ 8 步全部真实内容（第二批：每步插画
+ *      与 3 条亮点，无占位残留）；跳过写 done；
  *   ⑤ 完成页：管理员双出口 / 成员单出口，都写 done；「新建第一个项目」拉起建档；
  *   ⑥ 重看直进：记忆 mode 后不再回第一屏（§三「选中即记住」）；
  *   ⑦ 播种字面量守卫：服务端 / 桌面建库两处的 'onboarding.done' 与 keys.ts 一致；
@@ -205,11 +205,14 @@ describe('新手引导 · 分步线（壳 + 步骤 1 看板）', () => {
     expect(document.body.textContent).toContain('第 1 步，共 8 步');
   });
 
-  it('② 下一步到第 2 步：占位内容（本批已知缺口），上一步可用', async () => {
+  it('② 下一步到第 2 步：月历真实内容（插画 + 亮点 ≥2 条），上一步可用', async () => {
     await renderInto(container, <OnboardingOverlay />);
     await click('[data-onboarding-next]');
     expect(document.querySelector('[data-onboarding-step-content="calendar"]')).toBeTruthy();
-    expect(document.querySelector('[data-onboarding-step-art="placeholder"]')).toBeTruthy();
+    expect(document.querySelector('[data-onboarding-step-art="calendar"]')).toBeTruthy();
+    expect(
+      document.querySelectorAll('[data-onboarding-step-highlights="calendar"] li').length,
+    ).toBeGreaterThanOrEqual(2);
     expect(
       (document.querySelector('[data-onboarding-prev]') as HTMLButtonElement).disabled,
     ).toBe(false);
@@ -220,6 +223,29 @@ describe('新手引导 · 分步线（壳 + 步骤 1 看板）', () => {
     await click('[data-onboarding-next]');
     await click('[data-onboarding-prev]');
     expect(document.querySelector('[data-onboarding-step-content="board"]')).toBeTruthy();
+  });
+
+  it('③b ★ 8 步全部是真实内容：逐步走完，每步 content+art 钩子齐、亮点 3 条、无占位残留', async () => {
+    const ids = ['board', 'calendar', 'timeline', 'print', 'members', 'backup', 'agent', 'plugins'];
+    await renderInto(container, <OnboardingOverlay />);
+    for (let i = 0; i < ids.length; i += 1) {
+      const id = ids[i]!;
+      expect(
+        document.querySelector(`[data-onboarding-step-content="${id}"]`),
+        `步骤 ${i + 1}（${id}）内容锚缺失`,
+      ).toBeTruthy();
+      expect(
+        document.querySelector(`[data-onboarding-step-art="${id}"]`),
+        `步骤 ${i + 1}（${id}）插画缺失`,
+      ).toBeTruthy();
+      expect(
+        document.querySelectorAll(`[data-onboarding-step-highlights="${id}"] li`).length,
+        `步骤 ${i + 1}（${id}）亮点条数`,
+      ).toBe(3);
+      if (i < ids.length - 1) await click('[data-onboarding-next]');
+    }
+    // 占位已清干净：不存在 placeholder 插画与占位文案键的消费点
+    expect(document.querySelector('[data-onboarding-step-art="placeholder"]')).toBeNull();
   });
 
   it('④ 第 8 步「下一步」进完成页；成员身份只有「先随便看看」一个出口，写 done', async () => {
