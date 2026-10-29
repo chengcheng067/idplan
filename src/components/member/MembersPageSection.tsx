@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
-import { Plus, UserRound, UserX, Crown, XCircle, Pencil, Check, X, KeyRound, LayoutGrid } from 'lucide-react';
+import { Plus, UserRound, UserX, Crown, XCircle, Pencil, Check, X, KeyRound, LayoutGrid, Trash2 } from 'lucide-react';
 
 import { memberHasPassword, type Member } from '../../core/types/entities';
 import { resolveErrorText, MemberActorKind, MemberRoleKind } from '../../core/types/enums';
 import { useMembersStore } from '../../store/useMembersStore';
 import { createMemberActions } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
 import { useRepos } from '../../hooks/useRepos';
-import { memberBoardHref, useRoleGuard, countActiveAdmins } from '../../hooks/useRoleGuard';
+import { memberBoardHref, useRoleGuard, countActiveAdmins, taskAssigneeIds } from '../../hooks/useRoleGuard';
 import { usePluginEnabled } from '../../core/plugin/PluginRegistryProvider';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Modal } from '../common/Modal';
@@ -18,12 +19,20 @@ import { ImeInput } from '../common/ImeInput';
 import { useLang } from '../../i18n';
 
 /**
- * 成员管理区（首页内嵌）：列表 / 新增 / 重命名 / 停用 / 设管理员 / 取消管理员。
+ * 成员管理区（首页内嵌）：列表 / 新增 / 重命名 / 停用 / 删除 / 设管理员 / 取消管理员。
  * v0.2：仅管理员视角出现（HomePage 已按 isAdmin 双保险渲染）。
  * v0.4.1：新增「重命名」入口——成员名字可随时修改，避免首字头像与实际姓名长期不一致。
  * v0.8.6.0002（反馈 #5）：每行新增「看板」——她原话「我在成员面板点击了成员，
  *   那是否也会显示这个看板」。落点 `/member-board?member=<id>`（管理员看该成员）；
  *   本区整体 `!isAdmin` 早退，按钮因此天然只在管理员视角出现。
+ * v1.0.0.0020：新增「删除」（用户多次指出只有停用、没有删除 = 功能缺失）。
+ *   与「停用」**并存、各管一件事**：
+ *     · 停用 = `active=false`，名单里灰着、历史全留、随时可再启用（处理「暂时离开」）；
+ *     · 删除 = 行真的消失（处理「这人不该再出现在系统里」）。
+ *   点删除先扫名下引用（任务 / 阶段 / 项目三处，直接从 store 数，不额外读库）：
+ *     · 引用数 0 ⇒ 简单确认后直接删；
+ *     · 引用数 > 0 ⇒ 二选一：**先转移给某人** 或 **直接删（引用置空，显示为「已删除成员」）**。
+ *   `AssignmentLog` 是 append-only 审计，**两条路都不动它**。
  */
 export function MembersPageSection(): JSX.Element | null {
   /** 取词 + 语言变化订阅点（本区文案在渲染期取） */
@@ -68,6 +77,22 @@ export function MembersPageSection(): JSX.Element | null {
   const [demoteTarget, setDemoteTarget] = useState<Member | null>(null);
   /** v0.6 密码系统：正在设/清密码的成员（弹 PasswordDialog） */
   const [passwordMember, setPasswordMember] = useState<Member | null>(null);
+  /**
+   * v1.0.0.0020：正在删除的成员 + 扫出来的名下引用数。
+   *
+   * 引用数**直接从 store 数**（不另开「干跑」读接口）：`tasks` / `stages` / `projects`
+   * 三个镜像在 `bootstrapAllStores` 后就是全量，再向仓库要一遍既慢又要处理
+   * 「数完到真删之间数据变了」的不一致。真删那一步仍由仓储在**事务内**重算，
+   * 这里只负责决定「弹简单确认还是弹二选一」。
+   */
+  const [deleteTarget, setDeleteTarget] = useState<Member | null>(null);
+  const [deleteRefs, setDeleteRefs] = useState<{ tasks: number; stages: number; projects: number }>({
+    tasks: 0,
+    stages: 0,
+    projects: 0,
+  });
+  const [reassignPick, setReassignPick] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const actions = createMemberActions(repos);
 
@@ -146,9 +171,48 @@ export function MembersPageSection(): JSX.Element | null {
     }
   };
 
+  /**
+   * 点「删除」：先扫该成员名下的引用（任务 / 阶段 / 项目三处），再决定弹哪种弹窗。
+   *
+   * ⚠️ 扫的是 `tasks` 的**有效参与人集合**（`taskAssigneeIds`：`assigneeIds` 为空时回落
+   * `[assigneeId]`），不是 `assigneeIds` 单字段——存量任务里「只有主负责人、集合为 []」
+   * 的形态很常见，只数集合会把这些任务漏掉，用户会看到「无引用 ⇒ 直接删」，
+   * 然后发现任务卡上冒出一堆「已删除成员」。
+   */
+  const openDelete = (m: Member): void => {
+    const { tasks, stages, projects } = useProjectsStore.getState();
+    setDeleteRefs({
+      tasks: tasks.filter((x) => taskAssigneeIds(x).includes(m.id)).length,
+      stages: stages.filter((s) => s.ownerId === m.id).length,
+      projects: projects.filter((p) => p.ownerMemberId === m.id).length,
+    });
+    // 接收人默认空（不预选）：预选一个会让「转移」变成一次不小心的点击就能提交，
+    // 而转移的目标是**另一个活人**，该由用户明确点名。
+    setReassignPick('');
+    setDeleteTarget(m);
+  };
+
+  /** 确认删除。`reassignTo`：成员 id（转移）或 null（置空）。 */
+  const onDelete = async (reassignTo: string | null): Promise<void> => {
+    const target = deleteTarget;
+    if (!target || deleting) return;
+    setDeleting(true);
+    try {
+      const counts = await actions.remove(target.id, reassignTo);
+      // counts === null ⇒ 仓储已报错（actions.remove 内部 toast），弹窗留着让用户重试
+      if (counts !== null) setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  /** 可作接收人的成员：排除被删者本人（自指会让引用原地打转）。 */
+  const reassignCandidates = deleteTarget
+    ? members.filter((m) => m.id !== deleteTarget.id)
+    : [];
+
   // 双保险：即便被误渲染也不暴露成员管理
   if (!isAdmin) return null;
-
   return (
     <section className="glass-light rounded-lg border border-line bg-paper p-5 shadow-soft">
       <div className="mb-3 flex items-center justify-between">
@@ -273,6 +337,7 @@ export function MembersPageSection(): JSX.Element | null {
               onRename={(name) => void onRename(m.id, name)}
               onPassword={() => setPasswordMember(m)}
               onOpenBoard={() => navigate(memberBoardHref(m.id))}
+              onDelete={() => openDelete(m)}
             />
           ))}
         </ul>
@@ -300,7 +365,185 @@ export function MembersPageSection(): JSX.Element | null {
           onClose={() => setPasswordMember(null)}
         />
       )}
+
+      {/*
+        v1.0.0.0020 · 删除成员。
+        两种形态共用一个组件：引用数 0 ⇒ 只剩「取消 / 删除」两个动作（简单确认）；
+        引用数 > 0 ⇒ 多出「转移给谁」与「直接删」两条路（用户必须选一条）。
+      */}
+      <DeleteMemberDialog
+        member={deleteTarget}
+        refs={deleteRefs}
+        candidates={reassignCandidates}
+        pick={reassignPick}
+        onPick={setReassignPick}
+        busy={deleting}
+        onCancel={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+        onConfirm={onDelete}
+      />
     </section>
+  );
+}
+
+/**
+ * 删除成员弹窗（引用数 0 = 简单确认；> 0 = 二选一）。
+ *
+ * ── 为什么「直接删」不是默认动作 ──
+ * 名下有活时，`reassignTo=null` 会让那些任务/阶段/看板的负责人变成「已删除成员」。
+ * 用户的本意通常不是「让这些活变成无主」，而是「这个人走了，活得有人接」。
+ * 所以两条路并列呈现、**都不预选**，用户必须主动点。
+ *
+ * ── 为什么文案这么啰嗦 ──
+ * 这是**不可撤销**的动作（行删了就是删了，只能在备份里找回来）。产品口径里
+ * 「历史记录不删」这一句必须写出来 —— 用户最担心的是「删了人，会不会把我以前的
+ * 工作记录全抹了」，答案是不会，这件事得直接说。
+ */
+function DeleteMemberDialog({
+  member,
+  refs,
+  candidates,
+  pick,
+  onPick,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  member: Member | null;
+  refs: { tasks: number; stages: number; projects: number };
+  candidates: Member[];
+  pick: string;
+  onPick(id: string): void;
+  busy: boolean;
+  onCancel(): void;
+  onConfirm(reassignTo: string | null): void;
+}): JSX.Element | null {
+  const { t } = useLang();
+  const currentMemberId = useSettingsStore((s) => s.currentMemberId);
+  if (!member) return null;
+  const total = refs.tasks + refs.stages + refs.projects;
+  const isSelf = member.id === currentMemberId;
+
+  const body = (
+    <>
+      <p>
+        {t('member.deleteSimpleBodyBefore')}
+        <b>{member.name}</b>
+        {t('member.deleteSimpleBodyAfter')}
+      </p>
+      {isSelf && <p className="mt-2 text-xs text-clay">{t('member.deleteSelfHint')}</p>}
+    </>
+  );
+
+  if (total === 0) {
+    return (
+      <ConfirmDialog
+        open
+        title={t('member.deleteTitle')}
+        danger
+        confirmText={t('member.deleteConfirm')}
+        onConfirm={() => onConfirm(null)}
+        onCancel={onCancel}
+        dataAttrs={{ 'data-member-delete-confirm': '' }}
+      >
+        {body}
+      </ConfirmDialog>
+    );
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      ariaLabel={t('member.deleteTitle')}
+      dataAttrs={{ 'data-member-delete-panel': '' }}
+    >
+      <div className="glass-strong iridescent-border dialog-pop w-full max-w-lg rounded-2xl p-5 shadow-soft outline-none">
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <h2 className="font-display text-display-md">{t('member.deleteTitle')}</h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label={t('common.close')}
+            className="rounded-md p-1 text-mist hover:bg-sand"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="text-sm leading-6 text-ink/80">
+          <b>{member.name}</b>
+          {t('member.deleteHasRefsBodyAfter', {
+            tasks: refs.tasks,
+            stages: refs.stages,
+            projects: refs.projects,
+          })}
+        </p>
+        {isSelf && <p className="mt-2 text-xs text-clay">{t('member.deleteSelfHint')}</p>}
+
+        {/* 路径一：先转移 */}
+        <div className="mt-4 rounded-lg border border-line bg-cream/60 p-3">
+          <p className="text-xs font-medium text-ink">{t('member.deleteReassignLabel')}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select
+              value={pick}
+              onChange={(e) => onPick(e.target.value)}
+              disabled={candidates.length === 0 || busy}
+              aria-label={t('member.deleteReassignLabel')}
+              className="min-w-0 flex-1 rounded-md border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-pine disabled:opacity-50"
+            >
+              <option value="">{t('member.deletePickPlaceholder')}</option>
+              {candidates.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                  {m.active ? '' : ` (${t('member.deactivate')})`}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => onConfirm(pick)}
+              disabled={!pick || busy || candidates.length === 0}
+              className="rounded-md bg-pine px-3 py-1.5 text-sm text-white transition-colors hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t('member.deleteReassignDo')}
+            </button>
+          </div>
+          {candidates.length === 0 && (
+            <p className="mt-1.5 text-[11px] text-mist">{t('member.deleteNoTarget')}</p>
+          )}
+        </div>
+
+        {/* 路径二：直接删（引用置空，历史保留） */}
+        <div className="mt-3 rounded-lg border border-line p-3">
+          <p className="text-xs font-medium text-ink">{t('member.deleteHardLabel')}</p>
+          <p className="mt-1 text-[11px] leading-5 text-mist">{t('member.deleteHardHint')}</p>
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => onConfirm(null)}
+              disabled={busy}
+              data-member-delete-hard=""
+              className="rounded-md border border-clay/50 px-3 py-1.5 text-sm text-clay transition-colors hover:bg-clay/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t('member.deleteHardDo')}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-md border border-line px-3 py-1.5 text-sm text-mist transition-colors hover:bg-sand disabled:opacity-40"
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -432,6 +675,7 @@ function MemberRow({
   onRename,
   onPassword,
   onOpenBoard,
+  onDelete,
 }: {
   member: Member;
   isLastAdmin: boolean;
@@ -442,6 +686,8 @@ function MemberRow({
   onPassword(): void;
   /** 反馈 #5：查看该成员的看板（管理员视角，落点 /member-board?member=<id>） */
   onOpenBoard(): void;
+  /** v1.0.0.0020：删除该成员（先由上层扫名下引用，再决定弹简单确认还是二选一） */
+  onDelete(): void;
 }): JSX.Element {
   /** 取词 + 语言变化订阅点（本模块级组件自己订阅） */
   const { t } = useLang();
@@ -603,6 +849,21 @@ function MemberRow({
                 <UserRound size={12} /> <span className="hidden sm:inline">{t('member.reactivate')}</span>
               </>
             )}
+          </button>
+          {/*
+            v1.0.0.0020：删除（放在「停用」右侧 = 破坏性最强的一项排最后）。
+            视觉上「危险但不刺眼」：不做实心红块、不做大红边框，只让**文字**在悬停时
+            转 clay（与「取消管理员」同一个警示色）——它挨着「停用」，一旦做得比停用
+            更抢眼，用户会在想停用的时候点错。删除是低频动作，克制比醒目重要。
+          */}
+          <button
+            type="button"
+            onClick={onDelete}
+            title={t('member.deleteTitle')}
+            data-member-delete=""
+            className="inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs text-mist hover:bg-sand hover:text-clay sm:px-2"
+          >
+            <Trash2 size={12} /> <span className="hidden sm:inline">{t('member.delete')}</span>
           </button>
         </span>
       )}

@@ -10,6 +10,7 @@ import type { Member, Project, Stage, Task } from '../core/types/entities';
 import { taskIsDone } from '../core/types/entities';
 import type { StageStatus } from '../core/types/enums';
 import { taskAssigneeIds } from '../hooks/useRoleGuard';
+import { memberDisplayText } from './member-display';
 
 /**
  * 导出 PNG / A4 预览的「打印友好」配色（v0.5 主题修复）：
@@ -77,8 +78,13 @@ export interface ScheduleSection {
  * 组装日程表 section：
  *   - 阶段按 orderIndex 1→9 排序（仅 visible 阶段）；
  *   - 任务按 orderIndex 排序；
- *   - 参与人 = taskAssigneeIds(task) 映射成员姓名（id 找不到 → 显示 id 兜底）；
+ *   - 参与人 = taskAssigneeIds(task) 映射成员姓名（**id 查不到人 → 「已删除成员」**）；
  *   - 未指派 → assigneeNames=[]。
+ *
+ * ⚠️ 兜底改过一次（v1.0.0.0020 · 删除成员批次）：原先是「查不到就显示原始 id」。
+ *   那时查不到人只可能是脏数据，印出 id 至少能让人知道「这里有个值」。成员可删之后
+ *   查不到人变成**正常状态**，把 `9f3a-…` 印在给客户的日程表上不可接受 ⇒ 改走
+ *   与屏幕一致的 `memberDisplayText()`（「已删除成员」）。
  */
 export function buildScheduleSections(opts: {
   project: Project;
@@ -86,8 +92,7 @@ export function buildScheduleSections(opts: {
   tasks: Task[];
   members: Member[];
 }): ScheduleSection[] {
-  const memberName = (id: string): string =>
-    opts.members.find((m) => m.id === id)?.name ?? id;
+  const memberName = (id: string): string => memberDisplayText(id, opts.members) || id;
 
   const visibleStages = opts.stages
     .filter((s) => s.projectId === opts.project.id && s.visible !== false)

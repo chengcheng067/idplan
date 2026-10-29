@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import type { Member, Stage } from '../../core/types/entities';
 import { StageStatus } from '../../core/types/enums';
 import { remainingDays } from '../../lib/date';
+import { memberDisplayName } from '../../lib/member-display';
 import { stageSolidClass, stageSolidColor } from './stageColors';
 import { customStageColor } from './stageColorKey';
 import { roleLabel, stageNameLabel, useLang } from '../../i18n';
@@ -36,6 +37,16 @@ export function StageRowsColumn({
   const { t } = useLang();
   const ownerLabel = (stage: Stage): string => {
     if (!stage.ownerId) return t('stageRows.unassigned');
+    /*
+     * 查不到成员 ⇒ 「已删除成员」（**不是**空串、**不是**原始 id）。
+     * 这里原先是 `t('stageRows.unknownOwner')`（「未知负责人」）—— 那是删除功能
+     * 上线**之前**的兜底，当时查不到人只可能是脏数据。现在查不到人是**正常状态**
+     * （成员被删了、引用置空或历史行还在），报「未知」等于把用户的正常操作说成异常。
+     * 文案与样式统一出处：`src/lib/member-display.ts`。
+     */
+    const display = memberDisplayName(stage.ownerId, members);
+    if (display === null) return t('stageRows.unassigned');
+    if (display.missing) return display.text;
     const owner = members.find((m) => m.id === stage.ownerId);
     if (!owner) return t('stageRows.unknownOwner');
     /*

@@ -842,6 +842,31 @@ export const enMessages: Record<MessageKey, string> = {
   'member.reactivateTitle': 'Reactivate',
   'member.deactivate': 'Deactivate',
   'member.reactivate': 'Reactivate',
+  /* ── Delete member (v1.0.0.0020; coexists with Deactivate) ── */
+  'member.delete': 'Delete',
+  'member.deleteTitle': 'Delete member',
+  'member.deletedMember': 'Deleted member',
+  'member.deleteSimpleBodyBefore': 'Delete ',
+  'member.deleteSimpleBodyAfter':
+    '? They will disappear from the list; assignments made to them stay on record.',
+  'member.deleteHasRefsBodyAfter':
+    ' still owns work ({tasks} tasks / {stages} stages / {projects} projects). Pick how to handle it first.',
+  'member.deleteReassignLabel': 'Hand over to',
+  'member.deleteReassignDo': 'Hand over and delete',
+  'member.deleteHardLabel': 'Delete without handing over',
+  'member.deleteHardHint':
+    'The work stays put and shows “Deleted member” as its owner. History is kept.',
+  'member.deleteHardDo': 'Delete',
+  'member.deletePickPlaceholder': 'Pick someone',
+  'member.deleteNoTarget': 'Nobody else to hand over to (need at least one more member)',
+  'member.toastMemberDeleted': 'Deleted “{name}”',
+  'member.toastMemberDeletedWithRefs':
+    'Deleted “{name}”: handed over {tasks} tasks / {stages} stages / {projects} projects',
+  'member.toastMemberDeletedOrphaned':
+    'Deleted “{name}”: cleared {tasks} tasks / {stages} stages / {projects} projects',
+  'member.toastMemberDeleteFailed': 'Delete failed, please try again.',
+  'member.deleteSelfHint': 'This is your current identity — deleting it signs you out.',
+  'member.deleteConfirm': 'Delete',
   /* ─────────────────── Timeline toolbar ─────────────────── */
   'timeline.hint': 'Tip: drag a bar edge to reschedule; ←/→ pan the timeline (hold Shift to speed up)',
   'timeline.zoom.month': 'Month',

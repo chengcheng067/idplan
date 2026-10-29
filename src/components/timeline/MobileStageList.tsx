@@ -5,6 +5,7 @@ import { customStageColor } from './stageColorKey';
 import { StatusPill } from '../common/StatusPill';
 import { cn } from '../../lib/cn';
 import { totalDaysInclusive } from '../../lib/date';
+import { DELETED_MEMBER_CLASS, memberDisplayName } from '../../lib/member-display';
 import { stageNameLabel, useLang } from '../../i18n';
 
 /** 阶段序号符号（①-⑨，与横向时间轴一致） */
@@ -49,6 +50,8 @@ export function MobileStageList({
         const { attrs: colorAttrs } = customStageColor(s.customColor);
         const active = s.status === StageStatus.InProgress;
         const owner = members.find((m) => m.id === s.ownerId);
+        /* 查不到成员 ⇒ 「已删除成员」灰名（口径与共享 helper 一致，见 src/lib/member-display.ts） */
+        const ownerDisplay = memberDisplayName(s.ownerId, members);
         const stageTasks = tasks.filter((t) => t.stageId === s.id);
         const taskCount = stageTasks.length;
         // v0.6 双色分层：来源标识（Agent 🤖 / Human 👤 计数）+ 未完成任务 status 角标
@@ -112,6 +115,12 @@ export function MobileStageList({
                     {owner.name[0]}
                   </span>
                   {owner.name}
+                </span>
+              )}
+              {/* 有 id 但查不到人（成员被删了）：不显示空、也不显示原始 id */}
+              {!owner && ownerDisplay !== null && (
+                <span className={`inline-flex items-center gap-1 ${DELETED_MEMBER_CLASS}`}>
+                  {ownerDisplay.text}
                 </span>
               )}
               {taskCount > 0 && <span>{t('mobileStage.taskCount', { n: taskCount })}</span>}

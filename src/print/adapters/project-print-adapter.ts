@@ -148,6 +148,17 @@ export function buildPrintViewModel(input: PrintViewModelInput): PrintViewModel 
     });
   const visibleTaskIds = new Set(visibleTasks.map((t) => t.id));
 
+  /**
+   * 成员 id → 姓名（查不到 → `null`，由上层决定怎么表达）。
+   *
+   * ⚠️ 删除成员上线后「查不到人」是**正常状态**（成员被删、或 `reassignTo=null`
+   * 已把引用置空后仍留着的历史行）。这里返回 `null` 而不是原名或 id：
+   *   · `ownerName` 位置是「阶段负责人」——纸面上留空比印一串 UUID 好；
+   *   · `assigneeNames` 位置有自己的 `filter(n => n !== null)`，空即「未指派」，
+   *     与纸面「—」的既有口径一致（`TaskListModule` / `SwissScheduleDocument` 都这么渲染）。
+   * 换句话说：**纸面上不出现「已删除成员」这个词**（那是屏幕侧的解释性灰名，
+   * 打印稿要的是「这里没人」），屏幕侧的统一入口是 `src/lib/member-display.ts`。
+   */
   const memberName = (id: string): string | null =>
     input.members.find((m) => m.id === id)?.name ?? null;
 

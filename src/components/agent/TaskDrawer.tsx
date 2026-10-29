@@ -41,6 +41,7 @@ import { useLayoutStore } from '../../store/useLayoutStore';
 import { StatusBadge } from './AgentTaskCard';
 import { Modal } from '../common/Modal';
 import { remainingDays } from '../../lib/date';
+import { DELETED_MEMBER_CLASS, memberDisplayName } from '../../lib/member-display';
 import { cn } from '../../lib/cn';
 
 /* ------------------------- 轻量 Markdown 渲染（转义防注入） ------------------------- */
@@ -237,6 +238,8 @@ export function TaskDrawer({
   const stageName =
     projectStages.find((s) => s.id === task.stageId)?.name ?? '—';
   const assignee = task.assigneeId ? members.find((m) => m.id === task.assigneeId) : null;
+  /** 显示口径（含「已删除成员」灰名）——数据口径仍是上面的 `assignee`，两者别混用 */
+  const assigneeDisplay = memberDisplayName(task.assigneeId, members);
   const agent = task.agentId ? members.find((m) => m.id === task.agentId) : null;
   const allowedTargets = TASK_STATUS_TRANSITIONS[task.status] ?? [];
   const canClaim = task.status === ('ready' as TaskStatus) && task.claimedAt === null;
@@ -351,7 +354,19 @@ export function TaskDrawer({
                 </Field>
               </>
             )}
-            <Field label="assignee">{assignee?.name ?? '—'}</Field>
+            <Field label="assignee">
+              {/*
+                查不到成员（已被删除）⇒ 灰名「已删除成员」，不是「—」也不是原始 id：
+                「—」会被读成「没指派」，而实际上这条任务确实指派过、只是那个人被删了。
+              */}
+              {assigneeDisplay !== null ? (
+                <span className={assigneeDisplay.missing ? DELETED_MEMBER_CLASS : undefined}>
+                  {assigneeDisplay.text}
+                </span>
+              ) : (
+                '—'
+              )}
+            </Field>
             <Field label={termFor('stageShort', termMode)}>{stageName}</Field>
             <Field label="dueDate">
               <span className={cn(!human && 'font-mono')}>

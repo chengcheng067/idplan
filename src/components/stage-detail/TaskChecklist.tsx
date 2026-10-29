@@ -17,6 +17,11 @@ import {
 } from '../../hooks/useRoleGuard';
 import { ImeInput } from '../common/ImeInput';
 import { roleLabel, useLang } from '../../i18n';
+import {
+  DELETED_MEMBER_CLASS,
+  DELETED_MEMBER_LABEL_KEY,
+  memberDisplayText,
+} from '../../lib/member-display';
 
 /**
  * checkbox 清单：增删改 / 多选指派（多人参与）/ 截止日 / 勾选完成（勾选写指派流水留痕）。
@@ -81,10 +86,16 @@ export function TaskChecklist({
 
   const memberOf = (id: string): Member | undefined => members.find((x) => x.id === id);
 
-  /** admin 视角参与人摘要（多值姓名，未指派 → 空串） */
+  /**
+   * 参与人摘要（多值姓名，未指派 → 空串）。
+   *
+   * 查不到成员一律走共享 helper ⇒ 「已删除成员」（原先是 `t('common.unknown')`「未知」）：
+   * 成员可以被删了，查不到人是**正常状态**而不是数据异常；且「未知」在这个位置
+   * 与「这个人叫什么我们不知道」混淆，用户看不出「他被删了」。
+   */
   const assigneeSummary = (task: Task): string =>
     taskAssigneeIds(task)
-      .map((id) => memberOf(id)?.name ?? t('common.unknown'))
+      .map((id) => memberDisplayText(id, members))
       .join('、');
 
   /** 成员视角参与人标签（多值，脱敏：用角色标签代替姓名） */
@@ -94,7 +105,8 @@ export function TaskChecklist({
     return ids
       .map((id) => {
         const m = memberOf(id);
-        if (!m) return t('common.unknown');
+        // 查不到人（成员已删）⇒ 灰名文案；脱敏口径下泄露一个「已删除成员」不泄露姓名
+        if (!m) return t(DELETED_MEMBER_LABEL_KEY);
         return isRestricted ? roleLabel(m.role || ROLE_SENTINELS.owner) : m.name;
       })
       .join('、');
@@ -187,7 +199,7 @@ export function TaskChecklist({
                   title={
                     task.assigneeId
                       ? t('taskChecklist.primaryOwner', {
-                          name: memberOf(task.assigneeId)?.name ?? t('common.unknown'),
+                          name: memberDisplayText(task.assigneeId, members),
                         })
                       : undefined
                   }
@@ -248,17 +260,27 @@ export function TaskChecklist({
                         <div className="mt-2 flex flex-wrap gap-1 border-t border-line/60 pt-2">
                           {draftIds.map((id) => {
                             const m = memberOf(id);
-                            if (!m) return null;
+                            /*
+                             * 成员已被删除（id 还留在任务的 assigneeIds 里）：
+                             * 原先这里是 `if (!m) return null` —— 于是这个 id **看不见但仍在
+                             * draftIds 里**，用户既不知道它存在、也没法把它去掉，一保存就原样写回。
+                             * 改为渲染一枚灰名 chip（可点 X 移除）：看得见才删得掉。
+                             */
+                            const label = m ? m.name : t(DELETED_MEMBER_LABEL_KEY);
                             return (
                               <span
                                 key={id}
-                                className="inline-flex items-center gap-1 rounded-full bg-pine-soft px-2 py-0.5 text-[11px] text-pine-deep"
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${
+                                  m
+                                    ? 'bg-pine-soft text-pine-deep'
+                                    : `bg-sand/60 ${DELETED_MEMBER_CLASS}`
+                                }`}
                               >
-                                {m.name}
+                                {label}
                                 <button
                                   type="button"
                                   onClick={() => toggleDraft(id)}
-                                  aria-label={t('taskChecklist.removeAria', { name: m.name })}
+                                  aria-label={t('taskChecklist.removeAria', { name: label })}
                                   className="rounded-full p-0.5 hover:bg-pine/20"
                                 >
                                   <X size={10} />

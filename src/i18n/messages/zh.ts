@@ -822,6 +822,29 @@ export const zhMessages = {
   'member.reactivateTitle': '重新启用',
   'member.deactivate': '停用',
   'member.reactivate': '启用',
+  /* ── 删除成员（v1.0.0.0020；与「停用」并存，各管一件事）── */
+  'member.delete': '删除',
+  'member.deleteTitle': '删除成员',
+  'member.deletedMember': '已删除成员',
+  'member.deleteSimpleBodyBefore': '删除 ',
+  'member.deleteSimpleBodyAfter': '？删除后这个人从名单里消失，之前指派给他的记录会留着。',
+  'member.deleteHasRefsBodyAfter':
+    ' 名下还有内容（{tasks} 个任务 / {stages} 个阶段 / {projects} 个项目）。先选一种处理方式。',
+  'member.deleteReassignLabel': '先转移给',
+  'member.deleteReassignDo': '转移并删除',
+  'member.deleteHardLabel': '直接删除',
+  'member.deleteHardHint': '内容留在原处，负责人一栏显示为「已删除成员」。历史记录不删。',
+  'member.deleteHardDo': '直接删除',
+  'member.deletePickPlaceholder': '选一个接收人',
+  'member.deleteNoTarget': '没有可选的接收人（至少要有另一个成员）',
+  'member.toastMemberDeleted': '已删除「{name}」',
+  'member.toastMemberDeletedWithRefs':
+    '已删除「{name}」：{tasks} 个任务 / {stages} 个阶段 / {projects} 个项目已转移',
+  'member.toastMemberDeletedOrphaned':
+    '已删除「{name}」：{tasks} 个任务 / {stages} 个阶段 / {projects} 个项目已置空',
+  'member.toastMemberDeleteFailed': '删除失败，请重试。',
+  'member.deleteSelfHint': '这是你当前的身份，删除后会退出身份。',
+  'member.deleteConfirm': '删除',
   /* ─────────────────── 时间轴工具栏（TimelineView）─────────────────── */
   'timeline.hint': '提示：拖动彩条边缘改期；←/→ 键平移时间轴（Shift 加速）',
   'timeline.zoom.month': '月',
