@@ -140,7 +140,7 @@ export const zh = {
   'wizard.stagePool': '阶段池',
   'wizard.addCustomStageAria': '新增自定义阶段',
   'wizard.customStages': '自定义阶段',
-  'wizard.customStagesEmpty': '暂无自定义阶段。点上方的「＋ 自定义阶段」添加（如「消防报审」）。',
+  'wizard.customStagesEmpty': '暂无自定义阶段。点上方的「＋ 自定义阶段」添加。',
   'wizard.collapseOtherDomains': '收起其他行业阶段',
   'wizard.showOtherDomains': '显示其他行业阶段（{domains}）',
   'wizard.duplicateNames': '阶段名重复：{names}。请改名后再提交（Agent 通道按名定位阶段，重名会歧义）。',
@@ -184,7 +184,7 @@ export const zh = {
   'wizard.cancelAddCustomStageAria': '取消新增自定义阶段',
   'wizard.fieldStageName': '阶段名称 *',
   'wizard.customStageNameAria': '自定义阶段名称',
-  'wizard.customStageNamePlaceholder': '如「消防报审」',
+  'wizard.customStageNamePlaceholder': '如「某某阶段」',
   'wizard.errStageNameRequired': '请填写阶段名称。',
   'wizard.errDuplicateName': '已有同名阶段「{name}」，阶段名不能重复。',
   'wizard.fieldRatio': '工作量占比（%）',
@@ -344,7 +344,7 @@ export const en = {
   'wizard.addCustomStageAria': 'Add custom stage',
   'wizard.customStages': 'Custom stages',
   'wizard.customStagesEmpty':
-    'No custom stages yet. Use “+ Custom stage” above to add one (for example “Fire permit review”).',
+    'No custom stages yet. Use “+ Custom stage” above to add one.',
   'wizard.collapseOtherDomains': 'Hide stages from other industries',
   'wizard.showOtherDomains': 'Show stages from other industries ({domains})',
   'wizard.duplicateNames':
@@ -389,7 +389,7 @@ export const en = {
   'wizard.cancelAddCustomStageAria': 'Cancel adding a custom stage',
   'wizard.fieldStageName': 'Stage name *',
   'wizard.customStageNameAria': 'Custom stage name',
-  'wizard.customStageNamePlaceholder': 'e.g. “Fire permit review”',
+  'wizard.customStageNamePlaceholder': 'e.g. “Some stage”',
   'wizard.errStageNameRequired': 'Please enter a stage name.',
   'wizard.errDuplicateName':
     'A stage named “{name}” already exists — stage names must be unique.',

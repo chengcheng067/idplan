@@ -54,7 +54,7 @@ const ZH_LITERALS: ReadonlyArray<{ key: MessageKey; vars?: Record<string, string
   { key: 'reschedule.cancelAria', zh: '取消改期' },
   { key: 'reschedule.reasonLabel', zh: '延期原因' },
   { key: 'reschedule.reasonRequired', zh: '*（任一阶段截止日后移必填）' },
-  { key: 'reschedule.reasonPlaceholder', zh: '如：甲方确认延迟 / 审批排队…' },
+  { key: 'reschedule.reasonPlaceholder', zh: '如：对方确认延迟 / 审批排队…' },
   { key: 'reschedule.reasonMissing', zh: '未填写延期原因前无法保存（历史将完整留痕）。' },
   { key: 'reschedule.noteLabel', zh: '备注原因（提前/平移可留空）' },
   { key: 'reschedule.saveMany', vars: { n: 3 }, zh: '保存 3 个阶段并留痕' },

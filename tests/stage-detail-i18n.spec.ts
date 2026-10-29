@@ -56,7 +56,7 @@ const ZH_LITERALS: ReadonlyArray<{ key: MessageKey; vars?: Record<string, string
   { key: 'taskChecklist.addEntry', zh: '添加条目' },
   /* ⚠️ 反斜杠是**真路径分隔符**：这里是 JS 字符串 ⇒ 期望值必须写成 `\\` 才是真反斜杠。
      写成单个 `\` 会变成「丢弃转义字符」，断言反而**锁不住**渲染缺陷。 */
-  { key: 'resourcePath.placeholder', zh: '如 D:\\项目资料\\03-方案 或 file://D:/…' },
+  { key: 'resourcePath.placeholder', zh: '如 D:\\资料库\\01-阶段 或 file://D:/…' },
   { key: 'resourcePath.register', zh: '登记本阶段资料文件夹路径…' },
   { key: 'resourcePath.open', zh: '打开' },
   { key: 'resourcePath.copy', zh: '复制路径' },
