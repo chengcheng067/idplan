@@ -554,7 +554,6 @@ describe('N5 · 建区 ⇒ repo.create + 以 Owner 身份进入', () => {
 });
 
 /* ══════════════════════════ N6 · 不受 local 标记影响 ══════════════════════════ */
-
 describe('N6 · remote 不受 hasWorkspaceEntryStarted() 影响', () => {
   it('N6 那条 local 标记为 true 时，remote 仍然渲染工作区列表', async () => {
     markWorkspaceEntryStarted();
@@ -578,5 +577,38 @@ describe('N6 · remote 不受 hasWorkspaceEntryStarted() 影响', () => {
     });
     await renderHome();
     expect(h.calls.filter((c) => c === 'list'), '已进入身份这一屏不渲染列表').toHaveLength(0);
+  });
+});
+
+/* ══════════════════════════ N7 · 退出身份 ⇒ 回区列表（remote 也成立） ══════════════════════════ */
+
+describe('N7 · remote 退出身份 ⇒ 首屏回到工作区列表', () => {
+  it('N7 本浏览器选过区 + 已进入身份 ⇒ 退出身份后回到工作区列表', async () => {
+    localStorage.setItem('idplan.currentWorkspaceId', 'ws-jia');
+    seedStores();
+    act(() => {
+      useSettingsStore.setState({ currentMemberId: 'mem_admin' });
+    });
+    const el = await renderHome();
+    // 已进入身份：不是「未进入」那一屏（列表不渲染）
+    expect(el.querySelector('[data-home-no-identity]')).toBeNull();
+    expect(el.querySelector('[data-workspace-picker]'), '已进入身份时不该有选公司界面').toBeNull();
+
+    // 退出身份（真实路径：setCurrentMember(null)，它同时清 entryStarted）
+    await act(async () => {
+      useSettingsStore.getState().setCurrentMember(null);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      el.querySelector('[data-workspace-picker]'),
+      'NAS 上退出身份也必须回到「选公司」这一屏（批 5 之前这里永远不回）',
+    ).not.toBeNull();
+    expect(el.querySelector('[data-workspace-list]'), '回的是列表态').not.toBeNull();
+    expect(el.querySelector('[data-home-no-identity]'), '不再卡在「请先进入身份」').toBeNull();
+    // 列表数据是现取的（退出那一刻缓存可能已过期）
+    expect(h.calls.filter((c) => c === 'list').length).toBeGreaterThanOrEqual(1);
   });
 });
