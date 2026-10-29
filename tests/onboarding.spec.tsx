@@ -38,6 +38,7 @@ import { useOnboardingStore } from '../src/store/useOnboardingStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import { useUiStore } from '../src/store/useUiStore';
 import { setLang } from '../src/i18n';
+import { zh as onboardingZh } from '../src/i18n/messages/parts/onboarding';
 import { withHostPolicySettings } from '../src/core/demo/demoDataFactory';
 import { ONBOARDING_DONE_KEY, ONBOARDING_MODE_KEY } from '../src/core/onboarding/keys';
 
@@ -74,6 +75,12 @@ function GateProbe(): JSX.Element {
   useOnboardingGate();
   return <div data-gate-probe="" />;
 }
+
+/** 「下一步」点击（多个 describe 共用，故提到模块级；包 act） */
+const clickNext = (): Promise<void> =>
+  act(async () => {
+    (document.querySelector('[data-onboarding-next]') as HTMLButtonElement | null)?.click();
+  });
 
 function resetStores(): void {
   useSettingsStore.setState({ hydrated: true, currentMemberId: 'm-spec' });
@@ -280,7 +287,7 @@ describe('新手引导 · 分步线（壳 + 步骤 1 看板）', () => {
     expect(document.querySelector('[data-onboarding-step-art="placeholder"]')).toBeNull();
   });
 
-  it('③c ★ 每步插画带 2~4 个 i18n 文字标签（data-art-label 计数，语言无关）', async () => {
+  it('③c ★ 每步插画标签数：timeline 恰为 0（产品裁定「这页不要文字」），其余 2~4', async () => {
     const ids = ['board', 'calendar', 'timeline', 'print', 'members', 'backup', 'agent', 'plugins'];
     await renderInto(container, <OnboardingOverlay />);
     for (let i = 0; i < ids.length; i += 1) {
@@ -288,13 +295,48 @@ describe('新手引导 · 分步线（壳 + 步骤 1 看板）', () => {
       const labels = Array.from(
         document.querySelectorAll(`[data-onboarding-step-art="${id}"] [data-art-label]`),
       );
-      expect(labels.length, `步骤 ${i + 1}（${id}）插画标签数应在 2~4`).toBeGreaterThanOrEqual(2);
-      expect(labels.length, `步骤 ${i + 1}（${id}）插画标签数应在 2~4`).toBeLessThanOrEqual(4);
+      if (id === 'timeline') {
+        expect(labels.length, '甘特/时间轴插画：零文字（含零标注）').toBe(0);
+      } else {
+        expect(labels.length, `步骤 ${i + 1}（${id}）插画标签数应在 2~4`).toBeGreaterThanOrEqual(2);
+        expect(labels.length, `步骤 ${i + 1}（${id}）插画标签数应在 2~4`).toBeLessThanOrEqual(4);
+      }
       // 标签必须有实际文本（键取到了值，不是空串/键名）
       for (const el of labels) {
         expect((el.textContent ?? '').trim(), `步骤 ${i + 1} 有标签是空串`).not.toBe('');
       }
       if (i < ids.length - 1) await click('[data-onboarding-next]');
+    }
+    // timeline 的 4 个槽位键已随裁定移除（按**键集**判，不扫源码注释——
+    // 文件头里那句「不设 onboarding.art.timeline.* 键」的说明文字会被源码扫误命中）
+    const artKeys = Object.keys(onboardingZh).filter((k) => k.startsWith('onboarding.art.'));
+    expect(artKeys.filter((k) => k.startsWith('onboarding.art.timeline.'))).toEqual([]);
+    expect(artKeys.length, '插画文字键集为空 ⇒ 选择器失效，这不是通过').toBeGreaterThan(20);
+  });
+
+  it('③d ★ 打印 / 备份 / Agent 三幅：文字画进图形内部（data-art-content ≥3）', async () => {
+    const expectContent = { print: 6, backup: 4, agent: 3 };
+    await renderInto(container, <OnboardingOverlay />);
+    for (let step = 1; step <= 8; step += 1) {
+      const art = document.querySelector('[data-onboarding-step-art]') as SVGElement | null;
+      const id = Array.from(document.querySelectorAll('[data-onboarding-step-content]')).length
+        ? (document.querySelector('[data-onboarding-step-content]') as HTMLElement).getAttribute(
+            'data-onboarding-step-content',
+          )
+        : null;
+      expect(art, `第 ${step} 步插画缺失`).toBeTruthy();
+      const contents = Array.from(
+        (art as SVGElement).querySelectorAll('[data-art-content]'),
+      );
+      const want = (expectContent as Record<string, number | undefined>)[id ?? ''];
+      if (want !== undefined) {
+        expect(contents.length, `${id} 幅的界面内容文字数`).toBe(want);
+      }
+      // 内容文字同样必须有值（键取到了，不是空串）
+      for (const el of contents) {
+        expect((el.textContent ?? '').trim()).not.toBe('');
+      }
+      if (step < 8) await clickNext();
     }
   });
 
@@ -379,6 +421,31 @@ describe('新手引导 · 插画标签的双语来源（不写死中文）', () 
     ).toEqual(['Member', 'Progress', 'Project', 'Stage']);
     await act(async () => {
       setLang('zh'); // 还原，别把语言状态漏给后续用例
+    });
+  });
+
+  it('②b ★ 英文模式：插画内**所有** <text>（标签 + 界面内容文字）都无中文', async () => {
+    // 符号片（A/D/E/H 与 { }）是拉丁符号，中英同形，豁免；其余必须随语言切换
+    const SYMBOLS = new Set(['A', 'D', 'E', 'H', '{ }']);
+    await act(async () => {
+      setLang('en');
+    });
+    useOnboardingStore.setState({ done: false, mode: 'steps', overlayOpen: true });
+    await renderInto(container, <OnboardingOverlay />);
+    const allTexts: string[] = [];
+    for (let step = 1; step <= 8; step += 1) {
+      const art = document.querySelector('[data-onboarding-step-art]') as SVGElement | null;
+      for (const el of Array.from((art as SVGElement).querySelectorAll('text'))) {
+        const s = (el.textContent ?? '').trim();
+        if (!SYMBOLS.has(s)) allTexts.push(s);
+      }
+      if (step < 8) await clickNext();
+    }
+    expect(allTexts.length, '采样到的文字太少 ⇒ 选择器失效，这不是通过').toBeGreaterThan(10);
+    const cjk = allTexts.filter((s) => /[一-鿿]/.test(s));
+    expect(cjk, `英文态插画里出现中文：${cjk.join(' / ')}`).toEqual([]);
+    await act(async () => {
+      setLang('zh');
     });
   });
 

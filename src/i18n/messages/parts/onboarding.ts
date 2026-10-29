@@ -104,10 +104,30 @@ export const zh = {
   'onboarding.art.calendar.holiday': '节假日',
   'onboarding.art.calendar.makeup': '补班',
   'onboarding.art.calendar.today': '今日',
-  'onboarding.art.timeline.project': '项目名',
-  'onboarding.art.timeline.stage': '阶段条',
-  'onboarding.art.timeline.milestone': '里程碑',
-  'onboarding.art.timeline.today': '今天',
+  /* 甘特 / 时间轴插画：她 2026-10-30 定稿「这一页不要文字」——
+     本步骤**不设** onboarding.art.timeline.* 键（插画内零 <text>）。
+     ⚠️ 不要再把这四个槽位加回来：加回来等于推翻这条产品裁定，且会留下无消费点的键。 */
+  /*
+   * 打印 / 备份 / Agent 三幅：第四批起文字**画进图形内部**当界面内容
+   * （不是贴在旁边的注释）。键分两类，spec 分别计数：
+   *   · `data-art-label`  —— 字段式标签（如「项目名：」），每步 2~4 个；
+   *   · `data-art-content`—— 界面内容文字（纸面标题 / 表头列名 / 文件名 / 气泡里那句话），
+   *     属第四批新增的槽位，取值一律**中性代号**（「某某项目」这类，不出现真实名）。
+   */
+  'onboarding.art.print.docTitle': '某某项目',
+  'onboarding.art.print.colStage': '阶段',
+  'onboarding.art.print.colDate': '日期',
+  'onboarding.art.print.rowStage': '方案',
+  'onboarding.art.print.rowDate': '10/01–10/12',
+  'onboarding.art.print.pageNo': '第 1 页',
+  'onboarding.art.backup.fileName': 'backup.json',
+  'onboarding.art.backup.keyProjects': 'projects',
+  'onboarding.art.backup.keyMembers': 'members',
+  'onboarding.art.backup.keyStages': 'stages',
+  // 气泡内那句话（单行长度受气泡宽度约束，zh/en 都刻意压短）
+  'onboarding.art.agent.prompt': '某某项目下周三开始。',
+  'onboarding.art.agent.draftTitle': '某某项目',
+  'onboarding.art.agent.draftStage': '方案',
   'onboarding.art.print.template': '模板',
   'onboarding.art.print.project': '项目名',
   'onboarding.art.print.stageList': '阶段清单',
@@ -118,7 +138,8 @@ export const zh = {
   'onboarding.art.backup.localData': '本机数据',
   'onboarding.art.backup.json': 'JSON 备份',
   'onboarding.art.backup.workspace': '工作区',
-  'onboarding.art.agent.request': '需求',
+  /* 气泡**内**那句话（内容）取代了原来贴在气泡旁的「需求」标注 ——
+     第四批起 Agent 只有 draft / validate 两枚标注式标签 */
   'onboarding.art.agent.draft': '排期草稿',
   'onboarding.art.agent.validate': '导回校验',
   'onboarding.art.plugins.enabled': '已启用',
@@ -228,10 +249,20 @@ export const en = {
   'onboarding.art.calendar.holiday': 'Holiday',
   'onboarding.art.calendar.makeup': 'Make-up day',
   'onboarding.art.calendar.today': 'Today',
-  'onboarding.art.timeline.project': 'Project',
-  'onboarding.art.timeline.stage': 'Stage bar',
-  'onboarding.art.timeline.milestone': 'Milestone',
-  'onboarding.art.timeline.today': 'Today',
+  /* 甘特 / 时间轴插画：产品裁定「这一页不要文字」⇒ zh 侧同样**不设**键（成对保持） */
+  'onboarding.art.print.docTitle': 'Project X',
+  'onboarding.art.print.colStage': 'Stage',
+  'onboarding.art.print.colDate': 'Date',
+  'onboarding.art.print.rowStage': 'Concept',
+  'onboarding.art.print.rowDate': 'Oct 1–12',
+  'onboarding.art.print.pageNo': 'Page 1',
+  'onboarding.art.backup.fileName': 'backup.json',
+  'onboarding.art.backup.keyProjects': 'projects',
+  'onboarding.art.backup.keyMembers': 'members',
+  'onboarding.art.backup.keyStages': 'stages',
+  'onboarding.art.agent.prompt': 'Project X starts next Wednesday.',
+  'onboarding.art.agent.draftTitle': 'Project X',
+  'onboarding.art.agent.draftStage': 'Concept',
   'onboarding.art.print.template': 'Template',
   'onboarding.art.print.project': 'Project',
   'onboarding.art.print.stageList': 'Stage list',
@@ -242,7 +273,6 @@ export const en = {
   'onboarding.art.backup.localData': 'Local data',
   'onboarding.art.backup.json': 'JSON backup',
   'onboarding.art.backup.workspace': 'Workspace',
-  'onboarding.art.agent.request': 'Request',
   'onboarding.art.agent.draft': 'Draft schedule',
   'onboarding.art.agent.validate': 'Validate on import',
   'onboarding.art.plugins.enabled': 'Enabled',
