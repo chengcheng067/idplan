@@ -318,6 +318,18 @@ const BASELINE: BaselineRow[] = [
   ['serverErr.exec.seqRequired', '字段 seq 必填：seq 由调用方经 nextSeq 计算并传入（仓储拒绝乱序/跳号）。'],
   ['serverErr.exec.operationsRequired', '字段 operations 必填且必须是数组（WritebackOperation[]）。'],
   ['serverErr.exec.operationsNotArray', '字段 operations 必须是数组（WritebackOperation[]）。'],
+
+  /* ── 工作区（批 3 · routes/workspaces.routes.ts）──
+   * 这八条是**新增**（不是从手写中文搬来的）：基准值 = 本轮定稿的载荷中文，
+   * 与 `SERVER_ERROR_TEXT` 逐字节相等由 ⑧ 锁住。八条都不带 params。 */
+  ['serverErr.workspace.nameRequired', '工作区名称不能为空。'],
+  ['serverErr.workspace.ownerNameRequired', 'Owner 管理员姓名不能为空。'],
+  ['serverErr.workspace.passwordRequired', '工作区密码不能为空。'],
+  ['serverErr.workspace.dbFileConflict', '目标库文件已被占用，请重试（系统不会覆盖已有数据）。'],
+  ['serverErr.workspace.createFailed', '建工作区失败，未留下任何残留数据，请重试。'],
+  ['serverErr.workspace.notFound', '工作区不存在。'],
+  ['serverErr.workspace.gateCurrentRequired', '该工作区已设过密码，修改时必须提供当前密码。'],
+  ['serverErr.workspace.gateCurrentWrong', '当前密码不正确。'],
 ];
 
 describe('① 载荷口径逐字节不变（BASELINE 手抄表，不是重算）', () => {

@@ -512,6 +512,95 @@ export function verifyGatePassword(
   return verifyPassword(plain, stored);
 }
 
+/** `setGatePassword()` 的失败原因（路由层据此选状态码与取词键） */
+export type SetGateFailure = 'notFound' | 'currentPasswordRequired' | 'currentPasswordWrong';
+
+/**
+ * 设 / 改某区闸密码（**必须校验旧密**，首次设密除外）。
+ *
+ * 三条口径（与桌面版 0017 产品口径同源）：
+ *   ① 该区**尚未设过**闸密（`gate_password_hash IS NULL`）⇒ 允许直接设，不需要 currentPassword；
+ *   ② 该区**已有**闸密 ⇒ 必须给 `currentPassword` 且校验通过，否则拒绝
+ *      （`currentPasswordRequired` / `currentPasswordWrong`）。
+ *      为什么必须校验：这个端点是**无鉴权**的（与 projects/members 同一格局），
+ *      若不校验旧密，局域网里任何人一个 POST 就能把别人的区闸密码换掉 ——
+ *      那等于把「区闸」这道客户端门闸彻底作废。
+ *   ③ 未登记的区 ⇒ `notFound`（调用方 404）。
+ *
+ * ⚠️ 写的是注册表库的 `gate_password_hash` **列**，不碰业务库里的成员密码。
+ *    新区建区时两处是同一个哈希（见 `createWorkspace()`）；此处改闸密**只改闸**，
+ *    成员密码不动 —— 两者在批 3 之后是不同用途：闸密守「进入这个区」，成员密码守
+ *    「以这个成员身份发言」。
+ *
+ * @returns `{ ok: true }` 或 `{ ok: false, reason }`（**不抛**，让路由层决定状态码）
+ */
+export function setGatePassword(
+  id: string,
+  plain: string,
+  currentPassword: string | undefined,
+  registryDb: ChangxiaServerDb = openRegistry(),
+): { ok: true } | { ok: false; reason: SetGateFailure } {
+  const row = findWorkspace(id, registryDb);
+  if (row === null) return { ok: false, reason: 'notFound' };
+
+  const existing = row.gate_password_hash;
+  if (existing !== null && existing !== '') {
+    if (currentPassword === undefined || currentPassword === '') {
+      return { ok: false, reason: 'currentPasswordRequired' };
+    }
+    if (!verifyPassword(currentPassword, existing)) {
+      return { ok: false, reason: 'currentPasswordWrong' };
+    }
+  }
+
+  registryDb
+    .prepare('UPDATE workspaces SET gate_password_hash = ?, updated_at = ? WHERE id = ?')
+    .run(hashPassword(plain), nowIso(), id);
+  return { ok: true };
+}
+
+/* ══════════════════════════ Owner 名派生 ══════════════════════════ */
+
+/**
+ * 派生某区的 Owner 显示名（`GET /api/workspaces` 的 `ownerMemberName`）。
+ *
+ * 判据（**与桌面版 `readWorkspaceGateHash` 的选取口径同源**）：该区业务库里
+ * `active=1 AND role_kind='admin'` 的第一行（按 `updated_at` 升序 = 最早的那个管理员）。
+ *
+ * 为什么是「派生」而不是读注册表的 `owner_member_id`：
+ *   `owner_member_id` 只有**新建区**才有（`createWorkspace()` 写入）；存量区
+ *   （ws-default 及所有升级上来的库）那一列是 NULL —— 播种时刻意不读业务库（见
+ *   `seedDefaultWorkspace()` 的注释）。所以「Owner 名」必须按判据实时查，
+ *   不能假设注册表里有。
+ *
+ * 为什么按判据查而不是「第一个创建的管理员」：
+ *   桌面版切区验密用的是同一判据（`active + role_kind='admin'` 里任一有 passwordHash 的）。
+ *   两边判据一致 ⇒ 「列表上显示的 Owner」与「实际能进去的那个管理员」是同一个人；
+ *   若这里改用创建时间最早，会出现「列表写着 A 是 Owner，实际只有 B 的密码能过」。
+ *
+ * 任何失败（库打不开 / 表不存在 / 无管理员）⇒ `null`（**不抛**）：
+ *   列表端点必须能出全表，一个区的库坏掉不该让整个工作区列表 500。
+ */
+export function deriveOwnerMemberName(
+  id: string,
+  registryDb: ChangxiaServerDb = openRegistry(),
+): string | null {
+  try {
+    const db = openWorkspaceDb(id, registryDb);
+    const row = db
+      .prepare(
+        `SELECT name FROM members
+          WHERE active = 1 AND role_kind = 'admin'
+          ORDER BY updated_at ASC, id ASC
+          LIMIT 1`,
+      )
+      .get() as { name: string } | undefined;
+    return row?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /* ══════════════════════════ 再导出 ══════════════════════════ */
 
 /**

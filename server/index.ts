@@ -25,6 +25,11 @@ import { registerMetaRoutes } from './routes/meta.routes';
 import { registerExecutionRoutes } from './routes/executions.routes';
 // v0.7（T02）：Agent 导入通道（独立 token `IDPLAN_AGENT_API_TOKEN`，与备份通道分离）
 import { registerAgentRoutes } from './routes/agent.routes';
+// v1.0（多工作区 NAS 版 · 批 3）：五个 `/api/workspaces*` 端点。
+// ★ 注意签名差异：本路由**不接 db**（它操作的是注册表库 + 跨区的多个业务库句柄，
+//   由 server/workspace-registry.ts 统一管理），故只有 app 一个入参。
+//   下面八行 `registerXxxRoutes(app, db)` 的签名与行为一个字都没动。
+import { registerWorkspaceRoutes } from './routes/workspaces.routes';
 
 const PORT = Number(process.env.PORT ?? 7788);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -91,6 +96,9 @@ async function main(): Promise<void> {
   //   幂等 upsert 与成员写入（详见该文件头「三条实现策略」）。先后顺序不影响
   //   注册正确性（委托发生在请求期），但放在最后读起来与依赖方向一致。
   registerAgentRoutes(app, db);
+  // ★ 多工作区（批 3）：**必须排在最后**。它不依赖任何既有路由（不经 app.inject 委托），
+  //   排最后只是为了让「八行老路由先就位」这个阅读顺序保持原样。
+  registerWorkspaceRoutes(app);
 
   await app.listen({ port: PORT, host: HOST });
 }

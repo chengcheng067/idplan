@@ -254,6 +254,18 @@ export const zh = {
   'coreErr.workspace.registryUnavailable':
     '工作区列表不可用（装配时缺少注册表回调），请检查启动配置。',
 
+  /* 段 6 之二：建工作区 / 改闸密的八条（多工作区 · 批 3 · server/routes/workspaces.routes.ts）
+   * ⚠️ 与 `SERVER_ERROR_TEXT`（server/lib/server-error-text.ts）**逐字节相同**，由
+   *    `tests/server-error-i18n.spec.ts` ⑧ 锁住。八条都不带 {params}。 */
+  'serverErr.workspace.nameRequired': '工作区名称不能为空。',
+  'serverErr.workspace.ownerNameRequired': 'Owner 管理员姓名不能为空。',
+  'serverErr.workspace.passwordRequired': '工作区密码不能为空。',
+  'serverErr.workspace.dbFileConflict': '目标库文件已被占用，请重试（系统不会覆盖已有数据）。',
+  'serverErr.workspace.createFailed': '建工作区失败，未留下任何残留数据，请重试。',
+  'serverErr.workspace.notFound': '工作区不存在。',
+  'serverErr.workspace.gateCurrentRequired': '该工作区已设过密码，修改时必须提供当前密码。',
+  'serverErr.workspace.gateCurrentWrong': '当前密码不正确。',
+
   /*
    * ── 段 5 之五：行业板块显示名（10 个 id）──
    * ⚠️ 值与 core 的 `DOMAIN_LABELS`（`src/core/template/stage-library.ts`）**逐字相同** ——
@@ -680,6 +692,19 @@ export const en = {
     'The workspace password could not be saved to the local database. Please try again (and check that browser storage is available).',
   'coreErr.workspace.registryUnavailable':
     'The workspace list is unavailable (the registry callback was not wired up at startup); please check the boot configuration.',
+
+  /* 段 6 之二：建工作区 / 改闸密的八条（多工作区 · 批 3） */
+  'serverErr.workspace.nameRequired': 'Workspace name cannot be empty.',
+  'serverErr.workspace.ownerNameRequired': "The owner administrator's name cannot be empty.",
+  'serverErr.workspace.passwordRequired': 'Workspace password cannot be empty.',
+  'serverErr.workspace.dbFileConflict':
+    'The target database file is already taken. Please try again (existing data is never overwritten).',
+  'serverErr.workspace.createFailed':
+    'Creating the workspace failed. No partial data was left behind; please try again.',
+  'serverErr.workspace.notFound': 'Workspace not found.',
+  'serverErr.workspace.gateCurrentRequired':
+    'This workspace already has a password; the current password is required to change it.',
+  'serverErr.workspace.gateCurrentWrong': 'The current password is incorrect.',
 
   /* ── 段 5 之五：行业板块显示名（10 个 id）—— 译名由 team-lead 给出 ── */
   'domain.indoor': 'Interiors',

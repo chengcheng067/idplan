@@ -158,6 +158,26 @@ export const SERVER_ERROR_TEXT = {
   'serverErr.backup.domainRejected':
     '备份导入被拒绝（库未做任何改动）。{offenders}。主板块 domain 只接受 {allowed}（共 {count} 个），或显式 null（= 清除，回到读时回落）。',
 
+  /* ── 工作区（routes/workspaces.routes.ts · 批 3） ── */
+  // 建区失败的五条：`createWorkspace()` 抛 `WorkspaceCreateError`，其 `.field` 是
+  // 机器可读的失败位置（name / ownerName / password / dbFile / storage），路由层按它选键。
+  // 为什么不把英文内部诊断串直接回给用户（那 6 条在 workspace-registry.ts 里）：
+  // 它们是「哪一步炸了」的调试信息，不是「用户该做什么」。
+  // ⚠️ 五条都**不带 {params}**：占位符两侧必须一致（spec ⑧ 第三条断言），不传参就没有漂移面。
+  'serverErr.workspace.nameRequired': '工作区名称不能为空。',
+  'serverErr.workspace.ownerNameRequired': 'Owner 管理员姓名不能为空。',
+  'serverErr.workspace.passwordRequired': '工作区密码不能为空。',
+  // `dbFile` 冲突**不放路径**：`/data/ws-<uuid>.db` 是容器内绝对路径，回给用户既暴露
+  // 部署结构又毫无可操作性（他没法对这个路径做任何事）。真因留在内部诊断串里。
+  'serverErr.workspace.dbFileConflict': '目标库文件已被占用，请重试（系统不会覆盖已有数据）。',
+  // 这句话里的「未留下任何残留数据」是 `createWorkspace()` 回滚保证的**用户面表达**
+  // （回滚本身由 tests/server.workspaces.spec.ts ⑥ 组三条钉死）。
+  'serverErr.workspace.createFailed': '建工作区失败，未留下任何残留数据，请重试。',
+  'serverErr.workspace.notFound': '工作区不存在。',
+  // 该区还没设过闸密（`hasGate:false`）时「改密」必须先设一次 —— 不是错误，是引导。
+  'serverErr.workspace.gateCurrentRequired': '该工作区已设过密码，修改时必须提供当前密码。',
+  'serverErr.workspace.gateCurrentWrong': '当前密码不正确。',
+
   /* ── 项目（routes/projects.routes.ts） ── */
   'serverErr.project.notFound': '项目不存在',
   'serverErr.project.notFoundOrDeleted': '项目不存在或已删除',
