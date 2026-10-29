@@ -227,6 +227,21 @@ export const CORE_ERROR_TEXT = {
 
   /* ── 段 5 之四：宿主装配缺失（无 Provider ⇒ 插件开关存不下来） ── */
   'coreErr.plugin.registryUnavailable': '插件注册表不可用（无 Provider），无法保存开关',
+
+  /* ── 段 6：工作区闸密码（多工作区抽象层 · 批 4） ── */
+  /*
+   * 只在 `LocalWorkspacesRepo.setGate` 用：写哈希返回 false（库不存在 / 该区没有
+   * active 管理员 / 读写出错）必须让调用方看见失败 —— 静默成功会让用户以为
+   * 密码已设好，下次进区被拦在门外。三类的**可操作动作是同一句**（检查存储或重试），
+   * 故不拆成三个键：拆开的价值在「用户能据此做不同的事」，这里做不到。
+   */
+  'coreErr.workspace.gateWriteFailed': '工作区密码没能存进本地数据库，请重试（或检查浏览器存储是否可用）。',
+  /*
+   * 装配缺失：`LocalWorkspacesRepo` 拿不到注册表回调（`RepositoryFactoryConfig`
+   * 的 `workspaceListRegistry` 没被注入）。只在装配写错时出现 —— 用户可见的形态是
+   * 首屏工作区列表整块失败，而不是「一个空列表」。
+   */
+  'coreErr.workspace.registryUnavailable': '工作区列表不可用（装配时缺少注册表回调），请检查启动配置。',
 } as const;
 
 /** 机器可读的载荷文案键（= 上表的键；渲染层用 `t(messageKey)` 取界面口径） */

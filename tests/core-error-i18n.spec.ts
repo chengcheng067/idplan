@@ -273,6 +273,10 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
 
   /* ── 段 5 之四（宿主装配缺失）：基准值取自改动前 `PluginRegistryProvider.tsx` 的裸 `Error(...)` 原文 ── */
   ['coreErr.plugin.registryUnavailable', ChangxiaErrorCode.Validation, '插件注册表不可用（无 Provider），无法保存开关'],
+
+  /* ── 段 6（多工作区抽象层 · 批 4）：本键是**新增**（不是从手写中文搬来的），基准值即本轮定稿 ── */
+  ['coreErr.workspace.gateWriteFailed', ChangxiaErrorCode.Storage, '工作区密码没能存进本地数据库，请重试（或检查浏览器存储是否可用）。'],
+  ['coreErr.workspace.registryUnavailable', ChangxiaErrorCode.Storage, '工作区列表不可用（装配时缺少注册表回调），请检查启动配置。'],
 ];
 
 /** 需要插值的键 → 参数（取值与上面基准表一致；未列出的键一律不传参） */

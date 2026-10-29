@@ -17,6 +17,8 @@ import type {
   IAdminRepository,
   IItinerariesRepository,
   IExecutionsRepository,
+  IWorkspaceRepository,
+  WorkspaceSummary,
 } from '../interfaces';
 import type {
   CreateItineraryDayCmd,
@@ -66,6 +68,15 @@ export class RestClient {
     /** 预留位：未来 Docker 化后填简单 token */
     private readonly authToken: string = '',
     private readonly timeoutMs: number = 8000,
+    /**
+     * 当前工作区 id（多工作区 · remote 形态）。
+     *
+     * 非空时每个请求都带上 `X-Workspace-Id`，服务端据此把请求路由到该区的数据；
+     * **空值一律不带这个头** —— 老服务端（不认识这个头）收到空串和不认识它是一回事，
+     * 但「带一个空值头」会让中间件/网关把它当成「显式声明无工作区」而做出与缺省
+     * 不同的判断（这是我们无法控制的外部行为），故按「没有就不发」处理。
+     */
+    private readonly workspaceId: string = '',
   ) {}
 
   public async request<T>(
@@ -73,15 +84,50 @@ export class RestClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
+    return this.unwrap<T>(await this.send(method, path, body));
+  }
+
+  /**
+   * 「**可能被拒**」的请求：`allowStatuses` 里列出的状态码当作**正常业务结果**返回，
+   * 不翻成 `ChangxiaError`；其余非 2xx 仍按 `request()` 的既有口径抛。
+   *
+   * ── 为什么必须开这个口子（而不是让调用方 catch 后嗅错误）──
+   * `RestClient` 把 HTTP 状态**压平成业务错误码**（404→NotFound / 409→Conflict /
+   * 400|422→Validation / 其余→Network），401 与「连不上」都会变成同一个 `Network`。
+   * 于是「密码不对」与「NAS 挂了」在调用方看来无法区分 —— 前者该提示重输密码，
+   * 后者该提示检查地址。要么在错误对象上多带一个 status 字段（改动面波及全部
+   * 远端仓储的错误处理），要么在**唯一需要它的调用点**把状态码原样取出来。
+   * 本方法取后者：只有明确知道「这个端点用 401 表达业务拒绝」的调用方才用它。
+   *
+   * 目前唯一调用方：`RemoteWorkspacesRepo.verifyGate`（401 = 闸密码不对）。
+   */
+  public async requestAllowingStatuses<T>(
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    path: string,
+    body: unknown,
+    allowStatuses: readonly number[],
+  ): Promise<{ status: number; data: T | null }> {
+    const res = await this.send(method, path, body);
+    if (allowStatuses.includes(res.status)) return { status: res.status, data: null };
+    return { status: res.status, data: await this.unwrap<T>(res) };
+  }
+
+  /** 发请求（不解释响应）：错误体解读与状态码映射全在 `unwrap()` 一处。 */
+  private async send(
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    path: string,
+    body?: unknown,
+  ): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}${path}`, {
+      return await fetch(`${this.baseUrl}${path}`, {
         method,
         headers: {
           'Content-Type': 'application/json',
           ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+          // ★ 工作区头（多工作区 · remote）：空值不注入，理由见构造函数注释。
+          ...(this.workspaceId ? { 'X-Workspace-Id': this.workspaceId } : {}),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
@@ -91,7 +137,10 @@ export class RestClient {
     } finally {
       clearTimeout(timer);
     }
+  }
 
+  /** 响应 → 值 / 抛错（HTTP→业务错误码的唯一映射处） */
+  private async unwrap<T>(res: Response): Promise<T> {
     if (!res.ok) {
       /*
        * ⚠️ 三支读者不同（甲案 · server 片，2026-10 英文收尾批）：
@@ -604,6 +653,82 @@ class RemoteAdminRepository implements IAdminRepository {
   }
 }
 
+/* ------------------------------ 工作区仓储（remote） ------------------------------ */
+
+/**
+ * 工作区能力仓储（remote / NAS 形态）。
+ *
+ * 端点契约（服务端侧实现，本文件只按契约调用）：
+ *   · `GET  /workspaces`                → `{ workspaces: [{id,name,ownerMemberName,createdAt}] }`
+ *   · `POST /workspaces`                → `{ id, ownerMemberId }`（body: `{name,ownerName,password}`）
+ *   · `GET  /workspaces/:id/gate`       → `{ hasGate: boolean }`
+ *   · `POST /workspaces/:id/gate/verify`→ 200 = 密码对 / 401 = 密码错（body: `{password}`）
+ *   · `POST /workspaces/:id/gate`       → 204（body: `{password, currentPassword?}`）
+ *
+ * ⚠️ `list()` 的取值不是 `WorkspaceSummary` 的裸数组：服务端包了一层 `{ workspaces: ... }`
+ *   （与其它端点的「裸数组」不同，因为工作区列表要能被服务端单独扩展出分页/计数而
+ *   不改响应形状）。这一层的解包**只在这里做一次**；调用方永远只看到数组。
+ */
+export class RemoteWorkspacesRepo implements IWorkspaceRepository {
+  public constructor(private readonly api: RestClient) {}
+
+  async list(): Promise<WorkspaceSummary[]> {
+    const res = await this.api.get<{ workspaces?: WorkspaceSummary[] }>('/workspaces');
+    const rows = res?.workspaces;
+    if (!Array.isArray(rows)) return [];
+    /*
+     * 兜底归一（只补 `ownerMemberName` 的空值语义）：服务端在「存量区还没解析出
+     * 首个管理员」时可能省略该字段。接口契约是 `string | null`（空 = 尚未回填），
+     * 用 `?? null` 把 `undefined` 收进同一语义，避免调用方各自写一遍
+     * `ws.ownerMemberName ?? null`（第二份判据）。
+     */
+    return rows.map((w) => ({
+      id: w.id,
+      name: w.name,
+      ownerMemberName: w.ownerMemberName ?? null,
+      createdAt: w.createdAt,
+    }));
+  }
+
+  create(cmd: { name: string; ownerName: string; password: string }): Promise<{ id: string; ownerMemberId: string }> {
+    return this.api.post('/workspaces', cmd);
+  }
+
+  gateOf(id: string): Promise<{ hasGate: boolean }> {
+    return this.api.get(`/workspaces/${id}/gate`);
+  }
+
+  /**
+   * 校验工作区闸密码：**错密码返回 false，不抛**。
+   *
+   * 服务端用 401 表达「密码不对」（与 `POST /api/members/verify` 同协议）。
+   * ⚠️ 只有 401 被吞成 `false`；网络错误 / 5xx **照常抛** —— 那是真故障，
+   *   显示成「密码不对」会把用户引向重输密码，而问题在 NAS。
+   *   实现走 `requestAllowingStatuses`：`RestClient` 的常规错误映射会把 401 压成
+   *   `Network`（与「连不上」同码），在那边**无法区分**，故状态码必须在翻之前取出来。
+   */
+  async verifyGate(id: string, password: string): Promise<boolean> {
+    const { status } = await this.api.requestAllowingStatuses(
+      'POST',
+      `/workspaces/${id}/gate/verify`,
+      { password },
+      [401],
+    );
+    return status !== 401;
+  }
+
+  setGate(
+    id: string,
+    password: string,
+    opts?: { currentPassword?: string },
+  ): Promise<void> {
+    return this.api.post(`/workspaces/${id}/gate`, {
+      password,
+      ...(opts?.currentPassword === undefined ? {} : { currentPassword: opts.currentPassword }),
+    });
+  }
+}
+
 /* --------------------------------- 工厂出口 --------------------------------- */
 
 /**
@@ -614,8 +739,19 @@ class RemoteAdminRepository implements IAdminRepository {
  */
 export const API_TOKEN_KEY = 'idplan.apiToken';
 
-/** remote bundle 装配（rest.client 同时承担 createRemoteRepositories 职责） */
-export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle {
+/**
+ * remote bundle 装配（rest.client 同时承担 createRemoteRepositories 职责）。
+ *
+ * @param apiBaseUrl API 基址（必填，末尾斜杠会被去掉）
+ * @param workspaceId 当前工作区 id（多工作区 · 批 4）。非空 ⇒ 全部请求带
+ *        `X-Workspace-Id`；空 ⇒ 不带（老服务端/单区部署的行为与改造前一致）。
+ *
+ * ★ 为什么是**一个参数、一个 `RestClient` 实例**：十个 Remote* 仓储共用同一个
+ *   `api`（见下方 return），故工作区头只需在这一处注入就覆盖全部端点 —— 不存在
+ *   「某个仓储忘了带头」的漏网可能。反例形态（每个仓储各自 new 一个 client）会让
+ *   这条隐式契约变成十份手抄。
+ */
+export function createRemoteRepositories(apiBaseUrl: string, workspaceId = ''): IRepositoryBundle {
   if (!apiBaseUrl) {
     throw coreError(ChangxiaErrorCode.Network, 'coreErr.remote.baseUrlRequired');
   }
@@ -633,7 +769,7 @@ export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle 
   const stored =
     typeof localStorage !== 'undefined' ? (localStorage.getItem(API_TOKEN_KEY) ?? '').trim() : '';
   const apiToken = stored || (env.VITE_API_TOKEN ?? '').trim();
-  const api = new RestClient(apiBaseUrl.replace(/\/+$/, ''), apiToken);
+  const api = new RestClient(apiBaseUrl.replace(/\/+$/, ''), apiToken, undefined, workspaceId);
   return {
     projects: new RemoteProjectsRepository(api),
     stages: new RemoteStagesRepository(api),
@@ -644,6 +780,7 @@ export function createRemoteRepositories(apiBaseUrl: string): IRepositoryBundle 
     contracts: new RemoteContractsRepository(api),
     settings: new RemoteSettingsRepository(api),
     executions: new RemoteExecutionsRepository(api),
+    workspaces: new RemoteWorkspacesRepo(api),
     admin: new RemoteAdminRepository(api),
   };
 }

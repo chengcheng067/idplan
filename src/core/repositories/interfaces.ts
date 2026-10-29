@@ -341,6 +341,93 @@ export interface IAdminRepository {
   replaceAllImport(pkg: import('../types/dto').BackupPackage): Promise<{ renumbered: number }>;
 }
 
+/**
+ * 工作区列表项（`IWorkspaceRepository.list()` 的元素）。
+ *
+ * ★ 为什么只有这四个字段（不是把 `src/lib/workspace-registry.ts` 的 `WorkspaceEntry`
+ *   搬过来）：`dbName` 是 **local 专属**的实现细节（每个区一个 Dexie 库），remote
+ *   形态下工作区是服务端的一张表、没有「库名」这个概念。接口层不许让调用方看见
+ *   「库名」，否则 UI 会退化成按实现分支（那正是本次抽象要消灭的东西）。
+ *   local 实现的 `listRegistry` 注入回调负责把 `WorkspaceEntry` 映射成这四项。
+ */
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  /** Owner（最高管理员）成员名；存量区在首次解析出首个管理员前为 null */
+  ownerMemberName: string | null;
+  /** 建区时刻（ISO 8601 字符串，与注册表 `WorkspaceEntry.createdAt` 同口径） */
+  createdAt: string;
+}
+
+/** 建工作区入参（两套实现的语义必须一致：建空白区 + Owner 管理员入库） */
+export interface CreateWorkspaceCmd {
+  name: string;
+  /** Owner 管理员姓名 */
+  ownerName: string;
+  /** 工作区闸密码明文（≥4 位校验在 UI 层；落库一律是哈希） */
+  password: string;
+}
+
+/** 设/改工作区闸密码的选项 */
+export interface SetWorkspaceGateOptions {
+  /**
+   * 当前密码（remote 形态的「改密」需要服务端校验旧密；local 形态只在显式改密时用到）。
+   * 首次设密（该区本来没有闸密）时缺省。
+   */
+  currentPassword?: string;
+}
+
+/**
+ * 工作区能力仓储（多工作区抽象层 · 前端工作区能力的唯一数据访问面）。
+ *
+ * ── 它解决什么问题 ──
+ * 桌面版的工作区能力（列区 / 建区 / 读闸密 / 验闸密 / 写闸密）此前是**组件直连**：
+ * `WorkspacePicker` 同时 import `src/lib/workspace-registry`（localStorage 注册表）
+ * 与 `src/core/repositories/local/workspace.db`（Dexie 建库/闸密）。remote（NAS）
+ * 形态要复用同一个选择器，就必须把这五件事抽成接口——否则 UI 只能按 `dataSource`
+ * 分叉，长出第二套界面。
+ *
+ * ── 纪律（与其它仓储同口径）──
+ *   · 全部方法 async；local(Dexie + 注册表) / remote(fetch) 两套适配器逐一对应实现；
+ *   · 任何失败抛 `ChangxiaError{code, userMessage}`；
+ *   · **接口本身不引任何平台 API**（不碰 `window` / `document` / `localStorage` /
+ *     `indexedDB`）：`src/core/**` 的纯净性由 `tests/arch-boundary.spec.ts` 锁定，
+ *     且本文件是服务端 tsconfig 的 include 面内的共享内核文件。
+ *
+ * ── 语义要点（两套实现必须逐条一致，否则同一段 UI 在两种形态下行为分裂）──
+ *   ① `verifyGate` 的「密码不对」是**正常返回 false**，不是异常：输错密码是用户
+ *      日常操作，抛错会把「密码不对」和「网络断了」混成同一条错误路径。
+ *   ② `gateOf` 的 `hasGate:false` 表示该区还没设过闸密 ⇒ 调用方应引导「先设一个
+ *      再进」（0017 产品口径），**不得**当成「无需验密、直接进」（0016 的旧做法已废止）。
+ *   ③ 本接口**不**包含「同区免验密」这类判断：那是调用方的事，曾经写在这里的
+ *      免密短路已被产品负责人否掉（详见 `WorkspacePicker` 文件头）。
+ */
+export interface IWorkspaceRepository {
+  /** 全部工作区（按创建时间先后，与注册表顺序一致） */
+  list(): Promise<WorkspaceSummary[]>;
+
+  /**
+   * 建一个空白工作区，并把 Owner 管理员写进它的成员表。
+   *
+   * 返回值 `ownerMemberId` 供调用方落「区级身份键」，实现「建区即以 Owner 身份进入」。
+   */
+  create(cmd: CreateWorkspaceCmd): Promise<{ id: string; ownerMemberId: string }>;
+
+  /** 该区是否设过闸密码（`hasGate:false` ⇒ 调用方走「先设一个再进」） */
+  gateOf(id: string): Promise<{ hasGate: boolean }>;
+
+  /** 校验明文密码是否是该区的闸密码（**错密码返回 false，不抛**） */
+  verifyGate(id: string, password: string): Promise<boolean>;
+
+  /**
+   * 设 / 改该区闸密码。
+   *
+   * 该区尚无闸密时 `opts.currentPassword` 可缺省；已有闸密时由实现方决定是否校验旧密
+   * （remote 交给服务端裁决，local 形态当前只用于「补设」，改密走成员管理）。
+   */
+  setGate(id: string, password: string, opts?: SetWorkspaceGateOptions): Promise<void>;
+}
+
 /** 七接口捆绑：DI 唯一下发的对象 */
 export interface IRepositoryBundle {
   projects: IProjectsRepository;
@@ -353,6 +440,22 @@ export interface IRepositoryBundle {
   settings: ISettingsRepository;
   /** Agent 执行域仓储（第一切片） */
   executions: IExecutionsRepository;
+  /**
+   * 工作区能力仓储（多工作区抽象层 · 批 4）。
+   *
+   * ── 为什么是可选字段（与 `admin` 同一处理）──
+   * 本接口有**三类**装配方：前端 local 工厂、前端 remote 工厂、**服务端 SQLite 适配器**
+   * （`server/adapters/sqlite.bundle.ts`，供 `payload.apply` 在 Node 侧跑共享内核）。
+   * 服务端那个适配器只实现共享内核真正消费的那几个域，工作区能力**不在其中**
+   * （NAS 的工作区是它自己的一张表，由 server 路由直接读写，不经仓储）。
+   * 设成必填会让服务端 tsc 直接红，而正确的修法不是逼服务端补一个用不上的实现。
+   *
+   * ⚠️ 但「类型可选」不等于「前端可以不给」：**两个前端工厂都必须给出实现**，
+   * 这条由 `tests/workspace-repository.spec.ts` 的「装配完备性」用例钉死
+   * （它会对两个工厂的产物断言 `workspaces` 存在且五个方法齐全）。
+   * 这样缺实现的失配会在提交期红，而不是等到首屏工作区列表打不开。
+   */
+  workspaces?: IWorkspaceRepository;
   admin?: IAdminRepository;
 }
 
@@ -366,4 +469,23 @@ export interface RepositoryFactoryConfig {
    * remote 模式忽略本字段。
    */
   dbName?: string;
+  /**
+   * 当前工作区 id（多工作区 · 批 4）。
+   *
+   * **只有 remote 形态消费它**：作为 `X-Workspace-Id` 请求头注入，服务端据此
+   * 把请求路由到该区的数据。local 形态忽略它 —— 那边的「当前区」由 `dbName`
+   * 表达（每个区一个 Dexie 库），两者是同一件事的两种载体。
+   *
+   * 缺省空串 ⇒ 不发该头（老服务端 / 单区部署的行为与改造前逐字节一致）。
+   */
+  workspaceId?: string;
+  /**
+   * local 形态的**工作区列表来源**（`IWorkspaceRepository.list()` 的实现）。
+   *
+   * 为什么是注入而不是在 core 里 import：注册表住在 `src/lib/workspace-registry.ts`，
+   * 读 localStorage，而 `src/core/**` 不许碰浏览器存储（`tests/arch-boundary.spec.ts`）。
+   * 注入方是 `src/di/repository.provider.tsx`（在 `src/di/`，无此约束）。
+   * remote 形态忽略本字段（那边的列表来自 `GET /api/workspaces`）。
+   */
+  workspaceListRegistry?: () => WorkspaceSummary[];
 }

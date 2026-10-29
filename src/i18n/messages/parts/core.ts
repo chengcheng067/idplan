@@ -248,6 +248,12 @@ export const zh = {
   /* 段 5 之四：宿主装配缺失（无 Provider）——载荷表与本表逐字相等（有 spec 钉） */
   'coreErr.plugin.registryUnavailable': '插件注册表不可用（无 Provider），无法保存开关',
 
+  /* 段 6：工作区闸密码写入失败（多工作区抽象层 · 批 4）——载荷表与本表逐字相等 */
+  'coreErr.workspace.gateWriteFailed':
+    '工作区密码没能存进本地数据库，请重试（或检查浏览器存储是否可用）。',
+  'coreErr.workspace.registryUnavailable':
+    '工作区列表不可用（装配时缺少注册表回调），请检查启动配置。',
+
   /*
    * ── 段 5 之五：行业板块显示名（10 个 id）──
    * ⚠️ 值与 core 的 `DOMAIN_LABELS`（`src/core/template/stage-library.ts`）**逐字相同** ——
@@ -668,6 +674,12 @@ export const en = {
   /* 段 5 之四：宿主装配缺失（无 Provider） */
   'coreErr.plugin.registryUnavailable':
     'The plugin registry is unavailable (no Provider), so this switch cannot be saved.',
+
+  /* 段 6：工作区闸密码写入失败（多工作区抽象层 · 批 4） */
+  'coreErr.workspace.gateWriteFailed':
+    'The workspace password could not be saved to the local database. Please try again (and check that browser storage is available).',
+  'coreErr.workspace.registryUnavailable':
+    'The workspace list is unavailable (the registry callback was not wired up at startup); please check the boot configuration.',
 
   /* ── 段 5 之五：行业板块显示名（10 个 id）—— 译名由 team-lead 给出 ── */
   'domain.indoor': 'Interiors',

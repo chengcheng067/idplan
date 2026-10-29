@@ -7,7 +7,7 @@ import type { IRepositoryBundle } from '../core/repositories/interfaces';
 import { detectLocalDbVersion, isDbAheadOfApp, needsPreMigrationBackup } from '../core/repositories/local/dexie.database';
 import { SCHEMA_VERSION } from '../core/schema/current';
 import { recoverZombieExecutions } from '../core/execution/execution-recovery';
-import { currentWorkspaceDbName } from '../lib/workspace-registry';
+import { currentWorkspaceDbName, currentWorkspaceIdSync, listWorkspaces } from '../lib/workspace-registry';
 /*
  * ★ i18n 笔 misc：本文件同时用**两种**取词形态，故 import 时先把模块级取词改名。
  *   · `translate`（模块级 `t`，不订阅）：只给 `startRepositories` 那次「算一次就完」
@@ -73,7 +73,30 @@ export function RepoProvider({ children }: { children: React.ReactNode }): JSX.E
 
   const startRepositories = useCallback(async (dbName?: string): Promise<void> => {
     try {
-      const b = await createRepositories({ dataSource: appEnv.dataSource, apiBaseUrl: appEnv.apiBaseUrl, dbName });
+      /*
+       * ★ 多工作区（批 4）：工厂现在还要「当前工作区 id」与「工作区列表来源」。
+       *   两者都在这里取 —— 本文件在 `src/di/`，读 localStorage 是合法的
+       *   （`src/core/**` 才有那条锁，见 tests/arch-boundary.spec.ts）。
+       *   · `workspaceId`：remote 用它注入 `X-Workspace-Id`；local 忽略。
+       *   · `workspaceListRegistry`：local 的工作区列表来源，工厂把它注进
+       *     `LocalWorkspacesRepo`。**必须**在这里给，不能让 core 自己 import
+       *     注册表（那会把 localStorage 拖进 core）。
+       *   取法与下面 `currentWorkspaceDbName()` 同一个出处（workspace-registry），
+       *   保证「库名」与「区 id」永远指向同一个区 —— 两处各自算一遍就会分叉。
+       */
+      const b = await createRepositories({
+        dataSource: appEnv.dataSource,
+        apiBaseUrl: appEnv.apiBaseUrl,
+        dbName,
+        workspaceId: currentWorkspaceIdSync(),
+        workspaceListRegistry: () =>
+          listWorkspaces().map((w) => ({
+            id: w.id,
+            name: w.name,
+            ownerMemberName: w.ownerMemberName,
+            createdAt: w.createdAt,
+          })),
+      });
       // ★ 僵尸态兜底（规格 §12 L223 第 1 条）：仓储刚装配完、**首屏数据装载之前**收敛。
       //   时序是硬要求，不是风格选择：
       //     - 早于 `createRepositories` 不可能（那时还没有仓储可写）；
