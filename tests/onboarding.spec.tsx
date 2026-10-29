@@ -37,16 +37,35 @@ import { useOnboardingGate } from '../src/hooks/useOnboardingGate';
 import { useOnboardingStore } from '../src/store/useOnboardingStore';
 import { useSettingsStore } from '../src/store/useSettingsStore';
 import { useUiStore } from '../src/store/useUiStore';
+import { setLang } from '../src/i18n';
 import { withHostPolicySettings } from '../src/core/demo/demoDataFactory';
 import { ONBOARDING_DONE_KEY, ONBOARDING_MODE_KEY } from '../src/core/onboarding/keys';
 
 const rootDir = join(__dirname, '..');
 const read = (p: string): string => readFileSync(join(rootDir, p), 'utf8');
 
+/**
+ * 挂载助手（**先卸后挂**）。
+ *
+ * 为什么要卸旧根：上一条用例 `document.body.innerHTML = ''` 只是把容器**摘出文档**，
+ * 那个 React root 并未 unmount，仍然订阅着 store —— 下一条用例改 store 时它会
+ * 在 act 之外重渲染，刷一屏 `not wrapped in act(...)` 警告（这类噪声会掩盖真实错误，
+ * 是本仓既有教训）。故每次挂载前显式卸掉上一个根。
+ */
+let mountedRoot: Awaited<ReturnType<typeof import('react-dom/client').createRoot>> | null = null;
+
 async function renderInto(el: HTMLElement, node: ReactNode): Promise<void> {
+  if (mountedRoot !== null) {
+    const stale = mountedRoot;
+    mountedRoot = null;
+    await act(async () => {
+      stale.unmount();
+    });
+  }
   await act(async () => {
     const { createRoot } = await import('react-dom/client');
-    createRoot(el).render(node);
+    mountedRoot = createRoot(el);
+    mountedRoot.render(node);
   });
 }
 
@@ -63,11 +82,27 @@ function resetStores(): void {
   settingsSetSpy.mockClear();
 }
 
+/**
+ * 清场（每条用例**先跑**）：卸掉上一条用例挂的 React root。
+ * 顺序很重要 —— 必须先卸再 `resetStores()`：还挂着的组件订阅着 store，
+ * 在 act 外改 store 就会刷 `not wrapped in act(...)` 警告（噪声会掩盖真实错误）。
+ */
+async function resetStage(): Promise<void> {
+  if (mountedRoot !== null) {
+    const stale = mountedRoot;
+    mountedRoot = null;
+    await act(async () => {
+      stale.unmount();
+    });
+  }
+  localStorage.clear();
+  document.body.innerHTML = '';
+}
+
 describe('新手引导 · 自动闸门（useOnboardingGate）', () => {
   let container: HTMLElement;
-  beforeEach(() => {
-    localStorage.clear();
-    document.body.innerHTML = '';
+  beforeEach(async () => {
+    await resetStage();
     container = document.createElement('div');
     document.body.appendChild(container);
     resetStores();
@@ -107,9 +142,8 @@ describe('新手引导 · 自动闸门（useOnboardingGate）', () => {
 
 describe('新手引导 · 第一屏（选模式）', () => {
   let container: HTMLElement;
-  beforeEach(() => {
-    localStorage.clear();
-    document.body.innerHTML = '';
+  beforeEach(async () => {
+    await resetStage();
     container = document.createElement('div');
     document.body.appendChild(container);
     resetStores();
@@ -140,9 +174,8 @@ describe('新手引导 · 第一屏（选模式）', () => {
 
 describe('新手引导 · 简单介绍线（单屏 6 卡）', () => {
   let container: HTMLElement;
-  beforeEach(() => {
-    localStorage.clear();
-    document.body.innerHTML = '';
+  beforeEach(async () => {
+    await resetStage();
     container = document.createElement('div');
     document.body.appendChild(container);
     resetStores();
@@ -185,9 +218,8 @@ describe('新手引导 · 分步线（壳 + 步骤 1 看板）', () => {
       (document.querySelector(sel) as HTMLButtonElement | null)?.click();
     });
 
-  beforeEach(() => {
-    localStorage.clear();
-    document.body.innerHTML = '';
+  beforeEach(async () => {
+    await resetStage();
     container = document.createElement('div');
     document.body.appendChild(container);
     resetStores();
@@ -248,6 +280,24 @@ describe('新手引导 · 分步线（壳 + 步骤 1 看板）', () => {
     expect(document.querySelector('[data-onboarding-step-art="placeholder"]')).toBeNull();
   });
 
+  it('③c ★ 每步插画带 2~4 个 i18n 文字标签（data-art-label 计数，语言无关）', async () => {
+    const ids = ['board', 'calendar', 'timeline', 'print', 'members', 'backup', 'agent', 'plugins'];
+    await renderInto(container, <OnboardingOverlay />);
+    for (let i = 0; i < ids.length; i += 1) {
+      const id = ids[i]!;
+      const labels = Array.from(
+        document.querySelectorAll(`[data-onboarding-step-art="${id}"] [data-art-label]`),
+      );
+      expect(labels.length, `步骤 ${i + 1}（${id}）插画标签数应在 2~4`).toBeGreaterThanOrEqual(2);
+      expect(labels.length, `步骤 ${i + 1}（${id}）插画标签数应在 2~4`).toBeLessThanOrEqual(4);
+      // 标签必须有实际文本（键取到了值，不是空串/键名）
+      for (const el of labels) {
+        expect((el.textContent ?? '').trim(), `步骤 ${i + 1} 有标签是空串`).not.toBe('');
+      }
+      if (i < ids.length - 1) await click('[data-onboarding-next]');
+    }
+  });
+
   it('④ 第 8 步「下一步」进完成页；成员身份只有「先随便看看」一个出口，写 done', async () => {
     await renderInto(container, <OnboardingOverlay />);
     for (let i = 0; i < 8; i += 1) {
@@ -287,6 +337,60 @@ describe('新手引导 · 分步线（壳 + 步骤 1 看板）', () => {
     await click('[data-onboarding-skip]');
     expect(settingsSetSpy).toHaveBeenCalledWith(ONBOARDING_DONE_KEY, true);
     expect(useOnboardingStore.getState().overlayOpen).toBe(false);
+  });
+});
+
+describe('新手引导 · 插画标签的双语来源（不写死中文）', () => {
+  let container: HTMLElement;
+  beforeEach(async () => {
+    await resetStage();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    resetStores();
+  });
+
+  it('① 中文模式：看板标签 = 项目名 / 阶段 / 成员 / 进度（四枚）', async () => {
+    useOnboardingStore.setState({ done: false, mode: 'steps', overlayOpen: true });
+    await renderInto(container, <OnboardingOverlay />);
+    // 排序后比较：标签在 DOM 里的先后由 SVG 绘制顺序决定（不是文案顺序），
+    // 断言的是"这四枚都在"，不锁位置
+    const textOf = (): string[] =>
+      Array.from(document.querySelectorAll('[data-onboarding-step-art="board"] [data-art-label]'))
+        .map((el) => (el.textContent ?? '').trim())
+        .sort();
+    expect(textOf()).toEqual(['成员', '进度', '项目名', '阶段'].sort());
+  });
+
+  it('② ★ 英文模式：同一批标签切成英文，且不含任何中文（键来源而非字面量）', async () => {
+    // 包 act：setLang 会触发已挂载组件重渲染（React 会警告 update not wrapped in act）
+    await act(async () => {
+      setLang('en');
+    });
+    useOnboardingStore.setState({ done: false, mode: 'steps', overlayOpen: true });
+    await renderInto(container, <OnboardingOverlay />);
+    const labels = Array.from(
+      document.querySelectorAll('[data-onboarding-step-art="board"] [data-art-label]'),
+    );
+    expect(labels.length).toBe(4);
+    const text = labels.map((el) => (el.textContent ?? '')).join(' ');
+    expect(text, `英文态标签里出现中文：${text}`).not.toMatch(/[一-鿿]/);
+    expect(
+      labels.map((el) => (el.textContent ?? '').trim()).sort(),
+    ).toEqual(['Member', 'Progress', 'Project', 'Stage']);
+    await act(async () => {
+      setLang('zh'); // 还原，别把语言状态漏给后续用例
+    });
+  });
+
+  it('③ 看板插画是 4 条轨道（我们是 4 列看板，不是 3 列）', async () => {
+    useOnboardingStore.setState({ done: false, mode: 'steps', overlayOpen: true });
+    await renderInto(container, <OnboardingOverlay />);
+    const art = document.querySelector('[data-onboarding-step-art="board"]') as SVGElement;
+    // 轨道 = 高 240 的纸面轨道 rect（任务卡/胶囊/进度条都更矮，不会误命中）
+    const tracks = Array.from(art.querySelectorAll('rect')).filter(
+      (r) => r.getAttribute('height') === '240',
+    );
+    expect(tracks.length, '看板插画轨道数').toBe(4);
   });
 });
 

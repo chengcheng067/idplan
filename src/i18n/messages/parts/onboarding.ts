@@ -91,6 +91,40 @@ export const zh = {
   'onboarding.step.plugins.h2': '第三方插件可从文件安装。',
   'onboarding.step.plugins.h3': '每个插件自带设置，装了就有。',
 
+  /* ══════════ 步骤插画里的文字标签（装饰性 SVG <text>，aria-hidden 整幅不念）══════════
+   * 命名 `onboarding.art.<stepId>.<slot>`；取值取自软件自身的**功能词**——
+   * 插画是抽象示意，靠这些标签把「这堆图形是哪个功能」说清楚（她 2026-10-30 批注）。
+   * ⚠️ 只走消息表：**源码里不许出现中文文本字面量**（硬编码中文棘轮）。
+   */
+  'onboarding.art.board.project': '项目名',
+  'onboarding.art.board.stage': '阶段',
+  'onboarding.art.board.member': '成员',
+  'onboarding.art.board.progress': '进度',
+  'onboarding.art.calendar.project': '项目名',
+  'onboarding.art.calendar.holiday': '节假日',
+  'onboarding.art.calendar.makeup': '补班',
+  'onboarding.art.calendar.today': '今日',
+  'onboarding.art.timeline.project': '项目名',
+  'onboarding.art.timeline.stage': '阶段条',
+  'onboarding.art.timeline.milestone': '里程碑',
+  'onboarding.art.timeline.today': '今天',
+  'onboarding.art.print.template': '模板',
+  'onboarding.art.print.project': '项目名',
+  'onboarding.art.print.stageList': '阶段清单',
+  'onboarding.art.print.footer': '页脚',
+  'onboarding.art.members.admin': '管理员',
+  'onboarding.art.members.member': '成员',
+  'onboarding.art.members.password': '密码',
+  'onboarding.art.backup.localData': '本机数据',
+  'onboarding.art.backup.json': 'JSON 备份',
+  'onboarding.art.backup.workspace': '工作区',
+  'onboarding.art.agent.request': '需求',
+  'onboarding.art.agent.draft': '排期草稿',
+  'onboarding.art.agent.validate': '导回校验',
+  'onboarding.art.plugins.enabled': '已启用',
+  'onboarding.art.plugins.disabled': '已关闭',
+  'onboarding.art.plugins.install': '从文件安装',
+
   /* ══════════ 完成页 ══════════ */
   'onboarding.finish.title': '你已了解 ID Plan 的核心功能',
   'onboarding.finish.lead': '随时可以从「设置 → 关于」重新查看这份引导。',
@@ -181,6 +215,39 @@ export const en = {
   'onboarding.step.plugins.h1': 'Each plugin has its own switch, on or off anytime.',
   'onboarding.step.plugins.h2': 'Third-party plugins can be installed from a file.',
   'onboarding.step.plugins.h3': 'Every plugin ships its own settings — install and it is there.',
+
+  /* ══════════ 步骤插画里的文字标签（装饰性 SVG <text>，整幅 aria-hidden）══════════
+   * 命名 `onboarding.art.<stepId>.<slot>`，取值 = 软件自身的功能词；
+   * ⚠️ 只走消息表：源码不许出现中文文本字面量（硬编码中文棘轮）。
+   */
+  'onboarding.art.board.project': 'Project',
+  'onboarding.art.board.stage': 'Stage',
+  'onboarding.art.board.member': 'Member',
+  'onboarding.art.board.progress': 'Progress',
+  'onboarding.art.calendar.project': 'Project',
+  'onboarding.art.calendar.holiday': 'Holiday',
+  'onboarding.art.calendar.makeup': 'Make-up day',
+  'onboarding.art.calendar.today': 'Today',
+  'onboarding.art.timeline.project': 'Project',
+  'onboarding.art.timeline.stage': 'Stage bar',
+  'onboarding.art.timeline.milestone': 'Milestone',
+  'onboarding.art.timeline.today': 'Today',
+  'onboarding.art.print.template': 'Template',
+  'onboarding.art.print.project': 'Project',
+  'onboarding.art.print.stageList': 'Stage list',
+  'onboarding.art.print.footer': 'Footer',
+  'onboarding.art.members.admin': 'Admin',
+  'onboarding.art.members.member': 'Member',
+  'onboarding.art.members.password': 'Password',
+  'onboarding.art.backup.localData': 'Local data',
+  'onboarding.art.backup.json': 'JSON backup',
+  'onboarding.art.backup.workspace': 'Workspace',
+  'onboarding.art.agent.request': 'Request',
+  'onboarding.art.agent.draft': 'Draft schedule',
+  'onboarding.art.agent.validate': 'Validate on import',
+  'onboarding.art.plugins.enabled': 'Enabled',
+  'onboarding.art.plugins.disabled': 'Disabled',
+  'onboarding.art.plugins.install': 'Install from file',
 
   'onboarding.finish.title': 'You now know the core of ID Plan',
   'onboarding.finish.lead': 'You can replay this guide anytime from Settings → About.',
