@@ -320,8 +320,17 @@ const BASELINE: BaselineRow[] = [
   ['serverErr.exec.operationsNotArray', '字段 operations 必须是数组（WritebackOperation[]）。'],
 
   /* ── 工作区（批 3 · routes/workspaces.routes.ts）──
-   * 这八条是**新增**（不是从手写中文搬来的）：基准值 = 本轮定稿的载荷中文，
-   * 与 `SERVER_ERROR_TEXT` 逐字节相等由 ⑧ 锁住。八条都不带 params。 */
+   *
+   * ⚠️⚠️ **本组与上面所有组的语义不同，读这一段的第二列时请注意**：
+   *   上面每一组的第二列是「**改动前源码里那句字面量**」（历史快照，用来钉住
+   *   「载荷口径没有漂」）。本组八条是**全新键**——它们不存在「改动前的原文」，
+   *   是本轮为「建工作区失败 / 改闸密」新造的用户面文案。
+   *   因此本组第二列填的是**与本文件同批定稿的 zh 现值**（= `SERVER_ERROR_TEXT` 的取值），
+   *   它与 ⑧「分片 zh 与载荷表逐字节相等」指向同一个值，**不是**独立的历史基准。
+   *
+   *   ⇒ 后人改动这八条的文案时：改载荷表 + 改 message 表 zh/en + 改这里，三处同改，
+   *     不要以为「第二列是不许动的历史快照」。这一点与上面各组相反。
+   *   八条都不带 {params}，故 ⑧ 的占位符一致性断言天然满足。 */
   ['serverErr.workspace.nameRequired', '工作区名称不能为空。'],
   ['serverErr.workspace.ownerNameRequired', 'Owner 管理员姓名不能为空。'],
   ['serverErr.workspace.passwordRequired', '工作区密码不能为空。'],

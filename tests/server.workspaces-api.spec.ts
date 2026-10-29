@@ -28,13 +28,15 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { registerWorkspaceRoutes } from '../server/routes/workspaces.routes';
+import { createDb, openDb } from '../server/db';
 import {
   DEFAULT_WORKSPACE_ID,
+  WorkspaceCreateError,
   closeAllWorkspaceDbs,
   findWorkspace,
   openRegistry,
@@ -611,5 +613,78 @@ describe('⑥ 八条 workspace 键都真的被路由用到（防「键加了没�
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+/* ══════════════════════ ⑦ 两个「隐雷」守卫 ══════════════════════ */
+
+describe('⑦ 守卫：field→键映射的唯一出处 + active 列类型对齐', () => {
+  it('★ WorkspaceCreateError 的 field 取值域恰是映射表的键（少一档 = 运行时 key undefined）', () => {
+    // 直接构造五个 field 的错误，确认映射表都能给出**存在**的键。
+    // 为什么这条必要：`CREATE_ERROR_KEYS[err.field]` 是运行时取值，若将来给
+    // WorkspaceCreateError 加了第六个 field 而忘了补映射，TypeScript **不会报错**
+    // （Record 的键在遍历处是 string 化的），运行时就会 send 一个 userMessage=undefined
+    // 的错误体 —— 用户看到空白提示。这里把「加档必须补映射」变成提交期红灯。
+    const fields: Array<import('../server/workspace-registry').WorkspaceCreateError['field']> = [
+      'name',
+      'ownerName',
+      'password',
+      'dbFile',
+      'storage',
+    ];
+    for (const f of fields) {
+      const err = new WorkspaceCreateError(f, 'probe');
+      expect(err.field).toBe(f);
+    }
+    // 五个 field 各对应一个**不同的**键（不许两档共用一个键，那样就没法区分了）
+    const src = readFileSync(join(__dirname, '..', 'server', 'routes', 'workspaces.routes.ts'), 'utf-8');
+    // 只切出 `CREATE_ERROR_KEYS` 那个对象字面量的内部，避免匹配到别处同名字样
+    const block = /const CREATE_ERROR_KEYS[^{]*\{([\s\S]*?)\n\};/.exec(src)?.[1];
+    expect(block, '找不到 CREATE_ERROR_KEYS 映射表 —— 它被改名或挪走了？').toBeTruthy();
+
+    const keys = fields.map((f) => {
+      // ★ 行首锚定：不能用 `\b${f}:` —— `ownerName:` 与 `name:` 之间存在词边界，
+      //   `\bname:` 会先命中 `ownerName:` 里的那截，导致 name 与 ownerName 拿到同一个键。
+      const re = new RegExp(String.raw`(?:^|\n)\s*${f}:\s*'(serverErr\.workspace\.[A-Za-z]+)'`);
+      return re.exec(block!)?.[1];
+    });
+    expect(keys.filter((k) => k !== undefined)).toHaveLength(fields.length);
+    // 两档共用同一个键 ⇒ 用户看到「工作区名称不能为空」但实际缺的是 Owner 名
+    expect(new Set(keys).size).toBe(fields.length);
+  });
+
+  it('★ members.active 在 schema 里是 INTEGER（判据与列类型对齐，不是字符串列）', () => {
+    /*
+     * ── 这条守的是什么（订正过一次，如实记下）──
+     * `deriveOwnerMemberName()` 的条件是 `active = 1 AND role_kind = 'admin'`。
+     *
+     * ⚠️ 我最初在注释里写「若把列改成 TEXT，`active = 1` 会静默查不到任何管理员」——
+     *    **这句是错的**，已实测推翻（见下）：SQLite 对 INTEGER 列做**列亲和性转换**，
+     *    在 INTEGER 列上写 `active = '1'` 与 `active = 1` **结果完全等价**（都命中，
+     *    返回同一行）。所以「字符串字面量 vs INTEGER 列」在 SQLite 里**不会**造成静默失配。
+     *
+     * 那这条守什么？守**两件仍然会出事的事**：
+     *   ① 列类型漂移：若 `members.active` 真被改成 TEXT 且写入方存 `'true'`/`'yes'`，
+     *      那么 `active = 1` 与 `active = '1'` **都会**查不到 —— 这才是真正的失配形态。
+     *      ⇒ 断言列声明类型是 INTEGER，本判据的语义前提（0/1 两值）才成立。
+     *   ② 源码写法与列类型对齐：本仓的既有口径是「INTEGER 列写整数」（`members.routes.ts`
+     *      的 `active: b.active ? 1 : 0`、`rowToMember` 的 `Boolean(r.active)`）。
+     *      写成 `'1'` 虽然今天等价，但它会让下一个人以为这列是文本，进而写出
+     *      `active = 'true'` 这类**真正**不匹配的东西。⇒ 钉住写法，防的是「错误示范」。
+     */
+    const biz = openDb(join(dataDir, 'typecheck.db'));
+    createDb(biz);
+    const col = (biz.prepare('PRAGMA table_info(members)').all() as Array<{ name: string; type: string }>).find(
+      (c) => c.name === 'active',
+    )!;
+    expect(col.type, 'members.active 换了类型 ⇒ deriveOwnerMemberName 的 active = 1 判据要重新推导').toBe(
+      'INTEGER',
+    );
+    biz.close();
+
+    // 源码写法对齐（`active = '1'` 今天等价，但它是错误示范 —— 详见上面 ②）
+    const src = readFileSync(join(__dirname, '..', 'server', 'workspace-registry.ts'), 'utf-8');
+    expect(src).toContain('active = 1');
+    expect(src).not.toContain("active = '1'");
   });
 });

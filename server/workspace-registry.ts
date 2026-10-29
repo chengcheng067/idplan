@@ -587,6 +587,12 @@ export function deriveOwnerMemberName(
 ): string | null {
   try {
     const db = openWorkspaceDb(id, registryDb);
+    // `members.active` 在 schema 里是 INTEGER（0/1，见 schema.sql），故写整数 1。
+    // ⚠️ 如实记一条实测结论（免得后人以为这里埋着雷）：SQLite 的**列亲和性**会让
+    //    INTEGER 列上的「把 1 写成引号串」与「写整数 1」**结果完全等价**，
+    //    所以这一列上不存在「引号串 vs INTEGER 列」的静默失配。
+    //    写整数仍是对的 —— 它让读者一眼看出这列是数值列，不会有人跟着写出
+    //    「把 true 写成引号串」那种**真正**查不到的形态。
     const row = db
       .prepare(
         `SELECT name FROM members
