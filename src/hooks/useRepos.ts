@@ -8,6 +8,8 @@ import { normalizeRestPolicy } from '../core/holidays/policy';
 import { useRepoContext } from '../di/repository.provider';
 import { useProjectsStore } from '../store/useProjectsStore';
 import { useMembersStore } from '../store/useMembersStore';
+import { useOnboardingStore } from '../store/useOnboardingStore';
+import { isOnboardingMode, ONBOARDING_DONE_KEY, ONBOARDING_MODE_KEY } from '../core/onboarding/keys';
 import { readStoredMemberId, useSettingsStore } from '../store/useSettingsStore';
 import { normalizeLegacyMemberRoles } from './useRoleGuard';
 import { currentWorkspaceIdSync, setWorkspaceOwnerName } from '../lib/workspace-registry';
@@ -131,6 +133,19 @@ export async function bootstrapAllStores(repos: IRepositoryBundle): Promise<void
   useSettingsStore.getState().hydrate(currentMemberId);
 
   /*
+   * 新手引导进度（settings KV `onboarding.done` / `onboarding.mode`）注入镜像。
+   * 三态语义见 core/onboarding/keys.ts：缺行 = null = 视为已看过（老库不自动弹）；
+   * 显式 false = 全新数据库标记（建区/首次确立管理员时播种）→ 身份选定后自动弹。
+   * 脏值（JSON 损坏 / mode 非法字面量）一律按 null 处理，与 restPolicy 同一宽口径。
+   */
+  useOnboardingStore
+    .getState()
+    .hydrateFromSettings(
+      readOnboardingDoneFromSettings(settings),
+      readOnboardingModeFromSettings(settings),
+    );
+
+  /*
    * ★ 0016：回填当前工作区的 Owner 名（注册表选择列表显示用）。
    * 口径 =「现有管理员即 Owner」（规格 §2）：取首个 active 管理员的名字；
    * ws-default 升级时注册表里 Owner 名为空，正是这里补上。幂等，失败静默
@@ -180,6 +195,42 @@ function readCurrentMemberFromSettings(
       } catch {
         return null;
       }
+    }
+  }
+  return null;
+}
+
+/**
+ * 新手引导进度读档（settings 表 key='onboarding.done'）。
+ * 缺行返回 null（= 视为已看过 / 未装载，见 core/onboarding/keys.ts 三态）；
+ * 值非法（非 boolean、JSON 损坏）也按 null 处理 —— 引导进度读不出来不该拦首屏。
+ */
+function readOnboardingDoneFromSettings(
+  rows: Array<{ key: string; valueJson: string }>,
+): boolean | null {
+  for (const row of rows) {
+    if (row.key !== ONBOARDING_DONE_KEY) continue;
+    try {
+      const v: unknown = JSON.parse(row.valueJson);
+      return typeof v === 'boolean' ? v : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** 新手引导选线读档（key='onboarding.mode'；缺失/脏值返回 null，isOnboardingMode 再守一道） */
+function readOnboardingModeFromSettings(
+  rows: Array<{ key: string; valueJson: string }>,
+): import('../core/onboarding/keys').OnboardingMode | null {
+  for (const row of rows) {
+    if (row.key !== ONBOARDING_MODE_KEY) continue;
+    try {
+      const v: unknown = JSON.parse(row.valueJson);
+      return isOnboardingMode(v) ? v : null;
+    } catch {
+      return null;
     }
   }
   return null;

@@ -1181,6 +1181,42 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
+/* ----------------------------------------------------------------------------
+ * 新手引导 · 步进切换动画（设计稿 §八-5，2026-10-30 拍板）
+ * 文案先入（--dur-fast=120ms ≤150ms），插画元素随后错峰淡入 + 上移 8px：
+ * 每个元素 --dur-base=200ms，延迟按 60ms 递增（onb-in 上挂 style 动画延迟），
+ * 末元素 ~380ms 收尾 ≤400ms 总长。缓动走 --ease-enter（快起慢收）。
+ * 只在进入某一步时播一次（组件按 key 重挂内容区），不做循环、不重播。
+ * -------------------------------------------------------------------------- */
+@keyframes onb-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.onb-in {
+  animation: onb-fade-up var(--dur-base) var(--ease-enter) both;
+}
+
+/* 文案块（标题/说明/亮点）：先于插画入场的快速档 */
+.onb-in-copy {
+  animation-duration: var(--dur-fast);
+}
+
+/* ----------------------------------------------------------------------------
+ * 引导页全局观感：纯色满屏（bg-cream 同值），不用玻璃拟态——
+ * 引导是「新地方的第一眼」，要的是干净与安静，不是浮层感。
+ * -------------------------------------------------------------------------- */
+.onboarding-root {
+  background: rgb(var(--cream-rgb));
+}
+
+
 /* 上述新增类的 reduced-motion 关停（独立成段，不改上方既有清单） */
 @media (prefers-reduced-motion: reduce) {
   .menuFadeOut,
@@ -1193,7 +1229,10 @@ html[data-sidebar-collapsed='false'] .app-sidebar {
      属于无障碍回归 —— 仓库既有纪律是六组入口/出口类两段清单都要齐 */
   .scrim-out,
   .status-pulse,
-  .skeleton-pulse {
+  .skeleton-pulse,
+  /* 新手引导步进切换（设计稿 §八-5：减弱动效时退化为直接呈现） */
+  .onb-in,
+  .onb-in-copy {
     animation: none;
   }
 }

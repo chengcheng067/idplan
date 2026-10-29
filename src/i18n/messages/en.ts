@@ -38,6 +38,7 @@ import type { MessageKey } from './zh';
 
 import { en as enCore } from './parts/core';
 import { en as enMisc } from './parts/misc';
+import { en as enOnboarding } from './parts/onboarding';
 import { en as enPrintUi } from './parts/print-ui';
 import { en as enUi } from './parts/ui';
 
@@ -1648,4 +1649,5 @@ export const enMessages: Record<MessageKey, string> = {
   ...enPrintUi,
   ...enCore,
   ...enMisc,
+  ...enOnboarding,
 };

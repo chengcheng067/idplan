@@ -36,18 +36,20 @@ import { MESSAGE_KEYS, catalogOf } from '../src/i18n';
 import { maskComments } from './helpers/cjk-locator-guard';
 import { en as coreEn, zh as coreZh } from '../src/i18n/messages/parts/core';
 import { en as miscEn, zh as miscZh } from '../src/i18n/messages/parts/misc';
+import { en as onboardingEn, zh as onboardingZh } from '../src/i18n/messages/parts/onboarding';
 import { en as printEn, zh as printZh } from '../src/i18n/messages/parts/print-ui';
 import { en as uiEn, zh as uiZh } from '../src/i18n/messages/parts/ui';
 
 const rootDir = join(__dirname, '..');
 const read = (p: string): string => readFileSync(join(rootDir, p), 'utf8');
 
-/** 4 个分片（**恰好 4 个**；顺序即 spread 顺序，别改） */
+/** 5 个分片（**恰好 5 个**；顺序即 spread 顺序，别改） */
 const SHARDS = [
   { id: 'ui', rel: 'src/i18n/messages/parts/ui.ts', zh: uiZh, en: uiEn },
   { id: 'print-ui', rel: 'src/i18n/messages/parts/print-ui.ts', zh: printZh, en: printEn },
   { id: 'core', rel: 'src/i18n/messages/parts/core.ts', zh: coreZh, en: coreEn },
   { id: 'misc', rel: 'src/i18n/messages/parts/misc.ts', zh: miscZh, en: miscEn },
+  { id: 'onboarding', rel: 'src/i18n/messages/parts/onboarding.ts', zh: onboardingZh, en: onboardingEn },
 ] as const;
 
 const ZH = 'src/i18n/messages/zh.ts';
@@ -58,9 +60,9 @@ function inlineKeys(rel: string): string[] {
   return [...read(rel).matchAll(/^ {2}'([^']+)':/gm)].map((m) => m[1]!);
 }
 
-describe('分片注册 · 4 片齐、两列齐、职责与目录对应', () => {
-  it('★ 恰好这 4 个分片（增删分片要同批看本文件与 zh.ts 的 spread 顺序）', () => {
-    expect(SHARDS.map((s) => s.id)).toEqual(['ui', 'print-ui', 'core', 'misc']);
+describe('分片注册 · 5 片齐、两列齐、职责与目录对应', () => {
+  it('★ 恰好这 5 个分片（增删分片要同批看本文件与 zh.ts 的 spread 顺序）', () => {
+    expect(SHARDS.map((s) => s.id)).toEqual(['ui', 'print-ui', 'core', 'misc', 'onboarding']);
     for (const s of SHARDS) expect(read(s.rel).length, `${s.id} 分片不存在或为空`).toBeGreaterThan(0);
   });
 
@@ -125,7 +127,7 @@ describe('分片注册 · 键的完整性（三条：进了表 / 没吞 / 没撞
     }
   });
 
-  it('★ 装配没漏没重：`主表键集` === `内联键 ∪ 4 片键`', () => {
+  it('★ 装配没漏没重：`主表键集` === `内联键 ∪ 5 片键`', () => {
     const inline = new Set([...inlineKeys(ZH), ...inlineKeys(EN)]);
     const shard = new Set(SHARDS.flatMap((s) => Object.keys(s.zh)));
     const union = new Set([...inline, ...shard]);

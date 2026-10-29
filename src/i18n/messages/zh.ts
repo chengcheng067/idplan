@@ -33,6 +33,7 @@
  */
 import { zh as zhCore } from './parts/core';
 import { zh as zhMisc } from './parts/misc';
+import { zh as zhOnboarding } from './parts/onboarding';
 import { zh as zhPrintUi } from './parts/print-ui';
 import { zh as zhUi } from './parts/ui';
 
@@ -1677,6 +1678,7 @@ export const zhMessages = {
   ...zhPrintUi,
   ...zhCore,
   ...zhMisc,
+  ...zhOnboarding,
 } as const;
 
 /**
@@ -1720,4 +1722,5 @@ const _shardKeysUi: _ShardKeysLiteral<keyof typeof zhUi> = true;
 const _shardKeysPrintUi: _ShardKeysLiteral<keyof typeof zhPrintUi> = true;
 const _shardKeysCore: _ShardKeysLiteral<keyof typeof zhCore> = true;
 const _shardKeysMisc: _ShardKeysLiteral<keyof typeof zhMisc> = true;
+const _shardKeysOnboarding: _ShardKeysLiteral<keyof typeof zhOnboarding> = true;
 
