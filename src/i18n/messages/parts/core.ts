@@ -63,6 +63,8 @@ export const zh = {
   'coreErr.member.nameRequired': '成员姓名不能为空。',
   'coreErr.member.createFailed': '成员创建失败。',
   'coreErr.member.notFound': '未找到该成员。',
+  'coreErr.member.reassignToSelf': '不能把该成员名下的内容转移给他自己。',
+  'coreErr.member.deleteFailedRolledBack': '删除成员失败，已回滚（引用未被改写）。',
 
   /* ── 任务仓储（coreErr.task.*） ── */
   'coreErr.task.listReadFailed': '任务列表读取失败。',
@@ -511,6 +513,8 @@ export const en = {
   'coreErr.member.nameRequired': 'Member name cannot be empty.',
   'coreErr.member.createFailed': 'Failed to create the member.',
   'coreErr.member.notFound': 'Member not found.',
+  'coreErr.member.reassignToSelf': 'Cannot move this member’s work to the same member.',
+  'coreErr.member.deleteFailedRolledBack': 'Failed to delete the member; rolled back (no references were changed).',
 
   /* ── 任务仓储（coreErr.task.*） ── */
   'coreErr.task.listReadFailed': 'Failed to read the task list.',

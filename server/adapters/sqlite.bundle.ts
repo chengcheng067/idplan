@@ -663,6 +663,13 @@ export function createSqliteBundle(
     get: () => notImplemented('members.get'),
     update: () => notImplemented('members.update'),
     verifyCredentials: () => notImplemented('members.verifyCredentials'),
+    /*
+     * 删除成员（v1.0.0.0020）：Agent 通道（`payload.apply`）**不需要**删人
+     * ——它只用 `list` / `insert`（自动建 Agent 成员）。显式抛错而非空实现，
+     * 理由与同段其余 notImplemented 逐字相同：将来谁在 Agent 路径上调到它，
+     * 会当场拿到「未实现」而不是一个静默成功的空动作。
+     */
+    delete: () => notImplemented('members.delete'),
   };
 
   const settings: ISettingsRepository = {

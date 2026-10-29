@@ -99,6 +99,9 @@ const BASELINE: ReadonlyArray<readonly [CoreErrorKey, ChangxiaErrorCode, string]
   ['coreErr.member.nameRequired', ChangxiaErrorCode.Validation, '成员姓名不能为空。'],
   ['coreErr.member.createFailed', ChangxiaErrorCode.Storage, '成员创建失败。'],
   ['coreErr.member.notFound', ChangxiaErrorCode.NotFound, '未找到该成员。'],
+  // v1.0.0.0020 · 删除成员（新增键，基准值 = 本次落笔时的中文原句）
+  ['coreErr.member.reassignToSelf', ChangxiaErrorCode.Validation, '不能把该成员名下的内容转移给他自己。'],
+  ['coreErr.member.deleteFailedRolledBack', ChangxiaErrorCode.Storage, '删除成员失败，已回滚（引用未被改写）。'],
 
   /* ── 第 2 批（本地仓储余下 4 文件 / 31 键）：基准值同样**取自改动前的 `HEAD:` 源码** ── */
   ['coreErr.itinerary.createFailed', ChangxiaErrorCode.Storage, '每日行程创建失败。'],

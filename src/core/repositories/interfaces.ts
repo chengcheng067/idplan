@@ -167,6 +167,37 @@ export interface IMembersRepository {
    * remote：POST /api/members/verify 由后端 crypto.scrypt 比对。密码绝不下发客户端。
    */
   verifyCredentials(memberId: string, password: string): Promise<boolean>;
+  /**
+   * **删除**成员（v1.0.0.0020 补齐；在此之前只有 `update({active:false})` 软停用）。
+   *
+   * 「停用」与「删除」各管一件事，**两个都留**：
+   *   · 停用 = `active=false`，名单仍在、历史全留（`update({active:false})`，行为不变）；
+   *   · 删除 = 本方法：成员行消失，名下引用按 `reassignTo` **改写或置空**。
+   *
+   * 名下引用共三处（`AssignmentLog` **不算**「引用」，见下）：
+   *   `Task.assigneeId` / `Task.assigneeIds`、`Stage.ownerId`、`Project.ownerMemberId`。
+   *
+   * `reassignTo`：
+   *   · `null` ⇒ 引用**置空**（`assigneeId`/`ownerId`/`ownerMemberId` → null；
+   *     `assigneeIds` 里**只移除该项、保留其余**）；
+   *   · 成员 id ⇒ 引用**改到该成员**（`assigneeIds` 里逐项替换并去重）。
+   *
+   * ⚠️ `AssignmentLog` 是 **append-only 审计记录**，本方法**一个字都不改**：
+   *   删了成员之后那些历史行仍指着原 id，显示层查不到成员时按「已删除成员」灰名呈现
+   *   （见 `src/lib/member-display.ts`）。改写历史等于伪造审计。
+   */
+  delete(id: string, reassignTo: string | null): Promise<MemberRefRewrite>;
+}
+
+/**
+ * `IMembersRepository.delete` 的引用改写读数（UI 用它报「转移了 N 个任务 / M 个阶段 / K 个项目」）。
+ * 语义是「**被改写过的行数**」，不是「原本指向该成员的行数」——
+ * `reassignTo` 指向的成员与原成员重合时（理论上被 UI 排除）没有行会被改写。
+ */
+export interface MemberRefRewrite {
+  tasks: number;
+  stages: number;
+  projects: number;
 }
 
 /** append-only：只进不出 */

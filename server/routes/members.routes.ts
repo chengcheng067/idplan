@@ -14,6 +14,19 @@
  * 不经过本文件的 rowToMember）。备份是用户主动导出、自行保管的本地文件，暴露面与
  * 「任何能连到 NAS 端口的人调一下 GET 就拿到全部哈希」完全不同；且移除会让备份还原后
  * 成员密码全部失效，属于功能回归。两者风险等级不同，故区别对待。
+ *
+ * v1.0.0.0020 · 删除成员：新增 `DELETE /api/members/:id`（body 可选 `{ reassignTo }`）。
+ *   在此之前**只有软停用**（`PATCH { active:false }`），名册上永远删不掉人。
+ *   语义与 local 适配器（`local.members.repo.ts` 的同名方法）逐条一致：
+ *   一个事务里 ①按 reassignTo 改写 tasks / stages / projects 三处引用 ②删 members 行。
+ *   ⚠️ `assignments` 表**一个字都不碰** —— 那是 append-only 审计流水，
+ *   改写它等于伪造「这人从没被指派过」，删除它等于销毁审计。
+ *
+ * ⚠️ **本文件所有写端点（含新增的 DELETE）目前无鉴权**，与 projects / stages / tasks
+ *   同格局：这些端点在局域网信任基线（架构待确认 7）下不校验 Bearer，只有
+ *   settings / logs / contracts 七端点归 `guardWrite` 管（见 `meta.routes.ts`）。
+ *   本批**保持现状不改**（给 members 单独加门会让「能改成员密码、却不能删成员」
+ *   这种半边收口的形态出现，比统一开口更难解释）；要收就整族一起收。
  */
 
 import type { FastifyInstance } from 'fastify';
@@ -24,6 +37,9 @@ import { errorBody } from '../lib/server-error-text';
 // 否则会出现「成员密码能验、区闸密码永远验不过」这种只在切区那一刻暴露的故障。
 // 两个函数体逐字搬运过去，行为零变化（POST /api/members/verify 的用例守着）。
 import { hashPassword, verifyPassword } from '../lib/password-hash';
+// `assignee_ids` 是 JSON 数组串（schema.sql 的 tasks 注释），改写时**必须**
+// 解析→过滤→回写；字符串替换会把 '["m1","m12"]' 里的 m1 误中 m12 的片段。
+import { parseJsonArray, serializeAssigneeIds } from '../lib/json-columns';
 
 interface MemberRow {
   id: string;
@@ -182,5 +198,120 @@ export function registerMemberRoutes(app: FastifyInstance, db: Database.Database
       return errorBody('unauthorized', 'serverErr.member.badPassword');
     }
     return { ok: true, memberId };
+  });
+
+  /**
+   * DELETE /members/:id —— **真删成员** + 改写名下引用（body 可选 `{ reassignTo }`）。
+   *
+   * 与 PATCH `{active:false}`（软停用）**并存、各管一件事**：
+   *   停用让成员从名单「看不见」但行还在、历史全留；删除让行真的消失。
+   *
+   * `reassignTo`：
+   *   · `null` / 缺省 ⇒ 引用**置空**（assignee_id / owner_id / owner_member_id → NULL，
+   *     assignee_ids 里**只移除该项、其余保留**）；
+   *   · 成员 id ⇒ 引用改到该成员（assignee_ids 逐项替换并去重）。
+   *
+   * ── 单事务（`db.transaction(...)` 默认 DEFERRED 会先拿读锁再升级写锁，并发下报
+   *    SQLITE_BUSY；这里全部是「先读后写」，用 `.immediate()`）──
+   * ① 逐行读 tasks / stages / projects 改写 → ② 删 members 行。
+   *
+   * ── `assignee_ids` 是 JSON 数组串，必须**解析→过滤→回写** ──
+   * 用字符串 replace 会把 `["m1","m12"]` 里的 `m1` 误中 `m12` 的片段（前缀相同即中招），
+   * 也可能把 JSON 结构弄坏。解析/序列化统一走 `server/lib/json-columns.ts`
+   * （`serializeAssigneeIds` 内含 `filter(string)`，与本列 `string[]` 契约一致）。
+   *
+   * ── 主负责人 `assignee_id` 与集合的关系 ──
+   * 前端口径是 `assigneeId = assigneeIds[0] ?? null`（entities.Task 注释）。改写后
+   * 必须按**同一口径重算** `assignee_id`，否则会留下「主负责人=已删的人、
+   * 集合=别人」这种自相矛盾的行（旧数据里 `assignee_ids='[]'` 而 `assignee_id` 有值
+   * 的形态也存在，故判定要同时看两处）。
+   *
+   * ── `assignments` 表**一个字都不碰** ──
+   * append-only 审计流水：改成 reassignTo 等于伪造「这人从没被指派过」，
+   * 删掉等于销毁审计。历史行照旧指着原 id，显示层按「已删除成员」灰名呈现。
+   */
+  app.delete('/api/members/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existing = db.prepare('SELECT id FROM members WHERE id = ?').get(id);
+    if (!existing) {
+      void reply.status(404);
+      return errorBody('not_found', 'serverErr.member.notFound');
+    }
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    // `undefined`（没传）与 `null`（显式置空）同一语义：都不指向任何接收人。
+    const raw = b.reassignTo;
+    const reassignTo = raw === undefined || raw === null || raw === '' ? null : String(raw);
+    if (reassignTo === id) {
+      void reply.status(400);
+      return errorBody('validation', 'coreErr.member.reassignToSelf');
+    }
+    if (reassignTo !== null) {
+      const target = db.prepare('SELECT id FROM members WHERE id = ?').get(reassignTo);
+      if (!target) {
+        // 接收人不存在 ⇒ 400 而不是默默置空：静默置空会让用户的「转移」变成
+        // 「全员失去负责人」，而界面那句「已转移给 X」会是假的。
+        void reply.status(400);
+        return errorBody('validation', 'coreErr.member.notFound');
+      }
+    }
+
+    const now = nowIso();
+    const counts = { tasks: 0, stages: 0, projects: 0 };
+
+    const apply = db.transaction(() => {
+      const taskRows = db
+        .prepare('SELECT id, assignee_id, assignee_ids FROM tasks')
+        .all() as Array<{ id: string; assignee_id: string | null; assignee_ids: string }>;
+      const updateTask = db.prepare(
+        'UPDATE tasks SET assignee_id=?, assignee_ids=?, revision=revision+1, updated_at=? WHERE id=?',
+      );
+      for (const t of taskRows) {
+        const ids = parseJsonArray<string>(t.assignee_ids);
+        const hitInSet = ids.includes(id);
+        // 老行可能只有 assignee_id 而集合为空数组 ⇒ 两处都要看
+        const hitInSingle = t.assignee_id === id;
+        if (!hitInSet && !hitInSingle) continue;
+        // 底数用「集合 ∪ {主负责人}」：两者历史上可能漂移（集合空、主负责人有值）
+        const base = hitInSet ? ids : [id];
+        const nextIds: string[] = [];
+        const seen = new Set<string>();
+        for (const cur of base) {
+          const v = cur === id ? reassignTo : cur;
+          if (v === null) continue; // 置空模式：该项消失，其余照留
+          if (seen.has(v)) continue;
+          seen.add(v);
+          nextIds.push(v);
+        }
+        updateTask.run(nextIds[0] ?? null, serializeAssigneeIds(nextIds), now, t.id);
+        counts.tasks += 1;
+      }
+
+      const stageRows = db
+        .prepare('SELECT id FROM stages WHERE owner_id = ?')
+        .all(id) as Array<{ id: string }>;
+      const updateStage = db.prepare(
+        'UPDATE stages SET owner_id=?, revision=revision+1, updated_at=? WHERE id=?',
+      );
+      for (const s of stageRows) {
+        updateStage.run(reassignTo, now, s.id);
+        counts.stages += 1;
+      }
+
+      const projectRows = db
+        .prepare('SELECT id FROM projects WHERE owner_member_id = ?')
+        .all(id) as Array<{ id: string }>;
+      const updateProject = db.prepare(
+        'UPDATE projects SET owner_member_id=?, revision=revision+1, updated_at=? WHERE id=?',
+      );
+      for (const p of projectRows) {
+        updateProject.run(reassignTo, now, p.id);
+        counts.projects += 1;
+      }
+
+      db.prepare('DELETE FROM members WHERE id = ?').run(id);
+    });
+    apply.immediate();
+
+    return { ok: true, deletedId: id, reassignTo, ...counts };
   });
 }

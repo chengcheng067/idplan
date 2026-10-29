@@ -11,6 +11,7 @@ import type {
   IStagesRepository,
   ITasksRepository,
   IMembersRepository,
+  MemberRefRewrite,
   ILogsRepository,
   IContractsRepository,
   ISettingsRepository,
@@ -383,6 +384,20 @@ export class RemoteMembersRepository implements IMembersRepository {
       // 401（密码错误）或任何失败 → false；由调用方给出用户名/密码错误提示
       return false;
     }
+  }
+  /**
+   * 删除成员：`DELETE /api/members/:id`，body `{ reassignTo }`。
+   *
+   * `reassignTo` 三态与 local 适配器逐条同语义（`null` = 引用置空；成员 id = 转移）。
+   * 服务端在一个事务里改写 tasks / stages / projects 三处引用再删 members 行，
+   * **不碰 assignments**（append-only 审计）；返回被改写的行数供 UI 报数。
+   *
+   * 404（成员不存在）/ 400（reassignTo 自指或接收人不存在）由 `RestClient.unwrap`
+   * 翻成 `ChangxiaError`，调用方走既有 `resolveErrorText` 提示即可。
+   */
+  delete(id: string, reassignTo: string | null): Promise<MemberRefRewrite> {
+    // `RestClient.delete` 只收 path（既有签名），而本端点需要 body ⇒ 直接走 request。
+    return this.api.request<MemberRefRewrite>('DELETE', `/members/${id}`, { reassignTo });
   }
 }
 
