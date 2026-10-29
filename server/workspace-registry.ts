@@ -516,30 +516,101 @@ export function verifyGatePassword(
 export type SetGateFailure = 'notFound' | 'currentPasswordRequired' | 'currentPasswordWrong';
 
 /**
- * 设 / 改某区闸密码（**必须校验旧密**，首次设密除外）。
+ * 闸密同步的**基础设施故障**（不是业务失败）。
  *
- * 三条口径（与桌面版 0017 产品口径同源）：
- *   ① 该区**尚未设过**闸密（`gate_password_hash IS NULL`）⇒ 允许直接设，不需要 currentPassword；
- *   ② 该区**已有**闸密 ⇒ 必须给 `currentPassword` 且校验通过，否则拒绝
- *      （`currentPasswordRequired` / `currentPasswordWrong`）。
- *      为什么必须校验：这个端点是**无鉴权**的（与 projects/members 同一格局），
- *      若不校验旧密，局域网里任何人一个 POST 就能把别人的区闸密码换掉 ——
- *      那等于把「区闸」这道客户端门闸彻底作废。
- *   ③ 未登记的区 ⇒ `notFound`（调用方 404）。
+ * 为什么单立一个类而不是复用 `WorkspaceCreateError`：那个是「建区入参/落盘失败」，
+ * 语义是「用户填错了」；本类是「跨两个库的写入只成功了一半」，语义是「服务端出了问题，
+ * 数据可能不一致」。两者的用户面文案不同（前者引导改输入，后者只能重试 + 报运维），
+ * 混用会让用户对着一个他没填错的表单反复修改。
  *
- * ⚠️ 写的是注册表库的 `gate_password_hash` **列**，不碰业务库里的成员密码。
- *    新区建区时两处是同一个哈希（见 `createWorkspace()`）；此处改闸密**只改闸**，
- *    成员密码不动 —— 两者在批 3 之后是不同用途：闸密守「进入这个区」，成员密码守
- *    「以这个成员身份发言」。
+ * `inconsistent=true` 表示**补偿也失败**了：注册表列没改、成员密码已经改了。
+ * 这个状态必须被看见（500 + 日志），不能伪装成「什么都没发生」。
+ */
+export class WorkspaceGateSyncError extends Error {
+  public readonly inconsistent: boolean;
+  public constructor(message: string, opts: { original: unknown; rollback?: unknown }) {
+    // 内部诊断串用英文（同 WorkspaceNotFoundError 的理由：不进棘轮豁免配额）。
+    // ⚠️ 不用 `super(msg, { cause })`：本仓 target 是 ES2020，`ErrorOptions.cause`
+    //    要 ES2022 lib 才在类型里 ⇒ TS2554。与 `ChangxiaError` 同款手工赋值（见 enums.ts）。
+    super(`[workspace-registry] ${message}`);
+    this.name = 'WorkspaceGateSyncError';
+    try {
+      (this as { cause?: unknown }).cause = opts.original;
+    } catch {
+      /* 环境不支持 cause 时静默忽略 */
+    }
+    // 只有补偿也失败时才有 rollback 字段
+    this.inconsistent = opts.rollback !== undefined;
+    if (opts.rollback !== undefined) {
+      try {
+        (this as { rollbackError?: unknown }).rollbackError = opts.rollback;
+      } catch {
+        /* 同上 */
+      }
+    }
+  }
+}
+
+/**
+ * 设 / 改某区闸密码（**必须校验旧密**，首次设密除外），并**同步该区全部 active 管理员**的成员密码。
  *
- * @returns `{ ok: true }` 或 `{ ok: false, reason }`（**不抛**，让路由层决定状态码）
+ * ══════════════════════════════════════════════════════════════════════
+ * 产品口径（批 3.5 · 老板拍板）：「闸密 = 管理员密码，改就一起改」
+ * ══════════════════════════════════════════════════════════════════════
+ * 改闸密成功后，**同一次操作内**把该区所有 `active = 1 AND role_kind = 'admin'` 的成员
+ * `password_hash` 一并更新成**同一个新哈希**。
+ *
+ * ── 为什么必须一起改（批 3 的解耦是错的）──
+ * 批 3 写成「闸密守进区、成员密码守发言，两者解耦」。但用户的心智模型只有一个密码：
+ * 他在「工作区密码」框里改完，就会认为自己的登录密码也变了。解耦的真实后果是
+ * **下次用成员身份登录时发现「我明明改过密码」** —— 那是最困惑的形态，且完全静默。
+ *
+ * ── 三条硬要求（都有用例钉）──
+ *   ① **同一个哈希只算一次**：scrypt 只跑一次，注册表列与所有 admin 行写入**完全相同的
+ *      字符串**。各算一遍会得到不同盐的两个哈希，症状是「闸密能进、成员密码不过」——
+ *      比不改还糟。
+ *   ② **不动非管理员**：`role_kind = 'member'` 的密码一个都不许动（他们各自设的密码
+ *      是独立的，与「进入这个区」无关）。
+ *   ③ **事务性**：注册表列 + 业务库 N 行，任一失败整体回滚。绝不出现「闸密改了、
+ *      成员密码没改」的半截状态。
+ *
+ * ── 一个刻意保留的例外 ──
+ * 该区**没有任何 active 管理员**（管理员全被停用等异常状态）时，**不失败**：
+ * 只更新注册表列、跳过成员同步。理由：闸密是**进入这个区的门**，不能因为区里恰好
+ * 没有管理员就把门锁死 —— 那会让用户彻底进不去，而他能做的只有「删库重来」。
+ * 这不是「成功」而是「尽力而为」，故返回值里用 `syncedMembers: 0` 让调用方可观测。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 事务的边界（两个独立 SQLite 连接，没有原生原子性）
+ * ══════════════════════════════════════════════════════════════════════
+ * 注册表库与业务库是**两个独立连接**，SQLite 的事务是**单连接**概念 ⇒ 跨库没有原子性。
+ * 这里用「先做可逐行补偿的那一步」：
+ *
+ *   ⓪ 先**逐行快照**将被改的 admin 行（id / password_hash / revision）
+ *   ① 写业务库成员密码（单条 UPDATE，同一连接内天然原子）
+ *   ② 写注册表列；②失败 ⇒ 按快照**逐行写回**各自的旧哈希（补偿）
+ *
+ * ── 为什么补偿必须逐行，不能「统一写回旧闸密」──
+ * `PATCH /api/members/:id` 允许单独改某个管理员的成员密码，所以这些行的旧值**可能
+ * 各不相同**（也可能有的是 NULL）。用闸密统一回填会把「各自设过密码的管理员」全部
+ * 改成同一个值 —— 那是比不补偿更坏的数据损坏，而且完全静默。
+ * 逐行快照是唯一正确的做法（admin 行数是个位数，成本可忽略）。
+ * ★ 这条由 tests/server.workspaces-api.spec.ts ⑤b-③ 的变异 M5 钉住（统一写回会红）。
+ *
+ * ⚠️ 极端情况（补偿**也**失败，如进程被杀）仍可能留下不一致。这里不假装解决它：
+ *    SQLite 没有跨库事务，真要彻底解决得用 ATTACH + 单连接（会把注册表与业务库
+ *    耦合成同一连接池，代价远大于收益）。这种情形抛 `WorkspaceGateSyncError` 且
+ *    `inconsistent = true`，让调用方看到 500 并进日志 —— 好过假装成功。
+ *
+ * @returns `{ ok: true, syncedMembers }` 或 `{ ok: false, reason }`（**不抛**业务失败，
+ *          只有「跨库写入只成功了一半」这类基础设施故障才会抛）
  */
 export function setGatePassword(
   id: string,
   plain: string,
   currentPassword: string | undefined,
   registryDb: ChangxiaServerDb = openRegistry(),
-): { ok: true } | { ok: false; reason: SetGateFailure } {
+): { ok: true; syncedMembers: number } | { ok: false; reason: SetGateFailure } {
   const row = findWorkspace(id, registryDb);
   if (row === null) return { ok: false, reason: 'notFound' };
 
@@ -553,11 +624,68 @@ export function setGatePassword(
     }
   }
 
-  registryDb
-    .prepare('UPDATE workspaces SET gate_password_hash = ?, updated_at = ? WHERE id = ?')
-    .run(hashPassword(plain), nowIso(), id);
-  return { ok: true };
+  // ★ 硬要求 ①：整个操作**只算一次** scrypt。注册表列与所有 admin 行写入同一个字符串。
+  const newHash = hashPassword(plain);
+  const ts = nowIso();
+
+  // 业务库句柄：未登记已在上面 return；这里取句柄失败（文件损坏等）按 storage 故障处理
+  const biz = openWorkspaceDb(id, registryDb);
+
+  /*
+   * ★ 事务边界（跨两个 SQLite 连接，没有原生原子性）：先做「能逐行补偿」的那一步。
+   *
+   * 先把将要被改的 admin 行**逐行记下旧哈希**（连同 id）再更新 —— 补偿时按 id 逐行写回。
+   * 为什么不能「统一写回注册表里那个旧闸密」：`PATCH /api/members/:id` 允许单独改某个
+   * 管理员的成员密码，所以这些行的旧值**可能各不相同**（也可能有的是 NULL）。
+   * 用闸密统一回填会把「各自设过密码的管理员」全部改成同一个值 —— 那是比不补偿更坏
+   * 的数据损坏，而且是静默的。逐行快照是唯一正确的做法（行数是个位数，成本可忽略）。
+   */
+  const admins = biz
+    .prepare(
+      `SELECT id, password_hash, revision FROM members
+        WHERE active = 1 AND role_kind = 'admin'`,
+    )
+    .all() as Array<{ id: string; password_hash: string | null; revision: number }>;
+
+  // ── ① 写业务库（单条 UPDATE = 单连接内天然原子；`role_kind='member'` 不在 WHERE 里 ⇒ 不动，硬要求 ②）
+  const updated = biz
+    .prepare(
+      `UPDATE members
+          SET password_hash = ?, revision = revision + 1, updated_at = ?
+        WHERE active = 1 AND role_kind = 'admin'`,
+    )
+    .run(newHash, ts);
+
+  // ── ② 写注册表列；失败则按快照逐行补偿 ──
+  try {
+    registryDb
+      .prepare('UPDATE workspaces SET gate_password_hash = ?, updated_at = ? WHERE id = ?')
+      .run(newHash, ts, id);
+  } catch (err) {
+    const restore = biz.prepare(
+      'UPDATE members SET password_hash = ?, revision = ?, updated_at = ? WHERE id = ?',
+    );
+    const rollbackAll = biz.transaction(() => {
+      for (const a of admins) restore.run(a.password_hash, a.revision, nowIso(), a.id);
+    });
+    try {
+      rollbackAll();
+    } catch (rollbackErr) {
+      // 补偿也失败：**如实抛**，让调用方看到 500。不假装成功 ——
+      // 「闸密没改但成员密码改了」是必须被人看见的状态，藏起来只会更难查。
+      throw new WorkspaceGateSyncError(
+        'gate write failed AND member rollback failed (inconsistent state)',
+        { original: err, rollback: rollbackErr },
+      );
+    }
+    throw new WorkspaceGateSyncError(`gate write failed, members rolled back: ${(err as Error).message}`, {
+      original: err,
+    });
+  }
+
+  return { ok: true, syncedMembers: updated.changes };
 }
+
 
 /* ══════════════════════════ Owner 名派生 ══════════════════════════ */
 

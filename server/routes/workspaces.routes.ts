@@ -207,6 +207,11 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
       return;
     }
 
+    // ★ 批 3.5：`result.syncedMembers = 0` 是**合法的成功**（该区没有 active 管理员，
+    //   跳过成员同步 —— 闸密是进区的门，不能因为区里没管理员就把门锁死）。
+    //   这里不额外回字段：调用方（前端 setGate）按契约不读响应体（204），
+    //   可观测性走服务端日志，由 setGatePassword 的调用点按需打。
+
     // 204：成功但无内容（前端 `setGate` 不读响应体）
     void reply.status(204);
     return null;

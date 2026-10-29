@@ -42,7 +42,7 @@ import {
   openRegistry,
   seedDefaultWorkspace,
 } from '../server/workspace-registry';
-import { verifyPassword } from '../server/lib/password-hash';
+import { hashPassword, verifyPassword } from '../server/lib/password-hash';
 import { SERVER_ERROR_TEXT } from '../server/lib/server-error-text';
 
 let app: FastifyInstance;
@@ -512,7 +512,19 @@ describe('⑤ POST /api/workspaces/:id/gate（设/改闸密）', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('★ 改闸密**不动**成员密码（两者在批 3 之后是两个用途）', async () => {
+  /*
+   * ★★ 语义反转（批 3.5 · 老板拍板「闸密 = 管理员密码，改就一起改」）★★
+   *
+   * 本条在批 3 时断言的是「改闸密**不动**成员密码」（当时的设计是把闸密与成员密码
+   * **解耦**：闸密守进区、成员密码守发言）。产品负责人否掉了那个设计 ——
+   * 用户的心智模型只有一个密码，改完闸密就会认为登录密码也变了，解耦的真实后果是
+   * 「下次用成员身份登录时发现『我明明改过密码』」，且完全静默。
+   *
+   * 故本条断言**反转**为：「改闸密**同步**更新所有 active admin 的成员密码」。
+   * ⚠️ 这是**产品决策变更**，不是测试放松：断言强度没降（从「必须不变」变成
+   *    「必须变成新值，且必须是同一个哈希字面量」），只是钉的语义换了一边。
+   */
+  it('★ 改闸密**同步**更新 active admin 的成员密码（批 3.5 语义反转）', async () => {
     const created = await app.inject({
       method: 'POST',
       url: '/api/workspaces',
@@ -532,11 +544,288 @@ describe('⑤ POST /api/workspaces/:id/gate（设/改闸密）', () => {
       password_hash: string | null;
     };
     biz.close();
-    // 成员密码仍是建区时那个（改闸密只改注册表列）
-    expect(verifyPassword('owner-pw', owner.password_hash)).toBe(true);
-    expect(verifyPassword('gate-pw', owner.password_hash)).toBe(false);
+
+    // ① 新密码能验过、旧密码失效
+    expect(verifyPassword('gate-pw', owner.password_hash)).toBe(true);
+    expect(verifyPassword('owner-pw', owner.password_hash)).toBe(false);
+    // ② ★ 与注册表闸密是**同一个哈希字面量**（不是重新算一遍的同密码哈希 ——
+    //    不同盐会造成「闸密能进、成员密码不过」）
+    const gateHash = openRegistry()
+      .prepare('SELECT gate_password_hash FROM workspaces WHERE id = ?')
+      .get(id) as { gate_password_hash: string };
+    expect(owner.password_hash).toBe(gateHash.gate_password_hash);
   });
 });
+
+/* ══════════════════════ ⑤b 闸密↔管理员密码同步（批 3.5） ══════════════════════ */
+
+describe('⑤b 改闸密 ⇒ 同步 active admin 的成员密码（批 3.5 · 老板拍板）', () => {
+  /** 在读到的成员表里插一条（便于造「多个管理员 / 混合成员」场景） */
+  function addMember(
+    wsId: string,
+    row: { id: string; name: string; roleKind: 'admin' | 'member'; password?: string; active?: 0 | 1 },
+  ): void {
+    const biz = new Database(join(dataDir, `${wsId}.db`));
+    biz
+      .prepare(
+        `INSERT INTO members (id, name, role, contact, avatar_color, active, role_kind, password_hash,
+           actor_kind, agent_kind, revision, updated_at)
+         VALUES (?, ?, '', NULL, '#3D6B5B', ?, ?, ?, 'human', NULL, 1, ?)`,
+      )
+      .run(
+        row.id,
+        row.name,
+        row.active ?? 1,
+        row.roleKind,
+        row.password === undefined ? null : hashForTest(row.password),
+        new Date().toISOString(),
+      );
+    biz.close();
+    // 句柄缓存里有旧连接 ⇒ 清掉，让后续 openWorkspaceDb 重开读到新行
+    closeAllWorkspaceDbs();
+  }
+
+  /** 与 server/lib/password-hash.ts 同源的哈希（测试侧直接 import，不另写一份实现） */
+  function hashForTest(plain: string): string {
+    return hashPassword(plain);
+  }
+
+  /** 直接读某区全体成员的 (id, role_kind, active, password_hash, revision) */
+  function membersOf(wsId: string): Array<{
+    id: string;
+    role_kind: string;
+    active: number;
+    password_hash: string | null;
+    revision: number;
+  }> {
+    // ★ 库文件名**必须从注册表取**：`ws-default` 的库是 `changxia.db`，不是 `ws-default.db`。
+    //   硬编码 `${wsId}.db` 对新建区碰巧成立，对存量区会「打不开数据库文件」。
+    const row = findWorkspace(wsId, openRegistry())!;
+    const biz = new Database(row.db_file, { readonly: true });
+    const rows = biz
+      .prepare('SELECT id, role_kind, active, password_hash, revision FROM members ORDER BY id')
+      .all() as Array<{
+      id: string;
+      role_kind: string;
+      active: number;
+      password_hash: string | null;
+      revision: number;
+    }>;
+    biz.close();
+    return rows;
+  }
+
+  it('★ ① 改闸密后**所有** active admin 的密码都变，且都是同一个哈希字面量', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: '多管', ownerName: '管理员甲', password: 'pw-orig' },
+    });
+    const id = created.json<{ id: string }>().id;
+
+    // 再造两个管理员（各自不同的旧密码）+ 一条已停用的管理员（不该被改）
+    addMember(id, { id: 'adm2', name: '管理员乙', roleKind: 'admin', password: 'pw-乙' });
+    addMember(id, { id: 'adm3', name: '管理员丙', roleKind: 'admin', password: 'pw-丙' });
+    addMember(id, { id: 'adm-off', name: '已停用管理员', roleKind: 'admin', password: 'pw-off', active: 0 });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${id}/gate`,
+      payload: { password: 'pw-new', currentPassword: 'pw-orig' },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const rows = membersOf(id);
+    const admins = rows.filter((r) => r.role_kind === 'admin' && r.active === 1);
+    const gateHash = (
+      openRegistry().prepare('SELECT gate_password_hash FROM workspaces WHERE id = ?').get(id) as {
+        gate_password_hash: string;
+      }
+    ).gate_password_hash;
+
+    // 三个 active admin 全被更新，且哈希字面量**完全相同**（硬要求 ①：scrypt 只算一次）
+    expect(admins).toHaveLength(3);
+    for (const a of admins) {
+      expect(a.password_hash, `${a.id} 的密码没同步`).toBe(gateHash);
+      expect(verifyPassword('pw-new', a.password_hash), `${a.id} 用新密码验不过`).toBe(true);
+    }
+    // 各自的旧密码**全部**失效（不是只有 Owner 的失效）
+    for (const [, oldPw] of [
+      ['管理员甲', 'pw-orig'],
+      ['管理员乙', 'pw-乙'],
+      ['管理员丙', 'pw-丙'],
+    ] as const) {
+      expect(verifyPassword(oldPw, admins[0]!.password_hash), `旧密码 ${oldPw} 仍然能过`).toBe(false);
+    }
+
+    // ★ 已停用的管理员**不在同步范围**（WHERE 里是 active = 1）
+    const off = rows.find((r) => r.id === 'adm-off')!;
+    expect(verifyPassword('pw-off', off.password_hash), '已停用管理员的密码不该被改').toBe(true);
+  });
+
+  it('★ ② role_kind=member 的成员密码**一个都不许动**', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: '混合', ownerName: '管', password: 'pw-orig' },
+    });
+    const id = created.json<{ id: string }>().id;
+
+    addMember(id, { id: 'm1', name: '成员一', roleKind: 'member', password: 'member-pw-1' });
+    addMember(id, { id: 'm2', name: '成员二', roleKind: 'member', password: 'member-pw-2' });
+    addMember(id, { id: 'm3', name: '无密成员', roleKind: 'member' }); // 本来就没密码
+
+    const before = membersOf(id).filter((r) => r.role_kind === 'member');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${id}/gate`,
+      payload: { password: 'pw-new', currentPassword: 'pw-orig' },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const after = membersOf(id).filter((r) => r.role_kind === 'member');
+    // 逐行比对（不只是「数量对了」）—— 连 NULL 都不许变成哈希
+    expect(after.map((r) => [r.id, r.password_hash])).toEqual(before.map((r) => [r.id, r.password_hash]));
+    // 且成员密码确实还是原来的
+    expect(verifyPassword('member-pw-1', after.find((r) => r.id === 'm1')!.password_hash)).toBe(true);
+    expect(verifyPassword('member-pw-2', after.find((r) => r.id === 'm2')!.password_hash)).toBe(true);
+    expect(after.find((r) => r.id === 'm3')!.password_hash).toBeNull();
+    // 反证：用新闸密去验成员，必须不过（说明没被同步）
+    expect(verifyPassword('pw-new', after.find((r) => r.id === 'm1')!.password_hash)).toBe(false);
+  });
+
+  it('★ ③ 注册表写入失败 ⇒ admin 密码**逐个**回滚到各自的旧值（不是统一写回闸密）', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: '回滚', ownerName: '管甲', password: 'pw-a' },
+    });
+    const id = created.json<{ id: string }>().id;
+    // 第二个管理员**有自己的不同旧密码** —— 这条正是「统一写回闸密」会毁掉的数据
+    addMember(id, { id: 'adm2', name: '管乙', roleKind: 'admin', password: 'pw-b' });
+
+    const beforeRows = membersOf(id);
+    const registry = openRegistry();
+    // 注入：注册表 UPDATE 失败（BEFORE UPDATE 触发器 ABORT）。此时成员密码已经改了。
+    registry.exec(
+      `CREATE TRIGGER inject_gate_update_fail BEFORE UPDATE OF gate_password_hash ON workspaces
+       BEGIN SELECT RAISE(ABORT, 'injected gate update failure'); END;`,
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${id}/gate`,
+      payload: { password: 'pw-new', currentPassword: 'pw-a' },
+    });
+    registry.exec('DROP TRIGGER inject_gate_update_fail');
+
+    // 基础设施故障 ⇒ 500（不是 400：用户没填错任何东西）
+    expect(res.statusCode).toBe(500);
+
+    const afterRows = membersOf(id);
+    // ★ 逐行回滚到**各自的**旧哈希（不是统一变成同一个值）
+    expect(afterRows.map((r) => [r.id, r.password_hash])).toEqual(beforeRows.map((r) => [r.id, r.password_hash]));
+    // 两个管理员各自的旧密码都能验过 —— 若实现是「统一写回闸密」，adm2 的 pw-b 会失效
+    for (const r of afterRows.filter((x) => x.role_kind === 'admin')) {
+      const oldPw = r.id === 'adm2' ? 'pw-b' : 'pw-a';
+      expect(verifyPassword(oldPw, r.password_hash), `${r.id} 的旧密码 ${oldPw} 没被正确还原`).toBe(true);
+      expect(verifyPassword('pw-new', r.password_hash), `${r.id} 的新密码没被回滚掉`).toBe(false);
+    }
+    // ★ revision 必须回到快照原值（`revision = revision + 1` 的回滚若写成 `- 1`，
+    //   在并发/重复执行下会漂；这里钉「回滚是恢复快照值，不是做减法」）
+    // ⚠️ 先断言 revision 真的是数字：否则两边都是 undefined 会变成假绿
+    expect(beforeRows.every((r) => typeof r.revision === 'number')).toBe(true);
+    expect(afterRows.map((r) => [r.id, r.revision])).toEqual(beforeRows.map((r) => [r.id, r.revision]));
+    // 注册表列回到旧值
+    const gate = (
+      openRegistry().prepare('SELECT gate_password_hash FROM workspaces WHERE id = ?').get(id) as {
+        gate_password_hash: string;
+      }
+    ).gate_password_hash;
+    expect(verifyPassword('pw-a', gate)).toBe(true);
+    expect(verifyPassword('pw-new', gate)).toBe(false);
+  });
+
+  it('★ ④ 首次设密（老区 ws-default，gate 为 NULL）同样同步现有 active admin', async () => {
+    // ws-default 是存量区：建区流程没走过，闸密为 NULL，也没有 admin
+    const before = openRegistry().prepare('SELECT gate_password_hash FROM workspaces WHERE id = ?').get(
+      DEFAULT_WORKSPACE_ID,
+    ) as { gate_password_hash: string | null };
+    expect(before.gate_password_hash).toBeNull();
+
+    // 手动给 ws-default 的业务库塞一个管理员（模拟老库里有管理员但没闸密）
+    const biz = openDb(join(dataDir, 'changxia.db'));
+    createDb(biz);
+    biz
+      .prepare(
+        `INSERT INTO members (id, name, role, contact, avatar_color, active, role_kind, password_hash,
+           actor_kind, agent_kind, revision, updated_at)
+         VALUES ('old-admin','老管理员','负责人',NULL,'#3D6B5B',1,'admin',?, 'human',NULL,1,?)`,
+      )
+      .run(hashForTest('old-pw'), new Date().toISOString());
+    biz.close();
+    closeAllWorkspaceDbs();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${DEFAULT_WORKSPACE_ID}/gate`,
+      payload: { password: 'first-gate-pw' }, // 首次设密**不需要** currentPassword
+    });
+    expect(res.statusCode).toBe(204);
+
+    const gate = (
+      openRegistry().prepare('SELECT gate_password_hash FROM workspaces WHERE id = ?').get(DEFAULT_WORKSPACE_ID) as {
+        gate_password_hash: string | null;
+      }
+    ).gate_password_hash;
+    expect(gate).not.toBeNull();
+
+    const admin = membersOf(DEFAULT_WORKSPACE_ID).find((r) => r.id === 'old-admin')!;
+    // 老管理员的密码被同步成新闸密，且字面量相同
+    expect(admin.password_hash).toBe(gate);
+    expect(verifyPassword('first-gate-pw', admin.password_hash)).toBe(true);
+    expect(verifyPassword('old-pw', admin.password_hash)).toBe(false);
+  });
+
+  it('★ ⑤ 该区没有任何 active admin ⇒ **不失败**，只更新闸密、跳过成员同步', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: '无管', ownerName: '将停用', password: 'pw-orig' },
+    });
+    const id = created.json<{ id: string }>().id;
+
+    // 把唯一的管理员停用 ⇒ active admin 归零
+    const biz = new Database(join(dataDir, `${id}.db`));
+    biz.prepare("UPDATE members SET active = 0 WHERE role_kind = 'admin'").run();
+    biz.close();
+    closeAllWorkspaceDbs();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${id}/gate`,
+      payload: { password: 'pw-new', currentPassword: 'pw-orig' },
+    });
+
+    // ★ 关键：不能因为「区里没管理员」就把进区的门锁死 —— 那是用户彻底进不去的形态
+    expect(res.statusCode, '无 active admin 时改闸密不该失败').toBe(204);
+
+    // 闸密确实更新了
+    const gate = (
+      openRegistry().prepare('SELECT gate_password_hash FROM workspaces WHERE id = ?').get(id) as {
+        gate_password_hash: string;
+      }
+    ).gate_password_hash;
+    expect(verifyPassword('pw-new', gate)).toBe(true);
+
+    // 停用的管理员密码一个没动（不在 active=1 范围内）
+    const off = membersOf(id).find((r) => r.role_kind === 'admin')!;
+    expect(off.active).toBe(0);
+    expect(verifyPassword('pw-orig', off.password_hash), '停用管理员的密码不该被改').toBe(true);
+  });
+});
+
 
 /* ══════════════════════ ⑥ 八条键都被用到（防死键） ══════════════════════ */
 
