@@ -4,7 +4,13 @@
  *   2. 参与人多值姓名映射；
  *   3. 未指派 → assigneeNames=[]（页面渲染「—」）；
  *   4. 无任务阶段 → tasks=[]（页面显示「无任务」空行）；
- *   5. 成员 id 找不到 → 显示 id 兜底。
+ *   5. 成员 id 找不到 → 「已删除成员」（v1.0.0.0020 改：原先是显示原始 id 兜底）。
+ *      ⚠️ 改这条的理由不是「顺手换文案」：成员**可以被删除**之后，查不到人是**正常
+ *      状态**（`reassignTo=null` 置空了引用，或历史行还指着已删的人）。把 `mem_ghost`
+ *      印在给客户的日程表上不可接受。屏幕侧与纸面对「查不到」的表达不同是**有意**的：
+ *      屏幕说「已删除成员」（解释这行记录为什么还在），纸面留「—」（客户不需要知道
+ *      你们内部删过谁）——见 `src/lib/member-display.ts` 与
+ *      `src/print/adapters/project-print-adapter.ts` 的 memberName 注释。
  * node 环境纯函数断言，无需 DOM/canvas。
  */
 
@@ -88,10 +94,10 @@ describe('buildScheduleSections：日程表数据组装', () => {
     expect(unassigned.dueDate).toBeNull();
   });
 
-  it('成员 id 找不到 → 显示 id 兜底', () => {
+  it('成员 id 找不到 → 「已删除成员」（不再印原始 id）', () => {
     const sections = buildScheduleSections({ project, stages, tasks, members });
     const s2 = sections.find((s) => s.orderIndex === 2)!;
-    expect(s2.tasks[0]!.assigneeNames).toEqual(['mem_ghost']);
+    expect(s2.tasks[0]!.assigneeNames).toEqual(['已删除成员']);
   });
 
   it('无任务阶段 → tasks=[]（页面显示「无任务」空行）', () => {
