@@ -19,16 +19,35 @@
  */
 
 import Database from 'better-sqlite3';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+
+import { resolveDataDir } from './lib/data-paths';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export type ChangxiaServerDb = Database.Database;
 
-/** 打开（不建表） */
-export function openDb(filePath = process.env.CHANGXIA_DB ?? join(__dirname, 'changxia.db')): ChangxiaServerDb {
+/**
+ * 打开（不建表）。
+ *
+ * 默认路径来自 `lib/data-paths.ts` 的 `resolveDataDir()`（多工作区 NAS 版 · 批 1）：
+ * 它把 `CHANGXIA_DB` 的语义从「一个文件」兼容扩成「文件路径 or 目录」，
+ * 但**未设置时与今天逐字相同**（`<server>/changxia.db`）。详见该文件头的四条判定规则。
+ *
+ * 显式传参的调用方（测试里的临时文件）行为完全不变 —— 本函数只做「打开 + 两条 pragma」，
+ * 不建表、不迁移、不碰 `user_version`。
+ *
+ * 顺带 `mkdirSync(父目录, {recursive:true})`：多工作区要按需为新区开新文件，父目录可能
+ * 还不存在（NAS 上首次挂载 / 测试里的临时目录）。对已存在的父目录是空操作；
+ * 对「父目录不存在」这一种情况，今天的行为是 better-sqlite3 抛 `SQLITE_CANTOPEN`，
+ * 改成建目录后服务能起来 —— 这是本批**唯一**的行为扩展，且只发生在报错路径上。
+ */
+export function openDb(
+  filePath: string = resolveDataDir().defaultDbFile,
+): ChangxiaServerDb {
+  mkdirSync(dirname(filePath), { recursive: true });
   const db = new Database(filePath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -269,8 +288,7 @@ function migrateAgentIndex(db: ChangxiaServerDb): void {
 }
 
 /** 从分段 DDL 中取某一段（schema.sql 用行首 `-- @SECTION:NAME` 标记分隔） */
-export function sectionOf(ddl: string, name: string): string {
-  // 行锚定匹配：文件头说明性注释里可能出现标记字样（如「用 -- @SECTION:TABLES 与
+export function sectionOf(ddl: string, name: string): string {  // 行锚定匹配：文件头说明性注释里可能出现标记字样（如「用 -- @SECTION:TABLES 与
   // -- @SECTION:INDEXES 切分」），只有独立成行的标记才是真正的分段边界。
   const re = new RegExp(`^-- @SECTION:${name}[ \\t]*$`, 'm');
   const m = re.exec(ddl);

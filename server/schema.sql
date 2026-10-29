@@ -260,6 +260,42 @@ CREATE TABLE IF NOT EXISTS writeback_proposals (
   updated_at TEXT NOT NULL
 );
 
+-- @SECTION:REGISTRY
+
+-- 多工作区（NAS 版）的**注册表**：一行 = 一个工作区。
+--
+-- ★ 为什么单独成段（而不是塞进上面的 TABLES 段）：
+--   TABLES 段由 `createDb()` 跑在**每一个业务库**上；而注册表是**另一个库**
+--   （`workspaces.db`，见 server/lib/data-paths.ts）。若把本表写进 TABLES，则
+--     · `openRegistry()` 要么在注册表库里顺带长出 13 张业务表（与「注册表只放
+--       workspaces」直接矛盾，且多出一堆永远空着的表）；
+--     · 要么得靠字符串抠单条 DDL（脆，改一个换行就断）。
+--   第三段让两侧各自幂等、零交叉：业务库跑 TABLES + INDEXES，注册表只跑本段。
+--
+-- ★ 本表**不是业务数据**，因此**不**进 `/api/backup` 的 dump/import 清单
+--   （meta.routes.ts 的表映射）。备份是「一个工作区的业务快照」，注册表是
+--   「这台机器上有哪几个工作区」的机器级元数据，两者生命周期不同。
+--
+-- 字段口径：
+--   · id                 工作区 id（`ws-default` 是存量库绑定的固定值；新区 `ws-<uuid>`）
+--   · name               工作区名（用户可改；存量区播种为「未命名工作室」，与桌面版
+--                        的默认名同源，值钉在 server/workspace-registry.ts）
+--   · db_file            该区业务库的**绝对路径**（唯一来源 = resolveDataDir()；
+--                        唯一约束防同一文件被登记成两个区）
+--   · owner_member_id    Owner 成员 id（建区时写入；存量区播种时为 NULL —— 老库的
+--                        首个管理员要等批 3 的 API 层去解析回填）
+--   · gate_password_hash 进入本区的闸密码哈希（`saltHex:hashHex`，服务端 scrypt；
+--                        NULL = 尚未设闸密。建新区时强制与 Owner 同一密码）
+CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  db_file TEXT NOT NULL UNIQUE,
+  owner_member_id TEXT,
+  gate_password_hash TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 -- @SECTION:INDEXES
 
 CREATE INDEX IF NOT EXISTS idx_stages_project ON stages(project_id, order_index);

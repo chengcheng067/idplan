@@ -18,8 +18,12 @@
 
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { errorBody } from '../lib/server-error-text';
+// v1.0（多工作区 NAS 版 · 批 1）：scrypt 哈希/比对抽到 lib/password-hash.ts ——
+// 区闸密码（server/workspace-registry.ts）与成员密码必须是**同一套**参数与格式，
+// 否则会出现「成员密码能验、区闸密码永远验不过」这种只在切区那一刻暴露的故障。
+// 两个函数体逐字搬运过去，行为零变化（POST /api/members/verify 的用例守着）。
+import { hashPassword, verifyPassword } from '../lib/password-hash';
 
 interface MemberRow {
   id: string;
@@ -37,35 +41,6 @@ interface MemberRow {
   agent_kind: string | null;
   revision: number;
   updated_at: string;
-}
-
-/** scrypt 参数 */
-const SCRYPT_N = 16384;
-const SCRYPT_R = 8;
-const SCRYPT_P = 1;
-const KEY_LEN = 32;
-const SALT_LEN = 16;
-
-/** 明文密码 → `saltHex:hashHex`（scrypt） */
-function hashPassword(plain: string): string {
-  const salt = randomBytes(SALT_LEN);
-  const hash = scryptSync(plain, salt, KEY_LEN, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
-  return `${salt.toString('hex')}:${hash.toString('hex')}`;
-}
-
-/** 恒定时间校验明文密码是否匹配某哈希 */
-function verifyPassword(plain: string, stored: string | null): boolean {
-  if (!stored) return false;
-  const idx = stored.indexOf(':');
-  if (idx <= 0) return false;
-  const salt = Buffer.from(stored.slice(0, idx), 'hex');
-  const expected = Buffer.from(stored.slice(idx + 1), 'hex');
-  try {
-    const actual = scryptSync(plain, salt, expected.length, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
-    return actual.length === expected.length && timingSafeEqual(actual, expected);
-  } catch {
-    return false;
-  }
 }
 
 function rowToMember(r: MemberRow): Record<string, unknown> {

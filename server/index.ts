@@ -10,6 +10,10 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 
 import { createDb, openDb } from './db';
+// v1.0（多工作区 NAS 版 · 批 1）：注册表建出来 + 幂等播种 ws-default。
+// ⚠️ 本批只做地基：**不改** register 签名、**不改**请求路由（按 X-Workspace-Id
+//    分流是批 2）。因此下面八行注册全部仍绑在同一个 db 上 —— 行为零变化。
+import { openRegistry, seedDefaultWorkspace } from './workspace-registry';
 import { errorBodyFrom } from './lib/server-error-text';
 import { registerProjectRoutes } from './routes/projects.routes';
 import { registerStageRoutes } from './routes/stages.routes';
@@ -28,6 +32,30 @@ const HOST = process.env.HOST ?? '0.0.0.0';
 async function main(): Promise<void> {
   const db = openDb();
   createDb(db);
+
+  // ── 多工作区地基（批 1）─────────────────────────────────────────────
+  // 注册表库（与业务库同目录的 workspaces.db）建出来，并把存量库幂等登记成
+  // ws-default（名「未命名工作室」、数据零迁移，与桌面版同源）。
+  //
+  // 顺序：必须在 openDb()/createDb() 之后 —— 播种只写注册表，但「默认业务库是哪个
+  // 文件」由 resolveDataDir() 一次算定，与 openDb() 的默认值同源，早调晚调都一样；
+  // 放这里是为了让「业务库先就绪」这个既有前提在阅读顺序上不被打破。
+  //
+  // ⚠️ 失败处理：注册表写不进去（只读挂载 / 权限不足 / 磁盘满）**不拦启动**。批 1 的
+  //    行为契约是「零变化」，而批 1 的路由完全不读注册表 ⇒ 让它崩掉等于用一批 inert
+  //    代码换来一次无法提供服务的 NAS（老版本能跑，新版本起不来 = 回归）。
+  //    真正需要注册表可用的是批 2：那一路（`resolveWorkspaceFromRequest`）会**每请求**
+  //    响亮失败，诊断信息也更容易拿到。故此处只响亮地告警一次。
+  try {
+    const registry = openRegistry();
+    const seeded = seedDefaultWorkspace(registry);
+    if (seeded) console.log('[changxia-server] workspace registry seeded: ws-default');
+  } catch (err) {
+    console.error(
+      '[IDPLAN-SECURITY] workspace registry unavailable (multi-workspace data layer will be inert):',
+      err,
+    );
+  }
 
   const app = Fastify({
     logger: true,

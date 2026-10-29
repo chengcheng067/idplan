@@ -438,6 +438,12 @@ const EXEMPTIONS: ReadonlyArray<readonly [string, string]> = [
   ['server/lib/project-domain.ts', '第 ${o.index} 条项目（id=${o.id}）的行业值「${String(o.value)}」不合法'],
   ['server/routes/meta.routes.ts', '未知'],
   ['server/routes/meta.routes.ts', '未知'],
+  // ★ 多工作区 NAS 版 · 批 1 新增（与上面两条「未知」同族 = A-数据类）：
+  //   存量工作区的默认名，**落库数据值**（写进 workspaces.db 的 name 列）。
+  //   翻了会造成「老行中文 / 新行英文」的审计串味（这台机器上同时存在两种语言的区名）；
+  //   正解与 role-sentinel 同款：写入点钉死中文原值，**显示层取词**（批 3 的
+  //   `GET /api/workspaces` 派生显示名）。它不是错误体文案，不该进载荷表。
+  ['server/workspace-registry.ts', '未命名工作室'],
 ];
 
 const CJK = /[\u3400-\u4dbf\u4e00-\u9fff]/;
