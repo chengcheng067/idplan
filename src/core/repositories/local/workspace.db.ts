@@ -1,5 +1,7 @@
 import { MemberRoleKind } from '../../types/enums';
 import { ROLE_SENTINELS } from '../../types/role-sentinel';
+import { ONBOARDING_DONE_KEY } from '../../onboarding/keys';
+import type { Setting } from '../../types/entities';
 import { hashPassword } from '../../../lib/password';
 /* Dexie 只在 gatekeeper 文件 import（arch-boundary）；此处经其再导出取 exists */
 import { ChangxiaDatabase, Dexie, openDatabase } from './dexie.database';
@@ -49,6 +51,22 @@ export async function createWorkspaceOwnerDb(cmd: CreateWorkspaceOwnerCmd): Prom
       roleKind: MemberRoleKind.Admin,
       password: cmd.password,
     });
+    /*
+     * ★ 全新库播种 onboarding 标记（设计稿 §二：只有全新数据库才自动弹引导）。
+     * 本函数只被「建新工作区」调用 ⇒ 库一定是新的 ⇒ 直接写显式 false（语义见
+     * core/onboarding/keys.ts：缺行=已看过、false=待弹、true=看完/跳过）。
+     * 失败静默：播种失败只是「这个区不自动弹引导」，不值得让建区失败回滚。
+     */
+    const seed: Setting = {
+      key: ONBOARDING_DONE_KEY,
+      valueJson: JSON.stringify(false),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      await db.settings.put(seed);
+    } catch {
+      /* 静默：见上 */
+    }
     return owner.id;
   } finally {
     db.close();

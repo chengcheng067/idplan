@@ -306,7 +306,13 @@ export function withHostPolicySettings(
   current: ReadonlyArray<Setting>,
 ): BackupPackage {
   const prefix = pluginEnabledKey('');
-  const kept = current.filter((s) => s.key.startsWith(prefix));
+  /*
+   * 宿主策略族二（onboarding）：`onboarding.done` / `onboarding.mode` 同属「这台
+   * 安装的进度状态」，不是数据。不保住的后果：新库用户在 FirstRunGuide 里载入
+   * 示例 → 覆盖式替换把播种的 `onboarding.done=false` 抹掉 → 引导再也不弹。
+   */
+  const onboardingPrefix = 'onboarding.';
+  const kept = current.filter((s) => s.key.startsWith(prefix) || s.key.startsWith(onboardingPrefix));
   // 本机没有该族 ⇒ 原包**原样**返回（不留一个空数组引起的无意义 diff）
   if (kept.length === 0) return pkg;
   const existing = new Set(pkg.data.settings.map((s) => s.key));

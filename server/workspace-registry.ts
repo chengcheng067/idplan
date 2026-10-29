@@ -381,6 +381,19 @@ export function createWorkspace(
       )
       .run(ownerMemberId, ownerName, ROLE_SENTINELS.owner, OWNER_AVATAR_COLOR, passwordHash, ts);
 
+    // ④b 全新库播种 onboarding 标记（与桌面版 createWorkspaceOwnerDb 同一语义）。
+    //     键名 'onboarding.done' 的唯一出处是 src/core/onboarding/keys.ts（服务端
+    //     不跨包 import，靠 tests/onboarding.spec.ts 的字面量守卫锁两边一致）。
+    //     三态语义：缺行=已看过（老库不弹）/ false=全新库待弹 / true=看完或跳过。
+    //     失败静默：播种丢一拍只是「该区不自动弹引导」，不值得让建区失败回滚。
+    try {
+      opened
+        .prepare(`INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)`)
+        .run('onboarding.done', JSON.stringify(false), ts);
+    } catch {
+      /* 静默：见上 */
+    }
+
     // ⑤ 注册表行（owner / gate hash 一次写入，无中间态）
     registryDb
       .prepare(

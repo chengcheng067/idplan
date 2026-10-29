@@ -5,6 +5,8 @@ import { X } from 'lucide-react';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useMembersStore } from '../../store/useMembersStore';
 import { useProjectsStore } from '../../store/useProjectsStore';
+import { useOnboardingStore } from '../../store/useOnboardingStore';
+import { ONBOARDING_DONE_KEY } from '../../core/onboarding/keys';
 import { useRepos } from '../../hooks/useRepos';
 import { matchActiveMemberByName, useRoleGuard } from '../../hooks/useRoleGuard';
 import { createMemberActions } from '../../store/useMembersStore';
@@ -141,6 +143,19 @@ export function IdentityDialog(): JSX.Element | null {
    * 在各自那里再写一遍就是第三份孪生实现。
    */
   const createAdminAndEnter = async (trimmed: string, password?: string): Promise<void> => {
+    /*
+     * ★ 全新数据库播种 onboarding 标记（设计稿 §二：只有全新数据库才自动弹引导）。
+     * 判据 = 建号前 members 为空（首启管理员确立是「全新库」在桌面版唯一的落库时刻；
+     * 建区路径的播种在 createWorkspaceOwnerDb / 服务端 createWorkspace）。
+     * 先镜像后落库：镜像一置 false，useOnboardingGate 在 setCurrentMember 后的
+     * Effect 重跑里即可弹（不必等落库 Promise 回来）；落库失败静默——丢的只是
+     * 「下次启动再弹一次」。
+     */
+    const isNewDatabase = members.length === 0;
+    if (isNewDatabase) {
+      void repos.settings.set(ONBOARDING_DONE_KEY, false).catch(() => undefined);
+      useOnboardingStore.getState().markEligible();
+    }
     const created = await repos.members.insert({
       name: trimmed,
       /*

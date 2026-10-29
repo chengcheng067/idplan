@@ -159,10 +159,15 @@ describe('W3 · 新建工作区：空白新区 + Owner 入库 + 密码哈希', (
       expect(owner.passwordHash).not.toContain('1234');
       expect(await verifyPassword('1234', owner.passwordHash)).toBe(true);
       expect(await verifyPassword('0000', owner.passwordHash)).toBe(false);
-      // 空白区：任何业务表都无数据
+      // 空白区：业务表无数据；settings 只有一行——建区播种的 onboarding 引导标记
+      // （onboarding-design-2026-10-30 §二：只有全新数据库才自动弹引导；
+      //   键名出处 src/core/onboarding/keys.ts，值 false = 「待弹」三态语义）
       expect(await db.projects.toArray()).toHaveLength(0);
       expect(await db.tasks.toArray()).toHaveLength(0);
-      expect(await db.settings.toArray()).toHaveLength(0);
+      const seedRows = await db.settings.toArray();
+      expect(seedRows).toHaveLength(1);
+      expect(seedRows[0]!.key).toBe('onboarding.done');
+      expect(JSON.parse(seedRows[0]!.valueJson)).toBe(false);
     } finally {
       db.close();
     }
