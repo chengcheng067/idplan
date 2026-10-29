@@ -1,14 +1,16 @@
 import { useLang } from '../../i18n';
 
 /**
- * 欢迎页右侧装饰插画（第一屏 · 简化版）。
+ * 欢迎页右侧装饰插画（第一屏 · 完整构图，第二批对照打样稿逐元素保真）。
  *
  * 设计稿 §八-3 拍板：插画 = 内联 SVG，词汇全部取自软件自身（看板轨道、任务卡、
- * 阶段胶囊、进度条、今天胶囊），贴 token、亮暗自动跟随。本批为竖切样板，先用
- * 打样稿 A（deliverables/onboarding-welcome-sample-A.html）的**简化版**——
- * 排版与元素语言与打样稿一致，色值全部换成 `--color-*` / `--*-rgb` token
- * （这两个族本就是「供内联 SVG 使用」的兼容旧名，见 global.css 注释），
- * 暗色主题由 token 翻转自动接管。完整插画第二批补。
+ * 阶段胶囊、进度条、月历色点、今天胶囊）。构图以打样稿 A
+ * （deliverables/onboarding-welcome-sample-A.html）为版式权威，逐元素核对：
+ *   品牌浅晕 + 休息日灰两枚环境几何 → 三条看板轨道（含轨道内占位行与进度条）
+ *   → 品牌色悬浮任务卡（微倾 + 白色标记 + 头像圆点）→ 完成/临期/进行三枚阶段
+ *   胶囊（moss / amber / pine 三 token 族）→ 月历色点组 → 今天胶囊。
+ * 色值全部换 `--color-*` / `--*-rgb` token（这两个族本就是「供内联 SVG 使用」
+ * 的兼容旧名，见 global.css 注释），暗色主题由 token 翻转自动接管。
  */
 export function WelcomeArt(): JSX.Element {
   return (
