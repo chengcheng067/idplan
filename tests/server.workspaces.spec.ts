@@ -152,6 +152,95 @@ describe('0 · resolveDataDir：CHANGXIA_DB 的四条判定规则（升级不丢
     // 关键反证：数据目录**不是**那个还不存在的文件名本身
     expect(p.dataDir).not.toBe(file);
   });
+
+  /**
+   * ★ team-lead 指定的**四格判定表**（升级路径走错 = 数据「消失」，所以四种情形各一条，
+   *   不只测首发）。这四条是「`CHANGXIA_DB` 兼容语义」的完整判据：
+   *
+   *   | 情形                          | defaultDbFile      | dataDir          |
+   *   |-------------------------------|--------------------|------------------|
+   *   | (a) 已存在且是**业务库文件**   | 该文件原样         | dirname(该文件)  |
+   *   | (b) 已存在且是**目录**         | <dir>/changxia.db  | 该目录           |
+   *   | (c) **不存在**                 | 该路径原样         | dirname(该路径)  |
+   *   | (d) 已存在且是**空库文件**     | 该文件原样         | dirname(该文件)  |
+   *
+   *   (a) 与 (d) 必须给出**同一个**答案 —— 判据是「存在且是文件」而不是「里面有没有表」（见
+   *   data-paths.ts 文件头「业务表探测为什么不做」）。(d) 单独立一条是因为它是**最容易
+   *   被误判成目录**的形态：零业务表的 SQLite 文件看起来「什么都不是」，而它恰是
+   *   一个刚被 `new Database()` 建出来、还没跑 `createDb()` 的合法业务库。
+   */
+  describe('★ 四格判定表（team-lead 验收依据，四情形各一条）', () => {
+    it('(a) 已存在且是业务库文件（有表有数据）⇒ 那个文件就是默认库，不搬不复制', () => {
+      const file = join(dataDir, 'has-data.db');
+      const seeded = openDb(file);
+      createDb(seeded);
+      seeded
+        .prepare(
+          `INSERT INTO projects (id, name, type, address, client_name, contract_amount, signed_at,
+             planned_start_at, planned_end_at, cover_color, revision, updated_at)
+           VALUES ('p1','真项目','x','','',NULL,NULL,'2026-01-01','2026-02-01',NULL,1,'2026-01-01T00:00:00.000Z')`,
+        )
+        .run();
+      seeded.close();
+      const before = readdirSync(dataDir).filter((n) => n.endsWith('.db')).sort();
+
+      const p = resolveDataDir(file);
+      expect(p.defaultDbFile).toBe(file);
+      expect(p.dataDir).toBe(dataDir);
+      // 判定过程**不产生**任何新文件（纯读）
+      expect(readdirSync(dataDir).filter((n) => n.endsWith('.db')).sort()).toEqual(before);
+    });
+
+    it('(b) 已存在且是目录 ⇒ 默认库是该目录下的 changxia.db', () => {
+      const dir = join(dataDir, 'as-dir');
+      mkdirSync(dir, { recursive: true });
+      const p = resolveDataDir(dir);
+      expect(p.dataDir).toBe(dir);
+      expect(p.defaultDbFile).toBe(join(dir, 'changxia.db'));
+      expect(p.registryFile).toBe(join(dir, 'workspaces.db'));
+    });
+
+    it('(c) 不存在 ⇒ 按文件路径理解（父目录为数据目录，默认库仍是同名文件）', () => {
+      const file = join(dataDir, 'not-yet-created.db');
+      expect(existsSync(file)).toBe(false);
+      const p = resolveDataDir(file);
+      expect(p.defaultDbFile).toBe(file);
+      expect(p.dataDir).toBe(dataDir);
+      expect(p.registryFile).toBe(join(dataDir, 'workspaces.db'));
+    });
+
+    it('(d) 已存在但是**空库文件**（零业务表）⇒ 与 (a) 同一答案，且开库后自动补齐全量 schema', () => {
+      const file = join(dataDir, 'empty-lib.db');
+      // 只建文件、不跑 createDb()：模拟「刚被 new Database() 建出来、还没建表」
+      const empty = new Database(file);
+      expect(
+        (empty.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get() as { n: number }).n,
+      ).toBe(0);
+      empty.close();
+
+      const p = resolveDataDir(file);
+      // ★ 与 (a) 逐项相同 —— 判据是「存在且是文件」，不是「里面有没有表」
+      expect(p.defaultDbFile).toBe(file);
+      expect(p.dataDir).toBe(dataDir);
+
+      // 走完整流程：把 env 指向这个空库（真实升级/首发形态），播种 + 开库
+      // ⇒ 空库被 createDb() 补齐成 13 表，且它就是 ws-default（不被另建一个 changxia.db）
+      process.env.CHANGXIA_DB = file;
+      closeAllWorkspaceDbs();
+      const registry = openRegistry();
+      seedDefaultWorkspace(registry);
+      expect(findWorkspace(DEFAULT_WORKSPACE_ID, registry)!.db_file).toBe(file);
+      const biz = openWorkspaceDb(DEFAULT_WORKSPACE_ID, registry);
+      expect(
+        (biz.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get() as { n: number }).n,
+      ).toBeGreaterThanOrEqual(13);
+      // 反证：没有在旁边另建一个 changxia.db（那会是最难发现的「数据凭空消失」形态）
+      expect(readdirSync(dataDir).filter((n) => n.endsWith('.db')).sort()).toEqual([
+        'empty-lib.db',
+        'workspaces.db',
+      ]);
+    });
+  });
 });
 
 /* ══════════════════════ ① 空目录首发：注册表 + 播种 ══════════════════════ */
