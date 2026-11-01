@@ -95,6 +95,7 @@ export const enMessages: Record<MessageKey, string> = {
   'appearance.lang.zh': '中文',
   'appearance.lang.en': 'English',
   'appearance.langHint': 'Applies immediately — no restart needed.',
+  'appearance.langFollowSystem': 'Until you pick one here, the language follows your system.',
 
   /* ─────────────────────────── Sidebar navigation ─────────────────────────── */
   'nav.mainAria': 'Main navigation',

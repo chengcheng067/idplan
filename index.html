@@ -44,17 +44,46 @@
       口径（必须与 src/i18n/lang.ts 严格一致）：
         · localStorage key = 'idplan-lang'，合法值只有 'zh' / 'en'；
         · `data-lang` 写内部值（zh/en），`lang` 写 HTML 语义值（zh-CN / en）；
-        · 读不到 / 脏值 / 抛异常 → 一律回落 'zh'（**出厂默认恒为中文**，
-          不跟随浏览器 Accept-Language，理由见 lang.ts 文件头）。
+        · **优先级：用户显式选择 > 系统语言 > 出厂默认 'zh'**（2026-10-31 起改为
+          默认跟随系统，与主题「用户显式 light/dark > prefers-color-scheme」逐条对齐；
+          原口径「不跟随浏览器语言、无选择恒为 zh」已被产品负责人推翻）；
+        · 读不到 / 脏值 / 抛异常 → 回落系统语言；系统语言不是中/英 → 'zh'。
     -->
     <script>
       (function () {
+        // 把 BCP-47 标签解析成内部值；只认中/英两档，其它一律 null（不猜）
+        function parseTag(tag) {
+          if (typeof tag !== 'string') return null;
+          var t = tag.toLowerCase();
+          if (t === 'zh' || t.indexOf('zh-') === 0) return 'zh';
+          if (t === 'en' || t.indexOf('en-') === 0) return 'en';
+          return null;
+        }
+        // 系统语言：优先 navigator.languages（逐个取首个可解析项），再退 navigator.language
+        function systemLang() {
+          try {
+            var list = navigator.languages;
+            if (list && list.length) {
+              for (var i = 0; i < list.length; i++) {
+                var hit = parseTag(list[i]);
+                if (hit !== null) return hit;
+              }
+            }
+            var one = parseTag(navigator.language);
+            if (one !== null) return one;
+          } catch (e) {
+            /* 取不到：回落出厂默认 */
+          }
+          return null;
+        }
         var lang = 'zh';
         try {
           var v = localStorage.getItem('idplan-lang');
           if (v === 'en' || v === 'zh') lang = v;
+          else lang = systemLang() || 'zh';
         } catch (e) {
-          /* 存储不可用：保持出厂默认 'zh' */
+          /* 存储不可用：仍按系统语言走（不能因 localStorage 挂了就丢掉跟随系统） */
+          lang = systemLang() || 'zh';
         }
         document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
         document.documentElement.dataset.lang = lang;

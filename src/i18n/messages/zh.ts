@@ -88,6 +88,7 @@ export const zhMessages = {
   'appearance.lang.zh': '中文',
   'appearance.lang.en': 'English',
   'appearance.langHint': '切换后界面文案即时更新，无需重启。',
+  'appearance.langFollowSystem': '未手动切换时，默认跟随系统语言。',
 
   /* ──────────────────────── 侧栏主导航 ──────────────────────── */
   // ⚠️ 一行一对（2026-10-15 拆行）：原先 `'nav.mainAria'` 与 `'nav.projects'` 写在同一行，
