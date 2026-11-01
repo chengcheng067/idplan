@@ -265,21 +265,64 @@ describe('③ 中文与 enums.ts 的五张标签表逐键同值（防两处漂�
   });
 });
 
-/* ══════════════ ④ 出厂默认恒为中文、不跟随浏览器 ══════════════ */
+/* ══════════ ④ 默认跟随系统（显式选择优先），出厂默认仍为中文 ══════════ */
 
-describe('④ 出厂默认恒为中文', () => {
+describe('④ 默认跟随系统、出厂默认中文', () => {
   it('DEFAULT_LANG === zh，ALL_LANGS 两档', () => {
     expect(DEFAULT_LANG).toBe('zh');
     expect([...ALL_LANGS]).toEqual(['zh', 'en']);
   });
 
-  it('语言判定**不读浏览器语言**（源码锁：不出现 navigator.language）', () => {
+  /**
+   * ⚠️ 本条**原先是反向锁**（断言 lang.ts / index.html 里**不许**出现 `navigator.language`），
+   *    守的是旧决策「不跟随浏览器语言、无选择恒为 zh」。
+   *    2026-10-31 产品负责人拍板推翻该决策（原话：「要做的，而且我注意到主题默认是
+   *    跟随系统这点就很好」）⇒ 锁的**方向必须跟着翻**，否则它会去拦新功能。
+   *
+   * 新锁守的是**跟随系统的三条不可退让的约束**（不是「有没有那段代码」，
+   * 而是「语义有没有被写歪」——只断字面量会变成为写而写）：
+   */
+  it('跟随系统：写入点存在，且「显式选择 > 系统语言」的优先级没被写反', () => {
     const src = readFileSync(resolve(ROOT, 'src/i18n/lang.ts'), 'utf-8');
-    expect(src, '一旦跟随浏览器语言，英文系统首开就变英文（无人要求的行为变更）').not.toMatch(
-      /navigator\.languages?\b/,
-    );
+
+    // ① 系统语言探测**必须**存在（否则「跟随系统」名存实亡）
+    expect(src, 'lang.ts 必须真的读系统语言').toMatch(/navigator\.languages?\b/);
+
+    // ② 唯一解析处必须是「显式选择 ?? 系统语言 ?? 默认」这个顺序。
+    //    锁的是**顺序**：若写成 `detectSystemLang() ?? readStoredLang() ?? …`，
+    //    用户手动选的英文会被系统中文盖掉 —— 那是本功能最危险的写歪方式。
+    const resolver = src.match(/function resolveLang\(\)[^{]*\{\s*return ([^;]+);/);
+    expect(resolver, 'resolveLang() 必须存在（唯一解析处）').not.toBeNull();
+    const order = resolver![1];
+    const iStored = order.indexOf('readStoredLang');
+    const iSystem = order.indexOf('detectSystemLang');
+    const iDefault = order.indexOf('DEFAULT_LANG');
+    expect(iStored, '显式选择必须参与解析').toBeGreaterThanOrEqual(0);
+    expect(iSystem, '系统语言必须参与解析').toBeGreaterThanOrEqual(0);
+    expect(iDefault, '默认语言必须是最后兜底').toBeGreaterThanOrEqual(0);
+    expect(iStored, '显式选择必须排在系统语言之前').toBeLessThan(iSystem);
+    expect(iSystem, '系统语言必须排在默认语言之前').toBeLessThan(iDefault);
+
+    // ③ 内联脚本不许走两套口径：它也必须读系统语言
     const html = readFileSync(resolve(ROOT, 'index.html'), 'utf-8');
-    expect(html).not.toMatch(/navigator\.languages?\b/);
+    expect(html, 'index.html 必须与 lang.ts 同口径跟随系统').toMatch(/navigator\.languages?\b/);
+  });
+
+  /**
+   * ★ 新增（2026-10-31）：`languagechange` 监听不许把系统语言**当成用户选择落库**。
+   * 病灶形态：里面若调 `setLang(next)`，`setLang` 会写 localStorage ⇒ 用户从没点过
+   * 语言按钮，却凭空多出一条「显式选择」⇒ 之后系统语言再变就不跟了（静默失效）。
+   */
+  it('系统语言变化时不落库（否则会伪造出「用户显式选择」，此后不再跟随）', () => {
+    const src = readFileSync(resolve(ROOT, 'src/i18n/lang.ts'), 'utf-8');
+    const block = src.match(/addEventListener\('languagechange'[\s\S]*?\n  \}\);/);
+    expect(block, "必须挂 languagechange 监听（否则系统语言切换要重启才生效）").not.toBeNull();
+    expect(
+      block![0],
+      'languagechange 回调里不许调 setLang()——它会把系统语言写进 localStorage',
+    ).not.toMatch(/setLang\(/);
+    // 但**必须**真的广播出去（否则界面不重渲染，只有 DOM 属性变了）
+    expect(block![0], '必须 emit() 通知订阅方重渲染').toMatch(/emit\(\)/);
   });
 
   it('index.html 的内联脚本与 lang.ts 同 key、同合法值、同回落（口径不许两处）', () => {

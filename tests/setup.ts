@@ -187,3 +187,49 @@ export async function installFakeIndexedDB(): Promise<void> {
     gNow.IDBKeyRange = FakeIDBKeyRange;
   }
 }
+
+/**
+ * ★ 2026-10-31：**把测试环境的「系统语言」显式声明为中文**。
+ *
+ * ── 为什么必须在这里钉住（否则全量会大面积变红）──
+ * 本批把界面语言的默认来源从「写死 'zh'」改成了「**跟随系统语言**」
+ * （`src/i18n/lang.ts` 的 `detectSystemLang()`；产品负责人拍板，
+ * 与主题「默认跟随系统」对齐）。而 jsdom 的 `navigator.language` 是 **`'en-US'`**
+ * ——实测过（探针结果：`ORIGINAL navigator.language = "en-US"`）。
+ * 后果：若不钉住，模块级 `let lang = resolveLang()` 在 import 期就会解析成 `'en'`，
+ * 于是**整个仓库的用例基线语言从中文变成英文** ⇒ 所有按中文文案/中文 aria 断言的
+ * 用例、以及所有 `resetLang() { setLang('zh') }` 的复位前提，全部失去意义。
+ *
+ * ── 为什么钉在这里，而不是在 `lang.ts` 里写「测试态就回落 zh」──
+ * ① 那是**生产代码里的测试特例**：既污染产品语义（多一条只有测试才走的分支），
+ *   又会让「跟随系统」这条功能**永远不会被任何用例覆盖到**（测试态永远走不到巩固路径）。
+ * ② 放在这里，语义是「**本测试跑在中文本机上**」——一次环境声明，与
+ *    `IS_REACT_ACT_ENVIRONMENT` / `matchMedia` 复位同性质，属**环境事实**而非产品逻辑。
+ * ③ 想测「英文系统」时，用例自己 `Object.defineProperty(navigator, 'language', …)`
+ *    覆盖即可（该方法已在 jsdom 下实测可行：`defineProperty` 后 `navigator.language === 'zh-CN'`）。
+ *    ⇒ 新功能因此**可被测试**，而不是绕开测试。
+ *
+ * ⚠️ **只在 `language` 未定义或为 jsdom 默认值时覆盖**：若某个 spec 在
+ *    `vi.hoisted` / 模块加载前已显式设定过语言，尊重它（不覆盖用户的显式意图）。
+ * ⚠️ 不写 `languages`：让生产代码走「`languages` 缺失 ⇒ 回落 `language`」这条**降级分支**，
+ *    这正好把 `detectSystemLang()` 的兜底路径也纳入全量覆盖。
+ */
+if (typeof navigator !== 'undefined' && !('__LANG_PINNED__' in navigator)) {
+  try {
+    Object.defineProperty(navigator, 'language', {
+      value: 'zh-CN',
+      configurable: true, // 允许 spec 自己再覆盖（测英文系统时用）
+      enumerable: true,
+    });
+    Object.defineProperty(navigator, 'languages', {
+      value: undefined,
+      configurable: true,
+    });
+    Object.defineProperty(navigator, '__LANG_PINNED__', {
+      value: true,
+      configurable: true,
+    });
+  } catch {
+    /* 环境不允许改 navigator：忽略（极少数环境），用例自己负责 */
+  }
+}
