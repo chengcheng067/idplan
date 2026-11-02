@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/License-All%20Rights%20Reserved-lightgrey.svg" alt="License: All Rights Reserved" />
   <img src="https://img.shields.io/badge/version-1.0.0.0014-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/tests-4193%20passing-brightgreen.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
@@ -141,7 +141,7 @@ ID Plan's interface is assembled from a set of **contribution points**: routes, 
 - 🧪 [**A complete example**](./docs/plugin-api/example.md) — a “meeting-room occupancy board”: manifest + panel + unit tests, ready to copy
 - ✅ [**Pre-submission self-check**](./docs/plugin-api/review-checklist.md) — the five things we review
 
-Just send a PR to `src/plugins/<your-plugin>/` — **the code shares the same build, and once reviewed and merged it ships with the next version**; or hand your plugin file to someone else and let them “install from file”. That is the real shape of “open co-creation” at this stage: writers code against the contract, installers can see what they installed.
+Just hand your plugin file to someone else and let them “install from file”. If you want it to land in this repo and ship with a release, you must **talk to the author in an issue first and obtain written permission** — this repository is all rights reserved, so unpermitted code contributions are not merged (see [LICENSE](./LICENSE)). That is the real shape of “open co-creation” at this stage: writers code against the contract, installers can see what they installed.
 
 ---
 
@@ -306,13 +306,15 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 
 ---
 
-## 🤝 How to contribute
+## 🤝 Questions and suggestions
 
-- **Write a plugin** — copy the [example](./docs/plugin-api/example.md), 30 minutes; send a PR into `src/plugins/`, or hand the file to someone for “install from file”
-- **Add industry templates** — if you know an industry, send a template PR (the stage library is a pure JSON addition, zero migration); “copy the prompt → send it to your Agent → import it back” in the app can help you generate one
-- **Report features / bugs** — open an Issue, or send a PR directly
-- **Improve interaction / visuals** — UI copy, flows, icon polish
-- **Contribute code** — write tests with vitest, PRs welcome; submitting means you agree to merge your contribution under the same MIT licence as this project
+> ⚠️ **This repository is public for demonstration and discussion; unsolicited external code contributions are not accepted.** The “send a PR / submit a template” wording in items 1 and 2 below applies only to contributions for which you have **obtained prior written permission from the author**; PRs sent without it will not be merged.
+
+- **Write a plugin** — copy the [example](./docs/plugin-api/example.md), 30 minutes; then hand the file to someone for “install from file”, no need to land it in this repo
+- **Add industry templates** — if you know an industry, share the stage-library JSON addition in an issue and the author decides whether it goes into this repo
+- **Report features / bugs** — issues are welcome
+- **Improve interaction / visuals** — suggestions and screenshots in an issue are welcome
+- **Contribute code** — you must **talk to the author in an issue first and obtain written permission**; for approved contributions, copyright belongs to the project author and the licence follows this repository's [LICENSE](./LICENSE)
 
 > Once the app is installed, **Settings → About** has a tip code and my WeChat — if it works well for you, buy me a coffee; if something feels off, tell me directly.
 
@@ -320,15 +322,17 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 
 ## ⚖️ License
 
-This project is open-sourced under the **[MIT License](./LICENSE)** — you are free to use, copy, modify, merge, publish, distribute, sublicense and sell copies of this software (commercial use included); the only requirement is to keep the copyright and permission notices above. **Commercial use needs no separate licence and costs nothing.**
+**All rights reserved.** See the root **[LICENSE](./LICENSE)** for the full text.
 
-> The design intent: letting more small teams, independent workers and students dare to use it, change it and redistribute it is the best way for this tool to stay alive.
+This repository is public for demonstration and discussion: you may **read, clone, and build it locally** for your own evaluation. **Without prior written permission from the author, you may not redistribute, publish modified versions, use it commercially, or incorporate it into another product.** The ID Plan name, logo, and interface design are owned by the author.
+
+> Third-party dependencies (Electron, React, Vite, etc.) remain under their own respective licenses; see `package-lock.json`.
 
 ---
 
 ## 💬 Last word
 
-If you have a similar need, or any thoughts about this project, open an Issue or a PR. Let's make it better together.
+If you have a similar need, or any thoughts about this project, open an Issue. Let's make it better together.
 
 > **ID Plan — clear stages, visible progress.**
 

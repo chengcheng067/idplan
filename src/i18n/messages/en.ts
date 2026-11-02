@@ -1058,6 +1058,7 @@ export const enMessages: Record<MessageKey, string> = {
 
   'settings.about.version': 'Version',
   'settings.about.license': 'License',
+  'settings.about.licenseValue': 'All rights reserved',
   'settings.about.betaNote': 'Beta build — features and data formats may still change.',
   'settings.about.frontend': 'Frontend',
   'settings.about.packaging': 'Packaged',

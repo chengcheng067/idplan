@@ -1,21 +1,23 @@
-MIT License
+ID Plan 许可证 · 保留所有权利
+ID Plan License · All Rights Reserved
 
-Copyright (c) 2026 杨雯丞 (Yang Wencheng)
+版权所有 (c) 2026 杨雯丞 (Yang Wencheng)。保留所有权利。
+Copyright (c) 2026 Yang Wencheng. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本仓库公开是为了展示与交流：你可以阅读、克隆、在本地构建用于自己评估。
+This repository is public for demonstration and discussion. You may read,
+clone, and build it locally for your own evaluation.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+未经作者书面许可，不得再分发、修改后发布、商用，或把它作为其他产品的一部分。
+Without prior written permission from the author, you may not redistribute,
+publish modified versions, use it commercially, or incorporate it into
+another product.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+ID Plan 名称、徽标与界面设计均归作者所有。
+The ID Plan name, logo, and interface design are owned by the author.
+
+---
+
+第三方依赖（Electron、React、Vite 等）仍适用其各自的许可证，见 package-lock.json。
+Third-party dependencies (Electron, React, Vite, etc.) remain under their own
+respective licenses; see package-lock.json.

@@ -101,7 +101,7 @@ import { cn } from '../../lib/cn';
  *   ③ 数据与备份  保存·导入备份 / 日志导出 / NAS 服务 / 检查更新 / 数据存放说明
  *   ④ 插件        插件开关/从文件安装/卸载/启用前披露（+ 上一轮的 Agent 子段）
  *   ⑤ 行业与模板  行业库（自定义包三步流）
- *   ⑥ 关于        版本 / 开源许可 / Issue / 赞赏与反馈预留卡
+ *   ⑥ 关于        版本 / 许可证 / Issue / 赞赏与反馈预留卡
  *
  * ── v1.0 · 设置再收一层：**插件自带的设置搬进插件自己的卡**（本轮）──
  * 她的原话：「Agent 实际上应该包含在下面那个箭头指的『插件』里面，给里面
@@ -841,10 +841,10 @@ export function SettingsDialog({
                         <dt className="text-mist">{t('settings.about.version')}</dt>
                         <dd className="font-medium text-ink">{BUILD_VERSION}</dd>
                       </div>
-                      {/* 开源许可（MIT，仓库根 LICENSE）——反馈 #7 分区方案里「关于」区的明列项 */}
+                      {/* 许可证（保留所有权利，仓库根 LICENSE）——反馈 #7 分区方案里「关于」区的明列项 */}
                       <div className="flex items-center justify-between gap-3">
                         <dt className="text-mist">{t('settings.about.license')}</dt>
-                        <dd className="text-ink">MIT</dd>
+                        <dd className="text-ink">{t('settings.about.licenseValue')}</dd>
                       </div>
                       {/* 内测提示（v0.7）：与标题 Beta 徽标呼应，克制地说明版本状态 */}
                       <p className="pt-0.5 text-[11px] leading-relaxed text-mist">

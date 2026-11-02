@@ -16,4 +16,4 @@
 - [ ] 架构铁律核对过（CONTRIBUTING §1-2：dexie 单文件 / electron 不进 src / better-sqlite3 只在 server）
 - [ ] 涉及版本号/套餐数/测试数的，已同源同批更新（README / api-contract / roadmap）
 
-> 提交即表示你的贡献以 MIT 许可并入本项目（inbound = outbound，见 CONTRIBUTING）。
+> ⚠️ 提交 PR 前请先在 issue 取得**作者书面同意**；未经同意的 PR 不予合入。经同意的贡献，其**著作权归本项目作者所有**，许可随本仓库 `LICENSE`（保留所有权利）。

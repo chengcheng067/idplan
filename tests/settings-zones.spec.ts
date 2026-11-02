@@ -499,12 +499,16 @@ describe.skipIf(!CAN_RUN_FRESH)('设置抽屉 · 分区与贴缘几何（反馈 
       expect(industryText).toContain('复制提示词');
       expect(industryText).toContain('导回这里');
 
-      // 切「关于」：版本 + 开源许可 + 赞赏/反馈两张实卡（微信图 2026-10-08 到位，
+      // 切「关于」：版本 + 许可证 + 赞赏/反馈两张实卡（微信图 2026-10-08 到位，
       // 不再是「图片待补」占位——断言随之升级为验证真图渲染，比占位文本更强）
+      // 2026-11-03 许可口径变更：原「开源许可 / MIT」→「许可证 / 保留所有权利」，
+      // 断言同步改口径，两处都钉住（标签 + 取值），避免只改一半仍绿。
       await page.locator('[data-settings-zone="about"]').click();
       const aboutText = await drawer.innerText();
       expect(aboutText).toContain('版本号');
-      expect(aboutText).toContain('开源许可');
+      expect(aboutText).toContain('许可证');
+      expect(aboutText).toContain('保留所有权利');
+      expect(aboutText).not.toContain('开源许可');
       expect(aboutText).toContain('赞赏支持');
       expect(aboutText).toContain('反馈建议');
       expect(aboutText).not.toContain('图片待补');

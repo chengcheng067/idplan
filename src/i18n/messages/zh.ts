@@ -1044,7 +1044,8 @@ export const zhMessages = {
 
   /* ── 关于区 ── */
   'settings.about.version': '版本号',
-  'settings.about.license': '开源许可',
+  'settings.about.license': '许可证',
+  'settings.about.licenseValue': '保留所有权利',
   'settings.about.betaNote': '内测版本，功能与数据格式仍可能调整。',
   'settings.about.frontend': '前端',
   'settings.about.packaging': '打包',

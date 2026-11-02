@@ -2,7 +2,7 @@
   "name": "id-plan",
   "private": true,
   "version": "1.0.0",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "description": "ID Plan — 跨行业项目排程工具（离线优先）：把合同变成一张看得懂的阶段时间轴",
   "author": "杨雯丞",
