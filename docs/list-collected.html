@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ID Plan 已收集个人信息清单</title>
+<meta name="description" content="ID Plan 已收集个人信息清单：本应用不收集个人信息，逐字段列表说明。">
+<style>
+  :root{
+    --ink:#1b1e23;
+    --ink-2:#464d55;
+    --ink-3:#767e88;
+    --line:#e4e7eb;
+    --line-soft:#eff1f4;
+    --bg:#ffffff;
+    --bg-soft:#f7f8fa;
+    --bg-note:#f2f6f4;
+    --accent:#2f5f52;
+    --accent-ink:#24493f;
+    --warn-bg:#fdf8ec;
+    --warn-line:#eadcb4;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC","Helvetica Neue",Arial,sans-serif;
+    font-size:16px;
+    line-height:1.8;
+    letter-spacing:.01em;
+  }
+  .page{max-width:820px;margin:0 auto;padding:56px 24px 72px}
+  header.doc-head{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:8px}
+  .brand{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px}
+  h1{font-size:29px;line-height:1.35;margin:0 0 10px;font-weight:700;letter-spacing:-.01em}
+  .doc-sub{color:var(--ink-2);font-size:15px;margin:0}
+  .langbar{
+    display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+    padding:14px 0 18px;border-bottom:1px solid var(--line);margin-bottom:34px;font-size:14px;
+  }
+  .langbar a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(47,95,82,.35);padding-bottom:1px}
+  .langbar a:hover{border-bottom-color:var(--accent)}
+  .langbar .sep{color:var(--line)}
+  .langbar .cur{color:var(--ink-3)}
+  section{margin:0 0 40px}
+  h2.sec{font-size:20px;line-height:1.5;margin:0 0 14px;padding-top:6px;font-weight:700;letter-spacing:-.005em}
+  h2.sec .num{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:10px;font-weight:700}
+  h3{font-size:16px;margin:24px 0 8px;font-weight:600;color:var(--ink)}
+  p{margin:0 0 14px}
+  ul,ol.body-list{margin:0 0 14px;padding-left:1.5em}
+  li{margin:0 0 8px}
+  strong{font-weight:600}
+  code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-size:.9em;background:var(--bg-soft);border:1px solid var(--line-soft);
+    border-radius:3px;padding:1px 5px;
+    /* 长 URL / 长标识符必须能断行，否则窄屏会撑出横向滚动 */
+    overflow-wrap:anywhere;word-break:break-word;
+  }
+  a{color:var(--accent)}
+  .lead{background:var(--bg-note);border-left:3px solid var(--accent);padding:16px 20px;margin:0 0 20px;border-radius:0 4px 4px 0}
+  .lead p:last-child{margin-bottom:0}
+  .note{background:var(--bg-soft);border:1px solid var(--line);border-radius:5px;padding:14px 18px;font-size:14.5px;color:var(--ink-2);margin:0 0 18px}
+  .note p:last-child{margin-bottom:0}
+  .warn{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:5px;padding:14px 18px;font-size:14.5px;margin:0 0 18px}
+  .warn p:last-child{margin-bottom:0}
+  .tbl-wrap{overflow-x:auto;margin:0 0 18px;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;line-height:1.6;min-width:520px}
+  caption{caption-side:top;text-align:left;font-size:13px;color:var(--ink-3);padding:0 0 8px}
+  th,td{border-bottom:1px solid var(--line);padding:9px 12px 9px 0;text-align:left;vertical-align:top}
+  thead th{border-bottom:1.5px solid var(--ink);font-weight:600;font-size:13.5px;color:var(--ink);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:1px solid var(--line)}
+  td.no{color:var(--accent);font-weight:600;white-space:nowrap}
+  td.yes{color:#9a5b1e;font-weight:600;white-space:nowrap}
+  td.mid{white-space:nowrap}
+  footer.doc-foot{border-top:1px solid var(--line);margin-top:56px;padding-top:24px;font-size:14px;color:var(--ink-3)}
+  footer.doc-foot p{margin:0 0 10px}
+  .foot-strong{color:var(--ink-2);font-weight:600}
+  .backtop{display:inline-block;margin-top:6px;font-size:13.5px;color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(47,95,82,.35)}
+  .rule{height:1px;background:var(--line);border:0;margin:40px 0}
+  .en-block{background:var(--bg-soft);border:1px solid var(--line);border-radius:6px;padding:30px 28px 24px;margin:0 0 40px}
+  .en-block h2{font-size:21px;margin:0 0 6px;font-weight:700;letter-spacing:-.01em}
+  .en-block .en-sub{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 20px}
+  .en-block h3{font-size:15px;margin:22px 0 6px}
+  .en-block p,.en-block li{font-size:15px;line-height:1.75}
+  @media (max-width:720px){
+    .page{padding:36px 18px 56px}
+    h1{font-size:24px}
+    h2.sec{font-size:18px}
+    .en-block{padding:22px 18px 18px}
+  }
+  @media print{
+    .page{max-width:none;padding:0}
+    .langbar,.backtop{display:none}
+    body{font-size:11pt;line-height:1.6}
+    a{color:inherit;text-decoration:none}
+    section{page-break-inside:avoid}
+    table{min-width:0}
+  }
+</style>
+</head>
+<body>
+<div class="page" id="top">
+
+<header class="doc-head">
+  <p class="brand">ID Plan · 清单一</p>
+  <h1>已收集个人信息清单</h1>
+  <p class="doc-sub">室内设计项目节点管理系统 · 生效日期 2026 年 11 月 03 日</p>
+</header>
+
+<div class="langbar">
+  <span class="cur">简体中文</span>
+  <span class="sep">|</span>
+  <a href="privacy.html">隐私政策</a>
+  <a href="list-sharing.html">个人信息共享清单</a>
+  <a href="list-sdk.html">第三方 SDK 清单</a>
+</div>
+
+<div class="lead">
+  <p><strong>清单结论：本应用收集的个人信息为 0 项。</strong></p>
+  <p>本清单按监管要求逐项列明可能涉及的字段与权限。<strong>所有项目均标注「否」——这份清单的意义正在于此：它证明的不是「我们收集了什么」，而是「我们没有收集什么」。</strong></p>
+</div>
+
+<!-- ============ 1 ============ -->
+<section id="s1">
+  <h2 class="sec"><span class="num">01</span>个人信息字段清单</h2>
+  <div class="tbl-wrap">
+    <table>
+      <caption>口径：「收集」指应用主动获取、回传或向开发者传输；仅由用户在本地写入自己设备的不计为「收集」。</caption>
+      <thead>
+        <tr>
+          <th>字段</th>
+          <th>是否收集</th>
+          <th>存放位置</th>
+          <th>用途</th>
+          <th>是否上传</th>
+          <th>可否删除</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>姓名 / 昵称</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>手机号</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>电子邮箱</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>身份证件号码 / 实名信息</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>设备标识符（IMEI / MAC / OAID / 广告标识）</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>位置信息（GPS / 基站 / 粗略定位）</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>通讯录 / 短信 / 通话记录</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>相册 / 图片 / 视频</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>摄像头 / 麦克风数据</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>剪贴板内容</td><td class="no">否</td>
+          <td>不存储（仅在你点「复制」时写入系统剪贴板）</td>
+          <td>方便你粘贴到其他工具</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>生物识别信息</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>应用使用行为 / 页面浏览 / 点击埋点</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>崩溃日志 / 性能监控数据</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>网络身份（IP 地址、追踪 Cookie、浏览器指纹）</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>账号、密码（云端）</td><td class="no">否</td>
+          <td>无账号体系</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>支付信息 / 交易记录</td><td class="no">否</td>
+          <td>不存储（本应用无付费功能）</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+        <tr>
+          <td>搜索记录</td><td class="no">否</td>
+          <td>不存储</td><td>—</td><td class="no">否</td><td class="mid">不适用</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="s2">
+  <h2 class="sec"><span class="num">02</span>系统权限清单</h2>
+  <div class="tbl-wrap">
+    <table>
+      <caption>「是否申请」指应用是否向操作系统请求授权。</caption>
+      <thead>
+        <tr><th>权限</th><th>是否申请</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>摄像头</td><td class="no">否</td><td>无拍照、无扫码、无视频功能</td></tr>
+        <tr><td>麦克风</td><td class="no">否</td><td>无录音、无语音输入</td></tr>
+        <tr><td>相册 / 文件媒体库</td><td class="no">否</td><td>仅在你主动点击「上传 logo」「加载备份」时弹出系统文件选择器，读取你选中的那一个文件</td></tr>
+        <tr><td>通讯录</td><td class="no">否</td><td>—</td></tr>
+        <tr><td>短信</td><td class="no">否</td><td>—</td></tr>
+        <tr><td>通话记录</td><td class="no">否</td><td>—</td></tr>
+        <tr><td>定位</td><td class="no">否</td><td>—</td></tr>
+        <tr><td>通知推送</td><td class="no">否</td><td>无推送通道</td></tr>
+        <tr><td>后台自启动 / 常驻</td><td class="no">否</td><td>—</td></tr>
+        <tr><td>读取剪贴板</td><td class="no">否</td><td>只有写入操作，且由你点按钮触发</td></tr>
+        <tr><td>蓝牙 / NFC</td><td class="no">否</td><td>—</td></tr>
+        <tr><td>网络访问（出站）</td><td class="yes">是</td><td>仅用于访问<strong>你自己的 NAS</strong>；桌面版另有检查更新一次。详见隐私政策第 06 节</td></tr>
+        <tr><td>本地存储（浏览器数据库）</td><td class="yes">是</td><td>保存你自己录入的项目数据，存在你的设备上</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="s3">
+  <h2 class="sec"><span class="num">03</span>用户自行录入的业务数据（区别于「个人信息收集」）</h2>
+  <div class="note">
+    <p><strong>为什么单列一块：</strong>下列字段确实会进入存储，但<strong>写入方是用户本人</strong>，读取方也只有用户自己的设备或 NAS。开发者没有接口能读到它们，因此不构成「开发者收集个人信息」。把它们列出来，是为了让这份清单完整可核验——不藏任何一类数据。</p>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <caption>全部仅本地存储，无一上传。</caption>
+      <thead>
+        <tr>
+          <th>字段</th>
+          <th>由谁录入</th>
+          <th>存放位置</th>
+          <th>用途</th>
+          <th>是否上传</th>
+          <th>可否删除</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>项目名称</td><td class="mid">用户</td>
+          <td rowspan="9">你自己的设备或 NAS 本地数据库<br>（NAS 版在卷 <code>idplan-data</code>；桌面/浏览器版在本地库 <code>changxia</code>）</td>
+          <td>标识项目</td><td class="no">否</td><td class="yes">可（界面内删除）</td>
+        </tr>
+        <tr>
+          <td>项目地址</td><td class="mid">用户</td>
+          <td>项目档案</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>客户名称</td><td class="mid">用户</td>
+          <td>项目档案，便于区分委托方</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>合同金额、签约日期</td><td class="mid">用户</td>
+          <td>项目档案</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>阶段名称、阶段起止日期、阶段备注</td><td class="mid">用户</td>
+          <td>排期与打印</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>阶段变更日志（时间、原因、操作人显示名）</td><td class="mid">用户 / 系统</td>
+          <td>变更追溯</td><td class="no">否</td><td class="yes">可（随阶段删除）</td>
+        </tr>
+        <tr>
+          <td>任务标题、任务备注、截止日期</td><td class="mid">用户</td>
+          <td>分工与进度跟踪</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>团队成员姓名、角色</td><td class="mid">用户</td>
+          <td>团队分工与看板展示</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td><strong>团队成员联系方式</strong>（自由文本框）</td><td class="mid">用户</td>
+          <td>便于团队内部联系。<strong>你若在该栏填手机号或邮箱，它与其他业务数据同等对待：仅存你的本地库，从不上传。</strong></td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>成员头像底色</td><td class="mid">用户</td>
+          <td rowspan="6">同上（本地数据库）</td>
+          <td>看板用色区分成员。<strong>只存颜色代码，不上传头像图片。</strong></td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>成员进入密码（哈希值）</td><td class="mid">用户</td>
+          <td>成员身份校验。<strong>只存不可逆哈希，不存明文。</strong></td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>合同文件名、合同文本摘要</td><td class="mid">用户</td>
+          <td>建档记录。<strong>只存摘要，不存合同原文。</strong></td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>行程日期、交通、住宿、预算与实际支出</td><td class="mid">用户</td>
+          <td>差旅排期与费用记录</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>公司 logo（打印用）</td><td class="mid">用户</td>
+          <td>打印模板署名</td><td class="no">否</td><td class="yes">可</td>
+        </tr>
+        <tr>
+          <td>界面偏好（布局、主题、语言、打印选项、引导标记）</td><td class="mid">用户 / 系统</td>
+          <td>记住你的使用习惯</td><td class="no">否</td><td class="yes">可（清除站点数据）</td>
+        </tr>
+        <tr>
+          <td>本机服务令牌（<code>idplan.agentToken</code> / <code>idplan.apiToken</code>）</td><td class="mid">用户填写 / 系统生成</td>
+          <td>浏览器本地存储（不进备份、不随身份同步）</td>
+          <td>访问你自己的 NAS 后端与本地 Agent 通道</td><td class="no">否</td><td class="yes">可（设置内清除或清站点数据）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="s4">
+  <h2 class="sec"><span class="num">04</span>数据流向总览</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>方向</th><th>是否存在</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>用户设备 → 开发者</td><td class="no">不存在</td><td>没有任何上报端点，开发者无接收服务</td></tr>
+        <tr><td>用户设备 → 第三方（统计 / 广告 / 崩溃监控）</td><td class="no">不存在</td><td>未集成任何此类 SDK</td></tr>
+        <tr><td>用户设备 → 用户自己的 NAS</td><td class="yes">存在</td><td>局域网内，NAS 版读写数据</td></tr>
+        <tr><td>桌面版 → GitHub（检查更新）</td><td class="yes">存在</td><td>仅 Windows 桌面版，仅携带固定的客户端名标识，不含任何用户数据</td></tr>
+        <tr><td>NAS → 用户自行配置的 AI 服务（可选）</td><td class="mid">默认关闭</td><td>需用户显式配置三项参数才启用；发送内容 ≤500 字；详见隐私政策第 06 节</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="en-block" id="en" lang="en">
+  <h2>List of Personal Information Collected (English)</h2>
+  <p class="en-sub">ID Plan · Effective November 3, 2026</p>
+  <p><strong>Total personal information collected: zero items.</strong></p>
+  <p>This list enumerates every field and permission that could plausibly be relevant, and marks all of them "No". Its purpose is to document what is <em>not</em> collected:</p>
+  <ul>
+    <li>Name / nickname — <strong>not collected</strong>, not stored</li>
+    <li>Phone number — <strong>not collected</strong>, not stored</li>
+    <li>Email address — <strong>not collected</strong>, not stored</li>
+    <li>Government ID / real-name information — <strong>not collected</strong></li>
+    <li>Device identifiers (IMEI / MAC / OAID / advertising ID) — <strong>not collected</strong></li>
+    <li>Location — <strong>not collected</strong>, permission not requested</li>
+    <li>Contacts / SMS / call logs — <strong>not collected</strong>, permissions not requested</li>
+    <li>Photos / camera / microphone — <strong>not collected</strong>, permissions not requested</li>
+    <li>Clipboard contents — <strong>not collected</strong>; clipboard is written only when you press "Copy", never read</li>
+    <li>Biometrics — <strong>not collected</strong></li>
+    <li>Usage behaviour / analytics / click tracking — <strong>not collected</strong></li>
+    <li>Crash logs / performance data — <strong>not collected</strong></li>
+    <li>IP address / tracking cookies / browser fingerprint — <strong>not collected</strong></li>
+    <li>Account credentials — no account system exists</li>
+    <li>Payment or transaction data — <strong>not collected</strong> (the app has no paid features)</li>
+    <li>Search history — <strong>not collected</strong></li>
+  </ul>
+  <p><strong>Permissions requested:</strong> network access (outbound) and local browser storage. Nothing else — no camera, microphone, contacts, SMS, photo library, location, notifications, background auto-start, or Bluetooth/NFC.</p>
+  <p><strong>Business data you enter yourself</strong> (project names, addresses, client names, contract amounts, stage names and notes, task titles, team member names and roles, an optional free-text contact field, avatar colours, password hashes, contract file names and text digests, travel and budget records, company logo, UI preferences, local service tokens) is written by <em>you</em> and stored only on your own device or your own NAS. It is never uploaded, and we have no interface that can read it. All of it can be deleted by you at any time from within the app or by removing the local database / Docker volume.</p>
+  <p><a class="backtop" href="#top">↑ 返回中文 / Back to Chinese</a></p>
+</section>
+
+<footer class="doc-foot">
+  <p class="foot-strong">本应用为纯本地 / 局域网工具，开发者不运营任何收集用户数据的服务器。</p>
+  <p>ID Plan · 室内设计项目节点管理系统 · 个人开发者 杨雯丞</p>
+  <p>生效日期：2026-11-03　|　适用版本：1.0.0.0022 及以后</p>
+  <p>相关文件：<a href="privacy.html">隐私政策</a> · <a href="list-sharing.html">个人信息共享清单</a> · <a href="list-sdk.html">第三方 SDK 清单</a></p>
+</footer>
+
+</div>
+</body>
+</html>
