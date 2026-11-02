@@ -11,9 +11,13 @@
 spec_version: "2.1"
 app_id: com.chengcheng.idplan
 version: 1.0.0
+# 架构声明必须与 rootfs_<arch>/images/ 里真实存在的镜像 tar 一致。
+# 现状（2026-11-03 核验）：rootfs_amd64 的镜像来自 1.0.0.0022 构建，rootfs_arm64
+# 仍是 2026-08-31 的陈镜像，两者版本不同号。商店审核按声明的架构逐一下发安装包，
+# 声明了却装不上 = 直接被驳 ⇒ 本期只声明 amd64。等 arm64 镜像按 1.0.0.0022 重出后
+# （跑 .github/workflows/upk-images.yml 的 arm64 分支）再把 arm64 加回来。
 support_arch:
   - amd64
-  - arm64
 
 # 客户端类型：pc=桌面端，app=移动端（Docker 应用 tab 直连 IP:端口，手机浏览器亦可访问；适配手机见前端响应式）
 supports:
@@ -120,15 +124,26 @@ parameters:
         name: 自然语言通道 - 模型名
         description: 传给端点的模型名（如 qwen2.5:7b / deepseek-chat）。
 
-# 合规与技术支持链接（使用开源代码时必须配置 license + source）
+# ---- 合规与技术支持链接 ----
+# 每一条都必须是「用户点开能直接看到对应内容」的页面。四条全指个人主页
+# （https://github.com/chengcheng067）在资料审核环节必被驳：那不是隐私政策。
+#
+# ⚠️ privacy_policy_link 的发布前置（这是目前唯一一条未就绪的）：
+#    需把 docs/privacy.html 推到 master，并在仓库 Settings → Pages 选
+#    「Deploy from a branch → master / docs」发布，之后该 URL 才可用。
+#    发布前它是 404 —— 提交资料审核前必须先验证这条链接能打开。
 privacy_policy_link:
-  - https://github.com/chengcheng067
+  - https://chengcheng067.github.io/idplan/privacy.html
+# 许可证：2026-11-03 起由 MIT 切换为「保留所有权利」（commit 3bc3d62）。
+# 仓库仍公开，但仅许可阅读/克隆/本地评估，不得再分发或商用。
 license_agreement_link:
-  - https://github.com/chengcheng067
+  - https://github.com/chengcheng067/idplan/blob/master/LICENSE
+# 源码：仓库公开可查阅（license 已注明「公开是为了展示与交流」）。
+# 若审核方按「开源项目」理解，需说明本应用为专有许可、源码公开仅供查阅。
 source_code_link:
-  - https://github.com/chengcheng067
+  - https://github.com/chengcheng067/idplan
 technical_support_link:
-  - https://github.com/chengcheng067
+  - https://github.com/chengcheng067/idplan/issues
 
 # 多语言展示信息（必须保留 en-US 兜底）
 i18n:
@@ -136,15 +151,15 @@ i18n:
     name: ID Plan
     description: Interior design project stage management timeline
     author: ChengCheng
-    official: https://github.com/chengcheng067
-    help: https://github.com/chengcheng067
+    official: https://github.com/chengcheng067/idplan
+    help: https://github.com/chengcheng067/idplan/issues
     publisher: ChengCheng
     publisher_link: https://github.com/chengcheng067
   zh-CN:
     name: ID Plan
     description: 室内设计项目节点管理系统：把合同变成一张看得懂的阶段时间轴
     author: 丞丞
-    official: https://github.com/chengcheng067
-    help: https://github.com/chengcheng067
+    official: https://github.com/chengcheng067/idplan
+    help: https://github.com/chengcheng067/idplan/issues
     publisher: 丞丞
     publisher_link: https://github.com/chengcheng067
