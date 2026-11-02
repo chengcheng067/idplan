@@ -129,26 +129,28 @@ jobs:
       #   driver 支持），再 `docker save`。docker save 的输出恒为 docker-archive
       #   （manifest.json + repositories + <layerid>/layer.tar），不依赖 exporter
       #   的参数细节。代价只是多占一点 runner 磁盘，换来格式零歧义。
+      # ★ 为什么用 --output type=docker 而不是 --load + docker save：
+      #   GitHub Actions runner 的 Docker 启用了 containerd 镜像存储，
+      #   `docker save` 在那里输出的是 OCI layout（blobs/sha256/…），
+      #   照样没有 manifest.json。upk-images.yml 头部记录过同一个坑。
+      #   `--output type=docker,dest=…` 是 BuildKit 的 docker exporter，
+      #   直接产出经典 docker-archive（manifest.json + repositories +
+      #   <layerid>/layer.tar），与 runner 的存储驱动无关。
+      #   这个写法在本仓 upk-images.yml 已长期跑通，不是猜的。
       - name: 导出 amd64.tar（前端 + 后端）
         if: github.event_name == 'workflow_dispatch'
         run: |
+          set -e
           mkdir -p release-docker
-          docker buildx build --platform linux/amd64 \
-            -f ugnas/Dockerfile -t idplan:amd64 --load .
-          docker save -o release-docker/idplan-amd64.tar idplan:amd64
-          docker buildx build --platform linux/amd64 \
-            -f ugnas/Dockerfile.backend -t idplan-backend:amd64 --load .
-          docker save -o release-docker/idplan-backend-amd64.tar idplan-backend:amd64
+          docker buildx build --platform linux/amd64             -f ugnas/Dockerfile -t idplan:amd64             --output type=docker,dest=release-docker/idplan-amd64.tar .
+          docker buildx build --platform linux/amd64             -f ugnas/Dockerfile.backend -t idplan-backend:amd64             --output type=docker,dest=release-docker/idplan-backend-amd64.tar .
 
       - name: 导出 arm64.tar（前端 + 后端）
         if: github.event_name == 'workflow_dispatch'
         run: |
-          docker buildx build --platform linux/arm64 \
-            -f ugnas/Dockerfile -t idplan:arm64 --load .
-          docker save -o release-docker/idplan-arm64.tar idplan:arm64
-          docker buildx build --platform linux/arm64 \
-            -f ugnas/Dockerfile.backend -t idplan-backend:arm64 --load .
-          docker save -o release-docker/idplan-backend-arm64.tar idplan-backend:arm64
+          set -e
+          docker buildx build --platform linux/arm64             -f ugnas/Dockerfile -t idplan:arm64             --output type=docker,dest=release-docker/idplan-arm64.tar .
+          docker buildx build --platform linux/arm64             -f ugnas/Dockerfile.backend -t idplan-backend:arm64             --output type=docker,dest=release-docker/idplan-backend-arm64.tar .
 
       # 自证：格式必须是 docker-archive。真出问题就在这一步红，而不是等用户
       # 在 NAS 上导入失败才发现。tar 大小读不到 manifest.json 时 t 会非 0 退出。
