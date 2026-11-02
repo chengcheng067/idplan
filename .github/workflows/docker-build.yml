@@ -130,6 +130,7 @@ jobs:
       #   （manifest.json + repositories + <layerid>/layer.tar），不依赖 exporter
       #   的参数细节。代价只是多占一点 runner 磁盘，换来格式零歧义。
       - name: 导出 amd64.tar（前端 + 后端）
+        if: github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p release-docker
           docker buildx build --platform linux/amd64 \
@@ -140,6 +141,7 @@ jobs:
           docker save -o release-docker/idplan-backend-amd64.tar idplan-backend:amd64
 
       - name: 导出 arm64.tar（前端 + 后端）
+        if: github.event_name == 'workflow_dispatch'
         run: |
           docker buildx build --platform linux/arm64 \
             -f ugnas/Dockerfile -t idplan:arm64 --load .
@@ -151,6 +153,7 @@ jobs:
       # 自证：格式必须是 docker-archive。真出问题就在这一步红，而不是等用户
       # 在 NAS 上导入失败才发现。tar 大小读不到 manifest.json 时 t 会非 0 退出。
       - name: 校验 tar 是 docker-archive 格式
+        if: github.event_name == 'workflow_dispatch'
         run: |
           set -e
           for f in release-docker/*.tar; do
@@ -165,7 +168,8 @@ jobs:
 
       - name: 创建 Release 并上传 tar 附件
         uses: softprops/action-gh-release@v2
-        if: contains(fromJSON('["refs/heads/main","refs/heads/master"]'), github.ref) || github.event_name == 'workflow_dispatch'
+        # 只在手动发版时产出 Release：push 触发不该每推一次就刷一条 docker-* 版本
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: "ID Plan Docker ${{ env.VERSION }}"
           tag_name: "docker-${{ env.VERSION }}"
