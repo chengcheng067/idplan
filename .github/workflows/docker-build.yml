@@ -3,12 +3,14 @@
 #
 # 作用：在 GitHub 云端（runner 自带 Docker）构建「前端 + 后端」双架构镜像：
 #   - 推送到 ghcr.io 容器仓库  → NAS 用 docker pull 拉取（升级方便）
-#   - 导出单架构 oci .tar     → NAS 用 Docker「导入镜像」一次装好（不依赖网络）
+#   - 导出单架构 docker-archive .tar → NAS 用 Docker「导入镜像」一次装好（不依赖网络）
 #   全程不需要用户本机装 Docker。
 #
 # 触发：
-#   1. push 到 master 分支
-#   2. 手动 workflow_dispatch（可填版本号）
+#   1. push 到 master 分支          → 标签 <pkgver>-sha<7> + latest
+#   2. 手动 workflow_dispatch       → 标签 <填的版本号>（或 <pkgver>）+ latest
+#      手动这一步是「产出可复现版本标签」的唯一途径：
+#      Actions 页面 → 左侧 docker-build → Run workflow → version 填 1.0.0
 #
 # 推送目标（ghcr）：
 #   ghcr.io/chengcheng067/idplan:<ver>           前端（nginx 托管 dist）
@@ -25,9 +27,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "镜像版本号（默认 0.3.0）"
+        description: "镜像版本号（留空 = 取 package.json 的 version）"
         required: false
-        default: "0.3.0"
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -56,11 +58,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 版本号的取法（修一个历史事故的根因）
+      #   事故形态：input 的 default 被写死成 "0.3.0"，而 push 触发时
+      #   github.event.inputs.version 恒为空 ⇒ 代码回落到默认值 ⇒ 每次 push
+      #   都把最新代码重新贴成 :0.3.0 + :latest。结果是 ghcr 上那个「0.3.0」
+      #   标签下的镜像其实是当前 master 的最新构建，标签与内容完全脱钩、
+      #   不可复现（同一份 compose 下周部署可能装到另一批东西）。
+      #
+      #   现在的口径：
+      #   · 手动 dispatch 填了 version → 用填的那个，正常打版本标签。
+      #   · 否则取 package.json 的 version 作为**基线版本**。
+      #   · push 触发（没有人工确认过的版本号）→ 基线版本后追 -sha<7>，
+      #     例如 1.0.0-sha3bc3d62。这样「裸版本标签只由人工 dispatch 产生」，
+      #     版本标签再也不会被 push 悄悄移动；latest 仍然跟随最新构建，
+      #     需要「最新」的人用 latest，需要「固定可复现」的人用带 sha 的标签。
       - name: 确定版本号
         id: ver
         run: |
-          VER="${{ github.event.inputs.version }}"
-          if [ -z "$VER" ]; then VER="0.3.0"; fi
+          set -e
+          INPUT_VER="${{ github.event.inputs.version }}"
+          if [ -n "$INPUT_VER" ]; then
+            VER="$INPUT_VER"
+            MOVABLE_REASON="workflow_dispatch 指定"
+          else
+            BASE="$(node -p "require('./package.json').version")"
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              VER="$BASE"
+              MOVABLE_REASON="workflow_dispatch 未填，取 package.json"
+            else
+              VER="${BASE}-sha$(echo '${{ github.sha }}' | cut -c1-7)"
+              MOVABLE_REASON="push 触发，加 sha 后缀避免移动裸版本标签"
+            fi
+          fi
+          echo "VERSION=${VER}（${MOVABLE_REASON}）"
           echo "VERSION=${VER}" >> "$GITHUB_ENV"
           echo "tag=${VER}" >> "$GITHUB_OUTPUT"
 
@@ -87,25 +117,51 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.BACK }}:${{ env.VERSION }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.BACK }}:latest
 
-      # ---------- 导出单架构 oci tar（NAS「导入镜像」用） ----------
+      # ---------- 导出单架构 tar（NAS「导入镜像」用） ----------
+      #
+      # ★ 这里必须产出「经典 docker-archive」而不是 OCI 布局。
+      #   历史事故：导出步骤曾用 `--output type=oci,dest=…`（buildx 默认输出），
+      #   生成的 tar 解开后第一条是 blobs/sha256/…、**没有 manifest.json**，
+      #   于是 `docker load` 与绿联 Docker 的「导入镜像」全部报
+      #   `manifest.json not found`。upk-images.yml 头部也记过同一个坑。
+      #
+      #   现在改用最不会出错的组合：`--load` 先入本地镜像库（docker-container
+      #   driver 支持），再 `docker save`。docker save 的输出恒为 docker-archive
+      #   （manifest.json + repositories + <layerid>/layer.tar），不依赖 exporter
+      #   的参数细节。代价只是多占一点 runner 磁盘，换来格式零歧义。
       - name: 导出 amd64.tar（前端 + 后端）
         run: |
           mkdir -p release-docker
           docker buildx build --platform linux/amd64 \
-            -f ugnas/Dockerfile -t idplan:amd64 \
-            --output type=oci,dest=release-docker/idplan-amd64.tar .
+            -f ugnas/Dockerfile -t idplan:amd64 --load .
+          docker save -o release-docker/idplan-amd64.tar idplan:amd64
           docker buildx build --platform linux/amd64 \
-            -f ugnas/Dockerfile.backend -t idplan-backend:amd64 \
-            --output type=oci,dest=release-docker/idplan-backend-amd64.tar .
+            -f ugnas/Dockerfile.backend -t idplan-backend:amd64 --load .
+          docker save -o release-docker/idplan-backend-amd64.tar idplan-backend:amd64
 
       - name: 导出 arm64.tar（前端 + 后端）
         run: |
           docker buildx build --platform linux/arm64 \
-            -f ugnas/Dockerfile -t idplan:arm64 \
-            --output type=oci,dest=release-docker/idplan-arm64.tar .
+            -f ugnas/Dockerfile -t idplan:arm64 --load .
+          docker save -o release-docker/idplan-arm64.tar idplan:arm64
           docker buildx build --platform linux/arm64 \
-            -f ugnas/Dockerfile.backend -t idplan-backend:arm64 \
-            --output type=oci,dest=release-docker/idplan-backend-arm64.tar .
+            -f ugnas/Dockerfile.backend -t idplan-backend:arm64 --load .
+          docker save -o release-docker/idplan-backend-arm64.tar idplan-backend:arm64
+
+      # 自证：格式必须是 docker-archive。真出问题就在这一步红，而不是等用户
+      # 在 NAS 上导入失败才发现。tar 大小读不到 manifest.json 时 t 会非 0 退出。
+      - name: 校验 tar 是 docker-archive 格式
+        run: |
+          set -e
+          for f in release-docker/*.tar; do
+            echo "--- $f"
+            if ! tar -tf "$f" | grep -qx 'manifest.json'; then
+              echo "::error file=$f::缺少 manifest.json —— 这不是 docker-archive，NAS 导入会失败"
+              tar -tf "$f" | head -5
+              exit 1
+            fi
+            ls -lh "$f"
+          done
 
       - name: 创建 Release 并上传 tar 附件
         uses: softprops/action-gh-release@v2
