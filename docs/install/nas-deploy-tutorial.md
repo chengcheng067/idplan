@@ -3,9 +3,11 @@
 > 你只需要一台**绿联 NAS**（UGOS Pro 系统）+ 一个浏览器，**不需要**电脑上装任何 Docker 或编程工具。
 > 本教程从零开始，每一步都点哪个按钮都写清楚了。
 
-> 📌 **镜像版本怎么定**：Docker 镜像由 [docker-build.yml](../../.github/workflows/docker-build.yml) 构建，**镜像标签就是构建时填写的版本号**。**当前实际已发布的只有 `0.3.0`**（另有 `latest` 同指）：ghcr 上 `chengcheng067/idplan` 与 `chengcheng067/idplan-backend` 都只有 `0.3.0` / `latest` 两个标签，Releases 里对应的镜像包也只有 `docker-0.3.0` 一条（含 amd64/arm64 四个 `.tar`）。所以下面的示例统一用 `0.3.0`；**别照抄历史示例里的 `0.8.0`——那个标签从未发布过，会拉取失败**。若你手上有 `.tar` 离线包，直接导入即可，不必拉取镜像。
+> 📌 **镜像版本怎么定**：镜像由 [docker-build.yml](../../.github/workflows/docker-build.yml) 构建，标签取自构建时传入的版本号。**ghcr 上目前只有 `0.3.0` 与 `latest` 两个标签**（`chengcheng067/idplan` 与 `chengcheng067/idplan-backend` 都是这个情况，且同一仓库里两者是同一 digest，即内容相同）；Releases 里对应的镜像包是 `docker-0.3.0` 一条（含 amd64/arm64 四个 `.tar`）。所以下面的示例统一用 `0.3.0`；**别照抄历史示例里的 `0.8.0`——那个标签从未发布过，会拉取失败**。若你手上有经典格式的 `.tar` 离线包可离线导入，但**Releases 里现成的 tar 是 OCI 布局、导入会报错**，见「方式 B」里的说明。
 >
-> ⚠️ 注意区分两种「绿联 NAS 装法」：本教程是 **Docker compose 形态**（镜像从 ghcr 拉或离线导入 `.tar`）。如果你想装成**应用中心里的一个应用**，用 `.upk` 应用包，见 [upk-install-tutorial.md](upk-install-tutorial.md)（当前交付 `amd64_com.chengcheng.idplan_1.0.0.0008.upk`）。
+> ⚠️ **`0.3.0` 这个标签不代表 0.3.0 版的代码**：它就是「最近一次 master 推送」构建出来的那批镜像（实测构建时间：前端 2026-11-02T17:10Z、后端 17:16Z），因为 docker-build.yml 被推送触发时版本号取默认值 `0.3.0`，于是每次推送都把最新代码重新贴成 `0.3.0` + `latest`。Releases 里 `docker-0.3.0` 那 4 个 tar 也在同一批（2026-11-02T17:25Z）被重传，所以**离线导入装的也是这一轮构建**。结论：**内容通常是新的，但标签不可复现**——下周再部署同一份 compose，装到的可能是另一批内容。要固定版本，等维护者用 `workflow_dispatch` + `version=1.0.0` 发一次带版本号的构建，再改 compose 里那两处 `image:`。
+>
+> ⚠️ 注意区分两种「绿联 NAS 装法」：本教程是 **Docker compose 形态**（镜像从 ghcr 拉或离线导入 `.tar`），也就是**不经绿联应用商店**的自托管部署，用的文件是 `idplan-nas-compose.yml`。如果你想装成**应用中心里的一个应用**，用 `.upk` 应用包，见 [upk-install-tutorial.md](upk-install-tutorial.md)（当前交付 `amd64_com.chengcheng.idplan_1.0.0.0022.upk`，2026-11-01 发布）；那套走的是 upk 内的 `ugnas/docker-compose.yaml`，镜像从包内 tar 加载，与本教程的 compose 不是同一个文件，不要互换。
 
 ---
 
@@ -42,7 +44,28 @@
 
 ### 方式 B：离线导入 .tar（不想依赖网络时）
 
-如果你已经下载了 `.tar` 镜像文件（见文末"如何拿镜像"），用这种方式：
+> ⚠️ **目前 Releases 里下载到的 `.tar` 直接导入会失败，请先看这一段。**
+>
+> `docker-0.3.0` 那 4 个 tar 是 **OCI 布局**（解开后第一条是 `blobs/sha256/…`，**没有 `manifest.json`**），
+> 而绿联 Docker 的「导入镜像」与 `docker load` 要的是经典 docker-save 格式
+> （`manifest.json` + `repositories` + `<layerid>/layer.tar`）。所以点导入会报
+> `manifest.json not found` / 类似的格式错误。根因在 `docker-build.yml` 的导出步骤用了 buildx
+> 默认输出（OCI），这件事 `upk-images.yml` 头部也记录过同一个坑。
+>
+> **能用的办法**——在一台装了 Docker 的电脑上转一份经典格式再带到 NAS：
+>
+> ```bash
+> # 在能上网的电脑上（Linux / macOS / Windows 的 WSL 都行）
+> docker pull --platform linux/amd64 ghcr.io/chengcheng067/idplan:0.3.0
+> docker pull --platform linux/amd64 ghcr.io/chengcheng067/idplan-backend:0.3.0
+> docker save -o idplan-amd64.tar          ghcr.io/chengcheng067/idplan:0.3.0
+> docker save -o idplan-backend-amd64.tar  ghcr.io/chengcheng067/idplan-backend:0.3.0
+> ```
+>
+> 把这两个新生成的 tar 传到 NAS 导入即可。arm64 机型把 `linux/amd64` 换成 `linux/arm64`。
+> 如果不想折腾，**直接用方式 A 联网部署**——NAS 自己能拉 ghcr，墙内速度通常也够。
+
+如果你已经拿到了**经典格式**的 `.tar` 镜像文件，用这种方式：
 
 1. 先把 `.tar` 文件传到 NAS 上。可以放进共享文件夹（如 `docker` 文件夹）。
 2. 打开桌面「**Docker**」→ 左侧「**镜像**」→「**本地镜像**」。
@@ -70,6 +93,20 @@
 | `VITE_API_BASE_URL` | `/api` | 保持这个值不要改，nginx 会自动转发 |
 
 > 如果只想自己一个人用、数据存浏览器本地（离线），把 `VITE_DATA_SOURCE` 改成 `local` 即可，`VITE_API_BASE_URL` 留空或 `/api` 都行。
+
+### 四之二、后端可选变量（备份 / Agent / 自然语言，不配就是关闭）
+
+同样在 **idplan-backend** 容器上点「编辑」→「环境变量」。这 5 个变量**可以全部留空**，留空 = 对应功能 fail-closed 关闭（服务照常跑，只是那几个入口会返回「未配置」的提示，不会导致容器起不来）：
+
+| 变量 | 填什么 | 留空的后果 |
+|---|---|---|
+| `IDPLAN_AGENT_TOKEN` | 一串自选密钥，同时填进 ID Plan 设置 →「NAS 服务」 | 备份/恢复全拒（点一次 401 一次） |
+| `IDPLAN_AGENT_API_TOKEN` | 另一串（与上面不同，两通道分权） | Agent 导入通道全拒 |
+| `IDPLAN_NL_LLM_BASE_URL` | OpenAI 兼容端点，如 `http://192.168.1.10:11434/v1` | 自然语言通道关闭 |
+| `IDPLAN_NL_LLM_API_KEY` | 该端点对应的 key（自架 Ollama 可填任意非空值） | 自然语言通道关闭 |
+| `IDPLAN_NL_LLM_MODEL` | 模型名，如 `qwen2.5:7b` | 自然语言通道关闭 |
+
+> ⚠️ 这 5 个变量要镜像里有对应代码才生效。ghcr 上那份镜像（2026-11-02 由 master 构建）和 Releases 里同批重传的 `docker-0.3.0` tar 都含这些代码，配了即生效。
 
 ---
 
@@ -114,8 +151,8 @@
 
 | 文件名 | 作用 |
 |---|---|
-| `idplan-nas-compose.yml` | 一键部署的 compose 文件（粘贴/上传用） |
-| `idplan-nas-compose-amd64.yml` | 离线导入版（.tar 为 amd64） |
-| `idplan-nas-compose-arm64.yml` | 离线导入版（.tar 为 arm64） |
+| `idplan-nas-compose.yml` | 本文档配套的 compose 文件（粘贴/上传用，自托管部署） |
 
-**升级方法**：改 compose 里的镜像版本号，再重新「部署」一次即可，数据不丢。但**版本号必须对应一个已发布的镜像**——当前只有 `0.3.0`（滚动刷新，每次 master 推送重建），所以现在其实没有「按版本号升级」这条路；等 docker-build.yml 发了新版本号再改。
+**离线导入（方式 B）没有单独的 compose 文件**：用同一份 `idplan-nas-compose.yml`，只把两处 `image:` 改成你导入的镜像名（见方式 B 的示例）。
+
+**升级方法**：改 compose 里的镜像版本号，再重新「部署」一次即可，数据不丢。但**版本号必须对应一个已发布的镜像**——ghcr 上目前只有 `0.3.0`（外加一个和它同内容的 `latest`），而 `0.3.0` 会被每次 master 推送覆盖成新构建，所以现在没有「按版本号升级」这条路。要拿到一个可复现的固定版本，需要维护者用 `.github/workflows/docker-build.yml` 的 `workflow_dispatch` 传 `version=1.0.0` 跑一次（推送触发时版本号会回落默认值 `0.3.0`，所以不能靠推送），推送成功后把 `idplan-nas-compose.yml` 里**两处** `:0.3.0` 改成 `:1.0.0` 再重新部署。

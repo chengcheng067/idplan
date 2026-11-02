@@ -1,27 +1,58 @@
 # =====================================================================
-# ID Plan · 绿联 NAS 一键部署 docker-compose（纯镜像拉取，小白友好）
+# ID Plan · 自托管 docker compose（**不经绿联应用商店**的手动部署）
 #
-# 用法（三选一，都在绿联桌面「Docker 应用 → 项目 → 创建」里）：
-#   1. 把本文件内容直接粘贴到「Compose 文件」输入框；
-#   2. 或上传本文件（推荐）；
-#   3. 手动逐个创建容器（不推荐，麻烦）。
+# ★ 本文件只管一种情况：你有自己的 Docker（绿联 NAS 的 Docker 应用、
+#   群晖、Unraid、一台 Linux 机器都行），手动拉镜像/导入 tar 起来用。
+#   如果你要的是「应用中心里点一下装好的那个 ID Plan」，那是商店安装包，
+#   走 ugnas/docker-compose.yaml（镜像从 upk 内的 tar 加载），与本文件无关。
+#   两者不要互相抄，尤其不要把本文件塞进 upk。
 #
-# 说明：
-#   - 两个镜像都从 ghcr.io 拉取（前端 idplan + 后端 idplan-backend），
-#     不需要你本机有任何 Docker，NAS 自己会拉。
-#   - 下面 image 标签里的版本号必须是**已发布的**版本。当前实际已发布的只有
-#     0.3.0（另有 latest 同指）：ghcr 上 chengcheng067/idplan 与
-#     chengcheng067/idplan-backend 都只有 0.3.0 / latest 两个标签，
-#     Releases 里对应的镜像包也只有 docker-0.3.0 一条。
-#     镜像由 docker-build.yml 构建，标签即构建时的版本号；
-#     未构建过的版本（例如曾写在这里的 0.8.0）会拉取失败，别照抄历史示例。
-#   - network_mode: bridge 是绿联 Docker 应用的既有约束；用 links 让
-#     前端 nginx 能解析到后端容器（否则 /api 反代会失败）。
-#   - 数据卷 /data 用于保存 SQLite 团队库，容器重建不丢数据。
+# 用法（绿联：桌面「Docker 应用 → 项目 → 创建」）：
+#   1. 把本文件内容直接粘贴到「Compose 文件」输入框；或
+#   2. 上传本文件（推荐）。
+#
+# ---------------------------------------------------------------------
+# ★ 镜像版本（最容易踩坑，先读）
+#
+#   下面两处 image 的标签必须是 ghcr 上**确有**的版本。截至本文件修订
+#   （2026-11-03）匿名查 registry API 的实测结果：
+#     /v2/chengcheng067/idplan/tags/list         → {"tags":["0.3.0","latest"]}
+#     /v2/chengcheng067/idplan-backend/tags/list → {"tags":["0.3.0","latest"]}
+#     两个仓库的 0.3.0 与 latest 分别是同一 digest
+#     （前端 sha256:bf81cc6d…，后端 sha256:92772343…）；
+#     查 1.0.0 的 manifest → 404（该标签不存在）。
+#   → 所以这里只能写 0.3.0。不用 latest 的理由不是"内容不一样"（现在同 digest），
+#     而是 latest 会随每次推送移动：同一份 compose 隔一周再部署，装到的可能是
+#     另一份内容，出问题也无法回到上次那个版本。
+#
+#   ⚠ 这个 0.3.0 标签**不代表 0.3.0 版的代码**。读镜像 config 得到的构建时间是
+#     前端 2026-11-02T17:10Z / 后端 2026-11-02T17:16Z（= 北京时间 11-03 01:10 /
+#     01:16），即最近一次 master 推送触发的构建，内容对应 1.0.0.0022 之后的状态。
+#     原因：docker-build.yml 由 push 触发时 github.event.inputs.version 为空，
+#     代码回落到默认值 "0.3.0"，于是每次推送都把最新代码重新贴成 0.3.0 + latest。
+#   → 两个结论：
+#     ① 自托管现在装到的是**较新的代码**（不是 2026-08-29 的旧状态）。Releases
+#        里 docker-0.3.0 那 4 个 tar 也在同一批（2026-11-02T17:25Z）被重新上传，
+#        所以「离线导入」装的也是同一轮构建；
+#     ② 但 `0.3.0` 这个标签**不可复现**——下次 master 推送会把它覆盖成新构建。
+#        要拿到固定版本，得由维护者用 workflow_dispatch + version=1.0.0 发一次
+#        带版本号的构建，然后把下面**两处** `:0.3.0` 改成 `:1.0.0`（改完先确认
+#        https://github.com/chengcheng067/idplan/pkgs/container/idplan 上出现 1.0.0）。
+#
+#   ＊ 未构建过的版本号（例如曾写在这里的 0.8.0）会拉取失败，别照抄历史示例。
+#
+# ---------------------------------------------------------------------
+# 其他约束：
+#   - network_mode: bridge 是绿联 Docker 应用的既有约束；该模式没有
+#     user-defined network 的服务名 DNS，nginx 的 proxy_pass http://backend:7788
+#     会解析失败，因此必须保留 links（把 backend 写进本容器 hosts）。
+#   - /api 前缀由前端镜像里的 nginx 转发到 backend:7788（见 ugnas/nginx/nginx.conf），
+#     浏览器无需直连后端端口，故 backend 只 expose 不 ports。
+#   - 数据卷 /data 保存 SQLite 团队库（changxia.db + WAL），容器重建不丢数据。
 #
 # 打开方式：浏览器访问 http://<NAS-IP>:28080
 # 首次建议把「数据源」设为 remote + API 地址 /api（团队共享模式），
-# 具体见配套《NAS 部署教程.md》。
+# 具体见配套 nas-deploy-tutorial.md。
 # =====================================================================
 services:
   # ---------------- 前端（nginx 托管页面 + /api 反代到后端） ----------------
@@ -33,7 +64,8 @@ services:
       - "28080:80"
     environment:
       - TZ=Asia/Shanghai
-      # remote = 团队共享（数据落 NAS 后端）；local = 浏览器本地记录
+      # remote = 团队共享（数据落 NAS 后端）；local = 浏览器本地记录。
+      # 由镜像入口脚本渲染进 /env-config.js（ugnas/scripts/entrypoint.sh）。
       - VITE_DATA_SOURCE=${VITE_DATA_SOURCE:-remote}
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
     depends_on:
@@ -41,6 +73,14 @@ services:
     links:
       - backend:backend
     network_mode: bridge
+    # 与 ugnas/docker-compose.yaml 同口径。基础镜像 nginx:1.27-alpine 自带
+    # busybox wget（新旧两版 Dockerfile 都是这个基础镜像），这个探针可用。
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
 
   # ---------------- 后端（Fastify + SQLite，团队共享数据层） ----------------
   backend:
@@ -53,6 +93,21 @@ services:
       - PORT=7788
       - HOST=0.0.0.0
       - NODE_ENV=production
+      # ★ 备份/恢复通道令牌（fail-closed）：留空 = 服务端拒绝所有备份请求。
+      #   要启用：在这里填一串自选值，同一串值填进 ID Plan 设置 →「NAS 服务」。
+      #   绿联商店版由编排界面注入同名变量，自托管没有那层，所以用 ${VAR:-} 兜空，
+      #   允许「不配 = 该功能关闭」，不会把整份 compose 卡成启动失败。
+      - IDPLAN_AGENT_TOKEN=${IDPLAN_AGENT_TOKEN:-}
+      # ★ Agent 导入通道令牌（与备份通道分权，建议填不同的值），空 = 全拒。
+      - IDPLAN_AGENT_API_TOKEN=${IDPLAN_AGENT_API_TOKEN:-}
+      # 自然语言通道（OpenAI 兼容端点，可指向自架 Ollama）；三件套缺一即 fail-closed。
+      # IDPLAN_NL_LLM_BASE_URL 例：http://192.168.1.10:11434/v1
+      - IDPLAN_NL_LLM_BASE_URL=${IDPLAN_NL_LLM_BASE_URL:-}
+      - IDPLAN_NL_LLM_API_KEY=${IDPLAN_NL_LLM_API_KEY:-}
+      - IDPLAN_NL_LLM_MODEL=${IDPLAN_NL_LLM_MODEL:-}
+      # 上面 5 个变量由 server/lib/agent-auth.ts 与 server/lib/nl-llm.ts 读取；
+      # 当前 ghcr 镜像（2026-11-02 由 master 构建）与 Releases 里同批上传的
+      # docker-0.3.0 tar 都含这些代码，配了即生效。
     # 数据持久化（关键）：容器重建不丢库。
     # 方案 A（推荐，具名卷）：什么都不用改，NAS 自动存到 docker 目录。
     # 方案 B（想在自己可见的共享文件夹里看到 .db）：
@@ -63,6 +118,24 @@ services:
     expose:
       - "7788"
     network_mode: bridge
+    # 与 ugnas/docker-compose.yaml 同口径。该探针要求 GET /api/settings 可用，
+    # 已核对：2026-08-29 那份旧代码（meta.routes.ts）与当前代码都注册了这条路由，
+    # 所以无论拉 ghcr 还是离线导入旧 tar，这个探针都成立。
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7788/api/settings').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
 
 volumes:
+  # 具名卷 idplan-data：数据实际保存在 Docker 存储空间里。
+  #   - 容器内路径：/data/changxia.db
+  #   - 升级/重建容器时保持卷名不变，数据就不会丢。
   idplan-data:
