@@ -10,19 +10,19 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-All%20Rights%20Reserved-lightgrey.svg" alt="License: All Rights Reserved" />
-  <img src="https://img.shields.io/badge/version-1.0.0.0014-blue.svg" alt="version" />
-  <img src="https://img.shields.io/badge/tests-4193%20passing-brightgreen.svg" alt="tests" />
+  <img src="https://img.shields.io/badge/version-1.0.0.0022-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/tests-vitest%20%2B%20Chromium-blue.svg" alt="tests" />
   <img src="https://img.shields.io/badge/Electron-44-47848F.svg" alt="Electron" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20NAS%20%7C%20Browser-lightgrey.svg" alt="platform" />
 </p>
 
 > 🌐 English · [中文](./README.md)
 
-> ⚠️ **The English build is NOT finished yet and will keep iterating.** This release (`1.0.0.0010`) pushes the English pass a long way — 1824 message keys in exact zh/en parity, and the “needs translating” Chinese surface under `src/**` down from 783 to 35 — but **printed paper is still Chinese by design, server-side error messages are not in English yet, and nobody has done a human screen-by-screen pass in English.** Full list: [🌐 Language](#-language).
+> ⚠️ **The English build is NOT finished yet and will keep iterating.** Both UI copy and server-side error text now go through the message tables (the zh/en key sets are pinned by compile-time constraints and guards), but **printed paper is still Chinese by design, some persisted values and protocol payloads deliberately stay Chinese, and nobody has done a human screen-by-screen pass in English.** Full list: [🌐 Language](#-language).
 
-> Covers **7 industry groups / 9 domains / 29 stage presets / 74 stage definitions** (software development, marketing campaigns, film production, wedding planning, consulting delivery, travel, architecture & interiors …). It turns a project's budget, type, stage milestones and members into one timeline — read progress as a board (kanban), a calendar or a gantt, and export the schedule as a delivery page you can send straight to a client.
+> **Not tied to any one industry.** Any job that breaks a project into stages can use it — the built-in **7 industry groups / 9 domains / 29 stage presets / 74 stage definitions** (software development, marketing campaigns, film production, wedding planning, consulting delivery, travel, architecture & interiors …) are ready-made examples, not a limit on scope; you can also generate and import a stage library for your own industry. It turns a project's budget, type, stage milestones and members into one timeline — read progress as a board (kanban), a calendar or a gantt, and export the schedule as a delivery page you can send straight to a client.
 > **Statutory holidays built in** (2025 / 2026, make-up workdays included): the calendar shows holiday names, a schedule can skip them in one click, and changing the rest policy reflows projects you already built — see [📅 Scheduling & delivery](#-scheduling--delivery).
-> **Printing ships four templates, and each carries the same five content blocks** (Print header / Print timeline / Project info / Stage list / Footer), laid out in that template's own typographic language — see [🖨️ Printing](#-printing-four-templates-one-set-of-content-four-readings).
+> **Printing ships four design templates, and each carries the same five content blocks** (Print header / Print timeline / Project info / Stage list / Footer), laid out in that template's own typographic language; the kept Classic template makes five paper options in total — see [🖨️ Printing](#-printing-four-templates-one-set-of-content-four-readings).
 > **It also lets external AI writers (WorkBuddy / Codex and friends) onboard by reading a single file and write tasks straight into your board** — see [🤖 Agent Access](#-agent-access).
 > **The plugin system is open**: the interface spec lives in the same repo as the code, so anyone can write a plugin against the spec and install it — see [🧩 Plugins](#-plugins).
 
@@ -31,6 +31,29 @@
 ## 📸 A look
 
 > Every screenshot below uses the **built-in demo data** (`Demo Project 1..5`, no real client information anywhere). To see the same data on your own machine: after installing, use **“Load sample projects” at the bottom of the sidebar** (that entry point comes from the built-in “Sample Projects” plugin — if it isn't in your sidebar, turn it on under **Settings → Plugins**; you can also load it straight from the first-run guide card).
+
+### Six cards at a glance
+
+A set of feature cards made for the **UGREEN App Center listing page** (1200 × 720, 5:3). All six use the built-in demo data above; click any card for the 1:1 original.
+
+<table>
+  <tr>
+    <td align="center"><a href="./docs/screenshots/store/01-overview.png"><img src="./docs/screenshots/store/01-overview.png" alt="01 Overview: see which stage every project is in" width="410" /></a><br /><sub>01 · Board: which stage a project is in</sub></td>
+    <td align="center"><a href="./docs/screenshots/store/02-timeline.png"><img src="./docs/screenshots/store/02-timeline.png" alt="02 Timeline: contract, stages and durations on one line" width="410" /></a><br /><sub>02 · Gantt timeline and stage detail</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/screenshots/store/03-calendar.png"><img src="./docs/screenshots/store/03-calendar.png" alt="03 Holidays and rest days are skipped automatically" width="410" /></a><br /><sub>03 · Calendar: rest policy and statutory holidays</sub></td>
+    <td align="center"><a href="./docs/screenshots/store/04-print.png"><img src="./docs/screenshots/store/04-print.png" alt="04 Five A4 templates, ready for paper" width="410" /></a><br /><sub>04 · Print: five A4 templates (four designs + Classic)</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/screenshots/store/05-tasks.png"><img src="./docs/screenshots/store/05-tasks.png" alt="05 What everyone needs to do today, on one screen" width="410" /></a><br /><sub>05 · My tasks: grouped by person</sub></td>
+    <td align="center"><a href="./docs/screenshots/store/06-selfhost.png"><img src="./docs/screenshots/store/06-selfhost.png" alt="06 Free and self-hostable" width="410" /></a><br /><sub>06 · Your data stays on your own NAS</sub></td>
+  </tr>
+</table>
+
+> Card 06 is a text-only closing card, not a screenshot: *Free · self-hostable* — data stays on your own NAS, nothing is uploaded, no subscription, and you can export it to a file and take it with you at any time. “Free” means the software itself has no price; **use, redistribution and commercial use remain governed by the repository [LICENSE](LICENSE)** (all rights reserved).
+
+### Interface details
 
 <p align="center">
   <img src="./docs/screenshots/calendar-month.png" alt="Calendar view: October 2026 — statutory holidays shaded grey with the holiday name, make-up workdays tagged 班, and a project-colour dot plus project name inside each cell" width="860" />
@@ -163,29 +186,30 @@ The Agent board is itself a plugin (turn it off under Settings → Plugins) — 
 
 ## 🌐 Language
 
-The UI ships in **Chinese / English**, switchable under **Settings → Appearance → Language**. Chinese is the default; the language **follows your explicit choice only — it never follows the browser locale** (so an `Accept-Language: en` browser won't silently flip to English on first open).
+The UI ships in **Chinese / English**, switchable under **Settings → Appearance → Language**. **Until you choose explicitly, it follows the system language** (explicit choice > system language > factory default Chinese): a change in system language is followed live, but once you pick a language in Settings, that choice is locked and later system changes are ignored. If the system language resolves to neither Chinese nor English, it falls back to Chinese.
 
 ### ⚠️ English is not finished — it will keep iterating
 
-**What's done** (every number below is a re-runnable reading, not an impression):
+**What's done** (mechanisms, not point-in-time counts that go stale with every new translation):
 
-- **1824 message keys, with the Chinese and English tables in exact two-way parity.** `en.ts` is typed `Record<MessageKey, string>`, so **missing a single key fails the build**; a guard also compares the two key sets shard by shard.
+- **Chinese and English message tables are in exact two-way parity.** `en.ts` is typed `Record<MessageKey, string>`, so **missing a single key fails the build**; a guard also compares the two key sets shard by shard. The tables are split into `ui / print-ui / core / misc / onboarding`, each with its own compile-time assertion.
+- **Server-side error text goes through the message tables too**: `server/**` throws a `messageKey` plus params, and the UI resolves it in the current language. The three text tables must match key-for-key and value-for-value, asserted directly by `tests/server-error-i18n.spec.ts` — changing either side turns the suite red. Errors in the NAS / browser form are no longer hard-coded Chinese.
 - The **only** Chinese value left inside the English table is the “中文” entry in the language picker itself — by design (a language names itself in its own language).
-- The Chinese surface classed as “needs translating” under `src/**` (UI + shared core): **783 → 35 (−96%)**, with 30 of the remaining ones individually registered with a reason to defer.
-- Test locators moved from **Chinese copy** to **language-neutral `data-*` hooks** (ratchet 102 → 0 — no Chinese locators left in the repo). Not fussiness: switching to English used to make a batch of tests **fail falsely** — the error looked like “element doesn't exist”, hiding the real cause (“it was looking for Chinese”).
+- The Chinese surface classed as “needs translating” under `src/**` has largely moved into the message tables; the values deliberately left in Chinese (stage preset names, domain names, log group names, Agent protocol payloads) each carry a registered reason and a reverse assertion so they can't be “helpfully” translated by accident.
+- Test locators moved from **Chinese copy** to **language-neutral `data-*` hooks** (no Chinese locators left in the repo). Not fussiness: switching to English used to make a batch of tests **fail falsely** — the error looked like “element doesn't exist”, hiding the real cause (“it was looking for Chinese”).
 - A geometry acceptance pass was run **in English** (six-zone nav at the 767 breakpoint): **longer English strings do not break the layout** — all six nav items stay fully visible without horizontal scrolling.
-- **Printed paper really is untouched.** This release did touch high-traffic shared components (`ConfirmDialog` / `SegmentedControl`), so this had to be **measured, not reasoned about**: all 550 print visual credentials were compared **file by file** before and after the run — **331 of the 332 PNGs (the actual rendered paper) are byte-for-byte identical** (one differs by 2 bytes, likely non-deterministic rendering). 176 HTML snapshots differ, but the differences sit **entirely inside the embedded CSS block**: with styles stripped, the structural part is **byte-for-byte identical across 18,288 characters**, and on the CSS side it is 8 **purely additive** Tailwind utility classes, none of them a print-layout rule. A useful side conclusion: **print rendering is deterministic**.
+- **Printed paper really is untouched.** That round of changes did touch high-traffic shared components (`ConfirmDialog` / `SegmentedControl`), so this had to be **measured, not reasoned about**: the print visual credentials were compared **file by file** before and after the run — the actual rendered-paper PNGs were **all byte-for-byte identical** except one differing by 2 bytes (likely non-deterministic rendering). HTML snapshots differed, but the differences sat **entirely inside the embedded CSS block**: with styles stripped, the structural part was byte-for-byte identical, and the CSS side held only **purely additive** Tailwind utility classes, none of them a print-layout rule. A useful side conclusion: **print rendering is deterministic**.
 
 **What's still missing**:
 
 | Gap | Current state | How it hits you |
 |---|---|---|
 | **Printed paper stays Chinese** | A design trade-off: **screen follows the language, paper is pinned to Chinese** | PDFs / printouts exported by an English user are still Chinese — the **biggest** gap |
-| **Server-side error messages** | The whole of `server/**` (16 files) has **never been surveyed** | Under the NAS / browser form, English users still see Chinese errors |
-| **Persisted values / protocol payloads are not translated** | 318 items deliberately untranslated (stage preset names, domain names, log group names, Agent protocol payloads …) | Some of them **do reach the screen** ⇒ Chinese still appears inside the English UI |
-| **67 grey-zone items awaiting a product call** | Colour names 29 · industry-library prompt 24 · validation notes 7 · execution-convergence reasons 4 · export filenames 2 · one half-finished ternary 1 | Can't be touched until the product side decides |
-| **35 A-class items remain** | 30 of them have individually registered reasons (15 + 10 + 5 across `enums.ts` / `stage-library.ts` / `demoDataFactory.ts`) | — |
+| **Persisted values stay Chinese on screen** | Stage preset names, domain names, log group names and the like are deliberately not translated; some of them do reach the screen | Chinese still appears inside the English UI |
+| **Grey-zone terms awaiting a product call** | Colour names, industry-library prompts, validation notes, execution-convergence reasons, export filenames … need a product decision before they can move | Parts of the English UI remain Chinese |
 | **No human screen-by-screen pass in English** | Only automated geometry / gate readings pass | Layout, wording and tone can only really be judged by a person |
+
+> “What's done” deliberately avoids counts like “N keys / N strings left”: those are point-in-time census snapshots that go stale every time a translation lands. The mechanisms and guards are what hold; the counts live in the repo's guard specs.
 
 ⇒ **English will keep iterating.** You may well hit any of the gaps above — **if you do, please open an Issue** with the screen and what you saw.
 
@@ -203,7 +227,7 @@ npm run electron:dev   # run the desktop form in development
 ```
 
 ```bash
-npm test               # full unit suite (248 spec files / 3983 cases, vitest)
+npm test               # full suite (vitest, incl. real-Chromium geometry checks)
 npm run typecheck      # frontend type checking
 npm run build          # typecheck + build
 npm run electron:build # build + package the Windows NSIS installer
@@ -247,6 +271,7 @@ Download the installer and double-click; data stays **on your machine**: 📄 [I
 Data lives on the NAS and everyone sees the same copy. All you need is one UGREEN NAS (UGOS Pro) plus a browser:
 - 📦 **UPK app package** (the easiest route, **amd64 models only** — see below for arm64): [tutorial](docs/install/upk-install-tutorial.md)
 - ⚙️ **Docker compose** (configure the container yourself, amd64 / arm64 both fine): [tutorial](docs/install/nas-deploy-tutorial.md) · [compose file](docs/install/idplan-nas-compose.yml)
+- 🧾 **Privacy policy**: [docs/privacy.html](docs/privacy.html) (written for the App Center submission; every claim checked against the code — where data lives, what is collected, whether any third-party SDK is present)
 - ℹ️ No UPK package for arm64 models yet (no real machine to verify on, and we don't publish unverified releases); the Docker image is multi-arch, so the compose route works on arm64 as-is
 
 ### Docker (generic / your own server)
@@ -281,6 +306,7 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 - 🧩 [**Plugin API (contract / example / self-check)**](./docs/plugin-api/) · 🔌 [Interface contract (the four Agent endpoints)](docs/api-contract.md) · 🗂️ [Backup format](docs/backup-format.md) · 🧪 [Migration drill](docs/migration-drill.md)
 - 🗺️ [Roadmap (including the “explicitly not doing” list)](docs/roadmap.md)
 - 🧾 [Release checklist (including the arm64 route and a compilation of gotchas)](docs/release-checklist.md)
+- 🔒 [Privacy policy](docs/privacy.html) · [License](LICENSE)
 
 ---
 
@@ -294,11 +320,13 @@ ghcr.io/chengcheng067/idplan-backend:<version>  # backend (Fastify + SQLite)
 | Four print templates (the same 5 content blocks × four layouts; per-block toggles, template identity elements not toggleable) | ✅ Available |
 | Custom print colours (3 tokens + preset variants + hard contrast gate) and a global logo | ✅ Available |
 | Member boards, role-scoped settings and data boundaries | ✅ Available |
+| First-run guide (welcome / quick intro / step-by-step, replayable any time) | ✅ Available |
+| NAS multi-workspace (pick a company / create one / enter with a password) | ✅ Available |
 | Plugins (registry / real switch / sandboxed loading / install from file) | ✅ Available (v1 read-only) |
 | Custom industry library (copy prompt → generate → import back) | ✅ Available |
 | Agent loopback auto-import, proposal approval, execution records | ✅ Available |
 | Cross-template generic rendering (modules rendered under different layouts) | 🚧 Capability exists in code; not exposed in the picker yet |
-| UI languages (Chinese / English, 1824 message keys in parity) | 🟡 Chinese available · **English in progress** (see [🌐 Language](#-language)) |
+| UI languages (Chinese / English, message keys in parity, server errors keyed) | 🟡 Chinese available · **English in progress** (see [🌐 Language](#-language)) |
 | Plugin write capability / remote marketplace / CSP egress control | 🚧 Roadmap (see below) |
 | NAS remote auto-write | 🔴 Not enabled (connectivity probe only) |
 
