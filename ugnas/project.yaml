@@ -149,7 +149,7 @@ technical_support_link:
 i18n:
   en-US:
     name: ID Plan
-    description: Interior design project stage management timeline
+    description: A cross-industry project scheduling tool — turn any project into a readable stage timeline
     author: ChengCheng
     official: https://github.com/chengcheng067/idplan
     help: https://github.com/chengcheng067/idplan/issues
@@ -157,7 +157,7 @@ i18n:
     publisher_link: https://github.com/chengcheng067
   zh-CN:
     name: ID Plan
-    description: 室内设计项目节点管理系统：把合同变成一张看得懂的阶段时间轴
+    description: 跨行业项目排程工具：把项目拆成一张看得懂的阶段时间轴
     author: 丞丞
     official: https://github.com/chengcheng067/idplan
     help: https://github.com/chengcheng067/idplan/issues
